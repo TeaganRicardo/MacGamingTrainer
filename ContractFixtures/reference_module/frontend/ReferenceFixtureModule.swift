@@ -36,23 +36,21 @@ struct ReferenceFixtureContent: View {
     @ObservedObject var model: ReferenceFixtureModel
 
     var body: some View {
-        TrainerCard {
-            TrainerFeatureToggleRow(
-                title: "Reference Feature",
-                icon: "checkmark.circle",
-                state: TrainerFeatureControlState(
-                    isOn: model.enabled,
-                    isInteractive: true,
-                    canEditValue: false,
-                    opacity: 1,
-                    indicatorColor: .accentColor,
-                    helpText: "",
-                    isWarning: false
-                ),
-                shortcutText: nil
-            ) {
-                model.enabled.toggle()
-            }
+        TrainerFeatureToggleRow(
+            title: "Reference Feature",
+            icon: "checkmark.circle",
+            state: TrainerFeatureControlState(
+                isOn: model.enabled,
+                isInteractive: true,
+                canEditValue: false,
+                opacity: 1,
+                indicatorColor: .accentColor,
+                helpText: "",
+                isWarning: false
+            ),
+            shortcutText: nil
+        ) {
+            model.enabled.toggle()
         }
     }
 }
