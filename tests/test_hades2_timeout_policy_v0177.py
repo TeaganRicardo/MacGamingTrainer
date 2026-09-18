@@ -9,7 +9,7 @@ api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 # state (green desired switches, no live catalog).
 assert re.search(r'case \.connect:\s*(?:.|\n)*?return 90\.0', api)
 assert re.search(r'case \.scan:\s*(?:.|\n)*?return 15\.0', api)
-assert re.search(r'case \.status:\s*(?:.|\n)*?return 8\.0', api)
+assert re.search(r'case \.status:\s*(?:.|\n)*?return 15\.0', api)
 assert re.search(r'case \.disconnect:\s*(?:.|\n)*?return 12\.0', api)
 
 # Guard against re-introducing the coupled 12 s connect/disconnect case.
