@@ -269,15 +269,17 @@ struct Hades2ShortcutSettingsView: View {
         model.shortcutError = ""
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
-                stopCapture()
+                DispatchQueue.main.async { stopCapture() }
                 return nil
             }
             guard let chord = HotkeyChord.capture(event) else {
                 model.shortcutError = "无法识别该按键，请换一个组合。"
                 return nil
             }
-            model.setShortcut(action: action, chord: chord)
-            stopCapture()
+            DispatchQueue.main.async {
+                model.setShortcut(action: action, chord: chord)
+                stopCapture()
+            }
             return nil
         }
     }
