@@ -20,7 +20,6 @@ struct TrainerConnectionPolicy {
             // A real target-process lifetime resets an explicit detach from the
             // previous run and supplies one background recovery/connect chance.
             automaticConnectionSuppressed = false
-            backgroundConnectionAllowed = true
             backendRestartRequested = true
             connectRequested = true
         } else {
@@ -29,6 +28,13 @@ struct TrainerConnectionPolicy {
             automaticConnectionSuppressed = false
             backgroundConnectionAllowed = false
         }
+    }
+
+    mutating func targetLaunched() {
+        guard targetRunning, !automaticConnectionSuppressed else { return }
+        backgroundConnectionAllowed = true
+        backendRestartRequested = true
+        connectRequested = true
     }
 
     mutating func targetActivated() {
