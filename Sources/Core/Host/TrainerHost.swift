@@ -58,6 +58,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             }
             reconcileAutomaticConnection()
         }
+        .onChange(of: targetMonitor.launchGeneration) { _, _ in
+            // Only a real NSWorkspace launch may grant the one background
+            // debugger-attach opportunity. Initial process discovery remains
+            // foreground-only.
+            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
+            connectionPolicy.targetLaunched()
+            reconcileAutomaticConnection()
+        }
         .onChange(of: targetMonitor.activationGeneration) { _, _ in
             // Target activation can arrive before this app's resign-active
             // notification. Record the opportunity only; consume it when the
