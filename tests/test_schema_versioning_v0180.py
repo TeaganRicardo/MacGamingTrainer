@@ -140,7 +140,7 @@ try:
     profiles = Hades2ProfileService(base/'profiles')
 
     # New profile writes are explicitly versioned.
-    profiles.save('current', loaded, {'godMode': 1})
+    profiles.save('current', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     current_path = profiles.path('current')
     current_doc = json.loads(current_path.read_text(encoding='utf-8'))
     assert current_doc['schemaVersion'] == PROFILE_SCHEMA_VERSION
@@ -162,7 +162,7 @@ try:
 
     # Saving an explicitly named profile is a user-requested replacement, not a
     # migration. It atomically writes the current envelope over any old version.
-    profiles.save('legacy', loaded, {'godMode': 1})
+    profiles.save('legacy', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     replaced_profile = json.loads(legacy_profile_path.read_text(encoding='utf-8'))
     assert replaced_profile['schemaVersion'] == PROFILE_SCHEMA_VERSION
     assert profiles.load('legacy')['desired']['godMode'] is True
@@ -187,7 +187,7 @@ try:
         raise AssertionError('future Profile schema was accepted')
     assert future_profile_path.read_bytes() == future_profile_bytes
 
-    profiles.save('future', loaded, {'godMode': 1})
+    profiles.save('future', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     assert json.loads(future_profile_path.read_text(encoding='utf-8'))['schemaVersion'] == PROFILE_SCHEMA_VERSION
     deleted = profiles.delete('future')
     assert deleted['deleted'] is True and not future_profile_path.exists()
