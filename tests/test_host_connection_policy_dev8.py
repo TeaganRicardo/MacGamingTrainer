@@ -43,13 +43,17 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
     fail("launch connect was not one-shot")
 }
 
-// A true launch carries a one-shot permission to finish the same automatic
-// connection while Trainer is backgrounded even if the first consume point was
-// blocked by backend busy/recovery. The permission ends when connect is issued.
+// Merely discovering an already-running target is not a true launch and must
+// never grant background debugger permission. Only the explicit launch event
+// may do so.
 var launchPolicy = TrainerConnectionPolicy()
 launchPolicy.targetStateChanged(running: true)
+if launchPolicy.backgroundConnectionAllowed {
+    fail("initial running snapshot incorrectly granted background permission")
+}
+launchPolicy.targetLaunched()
 if !launchPolicy.backgroundConnectionAllowed {
-    fail("launch did not grant background connection permission")
+    fail("explicit launch did not grant background connection permission")
 }
 if launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
     fail("background launch connected while busy")
