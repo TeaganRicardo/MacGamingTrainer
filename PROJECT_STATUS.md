@@ -40,13 +40,13 @@
 - Shortcut rows with no badge collapse instead of reserving the former 52pt empty slot.
 - Fire/Water/Earth/Air/Aether compile with distinct SF Symbols and semantic colors. Target-Mac UI acceptance confirmed all five cards render on one row at normal display scale.
 
-## In progress
+## Pending manual acceptance
 
-1. Passive waiting -> ready transition: bounded two-shot status probe per connection lifetime at 15s / 30s; no repeating timer. Full main-menu-to-run passive acceptance remains open.
+1. Passive waiting -> ready transition: implementation now schedules two independent one-shot probes at +15s and +30s from the waiting transition; no repeating timer. Automated regression covers scheduling/cancellation. The user will perform the remaining main-menu-to-run acceptance on the target Mac.
 
-## Deferred until correctness is stable
+## Deferred until correctness is manually accepted
 
-- LLDB attach latency profiling and optimization.
+- LLDB attach latency profiling and optimization (#4).
 
 ## Non-regression constraints
 
