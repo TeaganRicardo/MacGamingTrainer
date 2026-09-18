@@ -54,3 +54,23 @@ assert not (ROOT / 'Backend/games/reference_fixture').exists()
 assert not (ROOT / 'Sources/ReferenceFixture').exists()
 
 print('cross_game_isolation_ok')
+
+
+# Shared propagation is structural: every selected module is compiled with
+# Sources/App.swift + every Sources/Core Swift file, then only its own frontend.
+# There must be no game switch/case in this source-graph assembly.
+build = (ROOT / 'build.sh').read_text()
+assert 'SWIFT_SOURCES=("$ROOT/Sources/App.swift")' in build
+assert 'find "$ROOT/Sources/Core" -type f -name' in build
+assert 'find "$FRONTEND_DIR" -type f -name' in build
+assert build.index('find "$ROOT/Sources/Core"') < build.index('find "$FRONTEND_DIR"')
+for forbidden in ('case "$ACTIVE_GAME_ID"', 'if [[ "$ACTIVE_GAME_ID"', 'hades2)', 'reference_fixture)'):
+    assert forbidden not in build, forbidden
+
+core_ui = '\n'.join(path.read_text() for path in (ROOT / 'Sources/Core/UI').rglob('*.swift'))
+hades_ui = '\n'.join(path.read_text() for path in (ROOT / 'Sources/Hades2').rglob('*.swift'))
+assert 'struct TrainerFeatureToggleRow' in core_ui
+assert 'TrainerFeatureToggleRow(' in hades_ui
+assert 'TrainerFeatureToggleRow(' in fixture
+
+print('shared_core_propagation_ok')
