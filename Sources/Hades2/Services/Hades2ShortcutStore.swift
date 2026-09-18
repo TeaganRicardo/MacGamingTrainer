@@ -38,13 +38,41 @@ struct Hades2ShortcutStore {
     }
 
     mutating func applyProfile(_ values: [String: Any]) {
+        var patch: [ShortcutAction: HotkeyChord] = [:]
+        var patchTokens = Set<String>()
         for action in ShortcutAction.uiOrder {
             guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value) else { continue }
-            if ShortcutAction.uiOrder.contains(where: {
-                $0 != action && chord($0).keyCode == proposed.keyCode && chord($0).modifiers == proposed.modifiers
-            }) { continue }
-            chords[action] = proposed
+            let token = Self.token(proposed)
+            guard !patchTokens.contains(token) else { continue }
+            patch[action] = proposed
+            patchTokens.insert(token)
         }
+        guard !patch.isEmpty else { return }
+
+        var next = chords
+        for (action, proposed) in patch { next[action] = proposed }
+
+        // Apply imported assignments as one layout. Non-imported actions that
+        // collide with an imported chord are moved to a free default slot.
+        // This allows valid Profile swaps without comparing each assignment
+        // against the stale pre-import layout.
+        var used = patchTokens
+        let defaultsLayout = Self.defaultLayout()
+        for action in ShortcutAction.uiOrder where patch[action] == nil {
+            var current = next[action] ?? defaultsLayout[action]!
+            if used.contains(Self.token(current)) {
+                if let preferred = defaultsLayout[action], !used.contains(Self.token(preferred)) {
+                    current = preferred
+                } else if let free = ShortcutAction.uiOrder.enumerated()
+                    .compactMap({ HotkeyChord.controlOptionDefault(index: $0.offset) })
+                    .first(where: { !used.contains(Self.token($0)) }) {
+                    current = free
+                }
+            }
+            next[action] = current
+            used.insert(Self.token(current))
+        }
+        chords = next
         persistCurrentLayout()
     }
 
