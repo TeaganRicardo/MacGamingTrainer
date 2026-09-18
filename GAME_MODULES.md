@@ -27,6 +27,24 @@ build.sh
 
 The current host protocol is 5. Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
+## Mechanical cross-game proof
+
+The module contract is continuously exercised by a permanent non-production fixture under `ContractFixtures/reference_module`.
+
+The fixture is intentionally kept outside `Backend/games` and `Sources/<Game>`, so normal runtime discovery never exposes it as a user-facing trainer. Tests/CI temporarily install it into the standard module paths and then use the same manifest validator, generated Swift binding, Backend/core server and `build.sh <game-id>` path as a real game.
+
+Current CI proves:
+
+- shared source graph is always `Sources/App.swift + Sources/Core/** + selected frontend`;
+- neither `build.sh` nor Core contains a Hades/reference-fixture branch;
+- Hades II and the reference fixture both consume shared Core UI controls;
+- Core/App/build/backend-core contain no Hades business semantics;
+- Hades II contains no reference-fixture dependency and the fixture contains no Hades dependency;
+- packaged backend output contains exactly the selected game module;
+- macOS build matrix typechecks, builds and codesigns both Hades II and the reference fixture through the same host/build path.
+
+The fixture is framework evidence, not a template that future games must copy semantically. A real new game still owns its own state/commands/transport/save concepts.
+
 ## Minimal backend adapter
 
 ```python
