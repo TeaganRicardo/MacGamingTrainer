@@ -20,6 +20,23 @@ for retired in (
 ):
     assert retired not in model, retired
 
+# Initial process discovery and a real NSWorkspace launch are distinct events.
+# Only didLaunch may grant permission to attach while Trainer is backgrounded.
+monitor = (ROOT / 'Sources/Core/Runtime/TrainerTargetProcessMonitor.swift').read_text()
+assert '@Published private(set) var launchGeneration' in monitor
+launch_note = monitor[monitor.index('NSWorkspace.didLaunchApplicationNotification'):monitor.index('NSWorkspace.didActivateApplicationNotification')]
+assert 'launchGeneration &+= 1' in launch_note
+
+launch_start = host.index('.onChange(of: targetMonitor.launchGeneration)')
+launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
+launch_block = host[launch_start:launch_end]
+for token in (
+    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
+    'connectionPolicy.targetLaunched()',
+    'reconcileAutomaticConnection()',
+):
+    assert token in launch_block, token
+
 # A true target-process launch grants a one-shot background connection
 # permission in the pure connection policy. The permission survives temporary
 # busy/backend recovery states until connect is consumed; ordinary activation
