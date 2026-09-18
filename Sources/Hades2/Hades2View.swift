@@ -937,7 +937,7 @@ struct Hades2TrainerView: View {
         switch id {
         case "Fire": return ("flame.fill", .orange)
         case "Water": return ("drop.fill", .blue)
-        case "Earth": return ("leaf.fill", .green)
+        case "Earth": return ("mountain.2.fill", .brown)
         case "Air": return ("wind", .cyan)
         case "Aether": return ("sparkles", .purple)
         default: return ("circle.hexagongrid.fill", accent)
