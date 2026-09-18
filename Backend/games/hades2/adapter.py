@@ -72,6 +72,7 @@ class Hades2Adapter(GameAdapter):
             transport = Hades2LuaTransport()
         self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
         self._runtime_bootstrapped=False;self._catalog_initialized=False
+        self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
                     'godMode':False,'infiniteHealth':False,'infiniteMana':False,'damageEnabled':False,'instantCastCooldown':False,'hexAlwaysReady':False,'infiniteAmmo':False,'autoMiniGames':False,'gardenQoL':False,'boonRarityEnabled':False,'damageMultiplier':2,'gameSpeed':1,'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False}, 'nextRoomReward':None,
                     'desiredFeatures':{key:False for key in TOGGLES},
