@@ -31,7 +31,8 @@ struct TrainerConnectionPolicy {
     }
 
     mutating func targetLaunched() {
-        guard targetRunning, !automaticConnectionSuppressed else { return }
+        targetRunning = true
+        automaticConnectionSuppressed = false
         backgroundConnectionAllowed = true
         backendRestartRequested = true
         connectRequested = true
