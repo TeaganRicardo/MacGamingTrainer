@@ -20,7 +20,7 @@
 - App bundle passes codesign --verify --deep --strict.
 - com.apple.security.cs.debugger=true entitlement is present.
 - Hades process discovery works without attaching.
-- Runtime diagnostics revision 25 is verified on target Mac; a valid Hero object was confirmed both in Crossroads and in a real run.
+- Runtime diagnostics revision 26 is verified on target Mac; a valid Hero object was confirmed both in Crossroads and in a real run.
 - Main-menu waiting quit regression is fixed: quit persists desired-off state, disconnects best-effort, and does not block app termination.
 - Save backup 修改器测试 was restored successfully; a pre-restore backup was created automatically.
 - Real-run acceptance reached status=ready / scene=run with Hero object 40000, 97 resources, 129 rewards, 11 stats and 5 elements.
