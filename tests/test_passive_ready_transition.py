@@ -20,12 +20,12 @@ for retired in (
 ):
     assert retired not in model, retired
 
-# A true target-process launch may consume the pending connect while Trainer is
-# backgrounded so attach time is paid during launch/loading. Ordinary activation
-# still cannot start debugger work in the background.
-assert 'reconcileAutomaticConnection(allowBackground: running)' in host
-assert 'private func reconcileAutomaticConnection(allowBackground: Bool = false)' in host
-assert 'guard allowBackground || NSApp.isActive else { return }' in host
+# A true target-process launch grants a one-shot background connection
+# permission in the pure connection policy. The permission survives temporary
+# busy/backend recovery states until connect is consumed; ordinary activation
+# never grants it.
+assert 'connectionPolicy.backgroundConnectionAllowed || NSApp.isActive' in host
+assert 'reconcileAutomaticConnection(allowBackground:' not in host
 assert 'NSApplication.didBecomeActiveNotification' in host
 assert 'targetMonitor.refresh()' in host
 assert 'reconcileAutomaticConnection()' in host
