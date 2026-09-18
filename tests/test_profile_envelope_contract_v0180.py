@@ -16,7 +16,7 @@ service = Hades2ProfileService(base/'profiles')
 desired = {'godMode': False}
 
 # Current-version writes have the complete envelope and remain loadable.
-service.save('stable', desired, {'godMode': 1})
+service.save('stable', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
 stable_path = service.path('stable')
 stable_doc = json.loads(stable_path.read_text(encoding='utf-8'))
 assert set(stable_doc) == {'schemaVersion','name','updatedAt','desired','shortcuts'}
@@ -39,7 +39,7 @@ else:
 assert legacy_path.read_bytes() == legacy_bytes
 
 # An explicit save is a replacement operation and writes the current schema.
-service.save('legacy', desired, {'godMode': 1})
+service.save('legacy', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
 assert service.load('legacy')['desired'] == desired
 assert json.loads(legacy_path.read_text())['schemaVersion'] == PROFILE_SCHEMA_VERSION
 
