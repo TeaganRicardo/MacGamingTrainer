@@ -14,9 +14,9 @@ struct TrainerShortcutBadge: View {
     }
 }
 
-/// Fixed shortcut column shared by normal and multiplier feature rows. This
-/// keeps badge styling and the badge-to-switch spacing identical even when the
-/// multiplier row inserts a numeric editor to the left.
+/// Shared shortcut badge slot. Rows with a shortcut keep a stable minimum
+/// badge width; rows without one collapse completely so no phantom gap remains
+/// between numeric editors and their toggle/apply control.
 struct TrainerShortcutBadgeSlot: View {
     let text: String?
 
