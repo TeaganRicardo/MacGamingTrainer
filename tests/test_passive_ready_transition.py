@@ -26,6 +26,30 @@ assert 'reconcileAutomaticConnection()' in host
 assert 'model.hostDidBecomeActive()' in host
 assert 'connectionPolicy.targetActivated()' in host
 
+# Target activation only records an opportunity. It must not consume that
+# opportunity immediately because NSWorkspace target-activation can race the
+# trainer's own didResignActive transition.
+activation_start = host.index('.onChange(of: targetMonitor.activationGeneration)')
+activation_end = host.index('.onChange(of: model.backendAvailable)', activation_start)
+activation_block = host[activation_start:activation_end]
+assert 'connectionPolicy.targetActivated()' in activation_block
+assert 'reconcileAutomaticConnection()' not in activation_block
+
+# Trainer activation is the only place that repairs a potentially missed target
+# snapshot before consuming pending debugger work.
+foreground_start = host.index('NSApplication.didBecomeActiveNotification')
+foreground_end = host.index('\n    }\n\n    private func handlePrimaryConnectionAction', foreground_start)
+host_foreground = host[foreground_start:foreground_end]
+for token in (
+    'targetMonitor.refresh()',
+    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
+    'reconcileAutomaticConnection()',
+    'model.hostDidBecomeActive()',
+):
+    assert token in host_foreground, token
+assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.targetStateChanged')
+assert host_foreground.index('connectionPolicy.targetStateChanged') < host_foreground.index('reconcileAutomaticConnection()')
+
 # App activation is a generic optional lifecycle hook. Hades uses it only for a
 # single foreground refresh when an existing connection is still waiting.
 assert 'func hostDidBecomeActive()' in contract
