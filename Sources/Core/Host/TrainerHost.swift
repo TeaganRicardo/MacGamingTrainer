@@ -59,8 +59,10 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             reconcileAutomaticConnection()
         }
         .onChange(of: targetMonitor.activationGeneration) { _, _ in
+            // Target activation can arrive before this app's resign-active
+            // notification. Record the opportunity only; consume it when the
+            // trainer itself becomes foreground again.
             connectionPolicy.targetActivated()
-            reconcileAutomaticConnection()
         }
         .onChange(of: model.backendAvailable) { _, available in
             if available { connectionPolicy.backendBecameAvailable() }
@@ -75,6 +77,10 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             targetMonitor.refresh()
+            // Repair policy state synchronously even when the published
+            // isRunning value did not change and SwiftUI therefore emits no
+            // onChange callback.
+            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
             reconcileAutomaticConnection()
             model.hostDidBecomeActive()
         }
