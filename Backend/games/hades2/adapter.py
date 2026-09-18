@@ -400,10 +400,23 @@ class Hades2Adapter(GameAdapter):
                 runtime_params['includeCatalogs']=not self._catalog_initialized
             dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
             code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
+            decode_metrics={}
+            def decode_runtime(raw):
+                phase=time.monotonic()
+                payload=json.loads(raw)
+                decode_metrics['json']=time.monotonic()-phase
+                phase=time.monotonic()
+                payload=localize_catalog(payload)
+                decode_metrics['localize']=time.monotonic()-phase
+                return payload
             decoded=execute_with_ledger(
-                self.transport,command,code,lambda raw:localize_catalog(json.loads(raw)),
+                self.transport,command,code,decode_runtime,
                 replay=replay,read_only=read_only,
             )
+            if command=='status':
+                self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+                self._last_status_json_duration=decode_metrics.get('json',0.0)
+                self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             if not read_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
