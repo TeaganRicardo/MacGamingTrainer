@@ -1,0 +1,400 @@
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/BUILDING.md /mnt/data/MacGamingTrainer_v0.17.3/BUILDING.md
+--- /mnt/data/MacGamingTrainer_v0.17.2/BUILDING.md	2026-09-17 13:27:49.152249458 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/BUILDING.md	2026-09-17 13:36:35.802499540 +0000
+@@ -1,55 +1,19 @@
+-# Build v0.17.2
++# Build v0.17.3
+ 
+-## Finder 双击编译（不打开 Terminal）
+-
+-项目根目录包含 `Build Trainer.app`。在 Finder 中直接双击即可调用同一个 `build.sh`：
+-
+-- 编译开始时显示系统通知；
+-- 成功后可直接打开本次生成的 Trainer App；
+-- 失败时弹出最后一段错误，并可直接用 TextEdit 打开 `build-gui.log`；
+-- 不启动 Terminal，也不维护第二套构建逻辑。
+-
+-首次从下载目录运行时，如果 macOS Gatekeeper 阻止这个未公证的本地构建助手，可在 Finder 中右键 `Build Trainer.app` → `打开`。构建出的 Trainer App 仍由 `build.sh` 按模块要求执行 ad-hoc codesign 和签名验证。
+-
+-## 命令行编译
+-
+-默认模块来自 `ACTIVE_GAME_ID`：
++当前唯一支持的构建方式是手动运行 `build.sh`。此前实验性的 Finder 双击构建 App 已暂时移除，因为在下载目录中会受到 macOS Finder 权限与 bundle 路径解析影响。
+ 
+ ```bash
+ chmod +x build.sh
+ ./build.sh
+ ```
+ 
+-也可以显式选择模块：
+-
+-```bash
+-./build.sh hades2
+-# or
+-MGT_GAME_ID=hades2 ./build.sh
+-```
+-
+-通用构建流程：
+-
+-1. 使用 `Tools/validate_game_module.py` 验证所选模块；
+-2. 使用 `Tools/generate_game_binding.py` 生成 identity/protocol Swift binding；
+-3. 只编译 `Sources/App.swift + Sources/Core + selected frontend`；
+-4. 在 `-O` 正式编译前先执行非优化 `swiftc -typecheck`；
+-5. 只打包 `Backend/core + Backend/games/<selected>`；
+-6. 只应用该模块 manifest 声明的签名/调试要求。
+-
+-## Xcode / LLDB Python
+-
+-Hades II 需要完整 Xcode 环境提供可导入的 LLDB Python。如果：
+-
+-```bash
+-xcode-select -p
+-```
++构建脚本会先执行完整 Swift semantic `-typecheck`，再进入优化编译；因此跨文件作用域、缺失 helper、错误类型名等问题会在链接前直接报出。
+ 
+-仍指向 Command Line Tools，并且 LLDB Python 无法加载，请切换到完整 Xcode：
++如果 LLDB Python 检查失败，确认已安装完整 Xcode 并执行：
+ 
+ ```bash
+ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+ xcrun lldb -P
+ ```
+ 
+-当前 Linux 验证环境无法执行最终的 macOS SwiftUI/AppKit semantic link、codesign 和真实 LLDB attach；`build.sh` 会在目标 Mac 上首先运行完整 `swiftc -typecheck`，然后才进入优化编译。
++输出 App 位于项目构建目录；具体路径会由 `build.sh` 在成功时打印。
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/Backend/core/protocol.py /mnt/data/MacGamingTrainer_v0.17.3/Backend/core/protocol.py
+--- /mnt/data/MacGamingTrainer_v0.17.2/Backend/core/protocol.py	2026-09-17 12:52:44.108495506 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/Backend/core/protocol.py	2026-09-17 13:36:35.802106673 +0000
+@@ -6,7 +6,7 @@
+ # module has its own independent protocol/schema version exposed alongside it.
+ HOST_PROTOCOL_VERSION = 5
+ PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
+-APP_BACKEND_VERSION = '0.17.2'
++APP_BACKEND_VERSION = '0.17.3'
+ 
+ 
+ from core.adapter import GameAdapter
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' "/mnt/data/MacGamingTrainer_v0.17.2/Build Trainer.app/Contents/Info.plist" "/mnt/data/MacGamingTrainer_v0.17.3/Build Trainer.app/Contents/Info.plist"
+--- "/mnt/data/MacGamingTrainer_v0.17.2/Build Trainer.app/Contents/Info.plist"	2026-09-17 12:52:15.426977688 +0000
++++ "/mnt/data/MacGamingTrainer_v0.17.3/Build Trainer.app/Contents/Info.plist"	1970-01-01 00:00:00.000000000 +0000
+@@ -1,28 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+-<plist version="1.0">
+-<dict>
+-    <key>CFBundleDevelopmentRegion</key>
+-    <string>zh_CN</string>
+-    <key>CFBundleExecutable</key>
+-    <string>BuildTrainer</string>
+-    <key>CFBundleIdentifier</key>
+-    <string>com.gao.macgamingtrainer.builder</string>
+-    <key>CFBundleInfoDictionaryVersion</key>
+-    <string>6.0</string>
+-    <key>CFBundleName</key>
+-    <string>Build Trainer</string>
+-    <key>CFBundleDisplayName</key>
+-    <string>Build Trainer</string>
+-    <key>CFBundlePackageType</key>
+-    <string>APPL</string>
+-    <key>CFBundleShortVersionString</key>
+-    <string>1.0</string>
+-    <key>CFBundleVersion</key>
+-    <string>1</string>
+-    <key>LSUIElement</key>
+-    <true/>
+-    <key>NSHighResolutionCapable</key>
+-    <true/>
+-</dict>
+-</plist>
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' "/mnt/data/MacGamingTrainer_v0.17.2/Build Trainer.app/Contents/MacOS/BuildTrainer" "/mnt/data/MacGamingTrainer_v0.17.3/Build Trainer.app/Contents/MacOS/BuildTrainer"
+--- "/mnt/data/MacGamingTrainer_v0.17.2/Build Trainer.app/Contents/MacOS/BuildTrainer"	2026-09-17 12:58:21.565642589 +0000
++++ "/mnt/data/MacGamingTrainer_v0.17.3/Build Trainer.app/Contents/MacOS/BuildTrainer"	1970-01-01 00:00:00.000000000 +0000
+@@ -1,64 +0,0 @@
+-#!/bin/bash
+-set -u
+-
+-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+-ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+-LOG="$ROOT/build-gui.log"
+-BUILD_SCRIPT="$ROOT/build.sh"
+-
+-show_dialog() {
+-    local title="$1"
+-    local message="$2"
+-    local primary="$3"
+-    local secondary="${4:-}"
+-    /usr/bin/osascript - "$title" "$message" "$primary" "$secondary" <<'APPLESCRIPT'
+-on run argv
+-    set dialogTitle to item 1 of argv
+-    set dialogMessage to item 2 of argv
+-    set primaryButton to item 3 of argv
+-    set secondaryButton to item 4 of argv
+-    if secondaryButton is "" then
+-        display dialog dialogMessage with title dialogTitle buttons {primaryButton} default button primaryButton with icon note
+-    else
+-        display dialog dialogMessage with title dialogTitle buttons {secondaryButton, primaryButton} default button primaryButton with icon note
+-    end if
+-    return button returned of result
+-end run
+-APPLESCRIPT
+-}
+-
+-if [[ ! -f "$BUILD_SCRIPT" ]]; then
+-    show_dialog "Build Trainer" "找不到 build.sh。请把 Build Trainer.app 保留在项目根目录。" "关闭" >/dev/null
+-    exit 1
+-fi
+-
+-/bin/chmod +x "$BUILD_SCRIPT" 2>/dev/null || true
+-: > "$LOG"
+-/usr/bin/osascript -e 'display notification "正在编译 Mac Gaming Trainer；完成后会弹出结果。" with title "Build Trainer"' >/dev/null 2>&1 || true
+-
+-cd "$ROOT" || exit 1
+-/bin/bash "$BUILD_SCRIPT" >"$LOG" 2>&1
+-STATUS=$?
+-
+-if [[ $STATUS -eq 0 ]]; then
+-    APP_PATH="$(/usr/bin/awk '/^Built:$/ { if (getline > 0) { sub(/^  /, ""); print; exit } }' "$LOG" 2>/dev/null || true)"
+-    if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
+-        APP_PATH="$(/usr/bin/find "$ROOT/dist" -maxdepth 1 -type d -name '*.app' -print -quit 2>/dev/null || true)"
+-    fi
+-    if [[ -n "$APP_PATH" ]]; then
+-        CHOICE="$(show_dialog "编译完成" "编译与签名验证已完成。\n\n输出：${APP_PATH#$ROOT/}" "打开 App" "关闭")"
+-        if [[ "$CHOICE" == "打开 App" ]]; then
+-            /usr/bin/open "$APP_PATH"
+-        fi
+-    else
+-        show_dialog "编译完成" "编译已完成。输出位于 dist 目录。" "关闭" >/dev/null
+-    fi
+-    exit 0
+-fi
+-
+-TAIL="$(/usr/bin/tail -n 18 "$LOG" 2>/dev/null || true)"
+-CHOICE="$(show_dialog "编译失败" "编译失败（退出码 $STATUS）。\n\n最后输出：\n$TAIL" "打开日志" "关闭")"
+-if [[ "$CHOICE" == "打开日志" ]]; then
+-    /usr/bin/open -a TextEdit "$LOG"
+-fi
+-exit "$STATUS"
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/DEFERRED_REFACTOR_PLAN.md /mnt/data/MacGamingTrainer_v0.17.3/DEFERRED_REFACTOR_PLAN.md
+--- /mnt/data/MacGamingTrainer_v0.17.2/DEFERRED_REFACTOR_PLAN.md	2026-09-17 13:27:50.012277157 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/DEFERRED_REFACTOR_PLAN.md	2026-09-17 13:37:53.343875804 +0000
+@@ -1,4 +1,4 @@
+-# Deferred work after v0.17.2
++# Deferred work after v0.17.3
+ 
+ The framework-level corrective refactor and the first runtime-reliability pass are complete. Do not resume structural refactoring unless a concrete requirement demonstrates a missing host capability.
+ 
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/GAME_MODULES.md /mnt/data/MacGamingTrainer_v0.17.3/GAME_MODULES.md
+--- /mnt/data/MacGamingTrainer_v0.17.2/GAME_MODULES.md	2026-09-17 13:27:49.844271747 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/GAME_MODULES.md	2026-09-17 13:37:53.343995513 +0000
+@@ -1,4 +1,4 @@
+-# Game module contract — v0.17.2
++# Game module contract — v0.17.3
+ 
+ A normal new game should add only:
+ 
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/Info.plist /mnt/data/MacGamingTrainer_v0.17.3/Info.plist
+--- /mnt/data/MacGamingTrainer_v0.17.2/Info.plist	2026-09-17 12:52:44.108282998 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/Info.plist	2026-09-17 13:36:35.801969618 +0000
+@@ -17,9 +17,9 @@
+ 	<key>CFBundlePackageType</key>
+ 	<string>APPL</string>
+ 	<key>CFBundleShortVersionString</key>
+-	<string>0.17.2</string>
++	<string>0.17.3</string>
+ 	<key>CFBundleVersion</key>
+-	<string>25</string>
++	<string>26</string>
+ 	<key>LSMinimumSystemVersion</key>
+ 	<string>14.0</string>
+ 	<key>NSHighResolutionCapable</key>
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/REFACTOR_ASSESSMENT.md /mnt/data/MacGamingTrainer_v0.17.3/REFACTOR_ASSESSMENT.md
+--- /mnt/data/MacGamingTrainer_v0.17.2/REFACTOR_ASSESSMENT.md	2026-09-17 13:27:50.236284371 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/REFACTOR_ASSESSMENT.md	2026-09-17 13:37:53.344064196 +0000
+@@ -1,4 +1,4 @@
+-# v0.17.2 architecture assessment
++# v0.17.3 architecture assessment
+ 
+ ## Current verdict
+ 
+@@ -10,7 +10,7 @@
+ 
+ The current implementation meets that criterion for the tested module contract.
+ 
+-v0.17.2 intentionally does not alter those boundaries. It is a compile-reliability hotfix over v0.17.1: Hades view observation is aggregated into small Equatable snapshots, stale cross-file type references are audited automatically, and the main SwiftUI result-builder expressions are split into smaller semantic units. Runtime protocol/game behaviour remains unchanged.
++v0.17.3 intentionally does not alter those boundaries. It is a compile-reliability hotfix over v0.17.1: Hades view observation is aggregated into small Equatable snapshots, stale cross-file type references are audited automatically, and the main SwiftUI result-builder expressions are split into smaller semantic units. Runtime protocol/game behaviour remains unchanged.
+ 
+ ## Framework responsibilities
+ 
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/RELEASE_NOTES_v0.17.3.md /mnt/data/MacGamingTrainer_v0.17.3/RELEASE_NOTES_v0.17.3.md
+--- /mnt/data/MacGamingTrainer_v0.17.2/RELEASE_NOTES_v0.17.3.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/RELEASE_NOTES_v0.17.3.md	2026-09-17 13:36:35.802564266 +0000
+@@ -0,0 +1,18 @@
++# v0.17.3
++
++App version: **0.17.3**  
++Build: **26**  
++Host protocol: **v5 (unchanged)**  
++Hades II module protocol: **v4 (unchanged)**  
++Lua runtime revision: **19 (unchanged)**
++
++## Fixed
++
++- Restored `syncElementInputs(_:)` with the correct `[ElementCount]` type. The v0.17.2 snapshot refactor retained the call site but accidentally removed the helper implementation.
++- Expanded Swift integrity checks so Hades2View helper calls must have matching declarations; this specifically covers refactor-time orphaned call sites that `swiftc -parse` cannot diagnose.
++- Added a parser-assisted unresolved lowercase identifier audit using `swiftc -frontend -dump-parse` when Swift is available.
++- Re-ran custom type, model-member, API-member, private-boundary and full source-graph parse checks.
++
++## Build helper
++
++The experimental `Build Trainer.app` has been removed from the release for now. Manual `build.sh` is the only supported build path until the Finder permission/path behaviour is redesigned.
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/Sources/Hades2/Hades2View.swift /mnt/data/MacGamingTrainer_v0.17.3/Sources/Hades2/Hades2View.swift
+--- /mnt/data/MacGamingTrainer_v0.17.2/Sources/Hades2/Hades2View.swift	2026-09-17 12:57:40.687962093 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/Sources/Hades2/Hades2View.swift	2026-09-17 13:34:38.390254382 +0000
+@@ -426,6 +426,18 @@
+         materialFactor = compactNumber(snapshot.resourceMultiplier)
+     }
+ 
++    private func syncElementInputs(_ values: [ElementCount]) {
++        if !elementsInitialized {
++            elementInputs = Dictionary(uniqueKeysWithValues: values.map { ($0.id, number($0.count)) })
++            elementsInitialized = true
++            return
++        }
++
++        for item in values where focusedField != .element(item.id) {
++            elementInputs[item.id] = number(item.count)
++        }
++    }
++
+     private func applyInputChanges(from oldValue: Hades2ViewInputSnapshot, to newValue: Hades2ViewInputSnapshot) {
+         if vitalsInitialized {
+             if oldValue.healthCurrent != newValue.healthCurrent { model.setVital("health", field: "current", text: newValue.healthCurrent) }
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/tests/test_backend_core_round12.py /mnt/data/MacGamingTrainer_v0.17.3/tests/test_backend_core_round12.py
+--- /mnt/data/MacGamingTrainer_v0.17.2/tests/test_backend_core_round12.py	2026-09-17 12:52:44.108608335 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/tests/test_backend_core_round12.py	2026-09-17 13:36:35.802199562 +0000
+@@ -34,7 +34,7 @@
+ 
+ 
+ assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+-assert APP_BACKEND_VERSION == '0.17.2'
++assert APP_BACKEND_VERSION == '0.17.3'
+ assert any(row['id'] == 'hades2' and row['protocolVersion'] == 4 for row in available_games())
+ 
+ context = GameAdapterContext(
+@@ -46,7 +46,7 @@
+ hello = router.handle({'id':'hello','command':'hello','params':{}})
+ assert hello['ok'] and hello['protocolVersion'] == 5
+ assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
+-assert hello['result']['backendVersion'] == '0.17.2'
++assert hello['result']['backendVersion'] == '0.17.3'
+ reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
+ assert reply['ok'] and reply['result']['command'] == 'poke'
+ assert router.handle({'id':'a','command':'poke','params':{'x':1}}) == reply
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/tests/test_round17_static.py /mnt/data/MacGamingTrainer_v0.17.3/tests/test_round17_static.py
+--- /mnt/data/MacGamingTrainer_v0.17.2/tests/test_round17_static.py	2026-09-17 12:52:44.108901653 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/tests/test_round17_static.py	2026-09-17 13:37:53.343525799 +0000
+@@ -45,7 +45,7 @@
+ 
+ with (ROOT / 'Info.plist').open('rb') as handle:
+     plist = plistlib.load(handle)
+-assert plist['CFBundleShortVersionString'] == '0.17.2'
+-assert plist['CFBundleVersion'] == '25'
++assert plist['CFBundleShortVersionString'] == '0.17.3'
++assert plist['CFBundleVersion'] == '26'
+ 
+ print('round17_static_ok')
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/tests/test_swift_integrity_v0172.py /mnt/data/MacGamingTrainer_v0.17.3/tests/test_swift_integrity_v0172.py
+--- /mnt/data/MacGamingTrainer_v0.17.2/tests/test_swift_integrity_v0172.py	2026-09-17 12:57:52.372158497 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/tests/test_swift_integrity_v0172.py	2026-09-17 13:36:35.802304558 +0000
+@@ -57,25 +57,26 @@
+ observer_zone = view[view.index('private var connectionObservedContent'):view.index('private func resetEditorInputs')]
+ assert 'String(format:' not in observer_zone
+ 
+-# The non-terminal double-click builder is a real app bundle, not a .command
+-# file that opens Terminal.
+-builder = ROOT / 'Build Trainer.app'
+-exe = builder / 'Contents/MacOS/BuildTrainer'
+-plist_path = builder / 'Contents/Info.plist'
+-assert exe.is_file() and (exe.stat().st_mode & 0o111)
+-assert plist_path.is_file()
+-with plist_path.open('rb') as fh:
+-    plist = plistlib.load(fh)
+-assert plist['CFBundlePackageType'] == 'APPL'
+-assert plist['CFBundleExecutable'] == 'BuildTrainer'
+-assert plist['LSUIElement'] is True
+-builder_text = exe.read_text()
+-assert '/bin/bash "$BUILD_SCRIPT"' in builder_text
+-assert 'build-gui.log' in builder_text
+-assert 'Terminal' not in builder_text
+-bash = shutil.which('bash')
+-if bash:
+-    subprocess.run([bash, '-n', str(exe)], check=True)
++# The experimental Finder build helper was removed in v0.17.3 after real
++# macOS permission/path failures. Manual build.sh is the supported path.
++assert not (ROOT / 'Build Trainer.app').exists()
++
++# Hades2View helper calls must close over declarations in the same type. This
++# catches refactor regressions such as deleting syncElementInputs while leaving
++# its call site behind; plain Swift parsing accepts such unresolved names.
++helper_calls = set(re.findall(r'(?<![.$A-Za-z0-9_])([a-z_][A-Za-z0-9_]*)\s*\(', view))
++helper_decls = set(re.findall(r'\bfunc\s+([a-z_][A-Za-z0-9_]*)\s*\(', view))
++helper_prefixes = (
++    'sync', 'apply', 'reset', 'open', 'editable', 'feature', 'section',
++    'spawn', 'multiplier', 'stat', 'elementMetric', 'compact', 'speed',
++    'number', 'pair', 'resource', 'message',
++)
++missing_helpers = sorted(
++    name for name in helper_calls
++    if name.startswith(helper_prefixes) and name not in helper_decls
++)
++assert not missing_helpers, f'unresolved Hades2View helper calls: {missing_helpers}'
++assert 'private func syncElementInputs(_ values: [ElementCount])' in view
+ 
+ # Parse the entire source graph with the generated active-game binding.
+ swiftc = shutil.which('swiftc')
+diff -ruN '--exclude=VALIDATION_v0.17.3.txt' '--exclude=CHANGES_v0.17.2_to_v0.17.3.diff' /mnt/data/MacGamingTrainer_v0.17.2/tests/test_swift_symbol_integrity_v0173.py /mnt/data/MacGamingTrainer_v0.17.3/tests/test_swift_symbol_integrity_v0173.py
+--- /mnt/data/MacGamingTrainer_v0.17.2/tests/test_swift_symbol_integrity_v0173.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.3/tests/test_swift_symbol_integrity_v0173.py	2026-09-17 13:36:35.802435464 +0000
+@@ -0,0 +1,42 @@
++from pathlib import Path
++import re
++import shutil
++import subprocess
++
++ROOT = Path(__file__).resolve().parents[1]
++view_path = ROOT / 'Sources/Hades2/Hades2View.swift'
++view = view_path.read_text()
++
++# Fast source-level helper closure check.
++helper_calls = set(re.findall(r'(?<![.$A-Za-z0-9_])([a-z_][A-Za-z0-9_]*)\s*\(', view))
++helper_decls = set(re.findall(r'\bfunc\s+([a-z_][A-Za-z0-9_]*)\s*\(', view))
++helper_prefixes = (
++    'sync', 'apply', 'reset', 'open', 'editable', 'feature', 'section',
++    'spawn', 'multiplier', 'stat', 'elementMetric', 'compact', 'speed',
++    'number', 'pair', 'resource', 'message',
++)
++missing = sorted(name for name in helper_calls if name.startswith(helper_prefixes) and name not in helper_decls)
++assert not missing, f'missing Hades2View helper declarations: {missing}'
++
++# Parser-assisted unresolved-symbol approximation. Parse-only Swift accepts
++# unknown names, but its syntax tree exposes unresolved_decl_ref_expr nodes.
++# After subtracting locals/members and known stdlib globals, no lowercase bare
++# identifier should remain in the main Hades view.
++swiftc = shutil.which('swiftc')
++if swiftc:
++    proc = subprocess.run([swiftc, '-frontend', '-dump-parse', str(view_path)], capture_output=True, text=True, check=True)
++    unresolved = set(re.findall(r'unresolved_decl_ref_expr[^\n]*name="([^"]+)"', proc.stdout))
++    declared = set(re.findall(r'\b(?:var|let|func|struct|class|enum|protocol|typealias|case)\s+([A-Za-z_][A-Za-z0-9_]*)', view))
++    declared |= set(re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*:', view))
++    declared |= set(re.findall(r'\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b', view))
++    for match in re.finditer(r'\{\s*([^{}\n]+?)\s+in\b', view):
++        declared |= set(re.findall(r'\b([A-Za-z_][A-Za-z0-9_]*)\b', match.group(1)))
++    known = {'withAnimation', 'max', 'min', 'abs'}
++    suspicious = sorted(name for name in unresolved if name and name[0].islower() and name not in declared and name not in known)
++    assert not suspicious, f'suspicious unresolved lowercase identifiers in Hades2View: {suspicious}'
++
++assert 'syncElementInputs(snapshot.elements)' in view
++assert 'private func syncElementInputs(_ values: [ElementCount])' in view
++assert 'ElementAmount' not in view
++assert not (ROOT / 'Build Trainer.app').exists()
++print('swift_symbol_integrity_v0173_ok')

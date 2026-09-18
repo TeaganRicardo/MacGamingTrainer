@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "hades2",
+  "displayName": "Hades II",
+  "protocolVersion": 5,
+  "backend": {
+    "adapter": "games.hades2.adapter:Hades2Adapter"
+  },
+  "frontend": {
+    "sourceDirectory": "Sources/Hades2",
+    "moduleType": "Hades2GameModule",
+    "architectures": [
+      "arm64"
+    ],
+    "minimumMacOS": "14.0"
+  },
+  "steamAppId": "1145350",
+  "buildRequirements": {
+    "lldbPython": true,
+    "debuggerEntitlement": true,
+    "entitlements": "Backend/games/hades2/trainer-entitlements.plist"
+  },
+  "app": {
+    "bundleIdentifier": "com.gao.macgamingtrainer",
+    "displayName": "Mac Gaming Trainer"
+  },
+  "targetApplication": {
+    "processName": "Hades II",
+    "bundleIdentifier": "com.supergiantgames.macos.hades2"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "uuid": "6DFB0A36-6249-319F-8E18-5FC94898925A",
+  "preferred_base": 4294967296,
+  "symbols": {
+    "lua_gettop": {
+      "rva": 82504,
+      "prefix": "080840f9091040f9290140f9080109cb"
+    },
+    "lua_settop": {
+      "rva": 82532,
+      "prefix": "c101f837081040f9080140f90851218b"
+    },
+    "luaL_loadbufferx": {
+      "rva": 181368,
+      "prefix": "ff8300d1fd7b01a9fd430091e10b00a9"
+    },
+    "lua_pcallk": {
+      "rva": 87476,
+      "prefix": "ff4301d1f85f01a9f65702a9f44f03a9"
+    },
+    "lua_tolstring": {
+      "rva": 84188,
+      "prefix": "f657bda9f44f01a9fd7b02a9fd830091"
+    },
+    "_ZN3sgg13ScriptManager12LuaInterfaceE": {
+      "rva": 100841032
+    },
+    "_ZN3sgg13ConfigOptions20RequireFocusToUpdateE": {
+      "rva": 100793566
+    }
+  }
+}

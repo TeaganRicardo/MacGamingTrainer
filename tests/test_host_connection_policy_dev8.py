@@ -1,0 +1,128 @@
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import textwrap
+
+ROOT = Path(__file__).resolve().parents[1]
+SWIFTC = shutil.which('swiftc')
+if not SWIFTC:
+    raise SystemExit('swiftc required for host connection policy test')
+
+harness = r'''
+func fail(_ message: String) -> Never {
+    fatalError(message)
+}
+
+var policy = TrainerConnectionPolicy()
+
+// No target means no background restart/connect.
+policy.backendBecameUnavailable()
+policy.backendBecameAvailable()
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+    fail("restarted backend without a running target")
+}
+if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("connected without a running target")
+}
+
+// A target launch can recover a missing backend first, then connect exactly once
+// when that backend becomes available.
+policy.targetStateChanged(running: true)
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+    fail("launch did not request missing backend recovery")
+}
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+    fail("backend restart request was not one-shot")
+}
+policy.backendBecameAvailable()
+if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("recovered backend did not lead to automatic connect")
+}
+if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("launch connect was not one-shot")
+}
+
+// Busy state defers the same bounded activation request instead of discarding it.
+policy.targetActivated()
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
+    fail("restarted backend while host was busy")
+}
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+    fail("deferred backend restart was lost")
+}
+policy.backendBecameAvailable()
+if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
+    fail("connected while host was busy")
+}
+if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("deferred activation connect was lost")
+}
+
+// An unexpected backend loss while the target is live becomes one fallback
+// restart request after the session-level recovery path is no longer busy.
+policy.backendBecameUnavailable()
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
+    fail("host raced session-level backend recovery")
+}
+if !policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: true) {
+    fail("backend loss did not preserve fallback recovery intent")
+}
+
+// A terminal module state can veto automatic backend churn.
+policy.targetActivated()
+if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: false, actionsEnabled: false) {
+    fail("backend restarted while host actions were terminally disabled")
+}
+
+// Explicit debugger detach suppresses reconnect, but does not require killing or
+// suppressing the shared backend itself.
+policy.backendBecameAvailable()
+policy.connectionChanged(connected: true)
+policy.userWillToggleConnection(currentlyConnected: true)
+policy.targetActivated()
+policy.backendBecameAvailable()
+if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("manual detach was ignored")
+}
+if !policy.automaticConnectionSuppressed {
+    fail("manual detach suppression was not retained")
+}
+
+// Explicit reconnect clears the suppression immediately.
+policy.userWillToggleConnection(currentlyConnected: false)
+if policy.automaticConnectionSuppressed {
+    fail("manual reconnect did not clear suppression")
+}
+
+// A real target restart resets the previous lifetime's detach/recovery state.
+policy.userWillToggleConnection(currentlyConnected: true)
+policy.targetStateChanged(running: false)
+if policy.automaticConnectionSuppressed || policy.connectRequested || policy.backendRestartRequested || policy.targetRunning {
+    fail("target termination did not clear lifecycle state")
+}
+policy.targetStateChanged(running: true)
+if !policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("new target lifetime did not restore automatic connect")
+}
+
+print("host_connection_policy_dev8_ok")
+'''
+
+with tempfile.TemporaryDirectory(prefix='mgt-dev8-host-policy-') as td:
+    td = Path(td)
+    main = td / 'main.swift'
+    binary = td / 'policy_test'
+    main.write_text(textwrap.dedent(harness), encoding='utf-8')
+    subprocess.run([
+        SWIFTC,
+        str(ROOT / 'Sources/Core/Host/TrainerConnectionPolicy.swift'),
+        str(main),
+        '-o', str(binary),
+    ], check=True, cwd=ROOT)
+    proc = subprocess.run([str(binary)], cwd=ROOT, text=True, capture_output=True, timeout=10)
+    if proc.returncode != 0:
+        print(proc.stdout)
+        print(proc.stderr)
+        raise SystemExit(proc.returncode)
+    print(proc.stdout.strip())

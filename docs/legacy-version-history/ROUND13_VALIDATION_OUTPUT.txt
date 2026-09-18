@@ -1,0 +1,24 @@
+MacGamingTrainer Round 13 validation
+====================================
+backend_core_round12_ok
+hades2_adapter_round12_ok
+round12_static_ok
+swift_round12_ok
+module_contract_round13_ok
+preparation_round8_ok
+preparation_round9_staged_ok
+server_round9_compat_ok
+server_round10_compat_ok
+swift_round9_compat_ok
+swift_round10_compat_ok
+round11_compat_ok
+round9_mock_ok
+round10_mock_ok
+python_compile_ok
+build_sh_syntax_ok
+plist_ok
+{"backendAdapter": "games.hades2.adapter:Hades2Adapter", "buildRequirements": {"debuggerEntitlement": true, "entitlements": "Backend/games/hades2/trainer-entitlements.plist", "lldbPython": true}, "displayName": "Hades II", "frontend": {"moduleType": "Hades2GameModule", "sourceDirectory": "Sources/Hades2"}, "hostProtocolVersion": 5, "id": "hades2", "protocolVersion": 4, "steamAppId": "1145350"}
+swift_full_parse_ok
+core_coupling_audit_ok
+hades_identity_duplication_audit_ok
+all_round13_validation_ok

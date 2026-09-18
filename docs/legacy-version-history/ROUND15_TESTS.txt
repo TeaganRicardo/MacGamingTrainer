@@ -1,0 +1,35 @@
+Round 15 validation targets
+
+Architecture:
+- tests/test_global_decoupling_round15.py
+- tests/test_module_contract_round13.py
+- tests/test_packaged_module_round14.py
+- tests/test_build_contract_round14.py
+- tests/test_backend_core_round12.py
+- tests/test_round12_static.py
+- tests/test_swift_round12.py
+- tests/test_swift_file_boundaries_round14_1.py
+
+Hades compatibility:
+- tests/test_hades2_adapter_round12.py
+- tests/test_preparation_round9.py
+- tests/legacy/test_server_round9.py
+- tests/legacy/test_server_round10.py
+- tests/legacy/test_swift_round9.py
+- tests/legacy/test_swift_round10.py
+- tests/legacy/test_round11_static.py
+- tests/round9_mock.lua
+- tests/round10_mock.lua
+
+Static/tooling:
+- Python py_compile
+- Python 3.9 grammar parse for Backend + Tools
+- recursive Swift source parse with generated Hades binding
+- bash -n build.sh
+- plist validation
+- Core coupling scan
+
+Target Mac still required for:
+- real SwiftUI semantic typecheck/link with Apple SDK
+- codesign/LLDB Python gate
+- Hades II process attach and gameplay regression

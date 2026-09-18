@@ -1,0 +1,4200 @@
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/BUILDING.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/BUILDING.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/BUILDING.md	2026-09-17 08:43:47.767805678 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/BUILDING.md	2026-09-17 08:53:25.153174640 +0000
+@@ -1,64 +1,137 @@
+-# Mac Gaming Trainer v0.11.0 — Build on macOS
++# Mac Gaming Trainer v0.14.0 — Build on macOS
+ 
+-Requirements: Apple Silicon Mac and Xcode / Command Line Tools providing `swiftc`, `python3`, and `lldb`.
++当前构建模型是 **通用宿主 + 单个选中游戏模块**。Hades II 的 LLDB/Lua、签名权限、arm64 目标都不是宿主默认值，而由 `Backend/games/hades2/module.json` 显式声明。
+ 
+-First verify the active developer environment:
++## 选择游戏模块
++
++默认模块来自根目录：
++
++```text
++ACTIVE_GAME_ID
++```
++
++构建默认模块：
++
++```bash
++chmod +x build.sh
++./build.sh
++```
++
++构建指定模块：
++
++```bash
++./build.sh hades2
++```
++
++也可使用：
++
++```bash
++MGT_GAME_ID=hades2 ./build.sh
++```
++
++构建会完整校验该模块的源码侧 manifest，只编译其 Swift frontend，并只打包该 backend game package。
++
++## 通用构建依赖
++
++当前宿主仍是 SwiftUI + Python JSONL，因此构建机需要 Apple developer tools 提供：
+ 
+ ```bash
+ xcrun --find swiftc
+-xcrun --find lldb
+ xcrun --find python3
+-xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["xcrun","lldb","-P"],text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
++codesign --version
+ ```
+ 
+-The final command must succeed. The LLDB path injection matches the runtime loader; a bare `import lldb` is not a valid build preflight on all Xcode installations.
++只有所选模块声明 `lldbPython: true` 时才额外检查 LLDB Python。
++
++## Hades II 特有依赖
+ 
+-Build:
++`hades2` 声明：
++
++```json
++{
++  "frontend": {
++    "architectures": ["arm64"],
++    "minimumMacOS": "14.0"
++  },
++  "buildRequirements": {
++    "lldbPython": true,
++    "debuggerEntitlement": true
++  }
++}
++```
++
++因此 Hades II 构建会验证：
+ 
+ ```bash
+-cd /path/to/MacGamingTrainer_v11_round11
+-chmod +x build.sh
+-./build.sh
++xcrun --find lldb
++xcrun lldb -P
+ ```
+ 
+-Output:
++并使用：
+ 
+ ```text
+-dist/Mac Gaming Trainer.app
++Backend/games/hades2/trainer-entitlements.plist
+ ```
+ 
+-The build script ad-hoc signs with `entitlements.plist`, including the Debugging Tool entitlement used by the known-good original app:
++其他游戏不会自动继承这些要求。
+ 
+-```text
+-com.apple.security.cs.debugger = true
++## App identity 与架构
++
++`module.json` 可以声明：
++
++```json
++{
++  "app": {
++    "bundleIdentifier": "com.example.trainer.game",
++    "displayName": "Mac Gaming Trainer - Example"
++  },
++  "frontend": {
++    "architectures": ["arm64", "x86_64"],
++    "minimumMacOS": "14.0"
++  }
++}
+ ```
+ 
+-Verify:
++若声明多个 architecture，`build.sh` 会分别编译并通过 `lipo` 生成 universal binary。若不声明 architecture，则使用构建机当前架构。
+ 
+-```bash
+-codesign -d --entitlements :- "dist/Mac Gaming Trainer.app"
++不同游戏可使用不同 bundle identifier，因此可以并存安装且不会意外共享 bundle-scoped `UserDefaults`。Hades II 显式保留历史 bundle identifier `com.gao.macgamingtrainer`，避免现有快捷键/偏好迁移丢失。
++
++## 输出
++
++App 文件名来自模块的 `app.displayName`。Hades II 仍输出：
++
++```text
++dist/Mac Gaming Trainer.app
+ ```
+ 
+-Launch:
++启动：
+ 
+ ```bash
+ open "dist/Mac Gaming Trainer.app"
+ ```
+ 
+-Runtime log:
++打包后的 App 只包含：
+ 
+-```text
+-~/Library/Application Support/MacGamingTrainer/trainer.log
+-```
++- 通用 Swift host
++- 通用 Python backend core
++- 所选 game module
++- `Resources/ACTIVE_GAME_ID`（构建来源标记）
+ 
+-The in-app self-check under 游戏管理 should be run after first launch. It reports the developer-tool/LLDB environment, protocol compatibility, game compatibility and live runtime support separately. Use “导出诊断包” to create a ZIP containing report.json, the last 256 KiB of trainer.log and symbols.json. It does not include saves or custom Profile payloads.
++不会包含其他游戏的 frontend、backend、LLDB transport 或 entitlements。
+ 
++## 检查模块
+ 
+-## LLDB Python verification
++查看规范化 manifest：
+ 
+-The backend loads LLDB the same way as the runtime: first query the module directory, then prepend it to Python's search path. Do not use a bare `import lldb` as a build gate.
++```bash
++python3 tools/game_module_tool.py hades2 json
++```
++
++生成 Swift active-game binding：
+ 
+ ```bash
+-xcrun lldb -P
+-xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["xcrun","lldb","-P"],text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
++python3 tools/game_module_tool.py hades2 generate-swift /tmp/ActiveGame.generated.swift
++cat /tmp/ActiveGame.generated.swift
+ ```
++
++详见 `GAME_MODULES.md`。
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/game_spec.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/game_spec.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/game_spec.py	2026-09-17 08:10:00.885624622 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/game_spec.py	2026-09-17 08:18:16.753093372 +0000
+@@ -5,20 +5,56 @@
+ 
+ @dataclass(frozen=True)
+ class GameSpec:
+-    """Distribution-agnostic identity and local paths for one game."""
++    """Distribution-agnostic local identity for one game.
++
++    Core does not assume a Steam install, a macOS .app bundle, or a CPU
++    architecture. Game modules opt into those concepts explicitly.
++    """
+ 
+     id: str
+     display_name: str
+     process_name: str
+-    bundle_identifier: Optional[str]
+-    app_path: Path
+-    executable_name: str
++    executable_path: Path
++    bundle_identifier: Optional[str] = None
++    app_bundle_path: Optional[Path] = None
+     save_path: Optional[Path] = None
+-    minimum_architecture: Optional[str] = 'arm64'
++    minimum_architecture: Optional[str] = None
++
++    @classmethod
++    def macos_app_bundle(
++        cls,
++        *,
++        id: str,
++        display_name: str,
++        process_name: str,
++        app_path: Path,
++        executable_name: str,
++        bundle_identifier: Optional[str] = None,
++        save_path: Optional[Path] = None,
++        minimum_architecture: Optional[str] = None,
++    ) -> 'GameSpec':
++        app_path = Path(app_path)
++        return cls(
++            id=id,
++            display_name=display_name,
++            process_name=process_name,
++            executable_path=app_path / 'Contents' / 'MacOS' / executable_name,
++            bundle_identifier=bundle_identifier,
++            app_bundle_path=app_path,
++            save_path=save_path,
++            minimum_architecture=minimum_architecture,
++        )
++
++    @property
++    def app_path(self) -> Path:
++        """Compatibility alias for modules that require a macOS app bundle."""
++        if self.app_bundle_path is None:
++            raise RuntimeError(f'{self.display_name} does not declare a macOS app bundle path.')
++        return self.app_bundle_path
+ 
+     @property
+-    def executable_path(self) -> Path:
+-        return self.app_path / 'Contents' / 'MacOS' / self.executable_name
++    def executable_name(self) -> str:
++        return self.executable_path.name
+ 
+ 
+ @dataclass(frozen=True)
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/module_manifest.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/module_manifest.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/module_manifest.py	2026-09-17 08:03:48.689260802 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/module_manifest.py	2026-09-17 08:50:43.978020361 +0000
+@@ -2,12 +2,15 @@
+ from pathlib import Path
+ import json
+ import re
+-from typing import Any, Mapping
++from typing import Any, Mapping, Optional, Tuple, Union
+ 
+ 
+-_ID_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{0,63}$')
++_ID_RE = re.compile(r'^[a-z][a-z0-9_]{0,63}$')
+ _PY_TARGET_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$')
+ _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
++_BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
++_MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
++_SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
+ 
+ 
+ class ManifestError(ValueError):
+@@ -18,13 +21,21 @@
+ class FrontendSpec:
+     source_directory: str
+     module_type: str
++    architectures: Tuple[str, ...] = ()
++    minimum_macos: Optional[str] = None
++
++
++@dataclass(frozen=True)
++class AppSpec:
++    bundle_identifier: str
++    display_name: str
+ 
+ 
+ @dataclass(frozen=True)
+ class BuildRequirements:
+     lldb_python: bool = False
+     debugger_entitlement: bool = False
+-    entitlements: str | None = None
++    entitlements: Optional[str] = None
+ 
+ 
+ @dataclass(frozen=True)
+@@ -34,13 +45,14 @@
+     display_name: str
+     module_protocol_version: int
+     adapter: str
+-    frontend: FrontendSpec | None
++    frontend: Optional[FrontendSpec]
++    app: AppSpec
+     build: BuildRequirements
+     source_path: Path
+     extra_public_metadata: Mapping[str, Any]
+ 
+     @staticmethod
+-    def _safe_relative_path(value: object, field: str) -> str | None:
++    def _safe_relative_path(value: object, field: str) -> Optional[str]:
+         if value is None:
+             return None
+         if not isinstance(value, str) or not value.strip():
+@@ -50,8 +62,23 @@
+             raise ManifestError(f'{field} must stay inside the project root.')
+         return value
+ 
++    @staticmethod
++    def _safe_app_display_name(value: object, field: str) -> str:
++        if not isinstance(value, str):
++            raise ManifestError(f'{field} must be a string.')
++        value = value.strip()
++        if not value or len(value) > 120 or any(ord(ch) < 32 for ch in value) or '/' in value or ':' in value:
++            raise ManifestError(f'{field} must be a safe non-empty app name.')
++        return value
++
++    @staticmethod
++    def _default_app_name(display_name: str, game_id: str) -> str:
++        safe = ''.join('-' if ch in '/:' or ord(ch) < 32 else ch for ch in display_name).strip()
++        safe = safe[:80].strip() or game_id
++        return f'Mac Gaming Trainer - {safe}'
++
+     @classmethod
+-    def load(cls, path: str | Path) -> 'GameModuleManifest':
++    def load(cls, path: Union[str, Path]) -> 'GameModuleManifest':
+         source = Path(path)
+         try:
+             data = json.loads(source.read_text(encoding='utf-8'))
+@@ -66,10 +93,11 @@
+ 
+         game_id = data.get('id')
+         if not isinstance(game_id, str) or not _ID_RE.fullmatch(game_id):
+-            raise ManifestError('id must be a stable lowercase module identifier.')
++            raise ManifestError('id must be a lowercase Python-package-safe identifier (a-z, 0-9, underscore).')
+         display_name = data.get('displayName')
+         if not isinstance(display_name, str) or not display_name.strip() or len(display_name) > 120:
+             raise ManifestError('displayName must be a non-empty string.')
++        display_name = display_name.strip()
+ 
+         module_protocol_version = data.get('protocolVersion')
+         if type(module_protocol_version) is not int or not 1 <= module_protocol_version <= 1_000_000:
+@@ -89,7 +117,40 @@
+             module_type = frontend_data.get('moduleType')
+             if not isinstance(module_type, str) or not _SWIFT_TYPE_RE.fullmatch(module_type):
+                 raise ManifestError('frontend.moduleType must be a Swift type identifier.')
+-            frontend = FrontendSpec(source_directory=source_directory or '', module_type=module_type)
++
++            raw_arches = frontend_data.get('architectures', [])
++            if not isinstance(raw_arches, list) or any(not isinstance(item, str) for item in raw_arches):
++                raise ManifestError('frontend.architectures must be an array of architecture names.')
++            architectures = tuple(raw_arches)
++            if len(set(architectures)) != len(architectures):
++                raise ManifestError('frontend.architectures contains duplicates.')
++            invalid_arches = [arch for arch in architectures if arch not in _SUPPORTED_SWIFT_ARCHES]
++            if invalid_arches:
++                raise ManifestError('Unsupported frontend architecture: ' + ', '.join(invalid_arches))
++
++            minimum_macos = frontend_data.get('minimumMacOS')
++            if minimum_macos is not None:
++                if not isinstance(minimum_macos, str) or not _MACOS_VERSION_RE.fullmatch(minimum_macos):
++                    raise ManifestError('frontend.minimumMacOS must look like 14.0 or 14.4.1.')
++            frontend = FrontendSpec(
++                source_directory=source_directory or '',
++                module_type=module_type,
++                architectures=architectures,
++                minimum_macos=minimum_macos,
++            )
++
++        app_data = data.get('app', {})
++        if not isinstance(app_data, dict):
++            raise ManifestError('app must be an object.')
++        default_bundle_id = f"com.gao.macgamingtrainer.{game_id.replace('_', '-')}"
++        bundle_identifier = app_data.get('bundleIdentifier', default_bundle_id)
++        if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
++            raise ManifestError('app.bundleIdentifier must be a reverse-DNS bundle identifier.')
++        app_display_name = cls._safe_app_display_name(
++            app_data.get('displayName', cls._default_app_name(display_name, game_id)),
++            'app.displayName',
++        )
++        app = AppSpec(bundle_identifier=bundle_identifier, display_name=app_display_name)
+ 
+         raw_build = data.get('buildRequirements', {})
+         if not isinstance(raw_build, dict):
+@@ -107,15 +168,19 @@
+             entitlements=entitlements,
+         )
+ 
+-        reserved = {'schemaVersion', 'id', 'displayName', 'protocolVersion', 'backend', 'adapter', 'frontend', 'buildRequirements'}
++        reserved = {
++            'schemaVersion', 'id', 'displayName', 'protocolVersion', 'backend', 'adapter',
++            'frontend', 'app', 'buildRequirements',
++        }
+         public = {key: value for key, value in data.items() if key not in reserved and not key.startswith('_')}
+         return cls(
+             schema_version=schema_version,
+             id=game_id,
+-            display_name=display_name.strip(),
++            display_name=display_name,
+             module_protocol_version=module_protocol_version,
+             adapter=adapter,
+             frontend=frontend,
++            app=app,
+             build=build,
+             source_path=source,
+             extra_public_metadata=public,
+@@ -130,17 +195,44 @@
+         metadata.update(self.extra_public_metadata)
+         return metadata
+ 
+-    def validate_project_paths(self, project_root: str | Path) -> None:
++    def validate_backend_layout(self, backend_root: Union[str, Path]) -> None:
++        """Validate only paths/imports required by a packaged backend.
++
++        A shipped .app intentionally does not contain the Swift source tree, so
++        runtime discovery must not perform build-time frontend validation.
++        """
++        backend_root = Path(backend_root).resolve()
++        module_dir = self.source_path.parent.resolve()
++        expected_module_dir = (backend_root / 'games' / self.id).resolve()
++        if module_dir != expected_module_dir:
++            raise ManifestError(
++                f'Game module {self.id!r} must live at Backend/games/{self.id}/module.json.'
++            )
++        required_adapter_prefix = f'games.{self.id}.'
++        if not self.adapter.startswith(required_adapter_prefix):
++            raise ManifestError(
++                f'backend.adapter must stay inside the game package ({required_adapter_prefix}...).'
++            )
++
++    def validate_project_paths(self, project_root: Union[str, Path]) -> None:
++        """Full source/build validation used by tooling, never runtime discovery."""
+         root = Path(project_root).resolve()
++        self.validate_backend_layout(root / 'Backend')
++        module_dir = self.source_path.parent.resolve()
+         if self.frontend is not None:
+             frontend = (root / self.frontend.source_directory).resolve()
+             if root not in frontend.parents and frontend != root:
+                 raise ManifestError('frontend source directory escapes the project root.')
++            sources_root = (root / 'Sources').resolve()
++            if sources_root not in frontend.parents:
++                raise ManifestError('frontend source directory must live under Sources/.')
+             if not frontend.is_dir():
+                 raise ManifestError(f'Frontend source directory does not exist: {frontend}')
+         if self.build.entitlements:
+             entitlements = (root / self.build.entitlements).resolve()
+             if root not in entitlements.parents and entitlements != root:
+                 raise ManifestError('entitlements path escapes the project root.')
++            if module_dir not in entitlements.parents:
++                raise ManifestError('entitlements must live inside the selected game module.')
+             if not entitlements.is_file():
+                 raise ManifestError(f'Entitlements file does not exist: {entitlements}')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/protocol.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/protocol.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/protocol.py	2026-09-17 08:04:08.768950051 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/protocol.py	2026-09-17 08:48:11.882637890 +0000
+@@ -1,5 +1,8 @@
+ from abc import ABC, abstractmethod
+ from collections import OrderedDict
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any, Mapping
+ import json
+ import logging
+ 
+@@ -7,7 +10,7 @@
+ # module has its own independent protocol/schema version exposed alongside it.
+ HOST_PROTOCOL_VERSION = 5
+ PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
+-APP_BACKEND_VERSION = '0.12.0'
++APP_BACKEND_VERSION = '0.14.0'
+ 
+ 
+ class AdapterError(RuntimeError):
+@@ -16,17 +19,41 @@
+         self.code = code
+ 
+ 
++@dataclass(frozen=True)
++class GameAdapterContext:
++    game_id: str
++    display_name: str
++    module_protocol_version: int
++    module_dir: Path
++    public_metadata: Mapping[str, Any]
++
++
+ class GameAdapter(ABC):
+     """Per-game backend contract.
+ 
+     The JSONL host owns framing, idempotency and the host envelope. A game
+     adapter owns command validation, game state, preparation, diagnostics and
+     whatever transport it needs. New games do not need to use LLDB or Lua.
++
++    Manifest-owned identity arrives in ``context`` before the adapter performs
++    any game-specific initialization, so a module never needs to duplicate its
++    id/display/protocol constants.
+     """
+ 
+-    game_id = 'unknown'
+-    display_name = 'Unknown Game'
+-    module_protocol_version = 1
++    def __init__(self, context: GameAdapterContext):
++        self.context = context
++
++    @property
++    def game_id(self):
++        return self.context.game_id
++
++    @property
++    def display_name(self):
++        return self.context.display_name
++
++    @property
++    def module_protocol_version(self):
++        return self.context.module_protocol_version
+ 
+     @abstractmethod
+     def dispatch(self, command: str, params: dict, request_id: str):
+@@ -37,11 +64,13 @@
+         raise NotImplementedError
+ 
+     def metadata(self):
+-        return {
++        metadata = dict(self.context.public_metadata)
++        metadata.update({
+             'id': self.game_id,
+             'displayName': self.display_name,
+             'protocolVersion': self.module_protocol_version,
+-        }
++        })
++        return metadata
+ 
+ 
+ class JsonlRequestRouter:
+@@ -89,6 +118,8 @@
+                 }
+             else:
+                 result = self.adapter.dispatch(command, params, request_id)
++                if not isinstance(result, dict):
++                    raise TypeError('Game adapter dispatch() must return a JSON object.')
+             reply = self._envelope(request_id, True)
+             reply['result'] = result
+             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/adapter.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/adapter.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/adapter.py	2026-09-17 08:10:01.363501791 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/adapter.py	2026-09-17 08:27:57.295778607 +0000
+@@ -1,9 +1,9 @@
+ """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
+ from pathlib import Path
+ import sys, json, subprocess, time, traceback, logging, signal, math, zipfile, platform
+-from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION, AdapterError, GameAdapter
++from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION, AdapterError, GameAdapter, GameAdapterContext
+ from . import preparation
+-from .config import GAME_SPEC, STEAM_SPEC
++from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST
+ TransportError = AdapterError
+ 
+ TOGGLES=('godMode','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown','hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled','boonChoiceEnabled','moneyMultiplierEnabled','resourceMultiplierEnabled')
+@@ -138,11 +138,17 @@
+     raise ValueError('参数类型不支持。')
+ 
+ class Hades2Adapter(GameAdapter):
+-    game_id = GAME_SPEC.id
+-    display_name = GAME_SPEC.display_name
+-    module_protocol_version = 4
+     data_dir = preparation.DATA
+-    def __init__(self, transport=None):
++    def __init__(self, transport=None, context=None):
++        if context is None:
++            context = GameAdapterContext(
++                game_id=MODULE_MANIFEST.id,
++                display_name=MODULE_MANIFEST.display_name,
++                module_protocol_version=MODULE_MANIFEST.module_protocol_version,
++                module_dir=Path(__file__).resolve().parent,
++                public_metadata=MODULE_MANIFEST.public_metadata(),
++            )
++        super().__init__(context)
+         if transport is None:
+             from .transport import Hades2LuaTransport
+             transport = Hades2LuaTransport()
+@@ -738,7 +744,8 @@
+         x=subprocess.run(['/usr/bin/xcrun','--find','lldb'],capture_output=True,text=True,timeout=5);add('LLDB',x.returncode==0,x.stdout.strip() or x.stderr.strip())
+     except Exception as e:add('LLDB',False,e)
+     try:
+-        x=subprocess.run(['/usr/bin/xcrun','python3','-c','import lldb; print(lldb.SBDebugger)'],capture_output=True,text=True,timeout=8);add('LLDB Python',x.returncode==0,x.stdout.strip() or x.stderr.strip())
++        probe = 'import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
++        x=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=8);add('LLDB Python',x.returncode==0,x.stdout.strip() or x.stderr.strip())
+     except Exception as e:add('LLDB Python',False,e)
+     state=adapter.state if isinstance(getattr(adapter,'state',None),dict) else {}
+     add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/config.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/config.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/config.py	2026-09-17 08:10:00.886497461 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/config.py	2026-09-17 08:25:16.587576517 +0000
+@@ -1,18 +1,27 @@
+ from pathlib import Path
++
+ from core.game_spec import GameSpec, SteamSpec
++from core.module_manifest import GameModuleManifest
++
++MODULE_DIR = Path(__file__).resolve().parent
++MODULE_MANIFEST = GameModuleManifest.load(MODULE_DIR / 'module.json')
+ 
+ HOME = Path.home()
+ STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
+-GAME_SPEC = GameSpec(
+-    id='hades2',
+-    display_name='Hades II',
++STEAM_APP_ID = MODULE_MANIFEST.extra_public_metadata.get('steamAppId')
++if not isinstance(STEAM_APP_ID, str) or not STEAM_APP_ID.isdigit():
++    raise RuntimeError('Hades II module manifest is missing a valid steamAppId.')
++GAME_SPEC = GameSpec.macos_app_bundle(
++    id=MODULE_MANIFEST.id,
++    display_name=MODULE_MANIFEST.display_name,
+     process_name='Hades II',
+     bundle_identifier='com.supergiantgames.macos.hades2',
+     app_path=STEAMAPPS / 'common/Hades II/Hades II.app',
+     executable_name='Hades II',
+     save_path=HOME / 'Library/Application Support/Supergiant Games/Hades II',
++    minimum_architecture='arm64',
+ )
+-STEAM_SPEC = SteamSpec(app_id='1145350', steamapps_path=STEAMAPPS)
++STEAM_SPEC = SteamSpec(app_id=STEAM_APP_ID, steamapps_path=STEAMAPPS)
+ 
+ # Preserve the existing Hades II data location. New game modules should use a
+ # namespaced directory under MacGamingTrainer/<game-id> unless migration requires otherwise.
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/module.json /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/module.json
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/module.json	2026-09-17 08:04:22.694524257 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/module.json	2026-09-17 08:47:19.850823392 +0000
+@@ -8,12 +8,20 @@
+   },
+   "frontend": {
+     "sourceDirectory": "Sources/Hades2",
+-    "moduleType": "Hades2GameModule"
++    "moduleType": "Hades2GameModule",
++    "architectures": [
++      "arm64"
++    ],
++    "minimumMacOS": "14.0"
+   },
+   "steamAppId": "1145350",
+   "buildRequirements": {
+     "lldbPython": true,
+     "debuggerEntitlement": true,
+     "entitlements": "Backend/games/hades2/trainer-entitlements.plist"
++  },
++  "app": {
++    "bundleIdentifier": "com.gao.macgamingtrainer",
++    "displayName": "Mac Gaming Trainer"
+   }
+ }
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/preparation.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/preparation.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/preparation.py	2026-09-17 08:10:01.362938062 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/preparation.py	2026-09-17 08:18:30.896824593 +0000
+@@ -54,9 +54,12 @@
+ 
+ def _uuid(exe):
+     result = run('/usr/bin/xcrun', 'dwarfdump', '--uuid', str(exe)).decode()
+-    match = re.search(r'UUID: ([A-Fa-f0-9-]+) \(arm64\)', result)
++    architecture = GAME_SPEC.minimum_architecture
++    pattern = r'UUID: ([A-Fa-f0-9-]+) \(' + re.escape(architecture) + r'\)' if architecture else r'UUID: ([A-Fa-f0-9-]+) \([^)]*\)'
++    match = re.search(pattern, result)
+     if not match:
+-        raise RuntimeError('找不到 Apple Silicon Mach-O UUID。')
++        suffix = f'（{architecture}）' if architecture else ''
++        raise RuntimeError('找不到匹配架构的 Mach-O UUID' + suffix + '。')
+     return match.group(1).upper()
+ 
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/transport.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/transport.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/transport.py	2026-09-17 08:03:28.905643373 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/transport.py	2026-09-17 08:18:30.896986912 +0000
+@@ -34,8 +34,16 @@
+         self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None
+         try:
+             self.runtime_uuid=self.target.GetModuleAtIndex(0).GetUUIDString()
+-            if not self.runtime_uuid or not (self.target.GetTriple() or '').startswith(('arm64-','aarch64-')):
+-                raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 Apple Silicon 原生游戏。')
++            triple = self.target.GetTriple() or ''
++            required_arch = GAME_SPEC.minimum_architecture
++            arch_ok = True
++            if required_arch == 'arm64':
++                arch_ok = triple.startswith(('arm64-', 'aarch64-'))
++            elif required_arch:
++                arch_ok = triple.startswith(required_arch + '-')
++            if not self.runtime_uuid or not arch_ok:
++                requirement = required_arch or '受支持架构'
++                raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。')
+             for name in self.symbols:
+                 self.address(name)
+         except Exception:
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/registry.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/registry.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/registry.py	2026-09-17 08:08:12.639697553 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/registry.py	2026-09-17 08:47:07.031568737 +0000
+@@ -2,17 +2,23 @@
+ from pathlib import Path
+ 
+ from core.module_manifest import GameModuleManifest, ManifestError
++from core.protocol import GameAdapter, GameAdapterContext
+ 
+ _ROOT = Path(__file__).resolve().parent
+ 
+ 
+ def discover_manifests(root: Path = _ROOT):
+     rows = {}
+-    for path in sorted(Path(root).glob('*/module.json')):
+-        try:
+-            manifest = GameModuleManifest.load(path)
+-        except ManifestError:
+-            continue
++    root = Path(root)
++    backend_root = root.parent
++    for path in sorted(root.glob('*/module.json')):
++        manifest = GameModuleManifest.load(path)
++        # Runtime discovery validates only the packaged Backend tree. Full
++        # frontend/entitlements checks belong to the build tool because Sources/
++        # is intentionally absent from a shipped .app.
++        manifest.validate_backend_layout(backend_root)
++        if manifest.id in rows:
++            raise ManifestError(f'Duplicate game module id: {manifest.id}')
+         rows[manifest.id] = manifest
+     return rows
+ 
+@@ -36,13 +42,17 @@
+         raise ValueError(f'不支持的游戏模块：{game_id}') from error
+     module_name, class_name = manifest.adapter.split(':', 1)
+     module = import_module(module_name)
+-    adapter = getattr(module, class_name)()
+-    declared = getattr(adapter, 'module_protocol_version', None)
+-    if declared != manifest.module_protocol_version:
+-        try:
+-            adapter.close()
+-        finally:
+-            raise RuntimeError(
+-                f'游戏模块 {game_id} 协议声明不一致：manifest={manifest.module_protocol_version}, adapter={declared!r}'
+-            )
+-    return adapter
++    adapter_type = getattr(module, class_name, None)
++    if not isinstance(adapter_type, type) or not issubclass(adapter_type, GameAdapter):
++        raise TypeError(f'Adapter {manifest.adapter} must inherit GameAdapter.')
++    context = GameAdapterContext(
++        game_id=manifest.id,
++        display_name=manifest.display_name,
++        module_protocol_version=manifest.module_protocol_version,
++        module_dir=manifest.source_path.parent,
++        public_metadata=manifest.public_metadata(),
++    )
++    # Do not catch TypeError here: a TypeError raised *inside* a valid adapter
++    # constructor is a real module bug and must not be misreported as a bad
++    # constructor signature.
++    return adapter_type(context=context)
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/server.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/server.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/server.py	2026-09-17 08:07:18.415479101 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/server.py	2026-09-17 08:48:11.300026149 +0000
+@@ -39,7 +39,9 @@
+         Path(data_dir).mkdir(parents=True, exist_ok=True)
+         log_path = Path(data_dir) / 'trainer.log'
+     else:
+-        log_path = Path.home() / 'Library/Application Support/MacGamingTrainer/trainer.log'
++        # Generic fallback is namespaced per game. Modules that preserve a
++        # historical data location can still expose adapter.data_dir explicitly.
++        log_path = Path.home() / 'Library/Application Support/MacGamingTrainer' / adapter.game_id / 'trainer.log'
+         log_path.parent.mkdir(parents=True, exist_ok=True)
+     logging.basicConfig(filename=str(log_path), level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+     router = JsonlRequestRouter(adapter)
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/DEFERRED_REFACTOR_PLAN.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/DEFERRED_REFACTOR_PLAN.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/DEFERRED_REFACTOR_PLAN.md	2026-09-17 08:43:48.331797206 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/DEFERRED_REFACTOR_PLAN.md	2026-09-17 08:53:25.155696972 +0000
+@@ -1,64 +1,41 @@
+-# 后置完整重构计划
++# 后置重构计划（v0.14.0 更新）
+ 
+-完整物理重构按用户要求后置，不在 Round 10 内执行。当前 Feature Registry、Stat Registry、协议握手和 desired/active/dormant 状态机继续作为稳定逻辑基线。
++原 Round 10 的“大规模物理重构后置”已经被多游戏需求部分触发并完成。现在不再以拆文件数量为目标，而以新增游戏成本与 Hades II 实机风险为准。
+ 
+-## 触发时机
++## 已完成
+ 
+-满足以下条件后进入完整重构：
++- game module manifest / registry
++- generic JSONL server core
++- Hades II backend/frontend module isolation
++- generic Swift BackendProcess / BackendClient / TrainerBackendSession
++- generated active-game Swift binding
++- host/module 双层协议
++- per-game source/package selection
++- per-game LLDB / entitlement gating
++- GameSpec 去 Steam / app bundle / arm64 默认假设
++- build architecture 去 Hades arm64 固定值
++- per-game App/bundle identity
++- build-time / runtime manifest validation 分离
++- 第二游戏 packaged-backend smoke test
+ 
+-1. Round 10 新功能完成至少一轮目标 Mac 实机回归。
+-2. 没有仍在频繁变化的战斗功能协议。
+-3. 当前存档、Spawn、倍率、Profile、断线恢复路径无高优先级回归。
++## 仍后置：Hades II runtime.lua 模块化
+ 
+-## Phase A — Swift 物理拆分
++`Backend/games/hades2/runtime.lua` 继续保留单文件。只有目标 Mac 上的加载器能够稳定加载多文件 Lua，且 Cast / scene transition / save/profile 回归稳定后再拆。
+ 
+-保持行为和协议不变，只拆文件：
++这不影响新增其他游戏。
+ 
+-- `TrainerProtocol.swift` — JSONL schema、协议版本、请求/响应模型
+-- `TrainerModel.swift` — observable state、desired replay
+-- `GlobalHotkeys.swift` — 全局快捷键注册/迁移
+-- `CatalogModels.swift` — reward/resource/catalog metadata
+-- `MainTrainerView.swift` — 主界面与局内数据
+-- `BuildControlsView.swift` — 构筑/祝福/下一房奖励
+-- `SaveManagerView.swift` — 备份/恢复/删除
+-- `ProfileDiagnosticsView.swift` — 自定义配置、自检、诊断导出
++## 仍后置：Hades II transport 替代
+ 
+-要求：拆分前后 `swiftc -parse`、静态 contract 测试结果完全一致；目标 Mac 完整构建通过后再进入下一阶段。
++`Hades2LuaTransport` 保留为当前已验证实现。native helper / LLDB framework 等替代方案只有经过目标 Mac 回归后才考虑切换。
+ 
+-## Phase B — Python service 拆分
++## 可选未来：单 App 运行时多游戏切换
+ 
+-`server.py` 只保留 JSONL router 与错误边界：
++仅在明确需要一个安装包携带多模块时再做：
+ 
+-- `hades_adapter.py`
+-- `preferences.py`
+-- `localization.py`
+-- `diagnostics.py`
+-- `save_service.py`
+-- `protocol.py`
++- Swift frontend type erasure
++- runtime game picker
++- 多模块 resource/package discovery
++- active session teardown/recreate
++- 统一签名时的权限最小化重新设计
+ 
+-保持协议版本不变；只有确实改变 wire schema 时才升级协议。
+-
+-## Phase C — Lua 模块化
+-
+-这是风险最高的结构重构之一，仅在注入加载器能可靠加载多个 Lua 文件后实施：
+-
+-- feature registry/core lifecycle
+-- stat registry
+-- combat feature installers
+-- build/reward control
+-- catalog/spawn
+-- diagnostics/state serialization
+-
+-每次只迁移一组已经有 mock 覆盖的功能，禁止一次性 big-bang rewrite。
+-
+-## Phase D — Transport 最后处理
+-
+-`transport.py` 最后再动。它负责 LLDB attach、Lua boundary、进程时序与 debugger detach；代码量不大，但实机风险最高。
+-
+-可选方向：
+-
+-- 减少 Python/LLDB 环境依赖
+-- 直接使用 LLDB framework 或更稳定的 native helper
+-- 完整签名/notarization
+-
+-在替代路径经过实机长期验证前保留当前已工作的 transport 作为 fallback。
++当前 per-game build 的好处是权限最小、bundle preference 隔离、测试面清晰，不应为了“看起来更插件化”提前放弃。
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/GAME_MODULES.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/GAME_MODULES.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/GAME_MODULES.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/GAME_MODULES.md	2026-09-17 08:53:25.154049500 +0000
+@@ -0,0 +1,174 @@
++# Mac Gaming Trainer · Game Module Contract
++
++当前架构采用 **共享宿主、按游戏单独构建 App**。新增普通游戏时，目标是只增加游戏自己的 backend package 与 Swift frontend，不改 `server.py`、Core、App 或 build 逻辑。
++
++## 目录边界
++
++以 `example` 为例，新增：
++
++```text
++Backend/games/example/
++  __init__.py
++  module.json
++  adapter.py
++  ...transport / save / memory / symbols / runtime...
++
++Sources/Example/
++  ExampleTrainerModel.swift
++  ExampleTrainerView.swift
++```
++
++正常情况下不修改：
++
++```text
++Backend/server.py
++Backend/core/*
++Backend/games/registry.py
++Sources/App.swift
++Sources/Core/*
++build.sh
++```
++
++如果新游戏必须修改这些文件，应先判断是否真的是新的“宿主能力”，而不是把游戏特殊逻辑塞回 Core。
++
++## module.json 是唯一身份/协议源
++
++示例：
++
++```json
++{
++  "schemaVersion": 1,
++  "id": "example",
++  "displayName": "Example Game",
++  "protocolVersion": 1,
++  "backend": {
++    "adapter": "games.example.adapter:ExampleAdapter"
++  },
++  "frontend": {
++    "sourceDirectory": "Sources/Example",
++    "moduleType": "ExampleGameModule",
++    "architectures": ["arm64"],
++    "minimumMacOS": "14.0"
++  },
++  "app": {
++    "bundleIdentifier": "com.example.macgamingtrainer.example",
++    "displayName": "Mac Gaming Trainer - Example"
++  },
++  "buildRequirements": {
++    "lldbPython": false,
++    "debuggerEntitlement": false
++  }
++}
++```
++
++关键约束：
++
++- `id` 只允许小写字母、数字、下划线，并以字母开头；它也是 Python package 名。
++- manifest 必须位于 `Backend/games/<id>/module.json`。
++- adapter 必须位于 `games.<id>.*`，不能把另一款游戏的 adapter 当入口。
++- frontend 必须位于 `Sources/` 下。
++- `architectures` 当前支持 `arm64` / `x86_64`；可声明两个生成 universal binary。
++- 只有真正需要 LLDB 的模块才声明 `lldbPython: true`。
++- debugger entitlement 必须由对应游戏模块自己携带。
++
++`app` 可省略。省略时会为新模块生成独立默认 bundle identifier（`game_id` 中的下划线会转换为连字符）与独立 App 名称，避免不同游戏共享偏好域。Hades II 因兼容历史数据而显式保留原 bundle identifier。
++
++## Build-time 与 runtime 校验分离
++
++这是 v0.14.0 的重要修正。
++
++源码构建时，`game_module_tool.py` 会做完整校验：
++
++- backend module 目录
++- adapter package 边界
++- frontend source 目录
++- entitlement 路径
++
++打包后的 `.app` 不包含 `Sources/`，所以运行时 registry **只校验 Backend 目录与 adapter 边界**。不要在 runtime discovery 中再次要求源码树存在。
++
++## Backend adapter
++
++最小实现：
++
++```python
++from core.protocol import GameAdapter
++
++class ExampleAdapter(GameAdapter):
++    def __init__(self, context):
++        super().__init__(context)
++
++    def dispatch(self, command, params, request_id):
++        return {"connected": False}
++
++    def close(self):
++        pass
++```
++
++`context` 由 registry 根据 manifest 注入，包含：
++
++- game id
++- display name
++- module protocol version
++- module directory
++- public manifest metadata
++
++不要在 adapter 里再次维护同一套 ID / display name / protocol 常量。
++
++`dispatch()` 必须返回 JSON object/dict。以下内容由 Core 负责：
++
++- JSONL framing
++- request ID 幂等
++- host/module protocol envelope
++- one-at-a-time request ordering（Swift client）
++- 通用错误边界
++
++游戏模块自行决定如何实现功能：普通文件修改、存档、内存读写、原生 helper、LLDB、Lua 等都可以。Hades II 的 `Hades2LuaTransport` 与 Supergiant Lua boundary 完全属于 Hades 模块。
++
++## Swift frontend
++
++模块定义自己的 `TrainerGameModule`、Model 和 View。Swift 源码不手写 game ID / display name / protocol version；构建时由 manifest 自动生成 `ActiveGameModule` binding 与 descriptor。
++
++可复用 Core：
++
++- `BackendProcess`：Python JSONL 子进程
++- `BackendClient`：request queue / coalescing / request ID / 双协议校验
++- `TrainerBackendSession`：backend lifecycle / busy / error / notice / termination
++- `GlobalHotkeys`：字符串 action ID
++- `TrainerGameModule` / `TrainerSessionLifecycle`：App shell 合同
++
++游戏 Model 主要负责：
++
++1. 自己的状态字段；
++2. 自己的 command / params；
++3. `applyPayload`；
++4. backend 退出时清理本游戏临时状态。
++
++## 协议分层
++
++- Host protocol：仅描述通用 JSONL envelope / request 语义，位于 `Backend/core/protocol.py`。
++- Module protocol：描述单款游戏 command/state schema，位于该游戏 `module.json`。
++
++修改 Hades II 的 state/command 不应提升所有游戏的 Host protocol；只有通用 envelope 发生不兼容变化时才提升 Host protocol。
++
++## 已验证的第二游戏契约
++
++测试套件会构造一个完全不使用 Hades、LLDB 或 Lua 的临时 `other` 模块，并验证：
++
++1. manifest 能独立发现；
++2. registry 能从 manifest 注入 adapter identity；
++3. Swift descriptor 能自动生成；
++4. 打包结构中即使没有 `Sources/Other`，`server.py --game other` 仍能完成 `hello` 和自定义命令往返；
++5. Core / App / server 不需要加入 `OtherGame` 特判。
++
++这比只验证源码目录能够 import 更接近真实新增游戏流程。
++
++## 当前有意保留的框架边界
++
++现在仍不是运行时插件市场，保留以下宿主约束：
++
++- macOS + SwiftUI frontend；
++- Python JSONL backend host；
++- 一个 App build 选择一个游戏模块；
++- host lifecycle 有“连接 / 刷新 / 全部关闭”三类基础动作。
++
++这些不是 Hades II 耦合。若以后要做“同一个安装包运行时切换多款游戏”，再单独引入 runtime game picker、Swift type erasure 和多模块资源/权限策略。
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Info.plist /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Info.plist
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Info.plist	2026-09-17 08:03:28.904527103 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Info.plist	2026-09-17 08:48:12.484125772 +0000
+@@ -2,35 +2,31 @@
+ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+ <plist version="1.0">
+ <dict>
+-    <key>CFBundleDevelopmentRegion</key>
+-    <string>zh_CN</string>
+-    <key>CFBundleExecutable</key>
+-    <string>MacGamingTrainer</string>
+-    <key>CFBundleIdentifier</key>
+-    <string>com.gao.macgamingtrainer</string>
+-    <key>CFBundleInfoDictionaryVersion</key>
+-    <string>6.0</string>
+-    <key>CFBundleName</key>
+-    <string>Mac Gaming Trainer</string>
+-    <key>CFBundleDisplayName</key>
+-    <string>Mac Gaming Trainer</string>
+-    <key>CFBundlePackageType</key>
+-    <string>APPL</string>
+-    <key>CFBundleShortVersionString</key>
+-    <string>0.12.0</string>
+-    <key>CFBundleVersion</key>
+-    <string>17</string>
+-    <key>LSMinimumSystemVersion</key>
+-    <string>14.0</string>
+-    <key>LSArchitecturePriority</key>
+-    <array>
+-        <string>arm64</string>
+-    </array>
+-    <key>NSHighResolutionCapable</key>
+-    <true/>
+-    <key>NSSupportsAutomaticGraphicsSwitching</key>
+-    <true/>
+-    <key>LSApplicationCategoryType</key>
+-    <string>public.app-category.utilities</string>
++	<key>CFBundleDevelopmentRegion</key>
++	<string>zh_CN</string>
++	<key>CFBundleExecutable</key>
++	<string>MacGamingTrainer</string>
++	<key>CFBundleIdentifier</key>
++	<string>com.gao.macgamingtrainer</string>
++	<key>CFBundleInfoDictionaryVersion</key>
++	<string>6.0</string>
++	<key>CFBundleName</key>
++	<string>Mac Gaming Trainer</string>
++	<key>CFBundleDisplayName</key>
++	<string>Mac Gaming Trainer</string>
++	<key>CFBundlePackageType</key>
++	<string>APPL</string>
++	<key>CFBundleShortVersionString</key>
++	<string>0.14.0</string>
++	<key>CFBundleVersion</key>
++	<string>19</string>
++	<key>LSMinimumSystemVersion</key>
++	<string>14.0</string>
++	<key>NSHighResolutionCapable</key>
++	<true/>
++	<key>NSSupportsAutomaticGraphicsSwitching</key>
++	<true/>
++	<key>LSApplicationCategoryType</key>
++	<string>public.app-category.utilities</string>
+ </dict>
+ </plist>
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/REFACTOR_ASSESSMENT.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/REFACTOR_ASSESSMENT.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/REFACTOR_ASSESSMENT.md	2026-09-17 08:43:48.391796304 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/REFACTOR_ASSESSMENT.md	2026-09-17 08:53:25.154855234 +0000
+@@ -1,59 +1,116 @@
+-# Mac Gaming Trainer · Round 10 重构评估
++# Mac Gaming Trainer · v0.14.0 架构评估
+ 
+ ## 结论
+ 
+-Round 9 已经完成第一阶段逻辑重构；Round 10 按用户要求继续功能开发，完整物理重构后置。项目仍是单体 Swift/Lua/Python 文件组合，但最容易产生逻辑漂移的“持续功能生命周期”和“属性锁定”已经从散落分支迁移到 Registry / schema 驱动。
++重构前，框架并不适合直接增加第二款游戏：Hades II 的 command/state、准备逻辑、LLDB/Lua、Swift Model/View、构建依赖与进程通信存在多层交叉，最现实的新增方式会变成复制整套工程。
+ 
+-当前规模约：
++v0.14.0 后，**对于“共享 Mac/Swift/Python 宿主、每款游戏单独构建 App”这一目标，底座已经足够解耦，可以继续增加新游戏模块**。Hades II 仍很复杂，但其复杂性被限定在：
+ 
+-- Swift: 2.1k 行
+-- Lua: 2.6k 行
+-- server.py: 0.76k 行
+-- preparation.py: 0.61k 行
+-- transport.py: 0.23k 行
++```text
++Backend/games/hades2/*
++Sources/Hades2/*
++```
+ 
+-项目仍值得后续物理拆文件，但现在不应 big-bang rewrite。
++普通新游戏不应修改 Core/App/server/build。
+ 
+-## 已完成的逻辑重构
++## 已消除的 Hades II 耦合
+ 
+-### Feature Registry
++### 1. Backend host
+ 
+-Lua 持续功能不再在 support/active/reconcile 三处分别列举。registry 统一提供 support/install/release/active/dormant，并生成 runtime maps 与 reconcile。
++`Backend/server.py` 只负责：
+ 
+-### Stat Registry
++- 选择 manifest/adapter
++- JSONL stdin/stdout loop
++- 通用日志
++- router lifecycle
+ 
+-Grasp、Dodge、Crit、Charge/Move/Sprint/Dash/Attack Speed、Mana Regen、Enemy Damage 均通过一个 registry 管理 support、范围、current、install/release。
++`Backend/core/protocol.py` 只负责 host envelope、request idempotency、adapter contract。Hades 的 TOGGLES、STAT_RULES、desired/active/dormant、save/profile、catalog、spawn 都在 Hades adapter 内。
+ 
+-### 多层数值校验统一
++### 2. Transport
+ 
+-Python `STAT_RULES` 与 Swift `statRules` 将协议层和 UI 层的数值范围集中管理，减少新增属性时漏改某层的概率。
++LLDB Python、Supergiant Lua boundary、symbols、runtime.lua 全部属于 Hades package。Core 不 import `lldb`，也不要求其他游戏使用 Lua。
+ 
+-### Desired / Active / Dormant
++### 3. Swift host
+ 
+-用户目标、实机生效状态、等待环境状态被明确分离。断线时不再把“当前无法验证”误当成“用户关闭”。
++`Sources/App.swift` 不引用 Hades 类型。通用部分拆为：
+ 
+-## 下一阶段建议
++- `BackendProcess`
++- `BackendClient`
++- `TrainerBackendSession`
++- `GlobalHotkeys`
++- `TrainerGameModule` / `TrainerSessionLifecycle`
+ 
+-在 Round 10/后续功能面稳定并完成一轮目标 Mac 实机回归后，再进行物理拆分：
++Hades Model 只负责 Hades 状态、命令与 payload decode。
+ 
+-Swift：
+-- TrainerProtocol.swift
+-- TrainerModel.swift
+-- GlobalHotkeys.swift
+-- CatalogModels.swift
+-- MainTrainerView.swift
+-- SaveManagerView.swift
+-- ProfileDiagnosticsView.swift
++### 4. Identity / protocol
+ 
+-Python：
+-- router.py
+-- hades_adapter.py
+-- preferences.py
+-- localization.py
+-- save_service.py
++`module.json` 是单一事实源：
+ 
+-Lua 也可以把 catalog / state registry / feature installers 分文件，但应等注入加载器能可靠 import 多文件之后再做。
++- game id
++- display name
++- module protocol
++- backend adapter
++- Swift module type/source
++- frontend architecture / minimum macOS
++- App bundle identity
++- LLDB / entitlement requirements
+ 
+-## 不建议动
++Swift descriptor 由 build tool 生成；backend identity 由 registry context 注入。
+ 
+-`transport.py` 最后再动。它承担 LLDB attach、Lua boundary 和目标进程时序，实机风险远高于代码结构收益。
++### 5. Build
++
++构建只编译/打包选中模块。Hades 显式声明 arm64、LLDB Python 和 debugger entitlement；其他游戏不会继承。
++
++硬编码的 `-target arm64-apple-macosx14.0` 已移除。模块可以选择 arm64、x86_64 或 universal binary。
++
++### 6. App 并存
++
++之前所有游戏都会输出同名 App、使用同一个 bundle identifier，导致第二游戏与 Hades II 覆盖/共享 `UserDefaults`。
++
++现在 App identity 属于 manifest。Hades II 保留历史 bundle ID；其他模块默认获得独立 bundle ID 和 App 名。
++
++### 7. Runtime manifest 校验
++
++此前 runtime registry 调用了完整源码树校验；打包后的 App 没有 `Sources/`，理论上会导致真实启动失败。
++
++现在分为：
++
++- build-time：完整 project validation
++- runtime：仅 Backend/package validation
++
++并已有真实临时打包结构 smoke test 覆盖。
++
++## 当前仍有意共享的宿主假设
++
++以下是框架产品边界，不是 Hades II 泄漏：
++
++1. macOS / SwiftUI App；
++2. Python JSONL backend host；
++3. per-game build，而非单 App 运行时切换；
++4. 通用 trainer lifecycle：connect / refresh / disable-all；
++5. Core Swift 当前固定链接 SwiftUI / AppKit / Carbon。
++
++这些约束不阻止新增常规游戏修改器。只有新目标超出这些边界时，才应扩展 Core。
++
++## 不建议继续为了“解耦”而做的工作
++
++当前不需要为了第二游戏继续拆：
++
++- Hades `runtime.lua`；
++- Hades LLDB transport；
++- Hades UI 各功能 card；
++- Hades Feature/Stat registry 的内部文件组织。
++
++继续拆这些文件不会降低第二游戏接入成本，反而会扩大目标 Mac 回归面。
++
++## 何时需要下一轮框架重构
++
++只有出现以下需求之一再继续：
++
++- 一个安装包运行时切换多游戏；
++- frontend 需要按模块加载额外动态 framework/resource；
++- backend 不再使用 Python host；
++- 模块需要独立 helper process / privileged helper；
++- host lifecycle 不再适用于某类工具（例如纯离线 save editor）。
++
++在此之前，新游戏应优先通过现有 module contract 落地，而不是再次修改底座。
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND12_TO_14_CHANGESET.diff /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND12_TO_14_CHANGESET.diff
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND12_TO_14_CHANGESET.diff	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND12_TO_14_CHANGESET.diff	2026-09-17 08:55:41.573152390 +0000
+@@ -0,0 +1,1254 @@
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/BUILDING.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/BUILDING.md
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/BUILDING.md	2026-09-17 08:43:47.767805678 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/BUILDING.md	2026-09-17 08:53:25.153174640 +0000
++@@ -1,64 +1,137 @@
++-# Mac Gaming Trainer v0.11.0 — Build on macOS
+++# Mac Gaming Trainer v0.14.0 — Build on macOS
++ 
++-Requirements: Apple Silicon Mac and Xcode / Command Line Tools providing `swiftc`, `python3`, and `lldb`.
+++当前构建模型是 **通用宿主 + 单个选中游戏模块**。Hades II 的 LLDB/Lua、签名权限、arm64 目标都不是宿主默认值，而由 `Backend/games/hades2/module.json` 显式声明。
++ 
++-First verify the active developer environment:
+++## 选择游戏模块
+++
+++默认模块来自根目录：
+++
+++```text
+++ACTIVE_GAME_ID
+++```
+++
+++构建默认模块：
+++
+++```bash
+++chmod +x build.sh
+++./build.sh
+++```
+++
+++构建指定模块：
+++
+++```bash
+++./build.sh hades2
+++```
+++
+++也可使用：
+++
+++```bash
+++MGT_GAME_ID=hades2 ./build.sh
+++```
+++
+++构建会完整校验该模块的源码侧 manifest，只编译其 Swift frontend，并只打包该 backend game package。
+++
+++## 通用构建依赖
+++
+++当前宿主仍是 SwiftUI + Python JSONL，因此构建机需要 Apple developer tools 提供：
++ 
++ ```bash
++ xcrun --find swiftc
++-xcrun --find lldb
++ xcrun --find python3
++-xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["xcrun","lldb","-P"],text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
+++codesign --version
++ ```
++ 
++-The final command must succeed. The LLDB path injection matches the runtime loader; a bare `import lldb` is not a valid build preflight on all Xcode installations.
+++只有所选模块声明 `lldbPython: true` 时才额外检查 LLDB Python。
+++
+++## Hades II 特有依赖
++ 
++-Build:
+++`hades2` 声明：
+++
+++```json
+++{
+++  "frontend": {
+++    "architectures": ["arm64"],
+++    "minimumMacOS": "14.0"
+++  },
+++  "buildRequirements": {
+++    "lldbPython": true,
+++    "debuggerEntitlement": true
+++  }
+++}
+++```
+++
+++因此 Hades II 构建会验证：
++ 
++ ```bash
++-cd /path/to/MacGamingTrainer_v11_round11
++-chmod +x build.sh
++-./build.sh
+++xcrun --find lldb
+++xcrun lldb -P
++ ```
++ 
++-Output:
+++并使用：
++ 
++ ```text
++-dist/Mac Gaming Trainer.app
+++Backend/games/hades2/trainer-entitlements.plist
++ ```
++ 
++-The build script ad-hoc signs with `entitlements.plist`, including the Debugging Tool entitlement used by the known-good original app:
+++其他游戏不会自动继承这些要求。
++ 
++-```text
++-com.apple.security.cs.debugger = true
+++## App identity 与架构
+++
+++`module.json` 可以声明：
+++
+++```json
+++{
+++  "app": {
+++    "bundleIdentifier": "com.example.trainer.game",
+++    "displayName": "Mac Gaming Trainer - Example"
+++  },
+++  "frontend": {
+++    "architectures": ["arm64", "x86_64"],
+++    "minimumMacOS": "14.0"
+++  }
+++}
++ ```
++ 
++-Verify:
+++若声明多个 architecture，`build.sh` 会分别编译并通过 `lipo` 生成 universal binary。若不声明 architecture，则使用构建机当前架构。
++ 
++-```bash
++-codesign -d --entitlements :- "dist/Mac Gaming Trainer.app"
+++不同游戏可使用不同 bundle identifier，因此可以并存安装且不会意外共享 bundle-scoped `UserDefaults`。Hades II 显式保留历史 bundle identifier `com.gao.macgamingtrainer`，避免现有快捷键/偏好迁移丢失。
+++
+++## 输出
+++
+++App 文件名来自模块的 `app.displayName`。Hades II 仍输出：
+++
+++```text
+++dist/Mac Gaming Trainer.app
++ ```
++ 
++-Launch:
+++启动：
++ 
++ ```bash
++ open "dist/Mac Gaming Trainer.app"
++ ```
++ 
++-Runtime log:
+++打包后的 App 只包含：
++ 
++-```text
++-~/Library/Application Support/MacGamingTrainer/trainer.log
++-```
+++- 通用 Swift host
+++- 通用 Python backend core
+++- 所选 game module
+++- `Resources/ACTIVE_GAME_ID`（构建来源标记）
++ 
++-The in-app self-check under 游戏管理 should be run after first launch. It reports the developer-tool/LLDB environment, protocol compatibility, game compatibility and live runtime support separately. Use “导出诊断包” to create a ZIP containing report.json, the last 256 KiB of trainer.log and symbols.json. It does not include saves or custom Profile payloads.
+++不会包含其他游戏的 frontend、backend、LLDB transport 或 entitlements。
++ 
+++## 检查模块
++ 
++-## LLDB Python verification
+++查看规范化 manifest：
++ 
++-The backend loads LLDB the same way as the runtime: first query the module directory, then prepend it to Python's search path. Do not use a bare `import lldb` as a build gate.
+++```bash
+++python3 tools/game_module_tool.py hades2 json
+++```
+++
+++生成 Swift active-game binding：
++ 
++ ```bash
++-xcrun lldb -P
++-xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["xcrun","lldb","-P"],text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
+++python3 tools/game_module_tool.py hades2 generate-swift /tmp/ActiveGame.generated.swift
+++cat /tmp/ActiveGame.generated.swift
++ ```
+++
+++详见 `GAME_MODULES.md`。
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/game_spec.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/game_spec.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/game_spec.py	2026-09-17 08:10:00.885624622 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/game_spec.py	2026-09-17 08:18:16.753093372 +0000
++@@ -5,20 +5,56 @@
++ 
++ @dataclass(frozen=True)
++ class GameSpec:
++-    """Distribution-agnostic identity and local paths for one game."""
+++    """Distribution-agnostic local identity for one game.
+++
+++    Core does not assume a Steam install, a macOS .app bundle, or a CPU
+++    architecture. Game modules opt into those concepts explicitly.
+++    """
++ 
++     id: str
++     display_name: str
++     process_name: str
++-    bundle_identifier: Optional[str]
++-    app_path: Path
++-    executable_name: str
+++    executable_path: Path
+++    bundle_identifier: Optional[str] = None
+++    app_bundle_path: Optional[Path] = None
++     save_path: Optional[Path] = None
++-    minimum_architecture: Optional[str] = 'arm64'
+++    minimum_architecture: Optional[str] = None
+++
+++    @classmethod
+++    def macos_app_bundle(
+++        cls,
+++        *,
+++        id: str,
+++        display_name: str,
+++        process_name: str,
+++        app_path: Path,
+++        executable_name: str,
+++        bundle_identifier: Optional[str] = None,
+++        save_path: Optional[Path] = None,
+++        minimum_architecture: Optional[str] = None,
+++    ) -> 'GameSpec':
+++        app_path = Path(app_path)
+++        return cls(
+++            id=id,
+++            display_name=display_name,
+++            process_name=process_name,
+++            executable_path=app_path / 'Contents' / 'MacOS' / executable_name,
+++            bundle_identifier=bundle_identifier,
+++            app_bundle_path=app_path,
+++            save_path=save_path,
+++            minimum_architecture=minimum_architecture,
+++        )
+++
+++    @property
+++    def app_path(self) -> Path:
+++        """Compatibility alias for modules that require a macOS app bundle."""
+++        if self.app_bundle_path is None:
+++            raise RuntimeError(f'{self.display_name} does not declare a macOS app bundle path.')
+++        return self.app_bundle_path
++ 
++     @property
++-    def executable_path(self) -> Path:
++-        return self.app_path / 'Contents' / 'MacOS' / self.executable_name
+++    def executable_name(self) -> str:
+++        return self.executable_path.name
++ 
++ 
++ @dataclass(frozen=True)
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/module_manifest.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/module_manifest.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/module_manifest.py	2026-09-17 08:03:48.689260802 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/module_manifest.py	2026-09-17 08:50:43.978020361 +0000
++@@ -2,12 +2,15 @@
++ from pathlib import Path
++ import json
++ import re
++-from typing import Any, Mapping
+++from typing import Any, Mapping, Optional, Tuple, Union
++ 
++ 
++-_ID_RE = re.compile(r'^[a-z0-9][a-z0-9._-]{0,63}$')
+++_ID_RE = re.compile(r'^[a-z][a-z0-9_]{0,63}$')
++ _PY_TARGET_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*$')
++ _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+++_BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
+++_MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
+++_SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
++ 
++ 
++ class ManifestError(ValueError):
++@@ -18,13 +21,21 @@
++ class FrontendSpec:
++     source_directory: str
++     module_type: str
+++    architectures: Tuple[str, ...] = ()
+++    minimum_macos: Optional[str] = None
+++
+++
+++@dataclass(frozen=True)
+++class AppSpec:
+++    bundle_identifier: str
+++    display_name: str
++ 
++ 
++ @dataclass(frozen=True)
++ class BuildRequirements:
++     lldb_python: bool = False
++     debugger_entitlement: bool = False
++-    entitlements: str | None = None
+++    entitlements: Optional[str] = None
++ 
++ 
++ @dataclass(frozen=True)
++@@ -34,13 +45,14 @@
++     display_name: str
++     module_protocol_version: int
++     adapter: str
++-    frontend: FrontendSpec | None
+++    frontend: Optional[FrontendSpec]
+++    app: AppSpec
++     build: BuildRequirements
++     source_path: Path
++     extra_public_metadata: Mapping[str, Any]
++ 
++     @staticmethod
++-    def _safe_relative_path(value: object, field: str) -> str | None:
+++    def _safe_relative_path(value: object, field: str) -> Optional[str]:
++         if value is None:
++             return None
++         if not isinstance(value, str) or not value.strip():
++@@ -50,8 +62,23 @@
++             raise ManifestError(f'{field} must stay inside the project root.')
++         return value
++ 
+++    @staticmethod
+++    def _safe_app_display_name(value: object, field: str) -> str:
+++        if not isinstance(value, str):
+++            raise ManifestError(f'{field} must be a string.')
+++        value = value.strip()
+++        if not value or len(value) > 120 or any(ord(ch) < 32 for ch in value) or '/' in value or ':' in value:
+++            raise ManifestError(f'{field} must be a safe non-empty app name.')
+++        return value
+++
+++    @staticmethod
+++    def _default_app_name(display_name: str, game_id: str) -> str:
+++        safe = ''.join('-' if ch in '/:' or ord(ch) < 32 else ch for ch in display_name).strip()
+++        safe = safe[:80].strip() or game_id
+++        return f'Mac Gaming Trainer - {safe}'
+++
++     @classmethod
++-    def load(cls, path: str | Path) -> 'GameModuleManifest':
+++    def load(cls, path: Union[str, Path]) -> 'GameModuleManifest':
++         source = Path(path)
++         try:
++             data = json.loads(source.read_text(encoding='utf-8'))
++@@ -66,10 +93,11 @@
++ 
++         game_id = data.get('id')
++         if not isinstance(game_id, str) or not _ID_RE.fullmatch(game_id):
++-            raise ManifestError('id must be a stable lowercase module identifier.')
+++            raise ManifestError('id must be a lowercase Python-package-safe identifier (a-z, 0-9, underscore).')
++         display_name = data.get('displayName')
++         if not isinstance(display_name, str) or not display_name.strip() or len(display_name) > 120:
++             raise ManifestError('displayName must be a non-empty string.')
+++        display_name = display_name.strip()
++ 
++         module_protocol_version = data.get('protocolVersion')
++         if type(module_protocol_version) is not int or not 1 <= module_protocol_version <= 1_000_000:
++@@ -89,7 +117,40 @@
++             module_type = frontend_data.get('moduleType')
++             if not isinstance(module_type, str) or not _SWIFT_TYPE_RE.fullmatch(module_type):
++                 raise ManifestError('frontend.moduleType must be a Swift type identifier.')
++-            frontend = FrontendSpec(source_directory=source_directory or '', module_type=module_type)
+++
+++            raw_arches = frontend_data.get('architectures', [])
+++            if not isinstance(raw_arches, list) or any(not isinstance(item, str) for item in raw_arches):
+++                raise ManifestError('frontend.architectures must be an array of architecture names.')
+++            architectures = tuple(raw_arches)
+++            if len(set(architectures)) != len(architectures):
+++                raise ManifestError('frontend.architectures contains duplicates.')
+++            invalid_arches = [arch for arch in architectures if arch not in _SUPPORTED_SWIFT_ARCHES]
+++            if invalid_arches:
+++                raise ManifestError('Unsupported frontend architecture: ' + ', '.join(invalid_arches))
+++
+++            minimum_macos = frontend_data.get('minimumMacOS')
+++            if minimum_macos is not None:
+++                if not isinstance(minimum_macos, str) or not _MACOS_VERSION_RE.fullmatch(minimum_macos):
+++                    raise ManifestError('frontend.minimumMacOS must look like 14.0 or 14.4.1.')
+++            frontend = FrontendSpec(
+++                source_directory=source_directory or '',
+++                module_type=module_type,
+++                architectures=architectures,
+++                minimum_macos=minimum_macos,
+++            )
+++
+++        app_data = data.get('app', {})
+++        if not isinstance(app_data, dict):
+++            raise ManifestError('app must be an object.')
+++        default_bundle_id = f"com.gao.macgamingtrainer.{game_id.replace('_', '-')}"
+++        bundle_identifier = app_data.get('bundleIdentifier', default_bundle_id)
+++        if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
+++            raise ManifestError('app.bundleIdentifier must be a reverse-DNS bundle identifier.')
+++        app_display_name = cls._safe_app_display_name(
+++            app_data.get('displayName', cls._default_app_name(display_name, game_id)),
+++            'app.displayName',
+++        )
+++        app = AppSpec(bundle_identifier=bundle_identifier, display_name=app_display_name)
++ 
++         raw_build = data.get('buildRequirements', {})
++         if not isinstance(raw_build, dict):
++@@ -107,15 +168,19 @@
++             entitlements=entitlements,
++         )
++ 
++-        reserved = {'schemaVersion', 'id', 'displayName', 'protocolVersion', 'backend', 'adapter', 'frontend', 'buildRequirements'}
+++        reserved = {
+++            'schemaVersion', 'id', 'displayName', 'protocolVersion', 'backend', 'adapter',
+++            'frontend', 'app', 'buildRequirements',
+++        }
++         public = {key: value for key, value in data.items() if key not in reserved and not key.startswith('_')}
++         return cls(
++             schema_version=schema_version,
++             id=game_id,
++-            display_name=display_name.strip(),
+++            display_name=display_name,
++             module_protocol_version=module_protocol_version,
++             adapter=adapter,
++             frontend=frontend,
+++            app=app,
++             build=build,
++             source_path=source,
++             extra_public_metadata=public,
++@@ -130,17 +195,44 @@
++         metadata.update(self.extra_public_metadata)
++         return metadata
++ 
++-    def validate_project_paths(self, project_root: str | Path) -> None:
+++    def validate_backend_layout(self, backend_root: Union[str, Path]) -> None:
+++        """Validate only paths/imports required by a packaged backend.
+++
+++        A shipped .app intentionally does not contain the Swift source tree, so
+++        runtime discovery must not perform build-time frontend validation.
+++        """
+++        backend_root = Path(backend_root).resolve()
+++        module_dir = self.source_path.parent.resolve()
+++        expected_module_dir = (backend_root / 'games' / self.id).resolve()
+++        if module_dir != expected_module_dir:
+++            raise ManifestError(
+++                f'Game module {self.id!r} must live at Backend/games/{self.id}/module.json.'
+++            )
+++        required_adapter_prefix = f'games.{self.id}.'
+++        if not self.adapter.startswith(required_adapter_prefix):
+++            raise ManifestError(
+++                f'backend.adapter must stay inside the game package ({required_adapter_prefix}...).'
+++            )
+++
+++    def validate_project_paths(self, project_root: Union[str, Path]) -> None:
+++        """Full source/build validation used by tooling, never runtime discovery."""
++         root = Path(project_root).resolve()
+++        self.validate_backend_layout(root / 'Backend')
+++        module_dir = self.source_path.parent.resolve()
++         if self.frontend is not None:
++             frontend = (root / self.frontend.source_directory).resolve()
++             if root not in frontend.parents and frontend != root:
++                 raise ManifestError('frontend source directory escapes the project root.')
+++            sources_root = (root / 'Sources').resolve()
+++            if sources_root not in frontend.parents:
+++                raise ManifestError('frontend source directory must live under Sources/.')
++             if not frontend.is_dir():
++                 raise ManifestError(f'Frontend source directory does not exist: {frontend}')
++         if self.build.entitlements:
++             entitlements = (root / self.build.entitlements).resolve()
++             if root not in entitlements.parents and entitlements != root:
++                 raise ManifestError('entitlements path escapes the project root.')
+++            if module_dir not in entitlements.parents:
+++                raise ManifestError('entitlements must live inside the selected game module.')
++             if not entitlements.is_file():
++                 raise ManifestError(f'Entitlements file does not exist: {entitlements}')
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/protocol.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/protocol.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/core/protocol.py	2026-09-17 08:04:08.768950051 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/core/protocol.py	2026-09-17 08:48:11.882637890 +0000
++@@ -1,5 +1,8 @@
++ from abc import ABC, abstractmethod
++ from collections import OrderedDict
+++from dataclasses import dataclass
+++from pathlib import Path
+++from typing import Any, Mapping
++ import json
++ import logging
++ 
++@@ -7,7 +10,7 @@
++ # module has its own independent protocol/schema version exposed alongside it.
++ HOST_PROTOCOL_VERSION = 5
++ PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
++-APP_BACKEND_VERSION = '0.12.0'
+++APP_BACKEND_VERSION = '0.14.0'
++ 
++ 
++ class AdapterError(RuntimeError):
++@@ -16,17 +19,41 @@
++         self.code = code
++ 
++ 
+++@dataclass(frozen=True)
+++class GameAdapterContext:
+++    game_id: str
+++    display_name: str
+++    module_protocol_version: int
+++    module_dir: Path
+++    public_metadata: Mapping[str, Any]
+++
+++
++ class GameAdapter(ABC):
++     """Per-game backend contract.
++ 
++     The JSONL host owns framing, idempotency and the host envelope. A game
++     adapter owns command validation, game state, preparation, diagnostics and
++     whatever transport it needs. New games do not need to use LLDB or Lua.
+++
+++    Manifest-owned identity arrives in ``context`` before the adapter performs
+++    any game-specific initialization, so a module never needs to duplicate its
+++    id/display/protocol constants.
++     """
++ 
++-    game_id = 'unknown'
++-    display_name = 'Unknown Game'
++-    module_protocol_version = 1
+++    def __init__(self, context: GameAdapterContext):
+++        self.context = context
+++
+++    @property
+++    def game_id(self):
+++        return self.context.game_id
+++
+++    @property
+++    def display_name(self):
+++        return self.context.display_name
+++
+++    @property
+++    def module_protocol_version(self):
+++        return self.context.module_protocol_version
++ 
++     @abstractmethod
++     def dispatch(self, command: str, params: dict, request_id: str):
++@@ -37,11 +64,13 @@
++         raise NotImplementedError
++ 
++     def metadata(self):
++-        return {
+++        metadata = dict(self.context.public_metadata)
+++        metadata.update({
++             'id': self.game_id,
++             'displayName': self.display_name,
++             'protocolVersion': self.module_protocol_version,
++-        }
+++        })
+++        return metadata
++ 
++ 
++ class JsonlRequestRouter:
++@@ -89,6 +118,8 @@
++                 }
++             else:
++                 result = self.adapter.dispatch(command, params, request_id)
+++                if not isinstance(result, dict):
+++                    raise TypeError('Game adapter dispatch() must return a JSON object.')
++             reply = self._envelope(request_id, True)
++             reply['result'] = result
++             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/adapter.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/adapter.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/adapter.py	2026-09-17 08:10:01.363501791 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/adapter.py	2026-09-17 08:27:57.295778607 +0000
++@@ -1,9 +1,9 @@
++ """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
++ from pathlib import Path
++ import sys, json, subprocess, time, traceback, logging, signal, math, zipfile, platform
++-from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION, AdapterError, GameAdapter
+++from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION, AdapterError, GameAdapter, GameAdapterContext
++ from . import preparation
++-from .config import GAME_SPEC, STEAM_SPEC
+++from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST
++ TransportError = AdapterError
++ 
++ TOGGLES=('godMode','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown','hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled','boonChoiceEnabled','moneyMultiplierEnabled','resourceMultiplierEnabled')
++@@ -138,11 +138,17 @@
++     raise ValueError('参数类型不支持。')
++ 
++ class Hades2Adapter(GameAdapter):
++-    game_id = GAME_SPEC.id
++-    display_name = GAME_SPEC.display_name
++-    module_protocol_version = 4
++     data_dir = preparation.DATA
++-    def __init__(self, transport=None):
+++    def __init__(self, transport=None, context=None):
+++        if context is None:
+++            context = GameAdapterContext(
+++                game_id=MODULE_MANIFEST.id,
+++                display_name=MODULE_MANIFEST.display_name,
+++                module_protocol_version=MODULE_MANIFEST.module_protocol_version,
+++                module_dir=Path(__file__).resolve().parent,
+++                public_metadata=MODULE_MANIFEST.public_metadata(),
+++            )
+++        super().__init__(context)
++         if transport is None:
++             from .transport import Hades2LuaTransport
++             transport = Hades2LuaTransport()
++@@ -738,7 +744,8 @@
++         x=subprocess.run(['/usr/bin/xcrun','--find','lldb'],capture_output=True,text=True,timeout=5);add('LLDB',x.returncode==0,x.stdout.strip() or x.stderr.strip())
++     except Exception as e:add('LLDB',False,e)
++     try:
++-        x=subprocess.run(['/usr/bin/xcrun','python3','-c','import lldb; print(lldb.SBDebugger)'],capture_output=True,text=True,timeout=8);add('LLDB Python',x.returncode==0,x.stdout.strip() or x.stderr.strip())
+++        probe = 'import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
+++        x=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=8);add('LLDB Python',x.returncode==0,x.stdout.strip() or x.stderr.strip())
++     except Exception as e:add('LLDB Python',False,e)
++     state=adapter.state if isinstance(getattr(adapter,'state',None),dict) else {}
++     add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/config.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/config.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/config.py	2026-09-17 08:10:00.886497461 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/config.py	2026-09-17 08:25:16.587576517 +0000
++@@ -1,18 +1,27 @@
++ from pathlib import Path
+++
++ from core.game_spec import GameSpec, SteamSpec
+++from core.module_manifest import GameModuleManifest
+++
+++MODULE_DIR = Path(__file__).resolve().parent
+++MODULE_MANIFEST = GameModuleManifest.load(MODULE_DIR / 'module.json')
++ 
++ HOME = Path.home()
++ STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
++-GAME_SPEC = GameSpec(
++-    id='hades2',
++-    display_name='Hades II',
+++STEAM_APP_ID = MODULE_MANIFEST.extra_public_metadata.get('steamAppId')
+++if not isinstance(STEAM_APP_ID, str) or not STEAM_APP_ID.isdigit():
+++    raise RuntimeError('Hades II module manifest is missing a valid steamAppId.')
+++GAME_SPEC = GameSpec.macos_app_bundle(
+++    id=MODULE_MANIFEST.id,
+++    display_name=MODULE_MANIFEST.display_name,
++     process_name='Hades II',
++     bundle_identifier='com.supergiantgames.macos.hades2',
++     app_path=STEAMAPPS / 'common/Hades II/Hades II.app',
++     executable_name='Hades II',
++     save_path=HOME / 'Library/Application Support/Supergiant Games/Hades II',
+++    minimum_architecture='arm64',
++ )
++-STEAM_SPEC = SteamSpec(app_id='1145350', steamapps_path=STEAMAPPS)
+++STEAM_SPEC = SteamSpec(app_id=STEAM_APP_ID, steamapps_path=STEAMAPPS)
++ 
++ # Preserve the existing Hades II data location. New game modules should use a
++ # namespaced directory under MacGamingTrainer/<game-id> unless migration requires otherwise.
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/module.json /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/module.json
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/module.json	2026-09-17 08:04:22.694524257 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/module.json	2026-09-17 08:47:19.850823392 +0000
++@@ -8,12 +8,20 @@
++   },
++   "frontend": {
++     "sourceDirectory": "Sources/Hades2",
++-    "moduleType": "Hades2GameModule"
+++    "moduleType": "Hades2GameModule",
+++    "architectures": [
+++      "arm64"
+++    ],
+++    "minimumMacOS": "14.0"
++   },
++   "steamAppId": "1145350",
++   "buildRequirements": {
++     "lldbPython": true,
++     "debuggerEntitlement": true,
++     "entitlements": "Backend/games/hades2/trainer-entitlements.plist"
+++  },
+++  "app": {
+++    "bundleIdentifier": "com.gao.macgamingtrainer",
+++    "displayName": "Mac Gaming Trainer"
++   }
++ }
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/preparation.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/preparation.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/preparation.py	2026-09-17 08:10:01.362938062 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/preparation.py	2026-09-17 08:18:30.896824593 +0000
++@@ -54,9 +54,12 @@
++ 
++ def _uuid(exe):
++     result = run('/usr/bin/xcrun', 'dwarfdump', '--uuid', str(exe)).decode()
++-    match = re.search(r'UUID: ([A-Fa-f0-9-]+) \(arm64\)', result)
+++    architecture = GAME_SPEC.minimum_architecture
+++    pattern = r'UUID: ([A-Fa-f0-9-]+) \(' + re.escape(architecture) + r'\)' if architecture else r'UUID: ([A-Fa-f0-9-]+) \([^)]*\)'
+++    match = re.search(pattern, result)
++     if not match:
++-        raise RuntimeError('找不到 Apple Silicon Mach-O UUID。')
+++        suffix = f'（{architecture}）' if architecture else ''
+++        raise RuntimeError('找不到匹配架构的 Mach-O UUID' + suffix + '。')
++     return match.group(1).upper()
++ 
++ 
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/transport.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/transport.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/hades2/transport.py	2026-09-17 08:03:28.905643373 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/hades2/transport.py	2026-09-17 08:18:30.896986912 +0000
++@@ -34,8 +34,16 @@
++         self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None
++         try:
++             self.runtime_uuid=self.target.GetModuleAtIndex(0).GetUUIDString()
++-            if not self.runtime_uuid or not (self.target.GetTriple() or '').startswith(('arm64-','aarch64-')):
++-                raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 Apple Silicon 原生游戏。')
+++            triple = self.target.GetTriple() or ''
+++            required_arch = GAME_SPEC.minimum_architecture
+++            arch_ok = True
+++            if required_arch == 'arm64':
+++                arch_ok = triple.startswith(('arm64-', 'aarch64-'))
+++            elif required_arch:
+++                arch_ok = triple.startswith(required_arch + '-')
+++            if not self.runtime_uuid or not arch_ok:
+++                requirement = required_arch or '受支持架构'
+++                raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。')
++             for name in self.symbols:
++                 self.address(name)
++         except Exception:
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/registry.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/registry.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/games/registry.py	2026-09-17 08:08:12.639697553 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/games/registry.py	2026-09-17 08:47:07.031568737 +0000
++@@ -2,17 +2,23 @@
++ from pathlib import Path
++ 
++ from core.module_manifest import GameModuleManifest, ManifestError
+++from core.protocol import GameAdapter, GameAdapterContext
++ 
++ _ROOT = Path(__file__).resolve().parent
++ 
++ 
++ def discover_manifests(root: Path = _ROOT):
++     rows = {}
++-    for path in sorted(Path(root).glob('*/module.json')):
++-        try:
++-            manifest = GameModuleManifest.load(path)
++-        except ManifestError:
++-            continue
+++    root = Path(root)
+++    backend_root = root.parent
+++    for path in sorted(root.glob('*/module.json')):
+++        manifest = GameModuleManifest.load(path)
+++        # Runtime discovery validates only the packaged Backend tree. Full
+++        # frontend/entitlements checks belong to the build tool because Sources/
+++        # is intentionally absent from a shipped .app.
+++        manifest.validate_backend_layout(backend_root)
+++        if manifest.id in rows:
+++            raise ManifestError(f'Duplicate game module id: {manifest.id}')
++         rows[manifest.id] = manifest
++     return rows
++ 
++@@ -36,13 +42,17 @@
++         raise ValueError(f'不支持的游戏模块：{game_id}') from error
++     module_name, class_name = manifest.adapter.split(':', 1)
++     module = import_module(module_name)
++-    adapter = getattr(module, class_name)()
++-    declared = getattr(adapter, 'module_protocol_version', None)
++-    if declared != manifest.module_protocol_version:
++-        try:
++-            adapter.close()
++-        finally:
++-            raise RuntimeError(
++-                f'游戏模块 {game_id} 协议声明不一致：manifest={manifest.module_protocol_version}, adapter={declared!r}'
++-            )
++-    return adapter
+++    adapter_type = getattr(module, class_name, None)
+++    if not isinstance(adapter_type, type) or not issubclass(adapter_type, GameAdapter):
+++        raise TypeError(f'Adapter {manifest.adapter} must inherit GameAdapter.')
+++    context = GameAdapterContext(
+++        game_id=manifest.id,
+++        display_name=manifest.display_name,
+++        module_protocol_version=manifest.module_protocol_version,
+++        module_dir=manifest.source_path.parent,
+++        public_metadata=manifest.public_metadata(),
+++    )
+++    # Do not catch TypeError here: a TypeError raised *inside* a valid adapter
+++    # constructor is a real module bug and must not be misreported as a bad
+++    # constructor signature.
+++    return adapter_type(context=context)
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/server.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/server.py
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Backend/server.py	2026-09-17 08:07:18.415479101 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Backend/server.py	2026-09-17 08:48:11.300026149 +0000
++@@ -39,7 +39,9 @@
++         Path(data_dir).mkdir(parents=True, exist_ok=True)
++         log_path = Path(data_dir) / 'trainer.log'
++     else:
++-        log_path = Path.home() / 'Library/Application Support/MacGamingTrainer/trainer.log'
+++        # Generic fallback is namespaced per game. Modules that preserve a
+++        # historical data location can still expose adapter.data_dir explicitly.
+++        log_path = Path.home() / 'Library/Application Support/MacGamingTrainer' / adapter.game_id / 'trainer.log'
++         log_path.parent.mkdir(parents=True, exist_ok=True)
++     logging.basicConfig(filename=str(log_path), level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
++     router = JsonlRequestRouter(adapter)
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/DEFERRED_REFACTOR_PLAN.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/DEFERRED_REFACTOR_PLAN.md
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/DEFERRED_REFACTOR_PLAN.md	2026-09-17 08:43:48.331797206 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/DEFERRED_REFACTOR_PLAN.md	2026-09-17 08:53:25.155696972 +0000
++@@ -1,64 +1,41 @@
++-# 后置完整重构计划
+++# 后置重构计划（v0.14.0 更新）
++ 
++-完整物理重构按用户要求后置，不在 Round 10 内执行。当前 Feature Registry、Stat Registry、协议握手和 desired/active/dormant 状态机继续作为稳定逻辑基线。
+++原 Round 10 的“大规模物理重构后置”已经被多游戏需求部分触发并完成。现在不再以拆文件数量为目标，而以新增游戏成本与 Hades II 实机风险为准。
++ 
++-## 触发时机
+++## 已完成
++ 
++-满足以下条件后进入完整重构：
+++- game module manifest / registry
+++- generic JSONL server core
+++- Hades II backend/frontend module isolation
+++- generic Swift BackendProcess / BackendClient / TrainerBackendSession
+++- generated active-game Swift binding
+++- host/module 双层协议
+++- per-game source/package selection
+++- per-game LLDB / entitlement gating
+++- GameSpec 去 Steam / app bundle / arm64 默认假设
+++- build architecture 去 Hades arm64 固定值
+++- per-game App/bundle identity
+++- build-time / runtime manifest validation 分离
+++- 第二游戏 packaged-backend smoke test
++ 
++-1. Round 10 新功能完成至少一轮目标 Mac 实机回归。
++-2. 没有仍在频繁变化的战斗功能协议。
++-3. 当前存档、Spawn、倍率、Profile、断线恢复路径无高优先级回归。
+++## 仍后置：Hades II runtime.lua 模块化
++ 
++-## Phase A — Swift 物理拆分
+++`Backend/games/hades2/runtime.lua` 继续保留单文件。只有目标 Mac 上的加载器能够稳定加载多文件 Lua，且 Cast / scene transition / save/profile 回归稳定后再拆。
++ 
++-保持行为和协议不变，只拆文件：
+++这不影响新增其他游戏。
++ 
++-- `TrainerProtocol.swift` — JSONL schema、协议版本、请求/响应模型
++-- `TrainerModel.swift` — observable state、desired replay
++-- `GlobalHotkeys.swift` — 全局快捷键注册/迁移
++-- `CatalogModels.swift` — reward/resource/catalog metadata
++-- `MainTrainerView.swift` — 主界面与局内数据
++-- `BuildControlsView.swift` — 构筑/祝福/下一房奖励
++-- `SaveManagerView.swift` — 备份/恢复/删除
++-- `ProfileDiagnosticsView.swift` — 自定义配置、自检、诊断导出
+++## 仍后置：Hades II transport 替代
++ 
++-要求：拆分前后 `swiftc -parse`、静态 contract 测试结果完全一致；目标 Mac 完整构建通过后再进入下一阶段。
+++`Hades2LuaTransport` 保留为当前已验证实现。native helper / LLDB framework 等替代方案只有经过目标 Mac 回归后才考虑切换。
++ 
++-## Phase B — Python service 拆分
+++## 可选未来：单 App 运行时多游戏切换
++ 
++-`server.py` 只保留 JSONL router 与错误边界：
+++仅在明确需要一个安装包携带多模块时再做：
++ 
++-- `hades_adapter.py`
++-- `preferences.py`
++-- `localization.py`
++-- `diagnostics.py`
++-- `save_service.py`
++-- `protocol.py`
+++- Swift frontend type erasure
+++- runtime game picker
+++- 多模块 resource/package discovery
+++- active session teardown/recreate
+++- 统一签名时的权限最小化重新设计
++ 
++-保持协议版本不变；只有确实改变 wire schema 时才升级协议。
++-
++-## Phase C — Lua 模块化
++-
++-这是风险最高的结构重构之一，仅在注入加载器能可靠加载多个 Lua 文件后实施：
++-
++-- feature registry/core lifecycle
++-- stat registry
++-- combat feature installers
++-- build/reward control
++-- catalog/spawn
++-- diagnostics/state serialization
++-
++-每次只迁移一组已经有 mock 覆盖的功能，禁止一次性 big-bang rewrite。
++-
++-## Phase D — Transport 最后处理
++-
++-`transport.py` 最后再动。它负责 LLDB attach、Lua boundary、进程时序与 debugger detach；代码量不大，但实机风险最高。
++-
++-可选方向：
++-
++-- 减少 Python/LLDB 环境依赖
++-- 直接使用 LLDB framework 或更稳定的 native helper
++-- 完整签名/notarization
++-
++-在替代路径经过实机长期验证前保留当前已工作的 transport 作为 fallback。
+++当前 per-game build 的好处是权限最小、bundle preference 隔离、测试面清晰，不应为了“看起来更插件化”提前放弃。
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/GAME_MODULES.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/GAME_MODULES.md
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/GAME_MODULES.md	1970-01-01 00:00:00.000000000 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/GAME_MODULES.md	2026-09-17 08:53:25.154049500 +0000
++@@ -0,0 +1,174 @@
+++# Mac Gaming Trainer · Game Module Contract
+++
+++当前架构采用 **共享宿主、按游戏单独构建 App**。新增普通游戏时，目标是只增加游戏自己的 backend package 与 Swift frontend，不改 `server.py`、Core、App 或 build 逻辑。
+++
+++## 目录边界
+++
+++以 `example` 为例，新增：
+++
+++```text
+++Backend/games/example/
+++  __init__.py
+++  module.json
+++  adapter.py
+++  ...transport / save / memory / symbols / runtime...
+++
+++Sources/Example/
+++  ExampleTrainerModel.swift
+++  ExampleTrainerView.swift
+++```
+++
+++正常情况下不修改：
+++
+++```text
+++Backend/server.py
+++Backend/core/*
+++Backend/games/registry.py
+++Sources/App.swift
+++Sources/Core/*
+++build.sh
+++```
+++
+++如果新游戏必须修改这些文件，应先判断是否真的是新的“宿主能力”，而不是把游戏特殊逻辑塞回 Core。
+++
+++## module.json 是唯一身份/协议源
+++
+++示例：
+++
+++```json
+++{
+++  "schemaVersion": 1,
+++  "id": "example",
+++  "displayName": "Example Game",
+++  "protocolVersion": 1,
+++  "backend": {
+++    "adapter": "games.example.adapter:ExampleAdapter"
+++  },
+++  "frontend": {
+++    "sourceDirectory": "Sources/Example",
+++    "moduleType": "ExampleGameModule",
+++    "architectures": ["arm64"],
+++    "minimumMacOS": "14.0"
+++  },
+++  "app": {
+++    "bundleIdentifier": "com.example.macgamingtrainer.example",
+++    "displayName": "Mac Gaming Trainer - Example"
+++  },
+++  "buildRequirements": {
+++    "lldbPython": false,
+++    "debuggerEntitlement": false
+++  }
+++}
+++```
+++
+++关键约束：
+++
+++- `id` 只允许小写字母、数字、下划线，并以字母开头；它也是 Python package 名。
+++- manifest 必须位于 `Backend/games/<id>/module.json`。
+++- adapter 必须位于 `games.<id>.*`，不能把另一款游戏的 adapter 当入口。
+++- frontend 必须位于 `Sources/` 下。
+++- `architectures` 当前支持 `arm64` / `x86_64`；可声明两个生成 universal binary。
+++- 只有真正需要 LLDB 的模块才声明 `lldbPython: true`。
+++- debugger entitlement 必须由对应游戏模块自己携带。
+++
+++`app` 可省略。省略时会为新模块生成独立默认 bundle identifier（`game_id` 中的下划线会转换为连字符）与独立 App 名称，避免不同游戏共享偏好域。Hades II 因兼容历史数据而显式保留原 bundle identifier。
+++
+++## Build-time 与 runtime 校验分离
+++
+++这是 v0.14.0 的重要修正。
+++
+++源码构建时，`game_module_tool.py` 会做完整校验：
+++
+++- backend module 目录
+++- adapter package 边界
+++- frontend source 目录
+++- entitlement 路径
+++
+++打包后的 `.app` 不包含 `Sources/`，所以运行时 registry **只校验 Backend 目录与 adapter 边界**。不要在 runtime discovery 中再次要求源码树存在。
+++
+++## Backend adapter
+++
+++最小实现：
+++
+++```python
+++from core.protocol import GameAdapter
+++
+++class ExampleAdapter(GameAdapter):
+++    def __init__(self, context):
+++        super().__init__(context)
+++
+++    def dispatch(self, command, params, request_id):
+++        return {"connected": False}
+++
+++    def close(self):
+++        pass
+++```
+++
+++`context` 由 registry 根据 manifest 注入，包含：
+++
+++- game id
+++- display name
+++- module protocol version
+++- module directory
+++- public manifest metadata
+++
+++不要在 adapter 里再次维护同一套 ID / display name / protocol 常量。
+++
+++`dispatch()` 必须返回 JSON object/dict。以下内容由 Core 负责：
+++
+++- JSONL framing
+++- request ID 幂等
+++- host/module protocol envelope
+++- one-at-a-time request ordering（Swift client）
+++- 通用错误边界
+++
+++游戏模块自行决定如何实现功能：普通文件修改、存档、内存读写、原生 helper、LLDB、Lua 等都可以。Hades II 的 `Hades2LuaTransport` 与 Supergiant Lua boundary 完全属于 Hades 模块。
+++
+++## Swift frontend
+++
+++模块定义自己的 `TrainerGameModule`、Model 和 View。Swift 源码不手写 game ID / display name / protocol version；构建时由 manifest 自动生成 `ActiveGameModule` binding 与 descriptor。
+++
+++可复用 Core：
+++
+++- `BackendProcess`：Python JSONL 子进程
+++- `BackendClient`：request queue / coalescing / request ID / 双协议校验
+++- `TrainerBackendSession`：backend lifecycle / busy / error / notice / termination
+++- `GlobalHotkeys`：字符串 action ID
+++- `TrainerGameModule` / `TrainerSessionLifecycle`：App shell 合同
+++
+++游戏 Model 主要负责：
+++
+++1. 自己的状态字段；
+++2. 自己的 command / params；
+++3. `applyPayload`；
+++4. backend 退出时清理本游戏临时状态。
+++
+++## 协议分层
+++
+++- Host protocol：仅描述通用 JSONL envelope / request 语义，位于 `Backend/core/protocol.py`。
+++- Module protocol：描述单款游戏 command/state schema，位于该游戏 `module.json`。
+++
+++修改 Hades II 的 state/command 不应提升所有游戏的 Host protocol；只有通用 envelope 发生不兼容变化时才提升 Host protocol。
+++
+++## 已验证的第二游戏契约
+++
+++测试套件会构造一个完全不使用 Hades、LLDB 或 Lua 的临时 `other` 模块，并验证：
+++
+++1. manifest 能独立发现；
+++2. registry 能从 manifest 注入 adapter identity；
+++3. Swift descriptor 能自动生成；
+++4. 打包结构中即使没有 `Sources/Other`，`server.py --game other` 仍能完成 `hello` 和自定义命令往返；
+++5. Core / App / server 不需要加入 `OtherGame` 特判。
+++
+++这比只验证源码目录能够 import 更接近真实新增游戏流程。
+++
+++## 当前有意保留的框架边界
+++
+++现在仍不是运行时插件市场，保留以下宿主约束：
+++
+++- macOS + SwiftUI frontend；
+++- Python JSONL backend host；
+++- 一个 App build 选择一个游戏模块；
+++- host lifecycle 有“连接 / 刷新 / 全部关闭”三类基础动作。
+++
+++这些不是 Hades II 耦合。若以后要做“同一个安装包运行时切换多款游戏”，再单独引入 runtime game picker、Swift type erasure 和多模块资源/权限策略。
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Info.plist /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Info.plist
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Info.plist	2026-09-17 08:03:28.904527103 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Info.plist	2026-09-17 08:48:12.484125772 +0000
++@@ -2,35 +2,31 @@
++ <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
++ <plist version="1.0">
++ <dict>
++-    <key>CFBundleDevelopmentRegion</key>
++-    <string>zh_CN</string>
++-    <key>CFBundleExecutable</key>
++-    <string>MacGamingTrainer</string>
++-    <key>CFBundleIdentifier</key>
++-    <string>com.gao.macgamingtrainer</string>
++-    <key>CFBundleInfoDictionaryVersion</key>
++-    <string>6.0</string>
++-    <key>CFBundleName</key>
++-    <string>Mac Gaming Trainer</string>
++-    <key>CFBundleDisplayName</key>
++-    <string>Mac Gaming Trainer</string>
++-    <key>CFBundlePackageType</key>
++-    <string>APPL</string>
++-    <key>CFBundleShortVersionString</key>
++-    <string>0.12.0</string>
++-    <key>CFBundleVersion</key>
++-    <string>17</string>
++-    <key>LSMinimumSystemVersion</key>
++-    <string>14.0</string>
++-    <key>LSArchitecturePriority</key>
++-    <array>
++-        <string>arm64</string>
++-    </array>
++-    <key>NSHighResolutionCapable</key>
++-    <true/>
++-    <key>NSSupportsAutomaticGraphicsSwitching</key>
++-    <true/>
++-    <key>LSApplicationCategoryType</key>
++-    <string>public.app-category.utilities</string>
+++	<key>CFBundleDevelopmentRegion</key>
+++	<string>zh_CN</string>
+++	<key>CFBundleExecutable</key>
+++	<string>MacGamingTrainer</string>
+++	<key>CFBundleIdentifier</key>
+++	<string>com.gao.macgamingtrainer</string>
+++	<key>CFBundleInfoDictionaryVersion</key>
+++	<string>6.0</string>
+++	<key>CFBundleName</key>
+++	<string>Mac Gaming Trainer</string>
+++	<key>CFBundleDisplayName</key>
+++	<string>Mac Gaming Trainer</string>
+++	<key>CFBundlePackageType</key>
+++	<string>APPL</string>
+++	<key>CFBundleShortVersionString</key>
+++	<string>0.14.0</string>
+++	<key>CFBundleVersion</key>
+++	<string>19</string>
+++	<key>LSMinimumSystemVersion</key>
+++	<string>14.0</string>
+++	<key>NSHighResolutionCapable</key>
+++	<true/>
+++	<key>NSSupportsAutomaticGraphicsSwitching</key>
+++	<true/>
+++	<key>LSApplicationCategoryType</key>
+++	<string>public.app-category.utilities</string>
++ </dict>
++ </plist>
++diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/REFACTOR_ASSESSMENT.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/REFACTOR_ASSESSMENT.md
++--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/REFACTOR_ASSESSMENT.md	2026-09-17 08:43:48.391796304 +0000
+++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/REFACTOR_ASSESSMENT.md	2026-09-17 08:53:25.154855234 +0000
++@@ -1,59 +1,116 @@
++-# Mac Gaming Trainer · Round 10 重构评估
+++# Mac Gaming Trainer · v0.14.0 架构评估
++ 
++ ## 结论
++ 
++-Round 9 已经完成第一阶段逻辑重构；Round 10 按用户要求继续功能开发，完整物理重构后置。项目仍是单体 Swift/Lua/Python 文件组合，但最容易产生逻辑漂移的“持续功能生命周期”和“属性锁定”已经从散落分支迁移到 Registry / schema 驱动。
+++重构前，框架并不适合直接增加第二款游戏：Hades II 的 command/state、准备逻辑、LLDB/Lua、Swift Model/View、构建依赖与进程通信存在多层交叉，最现实的新增方式会变成复制整套工程。
++ 
++-当前规模约：
+++v0.14.0 后，**对于“共享 Mac/Swift/Python 宿主、每款游戏单独构建 App”这一目标，底座已经足够解耦，可以继续增加新游戏模块**。Hades II 仍很复杂，但其复杂性被限定在：
++ 
++-- Swift: 2.1k 行
++-- Lua: 2.6k 行
++-- server.py: 0.76k 行
++-- preparation.py: 0.61k 行
++-- transport.py: 0.23k 行
+++```text
+++Backend/games/hades2/*
+++Sources/Hades2/*
+++```
++ 
++-项目仍值得后续物理拆文件，但现在不应 big-bang rewrite。
+++普通新游戏不应修改 Core/App/server/build。
++ 
++-## 已完成的逻辑重构
+++## 已消除的 Hades II 耦合
++ 
++-### Feature Registry
+++### 1. Backend host
++ 
++-Lua 持续功能不再在 support/active/reconcile 三处分别列举。registry 统一提供 support/install/release/active/dormant，并生成 runtime maps 与 reconcile。
+++`Backend/server.py` 只负责：
++ 
++-### Stat Registry
+++- 选择 manifest/adapter
+++- JSONL stdin/stdout loop
+++- 通用日志
+++- router lifecycle
++ 
++-Grasp、Dodge、Crit、Charge/Move/Sprint/Dash/Attack Speed、Mana Regen、Enemy Damage 均通过一个 registry 管理 support、范围、current、install/release。
+++`Backend/core/protocol.py` 只负责 host envelope、request idempotency、adapter contract。Hades 的 TOGGLES、STAT_RULES、desired/active/dormant、save/profile、catalog、spawn 都在 Hades adapter 内。
++ 
++-### 多层数值校验统一
+++### 2. Transport
++ 
++-Python `STAT_RULES` 与 Swift `statRules` 将协议层和 UI 层的数值范围集中管理，减少新增属性时漏改某层的概率。
+++LLDB Python、Supergiant Lua boundary、symbols、runtime.lua 全部属于 Hades package。Core 不 import `lldb`，也不要求其他游戏使用 Lua。
++ 
++-### Desired / Active / Dormant
+++### 3. Swift host
++ 
++-用户目标、实机生效状态、等待环境状态被明确分离。断线时不再把“当前无法验证”误当成“用户关闭”。
+++`Sources/App.swift` 不引用 Hades 类型。通用部分拆为：
++ 
++-## 下一阶段建议
+++- `BackendProcess`
+++- `BackendClient`
+++- `TrainerBackendSession`
+++- `GlobalHotkeys`
+++- `TrainerGameModule` / `TrainerSessionLifecycle`
++ 
++-在 Round 10/后续功能面稳定并完成一轮目标 Mac 实机回归后，再进行物理拆分：
+++Hades Model 只负责 Hades 状态、命令与 payload decode。
++ 
++-Swift：
++-- TrainerProtocol.swift
++-- TrainerModel.swift
++-- GlobalHotkeys.swift
++-- CatalogModels.swift
++-- MainTrainerView.swift
++-- SaveManagerView.swift
++-- ProfileDiagnosticsView.swift
+++### 4. Identity / protocol
++ 
++-Python：
++-- router.py
++-- hades_adapter.py
++-- preferences.py
++-- localization.py
++-- save_service.py
+++`module.json` 是单一事实源：
++ 
++-Lua 也可以把 catalog / state registry / feature installers 分文件，但应等注入加载器能可靠 import 多文件之后再做。
+++- game id
+++- display name
+++- module protocol
+++- backend adapter
+++- Swift module type/source
+++- frontend architecture / minimum macOS
+++- App bundle identity
+++- LLDB / entitlement requirements
++ 
++-## 不建议动
+++Swift descriptor 由 build tool 生成；backend identity 由 registry context 注入。
++ 
++-`transport.py` 最后再动。它承担 LLDB attach、Lua boundary 和目标进程时序，实机风险远高于代码结构收益。
+++### 5. Build
+++
+++构建只编译/打包选中模块。Hades 显式声明 arm64、LLDB Python 和 debugger entitlement；其他游戏不会继承。
+++
+++硬编码的 `-target arm64-apple-macosx14.0` 已移除。模块可以选择 arm64、x86_64 或 universal binary。
+++
+++### 6. App 并存
+++
+++之前所有游戏都会输出同名 App、使用同一个 bundle identifier，导致第二游戏与 Hades II 覆盖/共享 `UserDefaults`。
+++
+++现在 App identity 属于 manifest。Hades II 保留历史 bundle ID；其他模块默认获得独立 bundle ID 和 App 名。
+++
+++### 7. Runtime manifest 校验
+++
+++此前 runtime registry 调用了完整源码树校验；打包后的 App 没有 `Sources/`，理论上会导致真实启动失败。
+++
+++现在分为：
+++
+++- build-time：完整 project validation
+++- runtime：仅 Backend/package validation
+++
+++并已有真实临时打包结构 smoke test 覆盖。
+++
+++## 当前仍有意共享的宿主假设
+++
+++以下是框架产品边界，不是 Hades II 泄漏：
+++
+++1. macOS / SwiftUI App；
+++2. Python JSONL backend host；
+++3. per-game build，而非单 App 运行时切换；
+++4. 通用 trainer lifecycle：connect / refresh / disable-all；
+++5. Core Swift 当前固定链接 SwiftUI / AppKit / Carbon。
+++
+++这些约束不阻止新增常规游戏修改器。只有新目标超出这些边界时，才应扩展 Core。
+++
+++## 不建议继续为了“解耦”而做的工作
+++
+++当前不需要为了第二游戏继续拆：
+++
+++- Hades `runtime.lua`；
+++- Hades LLDB transport；
+++- Hades UI 各功能 card；
+++- Hades Feature/Stat registry 的内部文件组织。
+++
+++继续拆这些文件不会降低第二游戏接入成本，反而会扩大目标 Mac 回归面。
+++
+++## 何时需要下一轮框架重构
+++
+++只有出现以下需求之一再继续：
+++
+++- 一个安装包运行时切换多游戏；
+++- frontend 需要按模块加载额外动态 framework/resource；
+++- backend 不再使用 Python host；
+++- 模块需要独立 helper process / privileged helper；
+++- host lifecycle 不再适用于某类工具（例如纯离线 save editor）。
+++
+++在此之前，新游戏应优先通过现有 module contract 落地，而不是再次修改底座。
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_NOTES.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_NOTES.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_NOTES.md	2026-09-17 08:31:35.994941804 +0000
+@@ -0,0 +1,139 @@
++# Round 13 — Multi-game framework decoupling
++
++Version: **0.13.0**  
++Build: **18**  
++Host protocol: **v5 (unchanged)**  
++Hades II module protocol: **v4 (unchanged)**  
++Hades II Lua runtime revision: **19 (unchanged)**
++
++Round 13 is an architecture release. It does not intentionally change Hades II gameplay behavior or its wire schema, so neither host protocol nor Hades II module protocol was bumped.
++
++## Why this refactor was necessary
++
++Round 11 was still effectively a Hades II application with some abstractions layered over it. Round 12 started separating the backend, but a second game still risked duplicating game identity/protocol constants and Swift backend lifecycle code.
++
++Round 13 finishes the minimum refactor needed for adding another game without copying or editing the framework core.
++
++## Framework boundary after Round 13
++
++Generic host/core:
++
++```text
++Backend/server.py
++Backend/core/*
++Backend/games/registry.py
++Sources/App.swift
++Sources/Core/*
++build.sh
++tools/game_module_tool.py
++```
++
++Hades II module:
++
++```text
++Backend/games/hades2/*
++Sources/Hades2/*
++```
++
++A normal new game should add only its own backend module + Swift frontend and should not modify the generic host files.
++
++## Manifest is now the single source of truth
++
++`Backend/games/<id>/module.json` owns:
++
++- game ID
++- display name
++- module protocol version
++- backend adapter class
++- Swift frontend source directory / module type
++- LLDB requirement
++- entitlement requirement
++
++The build tool generates the Swift `GameModuleDescriptor` from the manifest and the current host protocol. Hades II no longer hardcodes `hades2`, `Hades II`, host v5 or module v4 inside its Swift Model.
++
++Backend registry creates a `GameAdapterContext` from the manifest and passes it into the adapter constructor. This means a new adapter can safely read `self.game_id`, `self.display_name` and `self.module_protocol_version` during initialization without duplicating constants.
++
++## Backend refactor
++
++`Backend/server.py` remains game-agnostic and owns only JSONL framing/router lifecycle.
++
++`GameAdapter.dispatch()` is now explicitly required to return a JSON object/dict. This prevents a game module from returning a scalar/list that the common Swift client cannot decode as a result object.
++
++Manifest validation now enforces:
++
++- Python-package-safe game IDs
++- `Backend/games/<id>/module.json` placement
++- adapter contained inside `games.<id>.*`
++- frontend contained under `Sources/`
++- entitlement file contained inside the selected game module
++
++Invalid modules fail loudly instead of silently disappearing from discovery.
++
++## GameSpec refactor
++
++Core no longer assumes every game is:
++
++- a Steam title
++- a macOS `.app/Contents/MacOS/...` bundle
++- arm64
++
++`GameSpec` now accepts an explicit executable path and optional bundle/architecture metadata. `macos_app_bundle(...)` is an opt-in helper. Hades II explicitly opts into Steam, app bundle layout and arm64 inside its own module.
++
++## Swift host refactor
++
++New generic layer:
++
++```text
++Sources/Core/TrainerBackendSession.swift
++```
++
++It owns:
++
++- backend process startup
++- host/module protocol compatibility state
++- busy / operation / error / notice
++- stderr forwarding
++- unexpected termination handling
++
++`Hades2TrainerModel` no longer duplicates this lifecycle. It only owns Hades II commands, state fields and payload decoding.
++
++`BackendProcess` also now cleans up pipes/readability handlers when process launch itself fails, allowing a clean retry.
++
++## Build / permissions
++
++`build.sh <game-id>` compiles and packages only the selected game module.
++
++LLDB Python and debugger entitlement are not framework-wide requirements. They are read from the selected module manifest. Hades II keeps its existing LLDB/Lua transport and debugger entitlement inside `Backend/games/hades2`.
++
++This means a future game can use a different transport and does not inherit Hades II's LLDB/Lua assumptions.
++
++## Explicit non-goals
++
++Round 13 does **not**:
++
++- split `runtime.lua` into multiple injected Lua files
++- replace the known-good Hades II LLDB transport
++- convert Hades II UI into a generic schema-driven UI
++- provide runtime game switching inside one App bundle
++
++The current model is one shared source tree, one selected game module per App build. Runtime multi-game switching can be added later if it becomes a real product requirement.
++
++## Regression coverage
++
++Validated locally:
++
++- backend core / router contract
++- temporary second-game module discovery + adapter load
++- manifest isolation rules
++- generated Swift descriptor for a second game
++- Hades II adapter desired/profile/replay behavior
++- Round 9 / Round 10 server compatibility
++- Round 9 / Round 10 Lua mocks
++- Round 9–11 Swift/static compatibility checks
++- preparation/save staging tests
++- Python compile
++- Swift full-source parse
++- `build.sh` shell syntax
++- Info.plist + Hades entitlement plist parse
++
++Target-Mac full Xcode build and real Hades II attach remain the final environment-specific validation step.
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_TESTS.txt /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_TESTS.txt
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_TESTS.txt	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_TESTS.txt	2026-09-17 08:31:17.781963081 +0000
+@@ -0,0 +1,18 @@
++python3 tests/test_backend_core_round12.py
++python3 tests/test_hades2_adapter_round12.py
++python3 tests/test_round12_static.py
++python3 tests/test_swift_round12.py
++python3 tests/test_module_contract_round13.py
++python3 tests/test_preparation_round9.py
++python3 tests/legacy/test_server_round9.py
++python3 tests/legacy/test_server_round10.py
++python3 tests/legacy/test_swift_round9.py
++python3 tests/legacy/test_swift_round10.py
++python3 tests/legacy/test_round11_static.py
++python3 tests/run_lua_mock.py tests/round9_mock.lua
++python3 tests/run_lua_mock.py tests/round10_mock.lua
++python3 -m py_compile Backend/server.py Backend/core/*.py Backend/games/*.py Backend/games/hades2/*.py tools/game_module_tool.py
++bash -n build.sh
++python3 tools/game_module_tool.py hades2 json
++python3 tools/game_module_tool.py hades2 generate-swift /tmp/mgt-r13-active.swift
++swiftc -frontend -parse Sources/App.swift Sources/Core/*.swift Sources/Hades2/*.swift /tmp/mgt-r13-active.swift
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_VALIDATION_OUTPUT.txt /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_VALIDATION_OUTPUT.txt
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND13_VALIDATION_OUTPUT.txt	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND13_VALIDATION_OUTPUT.txt	2026-09-17 08:31:49.126744502 +0000
+@@ -0,0 +1,24 @@
++MacGamingTrainer Round 13 validation
++====================================
++backend_core_round12_ok
++hades2_adapter_round12_ok
++round12_static_ok
++swift_round12_ok
++module_contract_round13_ok
++preparation_round8_ok
++preparation_round9_staged_ok
++server_round9_compat_ok
++server_round10_compat_ok
++swift_round9_compat_ok
++swift_round10_compat_ok
++round11_compat_ok
++round9_mock_ok
++round10_mock_ok
++python_compile_ok
++build_sh_syntax_ok
++plist_ok
++{"backendAdapter": "games.hades2.adapter:Hades2Adapter", "buildRequirements": {"debuggerEntitlement": true, "entitlements": "Backend/games/hades2/trainer-entitlements.plist", "lldbPython": true}, "displayName": "Hades II", "frontend": {"moduleType": "Hades2GameModule", "sourceDirectory": "Sources/Hades2"}, "hostProtocolVersion": 5, "id": "hades2", "protocolVersion": 4, "steamAppId": "1145350"}
++swift_full_parse_ok
++core_coupling_audit_ok
++hades_identity_duplication_audit_ok
++all_round13_validation_ok
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_NOTES.md /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_NOTES.md
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_NOTES.md	2026-09-17 08:55:03.629822283 +0000
+@@ -0,0 +1,111 @@
++# Round 14 — Multi-game hardening
++
++Version: **0.14.0**  
++Build: **19**  
++Host protocol: **v5 (unchanged)**  
++Hades II module protocol: **v4 (unchanged)**  
++Hades II Lua runtime revision: **19 (unchanged)**
++
++Round 14 is a framework hardening release. It does not intentionally change Hades II gameplay behavior or its wire schema, so neither host protocol nor Hades II module protocol was bumped.
++
++## Why another refactor pass was necessary
++
++The first multi-game refactor removed most obvious Hades II coupling, but a stricter packaged-app review found two real blockers:
++
++1. runtime manifest discovery still performed build-time frontend validation, which would reject a shipped `.app` because `Sources/<Game>` is intentionally not packaged;
++2. build/app identity was still effectively Hades-shaped: the Swift target was hard-coded to arm64/macOS 14 and every game would reuse the same App name/bundle preference domain.
++
++Those are fixed in Round 14.
++
++## Build-time and runtime validation are now separate
++
++`GameModuleManifest` now exposes two validation levels:
++
++- `validate_backend_layout(...)` — safe for packaged runtime discovery;
++- `validate_project_paths(...)` — full source/build validation including frontend and entitlement paths.
++
++`Backend/games/registry.py` uses only backend validation. `tools/game_module_tool.py` uses full project validation.
++
++A packaged-module smoke test now constructs an App-like `Contents/Resources/Backend` tree **without any Sources directory**, starts `server.py --game other`, and verifies `hello` plus a custom command round-trip.
++
++## Per-game frontend build contract
++
++`module.json` may now declare:
++
++```json
++"frontend": {
++  "architectures": ["arm64", "x86_64"],
++  "minimumMacOS": "14.0"
++}
++```
++
++`build.sh` no longer contains a Hades-specific `-target arm64-apple-macosx14.0`.
++
++- no architecture declared → use build machine architecture;
++- one architecture → build one binary;
++- multiple architectures → build each slice and combine with `lipo`.
++
++Hades II explicitly declares `arm64` and macOS 14.0 in its own manifest.
++
++## Per-game App identity
++
++`module.json` may declare:
++
++```json
++"app": {
++  "bundleIdentifier": "com.example.trainer.game",
++  "displayName": "Mac Gaming Trainer - Example"
++}
++```
++
++This prevents different trainer builds from overwriting each other or sharing bundle-scoped `UserDefaults` unintentionally.
++
++Hades II explicitly retains:
++
++```text
++com.gao.macgamingtrainer
++Mac Gaming Trainer
++```
++
++so existing Hades preferences/hotkeys remain in the same domain.
++
++If a new module omits `app`, it receives safe per-game defaults. Underscores in the game ID are converted to hyphens for the default bundle identifier.
++
++## Registry error boundary improvement
++
++`create_adapter()` now verifies the adapter class is a `GameAdapter` subclass before construction. A `TypeError` raised *inside* a valid adapter constructor is no longer rewritten into a misleading “constructor signature” error.
++
++## Generic log isolation
++
++A game module without an explicit legacy `data_dir` now gets its generic backend log under:
++
++```text
++~/Library/Application Support/MacGamingTrainer/<game-id>/trainer.log
++```
++
++Hades II keeps its historical data location through `adapter.data_dir`.
++
++## Python compatibility
++
++The generic manifest layer avoids Python 3.10-only union type syntax and is syntax-checked against Python 3.9 grammar, reducing dependence on a particular Xcode Python minor version.
++
++## What remains intentionally shared
++
++The framework still assumes:
++
++- macOS + SwiftUI frontend;
++- Python JSONL backend host;
++- one selected game module per App build;
++- common trainer lifecycle actions: connect / refresh / disable-all.
++
++These are framework product boundaries, not Hades II leakage.
++
++## Hades II regression scope
++
++No Hades gameplay code was intentionally changed. Existing Round 9/10/11 compatibility tests, Hades adapter tests, preparation tests, and both Lua runtime mocks remain passing.
++
++Target-Mac priorities remain the same as Round 11 for actual game behavior, plus one new packaging check:
++
++1. build `./build.sh hades2` on target Mac;
++2. launch the produced App and verify backend starts (this specifically validates packaged manifest discovery);
++3. repeat existing Cast/Crossroads/next-room/game-speed regressions from Round 11.
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_TESTS.txt /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_TESTS.txt
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_TESTS.txt	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_TESTS.txt	2026-09-17 08:54:41.703159690 +0000
+@@ -0,0 +1,34 @@
++Round 14 validation coverage
++
++Architecture / framework:
++- tests/test_backend_core_round12.py
++- tests/test_hades2_adapter_round12.py
++- tests/test_module_contract_round13.py
++- tests/test_packaged_module_round14.py
++- tests/test_build_contract_round14.py
++- tests/test_round12_static.py
++- tests/test_swift_round12.py
++
++Legacy compatibility:
++- tests/legacy/test_server_round9.py
++- tests/legacy/test_server_round10.py
++- tests/legacy/test_swift_round9.py
++- tests/legacy/test_swift_round10.py
++- tests/legacy/test_round11_static.py
++
++Hades runtime / preparation:
++- tests/test_preparation_round9.py
++- tests/round9_mock.lua via tests/run_lua_mock.py
++- tests/round10_mock.lua via tests/run_lua_mock.py
++
++Syntax / packaging checks:
++- Python py_compile for backend/core/game modules/tooling
++- Python 3.9 grammar parse for Backend + tools
++- Swift frontend parse when swiftc is available
++- bash -n build.sh
++- plutil Info.plist + Hades entitlements
++
++Not executable in this Linux container:
++- full macOS xcrun/swiftc framework link
++- codesign / LLDB Python build gate
++- actual Hades II attach on target Mac
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_VALIDATION_OUTPUT.txt /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_VALIDATION_OUTPUT.txt
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/ROUND14_VALIDATION_OUTPUT.txt	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/ROUND14_VALIDATION_OUTPUT.txt	2026-09-17 08:55:21.333561879 +0000
+@@ -0,0 +1,53 @@
++# Mac Gaming Trainer v0.14.0 Round 14 validation
++
++== architecture/core ==
++-- tests/test_backend_core_round12.py
++backend_core_round12_ok
++-- tests/test_hades2_adapter_round12.py
++hades2_adapter_round12_ok
++-- tests/test_module_contract_round13.py
++module_contract_round13_ok
++-- tests/test_packaged_module_round14.py
++packaged_module_round14_ok
++-- tests/test_build_contract_round14.py
++build_contract_round14_ok
++-- tests/test_preparation_round9.py
++preparation_round8_ok
++preparation_round9_staged_ok
++-- tests/test_round12_static.py
++round12_static_ok
++-- tests/test_swift_round12.py
++swift_round12_ok
++
++== legacy compatibility ==
++-- tests/legacy/test_server_round9.py
++server_round9_compat_ok
++-- tests/legacy/test_server_round10.py
++server_round10_compat_ok
++-- tests/legacy/test_swift_round9.py
++swift_round9_compat_ok
++-- tests/legacy/test_swift_round10.py
++swift_round10_compat_ok
++-- tests/legacy/test_round11_static.py
++round11_compat_ok
++
++== python compile ==
++python_compile_ok
++
++== python 3.9 grammar ==
++python39_syntax_ok
++
++== lua mocks ==
++round9_mock_ok
++round10_mock_ok
++
++== swift parse ==
++swift_parse_ok
++
++== shell/plist ==
++build_sh_syntax_ok
++Info.plist: OK
++Backend/games/hades2/trainer-entitlements.plist: OK
++
++== coupling scan ==
++generic_core_coupling_scan_ok
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/BackendClient.swift /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/BackendClient.swift
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/BackendClient.swift	2026-09-17 08:10:41.591701618 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/BackendClient.swift	2026-09-17 08:22:07.083292521 +0000
+@@ -142,7 +142,7 @@
+             onLog?("请求 \(request.command) · \(request.id)")
+         } catch {
+             current = nil
+-            onClientError?("发送失败：\(error.localizedDescription)；一次性资源操作不会自动重试。")
++            onClientError?("发送失败：\(error.localizedDescription)；一次性操作不会自动重试。")
+             request.completion?(false)
+             flushNext()
+         }
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/BackendProcess.swift /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/BackendProcess.swift
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/BackendProcess.swift	2026-09-17 08:03:28.906247140 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/BackendProcess.swift	2026-09-17 08:29:53.645687544 +0000
+@@ -65,8 +65,19 @@
+             }
+         }
+ 
+-        try task.run()
+-        process = task
++        do {
++            try task.run()
++            process = task
++        } catch {
++            stdout.fileHandleForReading.readabilityHandler = nil
++            stderr.fileHandleForReading.readabilityHandler = nil
++            try? stdin.fileHandleForWriting.close()
++            input = nil
++            output = nil
++            errorOutput = nil
++            process = nil
++            throw error
++        }
+     }
+ 
+     func send(_ object: [String: Any]) throws {
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/TrainerBackendSession.swift /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/TrainerBackendSession.swift
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Core/TrainerBackendSession.swift	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Core/TrainerBackendSession.swift	2026-09-17 08:29:53.645459198 +0000
+@@ -0,0 +1,145 @@
++import Foundation
++import Combine
++
++/// UI-facing, game-agnostic backend session state.
++///
++/// `BackendClient` owns request ordering and JSONL framing. This layer owns the
++/// common trainer-host lifecycle around that client: locating/starting the
++/// backend, protocol compatibility, busy/error/notice presentation state, and
++/// termination cleanup. A game model only supplies how to decode its own
++/// result/state payload.
++final class TrainerBackendSession: ObservableObject {
++    @Published private(set) var backendAvailable = false
++    @Published private(set) var backendProtocolVersion: Int?
++    @Published private(set) var backendModuleProtocolVersion: Int?
++    @Published private(set) var protocolCompatible = true
++    @Published private(set) var busy = false
++    @Published private(set) var operation = ""
++    @Published var error = ""
++    @Published var notice = ""
++
++    private let client = BackendClient()
++    private var suppressTerminationError = false
++    private var applyPayload: (([String: Any]) -> Void)?
++    private var resetGameState: (() -> Void)?
++    private var log: ((String) -> Void)?
++
++    var isRunning: Bool { client.isRunning }
++    var isStarted: Bool { client.isStarted }
++
++    func start(
++        scriptURL: URL,
++        descriptor: GameModuleDescriptor,
++        applyPayload: @escaping ([String: Any]) -> Void,
++        resetGameState: @escaping () -> Void,
++        log: @escaping (String) -> Void
++    ) throws {
++        guard !client.isStarted else { return }
++        self.applyPayload = applyPayload
++        self.resetGameState = resetGameState
++        self.log = log
++        suppressTerminationError = false
++        backendAvailable = false
++        backendProtocolVersion = nil
++        backendModuleProtocolVersion = nil
++        protocolCompatible = true
++        busy = false
++        operation = ""
++        error = ""
++        notice = ""
++
++        try client.start(
++            scriptURL: scriptURL,
++            expectation: BackendProtocolExpectation(
++                gameID: descriptor.backendGameID,
++                hostProtocolVersion: descriptor.expectedHostProtocolVersion,
++                moduleProtocolVersion: descriptor.expectedModuleProtocolVersion
++            ),
++            onRequestStarted: { [weak self] title, announceSuccess in
++                guard let self = self else { return }
++                self.busy = true
++                self.operation = title
++                self.error = ""
++                if announceSuccess { self.notice = "" }
++            },
++            onReply: { [weak self] reply in
++                guard let self = self else { return }
++                self.backendProtocolVersion = reply.hostProtocolVersion
++                self.backendModuleProtocolVersion = reply.moduleProtocolVersion
++                self.protocolCompatible = true
++                self.busy = false
++                if reply.success {
++                    if let result = reply.result { self.applyPayload?(result) }
++                    if reply.announceSuccess { self.notice = "\(reply.operation)完成" }
++                } else {
++                    if let state = reply.state { self.applyPayload?(state) }
++                    self.error = reply.errorMessage ?? "操作失败，请查看日志。"
++                    self.log?("\(reply.operation)失败 [\(reply.errorCode ?? "unknown")]：\(self.error)")
++                }
++            },
++            onProtocolMismatch: { [weak self] message in
++                guard let self = self else { return }
++                self.protocolCompatible = false
++                self.backendAvailable = false
++                self.busy = false
++                self.error = message + " 请使用同一发布包中的 build.sh 重新构建 App。"
++                self.log?("协议不兼容：\(message)")
++            },
++            onStderr: { [weak self] clean in
++                self?.log?("BACKEND: \(clean)")
++            },
++            onLog: { [weak self] line in self?.log?(line) },
++            onTermination: { [weak self] status, stderrTail in
++                self?.handleTermination(status: status, stderrTail: stderrTail)
++            },
++            onClientError: { [weak self] message in
++                self?.busy = false
++                self?.error = message
++            }
++        )
++        backendAvailable = true
++    }
++
++    func send(
++        _ command: String,
++        params: [String: Any] = [:],
++        operation: String,
++        coalesceKey: String? = nil,
++        announceSuccess: Bool = true,
++        completion: ((Bool) -> Void)? = nil
++    ) {
++        client.send(
++            command,
++            params: params,
++            operation: operation,
++            coalesceKey: coalesceKey,
++            announceSuccess: announceSuccess,
++            completion: completion
++        )
++    }
++
++    func stop(suppressTerminationError: Bool = true) {
++        self.suppressTerminationError = suppressTerminationError
++        client.stop()
++    }
++
++    func markUnavailable(_ message: String) {
++        backendAvailable = false
++        busy = false
++        error = message
++    }
++
++    private func handleTermination(status: Int32, stderrTail: String) {
++        let mismatch = !protocolCompatible
++        backendAvailable = false
++        backendProtocolVersion = nil
++        backendModuleProtocolVersion = nil
++        if !mismatch { protocolCompatible = true }
++        busy = false
++        resetGameState?()
++
++        guard !suppressTerminationError && !mismatch else { return }
++        let suffix = stderrTail.isEmpty ? "" : "\n\n后端输出：\n\(stderrTail)"
++        error = "后端已退出（状态 \(status)）。游戏内修改可能仍然生效，请点击重启后端，再连接清理或重启游戏。\(suffix)"
++    }
++}
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Hades2/Hades2TrainerModel.swift /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Hades2/Hades2TrainerModel.swift
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/Sources/Hades2/Hades2TrainerModel.swift	2026-09-17 08:10:41.592021969 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/Sources/Hades2/Hades2TrainerModel.swift	2026-09-17 08:21:23.757248714 +0000
+@@ -1,18 +1,12 @@
+ import Foundation
+ import SwiftUI
+ import AppKit
++import Combine
+ 
+ struct Hades2GameModule: TrainerGameModule {
+-    static let descriptor = GameModuleDescriptor(
+-        id: "hades2",
+-        displayName: "Hades II",
+-        backendGameID: "hades2",
+-        expectedHostProtocolVersion: 5,
+-        expectedModuleProtocolVersion: 4
+-    )
+-    static let id = descriptor.id
+-    static let displayName = descriptor.displayName
+-
++    // `descriptor` is generated from Backend/games/hades2/module.json at build
++    // time. The manifest is the single source of truth for game identity and
++    // protocol versions.
+     static func makeModel() -> Hades2TrainerModel { Hades2TrainerModel() }
+     static func makeView(model: Hades2TrainerModel) -> Hades2TrainerView { Hades2TrainerView(model: model) }
+ }
+@@ -143,10 +137,22 @@
+         "enemyHealth": .init(min: 10, max: 1000, integer: false),
+     ]
+     @Published var connected = false
+-    @Published var backendAvailable = false
+-    @Published var backendProtocolVersion: Int?
+-    @Published var backendModuleProtocolVersion: Int?
+-    @Published var protocolCompatible = true
++    private let backendSession = TrainerBackendSession()
++    private var backendSessionObservation: AnyCancellable?
++    var backendAvailable: Bool { backendSession.backendAvailable }
++    var backendProtocolVersion: Int? { backendSession.backendProtocolVersion }
++    var backendModuleProtocolVersion: Int? { backendSession.backendModuleProtocolVersion }
++    var protocolCompatible: Bool { backendSession.protocolCompatible }
++    var busy: Bool { backendSession.busy }
++    var operation: String { backendSession.operation }
++    var error: String {
++        get { backendSession.error }
++        set { backendSession.error = newValue }
++    }
++    var notice: String {
++        get { backendSession.notice }
++        set { backendSession.notice = newValue }
++    }
+     @Published var pid: Int?
+     @Published var version = "等待检测"
+     @Published var status = "disconnected"
+@@ -155,10 +161,6 @@
+     @Published var activeFeatures: [String: Bool] = [:]
+     @Published var dormantFeatures: [String: Bool] = [:]
+     @Published var featureSupport: [String: Bool] = [:]
+-    @Published var busy = false
+-    @Published var operation = ""
+-    @Published var error = ""
+-    @Published var notice = ""
+     @Published var godMode = false
+     @Published var infiniteHealth = false
+     @Published var infiniteMana = false
+@@ -238,7 +240,6 @@
+     @Published var exiting = false
+     @Published var exitFailed = false
+ 
+-    private let backend = BackendClient()
+     private var mutationWorkItems: [String: DispatchWorkItem] = [:]
+     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
+     @Published private var activationGraceFeatures: Set<String> = []
+@@ -276,6 +277,9 @@
+     }
+ 
+     init() {
++        backendSessionObservation = backendSession.objectWillChange.sink { [weak self] _ in
++            self?.objectWillChange.send()
++        }
+         let defaults = UserDefaults.standard
+         let layoutVersion = defaults.integer(forKey: "shortcut.layoutVersion")
+         if layoutVersion >= 3 {
+@@ -336,115 +340,68 @@
+     }
+ 
+     func restartBackend() {
+-        guard !busy && !exiting && !backend.isStarted else { return }
++        guard !busy && !exiting && !backendSession.isStarted else { return }
+         error = ""
+         notice = ""
+         startBackend()
+     }
+ 
+     private func startBackend() {
+-        guard !backend.isStarted else { return }
+-        let script = Bundle.main.resourceURL!.appendingPathComponent("Backend/server.py")
++        guard !backendSession.isStarted else { return }
++        guard let resourceURL = Bundle.main.resourceURL else {
++            backendSession.markUnavailable("找不到 App Resources 目录。请使用 build.sh 重新构建完整 App。")
++            status = "backend_stopped"
++            return
++        }
++        let script = resourceURL.appendingPathComponent("Backend/server.py")
+         guard FileManager.default.fileExists(atPath: script.path) else {
+-            error = "找不到后端：\(script.path)。请使用 build.sh 重新构建完整 App。"
++            backendSession.markUnavailable("找不到后端：\(script.path)。请使用 build.sh 重新构建完整 App。")
++            status = "backend_stopped"
+             return
+         }
+         do {
+-            try backend.start(
++            try backendSession.start(
+                 scriptURL: script,
+-                expectation: BackendProtocolExpectation(
+-                    gameID: Hades2GameModule.descriptor.backendGameID,
+-                    hostProtocolVersion: Self.expectedHostProtocolVersion,
+-                    moduleProtocolVersion: Self.expectedModuleProtocolVersion
+-                ),
+-                onRequestStarted: { [weak self] title, announceSuccess in
+-                    guard let self = self else { return }
+-                    self.busy = true
+-                    self.operation = title
+-                    self.error = ""
+-                    if announceSuccess { self.notice = "" }
+-                },
+-                onReply: { [weak self] reply in
+-                    guard let self = self else { return }
+-                    self.backendProtocolVersion = reply.hostProtocolVersion
+-                    self.backendModuleProtocolVersion = reply.moduleProtocolVersion
+-                    self.protocolCompatible = true
+-                    self.busy = false
+-                    if reply.success {
+-                        if let result = reply.result { self.apply(result) }
+-                        if reply.announceSuccess { self.notice = "\(reply.operation)完成" }
+-                    } else {
+-                        if let state = reply.state { self.apply(state) }
+-                        self.error = reply.errorMessage ?? "操作失败，请查看日志。"
+-                        self.appendLog("\(reply.operation)失败 [\(reply.errorCode ?? "unknown")]：\(self.error)")
+-                    }
+-                },
+-                onProtocolMismatch: { [weak self] message in
+-                    guard let self = self else { return }
+-                    self.protocolCompatible = false
+-                    self.backendAvailable = false
+-                    self.busy = false
+-                    self.mutationWorkItems.values.forEach { $0.cancel() }
+-                    self.mutationWorkItems.removeAll()
+-                    self.error = message + " 请使用同一发布包中的 build.sh 重新构建 App。"
+-                    self.appendLog("协议不兼容：\(message)")
+-                },
+-                onStderr: { [weak self] clean in
+-                    self?.appendLog("BACKEND: \(clean)")
+-                },
+-                onLog: { [weak self] line in self?.appendLog(line) },
+-                onTermination: { [weak self] status, stderrTail in
+-                    guard let self = self else { return }
+-                    let protocolMismatch = !self.protocolCompatible
+-                    self.backendAvailable = false
+-                    self.backendProtocolVersion = nil
+-                    self.backendModuleProtocolVersion = nil
+-                    if !protocolMismatch { self.protocolCompatible = true }
+-                    self.connected = false
+-                    self.scene = "unknown"
+-                    self.capabilities = [:]
+-                    self.activeFeatures = [:]
+-                    self.dormantFeatures = [:]
+-                    self.featureSupport = [:]
+-                    self.statAvailable = [:]
+-                    self.activationGraceWorkItems.values.forEach { $0.cancel() }
+-                    self.activationGraceWorkItems = [:]
+-                    self.activationGraceFeatures = []
+-                    self.runtimeIssue = ""
+-                    self.health = nil
+-                    self.maxHealth = nil
+-                    self.mana = nil
+-                    self.maxMana = nil
+-                    self.armor = nil
+-                    self.spellCharge = nil
+-                    self.spellChargeCost = nil
+-                    self.money = nil
+-                    self.rerolls = nil
+-                    self.resources = []
+-                    self.boons = []
+-                    self.status = "backend_stopped"
+-                    self.busy = false
+-                    self.mutationWorkItems.values.forEach { $0.cancel() }
+-                    self.mutationWorkItems.removeAll()
+-                    if !self.shuttingDown && !protocolMismatch {
+-                        let suffix = stderrTail.isEmpty ? "" : "\n\n后端输出：\n\(stderrTail)"
+-                        self.error = "后端已退出（状态 \(status)）。游戏内修改可能仍然生效，请点击重启后端，再连接清理或重启游戏。\(suffix)"
+-                    }
+-                },
+-                onClientError: { [weak self] message in
+-                    self?.busy = false
+-                    self?.error = message
+-                }
++                descriptor: Hades2GameModule.descriptor,
++                applyPayload: { [weak self] payload in self?.apply(payload) },
++                resetGameState: { [weak self] in self?.resetAfterBackendTermination() },
++                log: { [weak self] line in self?.appendLog(line) }
+             )
+-            backendAvailable = true
+             send("scan", title: "检测游戏")
+         } catch {
+-            backendAvailable = false
+             status = "backend_stopped"
+-            self.error = "无法启动后端：\(error.localizedDescription)"
++            backendSession.markUnavailable("无法启动后端：\(error.localizedDescription)")
+         }
+     }
+ 
++    private func resetAfterBackendTermination() {
++        connected = false
++        scene = "unknown"
++        capabilities = [:]
++        activeFeatures = [:]
++        dormantFeatures = [:]
++        featureSupport = [:]
++        statAvailable = [:]
++        activationGraceWorkItems.values.forEach { $0.cancel() }
++        activationGraceWorkItems = [:]
++        activationGraceFeatures = []
++        runtimeIssue = ""
++        health = nil
++        maxHealth = nil
++        mana = nil
++        maxMana = nil
++        armor = nil
++        spellCharge = nil
++        spellChargeCost = nil
++        money = nil
++        rerolls = nil
++        resources = []
++        boons = []
++        status = "backend_stopped"
++        mutationWorkItems.values.forEach { $0.cancel() }
++        mutationWorkItems.removeAll()
++    }
++
+     private func apply(_ result: [String: Any]) {
+         let wasConnected = connected
+         let desiredBeforeApply = Dictionary(uniqueKeysWithValues: desiredFeatureKeys.map { ($0, desiredFeatureEnabled($0)) })
+@@ -632,7 +589,7 @@
+     }
+ 
+     func send(_ command: String, params: [String: Any] = [:], title: String, coalesceKey: String? = nil, announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
+-        backend.send(command, params: params, operation: title, coalesceKey: coalesceKey, announceSuccess: announceSuccess, completion: completion)
++        backendSession.send(command, params: params, operation: title, coalesceKey: coalesceKey, announceSuccess: announceSuccess, completion: completion)
+     }
+ 
+     private let desiredFeatureKeys: [String] = [
+@@ -920,7 +877,7 @@
+ 
+     private func updatePendingRestorePolling() {
+         pendingRestoreTimer?.invalidate(); pendingRestoreTimer = nil
+-        guard pendingRestoreID != nil, backend.isRunning else { return }
++        guard pendingRestoreID != nil, backendSession.isRunning else { return }
+         pendingRestoreTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
+             guard let self = self, self.pendingRestoreID != nil, !self.busy, !self.exiting else { return }
+             self.send("scan", title: "等待游戏退出并恢复存档", announceSuccess: false)
+@@ -1000,7 +957,7 @@
+         guard !exiting else { return }
+         if busy { error = "操作正在进行，请等待完成后再退出，以确保游戏恢复运行。"; NSApp.reply(toApplicationShouldTerminate: false); return }
+         exiting = true
+-        if !backend.isRunning { finishExit(); return }
++        if !backendSession.isRunning { finishExit(); return }
+         send("disable_all", title: "退出前关闭功能") { [weak self] success in
+             guard let self = self else { return }
+             guard success else { self.failExit(); return }
+@@ -1020,7 +977,7 @@
+         pendingRestoreTimer?.invalidate()
+         pendingRestoreTimer = nil
+         shuttingDown = true
+-        backend.stop()
++        backendSession.stop(suppressTerminationError: true)
+         NSApp.reply(toApplicationShouldTerminate: true)
+     }
+ }
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/build.sh /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/build.sh
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/build.sh	2026-09-17 08:12:19.161502134 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/build.sh	2026-09-17 08:47:52.697291848 +0000
+@@ -2,15 +2,10 @@
+ set -euo pipefail
+ 
+ ROOT="$(cd "$(dirname "$0")" && pwd)"
+-APP_NAME="Mac Gaming Trainer"
+ EXECUTABLE="MacGamingTrainer"
+-DIST="${ROOT}/dist"
+-APP="${DIST}/${APP_NAME}.app"
+-CONTENTS="${APP}/Contents"
+-BACKEND="${CONTENTS}/Resources/Backend"
+ MODULE_TOOL="${ROOT}/tools/game_module_tool.py"
+ 
+-for tool in xcrun codesign plutil grep; do
++for tool in xcrun codesign plutil grep find uname; do
+     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
+ done
+ 
+@@ -31,11 +26,33 @@
+ 
+ FRONTEND_DIR_REL="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field frontend.sourceDirectory)"
+ FRONTEND_MODULE_TYPE="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field frontend.moduleType)"
++ARCHITECTURES_RAW="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field frontend.architectures)"
++MIN_MACOS="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field frontend.minimumMacOS)"
++APP_BUNDLE_ID="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field app.bundleIdentifier)"
++APP_NAME="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field app.displayName)"
+ REQUIRES_LLDB="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field buildRequirements.lldbPython)"
+ REQUIRES_DEBUGGER_ENTITLEMENT="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field buildRequirements.debuggerEntitlement)"
+ ENTITLEMENTS_REL="$("$PYTHON" "$MODULE_TOOL" "$ACTIVE_GAME_ID" field buildRequirements.entitlements)"
+ FRONTEND_DIR="$ROOT/$FRONTEND_DIR_REL"
+ 
++[[ -n "$APP_NAME" && "$APP_NAME" != *'/'* ]] || { echo "Invalid app display name from module manifest." >&2; exit 1; }
++[[ -n "$APP_BUNDLE_ID" ]] || { echo "Missing app bundle identifier." >&2; exit 1; }
++[[ -n "$MIN_MACOS" ]] || MIN_MACOS="14.0"
++[[ -n "$ARCHITECTURES_RAW" ]] || ARCHITECTURES_RAW="$(uname -m)"
++read -r -a ARCHITECTURES <<< "$ARCHITECTURES_RAW"
++[[ ${#ARCHITECTURES[@]} -gt 0 ]] || { echo "No frontend architecture selected." >&2; exit 1; }
++for arch in "${ARCHITECTURES[@]}"; do
++    case "$arch" in
++        arm64|x86_64) ;;
++        *) echo "Unsupported frontend architecture: $arch" >&2; exit 1 ;;
++    esac
++done
++
++DIST="${ROOT}/dist"
++APP="${DIST}/${APP_NAME}.app"
++CONTENTS="${APP}/Contents"
++BACKEND="${CONTENTS}/Resources/Backend"
++
+ if [[ "$REQUIRES_LLDB" == "1" ]]; then
+     LLDB="$(xcrun --find lldb 2>/dev/null || true)"
+     [[ -n "$LLDB" ]] || { echo "The active game module requires LLDB." >&2; exit 1; }
+@@ -65,16 +82,29 @@
+ SWIFT_SOURCES+=("$GENERATED_SWIFT")
+ [[ ${#SWIFT_SOURCES[@]} -gt 3 ]] || { echo "No usable Swift sources for $ACTIVE_GAME_ID." >&2; exit 1; }
+ 
+-"$SWIFTC" \
+-    -parse-as-library \
+-    -O \
+-    -target arm64-apple-macosx14.0 \
+-    -sdk "$SDK" \
+-    -framework SwiftUI \
+-    -framework AppKit \
+-    -framework Carbon \
+-    "${SWIFT_SOURCES[@]}" \
+-    -o "${CONTENTS}/MacOS/${EXECUTABLE}"
++ARCH_BINARIES=()
++for arch in "${ARCHITECTURES[@]}"; do
++    binary="$GENERATED_DIR/$EXECUTABLE.$arch"
++    "$SWIFTC" \
++        -parse-as-library \
++        -O \
++        -target "${arch}-apple-macosx${MIN_MACOS}" \
++        -sdk "$SDK" \
++        -framework SwiftUI \
++        -framework AppKit \
++        -framework Carbon \
++        "${SWIFT_SOURCES[@]}" \
++        -o "$binary"
++    ARCH_BINARIES+=("$binary")
++done
++
++if [[ ${#ARCH_BINARIES[@]} -eq 1 ]]; then
++    cp "${ARCH_BINARIES[0]}" "${CONTENTS}/MacOS/${EXECUTABLE}"
++else
++    LIPO="$(xcrun --find lipo 2>/dev/null || true)"
++    [[ -n "$LIPO" ]] || { echo "Universal build requested but lipo is unavailable." >&2; exit 1; }
++    "$LIPO" -create "${ARCH_BINARIES[@]}" -output "${CONTENTS}/MacOS/${EXECUTABLE}"
++fi
+ 
+ # Package only the selected backend game module plus the game-agnostic host.
+ cp "$ROOT/Backend/server.py" "$BACKEND/server.py"
+@@ -86,12 +116,39 @@
+ find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
+ printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
+ 
++HAS_ICON=0
+ if [[ -f "$ROOT/AppIcon.icns" ]]; then
+     cp "$ROOT/AppIcon.icns" "${CONTENTS}/Resources/AppIcon.icns"
+-    /usr/libexec/PlistBuddy -c 'Delete :CFBundleIconFile' "${CONTENTS}/Info.plist" >/dev/null 2>&1 || true
+-    /usr/libexec/PlistBuddy -c 'Add :CFBundleIconFile string AppIcon' "${CONTENTS}/Info.plist"
++    HAS_ICON=1
+ fi
+ 
++# The base plist is a generic template. Per-game app identity, deployment target
++# and architecture priority come from module.json so independent game builds can
++# coexist without sharing bundle-scoped preferences by accident.
++"$PYTHON" - "${CONTENTS}/Info.plist" "$APP_BUNDLE_ID" "$APP_NAME" "$MIN_MACOS" "$HAS_ICON" "${ARCHITECTURES[@]}" <<'PY'
++import plistlib
++import sys
++from pathlib import Path
++
++path = Path(sys.argv[1])
++bundle_id, app_name, minimum_macos = sys.argv[2:5]
++has_icon = sys.argv[5] == '1'
++architectures = sys.argv[6:]
++with path.open('rb') as stream:
++    data = plistlib.load(stream)
++data['CFBundleIdentifier'] = bundle_id
++data['CFBundleName'] = app_name
++data['CFBundleDisplayName'] = app_name
++data['LSMinimumSystemVersion'] = minimum_macos
++data['LSArchitecturePriority'] = architectures
++if has_icon:
++    data['CFBundleIconFile'] = 'AppIcon'
++else:
++    data.pop('CFBundleIconFile', None)
++with path.open('wb') as stream:
++    plistlib.dump(data, stream, sort_keys=False)
++PY
++
+ chmod 755 "${CONTENTS}/MacOS/${EXECUTABLE}"
+ find "$BACKEND" -type f -exec chmod 644 {} +
+ chmod 644 "${CONTENTS}/Info.plist"
+@@ -119,6 +176,8 @@
+   $APP
+ Game module:
+   $ACTIVE_GAME_ID
++Architectures:
++  ${ARCHITECTURES[*]}
+ 
+ Launch with Finder or:
+   open "$APP"
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/legacy/test_round11_static.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/legacy/test_round11_static.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/legacy/test_round11_static.py	2026-09-17 08:11:10.355658353 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/legacy/test_round11_static.py	2026-09-17 08:24:58.429490069 +0000
+@@ -1,4 +1,5 @@
+ from pathlib import Path
++import subprocess, tempfile
+ root = Path(__file__).resolve().parents[2]
+ lua = (root/'Backend/games/hades2/runtime.lua').read_text()
+ model = (root/'Sources/Hades2/Hades2TrainerModel.swift').read_text()
+@@ -9,5 +10,8 @@
+ assert 'statAvailable = statAvailable' in lua
+ assert 'activationGraceFeatures' in model
+ assert 'warningState ? .orange' in view
+-assert 'expectedModuleProtocolVersion: 4' in model
++with tempfile.NamedTemporaryFile(suffix='.swift') as f:
++    subprocess.run(['python3', str(root/'tools/game_module_tool.py'), 'hades2', 'generate-swift', f.name], check=True)
++    generated = Path(f.name).read_text()
++assert 'expectedModuleProtocolVersion: 4' in generated
+ print('round11_compat_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/legacy/test_swift_round10.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/legacy/test_swift_round10.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/legacy/test_swift_round10.py	2026-09-17 08:11:10.357713112 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/legacy/test_swift_round10.py	2026-09-17 08:24:58.428671186 +0000
+@@ -1,11 +1,15 @@
+ from pathlib import Path
++import subprocess, tempfile
+ root = Path(__file__).resolve().parents[2]
+ model = (root/'Sources/Hades2/Hades2TrainerModel.swift').read_text()
+ view = (root/'Sources/Hades2/Hades2TrainerView.swift').read_text()
+ build = (root/'build.sh').read_text()
+ for token in ('boonChoiceEnabled','boonChoiceCount','enemyHealth'):
+     assert token in model or token in view, token
+-assert 'expectedHostProtocolVersion: 5' in model
+-assert 'expectedModuleProtocolVersion: 4' in model
++with tempfile.NamedTemporaryFile(suffix='.swift') as f:
++    subprocess.run(['python3', str(root/'tools/game_module_tool.py'), 'hades2', 'generate-swift', f.name], check=True)
++    generated = Path(f.name).read_text()
++assert 'expectedHostProtocolVersion: 5' in generated
++assert 'expectedModuleProtocolVersion: 4' in generated
+ assert 'REQUIRES_LLDB' in build and 'lldb","-P' in build
+ print('swift_round10_compat_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_backend_core_round12.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_backend_core_round12.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_backend_core_round12.py	2026-09-17 08:08:38.481832339 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_backend_core_round12.py	2026-09-17 08:49:23.617011431 +0000
+@@ -1,22 +1,21 @@
+ from pathlib import Path
+ import json
++import logging
+ import sys
+ import tempfile
+ 
+ root = Path(__file__).resolve().parents[1]
+ sys.path.insert(0, str(root / 'Backend'))
+ 
++from core.game_spec import GameSpec
+ from core.module_manifest import GameModuleManifest, ManifestError
+-from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION, PROTOCOL_VERSION, GameAdapter, JsonlRequestRouter
++from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION, PROTOCOL_VERSION, GameAdapter, GameAdapterContext, JsonlRequestRouter
+ from games.registry import available_games, create_adapter, discover_manifests
+ 
+ 
+ class FakeAdapter(GameAdapter):
+-    game_id = 'fake'
+-    display_name = 'Fake Game'
+-    module_protocol_version = 7
+-
+-    def __init__(self):
++    def __init__(self, context):
++        super().__init__(context)
+         self.state = {'connected': False}
+         self.calls = []
+         self.closed = False
+@@ -25,6 +24,8 @@
+         self.calls.append((command, dict(params), request_id))
+         if command == 'fail':
+             raise ValueError('bad fake request')
++        if command == 'scalar':
++            return 1
+         return {'command': command, 'params': params, 'requestId': request_id}
+ 
+     def close(self):
+@@ -32,10 +33,11 @@
+ 
+ 
+ assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+-assert APP_BACKEND_VERSION == '0.12.0'
++assert APP_BACKEND_VERSION == '0.14.0'
+ assert any(row['id'] == 'hades2' and row['protocolVersion'] == 4 for row in available_games())
+ 
+-adapter = FakeAdapter()
++# Router can also be exercised directly; identity normally comes from registry.
++adapter = FakeAdapter(GameAdapterContext(game_id='fake', display_name='Fake Game', module_protocol_version=7, module_dir=root, public_metadata={}))
+ router = JsonlRequestRouter(adapter)
+ hello = router.handle({'id': 'hello-1', 'command': 'hello', 'params': {}})
+ assert hello['ok'] and hello['protocolVersion'] == 5
+@@ -43,7 +45,7 @@
+ assert hello['result']['hostProtocolVersion'] == 5
+ assert hello['result']['game']['id'] == 'fake'
+ assert hello['result']['game']['protocolVersion'] == 7
+-assert hello['result']['backendVersion'] == '0.12.0'
++assert hello['result']['backendVersion'] == '0.14.0'
+ 
+ reply = router.handle({'id': 'a', 'command': 'poke', 'params': {'x': 1}})
+ assert reply['ok'] and reply['result']['command'] == 'poke'
+@@ -53,42 +55,85 @@
+ assert len(adapter.calls) == 1
+ conflict = router.handle({'id': 'a', 'command': 'poke', 'params': {'x': 2}})
+ assert not conflict['ok'] and conflict['error']['code'] == 'duplicate_conflict'
+-error = router.handle({'id': 'b', 'command': 'fail', 'params': {}})
+-assert not error['ok'] and error['error']['code'] == 'invalid_request'
+-assert error['state'] == {'connected': False}
+-assert error['moduleProtocolVersion'] == 7
++logging.disable(logging.CRITICAL)
++try:
++    error = router.handle({'id': 'b', 'command': 'fail', 'params': {}})
++    assert not error['ok'] and error['error']['code'] == 'invalid_request'
++    assert error['state'] == {'connected': False}
++    non_object = router.handle({'id': 'c', 'command': 'scalar', 'params': {}})
++    assert not non_object['ok'] and non_object['error']['code'] == 'operation_failed'
++finally:
++    logging.disable(logging.NOTSET)
+ router.close()
+ assert adapter.closed
+ 
+-# A second game can be discovered/loaded only by adding a package + manifest.
+-# Core/server files are not modified or monkey-patched.
+-tmp = Path(tempfile.mkdtemp(prefix='mgt-module-contract-'))
+-modules = tmp / 'games'
+-(modules / 'other').mkdir(parents=True)
+-(tmp / 'fake_other_adapter.py').write_text('''\nfrom core.protocol import GameAdapter\nclass OtherAdapter(GameAdapter):\n    game_id="other"\n    display_name="Other Game"\n    module_protocol_version=11\n    def dispatch(self, command, params, request_id): return {"ok": True, "command": command}\n    def close(self): pass\n''')
+-(modules / 'other' / 'module.json').write_text(json.dumps({
++# GameSpec no longer assumes an app bundle or arm64. A future module can point
++# at any local executable and opt into architecture/bundle metadata only if it
++# needs those concepts.
++spec = GameSpec(
++    id='other', display_name='Other Game', process_name='otherd',
++    executable_path=Path('/opt/other/bin/game')
++)
++assert spec.executable_path == Path('/opt/other/bin/game')
++assert spec.executable_name == 'game'
++assert spec.minimum_architecture is None and spec.app_bundle_path is None
++try:
++    _ = spec.app_path
++except RuntimeError:
++    pass
++else:
++    raise AssertionError('non-bundle game unexpectedly exposed app_path')
++
++# A second game is discovered/loaded only by adding its own module package,
++# manifest and frontend directory. It intentionally declares no id/display/
++# protocol constants in the adapter: registry binds those from module.json.
++project = Path(tempfile.mkdtemp(prefix='mgt-module-contract-'))
++backend = project / 'Backend'
++modules = backend / 'games'
++other = modules / 'other'
++frontend = project / 'Sources' / 'Other'
++other.mkdir(parents=True)
++frontend.mkdir(parents=True)
++(modules / '__init__.py').write_text('', encoding='utf-8')
++(other / '__init__.py').write_text('', encoding='utf-8')
++(other / 'adapter.py').write_text('''\nfrom core.protocol import GameAdapter\nclass OtherAdapter(GameAdapter):\n    def __init__(self, context):\n        super().__init__(context)\n        self.closed=False\n    def dispatch(self, command, params, request_id): return {"command": command}\n    def close(self): self.closed=True\n''', encoding='utf-8')
++(frontend / 'Other.swift').write_text('struct OtherGameModule {}\n', encoding='utf-8')
++(other / 'module.json').write_text(json.dumps({
+     'schemaVersion': 1,
+     'id': 'other',
+     'displayName': 'Other Game',
+     'protocolVersion': 11,
+-    'backend': {'adapter': 'fake_other_adapter:OtherAdapter'},
++    'backend': {'adapter': 'games.other.adapter:OtherAdapter'},
+     'frontend': {'sourceDirectory': 'Sources/Other', 'moduleType': 'OtherGameModule'},
+     'buildRequirements': {'lldbPython': False, 'debuggerEntitlement': False},
+ }), encoding='utf-8')
+-sys.path.insert(0, str(tmp))
++
++# Reuse the framework core while importing the temporary game's package.
++sys.path.insert(0, str(backend))
++import games
++old_games_path = list(games.__path__)
++games.__path__.insert(0, str(modules))
+ try:
+     rows = available_games(modules)
+     assert rows == [{'id': 'other', 'displayName': 'Other Game', 'protocolVersion': 11}]
+-    other = create_adapter('other', modules)
+-    assert other.game_id == 'other' and other.module_protocol_version == 11
+-    other.close()
++    other_adapter = create_adapter('other', modules)
++    assert other_adapter.game_id == 'other'
++    assert other_adapter.display_name == 'Other Game'
++    assert other_adapter.module_protocol_version == 11
++    assert other_adapter.dispatch('ping', {}, 'x') == {'command': 'ping'}
++    other_adapter.close()
+ finally:
+-    sys.path.remove(str(tmp))
+-
+-# Manifest rejects path traversal and malformed adapters before build/runtime.
+-bad = tmp / 'bad.json'
++    games.__path__[:] = old_games_path
++    sys.path.remove(str(backend))
++    for key in list(sys.modules):
++        if key == 'games.other' or key.startswith('games.other.'):
++            sys.modules.pop(key, None)
++
++# Manifest rejects malformed IDs, path traversal, external adapter packages,
++# and a manifest whose directory does not match its module id.
++bad = project / 'bad.json'
+ bad.write_text(json.dumps({
+-    'id': 'bad', 'displayName': 'Bad', 'protocolVersion': 1,
++    'id': 'bad-game', 'displayName': 'Bad', 'protocolVersion': 1,
+     'backend': {'adapter': 'not valid target'},
+     'frontend': {'sourceDirectory': '../escape', 'moduleType': 'BadModule'},
+ }), encoding='utf-8')
+@@ -99,6 +144,20 @@
+ else:
+     raise AssertionError('unsafe manifest accepted')
+ 
++foreign = modules / 'foreign'
++foreign.mkdir()
++(foreign/'module.json').write_text(json.dumps({
++    'id':'foreign','displayName':'Foreign','protocolVersion':1,
++    'backend':{'adapter':'outside.adapter:Adapter'},
++    'frontend':{'sourceDirectory':'Sources/Other','moduleType':'OtherGameModule'},
++}), encoding='utf-8')
++try:
++    GameModuleManifest.load(foreign/'module.json').validate_project_paths(project)
++except ManifestError:
++    pass
++else:
++    raise AssertionError('external adapter package accepted')
++
+ # Core is actually game-agnostic: no Hades gameplay vocabulary or LLDB import.
+ core_text = '\n'.join(path.read_text() for path in (root/'Backend/core').glob('*.py'))
+ for token in ('Hades', 'WeaponCast', 'CurrentRun', 'TraitData', '1145350', 'import lldb'):
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_build_contract_round14.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_build_contract_round14.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_build_contract_round14.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_build_contract_round14.py	2026-09-17 08:50:56.311577241 +0000
+@@ -0,0 +1,63 @@
++from pathlib import Path
++import json
++import plistlib
++import subprocess
++import tempfile
++
++root = Path(__file__).resolve().parents[1]
++manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
++build = (root/'build.sh').read_text()
++base_plist = plistlib.loads((root/'Info.plist').read_bytes())
++
++assert manifest['frontend']['architectures'] == ['arm64']
++assert manifest['frontend']['minimumMacOS'] == '14.0'
++assert manifest['app']['bundleIdentifier'] == 'com.gao.macgamingtrainer'
++assert manifest['app']['displayName'] == 'Mac Gaming Trainer'
++
++# The generic template no longer bakes Hades' architecture into every game.
++assert 'LSArchitecturePriority' not in base_plist
++assert '-target arm64-apple-macosx14.0' not in build
++assert 'frontend.architectures' in build
++assert 'frontend.minimumMacOS' in build
++assert 'app.bundleIdentifier' in build
++assert 'app.displayName' in build
++assert 'ARCH_BINARIES' in build and 'lipo' in build
++assert 'LSArchitecturePriority' in build
++
++# Build tool surfaces the manifest fields used by build.sh.
++def field(name):
++    return subprocess.check_output(
++        ['python3', str(root/'tools/game_module_tool.py'), 'hades2', 'field', name],
++        text=True,
++    ).strip()
++
++assert field('frontend.architectures') == 'arm64'
++assert field('frontend.minimumMacOS') == '14.0'
++assert field('app.bundleIdentifier') == 'com.gao.macgamingtrainer'
++assert field('app.displayName') == 'Mac Gaming Trainer'
++
++# A second module that omits app identity gets safe independent defaults rather
++# than inheriting Hades' bundle-scoped preferences.
++from importlib.util import spec_from_file_location, module_from_spec
++spec = spec_from_file_location('mgt_manifest_round14', root/'Backend/core/module_manifest.py')
++module = module_from_spec(spec)
++spec.loader.exec_module(module)
++project = Path(tempfile.mkdtemp(prefix='mgt-build-contract-'))
++module_dir = project/'Backend/games/other_game'
++frontend = project/'Sources/Other'
++module_dir.mkdir(parents=True)
++frontend.mkdir(parents=True)
++(frontend/'Other.swift').write_text('struct OtherGameModule {}\n')
++(module_dir/'module.json').write_text(json.dumps({
++    'id':'other_game','displayName':'Other Game','protocolVersion':1,
++    'backend':{'adapter':'games.other_game.adapter:OtherAdapter'},
++    'frontend':{'sourceDirectory':'Sources/Other','moduleType':'OtherGameModule'},
++}), encoding='utf-8')
++parsed = module.GameModuleManifest.load(module_dir/'module.json')
++parsed.validate_project_paths(project)
++assert parsed.app.bundle_identifier == 'com.gao.macgamingtrainer.other-game'
++assert parsed.app.display_name == 'Mac Gaming Trainer - Other Game'
++assert parsed.frontend.architectures == ()
++assert parsed.frontend.minimum_macos is None
++
++print('build_contract_round14_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_module_contract_round13.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_module_contract_round13.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_module_contract_round13.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_module_contract_round13.py	2026-09-17 08:24:09.538195994 +0000
+@@ -0,0 +1,71 @@
++from pathlib import Path
++import importlib.util
++import json
++import tempfile
++
++root = Path(__file__).resolve().parents[1]
++manifest_module_path = root / 'Backend/core/module_manifest.py'
++spec = importlib.util.spec_from_file_location('mgt_manifest_for_test', manifest_module_path)
++manifest_module = importlib.util.module_from_spec(spec)
++spec.loader.exec_module(manifest_module)
++GameModuleManifest = manifest_module.GameModuleManifest
++
++# Load the build tool as code so descriptor generation can be tested against a
++# temporary second game without copying or patching framework core files.
++tool_spec = importlib.util.spec_from_file_location('mgt_game_module_tool', root/'tools/game_module_tool.py')
++tool = importlib.util.module_from_spec(tool_spec)
++tool_spec.loader.exec_module(tool)
++
++project = Path(tempfile.mkdtemp(prefix='mgt-round13-module-'))
++module_dir = project/'Backend/games/other'
++frontend_dir = project/'Sources/Other'
++module_dir.mkdir(parents=True)
++frontend_dir.mkdir(parents=True)
++(frontend_dir/'Other.swift').write_text('''
++import SwiftUI
++struct OtherGameModule: TrainerGameModule {
++    static func makeModel() -> OtherModel { OtherModel() }
++    static func makeView(model: OtherModel) -> some View { Text("Other") }
++}
++final class OtherModel: ObservableObject, TrainerSessionLifecycle {
++    var backendAvailable = true
++    var busy = false
++    var connected = false
++    func connectFromHost() {}
++    func refreshFromHost() {}
++    func disableAllFromHost() {}
++    func openLog() {}
++    func requestExit() {}
++}
++''', encoding='utf-8')
++manifest_path = module_dir/'module.json'
++manifest_path.write_text(json.dumps({
++    'schemaVersion': 1,
++    'id': 'other',
++    'displayName': 'Other Game',
++    'protocolVersion': 23,
++    'backend': {'adapter':'games.other.adapter:OtherAdapter'},
++    'frontend': {'sourceDirectory':'Sources/Other','moduleType':'OtherGameModule'},
++    'buildRequirements': {'lldbPython':False,'debuggerEntitlement':False},
++}), encoding='utf-8')
++manifest = GameModuleManifest.load(manifest_path)
++manifest.validate_project_paths(project)
++
++generated = project/'ActiveGame.generated.swift'
++tool.generate_swift(manifest, generated)
++text = generated.read_text()
++assert 'extension OtherGameModule' in text
++assert 'typealias ActiveGameModule = OtherGameModule' in text
++assert 'id: "other"' in text
++assert 'displayName: "Other Game"' in text
++assert f'expectedHostProtocolVersion: {tool.HOST_PROTOCOL_VERSION}' in text
++assert 'expectedModuleProtocolVersion: 23' in text
++
++# The framework shell itself remains untouched by a new module.
++app = (root/'Sources/App.swift').read_text()
++core = '\n'.join(p.read_text() for p in sorted((root/'Sources/Core').glob('*.swift')))
++server = (root/'Backend/server.py').read_text()
++assert 'OtherGame' not in app + core + server
++assert 'Hades2' not in app + core + server
++
++print('module_contract_round13_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_packaged_module_round14.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_packaged_module_round14.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_packaged_module_round14.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_packaged_module_round14.py	2026-09-17 08:52:33.546845840 +0000
+@@ -0,0 +1,82 @@
++from pathlib import Path
++import json
++import os
++import shutil
++import subprocess
++import sys
++import tempfile
++
++root = Path(__file__).resolve().parents[1]
++package = Path(tempfile.mkdtemp(prefix='mgt-packaged-module-')) / 'MacGamingTrainer.app/Contents/Resources'
++backend = package / 'Backend'
++games = backend / 'games'
++other = games / 'other'
++other.mkdir(parents=True)
++
++shutil.copy2(root/'Backend/server.py', backend/'server.py')
++shutil.copytree(root/'Backend/core', backend/'core')
++shutil.copy2(root/'Backend/games/__init__.py', games/'__init__.py')
++shutil.copy2(root/'Backend/games/registry.py', games/'registry.py')
++(other/'__init__.py').write_text('', encoding='utf-8')
++(other/'adapter.py').write_text('''
++from core.protocol import GameAdapter
++class OtherAdapter(GameAdapter):
++    def __init__(self, context):
++        super().__init__(context)
++        self.state = {"connected": False}
++    def dispatch(self, command, params, request_id):
++        if command == "ping":
++            return {"pong": True, "echo": params}
++        raise ValueError("unknown fake command")
++    def close(self):
++        pass
++''', encoding='utf-8')
++# Crucially, this frontend source path DOES NOT exist in a packaged app. Runtime
++# discovery must still work because frontend validation belongs to build time.
++(other/'module.json').write_text(json.dumps({
++    'schemaVersion': 1,
++    'id': 'other',
++    'displayName': 'Other Game',
++    'protocolVersion': 23,
++    'backend': {'adapter': 'games.other.adapter:OtherAdapter'},
++    'frontend': {
++        'sourceDirectory': 'Sources/Other',
++        'moduleType': 'OtherGameModule',
++        'architectures': ['x86_64'],
++        'minimumMacOS': '14.0',
++    },
++    'buildRequirements': {'lldbPython': False, 'debuggerEntitlement': False},
++}), encoding='utf-8')
++
++proc = subprocess.Popen(
++    [sys.executable, '-u', str(backend/'server.py'), '--game', 'other'],
++    stdin=subprocess.PIPE,
++    stdout=subprocess.PIPE,
++    stderr=subprocess.PIPE,
++    text=True,
++    env={**os.environ, 'HOME': str(package.parent.parent.parent / 'home')},
++)
++try:
++    assert proc.stdin and proc.stdout
++    proc.stdin.write(json.dumps({'id':'hello','command':'hello','params':{}}) + '\n')
++    proc.stdin.flush()
++    hello = json.loads(proc.stdout.readline())
++    assert hello['ok'] is True
++    assert hello['gameID'] == 'other'
++    assert hello['moduleProtocolVersion'] == 23
++    assert hello['result']['game']['displayName'] == 'Other Game'
++
++    proc.stdin.write(json.dumps({'id':'ping','command':'ping','params':{'x':7}}) + '\n')
++    proc.stdin.flush()
++    ping = json.loads(proc.stdout.readline())
++    assert ping['ok'] is True
++    assert ping['result'] == {'pong': True, 'echo': {'x': 7}}
++finally:
++    proc.terminate()
++    try:
++        proc.wait(timeout=5)
++    except subprocess.TimeoutExpired:
++        proc.kill()
++        proc.wait(timeout=5)
++
++print('packaged_module_round14_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_round12_static.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_round12_static.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_round12_static.py	2026-09-17 08:09:05.093107233 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_round12_static.py	2026-09-17 08:29:05.409890143 +0000
+@@ -6,9 +6,11 @@
+ adapter = (root/'Backend/games/hades2/adapter.py').read_text()
+ transport = (root/'Backend/games/hades2/transport.py').read_text()
+ preparation = (root/'Backend/games/hades2/preparation.py').read_text()
++config = (root/'Backend/games/hades2/config.py').read_text()
+ server = (root/'Backend/server.py').read_text()
+ registry = (root/'Backend/games/registry.py').read_text()
+ manifest_core = (root/'Backend/core/module_manifest.py').read_text()
++game_spec = (root/'Backend/core/game_spec.py').read_text()
+ build = (root/'build.sh').read_text()
+ manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
+ 
+@@ -21,19 +23,31 @@
+ 
+ # Game-specific behavior/transport is contained in the Hades module.
+ assert 'class Hades2Adapter(GameAdapter)' in adapter
+-assert 'module_protocol_version = 4' in adapter
++assert 'GameAdapterContext(' in adapter
++assert 'module_protocol_version=MODULE_MANIFEST.module_protocol_version' in adapter
+ assert 'class Hades2LuaTransport' in transport
+ assert 'GAME_SPEC.executable_path' in preparation
+ assert 'GAME_SPEC.bundle_identifier' in preparation
++assert "minimum_architecture='arm64'" in config
++assert 'GameSpec.macos_app_bundle' in config
+ for token in ('CurrentRun', 'WeaponCast', 'TraitData', 'Hades2LuaTransport'):
+     assert token not in server, token
+ assert 'import lldb' not in server
+ 
+-# Registry/manifest contracts are generic and lazy.
++# GameSpec itself has no Steam, bundle-layout, or arm64 default assumption.
++assert 'executable_path: Path' in game_spec
++assert 'minimum_architecture: Optional[str] = None' in game_spec
++assert " / 'Contents' / 'MacOS' / " in game_spec  # only opt-in macos_app_bundle factory
++assert "minimum_architecture: Optional[str] = 'arm64'" not in game_spec
++
++# Registry/manifest contracts are generic, lazy and package-isolated.
+ assert 'GameModuleManifest' in registry
+ assert 'import_module' in registry
++assert 'GameAdapterContext' in registry
++assert 'adapter_type(context=context)' in registry
+ assert 'from games.hades2' not in registry
+ assert 'frontend.sourceDirectory' in manifest_core
++assert "required_adapter_prefix = f'games.{self.id}.'" in manifest_core
+ assert manifest['schemaVersion'] == 1
+ assert manifest['protocolVersion'] == 4
+ assert manifest['backend']['adapter'] == 'games.hades2.adapter:Hades2Adapter'
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_swift_round12.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_swift_round12.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tests/test_swift_round12.py	2026-09-17 08:09:05.093989804 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tests/test_swift_round12.py	2026-09-17 08:49:23.617146109 +0000
+@@ -11,9 +11,10 @@
+ build = (root/'build.sh').read_text()
+ plist = (root/'Info.plist').read_text()
+ 
+-# Core process/client/hotkey layers do not know Hades II commands or state.
++# Core process/client/session/hotkey layers do not know Hades II commands/state.
+ assert 'final class BackendProcess' in core
+ assert 'final class BackendClient' in core
++assert 'final class TrainerBackendSession' in core
+ assert 'protocol TrainerGameModule' in core
+ assert 'struct HotkeyBinding' in core
+ for token in ('Hades II', 'godMode', 'WeaponCast', 'boonRarity', 'CurrentRun', '1145350'):
+@@ -29,13 +30,16 @@
+     assert token not in app, token
+ assert not (root/'Sources/ConfiguredGame.swift').exists()
+ 
+-# Hades-specific state/view implement the generic module contract.
++# Hades-specific state/view implement the generic module contract, while game
++# identity/protocol constants are no longer duplicated in the source model.
+ assert 'struct Hades2GameModule: TrainerGameModule' in model
+ assert 'final class Hades2TrainerModel' in model
+ assert 'struct Hades2TrainerView' in view
+-assert 'expectedHostProtocolVersion: 5' in model
+-assert 'expectedModuleProtocolVersion: 4' in model
+-assert 'BackendClient()' in model
++assert 'static let descriptor = GameModuleDescriptor' not in model
++assert 'expectedHostProtocolVersion: 5' not in model
++assert 'expectedModuleProtocolVersion: 4' not in model
++assert 'TrainerBackendSession()' in model
++assert 'BackendClient()' not in model
+ assert 'BackendProcess()' not in model
+ assert 'QueuedRequest' not in model and 'currentID' not in model and 'requestQueue' not in model
+ assert 'GlobalHotkeys' in model and 'HotkeyBinding(actionID:' in model
+@@ -48,22 +52,31 @@
+ assert '法阵始终可用' in model
+ assert '敌人生命' in view
+ 
+-# Build generates the selected module binding and compiles only selected source.
+-assert 'generate-swift' in build
+-assert 'find "$FRONTEND_DIR"' in build
+-assert 'find "$ROOT/Sources"' not in build
+-assert '<string>0.12.0</string>' in plist and '<string>17</string>' in plist
+-
+-# Parse the complete selected Swift source graph when swiftc is available. This
+-# catches syntax damage without requiring SwiftUI modules on this Linux runner.
+-swiftc = shutil.which('swiftc')
+-if swiftc:
+-    generated = Path(tempfile.mkstemp(suffix='.swift')[1])
+-    try:
+-        subprocess.run(['python3', str(root/'tools/game_module_tool.py'), 'hades2', 'generate-swift', str(generated)], check=True)
++# Generated binding contains both ActiveGameModule and the descriptor sourced
++# from module.json/core host protocol, so frontend code cannot drift manually.
++generated = Path(tempfile.mkstemp(suffix='.swift')[1])
++try:
++    subprocess.run(['python3', str(root/'tools/game_module_tool.py'), 'hades2', 'generate-swift', str(generated)], check=True)
++    generated_text = generated.read_text()
++    assert 'typealias ActiveGameModule = Hades2GameModule' in generated_text
++    assert 'extension Hades2GameModule' in generated_text
++    assert 'id: "hades2"' in generated_text
++    assert 'displayName: "Hades II"' in generated_text
++    assert 'expectedHostProtocolVersion: 5' in generated_text
++    assert 'expectedModuleProtocolVersion: 4' in generated_text
++
++    # Build generates the selected module binding and compiles only selected source.
++    assert 'generate-swift' in build
++    assert 'find "$FRONTEND_DIR"' in build
++    assert 'find "$ROOT/Sources"' not in build
++    assert '<string>0.14.0</string>' in plist and '<string>19</string>' in plist
++
++    # Parse the complete selected Swift source graph when swiftc is available.
++    swiftc = shutil.which('swiftc')
++    if swiftc:
+         sources = [root/'Sources/App.swift'] + sorted((root/'Sources/Core').glob('*.swift')) + sorted((root/'Sources/Hades2').glob('*.swift')) + [generated]
+         subprocess.run([swiftc, '-frontend', '-parse', *map(str, sources)], check=True, env={**__import__('os').environ, 'TERM':'dumb'})
+-    finally:
+-        generated.unlink(missing_ok=True)
++finally:
++    generated.unlink(missing_ok=True)
+ 
+ print('swift_round12_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=dist' '--exclude=*.pyc' /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tools/game_module_tool.py /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tools/game_module_tool.py
+--- /mnt/data/mgt_r12_final/MacGamingTrainer_v12_round12/tools/game_module_tool.py	2026-09-17 08:04:32.501840004 +0000
++++ /mnt/data/mgt_r13_work/MacGamingTrainer_v13_round13/tools/game_module_tool.py	2026-09-17 08:47:26.798279309 +0000
+@@ -10,6 +10,7 @@
+     sys.path.insert(0, str(BACKEND))
+ 
+ from core.module_manifest import GameModuleManifest, ManifestError
++from core.protocol import HOST_PROTOCOL_VERSION
+ 
+ 
+ def manifest_path(game_id: str) -> Path:
+@@ -27,9 +28,14 @@
+         'id': manifest.id,
+         'displayName': manifest.display_name,
+         'protocolVersion': manifest.module_protocol_version,
++        'hostProtocolVersion': HOST_PROTOCOL_VERSION,
+         'backend.adapter': manifest.adapter,
+         'frontend.sourceDirectory': manifest.frontend.source_directory if manifest.frontend else '',
+         'frontend.moduleType': manifest.frontend.module_type if manifest.frontend else '',
++        'frontend.architectures': ' '.join(manifest.frontend.architectures) if manifest.frontend else '',
++        'frontend.minimumMacOS': manifest.frontend.minimum_macos if manifest.frontend and manifest.frontend.minimum_macos else '',
++        'app.bundleIdentifier': manifest.app.bundle_identifier,
++        'app.displayName': manifest.app.display_name,
+         'buildRequirements.lldbPython': manifest.build.lldb_python,
+         'buildRequirements.debuggerEntitlement': manifest.build.debugger_entitlement,
+         'buildRequirements.entitlements': manifest.build.entitlements or '',
+@@ -42,13 +48,29 @@
+     return str(value)
+ 
+ 
++def _swift_string(value: str) -> str:
++    # JSON string escaping is compatible with ordinary Swift string literals
++    # for the manifest character set we allow.
++    return json.dumps(value, ensure_ascii=False)
++
++
+ def generate_swift(manifest: GameModuleManifest, output: Path):
+     if manifest.frontend is None:
+         raise ManifestError('The selected game module has no frontend specification.')
+     output.parent.mkdir(parents=True, exist_ok=True)
++    module_type = manifest.frontend.module_type
+     output.write_text(
+-        '// Generated by tools/game_module_tool.py. Do not edit.\n'
+-        f'typealias ActiveGameModule = {manifest.frontend.module_type}\n',
++        '// Generated by tools/game_module_tool.py from module.json. Do not edit.\n'
++        f'extension {module_type} {{\n'
++        '    static let descriptor = GameModuleDescriptor(\n'
++        f'        id: {_swift_string(manifest.id)},\n'
++        f'        displayName: {_swift_string(manifest.display_name)},\n'
++        f'        backendGameID: {_swift_string(manifest.id)},\n'
++        f'        expectedHostProtocolVersion: {HOST_PROTOCOL_VERSION},\n'
++        f'        expectedModuleProtocolVersion: {manifest.module_protocol_version}\n'
++        '    )\n'
++        '}\n'
++        f'typealias ActiveGameModule = {module_type}\n',
+         encoding='utf-8',
+     )
+ 
+@@ -72,10 +94,17 @@
+         else:
+             payload = manifest.public_metadata()
+             payload.update({
++                'hostProtocolVersion': HOST_PROTOCOL_VERSION,
+                 'backendAdapter': manifest.adapter,
+                 'frontend': None if manifest.frontend is None else {
+                     'sourceDirectory': manifest.frontend.source_directory,
+                     'moduleType': manifest.frontend.module_type,
++                    'architectures': list(manifest.frontend.architectures),
++                    'minimumMacOS': manifest.frontend.minimum_macos,
++                },
++                'app': {
++                    'bundleIdentifier': manifest.app.bundle_identifier,
++                    'displayName': manifest.app.display_name,
+                 },
+                 'buildRequirements': {
+                     'lldbPython': manifest.build.lldb_python,
+@@ -84,7 +113,7 @@
+                 },
+             })
+             print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+-    except ManifestError as error:
++    except (ManifestError, OSError) as error:
+         print(str(error), file=sys.stderr)
+         return 2
+     return 0

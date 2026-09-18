@@ -1,0 +1,349 @@
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/BUILDING.md /mnt/data/MacGamingTrainer_v14_1_round14_1/BUILDING.md
+--- /mnt/data/MacGamingTrainer_v14_round14/BUILDING.md	2026-09-17 09:12:03.434460366 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/BUILDING.md	2026-09-17 09:16:57.250045363 +0000
+@@ -1,4 +1,4 @@
+-# Mac Gaming Trainer v0.14.0 — Build on macOS
++# Mac Gaming Trainer v0.14.1 — Build on macOS
+ 
+ 当前构建模型是 **通用宿主 + 单个选中游戏模块**。Hades II 的 LLDB/Lua、签名权限、arm64 目标都不是宿主默认值，而由 `Backend/games/hades2/module.json` 显式声明。
+ 
+@@ -135,3 +135,42 @@
+ ```
+ 
+ 详见 `GAME_MODULES.md`。
++
++## LLDB Python 报错：当前只选中了 Command Line Tools
++
++如果构建输出显示类似：
++
++```text
++Selected developer directory: /Library/Developer/CommandLineTools
++The selected game module requires LLDB Python...
++```
++
++先检查：
++
++```bash
++xcode-select -p
++xcodebuild -version
++```
++
++如果已经安装完整 Xcode，切换 developer directory：
++
++```bash
++sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
++```
++
++然后验证：
++
++```bash
++xcrun --find swiftc
++xcrun --find lldb
++xcrun lldb -P
++xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["xcrun","lldb","-P"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
++```
++
++最后重新运行：
++
++```bash
++./build.sh
++```
++
++如果 `/Applications/Xcode.app` 不存在，需要先安装完整 Xcode；仅安装 Command Line Tools 在部分系统版本上不能提供 Hades II backend 所需的可导入 LLDB Python 模块。
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/core/__pycache__/__init__.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/__pycache__/__init__.cpython-313.pyc differ
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/core/__pycache__/game_spec.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/__pycache__/game_spec.cpython-313.pyc differ
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/core/__pycache__/module_manifest.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/__pycache__/module_manifest.cpython-313.pyc differ
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/core/__pycache__/protocol.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/__pycache__/protocol.cpython-313.pyc differ
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/Backend/core/protocol.py /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/protocol.py
+--- /mnt/data/MacGamingTrainer_v14_round14/Backend/core/protocol.py	2026-09-17 08:55:41.578671822 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/core/protocol.py	2026-09-17 09:14:31.174076443 +0000
+@@ -10,7 +10,7 @@
+ # module has its own independent protocol/schema version exposed alongside it.
+ HOST_PROTOCOL_VERSION = 5
+ PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
+-APP_BACKEND_VERSION = '0.14.0'
++APP_BACKEND_VERSION = '0.14.1'
+ 
+ 
+ class AdapterError(RuntimeError):
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/games/__pycache__/__init__.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/games/__pycache__/__init__.cpython-313.pyc differ
+Binary files /mnt/data/MacGamingTrainer_v14_round14/Backend/games/__pycache__/registry.cpython-313.pyc and /mnt/data/MacGamingTrainer_v14_1_round14_1/Backend/games/__pycache__/registry.cpython-313.pyc differ
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/Info.plist /mnt/data/MacGamingTrainer_v14_1_round14_1/Info.plist
+--- /mnt/data/MacGamingTrainer_v14_round14/Info.plist	2026-09-17 08:55:41.578225277 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/Info.plist	2026-09-17 09:14:31.174000421 +0000
+@@ -17,9 +17,9 @@
+ 	<key>CFBundlePackageType</key>
+ 	<string>APPL</string>
+ 	<key>CFBundleShortVersionString</key>
+-	<string>0.14.0</string>
++	<string>0.14.1</string>
+ 	<key>CFBundleVersion</key>
+-	<string>19</string>
++	<string>20</string>
+ 	<key>LSMinimumSystemVersion</key>
+ 	<string>14.0</string>
+ 	<key>NSHighResolutionCapable</key>
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/REFACTOR_ASSESSMENT.md /mnt/data/MacGamingTrainer_v14_1_round14_1/REFACTOR_ASSESSMENT.md
+--- /mnt/data/MacGamingTrainer_v14_round14/REFACTOR_ASSESSMENT.md	2026-09-17 09:12:03.442460246 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/REFACTOR_ASSESSMENT.md	2026-09-17 09:15:25.862850047 +0000
+@@ -1,4 +1,4 @@
+-# Mac Gaming Trainer · v0.14.0 架构评估
++# Mac Gaming Trainer · v0.14.1 架构评估
+ 
+ ## 结论
+ 
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/ROUND14_1_NOTES.md /mnt/data/MacGamingTrainer_v14_1_round14_1/ROUND14_1_NOTES.md
+--- /mnt/data/MacGamingTrainer_v14_round14/ROUND14_1_NOTES.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/ROUND14_1_NOTES.md	2026-09-17 09:15:25.863115217 +0000
+@@ -0,0 +1,19 @@
++# Round 14.1 — macOS build regression hotfix
++
++Version: **0.14.1**  
++Build: **20**  
++Host protocol: **v5 (unchanged)**  
++Hades II module protocol: **v4 (unchanged)**  
++Lua runtime revision: **19 (unchanged)**
++
++## Fixed
++
++- Fixed the real multi-file Swift access-control regression reported on macOS/Swift 6.4. `ResourceSectionGroup` and `BoonSectionGroup` were declared `private` in `Hades2TrainerModel.swift` but referenced from `Hades2TrainerView.swift`. They are now private view-only helper types in the view file.
++- Simplified the boon picker `spawnRow` builder by precomputing groups/selection state and extracting display-name formatting. This reduces constraint-solver complexity around the exact function shown in the Swift frontend crash stack.
++- Added an unoptimized `swiftc -typecheck` semantic preflight before the optimized build. `swiftc -parse` cannot detect this class of cross-file access-control error; the build now reports semantic errors before entering the optimized compiler path.
++- Added a generic Swift file-boundary regression test that rejects top-level private Swift types referenced from other source files.
++- Improved LLDB Python diagnostics: failure output now prints the selected Xcode developer directory and explicitly explains the CommandLineTools-only case.
++
++## Environment note
++
++Hades II still requires LLDB Python at runtime. If `xcode-select -p` reports `/Library/Developer/CommandLineTools` and LLDB Python cannot import, install/open full Xcode and select `/Applications/Xcode.app/Contents/Developer`. This is a host development-environment requirement, not a Hades runtime/Lua protocol change.
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/Sources/Hades2/Hades2TrainerModel.swift /mnt/data/MacGamingTrainer_v14_1_round14_1/Sources/Hades2/Hades2TrainerModel.swift
+--- /mnt/data/MacGamingTrainer_v14_round14/Sources/Hades2/Hades2TrainerModel.swift	2026-09-17 08:55:41.579528099 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/Sources/Hades2/Hades2TrainerModel.swift	2026-09-17 09:13:49.075118527 +0000
+@@ -103,18 +103,6 @@
+     let detail: String
+ }
+ 
+-private struct ResourceSectionGroup: Identifiable {
+-    let id: Int
+-    let title: String
+-    let items: [MaterialResource]
+-}
+-
+-private struct BoonSectionGroup: Identifiable {
+-    let id: Int
+-    let title: String
+-    let items: [BoonOption]
+-}
+-
+ final class Hades2TrainerModel: ObservableObject, TrainerSessionLifecycle {
+     private static let expectedHostProtocolVersion = Hades2GameModule.descriptor.expectedHostProtocolVersion
+     private static let expectedModuleProtocolVersion = Hades2GameModule.descriptor.expectedModuleProtocolVersion
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/Sources/Hades2/Hades2TrainerView.swift /mnt/data/MacGamingTrainer_v14_1_round14_1/Sources/Hades2/Hades2TrainerView.swift
+--- /mnt/data/MacGamingTrainer_v14_round14/Sources/Hades2/Hades2TrainerView.swift	2026-09-17 08:55:41.579562800 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/Sources/Hades2/Hades2TrainerView.swift	2026-09-17 09:14:31.173588686 +0000
+@@ -9,6 +9,18 @@
+ private let panel = Color(red: 0.105, green: 0.115, blue: 0.155)
+ private let deferredColor = Color(red: 0.43, green: 0.56, blue: 0.48)
+ 
++private struct ResourceSectionGroup: Identifiable {
++    let id: Int
++    let title: String
++    let items: [MaterialResource]
++}
++
++private struct BoonSectionGroup: Identifiable {
++    let id: Int
++    let title: String
++    let items: [BoonOption]
++}
++
+ struct Hades2TrainerView: View {
+     private enum EditField: Hashable {
+         case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge
+@@ -633,26 +645,41 @@
+         }.padding(22).background(panel, in: RoundedRectangle(cornerRadius: 16))
+     }
+ 
++    private func boonDisplayName(_ option: BoonOption) -> String {
++        option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
++    }
++
+     private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>) -> some View {
+-        VStack(alignment: .leading, spacing: title == nil ? 0 : 10) {
+-            if let title = title, let icon = icon { Label(title, systemImage: icon).font(.subheadline.weight(.medium)) }
++        let groups = boonGroups(options)
++        let selectedID = selection.wrappedValue
++        let hasSelection = options.contains { $0.id == selectedID }
++
++        return VStack(alignment: .leading, spacing: title == nil ? 0 : 10) {
++            if let title, let icon {
++                Label(title, systemImage: icon).font(.subheadline.weight(.medium))
++            }
+             HStack(spacing: 12) {
+                 Picker(title ?? "特殊祝福", selection: selection) {
+-                    if selection.wrappedValue.isEmpty || options.isEmpty { Text("没有可用项目").tag("") }
+-                    ForEach(boonGroups(options)) { group in
+-                        Section {
++                    if selectedID.isEmpty || options.isEmpty {
++                        Text("没有可用项目").tag("")
++                    }
++                    ForEach(groups) { group in
++                        Section(header: Text(group.title)) {
+                             ForEach(group.items) { option in
+-                                Text(option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)").tag(option.id)
++                                Text(boonDisplayName(option)).tag(option.id)
+                             }
+-                        } header: {
+-                            Text(group.title).font(.caption).foregroundStyle(.secondary)
+                         }
+                     }
+-                }.labelsHidden().frame(maxWidth: .infinity).disabled(!model.canSpawnReward || options.isEmpty)
++                }
++                .labelsHidden()
++                .frame(maxWidth: .infinity)
++                .disabled(!model.canSpawnReward || options.isEmpty)
++
+                 Button("生成") {
+-                    guard options.contains(where: { $0.id == selection.wrappedValue }) else { return }
+-                    model.spawnBoon(selection.wrappedValue)
+-                }.disabled(!model.canSpawnReward || !options.contains(where: { $0.id == selection.wrappedValue }))
++                    guard hasSelection else { return }
++                    model.spawnBoon(selectedID)
++                }
++                .disabled(!model.canSpawnReward || !hasSelection)
+             }
+         }
+     }
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/build.sh /mnt/data/MacGamingTrainer_v14_1_round14_1/build.sh
+--- /mnt/data/MacGamingTrainer_v14_round14/build.sh	2026-09-17 08:55:41.577598617 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/build.sh	2026-09-17 09:16:08.987089033 +0000
+@@ -5,7 +5,7 @@
+ EXECUTABLE="MacGamingTrainer"
+ MODULE_TOOL="${ROOT}/tools/game_module_tool.py"
+ 
+-for tool in xcrun codesign plutil grep find uname; do
++for tool in xcrun xcode-select codesign plutil grep find uname; do
+     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
+ done
+ 
+@@ -57,9 +57,17 @@
+     LLDB="$(xcrun --find lldb 2>/dev/null || true)"
+     [[ -n "$LLDB" ]] || { echo "The active game module requires LLDB." >&2; exit 1; }
+     if ! /usr/bin/xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); assert p; sys.path.insert(0,p); import lldb; assert lldb.SBDebugger' >/dev/null 2>&1; then
++        DEVELOPER_PATH="$(xcode-select -p 2>/dev/null || true)"
+         echo "The active game module requires LLDB Python, but the selected developer environment cannot load it." >&2
+-        echo "Verify with: xcrun lldb -P" >&2
+-        echo "If full Xcode is installed, try: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" >&2
++        echo "Selected developer directory: ${DEVELOPER_PATH:-unknown}" >&2
++        if [[ "$DEVELOPER_PATH" == *"CommandLineTools"* ]]; then
++            echo "The selected game module requires the LLDB Python module from a full Xcode installation; Command Line Tools alone are insufficient on this machine." >&2
++        fi
++        echo "After installing/opening Xcode once, select it with:" >&2
++        echo "  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" >&2
++        echo "Then verify with:" >&2
++        echo "  xcrun lldb -P" >&2
++        echo "  xcrun python3 -c 'import subprocess,sys; p=subprocess.check_output([\"xcrun\",\"lldb\",\"-P\"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'" >&2
+         exit 1
+     fi
+ fi
+@@ -85,6 +93,21 @@
+ ARCH_BINARIES=()
+ for arch in "${ARCHITECTURES[@]}"; do
+     binary="$GENERATED_DIR/$EXECUTABLE.$arch"
++
++    # Semantic preflight deliberately runs without optimization. A plain parser
++    # cannot catch cross-file access-control/type errors, while reporting them
++    # here avoids turning a normal source error into an optimizer/type-checker
++    # crash with a much less useful stack dump.
++    "$SWIFTC" \
++        -typecheck \
++        -parse-as-library \
++        -target "${arch}-apple-macosx${MIN_MACOS}" \
++        -sdk "$SDK" \
++        -framework SwiftUI \
++        -framework AppKit \
++        -framework Carbon \
++        "${SWIFT_SOURCES[@]}"
++
+     "$SWIFTC" \
+         -parse-as-library \
+         -O \
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/tests/test_backend_core_round12.py /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_backend_core_round12.py
+--- /mnt/data/MacGamingTrainer_v14_round14/tests/test_backend_core_round12.py	2026-09-17 08:55:41.578029970 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_backend_core_round12.py	2026-09-17 09:14:31.174276747 +0000
+@@ -33,7 +33,7 @@
+ 
+ 
+ assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+-assert APP_BACKEND_VERSION == '0.14.0'
++assert APP_BACKEND_VERSION == '0.14.1'
+ assert any(row['id'] == 'hades2' and row['protocolVersion'] == 4 for row in available_games())
+ 
+ # Router can also be exercised directly; identity normally comes from registry.
+@@ -45,7 +45,7 @@
+ assert hello['result']['hostProtocolVersion'] == 5
+ assert hello['result']['game']['id'] == 'fake'
+ assert hello['result']['game']['protocolVersion'] == 7
+-assert hello['result']['backendVersion'] == '0.14.0'
++assert hello['result']['backendVersion'] == '0.14.1'
+ 
+ reply = router.handle({'id': 'a', 'command': 'poke', 'params': {'x': 1}})
+ assert reply['ok'] and reply['result']['command'] == 'poke'
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/tests/test_build_contract_round14.py /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_build_contract_round14.py
+--- /mnt/data/MacGamingTrainer_v14_round14/tests/test_build_contract_round14.py	2026-09-17 08:55:41.577658485 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_build_contract_round14.py	2026-09-17 09:14:31.174421760 +0000
+@@ -23,6 +23,8 @@
+ assert 'app.displayName' in build
+ assert 'ARCH_BINARIES' in build and 'lipo' in build
+ assert 'LSArchitecturePriority' in build
++assert '-typecheck' in build
++assert build.index('-typecheck') < build.index('-O \\')
+ 
+ # Build tool surfaces the manifest fields used by build.sh.
+ def field(name):
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/tests/test_swift_file_boundaries_round14_1.py /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_swift_file_boundaries_round14_1.py
+--- /mnt/data/MacGamingTrainer_v14_round14/tests/test_swift_file_boundaries_round14_1.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_swift_file_boundaries_round14_1.py	2026-09-17 09:14:31.174628884 +0000
+@@ -0,0 +1,31 @@
++from pathlib import Path
++import re
++
++root = Path(__file__).resolve().parents[1]
++swift_files = sorted((root / 'Sources').rglob('*.swift'))
++texts = {path: path.read_text() for path in swift_files}
++
++# A top-level private type is file-scoped in practice for this project. If a
++# different Swift file mentions its name, the build will fail even though
++# `swiftc -parse` succeeds. Keep this generic so future file splits are covered.
++private_type = re.compile(r'^private\s+(?:struct|class|enum|protocol|actor|typealias)\s+([A-Za-z_][A-Za-z0-9_]*)', re.M)
++violations = []
++for owner, text in texts.items():
++    for name in private_type.findall(text):
++        token = re.compile(rf'\b{re.escape(name)}\b')
++        for other, other_text in texts.items():
++            if other != owner and token.search(other_text):
++                violations.append(f'{name}: private in {owner.relative_to(root)}, referenced by {other.relative_to(root)}')
++
++assert not violations, '\n'.join(violations)
++
++model = texts[root / 'Sources/Hades2/Hades2TrainerModel.swift']
++view = texts[root / 'Sources/Hades2/Hades2TrainerView.swift']
++assert 'ResourceSectionGroup' not in model
++assert 'BoonSectionGroup' not in model
++assert 'private struct ResourceSectionGroup' in view
++assert 'private struct BoonSectionGroup' in view
++assert 'let groups = boonGroups(options)' in view
++assert 'let selectedID = selection.wrappedValue' in view
++
++print('swift_file_boundaries_round14_1_ok')
+diff -ruN '--exclude=ROUND14_1_VALIDATION_OUTPUT.txt' '--exclude=ROUND14_TO_14_1_CHANGESET.diff' /mnt/data/MacGamingTrainer_v14_round14/tests/test_swift_round12.py /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_swift_round12.py
+--- /mnt/data/MacGamingTrainer_v14_round14/tests/test_swift_round12.py	2026-09-17 08:55:41.578045323 +0000
++++ /mnt/data/MacGamingTrainer_v14_1_round14_1/tests/test_swift_round12.py	2026-09-17 09:14:31.174214816 +0000
+@@ -69,7 +69,7 @@
+     assert 'generate-swift' in build
+     assert 'find "$FRONTEND_DIR"' in build
+     assert 'find "$ROOT/Sources"' not in build
+-    assert '<string>0.14.0</string>' in plist and '<string>19</string>' in plist
++    assert '<string>0.14.1</string>' in plist and '<string>20</string>' in plist
+ 
+     # Parse the complete selected Swift source graph when swiftc is available.
+     swiftc = shutil.which('swiftc')

@@ -1,0 +1,67 @@
+=== python3 -m compileall -q Backend Tools tests ===
+=== python3 -c import ast,pathlib; fs=list(pathlib.Path("Backend").rglob("*.py"))+list(pathlib.Path("Tools").rglob("*.py")); [ast.parse(p.read_text(), filename=str(p), feature_version=(3,9)) for p in fs]; print("python39_grammar_ok", len(fs)) ===
+python39_grammar_ok 24
+=== python3 -c import json,pathlib; fs=list(pathlib.Path("Backend/games").rglob("*.json")); [json.loads(p.read_text()) for p in fs]; print("json_ok", len(fs)) ===
+json_ok 2
+=== python3 -c import plistlib,pathlib; fs=[pathlib.Path("Info.plist"), pathlib.Path("Backend/games/hades2/trainer-entitlements.plist"), pathlib.Path("Build Trainer.app/Contents/Info.plist")]; [plistlib.load(open(p,"rb")) for p in fs]; print("plist_ok", len(fs)) ===
+plist_ok 3
+=== bash -n build.sh ===
+=== bash -n Build Trainer.app/Contents/MacOS/BuildTrainer ===
+=== python3 tests/legacy/test_round11_static.py ===
+round11_compat_ok
+=== python3 tests/legacy/test_server_round10.py ===
+server_round10_compat_ok
+=== python3 tests/legacy/test_server_round9.py ===
+server_round9_compat_ok
+=== python3 tests/legacy/test_swift_round10.py ===
+swift_round10_compat_ok
+=== python3 tests/legacy/test_swift_round9.py ===
+swift_round9_compat_ok
+=== python3 tests/test_backend_core_round12.py ===
+backend_core_round12_ok
+=== python3 tests/test_build_contract_round14.py ===
+build_contract_round14_ok
+=== python3 tests/test_global_decoupling_round15.py ===
+global_decoupling_round15_ok
+=== python3 tests/test_hades2_adapter_round12.py ===
+hades2_adapter_round12_ok
+=== python3 tests/test_hades2_mutation_scheduler_round17.py ===
+hades2_mutation_scheduler_round17_ok
+=== python3 tests/test_hades2_services_round16.py ===
+hades2_services_round16_ok
+=== python3 tests/test_module_contract_round13.py ===
+module_contract_round13_ok
+=== python3 tests/test_packaged_module_round14.py ===
+packaged_module_round14_ok
+=== python3 tests/test_preparation_round9.py ===
+preparation_round8_ok
+preparation_round9_staged_ok
+=== python3 tests/test_round12_static.py ===
+round12_static_ok
+=== python3 tests/test_round17_1_swift_scope.py ===
+round17_1_swift_scope_ok
+=== python3 tests/test_round17_static.py ===
+round17_static_ok
+=== python3 tests/test_runtime_reliability_round17.py ===
+runtime_reliability_round17_ok
+=== python3 tests/test_swift_file_boundaries_round14_1.py ===
+swift_file_boundaries_round14_1_ok
+=== python3 tests/test_swift_integrity_v0172.py ===
+swift_integrity_v0172_ok
+=== python3 tests/test_swift_round12.py ===
+swift_round12_ok
+=== python3 tests/run_lua_mock.py tests/round9_mock.lua ===
+round9_mock_ok
+=== python3 tests/run_lua_mock.py tests/round10_mock.lua ===
+round10_mock_ok
+=== python3 Tools/generate_game_binding.py hades2 /tmp/tmp.QFn0baUaD6/ActiveGame.generated.swift ===
+=== swiftc -frontend -parse Sources/App.swift Sources/Core/Host/TrainerGameModule.swift Sources/Core/Host/TrainerHost.swift Sources/Core/Input/GlobalHotkeys.swift Sources/Core/Runtime/BackendClient.swift Sources/Core/Runtime/BackendProcess.swift Sources/Core/Runtime/TrainerBackendSession.swift Sources/Core/UI/Primitives/TrainerBadge.swift Sources/Core/UI/Primitives/TrainerCard.swift Sources/Core/UI/Primitives/TrainerField.swift Sources/Core/UI/Primitives/TrainerMessageBanner.swift Sources/Core/UI/Primitives/TrainerRow.swift Sources/Core/UI/Primitives/TrainerToggleControl.swift Sources/Core/UI/StatusComponents.swift Sources/Core/UI/TrainerShell.swift Sources/Core/UI/TrainerSidebar.swift Sources/Core/UI/TrainerTheme.swift Sources/Hades2/Hades2API.swift Sources/Hades2/Hades2BackendState.swift Sources/Hades2/Hades2Model.swift Sources/Hades2/Hades2Module.swift Sources/Hades2/Hades2Types.swift Sources/Hades2/Hades2View.swift Sources/Hades2/Presentation/Hades2FeaturePresentation.swift Sources/Hades2/Services/Hades2MutationScheduler.swift Sources/Hades2/Services/Hades2ShortcutStore.swift Sources/Hades2/Views/Controls/Hades2FeatureControls.swift Sources/Hades2/Views/Controls/Hades2ResourceEditor.swift Sources/Hades2/Views/Controls/Hades2StatControls.swift Sources/Hades2/Views/Hades2BoonPicker.swift Sources/Hades2/Views/Hades2HostActions.swift Sources/Hades2/Views/Hades2ManagementViews.swift Sources/Hades2/Views/Hades2ViewSnapshots.swift /tmp/tmp.QFn0baUaD6/ActiveGame.generated.swift ===
+=== python3 -c import plistlib; p=plistlib.load(open("Info.plist","rb")); assert p["CFBundleShortVersionString"]=="0.17.2"; assert p["CFBundleVersion"]=="25"; print("version_ok") ===
+version_ok
+=== python3 -c from pathlib import Path; s=Path("Sources/Hades2/Hades2View.swift").read_text(); assert s.count(".onChange(")==6; assert "ElementAmount" not in s; print("hades_view_observer_shape_ok") ===
+hades_view_observer_shape_ok
+=== python3 -c from pathlib import Path; p=Path("Build Trainer.app/Contents/MacOS/BuildTrainer"); assert p.is_file() and (p.stat().st_mode & 0o111); print("builder_app_ok") ===
+builder_app_ok
+=== environment limitation ===
+Linux cannot execute the final macOS SwiftUI/AppKit semantic typecheck/link/codesign or real LLDB attach. The target-Mac build.sh runs full swiftc -typecheck before optimized compilation.
+VALIDATION_v0.17.2_OK

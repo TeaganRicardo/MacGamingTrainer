@@ -1,0 +1,21 @@
+== Round 10 full validation ==
+UTC 2026-09-17T05:55:31Z
+python_compile_ok
+server_round9_ok
+server_round9_1_hardening_ok
+server_round10_ok
+server_round10_hardening_ok
+preparation_round8_ok
+preparation_round9_staged_ok
+swift_round9_static_ok
+swift_round9_1_hardening_ok
+swift_backend_stderr_hardening_ok
+swift_round10_static_ok
+swift_round10_hardening_ok
+swift_backend_stderr_hardening_ok
+round9_mock_ok
+round10_mock_ok
+swift_parse_ok
+build_sh_syntax_ok
+plist_ok
+release_markers_ok

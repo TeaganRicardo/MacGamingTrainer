@@ -1,0 +1,41 @@
+=== python3 -m py_compile Backend/server.py Backend/core/__init__.py Backend/core/game_spec.py Backend/core/module_manifest.py Backend/core/protocol.py Backend/games/registry.py Backend/games/registry_info.py Backend/games/hades2/__init__.py Backend/games/hades2/adapter.py Backend/games/hades2/config.py Backend/games/hades2/preparation.py Backend/games/hades2/transport.py tools/game_module_tool.py tests/test_swift_file_boundaries_round14_1.py ===
+=== python3 tests/legacy/test_server_round9.py ===
+server_round9_compat_ok
+=== python3 tests/legacy/test_server_round10.py ===
+server_round10_compat_ok
+=== python3 tests/test_preparation_round9.py ===
+preparation_round8_ok
+preparation_round9_staged_ok
+=== python3 tests/legacy/test_swift_round9.py ===
+swift_round9_compat_ok
+=== python3 tests/legacy/test_swift_round10.py ===
+swift_round10_compat_ok
+=== python3 tests/legacy/test_round11_static.py ===
+round11_compat_ok
+=== python3 tests/test_backend_core_round12.py ===
+backend_core_round12_ok
+=== python3 tests/test_hades2_adapter_round12.py ===
+hades2_adapter_round12_ok
+=== python3 tests/test_round12_static.py ===
+round12_static_ok
+=== python3 tests/test_swift_round12.py ===
+swift_round12_ok
+=== python3 tests/test_module_contract_round13.py ===
+module_contract_round13_ok
+=== python3 tests/test_packaged_module_round14.py ===
+packaged_module_round14_ok
+=== python3 tests/test_build_contract_round14.py ===
+build_contract_round14_ok
+=== python3 tests/test_swift_file_boundaries_round14_1.py ===
+swift_file_boundaries_round14_1_ok
+=== python3 tests/run_lua_mock.py tests/round9_mock.lua ===
+round9_mock_ok
+=== python3 tests/run_lua_mock.py tests/round10_mock.lua ===
+round10_mock_ok
+=== bash -n build.sh ===
+=== python3 -c import plistlib; p=plistlib.load(open('Info.plist','rb')); assert p['CFBundleShortVersionString']=='0.14.1'; assert p['CFBundleVersion']=='20'; print('plist_version_ok') ===
+plist_version_ok
+=== python3 -c from pathlib import Path; b=Path('build.sh').read_text(); assert 'Hades II' not in b and '1145350' not in b and 'Supergiant' not in b; print('build_generic_ok') ===
+build_generic_ok
+
+NOTE: full macOS SwiftUI semantic typecheck/build cannot be executed in this Linux validation container; build.sh now performs swiftc -typecheck on the target Mac before optimized compilation.

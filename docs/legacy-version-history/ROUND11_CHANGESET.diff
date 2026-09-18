@@ -1,0 +1,1207 @@
+--- round10/MacGamingTrainer.swift
++++ round11/MacGamingTrainer.swift
+@@ -115,7 +115,7 @@
+ }
+ 
+ final class TrainerModel: ObservableObject {
+-    private static let expectedProtocolVersion = 2
++    private static let expectedProtocolVersion = 3
+     private struct StatRule {
+         let min: Double
+         let max: Double
+@@ -192,6 +192,7 @@
+     @Published var rerollsLocked = false
+     @Published var boons: [BoonOption] = []
+     @Published var statSupport: [String: Bool] = [:]
++    @Published var statAvailable: [String: Bool] = [:]
+     @Published var graspValue: Double?
+     @Published var dodgeValue: Double?
+     @Published var critValue: Double?
+@@ -249,6 +250,8 @@
+     private var currentAnnounceSuccess = true
+     private var requestQueue: [QueuedRequest] = []
+     private var mutationWorkItems: [String: DispatchWorkItem] = [:]
++    private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
++    @Published private var activationGraceFeatures: Set<String> = []
+     private var hotkeys: GlobalHotkeys?
+     private var pendingRestoreTimer: Timer?
+     private var shuttingDown = false
+@@ -260,6 +263,7 @@
+     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
+     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
+     func supportsFeature(_ key: String) -> Bool { featureSupport[key] ?? true }
++    func isFeatureActivationPending(_ key: String) -> Bool { activationGraceFeatures.contains(key) }
+     var ready: Bool { canSetFeature }
+     var statusTitle: String {
+         if exiting { return "正在清理并退出" }
+@@ -391,6 +395,10 @@
+                 self.activeFeatures = [:]
+                 self.dormantFeatures = [:]
+                 self.featureSupport = [:]
++                self.statAvailable = [:]
++                self.activationGraceWorkItems.values.forEach { $0.cancel() }
++                self.activationGraceWorkItems = [:]
++                self.activationGraceFeatures = []
+                 self.runtimeIssue = ""
+                 self.health = nil
+                 self.maxHealth = nil
+@@ -486,6 +494,8 @@
+     }
+ 
+     private func apply(_ result: [String: Any]) {
++        let wasConnected = connected
++        let desiredBeforeApply = Dictionary(uniqueKeysWithValues: desiredFeatureKeys.map { ($0, desiredFeatureEnabled($0)) })
+         if let value = result["connected"] as? Bool { connected = value }
+         if result.keys.contains("pid") { pid = result["pid"] as? Int }
+         if let value = result["version"] as? String { version = value }
+@@ -565,6 +575,11 @@
+                 if let value = entry.value as? Bool { partial[entry.key] = value }
+             }
+         }
++        if let values = result["statAvailable"] as? [String: Any] {
++            statAvailable = values.reduce(into: [:]) { partial, entry in
++                if let value = entry.value as? Bool { partial[entry.key] = value }
++            }
++        }
+         if let stats = result["stats"] as? [String: Any] {
+             func decodeStat(_ key: String) -> (Double?, Bool) {
+                 guard let item = stats[key] as? [String: Any] else { return (nil, false) }
+@@ -609,6 +624,26 @@
+             diagnosticsPassed = result["passed"] as? Int ?? diagnostics.filter(\.ok).count
+             diagnosticsTotal = result["total"] as? Int ?? diagnostics.count
+         }
++        // Runtime installation can lag desired-state acknowledgement by a
++        // fraction of a second. Keep the normal accent during that grace
++        // window, but immediately surface a genuine dormant/waiting state.
++        for key in activeFeatures.keys where activeFeatures[key] == true { clearFeatureActivationGrace(key) }
++        // Cover enablements that arrive through profile loading/backend replay,
++        // not just a direct click that went through feature(_:value:).
++        for key in desiredFeatureKeys where desiredFeatureEnabled(key)
++            && desiredBeforeApply[key] != true && activeFeatures[key] != true && dormantFeatures[key] != true {
++            beginFeatureActivationGrace(key)
++        }
++        // Reconnection can replay an already-enabled desired state without a
++        // local false->true transition. Only grace features that are not already
++        // classified as genuinely dormant/waiting for an environment.
++        if !wasConnected && connected {
++            for key in desiredFeatureKeys where desiredFeatureEnabled(key)
++                && activeFeatures[key] != true && dormantFeatures[key] != true {
++                beginFeatureActivationGrace(key)
++            }
++        }
++
+         if result.keys.contains("pendingRestore") {
+             let pending = result["pendingRestore"] as? [String: Any]
+             pendingRestoreID = pending?["backupId"] as? String
+@@ -701,6 +736,49 @@
+         dispatch(request)
+     }
+ 
++    private let desiredFeatureKeys: [String] = [
++        "godMode", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
++        "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
++        "boonChoiceEnabled", "moneyMultiplierEnabled", "resourceMultiplierEnabled"
++    ]
++
++    private func desiredFeatureEnabled(_ key: String) -> Bool {
++        switch key {
++        case "godMode": return godMode
++        case "infiniteHealth": return infiniteHealth
++        case "infiniteMana": return infiniteMana
++        case "damageEnabled": return damageEnabled
++        case "instantCastCooldown": return instantCastCooldown
++        case "hexAlwaysReady": return hexAlwaysReady
++        case "infiniteAmmo": return infiniteAmmo
++        case "autoMiniGames": return autoMiniGames
++        case "gardenQoL": return gardenQoL
++        case "boonRarityEnabled": return boonRarityEnabled
++        case "boonChoiceEnabled": return boonChoiceEnabled
++        case "moneyMultiplierEnabled": return moneyMultiplierEnabled
++        case "resourceMultiplierEnabled": return resourceMultiplierEnabled
++        default: return false
++        }
++    }
++
++    private func beginFeatureActivationGrace(_ key: String, duration: TimeInterval = 0.9) {
++        activationGraceWorkItems[key]?.cancel()
++        activationGraceFeatures.insert(key)
++        let work = DispatchWorkItem { [weak self] in
++            guard let self = self else { return }
++            self.activationGraceWorkItems[key] = nil
++            self.activationGraceFeatures.remove(key)
++        }
++        activationGraceWorkItems[key] = work
++        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
++    }
++
++    private func clearFeatureActivationGrace(_ key: String) {
++        activationGraceWorkItems[key]?.cancel()
++        activationGraceWorkItems[key] = nil
++        activationGraceFeatures.remove(key)
++    }
++
+     func enqueueMutation(key: String, command: String, params: [String: Any], title: String, delay: TimeInterval = 0.35) {
+         mutationWorkItems[key]?.cancel()
+         let work = DispatchWorkItem { [weak self] in
+@@ -714,6 +792,10 @@
+ 
+     func feature(_ key: String, value: Any) {
+         guard canEditDesired else { return }
++        if let enabled = value as? Bool {
++            if enabled { beginFeatureActivationGrace(key) }
++            else { clearFeatureActivationGrace(key) }
++        }
+         // Desired state belongs to the trainer profile, not to the debugger
+         // connection. Keep the UI intent editable while detached and let the
+         // backend apply/replay it whenever a valid Lua scene becomes available.
+@@ -796,7 +878,7 @@
+     }
+ 
+     func setStat(_ stat: String, text: String, locked: Bool) {
+-        guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false else { return }
++        guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false, statAvailable[stat] != false else { return }
+         if !locked {
+             send("set_stat", params: ["stat": stat, "locked": false], title: "解除属性锁定")
+             return
+@@ -1585,15 +1667,16 @@
+ 
+     private func statRow(_ title: String, stat: String, text: Binding<String>, locked: Bool, suffix: String, focus: EditField) -> some View {
+         let supported = model.statSupport[stat] != false
++        let available = model.statAvailable[stat] != false
+         return HStack(spacing: 12) {
+             Text(title).font(.subheadline.weight(.semibold))
+             Spacer()
+             TextField("数值", text: text).textFieldStyle(.roundedBorder).frame(width: 90)
+-                .focused($focusedField, equals: focus).disabled(!model.canSetStats || !supported)
++                .focused($focusedField, equals: focus).disabled(!model.canSetStats || !supported || !available)
+             if !suffix.isEmpty { Text(suffix).foregroundStyle(.secondary).frame(width: 18) }
+             Toggle("锁定", isOn: Binding(get: { locked }, set: { model.setStat(stat, text: text.wrappedValue, locked: $0) }))
+-                .toggleStyle(.switch).controlSize(.small).labelsHidden().disabled(!model.canSetStats || !supported)
+-        }.opacity(supported ? 1 : 0.45).padding(.horizontal, 22).frame(minHeight: 62).background(panel)
++                .toggleStyle(.switch).controlSize(.small).labelsHidden().disabled(!model.canSetStats || !supported || !available)
++        }.opacity(supported ? (available ? 1 : 0.65) : 0.45).padding(.horizontal, 22).frame(minHeight: 62).background(panel)
+     }
+ 
+     private var boonRarityPanel: some View {
+@@ -1734,9 +1817,14 @@
+ 
+     private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: String, shortcut: ShortcutAction? = nil) -> some View {
+         let focus: EditField = feature == "moneyMultiplier" ? .moneyMultiplier : .resourceMultiplier
++        let active = model.activeFeatures[toggle] ?? false
++        let dormant = model.dormantFeatures[toggle] ?? false
++        let activationPending = model.isFeatureActivationPending(toggle)
++        let warningState = enabled && model.connected && !activationPending && (!active || dormant)
+         return HStack(spacing: 12) {
+             Label(title, systemImage: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill")
+                 .font(.subheadline.weight(.medium))
++                .foregroundStyle(warningState ? Color.orange : .primary)
+             Spacer()
+             TextField("2", text: text).textFieldStyle(.roundedBorder).frame(width: 70)
+                 .focused($focusedField, equals: focus).disabled(!model.canEditDesired)
+@@ -1746,7 +1834,8 @@
+                     .frame(width: 40)
+             }
+             Toggle(title, isOn: Binding(get: { enabled }, set: { model.feature(toggle, value: $0) }))
+-                .labelsHidden().toggleStyle(.switch).controlSize(.small).disabled(!model.canEditDesired)
++                .labelsHidden().toggleStyle(.switch).controlSize(.small)
++                .tint(warningState ? .orange : accent).disabled(!model.canEditDesired)
+         }
+     }
+ 
+@@ -1950,9 +2039,12 @@
+         let supported = model.supportsFeature(key)
+         let active = model.activeFeatures[key] ?? false
+         let dormant = model.dormantFeatures[key] ?? false
+-        let runtimeMismatch = enabled && model.connected && model.canSetFeature && !active && !dormant
+-        let deferred = enabled && (!model.connected || !model.canSetFeature || dormant)
+-        let indicatorColor: Color = runtimeMismatch ? .orange : (deferred ? deferredColor : (enabled ? accent : .secondary))
++        let activationPending = model.isFeatureActivationPending(key)
++        let runtimeMismatch = enabled && model.connected && model.canSetFeature && !active && !dormant && !activationPending
++        let waitingEnvironment = enabled && model.connected && (!model.canSetFeature || (dormant && !activationPending))
++        let detached = enabled && !model.connected
++        let warningState = runtimeMismatch || waitingEnvironment
++        let indicatorColor: Color = warningState ? .orange : (detached ? deferredColor : (enabled ? accent : .secondary))
+         return HStack(spacing: 16) {
+             Image(systemName: icon).font(.title3).foregroundStyle(indicatorColor)
+                 .frame(width: 40, height: 40).background(indicatorColor.opacity(enabled ? 0.15 : 0.05), in: RoundedRectangle(cornerRadius: 10))
+@@ -1967,7 +2059,7 @@
+                 }
+             }.frame(width: 52)
+             Button(action: action) {
+-                Capsule().fill(runtimeMismatch ? Color.orange : (deferred ? deferredColor.opacity(0.82) : (enabled ? accent : Color.white.opacity(0.13)))).frame(width: 44, height: 25)
++                Capsule().fill(warningState ? Color.orange : (detached ? deferredColor.opacity(0.82) : (enabled ? accent : Color.white.opacity(0.13)))).frame(width: 44, height: 25)
+                     .overlay(alignment: enabled ? .trailing : .leading) { Circle().fill(.white).frame(width: 19, height: 19).padding(3) }
+             }.buttonStyle(.plain).disabled(!model.canEditDesired || !supported)
+                 .accessibilityLabel(title).accessibilityValue(enabled ? "开启" : "关闭")
+@@ -1980,9 +2072,12 @@
+         let supported = model.supportsFeature(key)
+         let active = model.activeFeatures[key] ?? false
+         let dormant = model.dormantFeatures[key] ?? false
+-        let mismatch = enabled && model.connected && model.canSetFeature && !active && !dormant
+-        let deferred = enabled && (!model.connected || !model.canSetFeature || dormant)
+-        let color: Color = mismatch ? .orange : (deferred ? .secondary : (enabled ? accent : .secondary))
++        let activationPending = model.isFeatureActivationPending(key)
++        let mismatch = enabled && model.connected && model.canSetFeature && !active && !dormant && !activationPending
++        let waitingEnvironment = enabled && model.connected && (!model.canSetFeature || (dormant && !activationPending))
++        let detached = enabled && !model.connected
++        let warningState = mismatch || waitingEnvironment
++        let color: Color = warningState ? .orange : (detached ? deferredColor : (enabled ? accent : .secondary))
+         return HStack(spacing: 14) {
+             Image(systemName: icon).font(.title3).foregroundStyle(color).frame(width: 40, height: 40)
+                 .background(color.opacity(enabled ? 0.15 : 0.05), in: RoundedRectangle(cornerRadius: 10))
+@@ -1993,7 +2088,7 @@
+             Text("×").foregroundStyle(.secondary)
+             if let shortcut { Text("⌃⌥\(model.shortcutDigit(shortcut))").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary).frame(width: 40) }
+             Button(action: action) {
+-                Capsule().fill(mismatch ? Color.orange : (deferred ? Color.gray.opacity(0.6) : (enabled ? accent : Color.white.opacity(0.13)))).frame(width: 44, height: 25)
++                Capsule().fill(warningState ? Color.orange : (detached ? deferredColor.opacity(0.82) : (enabled ? accent : Color.white.opacity(0.13)))).frame(width: 44, height: 25)
+                     .overlay(alignment: enabled ? .trailing : .leading) { Circle().fill(.white).frame(width: 19, height: 19).padding(3) }
+             }.buttonStyle(.plain).disabled(!model.canEditDesired || !supported)
+         }.opacity(supported ? 1 : 0.45).frame(minHeight: 64).padding(.horizontal, 22).background(panel)
+@@ -2084,21 +2179,22 @@
+     private func editableStatMetric(_ title: String, icon: String, stat: String, text: Binding<String>, focus: EditField,
+         suffix: String, locked: Bool) -> some View {
+         let supported = model.statSupport[stat] != false
++        let available = model.statAvailable[stat] != false
+         return VStack(alignment: .leading, spacing: 10) {
+             HStack(spacing: 8) {
+                 Label(title, systemImage: icon).font(.caption).foregroundStyle(accent.opacity(0.9))
+                 Spacer()
+-                compactLockButton(locked: locked, enabled: model.canSetStats && supported) {
++                compactLockButton(locked: locked, enabled: model.canSetStats && supported && available) {
+                     model.setStat(stat, text: text.wrappedValue, locked: !locked)
+                 }
+             }
+             HStack(spacing: 5) {
+                 TextField("—", text: text).textFieldStyle(.plain).multilineTextAlignment(.center).frame(width: 80)
+                     .font(.system(size: 20, weight: .semibold, design: .rounded)).monospacedDigit()
+-                    .focused($focusedField, equals: focus).disabled(!model.canSetStats || !supported)
++                    .focused($focusedField, equals: focus).disabled(!model.canSetStats || !supported || !available)
+                 if !suffix.isEmpty { Text(suffix).font(.caption).foregroundStyle(.secondary) }
+             }.frame(maxWidth: .infinity, alignment: .center)
+-        }.opacity(supported ? 1 : 0.42).frame(maxWidth: .infinity, minHeight: 82, alignment: .leading).padding(15)
++        }.opacity(supported ? (available ? 1 : 0.65) : 0.42).frame(maxWidth: .infinity, minHeight: 82, alignment: .leading).padding(15)
+             .background(panel, in: RoundedRectangle(cornerRadius: 14))
+     }
+ 
+--- round10/hades.lua
++++ round11/hades.lua
+@@ -6,13 +6,13 @@
+ end
+ if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
+ local previousModule = __MacGamingTrainerV1
+-if previousModule and previousModule.revision ~= 18 then
++if previousModule and previousModule.revision ~= 19 then
+   previousModule.dispatch("cleanup")
+   __MacGamingTrainerV1 = nil
+ end
+ if __MacGamingTrainerV1 == nil then
+   local M = {
+-    version = 1, revision = 18, damageMultiplier = 2, damageEnabled = false,
++    version = 1, revision = 19, damageMultiplier = 2, damageEnabled = false,
+     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
+     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
+     godMode = false, infiniteHealth = false, infiniteMana = false,
+@@ -255,15 +255,32 @@
+       and type(room) == "table"
+       and finite(CurrentRun.Hero.Health) and finite(CurrentRun.Hero.Mana)
+   end
++  local function resourceCatalogReady()
++    return type(ResourceData) == "table" and type(ResourceDisplayOrderData) == "table"
++      and type(GameState) == "table" and type(GameState.Resources) == "table"
++      and type(GameState.LifetimeResourcesGained) == "table"
++  end
++  local function resourceRunAccountingReady()
++    -- Native AddResource and SpendResource update separate per-run ledgers.
++    -- Only use those native paths when both ledgers exist; otherwise a hub
++    -- resource decrease can fault while indexing CurrentRun.ResourcesSpent.
++    return type(CurrentRun) == "table" and type(CurrentRun.ResourcesGained) == "table"
++      and type(CurrentRun.ResourcesSpent) == "table"
++  end
+   local function resourceReady()
+-    return ready() and type(ResourceData) == "table" and type(ResourceDisplayOrderData) == "table"
+-      and type(GameState.Resources) == "table" and type(GameState.LifetimeResourcesGained) == "table"
+-      and type(CurrentRun.ResourcesGained) == "table"
++    -- Inventory resources live in GameState rather than on the combat Hero.
++    -- In the Crossroads they can therefore be edited directly even when there
++    -- is no live run object to receive AddResource/SpendResource accounting.
++    return resourceCatalogReady() and (resourceRunAccountingReady() or sceneName() == "crossroads")
++  end
++  local function economyReady()
++    -- Multiplier/lock hooks are global function hooks and can be installed in
++    -- the hub before a run exists. The native functions will receive a valid
++    -- CurrentRun whenever the game actually awards/spends a resource.
++    return resourceCatalogReady() and type(AddResource) == "function" and type(SpendResource) == "function"
+   end
+   local function requireResources()
+-    if type(ResourceData) ~= "table" or type(ResourceDisplayOrderData) ~= "table"
+-        or type(GameState.Resources) ~= "table" or type(GameState.LifetimeResourcesGained) ~= "table"
+-        or type(CurrentRun.ResourcesGained) ~= "table" then
++    if not resourceCatalogReady() then
+       error("Unsupported resource editing: resource tables unavailable")
+     end
+   end
+@@ -284,14 +301,26 @@
+     if hook and _G[name] == hook.wrapper then _G[name] = hook.original end
+     M.hooks[name] = nil
+   end
+-  local function installHook(name, body)
++  local function installHook(name, body, scope)
+     if owns(name) then return end
+     local original = _G[name]
+     local hook = { original = original }
+-    local ownerRun, ownerHero, ownerSession = CurrentRun, CurrentRun.Hero, SessionState
++    local ownerRun = CurrentRun
++    local ownerHero = type(ownerRun) == "table" and ownerRun.Hero or nil
++    local ownerSession = SessionState
++    -- Most combat hooks intentionally die with their Hero/run. Global-safe
++    -- hooks installed while no Hero exists (Crossroads) are session-scoped;
++    -- an explicit scope can opt into the same behavior. synchronize() still
++    -- releases/reconciles them on scene transitions, so no stale state crosses
++    -- sessions.
++    local sessionScoped = scope == "session" or type(ownerHero) ~= "table"
++    hook.scope = sessionScoped and "session" or "run"
+     hook.wrapper = function(...)
+-      local active = M.hooks[name] == hook and CurrentRun == ownerRun
+-        and CurrentRun.Hero == ownerHero and SessionState == ownerSession and not ownerHero.IsDead
++      local active = M.hooks[name] == hook and SessionState == ownerSession
++      if active and not sessionScoped then
++        active = CurrentRun == ownerRun and type(CurrentRun) == "table"
++          and CurrentRun.Hero == ownerHero and not ownerHero.IsDead
++      end
+       if active then return body(original, ...) end
+       return original(...)
+     end
+@@ -354,9 +383,16 @@
+     Cooldown = 0,
+     AllowMultiFireRequest = true,
+     IgnoreForceCooldown = true,
++    -- WeaponCast also has an engine-level active-projectile cap.  Removing the
++    -- cooldown/control effects alone still leaves a live cast occupying that
++    -- slot, so a second fire request can be rejected until the first cast dies.
++    -- Keep a generous finite cap instead of touching projectile lifetime or
++    -- expiring the player's current cast; overlapping casts therefore retain
++    -- their native boon/damage behavior.
++    ActiveProjectileCap = 32,
+   }
+   local castWeaponPropertyOrder = {
+-    "IgnoreOwnerAttackDisabled", "Cooldown", "AllowMultiFireRequest", "IgnoreForceCooldown",
++    "IgnoreOwnerAttackDisabled", "Cooldown", "AllowMultiFireRequest", "IgnoreForceCooldown", "ActiveProjectileCap",
+   }
+   -- The current game's projected-cast traits disable this entire trio.  Treat
+   -- them as one reversible group rather than declaring success after changing
+@@ -392,9 +428,20 @@
+   end
+   local function readCastWeaponProperty(property, hero)
+     hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
+-    if type(hero) ~= "table" or hero.ObjectId == nil or type(GetWeaponDataValue) ~= "function" then return nil, false end
+-    local ok, value = pcall(GetWeaponDataValue, { Id = hero.ObjectId, WeaponName = "WeaponCast", Property = property })
+-    return value, ok
++    if type(hero) ~= "table" or hero.ObjectId == nil then return nil, false end
++    if type(GetWeaponDataValue) == "function" then
++      local ok, value = pcall(GetWeaponDataValue, { Id = hero.ObjectId, WeaponName = "WeaponCast", Property = property })
++      if ok and value ~= nil then return value, true end
++    end
++    -- Some engine builds do not surface every inherited Weapon property through
++    -- GetWeaponDataValue until it has been overridden once. Use the canonical
++    -- base weapon value as the restoration fallback instead of leaking the
++    -- trainer's override after the feature is disabled.
++    if type(GetBaseDataValue) == "function" then
++      local ok, value = pcall(GetBaseDataValue, { Type = "Weapon", Name = "WeaponCast", Property = property })
++      if ok and value ~= nil then return value, true end
++    end
++    return nil, false
+   end
+   local function writeCastWeaponProperty(property, value, setter, hero)
+     setter = setter or SetWeaponProperty
+@@ -478,7 +525,11 @@
+     local currentHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+     if type(runtime) == "table" and runtime.hero == currentHero then
+       local nativeKeepsCastOpen = not castEffectNaturallyActive("WeaponCastAttackDisable")
+-      if type(weaponSetter) == "function" and not nativeKeepsCastOpen then
++      -- Restore every property to the latest value the game exposed/attempted
++      -- while the trainer was active. This is important for ActiveProjectileCap:
++      -- leaving the trainer's expanded cap behind would leak behavior after the
++      -- toggle is disabled, including when a native projected-cast boon is owned.
++      if type(weaponSetter) == "function" then
+         for _, property in ipairs(castWeaponPropertyOrder) do
+           if runtime.nativePropertyKnown[property] then
+             pcall(writeCastWeaponProperty, property, runtime.nativeProperties[property], weaponSetter, runtime.hero)
+@@ -743,7 +794,7 @@
+         refreshSpeedGlobal()
+       end
+       return result
+-    end)
++    end, "session")
+   end
+   local function callGameSpeed(value)
+     if not finite(value) or value < 0.1 or value > 5 then error("Game speed must be 0.1..5") end
+@@ -1021,7 +1072,8 @@
+   end
+   local function anyDesired()
+     for _, value in pairs(M.desiredFeatures) do if value then return true end end
+-    return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil or next(M.statTargets) ~= nil or M.gameSpeed ~= 1
++    return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
++      or next(M.statTargets) ~= nil or M.gameSpeed ~= 1 or M.nextRoomReward ~= nil
+   end
+   local function anyRuntimeActive()
+     return M.godMode or M.infiniteHealth or M.infiniteMana or M.damageEnabled
+@@ -1073,7 +1125,7 @@
+     if M.guardWrapper and UpdateTimers ~= M.guardWrapper then
+       M.guardWrapper, M.originalUpdateTimers = nil, nil
+     end
+-    if ready() and reconcileDesired then reconcileDesired(false) end
++    if reconcileDesired then reconcileDesired(false) end
+     if anyDesired() and not M.guardWrapper then
+       local ok, message = pcall(function()
+         requireFunctions("scene observer", { "UpdateTimers" })
+@@ -1155,6 +1207,19 @@
+     end
+   end
+   local function enforceLocks()
++    -- Save-backed inventory locks and process-global speed are meaningful in
++    -- the Crossroads too; keep those invariants before applying Hero-only
++    -- combat locks.
++    if type(GameState) == "table" and type(GameState.Resources) == "table" then
++      for id in pairs(M.resourceLocks) do enforceResource(id) end
++    end
++    if M.gameSpeed ~= 1 and M.gameSpeedActive and M.gameSpeedMethod == "directElapsedFactor" then
++      local ok, message = pcall(refreshSpeedGlobal)
++      if not ok then
++        M.gameSpeedActive = false
++        M.featureErrors.gameSpeed = tostring(message)
++      end
++    end
+     if not ready() then return end
+     for vital in pairs(M.vitalLocks) do enforceVital(vital) end
+     enforceElements()
+@@ -1166,9 +1231,6 @@
+     if M.hexAlwaysReady then
+       if refillHex() then M.featureErrors.hexAlwaysReady = nil end
+     end
+-    if type(GameState.Resources) == "table" then
+-      for id in pairs(M.resourceLocks) do enforceResource(id) end
+-    end
+     if M.rerollsLock ~= nil and finite(CurrentRun.NumRerolls)
+         and CurrentRun.NumRerolls ~= M.rerollsLock and type(UpdateRerollUI) == "function" then
+       CurrentRun.NumRerolls = M.rerollsLock
+@@ -1179,13 +1241,6 @@
+       -- build, so reapply the exact target after the game's timer update.
+       setDodgeRaw(CurrentRun.Hero, M.statTargets.dodge / 100)
+     end
+-    if M.gameSpeed ~= 1 and M.gameSpeedActive and M.gameSpeedMethod == "directElapsedFactor" then
+-      local ok, message = pcall(refreshSpeedGlobal)
+-      if not ok then
+-        M.gameSpeedActive = false
+-        M.featureErrors.gameSpeed = tostring(message)
+-      end
+-    end
+   end
+   M.enforceLocksInternal = enforceLocks
+   local function installGuard()
+@@ -1412,10 +1467,32 @@
+     end
+     return { value = value, target = M.statTargets[stat], locked = M.statTargets[stat] ~= nil }
+   end
+-  local function anySupportedStat(support)
+-    for _, stat in ipairs(statOrder or {}) do if support[stat] then return true end end
++  local function statAvailableMap(support)
++    local result = {}
++    for _, stat in ipairs(statOrder or {}) do
++      local entry = statRegistry and statRegistry[stat] or nil
++      local available = false
++      if support[stat] and entry ~= nil then
++        if entry.available == nil then available = ready()
++        else
++          local ok, value = pcall(entry.available)
++          available = ok and not not value
++        end
++      end
++      result[stat] = available
++    end
++    return result
++  end
++  local function anyAvailableStat(available)
++    for _, stat in ipairs(statOrder or {}) do if available[stat] then return true end end
+     return false
+   end
++  local function featureAvailable(entry)
++    if entry == nil then return false end
++    if entry.available == nil then return ready() end
++    local ok, value = pcall(entry.available)
++    return ok and not not value
++  end
+   local function castWeaponGateVerified(runtime)
+     if type(runtime) ~= "table" or not ready() or runtime.hero ~= CurrentRun.Hero then return false end
+     for _, property in ipairs(castWeaponPropertyOrder) do
+@@ -1427,7 +1504,7 @@
+   local function castDiagnostics()
+     local runtime = M.castRuntime
+     local diagnostics = {
+-      method = "nativeProjectedCastControlSet",
++      method = "nativeMultiCastControlSet",
+       effectHook = owns("SetEffectProperty"), weaponHook = owns("SetWeaponProperty"),
+       effectOverrides = { WeaponCastAttackDisable = false, WeaponCastSelfSlow = false, WeaponCastSelfSlow2 = false },
+     }
+@@ -1479,7 +1556,9 @@
+       end
+       supportMap[key] = entry ~= nil and evaluate(entry.support, true) or false
+       activeMap[key] = entry ~= nil and evaluate(entry.active, false) or false
+-      if entry and evaluate(entry.dormant, false) then dormantMap[key] = true end
++      local desired = entry and (entry.desired and evaluate(entry.desired, false) or not not M.desiredFeatures[key]) or false
++      local waitingForEnvironment = desired and supportMap[key] and not activeMap[key] and not featureAvailable(entry)
++      if entry and (evaluate(entry.dormant, false) or waitingForEnvironment) then dormantMap[key] = true end
+     end
+     return supportMap, activeMap, dormantMap
+   end
+@@ -1488,6 +1567,7 @@
+     local list, boonList = resources(), boons()
+     local rewardList = rewards()
+     local support = statSupport()
++    local statAvailable = statAvailableMap(support)
+     local currentScene = sceneName()
+     local availableMana = number(hero.MaxMana)
+     if CurrentRun and CurrentRun.Hero and type(GetHeroMaxAvailableMana) == "function" then
+@@ -1500,10 +1580,15 @@
+       local ok, _, _, _, cost = pcall(currentSpellRuntime)
+       if ok and finite(cost) then spellChargeCost = cost end
+     end
++    local economySupported = type(AddResource) == "function" and type(SpendResource) == "function" and resourceCatalogReady()
+     local activeMoney = not not (M.moneyMultiplierEnabled and owns("AddResource") and owns("SpendResource"))
+     local activeResources = not not (M.resourceMultiplierEnabled and owns("AddResource") and owns("SpendResource"))
++    featureSupportMap.moneyMultiplierEnabled = economySupported
++    featureSupportMap.resourceMultiplierEnabled = economySupported
+     activeFeatureMap.moneyMultiplierEnabled = activeMoney
+     activeFeatureMap.resourceMultiplierEnabled = activeResources
++    if M.desiredFeatures.moneyMultiplierEnabled and economySupported and not activeMoney then dormantFeatureMap.moneyMultiplierEnabled = true end
++    if M.desiredFeatures.resourceMultiplierEnabled and economySupported and not activeResources then dormantFeatureMap.resourceMultiplierEnabled = true end
+     local canSpawn = ready() and currentScene == "run" and type(MapState) == "table"
+       and type(MapState.RoomRequiredObjects) == "table" and type(LootObjects) == "table"
+     local elementList = setmetatable({}, arrayMeta)
+@@ -1521,8 +1606,11 @@
+     return {
+       status = ready() and "ready" or "waiting", scene = currentScene,
+       capabilities = {
+-        setFeature = ready(), setVitals = ready(), setResource = resourceReady(),
+-        spawnReward = canSpawn, setStats = ready() and anySupportedStat(support),
++        -- Desired feature state can be accepted as soon as the Lua runtime is
++        -- loaded. Individual run-only features report dormant until their
++        -- environment exists; hub-safe hooks can arm immediately.
++        setFeature = true, setVitals = ready(), setResource = resourceReady(),
++        spawnReward = canSpawn, setStats = anyAvailableStat(statAvailable),
+         setElements = ready() and type(hero.Elements) == "table", hotBackup = true, hotRestore = false,
+       },
+       featureSupport = featureSupportMap,
+@@ -1559,7 +1647,7 @@
+       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
+       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
+       runCount = runCount, elements = elementList,
+-      statSupport = support, stats = statsState,
++      statSupport = support, statAvailable = statAvailable, stats = statsState,
+       resources = list, boons = boonList, rewards = rewardList,
+       featureErrors = M.featureErrors,
+       runtimeDiagnostics = {
+@@ -2048,6 +2136,9 @@
+   end
+   local function installGraspLock()
+     requireFunctions("grasp lock", { "GetMaxMetaUpgradeCost" })
++    if type(GameState) == "table" and M.statTargets.grasp ~= nil then
++      GameState.MaxMetaUpgradeCostCache = M.statTargets.grasp
++    end
+     if not owns("GetMaxMetaUpgradeCost") then
+       installHook("GetMaxMetaUpgradeCost", function(original, ...)
+         if M.statTargets.grasp ~= nil then
+@@ -2149,27 +2240,27 @@
+       active = function() return M.infiniteAmmo and owns("HasHeroTraitValue") and owns("UpdateWeaponAmmo") end,
+     },
+     autoMiniGames = {
+-      install = installMiniGames, release = releaseMiniGames,
++      install = installMiniGames, release = releaseMiniGames, available = function() return true end,
+       support = function() return type(WaitForFishingInput) == "function" or type(ExorcismSequence) == "function" end,
+       active = function() return M.autoMiniGames and (owns("WaitForFishingInput") or owns("ExorcismSequence")) end,
+     },
+     gardenQoL = {
+-      install = installGardenQoL, release = releaseGardenQoL,
++      install = installGardenQoL, release = releaseGardenQoL, available = function() return true end,
+       support = function() return type(GardenPlantSeed) == "function" and type(UseGardenPlot) == "function" end,
+       active = function() return M.gardenQoL and owns("GardenPlantSeed") and owns("UseGardenPlot") end,
+     },
+     boonRarityEnabled = {
+-      install = installBoonRarity, release = releaseBoonRarity,
++      install = installBoonRarity, release = releaseBoonRarity, available = function() return true end,
+       support = function() return type(GetRarityChances) == "function" and type(SetTraitsOnLoot) == "function" end,
+       active = function() return M.boonRarityEnabled and owns("GetRarityChances") and owns("SetTraitsOnLoot") end,
+     },
+     boonChoiceEnabled = {
+-      install = installBoonChoice, release = releaseBoonChoice,
++      install = installBoonChoice, release = releaseBoonChoice, available = function() return true end,
+       support = function() return type(CalcNumLootChoices) == "function" and type(GetTotalLootChoices) == "function" end,
+       active = function() return M.boonChoiceEnabled and owns("CalcNumLootChoices") and owns("GetTotalLootChoices") end,
+     },
+     gameSpeed = {
+-      install = installGameSpeed, release = releaseGameSpeed, desired = function() return M.gameSpeed ~= 1 end,
++      install = installGameSpeed, release = releaseGameSpeed, desired = function() return M.gameSpeed ~= 1 end, available = function() return true end,
+       support = function() return type(GameplaySetElapsedTimeMultiplier) == "function" and type(GetGameplayElapsedTimeMultiplier) == "function" and type(SetThingProperty) == "function" end,
+       active = function(hero) return M.gameSpeedActive and owns("GameplaySetElapsedTimeMultiplier") and finite(_elapsedTimeMultiplier) and math.abs(_elapsedTimeMultiplier - gameplayBaseMultiplier() * M.gameSpeed) < 0.001 and (not ready() or M.gameSpeedHero == hero) end,
+     },
+@@ -2177,7 +2268,7 @@
+   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
+   statRegistry = {
+     grasp = {
+-      install = installGraspLock, release = releaseGraspLock, min = 0, max = 999, integer = true,
++      install = installGraspLock, release = releaseGraspLock, min = 0, max = 999, integer = true, available = function() return true end,
+       support = function() return type(GetMaxMetaUpgradeCost) == "function" end,
+       value = function(_, support) if support.grasp then local ok,v=pcall(GetMaxMetaUpgradeCost); if ok and finite(v) then return v end end end,
+     },
+@@ -2276,31 +2367,53 @@
+     return featureAttempt("stat:" .. stat, M.statTargets[stat] ~= nil, entry.install, entry.release, raiseOnError)
+   end
+   reconcileDesired = function(raiseOnError, onlyKey)
+-    if not ready() then return false end
+     local allOk = true
+-    local function run(key, desired, install, release)
++    local function run(key, desired, entry)
+       if onlyKey == nil or onlyKey == key then
+-        if not featureAttempt(key, desired, install, release, raiseOnError) then allOk = false end
++        if desired and not featureAvailable(entry) then
++          -- Desired state stays set, but the resident implementation is not
++          -- mounted until its scene/Hero dependency becomes available.
++          entry.release()
++          M.featureErrors[key] = nil
++        elseif not featureAttempt(key, desired, entry.install, entry.release, raiseOnError) then
++          allOk = false
++        end
+       end
+     end
+     for _, key in ipairs(featureOrder) do
+       local entry = featureRegistry[key]
+       local desired = entry.desired and entry.desired() or M.desiredFeatures[key]
+-      run(key, desired, entry.install, entry.release)
++      run(key, desired, entry)
+     end
+     if onlyKey == nil or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
+-      if not reconcileEconomy(raiseOnError) then allOk = false end
++      if (M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then
++        releaseEconomyRuntime(); M.featureErrors.economy = nil
++      elseif not reconcileEconomy(raiseOnError) then allOk = false end
+     end
+     if onlyKey == nil or onlyKey == "rerolls" then
+-      if M.rerollsLock ~= nil then
++      if M.rerollsLock ~= nil and ready() then
+         if not featureAttempt("rerolls", true, installRerolls, releaseRerollsRuntime, raiseOnError) then allOk = false end
++      elseif M.rerollsLock ~= nil then
++        releaseRerollsRuntime(); M.featureErrors.rerolls = nil
+       else
+         releaseRerollsRuntime(); M.featureErrors.rerolls = nil
+       end
+     end
++    if onlyKey == nil or onlyKey == "nextRoomReward" then
++      if M.nextRoomReward ~= nil then
++        if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
++      else
++        releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
++      end
++    end
++    local availableStats = statAvailableMap(statSupport())
+     for _, stat in ipairs(statOrder) do
+       if onlyKey == nil or onlyKey == "stat:" .. stat then
+-        if not reconcileStat(stat, raiseOnError) then allOk = false end
++        local entry = statRegistry[stat]
++        if M.statTargets[stat] ~= nil and not availableStats[stat] then
++          entry.release()
++          M.featureErrors["stat:" .. stat] = nil
++        elseif not reconcileStat(stat, raiseOnError) then allOk = false end
+       end
+     end
+     if anyDesired() then
+@@ -2361,10 +2474,26 @@
+   local function editResource(id, target)
+     local current = number(GameState.Resources[id])
+     if M.resourceLocks[id] ~= nil then M.resourceLocks[id] = target end
+-    local args = { Silent = true, SkipVoiceLines = true, SkipInventoryObjective = true,
+-      IgnoreAsLastResourceGained = true, SkipQuestStatusCheck = true, SkipResourceSpendPresentation = true }
+-    if target > current then AddResource(id, target - current, trainerSource, args)
+-    elseif target < current then SpendResource(id, current - target, trainerSource, args) end
++    local delta = target - current
++    if delta == 0 then return end
++    if resourceRunAccountingReady() and type(AddResource) == "function" and type(SpendResource) == "function" then
++      local args = { Silent = true, SkipVoiceLines = true, SkipInventoryObjective = true,
++        IgnoreAsLastResourceGained = true, SkipQuestStatusCheck = true, SkipResourceSpendPresentation = true }
++      if delta > 0 then AddResource(id, delta, trainerSource, args)
++      else SpendResource(id, -delta, trainerSource, args) end
++    else
++      -- The Crossroads can exist without CurrentRun.ResourcesGained/Spent.
++      -- Native AddResource indexes those tables unconditionally, so use the
++      -- save-backed resource fields directly and keep lifetime accounting
++      -- coherent rather than fabricating a fake run.
++      GameState.Resources[id] = target
++      if delta > 0 then
++        GameState.LifetimeResourcesGained[id] = number(GameState.LifetimeResourcesGained[id]) + delta
++      else
++        GameState.LifetimeResourcesSpent = GameState.LifetimeResourcesSpent or {}
++        GameState.LifetimeResourcesSpent[id] = number(GameState.LifetimeResourcesSpent[id]) - delta
++      end
++    end
+     if number(GameState.Resources[id]) ~= target then error("Resource setter did not reach the requested amount") end
+     if id == "Money" then refreshMoney() end
+   end
+@@ -2491,13 +2620,15 @@
+         if value < entry.min or value > entry.max then error("Stat value is outside the supported range") end
+         local support = statSupport()
+         if not support[stat] then error("Stat is unavailable in this game build") end
++        local available = statAvailableMap(support)
++        if not available[stat] then error("Stat is unavailable in the current scene") end
+         M.statTargets[stat] = value
+       else
+         M.statTargets[stat] = nil
+         entry.release()
+       end
+       M.featureErrors["stat:" .. stat] = nil
+-      if ready() then reconcileDesired(true, "stat:" .. stat) end
++      reconcileDesired(true, "stat:" .. stat)
+       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+       return state()
+     end
+@@ -2510,11 +2641,12 @@
+         local validLoot = type(LootData) == "table" and type(LootData[reward]) == "table"
+         if not validDirect and not validLoot then error("Unsupported next room reward") end
+         M.nextRoomReward = reward
+-        installNextRoomReward()
+       else
+         M.nextRoomReward = nil
+-        releaseNextRoomReward()
+       end
++      M.featureErrors.nextRoomReward = nil
++      reconcileDesired(true, "nextRoomReward")
++      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+       return state()
+     end
+     if command == "set_boon_rarity" then
+@@ -2545,13 +2677,11 @@
+         local previous = M.gameSpeed
+         M.gameSpeed = value
+         M.featureErrors.gameSpeed = nil
+-        if ready() then
+-          local ok, message = pcall(function() reconcileDesired(true, "gameSpeed") end)
+-          if not ok then
+-            M.gameSpeed = previous
+-            pcall(function() reconcileDesired(false, "gameSpeed") end)
+-            error("Feature unavailable: " .. tostring(message))
+-          end
++        local ok, message = pcall(function() reconcileDesired(true, "gameSpeed") end)
++        if not ok then
++          M.gameSpeed = previous
++          pcall(function() reconcileDesired(false, "gameSpeed") end)
++          error("Feature unavailable: " .. tostring(message))
+         end
+         if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+         return state()
+@@ -2574,15 +2704,13 @@
+         elseif feature == "resourceMultiplierEnabled" then M.resourceMultiplierEnabled = false end
+         if feature == "infiniteMana" and ready() then refreshMana() end
+       end
+-      if ready() then
+-        local ok, message = pcall(function() reconcileDesired(true, feature) end)
+-        if not ok then
+-          M.desiredFeatures[feature] = previous
+-          M.featureErrors[feature] = nil
+-          if feature == "moneyMultiplierEnabled" or feature == "resourceMultiplierEnabled" then M.featureErrors.economy = nil end
+-          reconcileDesired(false, feature)
+-          error("Feature unavailable: " .. tostring(message))
+-        end
++      local ok, message = pcall(function() reconcileDesired(true, feature) end)
++      if not ok then
++        M.desiredFeatures[feature] = previous
++        M.featureErrors[feature] = nil
++        if feature == "moneyMultiplierEnabled" or feature == "resourceMultiplierEnabled" then M.featureErrors.economy = nil end
++        reconcileDesired(false, feature)
++        error("Feature unavailable: " .. tostring(message))
+       end
+       if anyDesired() then installGuard()
+       elseif not anyRuntimeActive() then releaseGuard() end
+@@ -2624,13 +2752,9 @@
+       if not resourceReady() then error("Game scene does not expose resource editing") end
+       validateResource(params.resource)
+       integer(params.amount, command == "add_resource" and 1 or 0)
+-      requireFunctions("resource editing", { "AddResource", "SpendResource" })
+-      if params.resource == "Money" then requireFunctions("money editing", { "UpdateMoneyUI" }) end
++      if params.resource == "Money" and type(UpdateMoneyUI) ~= "function" then error("Unsupported money editing: missing UpdateMoneyUI") end
+       return action(command, params, function()
+-        if command == "add_resource" then
+-          AddResource(params.resource, params.amount, trainerSource, {
+-            Silent = true, SkipVoiceLines = true, SkipInventoryObjective = true, IgnoreAsLastResourceGained = true,
+-          })
++        if command == "add_resource" then editResource(params.resource, number(GameState.Resources[params.resource]) + params.amount)
+         else editResource(params.resource, params.amount) end
+       end)
+     end
+--- round10/server.py
++++ round11/server.py
+@@ -7,8 +7,8 @@
+ import preparation
+ from transport import LuaTransport, TransportError
+ 
+-PROTOCOL_VERSION=2
+-APP_BACKEND_VERSION='0.10.0'
++PROTOCOL_VERSION=3
++APP_BACKEND_VERSION='0.11.0'
+ 
+ TOGGLES=('godMode','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown','hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled','boonChoiceEnabled','moneyMultiplierEnabled','resourceMultiplierEnabled')
+ MULTIPLIERS=('damageMultiplier','moneyMultiplier','resourceMultiplier','gameSpeed')
+--- round10/Info.plist
++++ round11/Info.plist
+@@ -17,9 +17,9 @@
+     <key>CFBundlePackageType</key>
+     <string>APPL</string>
+     <key>CFBundleShortVersionString</key>
+-    <string>0.10.0</string>
++    <string>0.11.0</string>
+     <key>CFBundleVersion</key>
+-    <string>15</string>
++    <string>16</string>
+     <key>LSMinimumSystemVersion</key>
+     <string>14.0</string>
+     <key>LSArchitecturePriority</key>
+--- round10/BUILDING.md
++++ round11/BUILDING.md
+@@ -1,4 +1,4 @@
+-# Mac Gaming Trainer v0.10.0 — Build on macOS
++# Mac Gaming Trainer v0.11.0 — Build on macOS
+ 
+ Requirements: Apple Silicon Mac and Xcode / Command Line Tools providing `swiftc`, `python3`, and `lldb`.
+ 
+@@ -16,7 +16,7 @@
+ Build:
+ 
+ ```bash
+-cd /path/to/MacGamingTrainer_v10_round10
++cd /path/to/MacGamingTrainer_v11_round11
+ chmod +x build.sh
+ ./build.sh
+ ```
+--- round10/tests/round9_mock.lua
++++ round11/tests/round9_mock.lua
+@@ -76,12 +76,12 @@
+   units[id]=h
+   return h
+ end
+-CurrentRun = { Hero=hero(101,100,50,0.15), CurrentRoom={}, ResourcesGained={}, NumRerolls=0, SpellCharge=0 }
++CurrentRun = { Hero=hero(101,100,50,0.15), CurrentRoom={}, ResourcesGained={}, ResourcesSpent={}, NumRerolls=0, SpellCharge=0 }
+ 
+ local hitCalls, sacrificeCalls, clearCalls, spellFireCalls = 0, 0, 0, 0
+ local castEffectActive = { WeaponCastAttackDisable=true, WeaponCastSelfSlow=true, WeaponCastSelfSlow2=true }
+ local castPropertyCalls, weaponEnabled = 0, false
+-local castWeaponProperties = { IgnoreOwnerAttackDisabled=false, Cooldown=0.25, AllowMultiFireRequest=false, IgnoreForceCooldown=false }
++local castWeaponProperties = { IgnoreOwnerAttackDisabled=false, Cooldown=0.25, AllowMultiFireRequest=false, IgnoreForceCooldown=false, ActiveProjectileCap=1 }
+ local castWeaponPropertyCalls, activeCastCount = 0, 0
+ local spawnedLoot, spawnedConsumable, grantedTrait
+ local loadedPackages, timeScale = {}, 1
+@@ -174,6 +174,10 @@
+       and castWeaponProperties.IgnoreForceCooldown == true
+       and castWeaponProperties.Cooldown == 0
+     if not canRepeat then return false end
++    -- Multi-fire request acceptance is separate from the engine's active
++    -- projectile cap. A live cast can still occupy the only slot even when all
++    -- cooldown/control gates are open.
++    if activeCastCount >= (castWeaponProperties.ActiveProjectileCap or 1) then return false end
+   end
+   activeCastCount=activeCastCount+1
+   SessionMapState.LastCastProjectileId=900+activeCastCount
+@@ -541,7 +545,7 @@
+ M.dispatch('set_stat',{stat='manaRegen',locked=true,value=9})
+ M.dispatch('set_stat',{stat='attackSpeed',locked=true,value=160})
+ local oldHero=CurrentRun.Hero
+-CurrentRun={Hero=hero(202,80,40,0.10),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(202,80,40,0.10),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ UpdateTimers(0.016)
+ state=M.dispatch('status',{})
+ assert(state.stats.grasp.locked and GetMaxMetaUpgradeCost()==66,'grasp did not remount')
+@@ -563,14 +567,15 @@
+ castWeaponProperties.Cooldown=0.25
+ castWeaponProperties.AllowMultiFireRequest=false
+ castWeaponProperties.IgnoreForceCooldown=false
++castWeaponProperties.ActiveProjectileCap=1
+ assert(tryCast() and not tryCast(),'mock baseline unexpectedly allowed a second live cast')
+ activeCastCount=0; SessionMapState.CastAttachedProjectiles={}; SessionMapState.LastCastProjectileId=nil
+ state=setFeature('instantCastCooldown',true)
+ assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and state.activeFeatures.instantCastCooldown,'cast availability did not arm full native effect group')
+-assert(castWeaponProperties.IgnoreOwnerAttackDisabled and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.IgnoreForceCooldown and castWeaponProperties.Cooldown==0,'cast multi-fire properties not applied')
++assert(castWeaponProperties.IgnoreOwnerAttackDisabled and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.IgnoreForceCooldown and castWeaponProperties.Cooldown==0 and castWeaponProperties.ActiveProjectileCap==32,'cast multi-fire properties/projectile cap not applied')
+ assert(tryCast() and tryCast(),'cast availability still blocked the second live cast')
+ state=M.dispatch('status',{})
+-assert(state.runtimeDiagnostics.castRuntime.method=='nativeProjectedCastControlSet','cast diagnostics method missing')
++assert(state.runtimeDiagnostics.castRuntime.method=='nativeMultiCastControlSet','cast diagnostics method missing')
+ assert(state.runtimeDiagnostics.castRuntime.weaponGateVerified,'cast diagnostics did not verify engine weapon gate')
+ assert(state.runtimeDiagnostics.castRuntime.activeTrackedCasts==2,'cast diagnostics did not observe two live casts')
+ -- Later game writes are forced while enabled but remembered for restoration.
+@@ -580,15 +585,15 @@
+ assert(castWeaponProperties.Cooldown==0 and not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow,'cast hooks failed to keep native effect group open')
+ setFeature('instantCastCooldown',false)
+ assert(castEffectActive.WeaponCastAttackDisable and castEffectActive.WeaponCastSelfSlow and castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.Cooldown==0.5,'cast natural properties/effects were not restored')
+-assert(castWeaponProperties.IgnoreOwnerAttackDisabled==false and castWeaponProperties.AllowMultiFireRequest==false and castWeaponProperties.IgnoreForceCooldown==false,'cast boolean properties were not restored')
++assert(castWeaponProperties.IgnoreOwnerAttackDisabled==false and castWeaponProperties.AllowMultiFireRequest==false and castWeaponProperties.IgnoreForceCooldown==false and castWeaponProperties.ActiveProjectileCap==1,'cast boolean properties/projectile cap were not restored')
+ -- A native boon that disables the same gate must remain authoritative when the
+ -- trainer turns off; never reactivate or undo its multi-fire path.
+ table.insert(CurrentRun.Hero.Traits,{Name='NativeMultiCastTrait'})
+ castEffectActive.WeaponCastAttackDisable=false; castEffectActive.WeaponCastSelfSlow=false; castEffectActive.WeaponCastSelfSlow2=false
+-castWeaponProperties.IgnoreOwnerAttackDisabled=true; castWeaponProperties.AllowMultiFireRequest=true; castWeaponProperties.IgnoreForceCooldown=true; castWeaponProperties.Cooldown=0
++castWeaponProperties.IgnoreOwnerAttackDisabled=true; castWeaponProperties.AllowMultiFireRequest=true; castWeaponProperties.IgnoreForceCooldown=true; castWeaponProperties.Cooldown=0; castWeaponProperties.ActiveProjectileCap=2
+ setFeature('instantCastCooldown',true)
+ setFeature('instantCastCooldown',false)
+-assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.AllowMultiFireRequest,'cast release overwrote a native multi-cast boon')
++assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.ActiveProjectileCap==2,'cast release overwrote a native multi-cast boon/cap')
+ table.remove(CurrentRun.Hero.Traits,#CurrentRun.Hero.Traits)
+ 
+ -- Hex readiness uses the equipped Spell trait's actual weapon data/cost and
+@@ -606,7 +611,7 @@
+ -- Keep the user's desired toggle pending and arm it automatically once the
+ -- trait arrives; this is the exact reconnect/run-boundary race from live play.
+ setFeature('hexAlwaysReady',true)
+-CurrentRun={Hero=hero(250,85,42,0.11),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(250,85,42,0.11),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ CurrentRun.Hero.Traits={}
+ weaponEnabled=false
+ UpdateTimers(0.016)
+@@ -722,7 +727,7 @@
+ assert(state.moneyLocked and state.gameSpeed==1.5,'same-revision bootstrap lost locks or speed target')
+ 
+ local persistentOldHero=CurrentRun.Hero
+-CurrentRun={Hero=hero(303,90,45,0.12),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(303,90,45,0.12),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ -- New room units inherit the process/global elapsed multiplier, while the
+ -- newly-created Hero starts at its own neutral unit multiplier. This catches
+ -- accidental reversal of the old run's trainer factor against the new Hero.
+--- round10/tests/round10_mock.lua
++++ round11/tests/round10_mock.lua
+@@ -80,7 +80,7 @@
+   units[id]=h
+   return h
+ end
+-CurrentRun = { Hero=hero(101,100,50,0.15), CurrentRoom={}, ResourcesGained={}, NumRerolls=0, SpellCharge=0 }
++CurrentRun = { Hero=hero(101,100,50,0.15), CurrentRoom={}, ResourcesGained={}, ResourcesSpent={}, NumRerolls=0, SpellCharge=0 }
+ SetupUnit = function(unit,currentRun,args)
+   ActiveEnemies[unit.ObjectId]=unit
+   units[unit.ObjectId]=unit
+@@ -92,7 +92,7 @@
+ local hitCalls, sacrificeCalls, clearCalls, spellFireCalls = 0, 0, 0, 0
+ local castEffectActive = { WeaponCastAttackDisable=true, WeaponCastSelfSlow=true, WeaponCastSelfSlow2=true }
+ local castPropertyCalls, weaponEnabled = 0, false
+-local castWeaponProperties = { IgnoreOwnerAttackDisabled=false, Cooldown=0.25, AllowMultiFireRequest=false, IgnoreForceCooldown=false }
++local castWeaponProperties = { IgnoreOwnerAttackDisabled=false, Cooldown=0.25, AllowMultiFireRequest=false, IgnoreForceCooldown=false, ActiveProjectileCap=1 }
+ local castWeaponPropertyCalls, activeCastCount = 0, 0
+ local spawnedLoot, spawnedConsumable, grantedTrait
+ local loadedPackages, timeScale = {}, 1
+@@ -185,6 +185,10 @@
+       and castWeaponProperties.IgnoreForceCooldown == true
+       and castWeaponProperties.Cooldown == 0
+     if not canRepeat then return false end
++    -- Multi-fire request acceptance is separate from the engine's active
++    -- projectile cap. A live cast can still occupy the only slot even when all
++    -- cooldown/control gates are open.
++    if activeCastCount >= (castWeaponProperties.ActiveProjectileCap or 1) then return false end
+   end
+   activeCastCount=activeCastCount+1
+   SessionMapState.LastCastProjectileId=900+activeCastCount
+@@ -566,7 +570,7 @@
+ M.dispatch('set_stat',{stat='manaRegen',locked=true,value=9})
+ M.dispatch('set_stat',{stat='attackSpeed',locked=true,value=160})
+ local oldHero=CurrentRun.Hero
+-CurrentRun={Hero=hero(202,80,40,0.10),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(202,80,40,0.10),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ UpdateTimers(0.016)
+ state=M.dispatch('status',{})
+ assert(state.stats.grasp.locked and GetMaxMetaUpgradeCost()==66,'grasp did not remount')
+@@ -588,14 +592,15 @@
+ castWeaponProperties.Cooldown=0.25
+ castWeaponProperties.AllowMultiFireRequest=false
+ castWeaponProperties.IgnoreForceCooldown=false
++castWeaponProperties.ActiveProjectileCap=1
+ assert(tryCast() and not tryCast(),'mock baseline unexpectedly allowed a second live cast')
+ activeCastCount=0; SessionMapState.CastAttachedProjectiles={}; SessionMapState.LastCastProjectileId=nil
+ state=setFeature('instantCastCooldown',true)
+ assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and state.activeFeatures.instantCastCooldown,'cast availability did not arm full native effect group')
+-assert(castWeaponProperties.IgnoreOwnerAttackDisabled and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.IgnoreForceCooldown and castWeaponProperties.Cooldown==0,'cast multi-fire properties not applied')
++assert(castWeaponProperties.IgnoreOwnerAttackDisabled and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.IgnoreForceCooldown and castWeaponProperties.Cooldown==0 and castWeaponProperties.ActiveProjectileCap==32,'cast multi-fire properties/projectile cap not applied')
+ assert(tryCast() and tryCast(),'cast availability still blocked the second live cast')
+ state=M.dispatch('status',{})
+-assert(state.runtimeDiagnostics.castRuntime.method=='nativeProjectedCastControlSet','cast diagnostics method missing')
++assert(state.runtimeDiagnostics.castRuntime.method=='nativeMultiCastControlSet','cast diagnostics method missing')
+ assert(state.runtimeDiagnostics.castRuntime.weaponGateVerified,'cast diagnostics did not verify engine weapon gate')
+ assert(state.runtimeDiagnostics.castRuntime.activeTrackedCasts==2,'cast diagnostics did not observe two live casts')
+ -- Later game writes are forced while enabled but remembered for restoration.
+@@ -605,15 +610,15 @@
+ assert(castWeaponProperties.Cooldown==0 and not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow,'cast hooks failed to keep native effect group open')
+ setFeature('instantCastCooldown',false)
+ assert(castEffectActive.WeaponCastAttackDisable and castEffectActive.WeaponCastSelfSlow and castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.Cooldown==0.5,'cast natural properties/effects were not restored')
+-assert(castWeaponProperties.IgnoreOwnerAttackDisabled==false and castWeaponProperties.AllowMultiFireRequest==false and castWeaponProperties.IgnoreForceCooldown==false,'cast boolean properties were not restored')
++assert(castWeaponProperties.IgnoreOwnerAttackDisabled==false and castWeaponProperties.AllowMultiFireRequest==false and castWeaponProperties.IgnoreForceCooldown==false and castWeaponProperties.ActiveProjectileCap==1,'cast boolean properties/projectile cap were not restored')
+ -- A native boon that disables the same gate must remain authoritative when the
+ -- trainer turns off; never reactivate or undo its multi-fire path.
+ table.insert(CurrentRun.Hero.Traits,{Name='NativeMultiCastTrait'})
+ castEffectActive.WeaponCastAttackDisable=false; castEffectActive.WeaponCastSelfSlow=false; castEffectActive.WeaponCastSelfSlow2=false
+-castWeaponProperties.IgnoreOwnerAttackDisabled=true; castWeaponProperties.AllowMultiFireRequest=true; castWeaponProperties.IgnoreForceCooldown=true; castWeaponProperties.Cooldown=0
++castWeaponProperties.IgnoreOwnerAttackDisabled=true; castWeaponProperties.AllowMultiFireRequest=true; castWeaponProperties.IgnoreForceCooldown=true; castWeaponProperties.Cooldown=0; castWeaponProperties.ActiveProjectileCap=2
+ setFeature('instantCastCooldown',true)
+ setFeature('instantCastCooldown',false)
+-assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.AllowMultiFireRequest,'cast release overwrote a native multi-cast boon')
++assert(not castEffectActive.WeaponCastAttackDisable and not castEffectActive.WeaponCastSelfSlow and not castEffectActive.WeaponCastSelfSlow2 and castWeaponProperties.AllowMultiFireRequest and castWeaponProperties.ActiveProjectileCap==2,'cast release overwrote a native multi-cast boon/cap')
+ table.remove(CurrentRun.Hero.Traits,#CurrentRun.Hero.Traits)
+ 
+ -- Hex readiness uses the equipped Spell trait's actual weapon data/cost and
+@@ -631,7 +636,7 @@
+ -- Keep the user's desired toggle pending and arm it automatically once the
+ -- trait arrives; this is the exact reconnect/run-boundary race from live play.
+ setFeature('hexAlwaysReady',true)
+-CurrentRun={Hero=hero(250,85,42,0.11),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(250,85,42,0.11),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ CurrentRun.Hero.Traits={}
+ weaponEnabled=false
+ UpdateTimers(0.016)
+@@ -763,7 +768,7 @@
+ assert(state.moneyLocked and state.gameSpeed==1.5,'same-revision bootstrap lost locks or speed target')
+ 
+ local persistentOldHero=CurrentRun.Hero
+-CurrentRun={Hero=hero(303,90,45,0.12),CurrentRoom={},ResourcesGained={},NumRerolls=0,SpellCharge=0}
++CurrentRun={Hero=hero(303,90,45,0.12),CurrentRoom={},ResourcesGained={},ResourcesSpent={},NumRerolls=0,SpellCharge=0}
+ -- New room units inherit the process/global elapsed multiplier, while the
+ -- newly-created Hero starts at its own neutral unit multiplier. This catches
+ -- accidental reversal of the old run's trainer factor against the new Hero.
+@@ -813,4 +818,48 @@
+ state=M.dispatch('status',{})
+ assert(not state.healthLocked and not state.manaLocked and not state.armorLocked,'vital locks leaked after disable_all')
+ for _,row in ipairs(state.elements or {}) do assert(not row.locked,'element lock leaked after disable_all') end
++
++-- Crossroads/global-scope regression: save-backed/meta controls and global
++-- hooks should work without fabricating a combat Hero. Hero-bound combat
++-- features remain desired+dormant and remount when a run returns.
++local crossroadsReturnRun=CurrentRun
++CurrentHubRoom={Name='Hub_Main'}
++CurrentRun=nil
++state=M.dispatch('status',{})
++assert(state.scene=='crossroads' and state.status=='waiting','crossroads scene was not detected without CurrentRun')
++assert(state.capabilities.setFeature and state.capabilities.setStats and state.capabilities.setResource,'crossroads did not expose global-safe capabilities')
++assert(state.statAvailable.grasp and not state.statAvailable.dodge and not state.statAvailable.enemyHealth,'crossroads stat availability leaked Hero-only stats')
++state=M.dispatch('set_stat',{stat='grasp',locked=true,value=88})
++assert(state.stats.grasp.locked and GetMaxMetaUpgradeCost()==88 and GameState.MaxMetaUpgradeCostCache==88,'grasp was not genuinely editable in crossroads')
++state=setFeature('gardenQoL',true)
++assert(state.activeFeatures.gardenQoL,'garden QoL did not install immediately in crossroads')
++state=setFeature('boonChoiceEnabled',true)
++assert(state.activeFeatures.boonChoiceEnabled and CalcNumLootChoices({Name='ZeusUpgrade'})==state.boonChoiceCount,'boon choice hook did not install in crossroads')
++state=M.dispatch('set_resource',{resource='GiftPoints',amount=42,requestId='crossroads-gift'})
++assert(GameState.Resources.GiftPoints==42,'save-backed resource edit failed in crossroads')
++local crossroadsSpentBefore=(GameState.LifetimeResourcesSpent and GameState.LifetimeResourcesSpent.GiftPoints) or 0
++state=M.dispatch('set_resource',{resource='GiftPoints',amount=40,requestId='crossroads-gift-spend'})
++assert(GameState.Resources.GiftPoints==40 and GameState.LifetimeResourcesSpent.GiftPoints==crossroadsSpentBefore+2,'crossroads resource decrease did not preserve lifetime spend accounting')
++state=M.dispatch('lock_resource',{resource='GiftPoints',locked=true})
++assert(state.capabilities.setResource and state.resources[1].locked,'resource lock did not arm in crossroads')
++state=setFeature('moneyMultiplierEnabled',true)
++assert(state.activeFeatures.moneyMultiplierEnabled,'economy hook did not install in crossroads')
++state=M.dispatch('set_feature',{feature='gameSpeed',value=1.25})
++assert(state.activeFeatures.gameSpeed and math.abs(_elapsedTimeMultiplier-1.25)<1e-9,'game speed did not install in crossroads')
++state=setFeature('infiniteHealth',true)
++assert(state.desiredFeatures.infiniteHealth and state.dormantFeatures.infiniteHealth and not state.activeFeatures.infiniteHealth,'Hero-only feature was not dormant in crossroads')
++state=M.dispatch('set_next_room_reward',{reward='WeaponUpgrade'})
++assert(state.nextRoomReward=='WeaponUpgrade' and state.runtimeDiagnostics.nextRoomRewardHook,'next-room reward did not arm in crossroads')
++
++CurrentRun=crossroadsReturnRun
++CurrentHubRoom=nil
++UpdateTimers(0.016)
++state=M.dispatch('status',{})
++assert(state.activeFeatures.infiniteHealth,'dormant combat feature did not remount when a run returned')
++assert(state.activeFeatures.gameSpeed and math.abs(_elapsedTimeMultiplier-1.25)<1e-9,'session-scoped game speed did not survive crossroads-to-run transition')
++assert(state.nextRoomReward=='WeaponUpgrade' and state.runtimeDiagnostics.nextRoomRewardHook,'pending next-room reward was lost on crossroads-to-run transition')
++local crossroadsForcedRoom={Encounter={Name='Encounter'}}
++assert(ChooseRoomReward(CurrentRun,crossroadsForcedRoom,'RunProgress',nil,{})=='WeaponUpgrade' and crossroadsForcedRoom.Reward.Name=='WeaponUpgrade','crossroads next-room reward did not survive into the run')
++M.dispatch('disable_all',{})
++assert(GetMaxMetaUpgradeCost()==30 and math.abs(_elapsedTimeMultiplier-1)<1e-9,'crossroads global state leaked after disable_all')
+ print('round10_mock_ok')
+--- round10/tests/test_server_round9.py
++++ round11/tests/test_server_round9.py
+@@ -125,9 +125,9 @@
+ 
+ # Protocol handshake is present on both success and error replies.
+ probe=call('protocol-scan','scan',{})
+-assert probe['protocolVersion']==server.PROTOCOL_VERSION==2
++assert probe['protocolVersion']==server.PROTOCOL_VERSION==3
+ bad=call('protocol-error','definitely_unknown',{})
+-assert not bad['ok'] and bad['protocolVersion']==2
++assert not bad['ok'] and bad['protocolVersion']==3
+ 
+ # Diagnostics export is self-contained and never includes save/profile payloads.
+ real_run=server.subprocess.run
+@@ -154,7 +154,7 @@
+         names=set(z.namelist())
+         assert 'report.json' in names and 'trainer.log.tail' in names
+         report=json.loads(z.read('report.json'))
+-        assert report['protocolVersion']==2 and report['backendVersion']=='0.10.0'
++        assert report['protocolVersion']==3 and report['backendVersion']=='0.11.0'
+         assert 'profiles' not in report and 'desired' not in report
+         assert 'diagnostic-tail' in z.read('trainer.log.tail').decode('utf-8')
+ finally:
+--- round10/tests/test_server_round10.py
++++ round11/tests/test_server_round10.py
+@@ -135,9 +135,9 @@
+ 
+ # Protocol handshake is present on both success and error replies.
+ probe=call('protocol-scan','scan',{})
+-assert probe['protocolVersion']==server.PROTOCOL_VERSION==2
++assert probe['protocolVersion']==server.PROTOCOL_VERSION==3
+ bad=call('protocol-error','definitely_unknown',{})
+-assert not bad['ok'] and bad['protocolVersion']==2
++assert not bad['ok'] and bad['protocolVersion']==3
+ 
+ # Diagnostics export is self-contained and never includes save/profile payloads.
+ real_run=server.subprocess.run
+@@ -164,7 +164,7 @@
+         names=set(z.namelist())
+         assert 'report.json' in names and 'trainer.log.tail' in names
+         report=json.loads(z.read('report.json'))
+-        assert report['protocolVersion']==2 and report['backendVersion']=='0.10.0'
++        assert report['protocolVersion']==3 and report['backendVersion']=='0.11.0'
+         assert 'profiles' not in report and 'desired' not in report
+         assert 'diagnostic-tail' in z.read('trainer.log.tail').decode('utf-8')
+ finally:
+--- round10/tests/test_swift_round9.py
++++ round11/tests/test_swift_round9.py
+@@ -3,7 +3,9 @@
+ # Connection-deferred state uses the requested muted gray-green rather than generic gray.
+ assert 'private let deferredColor = Color(' in text
+ feature=text[text.index('private func featureRow'):text.index('private func featureMultiplierRow')]
+-assert 'deferred ? deferredColor' in feature
++assert 'warningState ? .orange' in feature
++assert 'detached ? deferredColor' in feature
++assert 'activationPending' in feature
+ assert 'deferred ? Color.gray' not in feature
+ 
+ # Top stats are collapsible: first four remain outside the expanded branch.
+@@ -43,7 +45,7 @@
+ for token in ('dashSpeed','manaRegen'):
+     assert token in text,token
+ 
+-assert 'expectedProtocolVersion = 2' in text
++assert 'expectedProtocolVersion = 3' in text
+ assert 'GUI 与 Backend 协议不兼容' in text
+ assert 'func exportDiagnostics()' in text
+ assert '导出诊断包' in text
+--- round10/tests/test_swift_round10.py
++++ round11/tests/test_swift_round10.py
+@@ -4,7 +4,9 @@
+ # Connection-deferred state uses the requested muted gray-green rather than generic gray.
+ assert 'private let deferredColor = Color(' in text
+ feature=text[text.index('private func featureRow'):text.index('private func featureMultiplierRow')]
+-assert 'deferred ? deferredColor' in feature
++assert 'warningState ? .orange' in feature
++assert 'detached ? deferredColor' in feature
++assert 'activationPending' in feature
+ assert 'deferred ? Color.gray' not in feature
+ 
+ # Top stats are collapsible: first four remain outside the expanded branch.
+@@ -44,7 +46,7 @@
+ for token in ('dashSpeed','manaRegen','enemyHealth'):
+     assert token in text,token
+ 
+-assert 'expectedProtocolVersion = 2' in text
++assert 'expectedProtocolVersion = 3' in text
+ assert 'GUI 与 Backend 协议不兼容' in text
+ assert 'func exportDiagnostics()' in text
+ assert '导出诊断包' in text

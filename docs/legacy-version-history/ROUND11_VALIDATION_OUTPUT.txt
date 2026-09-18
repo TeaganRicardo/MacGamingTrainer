@@ -1,0 +1,36 @@
+Mac Gaming Trainer v0.11.0 / Build 16 / protocol v3 / Lua revision 19
+Validation UTC: 2026-09-17T07:25:11Z
+
+> python3 tests/test_server_round9.py
+server_round9_ok
+server_round9_1_hardening_ok
+> python3 tests/test_server_round10.py
+server_round10_ok
+server_round10_hardening_ok
+> python3 tests/test_preparation_round9.py
+preparation_round8_ok
+preparation_round9_staged_ok
+> python3 tests/test_swift_round9.py
+swift_round9_static_ok
+swift_round9_1_hardening_ok
+swift_backend_stderr_hardening_ok
+> python3 tests/test_swift_round10.py
+swift_round10_static_ok
+swift_round10_hardening_ok
+swift_backend_stderr_hardening_ok
+> python3 tests/test_round11_static.py
+round11_static_ok
+> Lua mocks via system liblua5.4 (ABI string spoofed by mock as before)
+round9_mock_ok
+round10_mock_ok
+> swiftc -parse MacGamingTrainer.swift
+swift_parse_ok
+> python3 -m py_compile server.py preparation.py transport.py
+python_compile_ok
+> bash -n build.sh
+build_sh_syntax_ok
+> plutil -lint Info.plist entitlements.plist
+Info.plist: OK
+entitlements.plist: OK
+
+NOTE: full build.sh requires macOS/Xcode/xcrun and was not executed in this container.

@@ -1,0 +1,680 @@
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/BUILDING.md /mnt/data/MacGamingTrainer_v0.17.11/BUILDING.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/BUILDING.md	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/BUILDING.md	2026-09-17 18:08:22.346104727 +0000
+@@ -1,4 +1,4 @@
+-# Build v0.17.10
++# Build v0.17.11
+ 
+ 当前唯一支持的构建方式是手动运行 `build.sh`。此前实验性的 Finder 双击构建 App 已暂时移除，因为在下载目录中会受到 macOS Finder 权限与 bundle 路径解析影响。
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/core/protocol.py /mnt/data/MacGamingTrainer_v0.17.11/Backend/core/protocol.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/core/protocol.py	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/Backend/core/protocol.py	2026-09-17 18:08:22.345868781 +0000
+@@ -6,7 +6,7 @@
+ # module has its own independent protocol/schema version exposed alongside it.
+ HOST_PROTOCOL_VERSION = 5
+ PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
+-APP_BACKEND_VERSION = '0.17.10'
++APP_BACKEND_VERSION = '0.17.11'
+ 
+ 
+ from core.adapter import GameAdapter
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/games/hades2/localization.py /mnt/data/MacGamingTrainer_v0.17.11/Backend/games/hades2/localization.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/games/hades2/localization.py	2026-09-17 11:34:57.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/Backend/games/hades2/localization.py	2026-09-17 18:06:02.932896418 +0000
+@@ -14,6 +14,15 @@
+     return (value.replace(r'\\"', '"').replace(r'\\n', '\n')
+                  .replace(r'\\r', '\r').replace(r'\\t', '\t').replace(r'\\\\', '\\'))
+ 
++_MARKUP_TOKEN = re.compile(r'\{#[A-Za-z0-9_]+\}|[（(]\s*#[A-Za-z0-9_]+\s*[)）]|(?<!\w)#[A-Za-z][A-Za-z0-9_]*(?!\w)')
++
++def _clean_display_name(value):
++    value = _sjson_unescape(value)
++    value = _MARKUP_TOKEN.sub('', value)
++    value = re.sub(r'\s{2,}', ' ', value)
++    value = re.sub(r'\s+([,，。.!！?？:：;；])', r'\1', value)
++    return value.strip()
++
+ def _load_official_display_names(language, game_path=None):
+     language = str(language)
+     game = Path(game_path) if game_path is not None else GAME_SPEC.app_path
+@@ -53,7 +62,7 @@
+             end = ids[index + 1].start() if index + 1 < len(ids) else min(len(text), match.end() + 8192)
+             display = display_pattern.search(text, match.end(), end)
+             if display and identifier not in names:
+-                names[identifier] = _sjson_unescape(display.group(1))
++                names[identifier] = _clean_display_name(display.group(1))
+     _OFFICIAL_TEXT_CACHE[cache_key] = names
+     return names
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/games/hades2/runtime/hades.lua /mnt/data/MacGamingTrainer_v0.17.11/Backend/games/hades2/runtime/hades.lua
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Backend/games/hades2/runtime/hades.lua	2026-09-17 16:45:45.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/Backend/games/hades2/runtime/hades.lua	2026-09-17 18:10:31.123636393 +0000
+@@ -6,13 +6,13 @@
+ end
+ if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
+ local previousModule = __MacGamingTrainerV1
+-if previousModule and previousModule.revision ~= 21 then
++if previousModule and previousModule.revision ~= 22 then
+   previousModule.dispatch("cleanup")
+   __MacGamingTrainerV1 = nil
+ end
+ if __MacGamingTrainerV1 == nil then
+   local M = {
+-    version = 1, revision = 21, damageMultiplier = 2, damageEnabled = false,
++    version = 1, revision = 22, damageMultiplier = 2, damageEnabled = false,
+     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
+     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
+     godMode = false, infiniteHealth = false, infiniteMana = false,
+@@ -197,17 +197,38 @@
+     { id = "HermesUpgrade", name = "赫尔墨斯", order = 130 },
+   }
+   local rewardDefinitions = {
+-    -- sectionOrder, familyOrder, itemOrder keep related variants adjacent.
++    -- Curated ordering for common room rewards.  Runtime discovery below adds
++    -- any current/future RewardStoreData entries we do not know about yet.
++    { id = "RoomMoneyTinyDrop", name = "少量金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 5 },
++    { id = "RoomMoneySmallDrop", name = "小份金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 8 },
+     { id = "RoomMoneyDrop", name = "金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 10 },
+     { id = "RoomMoneyBigDrop", name = "大量金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 20 },
+     { id = "RoomMoneyTripleDrop", name = "三份金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 30 },
++    { id = "EmptyMaxHealthSmallDrop", name = "小型半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 5 },
+     { id = "MaxHealthDropSmall", name = "小型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 10 },
+     { id = "MaxHealthDrop", name = "半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 20 },
+     { id = "MaxHealthDropBig", name = "大型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 30 },
++    { id = "MaxManaDropSmall", name = "小型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 10 },
++    { id = "MaxManaDrop", name = "灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 20 },
++    { id = "MaxManaDropBig", name = "大型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
+     { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
+     { id = "StackUpgrade", name = "力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 10 },
+     { id = "StackUpgradeBig", name = "大型力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
+     { id = "StackUpgradeTriple", name = "三重力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
++    { id = "MinorTalentDrop", name = "少量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 10 },
++    { id = "TalentDrop", name = "星辰之路", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 20 },
++    { id = "TalentBigDrop", name = "大量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 30 },
++    { id = "GiftDrop", name = "蜜露", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 10 },
++    { id = "MetaCurrencyDrop", name = "骨头", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 20 },
++    { id = "MetaCurrencyBigDrop", name = "大量骨头", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 25 },
++    { id = "MetaCardPointsCommonDrop", name = "灰烬", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 30 },
++    { id = "MetaCardPointsCommonBigDrop", name = "大量灰烬", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 35 },
++    { id = "MemPointsCommonDrop", name = "心智", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 40 },
++    { id = "MemPointsCommonBigDrop", name = "大量心智", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 45 },
++    { id = "FireBoost", name = "火元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 10 },
++    { id = "WaterBoost", name = "水元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 20 },
++    { id = "EarthBoost", name = "土元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 30 },
++    { id = "AirBoost", name = "风元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 40 },
+     { id = "SpellDrop", name = "月神巫咒", category = "特殊祝福", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
+     { id = "TrialUpgrade", name = "卡俄斯祝福", category = "特殊祝福", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
+   }
+@@ -1366,7 +1387,13 @@
+   local function rewards()
+     local result, allowed = setmetatable({}, arrayMeta), {}
+     local officialSourceOrder = officialSpecialSourceOrder()
+-    local familyTitles = { money = "金币", centaurHeart = "半人马之心", hammer = "代达罗斯之锤", pom = "力量石榴" }
++    local familyTitles = {
++      money = "金币", centaurHeart = "半人马之心", soulTonic = "灵魂滋补剂",
++      hammer = "代达罗斯之锤", pom = "力量石榴", talent = "星辰之路",
++      meta = "局外资源奖励", element = "元素奖励",
++    }
++    local knownBoonIds = {}
++    for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end
+     local function addDefinition(entry)
+       if allowed[entry.id] then return end
+       local exists = (entry.kind == "loot" and type(LootData) == "table" and type(LootData[entry.id]) == "table")
+@@ -1384,6 +1411,42 @@
+       end
+     end
+     for _, entry in ipairs(rewardDefinitions) do addDefinition(entry) end
++
++    -- RewardStoreData is the game's authoritative list of room reward pools.
++    -- Add any direct LootData/ConsumableData entries that are not yet in our
++    -- curated catalog. This prevents the trainer catalog from silently going
++    -- stale when Supergiant adds or rearranges rewards.
++    if type(RewardStoreData) == "table" then
++      local storeNames = {}
++      for storeName, store in pairs(RewardStoreData) do
++        if storeName ~= "InvalidOverrides" and type(store) == "table" then storeNames[#storeNames + 1] = storeName end
++      end
++      table.sort(storeNames)
++      local discovered, seenDiscovered = {}, {}
++      for _, storeName in ipairs(storeNames) do
++        local store = RewardStoreData[storeName]
++        for _, definition in ipairs(store) do
++          local id = type(definition) == "table" and definition.Name or nil
++          if type(id) == "string" and not seenDiscovered[id] then
++            seenDiscovered[id] = true
++            local kind = type(ConsumableData) == "table" and type(ConsumableData[id]) == "table" and "consumable" or nil
++            if kind == nil and type(LootData) == "table" and type(LootData[id]) == "table" then kind = "loot" end
++            if kind ~= nil and not allowed[id] and not knownBoonIds[id] then
++              discovered[#discovered + 1] = { id = id, kind = kind, store = storeName }
++            end
++          end
++        end
++      end
++      table.sort(discovered, function(a, b) return a.id < b.id end)
++      for index, entry in ipairs(discovered) do
++        addDefinition({
++          id = entry.id, name = entry.id, category = "其他房间奖励", kind = entry.kind,
++          group = "pickup", family = "runtimeReward", familyOrder = 90, itemOrder = index,
++        })
++        if allowed[entry.id] then allowed[entry.id].sectionTitle = "其他房间奖励" end
++      end
++    end
++
+     local officialGodOrder = officialOlympianOrder()
+     for _, entry in ipairs(boonDefinitions) do
+       local item = { id = entry.id, name = entry.name, category = "诸神祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/DEFERRED_REFACTOR_PLAN.md /mnt/data/MacGamingTrainer_v0.17.11/DEFERRED_REFACTOR_PLAN.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/DEFERRED_REFACTOR_PLAN.md	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/DEFERRED_REFACTOR_PLAN.md	2026-09-17 18:08:23.030442230 +0000
+@@ -1,6 +1,6 @@
+-# Deferred work after v0.17.10
++# Deferred work after v0.17.11
+ 
+-The framework-level corrective refactor and the first runtime-reliability pass are complete. Do not resume structural refactoring unless a concrete requirement demonstrates a missing host capability.
++The framework-level corrective refactor and the first runtime-reliability pass are complete. Do not resume structural refactoring unless a concrete requirement demonstrates a missing host capability. See `NEXT_PHASE_TODO.md` for the stabilization gate and prioritized execution plan.
+ 
+ ## v0.18.x — Persistence & protocol integrity
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/GAME_MODULES.md /mnt/data/MacGamingTrainer_v0.17.11/GAME_MODULES.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/GAME_MODULES.md	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/GAME_MODULES.md	2026-09-17 18:08:22.346175143 +0000
+@@ -1,4 +1,4 @@
+-# Game module contract — v0.17.10
++# Game module contract — v0.17.11
+ 
+ A normal new game should add only:
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Info.plist /mnt/data/MacGamingTrainer_v0.17.11/Info.plist
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Info.plist	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/Info.plist	2026-09-17 18:08:22.345723862 +0000
+@@ -17,9 +17,9 @@
+ 	<key>CFBundlePackageType</key>
+ 	<string>APPL</string>
+ 	<key>CFBundleShortVersionString</key>
+-	<string>0.17.10</string>
++	<string>0.17.11</string>
+ 	<key>CFBundleVersion</key>
+-	<string>33</string>
++	<string>34</string>
+ 	<key>LSMinimumSystemVersion</key>
+ 	<string>14.0</string>
+ 	<key>NSHighResolutionCapable</key>
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/NEXT_PHASE_TODO.md /mnt/data/MacGamingTrainer_v0.17.11/NEXT_PHASE_TODO.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/NEXT_PHASE_TODO.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/NEXT_PHASE_TODO.md	2026-09-17 18:08:22.538641042 +0000
+@@ -0,0 +1,79 @@
++# Next development stage
++
++The v0.17.x line accumulated enough corrective work that the next stage should optimize for **stability, observable behaviour and contract integrity**, not new framework abstractions. Hades II is the behavioural reference implementation; a second game will later be used to prove the framework boundary.
++
++## P0 — Stabilization gate before v0.18
++
++### Runtime performance budget
++
++- Add a request-level performance ledger for LLDB/Lua boundary operations (command, duration, outcome) without introducing automatic status polling.
++- Define a hard rule: background UI maintenance must never cross the live Lua/debugger boundary unless the user explicitly asked for a live operation.
++- Add regression checks for accidental periodic `status`, `scan`, save-list refresh or reconnect loops.
++- Separate UI-local loading state from backend-global `busy`; no sidebar/sheet should flash or become unusable because an unrelated request is active.
++
++### Hades functional acceptance matrix
++
++Create a compact manual target-Mac checklist and keep it release-blocking for the functions that cannot be proven on Linux mocks:
++
++- connect/reconnect after 10–60 s LLDB attach
++- God/health/mana/cast/hex/ammo toggles
++- multiplier/stat/resource locks across room transitions
++- all Spawn families, including Selene/Chaos/special NPC traits and room-reward consumables
++- next-room override before exits appear and after exits are already materialized
++- save backup/restore/staged restore
++- Crossroads-safe editors and desired-state activation when entering a run
++
++For every regression, first identify whether the failure is Swift state, backend command routing, transport, or Lua runtime; do not patch multiple layers speculatively.
++
++### Catalog contracts
++
++- Treat game-owned runtime tables (`RewardStoreData`, `LootData`, `ConsumableData`, `UnitSetData`, localization SJSON) as authoritative wherever practical.
++- Keep a curated presentation order only as an overlay; do not use a hand-maintained allow-list as the sole source of truth.
++- Add catalog diagnostics: discovered count, hidden/unsupported count, unresolved localization count.
++
++## P1 — v0.18.x Persistence & protocol integrity
++
++- strict preferences/profile schema validation and versioned migration
++- corrupt-file quarantine + safe defaults
++- atomic/fsync persistence with surfaced write errors
++- typed distinction between missing / null / invalid fields in Hades Swift state decode
++- shared protocol fixtures/contracts across Python and Swift
++- one-shot state (for example next-room override) must have explicit owner and consume semantics; desired-state overlay must never resurrect consumed runtime state
++
++## P1 — v0.19.x Transport safety
++
++- classify commands as read-only, idempotent set, or non-idempotent action
++- distinguish definite failure from outcome-unknown after LLDB/Lua execution
++- prohibit automatic retry of outcome-unknown non-idempotent actions
++- keep diagnostics genuinely read-only
++- tighten `set_desired`/deferred activation semantics and surface exact activation state without polling
++- add explicit process/debugger ownership recovery for `already being debugged` cases
++
++## P2 — v0.20.x Second-game integration proof
++
++Add a deliberately small permanent reference game module that exercises:
++
++- scan/connect/disconnect
++- typed state decode
++- one toggle, one numeric mutation and one non-idempotent action
++- reconnect/error handling
++- shared sidebar/shell/theme/components
++- manifest-driven build/package requirements
++
++Acceptance criterion: adding it changes only the new game module + manifest. `Sources/Core`, `Backend/core`, `Sources/App.swift`, `Backend/core/server.py` and `build.sh` remain untouched.
++
++Also add a target-Mac validation script that performs semantic Swift build/link, app packaging/codesign, backend launch and a module handshake.
++
++## P3 — Hades-local cleanup after reliability is stable
++
++- split `Hades2Model.swift` by actual responsibility only where it reduces state coupling
++- split large Hades page sections without recreating visual primitives locally
++- consider multi-file Lua organization only after a loader is proven inside the real game runtime
++- remove obsolete historical migration shims/tests only when their covered behaviour exists in newer contract tests
++
++## Explicit non-goals
++
++- no new generic feature/stat/resource framework derived solely from Hades II
++- no periodic live-status polling to keep decorative UI state fresh
++- no UI redesign during architectural refactors
++- no transport replacement until a candidate survives real target-Mac regression
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/REFACTOR_ASSESSMENT.md /mnt/data/MacGamingTrainer_v0.17.11/REFACTOR_ASSESSMENT.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/REFACTOR_ASSESSMENT.md	2026-09-17 16:52:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/REFACTOR_ASSESSMENT.md	2026-09-17 18:08:22.346323527 +0000
+@@ -1,4 +1,4 @@
+-# v0.17.10 architecture assessment
++# v0.17.11 architecture assessment
+ 
+ ## Current verdict
+ 
+@@ -10,7 +10,7 @@
+ 
+ The current implementation meets that criterion for the tested module contract.
+ 
+-v0.17.10 tightens the UI side of those boundaries without moving Hades business semantics into Core. Reusable visual controls now live in `Sources/Core/UI`; Hades keeps only page composition and the mapping from Hades runtime semantics to game-agnostic visual state. The shared controls preserve the proven Hades visual language instead of introducing another visual system. In v0.17.10 every switch path still converges on one shared native purple `TrainerToggleControl`; Hades owns no switch rendering logic. The switch now uses regular macOS control size. This release also keeps the current-game reward identifiers and native Selene `GiveLoot` spawning while removing debugger-boundary status polling; runtime state is refreshed only by explicit/user-driven requests. The next-room override remains entirely inside the Hades runtime module and now follows the game's per-exit reward flow.
++v0.17.11 tightens the UI side of those boundaries without moving Hades business semantics into Core. Reusable visual controls now live in `Sources/Core/UI`; Hades keeps only page composition and the mapping from Hades runtime semantics to game-agnostic visual state. The shared controls preserve the proven Hades visual language instead of introducing another visual system. In v0.17.11 every switch path still converges on one shared native purple `TrainerToggleControl`; Hades owns no switch rendering logic. The switch now uses regular macOS control size. This release also keeps the current-game reward identifiers and native Selene `GiveLoot` spawning while removing debugger-boundary status polling; runtime state is refreshed only by explicit/user-driven requests. The next-room override remains entirely inside the Hades runtime module and now follows the game's per-exit reward flow.
+ 
+ ## Framework responsibilities
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/RELEASE_NOTES_v0.17.11.md /mnt/data/MacGamingTrainer_v0.17.11/RELEASE_NOTES_v0.17.11.md
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/RELEASE_NOTES_v0.17.11.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/RELEASE_NOTES_v0.17.11.md	2026-09-17 18:08:22.537787119 +0000
+@@ -0,0 +1,31 @@
++# v0.17.11
++
++App version: **0.17.11**  
++Build: **34**  
++Host protocol: **v5 (unchanged)**  
++Hades II module protocol: **v4 (unchanged)**  
++Lua runtime revision: **22**
++
++## Spawn catalog completeness
++
++The Spawn catalog is no longer limited to the old curated subset. The curated list now includes the full-release room-reward families that were visibly missing, including:
++
++- Soul Tonic: `MaxManaDropSmall`, `MaxManaDrop`, `MaxManaDropBig`
++- Path of Stars: `MinorTalentDrop`, `TalentDrop`, `TalentBigDrop`
++- small/tiny Obol and small Centaur variants
++- Nectar, Bones, Ash and Psyche (including known large variants)
++- Fire / Water / Earth / Air elemental rewards
++
++In addition, the runtime now walks the game's own `RewardStoreData` and automatically adds direct entries that resolve to real `ConsumableData` or `LootData`. Curated entries retain stable grouping/order; newly introduced game rewards fall into an `其他房间奖励` section instead of silently disappearing from the trainer.
++
++## Localization cleanup
++
++Official SJSON display names are now presentation-tag sanitized before they reach the catalog. Markers such as `(#Echo)`, `（#Echo）`, `#Echo` and `{#Echo}` / `{#Emph}` no longer appear as literal UI text. This applies to both Chinese and English lookup values.
++
++## Session metric card geometry
++
++`TrainerMetricCard` no longer imposes the old artificial 82-point minimum height. The title/lock row and value row now determine the card height with 7-point vertical padding, removing the extra blank strip above the title and making the contents vertically compact without Hades-specific layout code.
++
++## Development planning
++
++`NEXT_PHASE_TODO.md` records the next development stage. The priority is now reliability/performance acceptance and protocol/persistence hardening before any further framework abstraction.
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Sources/Core/UI/Primitives/TrainerCard.swift /mnt/data/MacGamingTrainer_v0.17.11/Sources/Core/UI/Primitives/TrainerCard.swift
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/Sources/Core/UI/Primitives/TrainerCard.swift	2026-09-17 16:13:48.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/Sources/Core/UI/Primitives/TrainerCard.swift	2026-09-17 18:06:18.380442359 +0000
+@@ -40,7 +40,7 @@
+     }
+ 
+     var body: some View {
+-        VStack(alignment: .leading, spacing: 6) {
++        VStack(alignment: .leading, spacing: 5) {
+             HStack(spacing: 8) {
+                 Label(title, systemImage: icon)
+                     .font(.caption)
+@@ -51,9 +51,12 @@
+             content
+                 .frame(maxWidth: .infinity, alignment: .center)
+         }
++        // Let the header/value pair determine the card height.  A previous
++        // minHeight centered the padded stack inside extra vertical space,
++        // which showed up as a conspicuous empty strip above the title row.
+         .padding(.horizontal, 14)
+-        .padding(.vertical, 10)
+-        .frame(maxWidth: .infinity, minHeight: 82, alignment: .center)
++        .padding(.vertical, 7)
++        .frame(maxWidth: .infinity, alignment: .leading)
+         .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+     }
+ }
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/VALIDATION_v0.17.11.txt /mnt/data/MacGamingTrainer_v0.17.11/VALIDATION_v0.17.11.txt
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/VALIDATION_v0.17.11.txt	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/VALIDATION_v0.17.11.txt	2026-09-17 18:12:02.028422871 +0000
+@@ -0,0 +1,90 @@
++=== python3 -m py_compile Backend/core/__init__.py Backend/core/adapter.py Backend/core/game_spec.py Backend/core/module_manifest.py Backend/core/protocol.py Backend/core/registry.py Backend/core/server.py Backend/games/__init__.py Backend/games/hades2/__init__.py Backend/games/hades2/adapter.py Backend/games/hades2/catalog.py Backend/games/hades2/command_router.py Backend/games/hades2/config.py Backend/games/hades2/diagnostics.py Backend/games/hades2/localization.py Backend/games/hades2/preferences.py Backend/games/hades2/preparation.py Backend/games/hades2/profile_service.py Backend/games/hades2/save_service.py Backend/games/hades2/schema.py Backend/games/hades2/transport.py Tools/generate_game_binding.py Tools/module_support.py Tools/validate_game_module.py tests/legacy/test_round11_static.py tests/legacy/test_server_round10.py tests/legacy/test_server_round9.py tests/legacy/test_swift_round10.py tests/legacy/test_swift_round9.py tests/run_lua_mock.py tests/test_backend_core_round12.py tests/test_build_contract_round14.py tests/test_global_decoupling_round15.py tests/test_hades2_adapter_round12.py tests/test_hades2_mutation_scheduler_round17.py tests/test_hades2_services_round16.py tests/test_hades2_timeout_policy_v0177.py tests/test_hades2_visual_baseline_v0174.py tests/test_module_contract_round13.py tests/test_packaged_module_round14.py tests/test_preparation_round9.py tests/test_round12_static.py tests/test_round17_1_swift_scope.py tests/test_round17_static.py tests/test_runtime_reliability_round17.py tests/test_swift_declaration_uniqueness_v0176.py tests/test_swift_file_boundaries_round14_1.py tests/test_swift_integrity_v0172.py tests/test_swift_round12.py tests/test_swift_symbol_integrity_v0173.py tests/test_toggle_unification_v0178.py tests/test_ui_component_boundary_v0175.py tests/test_v01710_regressions.py tests/test_v01711_catalog_localization_ui.py tests/test_v0179_regressions.py ===
++=== python3 -c import ast,pathlib; fs=list(pathlib.Path("Backend").rglob("*.py"))+list(pathlib.Path("Tools").rglob("*.py")); [ast.parse(p.read_text(), filename=str(p), feature_version=(3,9)) for p in fs]; print("python39_grammar_ok", len(fs)) ===
++python39_grammar_ok 24
++=== python3 tests/legacy/test_round11_static.py ===
++round11_compat_ok
++=== python3 tests/legacy/test_server_round10.py ===
++server_round10_compat_ok
++=== python3 tests/legacy/test_server_round9.py ===
++server_round9_compat_ok
++=== python3 tests/legacy/test_swift_round10.py ===
++swift_round10_compat_ok
++=== python3 tests/legacy/test_swift_round9.py ===
++swift_round9_compat_ok
++=== python3 tests/test_backend_core_round12.py ===
++backend_core_round12_ok
++=== python3 tests/test_build_contract_round14.py ===
++build_contract_round14_ok
++=== python3 tests/test_global_decoupling_round15.py ===
++global_decoupling_round15_ok
++=== python3 tests/test_hades2_adapter_round12.py ===
++hades2_adapter_round12_ok
++=== python3 tests/test_hades2_mutation_scheduler_round17.py ===
++hades2_mutation_scheduler_round17_ok
++=== python3 tests/test_hades2_services_round16.py ===
++hades2_services_round16_ok
++=== python3 tests/test_hades2_timeout_policy_v0177.py ===
++hades2_timeout_policy_v0177_ok
++=== python3 tests/test_hades2_visual_baseline_v0174.py ===
++hades2_visual_baseline_v0175_ok
++=== python3 tests/test_module_contract_round13.py ===
++module_contract_round13_ok
++=== python3 tests/test_packaged_module_round14.py ===
++packaged_module_round14_ok
++=== python3 tests/test_preparation_round9.py ===
++preparation_round8_ok
++preparation_round9_staged_ok
++=== python3 tests/test_round12_static.py ===
++round12_static_ok
++=== python3 tests/test_round17_1_swift_scope.py ===
++round17_1_swift_scope_ok
++=== python3 tests/test_round17_static.py ===
++round17_static_ok
++=== python3 tests/test_runtime_reliability_round17.py ===
++runtime_reliability_round17_ok
++=== python3 tests/test_swift_declaration_uniqueness_v0176.py ===
++swift_declaration_uniqueness_v0176_ok
++=== python3 tests/test_swift_file_boundaries_round14_1.py ===
++swift_file_boundaries_round14_1_ok
++=== python3 tests/test_swift_integrity_v0172.py ===
++swift_integrity_v0172_ok
++=== python3 tests/test_swift_round12.py ===
++swift_round12_ok
++=== python3 tests/test_swift_symbol_integrity_v0173.py ===
++swift_symbol_integrity_v0173_ok
++=== python3 tests/test_toggle_unification_v0178.py ===
++toggle_unification_v0178_ok
++=== python3 tests/test_ui_component_boundary_v0175.py ===
++ui_component_boundary_v0175_ok
++=== python3 tests/test_v01710_regressions.py ===
++v01710_regressions_ok
++=== python3 tests/test_v01711_catalog_localization_ui.py ===
++v01711_catalog_localization_ui_ok
++=== python3 tests/test_v0179_regressions.py ===
++v0179_regressions_ok
++PYTHON_VALIDATION_OK
++
++=== python3 tests/run_lua_mock.py tests/round9_mock.lua ===
++round9_mock_ok
++=== python3 tests/run_lua_mock.py tests/round10_mock.lua ===
++round10_mock_ok
++=== bash -n build.sh ===
++=== python3 -c import json,pathlib; fs=list(pathlib.Path("Backend/games").rglob("*.json")); [json.loads(p.read_text()) for p in fs]; print("json_ok", len(fs)) ===
++json_ok 2
++=== python3 -c import plistlib,pathlib; fs=[pathlib.Path("Info.plist"),pathlib.Path("Backend/games/hades2/trainer-entitlements.plist")]; [plistlib.load(open(p,"rb")) for p in fs]; print("plist_ok", len(fs)) ===
++plist_ok 2
++RUNTIME_VALIDATION_OK
++
++=== python3 Tools/generate_game_binding.py hades2 /tmp/tmp.zNlW7S17HS/ActiveGame.generated.swift ===
++=== swiftc -frontend -parse Sources/App.swift Sources/Core/Host/TrainerGameModule.swift Sources/Core/Host/TrainerHost.swift Sources/Core/Input/GlobalHotkeys.swift Sources/Core/Runtime/BackendClient.swift Sources/Core/Runtime/BackendProcess.swift Sources/Core/Runtime/TrainerBackendSession.swift Sources/Core/UI/Components/TrainerFeatureControls.swift Sources/Core/UI/Components/TrainerListControls.swift Sources/Core/UI/Components/TrainerResourceControls.swift Sources/Core/UI/Components/TrainerStatControls.swift Sources/Core/UI/Components/TrainerStatusControls.swift Sources/Core/UI/Primitives/TrainerBadge.swift Sources/Core/UI/Primitives/TrainerCard.swift Sources/Core/UI/Primitives/TrainerField.swift Sources/Core/UI/Primitives/TrainerMessageBanner.swift Sources/Core/UI/Primitives/TrainerRow.swift Sources/Core/UI/Primitives/TrainerToggleControl.swift Sources/Core/UI/StatusComponents.swift Sources/Core/UI/TrainerShell.swift Sources/Core/UI/TrainerSidebar.swift Sources/Core/UI/TrainerTheme.swift Sources/Hades2/Hades2API.swift Sources/Hades2/Hades2BackendState.swift Sources/Hades2/Hades2Model.swift Sources/Hades2/Hades2Module.swift Sources/Hades2/Hades2Types.swift Sources/Hades2/Hades2View.swift Sources/Hades2/Presentation/Hades2FeaturePresentation.swift Sources/Hades2/Services/Hades2MutationScheduler.swift Sources/Hades2/Services/Hades2ShortcutStore.swift Sources/Hades2/Views/Hades2HostActions.swift Sources/Hades2/Views/Hades2ManagementViews.swift Sources/Hades2/Views/Hades2ViewSnapshots.swift /tmp/tmp.zNlW7S17HS/ActiveGame.generated.swift ===
++=== python3 -c import plistlib; p=plistlib.load(open("Info.plist","rb")); assert p["CFBundleShortVersionString"]=="0.17.11"; assert p["CFBundleVersion"]=="34"; print("version_ok") ===
++version_ok
++=== python3 -c from pathlib import Path; s=Path("Backend/games/hades2/runtime/hades.lua").read_text(); assert "revision = 22" in s; assert "MaxManaDrop" in s; assert "RewardStoreData" in s; print("runtime_revision_catalog_ok") ===
++runtime_revision_catalog_ok
++=== python3 -c from pathlib import Path; s=Path("Sources/Core/UI/Primitives/TrainerCard.swift").read_text(); assert "minHeight: 82" not in s; assert ".padding(.vertical, 7)" in s; print("metric_card_geometry_ok") ===
++metric_card_geometry_ok
++SWIFT_VALIDATION_OK
++
++=== environment limitation ===
++Linux validation cannot execute the final macOS SwiftUI/AppKit semantic link/codesign or real LLDB attach. The target-Mac build.sh still performs semantic Swift typecheck before optimized compilation.
++VALIDATION_v0.17.11_OK
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/legacy/test_round11_static.py /mnt/data/MacGamingTrainer_v0.17.11/tests/legacy/test_round11_static.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/legacy/test_round11_static.py	2026-09-17 16:46:18.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/legacy/test_round11_static.py	2026-09-17 18:08:22.346059038 +0000
+@@ -4,7 +4,7 @@
+ lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text()
+ model = (root/'Sources/Hades2/Hades2Model.swift').read_text()
+ presentation = (root/'Sources/Hades2/Presentation/Hades2FeaturePresentation.swift').read_text()
+-assert 'revision = 21' in lua
++assert 'revision = 22' in lua
+ assert 'ActiveProjectileCap = 32' in lua
+ assert 'type(CurrentRun.ResourcesSpent) == "table"' in lua
+ assert 'statAvailable = statAvailable' in lua
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/round10_mock.lua /mnt/data/MacGamingTrainer_v0.17.11/tests/round10_mock.lua
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/round10_mock.lua	2026-09-17 16:47:43.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/round10_mock.lua	2026-09-17 18:10:31.123873791 +0000
+@@ -6,9 +6,21 @@
+ ResourceData = { Money = {}, GiftPoints={}, MetaCurrency={}, OreFSilver={} }
+ ResourceDisplayOrderData = { "GiftPoints", "MetaCurrency", "OreFSilver" }
+ ConsumableData = {
+-  RoomMoneyDrop = {}, RoomMoneyBigDrop = {}, RoomMoneyTripleDrop = {},
+-  MaxHealthDropSmall = {}, MaxHealthDrop = {}, MaxHealthDropBig = {}, MaxManaDrop = {},
+-  MetaCurrencyDrop = {}, MetaCardPointsCommonDrop = {}, MemPointsCommonDrop = {},
++  RoomMoneyTinyDrop = {}, RoomMoneySmallDrop = {}, RoomMoneyDrop = {}, RoomMoneyBigDrop = {}, RoomMoneyTripleDrop = {},
++  EmptyMaxHealthSmallDrop = {}, MaxHealthDropSmall = {}, MaxHealthDrop = {}, MaxHealthDropBig = {},
++  MaxManaDropSmall = {}, MaxManaDrop = {}, MaxManaDropBig = {},
++  MinorTalentDrop = {}, TalentDrop = {}, TalentBigDrop = {}, GiftDrop = {},
++  MetaCurrencyDrop = {}, MetaCurrencyBigDrop = {}, MetaCardPointsCommonDrop = {}, MetaCardPointsCommonBigDrop = {},
++  MemPointsCommonDrop = {}, MemPointsCommonBigDrop = {}, FireBoost = {}, WaterBoost = {}, EarthBoost = {}, AirBoost = {},
++  RuntimeFutureReward = {},
++}
++RewardStoreData = {
++  MockRunRewards = {
++    { Name = "MaxManaDrop" },
++    { Name = "TalentDrop" },
++    { Name = "RuntimeFutureReward" },
++    { Name = "HermesUpgrade" },
++  },
+ }
+ LootData = {
+   ZeusUpgrade = {}, HeraUpgrade = {}, PoseidonUpgrade = {}, DemeterUpgrade = {}, ApolloUpgrade = {},
+@@ -406,12 +418,23 @@
+ -- Runtime catalog includes ordinary drops, loot, Selene, and dynamically discovered NPC traits.
+ local state=M.dispatch('status',{})
+ assert(findReward(state,'RoomMoneyDrop'),'money drop missing')
++assert(findReward(state,'MaxManaDrop'),'Soul Tonic missing')
++assert(findReward(state,'MaxManaDropSmall'),'small Soul Tonic missing')
++assert(findReward(state,'TalentDrop'),'Path of Stars reward missing')
++assert(findReward(state,'GiftDrop'),'Nectar reward missing')
++assert(findReward(state,'MetaCurrencyDrop'),'Bones reward missing')
++assert(findReward(state,'FireBoost'),'element reward missing')
++assert(findReward(state,'RuntimeFutureReward'),'runtime RewardStoreData discovery missing')
+ assert(findReward(state,'WeaponUpgrade'),'hammer missing')
+ assert(findReward(state,'StackUpgrade'),'pom missing')
+ assert(findReward(state,'SpellDrop'),'Selene missing')
+ assert(findReward(state,'trait:SupportingFireBoon'),'Artemis trait missing')
+ assert(findReward(state,'trait:EchoLastRewardBoon'),'Echo trait missing')
+ assert(findReward(state,'ZeusUpgrade').group=='olympian','Olympian group missing')
++assert(findReward(state,'HermesUpgrade').group=='olympian','RewardStore Olympian must not be duplicated as pickup')
++local rewardIdCounts={}
++for _,item in ipairs(state.rewards or {}) do rewardIdCounts[item.id]=(rewardIdCounts[item.id] or 0)+1 end
++for id,count in pairs(rewardIdCounts) do assert(count==1,'duplicate reward catalog id: '..tostring(id)) end
+ assert(findReward(state,'RoomMoneyDrop').group=='pickup','pickup group missing')
+ assert(findReward(state,'SpellDrop').group=='special','special group missing')
+ assert(findReward(state,'TrialUpgrade').group=='special','Chaos should be in special group')
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_backend_core_round12.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_backend_core_round12.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_backend_core_round12.py	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_backend_core_round12.py	2026-09-17 18:08:22.345931456 +0000
+@@ -34,7 +34,7 @@
+ 
+ 
+ assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+-assert APP_BACKEND_VERSION == '0.17.10'
++assert APP_BACKEND_VERSION == '0.17.11'
+ assert any(row['id'] == 'hades2' and row['protocolVersion'] == 4 for row in available_games())
+ 
+ context = GameAdapterContext(
+@@ -46,7 +46,7 @@
+ hello = router.handle({'id':'hello','command':'hello','params':{}})
+ assert hello['ok'] and hello['protocolVersion'] == 5
+ assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
+-assert hello['result']['backendVersion'] == '0.17.10'
++assert hello['result']['backendVersion'] == '0.17.11'
+ reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
+ assert reply['ok'] and reply['result']['command'] == 'poke'
+ assert router.handle({'id':'a','command':'poke','params':{'x':1}}) == reply
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_round12_static.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_round12_static.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_round12_static.py	2026-09-17 16:46:18.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_round12_static.py	2026-09-17 18:08:22.346021391 +0000
+@@ -13,7 +13,7 @@
+ manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
+ 
+ # Hades gameplay behavior retained.
+-for token in ('revision = 21','ActiveProjectileCap = 32','nativeMultiCastControlSet','type(CurrentRun.ResourcesSpent) == "table"','statAvailable = statAvailable'):
++for token in ('revision = 22','ActiveProjectileCap = 32','nativeMultiCastControlSet','type(CurrentRun.ResourcesSpent) == "table"','statAvailable = statAvailable'):
+     assert token in lua, token
+ 
+ # Game-internal responsibilities are split instead of teaching Core Hades concepts.
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_round17_static.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_round17_static.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_round17_static.py	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_round17_static.py	2026-09-17 18:08:22.345982382 +0000
+@@ -45,7 +45,7 @@
+ 
+ with (ROOT / 'Info.plist').open('rb') as handle:
+     plist = plistlib.load(handle)
+-assert plist['CFBundleShortVersionString'] == '0.17.10'
+-assert plist['CFBundleVersion'] == '33'
++assert plist['CFBundleShortVersionString'] == '0.17.11'
++assert plist['CFBundleVersion'] == '34'
+ 
+ print('round17_static_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v01710_regressions.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v01710_regressions.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v01710_regressions.py	2026-09-17 16:45:11.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v01710_regressions.py	2026-09-17 18:07:42.397583666 +0000
+@@ -27,6 +27,6 @@
+ assert 'CurrentRun.CurrentRoom.OfferedRewards[doorId]' in lua
+ assert 'ReUseIds = true' in lua
+ assert 'nextRoomRewardPatchedDoors' in lua
+-assert 'revision = 21' in lua
++assert 'revision = 22' in lua
+ 
+ print('v01710_regressions_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v01711_catalog_localization_ui.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v01711_catalog_localization_ui.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v01711_catalog_localization_ui.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v01711_catalog_localization_ui.py	2026-09-17 18:07:42.570819696 +0000
+@@ -0,0 +1,67 @@
++from pathlib import Path
++import sys
++import tempfile
++
++ROOT = Path(__file__).resolve().parents[1]
++sys.path.insert(0, str(ROOT / 'Backend'))
++
++from games.hades2 import localization
++
++lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
++card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
++
++# Known full-release room rewards that were missing from the curated spawn list.
++for token in (
++    'RoomMoneyTinyDrop', 'RoomMoneySmallDrop',
++    'MaxManaDropSmall', 'MaxManaDrop', 'MaxManaDropBig',
++    'MinorTalentDrop', 'TalentDrop', 'TalentBigDrop',
++    'GiftDrop', 'MetaCurrencyDrop', 'MetaCurrencyBigDrop',
++    'MetaCardPointsCommonDrop', 'MetaCardPointsCommonBigDrop',
++    'MemPointsCommonDrop', 'MemPointsCommonBigDrop',
++    'FireBoost', 'WaterBoost', 'EarthBoost', 'AirBoost',
++):
++    assert f'id = "{token}"' in lua, token
++
++# Future-proofing: direct rewards from the game's RewardStoreData are added if
++# they resolve to real ConsumableData/LootData entries.
++assert 'if type(RewardStoreData) == "table" then' in lua
++assert 'definition.Name' in lua
++assert 'type(ConsumableData[id]) == "table"' in lua
++assert 'type(LootData[id]) == "table"' in lua
++assert 'RuntimeFutureReward' not in lua  # test-only name comes from the mock
++assert 'revision = 22' in lua
++
++# Hades SJSON display strings contain presentation tags. They must never leak to
++# the UI as literal (#Echo), #Echo or {#Echo} text.
++examples = {
++    '(#Echo) 回声祝福': '回声祝福',
++    '（#Echo） 回声祝福': '回声祝福',
++    '{#Echo}回声祝福': '回声祝福',
++    '#Echo 回声祝福': '回声祝福',
++    '{#Emph}Soul Tonic': 'Soul Tonic',
++}
++for raw, expected in examples.items():
++    assert localization._clean_display_name(raw) == expected, (raw, localization._clean_display_name(raw))
++
++# Exercise the installed-text parser too, not only the helper.
++localization._OFFICIAL_TEXT_CACHE.clear()
++with tempfile.TemporaryDirectory(prefix='mgt-v01711-loc-') as td:
++    root = Path(td)
++    text_dir = root / 'Contents/Resources/Content/Game/Text'
++    text_dir.mkdir(parents=True)
++    (text_dir / 'Traits.zh-CN.sjson').write_text('''
++Thing = { Id = "EchoMockTrait" DisplayName = "(#Echo) 回声之赐" }
++Mana = { Id = "MaxManaDrop" DisplayName = "{#Emph}灵魂滋补剂" }
++''', encoding='utf-8')
++    names = localization.official_display_names({'EchoMockTrait', 'MaxManaDrop'}, 'zh-CN', game_path=root)
++    assert names['EchoMockTrait'] == '回声之赐'
++    assert names['MaxManaDrop'] == '灵魂滋补剂'
++
++# Metric cards are content-sized; no hidden min-height is allowed to re-create
++# the empty strip above title/lock controls.
++metric = card[card.index('struct TrainerMetricCard'):]
++assert 'minHeight: 82' not in metric
++assert '.padding(.vertical, 7)' in metric
++assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric
++
++print('v01711_catalog_localization_ui_ok')
+diff -ruN '--exclude=__pycache__' '--exclude=*.pyc' '--exclude=.pytest_cache' '--exclude=CHANGES_v0.17.10_to_v0.17.11.diff' /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v0179_regressions.py /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v0179_regressions.py
+--- /tmp/tmp.ygsOutYJ1B/MacGamingTrainer_v0.17.10/tests/test_v0179_regressions.py	2026-09-17 16:47:06.000000000 +0000
++++ /mnt/data/MacGamingTrainer_v0.17.11/tests/test_v0179_regressions.py	2026-09-17 18:07:42.398143010 +0000
+@@ -18,10 +18,12 @@
+ model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
+ lua = (ROOT/'Backend/games/hades2/runtime/hades.lua').read_text()
+ 
+-# Compact session cards: total min-height is applied after padding, and paired
+-# values/suffixes stay visually together.
+-assert '.padding(.vertical, 10)' in card
+-assert card.index('.padding(.vertical, 10)') < card.index('.frame(maxWidth: .infinity, minHeight: 82, alignment: .center)')
++# Compact session cards: no artificial min-height may insert a blank strip
++# above the title row; paired values/suffixes stay visually together.
++metric_block = card[card.index('struct TrainerMetricCard'):]
++assert '.padding(.vertical, 7)' in metric_block
++assert 'minHeight: 82' not in metric_block
++assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric_block
+ assert 'HStack(spacing: 2)' in stats
+ assert stats.count('.frame(width: 54)') >= 2
+ assert 'HStack(spacing: 3)' in stats and '.frame(width: 58)' in stats
+@@ -57,7 +59,7 @@
+ assert 'if rewardId == "SpellDrop" then' in lua
+ assert 'requireFunctions("Selene loot spawning", { "GiveLoot" })' in lua
+ assert 'GiveLoot({ ForceLootName = "SpellDrop"' in lua
+-assert 'revision = 21' in lua
++assert 'revision = 22' in lua
+ 
+ # Old stored preferences migrate forward instead of silently retaining dead IDs.
+ normalized = Hades2PreferenceStore.normalize({'nextRoomReward':'RoomRewardMoney'})

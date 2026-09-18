@@ -1,0 +1,36 @@
+Mac Gaming Trainer v0.10.0 / Build 15 / protocol v2 / Lua revision 18
+Round 10 validation scope
+
+PASS  Python compile: server.py, preparation.py, transport.py
+PASS  Round 9 server regression
+PASS  Round 10 server regression
+      - offline desired blessing-choice count
+      - profile persistence of blessing-choice count
+      - replay of enemy-health lock
+      - enemy-health range validation 10–1000%
+      - blessing-choice count range validation 1–3
+      - protocol v2 success/error replies
+      - diagnostics export regression
+PASS  save / staged-restore regression
+PASS  Swift Round 9 static contracts
+PASS  Swift Round 10 static contracts
+      - enemy-health top-stat wiring
+      - blessing-choice persistent UI wiring
+      - protocol v2 handshake
+      - corrected LLDB build preflight remains present
+PASS  Lua Round 9 regression
+PASS  Lua Round 10 mock
+      - blessing choice 3 -> 2 -> 1 -> native 3 restore
+      - active enemy health percentage-preserving rescale
+      - live retarget of enemy health multiplier
+      - new SetupUnit enemy inherits multiplier
+      - unlock restores tracked living enemies
+      - disable_all releases both hooks
+      - expanded next-room reward family regression
+PASS  swiftc -parse MacGamingTrainer.swift
+PASS  bash -n build.sh
+PASS  Info.plist / entitlements.plist parse
+
+NOT RUN  macOS SwiftUI/AppKit/Carbon typecheck/link (Linux environment has no macOS SDK)
+NOT RUN  real Hades II integration
+NOT RUN  codesign execution on target macOS

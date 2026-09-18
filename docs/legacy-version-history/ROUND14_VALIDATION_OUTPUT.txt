@@ -1,0 +1,53 @@
+# Mac Gaming Trainer v0.14.0 Round 14 validation
+
+== architecture/core ==
+-- tests/test_backend_core_round12.py
+backend_core_round12_ok
+-- tests/test_hades2_adapter_round12.py
+hades2_adapter_round12_ok
+-- tests/test_module_contract_round13.py
+module_contract_round13_ok
+-- tests/test_packaged_module_round14.py
+packaged_module_round14_ok
+-- tests/test_build_contract_round14.py
+build_contract_round14_ok
+-- tests/test_preparation_round9.py
+preparation_round8_ok
+preparation_round9_staged_ok
+-- tests/test_round12_static.py
+round12_static_ok
+-- tests/test_swift_round12.py
+swift_round12_ok
+
+== legacy compatibility ==
+-- tests/legacy/test_server_round9.py
+server_round9_compat_ok
+-- tests/legacy/test_server_round10.py
+server_round10_compat_ok
+-- tests/legacy/test_swift_round9.py
+swift_round9_compat_ok
+-- tests/legacy/test_swift_round10.py
+swift_round10_compat_ok
+-- tests/legacy/test_round11_static.py
+round11_compat_ok
+
+== python compile ==
+python_compile_ok
+
+== python 3.9 grammar ==
+python39_syntax_ok
+
+== lua mocks ==
+round9_mock_ok
+round10_mock_ok
+
+== swift parse ==
+swift_parse_ok
+
+== shell/plist ==
+build_sh_syntax_ok
+Info.plist: OK
+Backend/games/hades2/trainer-entitlements.plist: OK
+
+== coupling scan ==
+generic_core_coupling_scan_ok
