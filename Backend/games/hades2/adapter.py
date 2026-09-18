@@ -411,12 +411,19 @@ class Hades2Adapter(GameAdapter):
                 payload=localize_catalog(payload)
                 decode_metrics['localize']=time.monotonic()-phase
                 return payload
-            decoded=execute_with_ledger(
-                self.transport,command,code,decode_runtime,
-                replay=replay,read_only=read_only,
-            )
             if command=='status':
-                self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+                self._last_status_boundary_duration=0.0
+                self._last_status_json_duration=0.0
+                self._last_status_localize_duration=0.0
+            try:
+                decoded=execute_with_ledger(
+                    self.transport,command,code,decode_runtime,
+                    replay=replay,read_only=read_only,
+                )
+            finally:
+                if command=='status':
+                    self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+            if command=='status':
                 self._last_status_json_duration=decode_metrics.get('json',0.0)
                 self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             self._runtime_bootstrapped=True
