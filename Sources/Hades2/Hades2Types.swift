@@ -38,7 +38,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL,
         .boonRarityEnabled, .forceLegendary, .forceDuo,
         .moneyMultiplierEnabled, .resourceMultiplierEnabled,
-        .applyNextRoomReward, .spawnOlympian, .spawnPickup, .spawnSpecial,
+        .spawnOlympian, .spawnPickup, .spawnSpecial, .applyNextRoomReward,
         .disableAll,
     ]
 
