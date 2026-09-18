@@ -21,9 +21,9 @@ try? fileManager.removeItem(at: directory)
 try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 try Data("seed\n".utf8).write(to: logURL)
 
-var fired = false
+var signalCount = 0
 let watcher = Hades2RunLogWatcher {
-    fired = true
+    signalCount += 1
 }
 watcher.start()
 
@@ -39,13 +39,54 @@ try handle.synchronize()
 try handle.close()
 
 let deadline = Date().addingTimeInterval(2.0)
-while !fired && Date() < deadline {
+while signalCount < 1 && Date() < deadline {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+}
+if signalCount < 1 {
+    fatalError("appending a World::Begin line did not trigger the watcher")
+}
+
+// Hades may replace the log between launches. The watcher must follow the new
+// inode and consume only new content from that replacement.
+let rotatedURL = directory.appendingPathComponent("Hades II.log.previous")
+try? fileManager.removeItem(at: rotatedURL)
+try fileManager.moveItem(at: logURL, to: rotatedURL)
+try Data("new session\n".utf8).write(to: logURL)
+
+let rotationSettleDeadline = Date().addingTimeInterval(0.5)
+while Date() < rotationSettleDeadline {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+}
+
+let replacement = try FileHandle(forWritingTo: logURL)
+try replacement.seekToEnd()
+try replacement.write(contentsOf: Data("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.100 seconds)\n".utf8))
+try replacement.synchronize()
+try replacement.close()
+
+let replacementDeadline = Date().addingTimeInterval(2.0)
+while signalCount < 2 && Date() < replacementDeadline {
+    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+}
+if signalCount < 2 {
+    fatalError("replacing the Hades log lost subsequent readiness signals")
+}
+
+// Truncation without inode replacement is another ordinary logger behavior.
+let truncating = try FileHandle(forWritingTo: logURL)
+try truncating.truncate(atOffset: 0)
+try truncating.write(contentsOf: Data("2026-09-19 [MainThread] World.cpp INFO| World::Begin() Hub_PreRun -> F_Opening03\n".utf8))
+try truncating.synchronize()
+try truncating.close()
+
+let truncationDeadline = Date().addingTimeInterval(2.0)
+while signalCount < 3 && Date() < truncationDeadline {
     RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
 }
 
 watcher.stop()
-if !fired {
-    fatalError("appending a World::Begin line did not trigger the watcher")
+if signalCount < 3 {
+    fatalError("truncating the Hades log lost subsequent readiness signals")
 }
 print("hades2_run_log_watcher_ok")
 """
