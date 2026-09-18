@@ -19,6 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Run host connection policy harness
+        run: python3 tests/test_host_connection_policy_dev8.py
+
       - name: Build Hades II trainer
         run: |
           chmod +x build.sh Tools/*.py
