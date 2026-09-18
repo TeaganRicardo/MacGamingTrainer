@@ -7,6 +7,7 @@ struct HotkeyChord: Equatable {
     static let shiftModifier: UInt32 = 1 << 9
     static let optionModifier: UInt32 = 1 << 11
     static let controlModifier: UInt32 = 1 << 12
+    static let supportedModifierMask = commandModifier | shiftModifier | optionModifier | controlModifier
 
     let keyCode: UInt32
     let modifiers: UInt32
@@ -33,11 +34,14 @@ struct HotkeyChord: Equatable {
 
     init?(payload: Any) {
         guard let row = payload as? [String: Any],
-              let keyCode = row["keyCode"] as? Int, 0...65535 ~= keyCode,
-              let modifiers = row["modifiers"] as? Int, modifiers >= 0,
+              let keyCode = row["keyCode"] as? Int, (0...65535).contains(keyCode),
+              let rawModifiers = row["modifiers"] as? Int, rawModifiers >= 0, rawModifiers <= Int(UInt32.max),
               let keyLabel = row["keyLabel"] as? String,
-              !keyLabel.isEmpty, keyLabel.count <= 16 else { return nil }
-        self.init(keyCode: UInt32(keyCode), modifiers: UInt32(modifiers), keyLabel: keyLabel)
+              !keyLabel.isEmpty, keyLabel.count <= 16,
+              keyLabel.unicodeScalars.allSatisfy({ $0.value >= 32 }) else { return nil }
+        let modifiers = UInt32(rawModifiers)
+        guard modifiers & ~Self.supportedModifierMask == 0 else { return nil }
+        self.init(keyCode: UInt32(keyCode), modifiers: modifiers, keyLabel: keyLabel)
     }
 
     static func controlOptionDefault(index: Int) -> HotkeyChord? {
