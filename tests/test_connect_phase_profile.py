@@ -105,3 +105,43 @@ for field in (
     assert field in log, field
 
 print('connect_phase_profile_ok')
+
+
+# A connect attempt that fails before attach/status must not report metrics from
+# the previous successful attempt.
+adapter._last_status_boundary_duration = 9.0
+adapter._last_status_json_duration = 9.0
+adapter._last_status_localize_duration = 9.0
+
+def failing_scan():
+    raise RuntimeError('simulated scan failure')
+
+adapter.scan = failing_scan
+failed_scan_stream = StringIO()
+failed_scan_handler = logging.StreamHandler(failed_scan_stream)
+root_logger.addHandler(failed_scan_handler)
+root_logger.setLevel(logging.INFO)
+try:
+    try:
+        adapter.connect()
+    except RuntimeError as error:
+        assert 'simulated scan failure' in str(error)
+    else:
+        raise AssertionError('scan failure unexpectedly succeeded')
+finally:
+    root_logger.removeHandler(failed_scan_handler)
+    root_logger.setLevel(old_level)
+
+assert adapter._last_status_boundary_duration == 0.0
+assert adapter._last_status_json_duration == 0.0
+assert adapter._last_status_localize_duration == 0.0
+failed_log = failed_scan_stream.getvalue()
+assert 'ConnectProfile outcome=RuntimeError' in failed_log
+assert 'firstLuaBoundary=0.000s' in failed_log
+assert 'jsonDecode=0.000s' in failed_log
+assert 'catalogLocalization=0.000s' in failed_log
+
+transport_source = (ROOT / 'Backend/games/hades2/transport.py').read_text()
+assert "self.last_attach_profile={'reused':True,'total':0.0}" in transport_source
+
+print('connect_phase_profile_failure_paths_ok')
