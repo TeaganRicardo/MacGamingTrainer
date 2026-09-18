@@ -1,5 +1,7 @@
 # v0.17.11 architecture assessment
 
+> Historical architecture note. This document records the reasoning that led to the current 0.1 framework boundary; it is not the current product/version status. See `PROJECT_STATUS.md`, `VERSIONING.md` and `NEXT_PHASE_TODO.md` for current facts.
+
 ## Current verdict
 
 The first decoupling passes solved physical isolation but over-generalized Hades II business semantics into the framework. v0.16.0 corrects that direction.
