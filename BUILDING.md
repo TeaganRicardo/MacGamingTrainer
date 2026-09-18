@@ -1,19 +1,28 @@
-# Build v0.17.11
+# Building MacGamingTrainer 0.1
 
-当前唯一支持的构建方式是手动运行 `build.sh`。此前实验性的 Finder 双击构建 App 已暂时移除，因为在下载目录中会受到 macOS Finder 权限与 bundle 路径解析影响。
+Current development branch: **0.1 / Build 2**.
+
+The supported build path is the repository `build.sh` script:
 
 ```bash
 chmod +x build.sh
-./build.sh
+./build.sh hades2
 ```
 
-构建脚本会先执行完整 Swift semantic `-typecheck`，再进入优化编译；因此跨文件作用域、缺失 helper、错误类型名等问题会在链接前直接报出。
+The build script performs Swift semantic validation before optimized compilation, then packages and signs the app. Cross-file scope errors, missing helpers and invalid type names should therefore fail before delivery.
 
-如果 LLDB Python 检查失败，确认已安装完整 Xcode 并执行：
+If the LLDB Python check fails, install/select the full Xcode toolchain:
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 xcrun lldb -P
 ```
 
-输出 App 位于项目构建目录；具体路径会由 `build.sh` 在成功时打印。
+The output app is written under `dist/`; the exact path is printed by `build.sh` after a successful build.
+
+Version source of truth:
+- product version and build: `Info.plist`;
+- release/development policy: `VERSIONING.md`;
+- runtime/protocol/schema status: `PROJECT_STATUS.md`.
+
+Do not treat the historical v0.17.x notes under `docs/legacy-version-history/` as current build instructions.
