@@ -148,9 +148,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // two bounded, one-shot opportunities to notice the first usable Lua
     // scene. This is intentionally not a repeating Timer / background poll.
     private static let passiveReadyProbeDelays: [TimeInterval] = [15, 30]
-    private var passiveReadyProbeWorkItem: DispatchWorkItem?
+    private var passiveReadyProbeWorkItems: [DispatchWorkItem] = []
     private var passiveReadyProbeGeneration: UInt = 0
-    private var passiveReadyProbeIndex = 0
     private var hotkeys: GlobalHotkeys?
     private var pendingRestoreTimer: Timer?
     private var shuttingDown = false
@@ -389,43 +388,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func beginPassiveReadyProbes() {
-        passiveReadyProbeWorkItem?.cancel()
-        passiveReadyProbeGeneration &+= 1
-        passiveReadyProbeIndex = 0
-        schedulePassiveReadyProbe(generation: passiveReadyProbeGeneration)
-    }
-
-    private func cancelPassiveReadyProbes() {
-        passiveReadyProbeWorkItem?.cancel()
-        passiveReadyProbeWorkItem = nil
-        passiveReadyProbeGeneration &+= 1
-        passiveReadyProbeIndex = 0
-    }
-
-    private func schedulePassiveReadyProbe(generation: UInt) {
-        guard generation == passiveReadyProbeGeneration,
-              passiveReadyProbeIndex < Self.passiveReadyProbeDelays.count else { return }
-        let delay = Self.passiveReadyProbeDelays[passiveReadyProbeIndex]
-        passiveReadyProbeIndex += 1
-        let work = DispatchWorkItem { [weak self] in
-            guard let self,
-                  generation == self.passiveReadyProbeGeneration,
-                  self.connected,
-                  self.status == "waiting",
-                  !self.exiting,
-                  !self.busy else { return }
-            self.passiveReadyProbeWorkItem = nil
-            self.send(.status, title: "等待可操作场景", announceSuccess: false) { [weak self] _ in
+        cancelPassiveReadyProbes()
+        let generation = passiveReadyProbeGeneration
+        for delay in Self.passiveReadyProbeDelays {
+            let work = DispatchWorkItem { [weak self] in
                 guard let self,
                       generation == self.passiveReadyProbeGeneration,
                       self.connected,
                       self.status == "waiting",
-                      !self.exiting else { return }
-                self.schedulePassiveReadyProbe(generation: generation)
+                      !self.exiting,
+                      !self.busy else { return }
+                self.send(.status, title: "等待可操作场景", announceSuccess: false)
             }
+            passiveReadyProbeWorkItems.append(work)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         }
-        passiveReadyProbeWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func cancelPassiveReadyProbes() {
+        passiveReadyProbeWorkItems.forEach { $0.cancel() }
+        passiveReadyProbeWorkItems.removeAll()
+        passiveReadyProbeGeneration &+= 1
     }
 
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
