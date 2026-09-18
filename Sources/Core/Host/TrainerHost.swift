@@ -56,7 +56,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             if !running, model.backendAvailable && !model.busy {
                 model.refreshFromHost()
             }
-            reconcileAutomaticConnection()
+            reconcileAutomaticConnection(allowBackground: running)
         }
         .onChange(of: targetMonitor.activationGeneration) { _, _ in
             // Target activation can arrive before this app's resign-active
@@ -94,12 +94,12 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     /// Lifecycle events may first recover a missing backend and then connect once
     /// that backend reports available. There is no polling/retry timer: target
     /// launch/activation and backend lifecycle transitions are the only triggers.
-    private func reconcileAutomaticConnection() {
-        // Attaching LLDB can stop the target for seconds. Never start that work
-        // while the trainer is in the background and the player is using the
-        // game; lifecycle events retain their pending intent until this app is
-        // foreground again.
-        guard NSApp.isActive else { return }
+    private func reconcileAutomaticConnection(allowBackground: Bool = false) {
+        // A true process launch may pay debugger attach cost during startup even
+        // while Trainer is backgrounded. Ordinary target activation remains
+        // pending until Trainer is foreground, so active gameplay never gains
+        // a surprise LLDB attach.
+        guard allowBackground || NSApp.isActive else { return }
         if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
             backendAvailable: model.backendAvailable,
             busy: model.busy,
