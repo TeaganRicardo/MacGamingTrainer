@@ -13,6 +13,9 @@ tests=(
   tests/test_hades2_adapter_round12.py
   tests/test_hades2_timeout_policy_v0177.py
   tests/test_localization_cache_recovery_v0180.py
+  tests/test_module_contract_round13.py
+  tests/test_packaged_module_round14.py
+  tests/test_cross_game_isolation.py
   tests/test_passive_ready_transition.py
   tests/test_persistence_integrity_v0180.py
   tests/test_post_v01_feature_contracts.py
