@@ -89,6 +89,20 @@ if !policy.automaticConnectionSuppressed {
     fail("manual detach suppression was not retained")
 }
 
+// A foreground snapshot of the same still-running target must be idempotent.
+// Trainer activation uses this to repair missed workspace notifications without
+// treating every Alt-Tab as a new game lifetime or clearing manual detach.
+policy.targetStateChanged(running: true)
+policy.connectionChanged(connected: true)
+policy.userWillToggleConnection(currentlyConnected: true)
+policy.targetStateChanged(running: true)
+if !policy.automaticConnectionSuppressed {
+    fail("same target snapshot cleared manual disconnect suppression")
+}
+if policy.connectRequested || policy.backendRestartRequested {
+    fail("same target snapshot created a duplicate automatic connection request")
+}
+
 // Explicit reconnect clears the suppression immediately.
 policy.userWillToggleConnection(currentlyConnected: false)
 if policy.automaticConnectionSuppressed {
