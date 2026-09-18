@@ -186,3 +186,37 @@ assert 'ConnectProfile outcome=waiting' in waiting_log
 assert 'firstLuaBoundary=2.750s' in waiting_log
 
 print('connect_phase_profile_waiting_ok')
+
+
+# Background launch attach can reach World::Update before Hades has finished
+# publishing its Lua game globals. During the initial connect only, that exact
+# bootstrap-not-ready condition is waiting, not an incompatible/disconnect.
+class EarlyRuntimeTransport(FakeTransport):
+    def execute(self, source):
+        self.last_duration = 0.050
+        raise adapter_module.TransportError(
+            'lua_error',
+            '[string "MacGamingTrainer"]:7: Unsupported game runtime: missing table SessionState',
+        )
+
+
+early_transport = EarlyRuntimeTransport()
+early_adapter = adapter_module.Hades2Adapter(transport=early_transport)
+early_adapter.preference_initialized = True
+early_adapter.preference_dirty = False
+
+
+def early_scan():
+    early_adapter.state['pid'] = 4444
+    early_adapter.state['status'] = 'disconnected'
+    return dict(early_adapter.state)
+
+
+early_adapter.scan = early_scan
+early_result = early_adapter.connect()
+assert early_result['status'] == 'waiting'
+assert early_result['connected'] is True
+assert early_transport.alive() is True
+assert early_adapter._last_status_boundary_duration == 0.050
+
+print('connect_phase_profile_early_runtime_ok')
