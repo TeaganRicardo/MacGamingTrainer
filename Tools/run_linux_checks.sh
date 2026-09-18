@@ -22,6 +22,7 @@ tests=(
   tests/test_profile_shortcut_schema_v0180.py
   tests/test_protocol_fixtures_v0180.py
   tests/test_reward_naming_audit.py
+  tests/test_runtime_boundary_efficiency_dev8.py
   tests/test_schema_versioning_v0180.py
 )
 
