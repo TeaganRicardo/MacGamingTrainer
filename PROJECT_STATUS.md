@@ -28,22 +28,24 @@
 - forceLegendary and forceDuo OFF/ON/both state transitions were exercised in a real run; boon rarity hooks engaged and returned to fully disabled state after cleanup.
 - Selene SpellDrop first-Hex spawn path is confirmed operational in-game.
 
+## Verified in Build 2
+
+- Full Python regression suite passes on the target Mac; Swift parse and native arm64 build pass; strict codesign verification passes.
+- Hades resident Lua revision 26 reloads correctly from the Build 2 bundle.
+- Live run catalog: 129 rewards and 97 resources; no list entry has an empty English label or an internal identifier standing in for English.
+- SpellDrop and TalentDrop both resolve to the Selene special-reward section. TalentDrop uses the official 繁星之路 · Path of Stars label.
+- Native TalentDrop interaction was verified without OCR: after pickup, ActiveScreens["TalentScreen"] was present, source was TalentDrop, current Hex was Leap, and 6 Talent points were available.
+- Profile schema 4 shortcut chords pass Linux Foundation-level semantic tests and the full target-Mac regression suite.
+- macOS synthetic key-event validation captured and registered a non-default Control+Shift+K chord as ⌃⇧K.
+- Shortcut rows with no badge collapse instead of reserving the former 52pt empty slot.
+- Fire/Water/Earth/Air/Aether compile with distinct SF Symbols and semantic colors.
+
 ## In progress
 
-1. Passive waiting -> ready transition: bounded two-shot status probe per connection lifetime at 15s / 30s; no repeating timer. Code + regression test are present; full main-menu-to-run acceptance remains open.
-2. Post-v0.1 Build 2 implementation:
-   - Selene `TalentDrop` is exposed as a distinct Selene special reward for native Path of Stars upgrades; target-Mac interaction verification pending.
-   - Dynamic catalog entries carry Chinese + English labels and name provenance.
-   - Profile schema 4 stores arbitrary supported hotkey chords; local layout-v3 UserDefaults receive a one-time migration.
-   - Static toggle/apply/spawn actions have configurable global shortcuts; defaults follow visible order (Control+Option 1-9, then A-Z).
-   - Shortcut rows without an assignment no longer reserve an empty badge column.
-   - Fire/Water/Earth/Air/Aether use distinct symbols and colors.
-3. Build 2 target-Mac acceptance pending:
-   - full Python regression suite and native arm64/codesign build from the GitHub branch;
-   - shortcut capture and one custom chord;
-   - native `TalentDrop` -> Path of Stars interaction;
-   - bilingual live catalog audit for any remaining identifier-only English names;
-   - visual check of element icons and row alignment.
+1. Passive waiting -> ready transition: bounded two-shot status probe per connection lifetime at 15s / 30s; no repeating timer. Full main-menu-to-run passive acceptance remains open.
+2. Manual visual acceptance only:
+   - confirm the 19-row shortcut settings sheet interaction/spacing in the actual UI;
+   - confirm the five element icons/colors at normal display scale.
 
 ## Deferred until correctness is stable
 
