@@ -23,7 +23,9 @@ class Hades2LuaTransport:
 
     def attach(self,pid):
         if self.process:
-            if self.pid==pid and self.alive(): return
+            if self.pid==pid and self.alive():
+                self.last_attach_profile={'reused':True,'total':0.0}
+                return
             self.detach()
         started=time.monotonic();profile={}
         self.last_attach_profile=profile
