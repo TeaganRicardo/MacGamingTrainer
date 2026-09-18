@@ -335,6 +335,7 @@ class Hades2Adapter(GameAdapter):
             self.state['capabilities']=disconnected_capabilities()
         return dict(self.state)
     def connect(self):
+        self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
             phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
