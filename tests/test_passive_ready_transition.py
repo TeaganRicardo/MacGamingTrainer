@@ -14,7 +14,6 @@ for retired in (
     'passiveReadyProbeGeneration',
     'beginPassiveReadyProbes',
     'cancelPassiveReadyProbes',
-    '等待可操作场景',
 ):
     assert retired not in model, retired
 
