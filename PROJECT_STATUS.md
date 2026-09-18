@@ -43,13 +43,13 @@
 ## Cloud/Linux verification
 
 - `.github/workflows/linux-contracts.yml` runs a fixed Linux-safe contract suite on branch pushes and pull requests.
-- Current Build 2 HEAD passes backend compilation, module validation and all 18 Linux contract tests, including passive-ready scheduling and connect-profiling success/failure paths.
+- Linux contracts cover backend compilation, module validation, foreground-only ready-detection policy, timeout policy, and connect-profiling success/failure paths. Latest CI status is tracked on the Build 2 branch.
 - Mac/gameplay acceptance is intentionally user-operated from this point forward.
 
 ## Pending manual acceptance
 
-1. Passive waiting -> ready transition (#1): two independent one-shot probes are scheduled at +15s and +30s from the waiting transition; no repeating timer. Confirm main-menu -> save reaches ready/run without manual refresh.
-2. LLDB attach profiling (#4): observation-only `LLDBAttachProfile` and `ConnectProfile` records are implemented. Make one fresh connection and provide those two trainer.log lines before any optimization is attempted.
+1. Foreground-only waiting -> ready transition (#1): fullscreen testing showed that background LLDB/Lua status probes can freeze/stutter the game and can hit the host watchdog during debugger cleanup. Build 2 now removes timed background probes, defers automatic debugger work while Trainer is backgrounded, and performs one silent waiting-status refresh when Trainer becomes foreground. Manual refresh remains the fallback. Rebuild and manually verify fullscreen behavior.
+2. LLDB attach profiling (#4): the supplied fullscreen/windowed logs show roughly 33 s vs 14 s end-to-end connection times, but were produced by a build without the current phase-level `LLDBAttachProfile` / `ConnectProfile` records. After rebuilding the latest branch, capture one fresh pair before optimizing.
 
 ## Non-regression constraints
 
