@@ -13,6 +13,7 @@ struct TrainerConnectionPolicy {
     private(set) var automaticConnectionSuppressed = false
 
     mutating func targetStateChanged(running: Bool) {
+        guard targetRunning != running else { return }
         targetRunning = running
         if running {
             // A real target-process lifetime resets an explicit detach from the
