@@ -63,6 +63,10 @@ adapter = adapter_module.Hades2Adapter(transport=transport)
 adapter.preference_initialized = True
 adapter.preference_dirty = False
 
+assert adapter._last_status_boundary_duration == 0.0
+assert adapter._last_status_json_duration == 0.0
+assert adapter._last_status_localize_duration == 0.0
+
 
 def fake_scan():
     adapter.state['pid'] = 4242
