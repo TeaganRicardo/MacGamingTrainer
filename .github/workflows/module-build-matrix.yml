@@ -1,0 +1,45 @@
+name: Module build matrix
+
+on:
+  push:
+    branches:
+      - 'architecture/**'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        game:
+          - hades2
+          - reference_fixture
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install reference fixture
+        if: matrix.game == 'reference_fixture'
+        run: |
+          mkdir -p Backend/games/reference_fixture Sources/ReferenceFixture
+          cp -R ContractFixtures/reference_module/backend/. Backend/games/reference_fixture/
+          cp -R ContractFixtures/reference_module/frontend/. Sources/ReferenceFixture/
+
+      - name: Build selected module
+        run: |
+          chmod +x build.sh Tools/*.py
+          ./build.sh "${{ matrix.game }}"
+
+      - name: Verify packaged module isolation
+        run: |
+          app="$(find dist -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
+          count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
+          test "$count" = "1"
+          codesign --verify --deep --strict "$app"
