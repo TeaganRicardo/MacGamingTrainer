@@ -72,6 +72,7 @@ class Hades2Adapter(GameAdapter):
             transport = Hades2LuaTransport()
         self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
         self._runtime_bootstrapped=False;self._catalog_initialized=False
+        self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
                     'godMode':False,'infiniteHealth':False,'infiniteMana':False,'damageEnabled':False,'instantCastCooldown':False,'hexAlwaysReady':False,'infiniteAmmo':False,'autoMiniGames':False,'gardenQoL':False,'boonRarityEnabled':False,'damageMultiplier':2,'gameSpeed':1,'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False}, 'nextRoomReward':None,
                     'desiredFeatures':{key:False for key in TOGGLES},
@@ -334,18 +335,43 @@ class Hades2Adapter(GameAdapter):
             self.state['capabilities']=disconnected_capabilities()
         return dict(self.state)
     def connect(self):
-        self.scan()
-        if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
-        self.transport.attach(self.state['pid'])
-        # A debugger reconnect is the synchronization boundary for the resident
-        # module. Bootstrap once here even when the same game process survived a
-        # manual detach, then use dispatch-only payloads for subsequent calls.
-        self._runtime_bootstrapped=False
-        self.state['connected']=True
-        try:return self.execute('status',{'includeCatalogs':True})
-        except TransportError as e:
-            if e.code=='waiting':self.state['status']='waiting';return dict(self.state,error=str(e))
-            self.transport.detach();mark_disconnected(self.state);raise
+        started=time.monotonic();profile={};outcome='ok'
+        try:
+            phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
+            if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
+            phase=time.monotonic();self.transport.attach(self.state['pid']);profile['attachTotal']=time.monotonic()-phase
+            # A debugger reconnect is the synchronization boundary for the resident
+            # module. Bootstrap once here even when the same game process survived a
+            # manual detach, then use dispatch-only payloads for subsequent calls.
+            self._runtime_bootstrapped=False
+            self.state['connected']=True
+            phase=time.monotonic()
+            try:
+                result=self.execute('status',{'includeCatalogs':True})
+            except TransportError as e:
+                outcome=e.code
+                if e.code=='waiting':
+                    self.state['status']='waiting';result=dict(self.state,error=str(e))
+                else:
+                    self.transport.detach();mark_disconnected(self.state);raise
+            profile['firstStatusTotal']=time.monotonic()-phase
+            return result
+        except Exception as exc:
+            outcome=getattr(exc,'code',type(exc).__name__)
+            raise
+        finally:
+            profile['total']=time.monotonic()-started
+            attach=getattr(self.transport,'last_attach_profile',{}) or {}
+            logging.info(
+                'ConnectProfile outcome=%s total=%.3fs scan=%.3fs attachTotal=%.3fs '
+                'createTarget=%.3fs attachProcess=%.3fs identity=%.3fs symbols=%.3fs resume=%.3fs '
+                'firstStatusTotal=%.3fs firstLuaBoundary=%.3fs jsonDecode=%.3fs catalogLocalization=%.3fs',
+                outcome,profile['total'],profile.get('scan',0.0),profile.get('attachTotal',0.0),
+                attach.get('createTarget',0.0),attach.get('attachProcess',0.0),attach.get('identity',0.0),
+                attach.get('symbols',0.0),attach.get('resume',0.0),profile.get('firstStatusTotal',0.0),
+                self._last_status_boundary_duration,self._last_status_json_duration,self._last_status_localize_duration,
+            )
+
     def execute(self,command,params,replay=False,read_only=False):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
@@ -371,10 +397,19 @@ class Hades2Adapter(GameAdapter):
                 runtime_params['includeCatalogs']=not self._catalog_initialized
             dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
             code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
+            decode_metrics={}
+            def decode_runtime(raw):
+                phase=time.monotonic();payload=json.loads(raw);decode_metrics['json']=time.monotonic()-phase
+                phase=time.monotonic();payload=localize_catalog(payload);decode_metrics['localize']=time.monotonic()-phase
+                return payload
             decoded=execute_with_ledger(
-                self.transport,command,code,lambda raw:localize_catalog(json.loads(raw)),
+                self.transport,command,code,decode_runtime,
                 replay=replay,read_only=read_only,
             )
+            if command=='status':
+                self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+                self._last_status_json_duration=decode_metrics.get('json',0.0)
+                self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             if not read_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
