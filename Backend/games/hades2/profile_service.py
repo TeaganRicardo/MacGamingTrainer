@@ -8,6 +8,7 @@ from .persistence import atomic_write_text, quarantine_corrupt_file, Unsupported
 
 PROFILE_SCHEMA_VERSION = 4
 _PROFILE_FIELDS = frozenset(('schemaVersion','name','updatedAt','desired','shortcuts'))
+_SHORTCUT_MODIFIER_MASK = (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)
 
 _SHORTCUT_ACTIONS = (
     'godMode','infiniteHealth','infiniteMana','instantCastCooldown','hexAlwaysReady',
@@ -35,7 +36,7 @@ def _normalize_shortcuts(raw):
         if not isinstance(row,dict) or set(row)!= {'keyCode','modifiers','keyLabel'}:continue
         key_code=row.get('keyCode');modifiers=row.get('modifiers');label=row.get('keyLabel')
         if type(key_code) is not int or not 0<=key_code<=65535:continue
-        if type(modifiers) is not int or not 0<=modifiers<=0xFFFFFFFF:continue
+        if type(modifiers) is not int or not 0<=modifiers<=0xFFFFFFFF or modifiers & ~_SHORTCUT_MODIFIER_MASK:continue
         if not isinstance(label,str) or not label or len(label)>16 or any(ord(ch)<32 for ch in label):continue
         token=(key_code,modifiers)
         if token in used:continue
