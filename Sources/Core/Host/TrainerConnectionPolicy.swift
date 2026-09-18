@@ -11,6 +11,7 @@ struct TrainerConnectionPolicy {
     private(set) var connectRequested = false
     private(set) var backendRestartRequested = false
     private(set) var automaticConnectionSuppressed = false
+    private(set) var backgroundConnectionAllowed = false
 
     mutating func targetStateChanged(running: Bool) {
         guard targetRunning != running else { return }
@@ -19,12 +20,14 @@ struct TrainerConnectionPolicy {
             // A real target-process lifetime resets an explicit detach from the
             // previous run and supplies one background recovery/connect chance.
             automaticConnectionSuppressed = false
+            backgroundConnectionAllowed = true
             backendRestartRequested = true
             connectRequested = true
         } else {
             backendRestartRequested = false
             connectRequested = false
             automaticConnectionSuppressed = false
+            backgroundConnectionAllowed = false
         }
     }
 
@@ -55,11 +58,13 @@ struct TrainerConnectionPolicy {
     mutating func userWillToggleConnection(currentlyConnected: Bool) {
         if currentlyConnected {
             automaticConnectionSuppressed = true
+            backgroundConnectionAllowed = false
             connectRequested = false
         } else {
             // An explicit reconnect is user intent, so future lifecycle events
             // may also reconnect if this immediate attempt does not succeed.
             automaticConnectionSuppressed = false
+            backgroundConnectionAllowed = false
         }
     }
 
@@ -67,6 +72,7 @@ struct TrainerConnectionPolicy {
         guard connected else { return }
         connectRequested = false
         automaticConnectionSuppressed = false
+        backgroundConnectionAllowed = false
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
@@ -106,6 +112,7 @@ struct TrainerConnectionPolicy {
               !connected,
               actionsEnabled else { return false }
         connectRequested = false
+        backgroundConnectionAllowed = false
         return true
     }
 }
