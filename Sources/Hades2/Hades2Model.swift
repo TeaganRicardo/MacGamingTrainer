@@ -141,6 +141,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var saveManagerPresented = false
 
     private let mutationScheduler = Hades2MutationScheduler()
+    private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] in
+        self?.handleRunLogReadySignal()
+    }
+    private var pendingRunReadySignal = false
     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<String> = []
     private var hotkeys: GlobalHotkeys?
@@ -178,8 +182,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     init() {
         DispatchQueue.main.async { [weak self] in
-            self?.installHotkeys()
-            self?.startBackend()
+            guard let self else { return }
+            self.runLogWatcher.start()
+            self.installHotkeys()
+            self.startBackend()
         }
     }
 
@@ -198,11 +204,37 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.status, title: "检测可操作场景", announceSuccess: false)
     }
 
+    private func handleRunLogReadySignal() {
+        guard !exiting else { return }
+        pendingRunReadySignal = true
+        consumeRunLogReadySignalIfPossible()
+    }
+
+    private func consumeRunLogReadySignalIfPossible() {
+        guard pendingRunReadySignal else { return }
+        if status == "ready" {
+            pendingRunReadySignal = false
+            return
+        }
+        guard connected,
+              status == "waiting",
+              backendAvailable,
+              !busy,
+              !exiting else { return }
+        pendingRunReadySignal = false
+        send(.status, title: "检测可操作场景", announceSuccess: false) { [weak self] _ in
+            self?.consumeRunLogReadySignalIfPossible()
+        }
+    }
+
     func toggleConnection() {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
         } else {
-            send(.connect, title: "连接游戏")
+            runLogWatcher.start()
+            send(.connect, title: "连接游戏") { [weak self] _ in
+                self?.consumeRunLogReadySignalIfPossible()
+            }
         }
     }
 
@@ -255,6 +287,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         pendingRestoreTimer?.invalidate()
         pendingRestoreTimer = nil
         pendingRestoreID = nil
+        pendingRunReadySignal = false
         pid = nil
         runtimeIssue = ""
         health = nil
