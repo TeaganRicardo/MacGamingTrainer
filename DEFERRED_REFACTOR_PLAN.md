@@ -1,35 +1,34 @@
-# Deferred work after v0.17.11
+# Deferred work after the 0.1 baseline
 
-The framework-level corrective refactor and the first runtime-reliability pass are complete. Do not resume structural refactoring unless a concrete requirement demonstrates a missing host capability. See `NEXT_PHASE_TODO.md` for the stabilization gate and prioritized execution plan.
+The corrective refactor and reliability work that produced the 0.1 baseline are complete. Do not resume broad structural refactoring unless a concrete requirement demonstrates a missing host capability.
 
-## 0.1.x — Persistence & protocol integrity
+Current execution status and the Build 2 stabilization gate live in `PROJECT_STATUS.md` and `NEXT_PHASE_TODO.md`.
 
-- strict preferences/profile schema validation and migration
-- corrupt-file quarantine + safe defaults
-- atomic/fsync persistence with write failures surfaced to UI
-- stricter Hades Swift state decode (missing vs invalid)
-- shared protocol fixtures/contracts across Python and Swift
+## 0.1.x — Transport and persistence hardening
 
-## v0.19.x — Transport safety
+Already established:
+- strict versioned desired-state/Profile envelopes;
+- corrupt-file quarantine and safe defaults;
+- atomic durable writes with surfaced failures;
+- typed Hades Swift payload boundary;
+- host protocol fixtures;
+- outcome-unknown protection for non-idempotent mutations.
 
-- distinguish definite failure from outcome-unknown after LLDB/Lua execution
-- classify read-only / idempotent-set / non-idempotent action commands
-- prohibit unsafe automatic retry of unknown non-idempotent outcomes
-- make diagnostics genuinely read-only
-- tighten `set_desired` failure semantics
+Still deferred:
+- make diagnostics genuinely read-only at the Lua/runtime level rather than only suppressing host-side adoption/replay/persistence;
+- measure and then optimize LLDB attach latency (#4);
+- improve explicit process/debugger ownership recovery for externally-held debugger sessions.
 
-## v0.20.x — Second-game integration proof
+## Second-game integration proof
 
-Add a small permanent reference module that exercises state, mutation, action, reconnect, error handling and shared Host/UI without touching Core/App/build. Add a target-mac validation script for semantic build/link/codesign/app/backend launch.
+Add a deliberately small permanent reference module only when needed to prove framework boundaries. It should exercise state, mutation, action, reconnect, error handling and shared Host/UI without modifying Core/App/build.
 
-## v0.21.x — Hades-local cleanup
+## Hades-local cleanup
 
-Only after the reliability/protocol layers are stable:
-
-- reduce `Hades2Model.swift` by actual responsibilities
-- split large Hades content sections where useful
-- modularize `runtime/hades.lua` only after a multi-file loader is proven against the target game
-- replace LLDB transport only after an alternative survives real target-Mac regression
+Only after reliability and measured performance are stable:
+- reduce `Hades2Model.swift` by real responsibility boundaries;
+- split large Hades content sections where useful;
+- modularize `runtime/hades.lua` only after a multi-file loader is proven against the real game.
 
 ## Framework rule
 
