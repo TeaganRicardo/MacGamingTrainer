@@ -43,6 +43,27 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
     fail("launch connect was not one-shot")
 }
 
+// A true launch carries a one-shot permission to finish the same automatic
+// connection while Trainer is backgrounded even if the first consume point was
+// blocked by backend busy/recovery. The permission ends when connect is issued.
+var launchPolicy = TrainerConnectionPolicy()
+launchPolicy.targetStateChanged(running: true)
+if !launchPolicy.backgroundConnectionAllowed {
+    fail("launch did not grant background connection permission")
+}
+if launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
+    fail("background launch connected while busy")
+}
+if !launchPolicy.backgroundConnectionAllowed {
+    fail("busy state discarded background launch permission")
+}
+if !launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("deferred background launch connect was lost")
+}
+if launchPolicy.backgroundConnectionAllowed {
+    fail("background launch permission survived connect consumption")
+}
+
 // Busy state defers the same bounded activation request instead of discarding it.
 policy.targetActivated()
 if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
