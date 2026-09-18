@@ -46,6 +46,6 @@ for token in ['pendingRestoreTimer?.invalidate()', 'pendingRestoreID = nil', 'pi
 with (ROOT / 'Info.plist').open('rb') as handle:
     plist = plistlib.load(handle)
 assert plist['CFBundleShortVersionString'] == '0.1'
-assert plist['CFBundleVersion'] == '1'
+assert plist['CFBundleVersion'] == '2'
 
 print('round17_static_ok')

@@ -218,7 +218,7 @@ if __MacGamingTrainerV1 == nil then
     { id = "StackUpgradeBig", name = "大型力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
     { id = "StackUpgradeTriple", name = "三重力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
     { id = "MinorTalentDrop", name = "少量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 10 },
-    { id = "TalentDrop", name = "星辰之路", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 20 },
+    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "TalentBigDrop", name = "大量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 30 },
     { id = "GiftDrop", name = "蜜露", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 10 },
     { id = "MetaCurrencyDrop", name = "骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 20 },

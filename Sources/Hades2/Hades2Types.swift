@@ -25,28 +25,28 @@ struct BoonOption: Identifiable {
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
     case godMode, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
-    case infiniteAmmo, damageEnabled, autoMiniGames, moneyMultiplierEnabled, resourceMultiplierEnabled, disableAll
+    case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
+    case boonRarityEnabled, forceLegendary, forceDuo
+    case moneyMultiplierEnabled, resourceMultiplierEnabled
+    case applyNextRoomReward, spawnOlympian, spawnPickup, spawnSpecial
+    case disableAll
 
     var id: String { rawValue }
+
     static let uiOrder: [ShortcutAction] = [
+        .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+        .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL,
+        .boonRarityEnabled, .forceLegendary, .forceDuo,
+        .moneyMultiplierEnabled, .resourceMultiplierEnabled,
+        .applyNextRoomReward, .spawnOlympian, .spawnPickup, .spawnSpecial,
+        .disableAll,
+    ]
+
+    static let legacyDigitActions: [ShortcutAction] = [
         .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
     ]
-    var defaultDigit: Int {
-        switch self {
-        case .godMode: return 1
-        case .infiniteHealth: return 2
-        case .infiniteMana: return 3
-        case .instantCastCooldown: return 4
-        case .hexAlwaysReady: return 5
-        case .infiniteAmmo: return 6
-        case .damageEnabled: return 7
-        case .autoMiniGames: return 8
-        case .moneyMultiplierEnabled: return 9
-        case .resourceMultiplierEnabled: return 9 // no default registration in the 0–9 layout
-        case .disableAll: return 0
-        }
-    }
+
     var title: String {
         switch self {
         case .godMode: return "God Mode"
@@ -57,8 +57,16 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .infiniteAmmo: return "无限弹药"
         case .damageEnabled: return "伤害倍率"
         case .autoMiniGames: return "小游戏自动成功"
+        case .gardenQoL: return "花园便捷操作"
+        case .boonRarityEnabled: return "祝福稀有度控制"
+        case .forceLegendary: return "强制传奇"
+        case .forceDuo: return "强制双重"
         case .moneyMultiplierEnabled: return "金币获取倍率"
         case .resourceMultiplierEnabled: return "材料获取倍率"
+        case .applyNextRoomReward: return "应用下一房奖励"
+        case .spawnOlympian: return "生成诸神祝福"
+        case .spawnPickup: return "生成资源与常规掉落"
+        case .spawnSpecial: return "生成特殊祝福"
         case .disableAll: return "全部关闭"
         }
     }

@@ -35,12 +35,15 @@ assert state['gardenQoL'] is True and a.preferences['gardenQoL'] is True
 state = a.set_next_room_reward_desired('WeaponUpgrade')
 assert state['nextRoomReward'] == 'WeaponUpgrade'
 
-saved = a.save_profile('模块化测试', {'godMode': 1, 'disableAll': 0})
+saved = a.save_profile('模块化测试', {
+    'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'},
+    'disableAll': {'keyCode':29,'modifiers':6144,'keyLabel':'0'},
+})
 assert saved['saved'] and saved['profiles'][0]['name'] == '模块化测试'
 a.preferences['gardenQoL'] = False; a._save_preferences()
 loaded = a.load_profile('模块化测试')
 assert loaded['loadedProfile'] == '模块化测试' and a.preferences['gardenQoL'] is True
-assert loaded['shortcuts']['godMode'] == 1
+assert loaded['shortcuts']['godMode'] == {'keyCode':18,'modifiers':6144,'keyLabel':'1'}
 assert a.delete_profile('模块化测试')['deleted']
 
 # Game-specific validation now lives behind the Hades adapter, not core server.

@@ -39,9 +39,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
-    @ViewState<String> private var selectedOlympian = ""
-    @ViewState<String> private var selectedPickup = ""
-    @ViewState<String> private var selectedSpecial = ""
     @ViewState<String> private var graspLimit = ""
     @ViewState<String> private var dodgeChance = ""
     @ViewState<String> private var critChance = ""
@@ -56,7 +53,6 @@ struct Hades2TrainerView: View {
     @ViewState<Bool> private var statsInitialized = false
     @ViewState<String> private var boonRarityFactor = "100"
     @ViewState<Bool> private var boonConfigInitialized = false
-    @ViewState<String> private var nextRoomRewardChoice = ""
     @ViewState<[String: String]> private var elementInputs = [:]
     @ViewState<Bool> private var elementsInitialized = false
 
@@ -167,7 +163,7 @@ struct Hades2TrainerView: View {
 
             VStack(spacing: 1) {
                 featureRow("小游戏自动成功", key: "autoMiniGames", icon: "gamecontroller.fill", enabled: model.autoMiniGames, shortcut: .autoMiniGames) { model.feature("autoMiniGames", value: !model.autoMiniGames) }
-                featureRow("花园便捷操作", key: "gardenQoL", icon: "leaf.fill", enabled: model.gardenQoL) { model.feature("gardenQoL", value: !model.gardenQoL) }
+                featureRow("花园便捷操作", key: "gardenQoL", icon: "leaf.fill", enabled: model.gardenQoL, shortcut: .gardenQoL) { model.feature("gardenQoL", value: !model.gardenQoL) }
             }
             .trainerGroupedRows()
         }
@@ -192,7 +188,7 @@ struct Hades2TrainerView: View {
                 boonPanel
                 nextRoomRewardPanel
             }
-            TrainerSection(title: "元素数量", icon: "atom") {
+            TrainerSection(title: "元素数量", icon: "circle.hexagongrid.fill") {
                 elementPanel
             }
         }
@@ -434,7 +430,7 @@ struct Hades2TrainerView: View {
         } else if focusedField == nil {
             boonRarityFactor = compactNumber(snapshot.boonRarityMultiplier)
         }
-        nextRoomRewardChoice = snapshot.nextRoomReward ?? ""
+        model.selectedNextRoomReward = snapshot.nextRoomReward ?? ""
         syncElementInputs(snapshot.elements)
         multiplier = compactNumber(snapshot.damageMultiplier)
         moneyFactor = compactNumber(snapshot.moneyMultiplier)
@@ -506,9 +502,9 @@ struct Hades2TrainerView: View {
                 forceDuo: model.boonForceDuo
             )
         }
-        if !newValue.olympianIDs.contains(selectedOlympian) { selectedOlympian = newValue.olympianIDs.first ?? "" }
-        if !newValue.pickupIDs.contains(selectedPickup) { selectedPickup = newValue.pickupIDs.first ?? "" }
-        if !newValue.specialIDs.contains(selectedSpecial) { selectedSpecial = newValue.specialIDs.first ?? "" }
+        if !newValue.olympianIDs.contains(model.selectedOlympianReward) { model.selectedOlympianReward = newValue.olympianIDs.first ?? "" }
+        if !newValue.pickupIDs.contains(model.selectedPickupReward) { model.selectedPickupReward = newValue.pickupIDs.first ?? "" }
+        if !newValue.specialIDs.contains(model.selectedSpecialReward) { model.selectedSpecialReward = newValue.specialIDs.first ?? "" }
         if !newValue.filteredResourceIDs.contains(selectedMaterial) {
             selectedMaterial = search.isEmpty && newValue.filteredResourceIDs.contains("MetaCurrency")
                 ? "MetaCurrency"
@@ -641,6 +637,7 @@ struct Hades2TrainerView: View {
             HStack(spacing: 12) {
                 Label("祝福稀有度控制", systemImage: "star.circle.fill").font(.subheadline.weight(.semibold))
                 Spacer()
+                TrainerShortcutBadge(text: model.shortcutText(.boonRarityEnabled))
                 TrainerToggleControl(
                     isOn: model.boonRarityEnabled,
                     enabled: model.canEditDesired,
@@ -661,18 +658,24 @@ struct Hades2TrainerView: View {
             }
             Divider()
             HStack(spacing: 18) {
-                TrainerCheckboxControl(
-                    title: "强制传奇 Legendary",
-                    isOn: model.boonForceLegendary,
-                    enabled: model.canEditDesired && model.boonRarityEnabled,
-                    onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: $0, forceDuo: model.boonForceDuo) }
-                )
-                TrainerCheckboxControl(
-                    title: "强制双重 Duo",
-                    isOn: model.boonForceDuo,
-                    enabled: model.canEditDesired && model.boonRarityEnabled,
-                    onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: model.boonForceLegendary, forceDuo: $0) }
-                )
+                HStack(spacing: 8) {
+                    TrainerCheckboxControl(
+                        title: "强制传奇 Legendary",
+                        isOn: model.boonForceLegendary,
+                        enabled: model.canEditDesired && model.boonRarityEnabled,
+                        onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: $0, forceDuo: model.boonForceDuo) }
+                    )
+                    TrainerShortcutBadge(text: model.shortcutText(.forceLegendary))
+                }
+                HStack(spacing: 8) {
+                    TrainerCheckboxControl(
+                        title: "强制双重 Duo",
+                        isOn: model.boonForceDuo,
+                        enabled: model.canEditDesired && model.boonRarityEnabled,
+                        onChange: { model.setBoonRarity(target: model.boonRarityTarget, multiplier: boonRarityFactor, forceLegendary: model.boonForceLegendary, forceDuo: $0) }
+                    )
+                    TrainerShortcutBadge(text: model.shortcutText(.forceDuo))
+                }
                 Spacer()
             }
         }.trainerPanel()
@@ -682,24 +685,25 @@ struct Hades2TrainerView: View {
         HStack(spacing: 14) {
             Label("下一房奖励", systemImage: "door.left.hand.open").font(.subheadline.weight(.semibold))
             Spacer()
-            Picker("下一房奖励", selection: $nextRoomRewardChoice) {
+            Picker("下一房奖励", selection: $model.selectedNextRoomReward) {
                 Text("不覆盖").tag("")
                 Section("常规") {
-                    Text("金币").tag("RoomMoneyDrop")
-                    Text("尘灰").tag("MetaCardPointsCommonDrop")
-                    Text("魂魄").tag("MemPointsCommonDrop")
-                    Text("骨骸").tag("MetaCurrencyDrop")
-                    Text("半人马之心").tag("MaxHealthDrop")
-                    Text("魔力上限").tag("MaxManaDrop")
-                    Text("力量石榴").tag("StackUpgrade")
-                    Text("代达罗斯之锤").tag("WeaponUpgrade")
-                    Text("塞勒涅巫咒").tag("SpellDrop")
+                    Text("金币 · Gold Crowns").tag("RoomMoneyDrop")
+                    Text("尘灰 · Ashes").tag("MetaCardPointsCommonDrop")
+                    Text("魂魄 · Psyche").tag("MemPointsCommonDrop")
+                    Text("骨骸 · Bones").tag("MetaCurrencyDrop")
+                    Text("半人马之心 · Centaur Heart").tag("MaxHealthDrop")
+                    Text("灵魂之水 · Soul Tonic").tag("MaxManaDrop")
+                    Text("力量石榴 · Pom of Power").tag("StackUpgrade")
+                    Text("狄德勒斯之锤 · Daedalus Hammer").tag("WeaponUpgrade")
+                    Text("月之礼赠 · Gift of the Moon").tag("SpellDrop")
                 }
                 Section("诸神") {
                     ForEach(olympianBoons) { boon in Text(boon.englishName.isEmpty ? boon.name : "\(boon.name) · \(boon.englishName)").tag(boon.id) }
                 }
             }.labelsHidden().frame(maxWidth: 360).disabled(!model.canEditDesired)
-            Button("应用") { model.setNextRoomReward(nextRoomRewardChoice.isEmpty ? nil : nextRoomRewardChoice) }.disabled(!model.canEditDesired)
+            TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
+            Button("应用") { model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward) }.disabled(!model.canEditDesired)
         }.trainerPanel()
     }
 
@@ -729,27 +733,27 @@ struct Hades2TrainerView: View {
             )
             Divider()
             multiplierRow("材料获取倍率", enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                text: $materialFactor, feature: "resourceMultiplier", toggle: "resourceMultiplierEnabled")
+                text: $materialFactor, feature: "resourceMultiplier", toggle: "resourceMultiplierEnabled", shortcut: .resourceMultiplierEnabled)
         }
         .trainerPanel()
     }
 
     private var boonPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            spawnRow(title: "诸神祝福", icon: "sparkles", options: olympianBoons, selection: $selectedOlympian)
+            spawnRow(title: "诸神祝福", icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian)
             Divider()
-            spawnRow(title: "资源与常规掉落", icon: "shippingbox.fill", options: pickupRewards, selection: $selectedPickup)
+            spawnRow(title: "资源与常规掉落", icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup)
             Divider()
             HStack {
                 Label("特殊祝福", systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
                 Spacer()
                 TextField("搜索官方中英文名或内部 ID", text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
-            spawnRow(title: nil, icon: nil, options: specialBoons, selection: $selectedSpecial)
+            spawnRow(title: nil, icon: nil, options: specialBoons, selection: $model.selectedSpecialReward, shortcut: .spawnSpecial)
         }.trainerPanel()
     }
 
-    private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>) -> some View {
+    private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>, shortcut: ShortcutAction) -> some View {
         TrainerGroupedOptionPicker(
             title: title,
             icon: icon,
@@ -759,6 +763,7 @@ struct Hades2TrainerView: View {
             enabled: model.canSpawnReward,
             emptyLabel: "没有可用项目",
             actionTitle: "生成",
+            shortcutText: model.shortcutText(shortcut),
             itemLabel: { option in
                 option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
             },
@@ -772,7 +777,7 @@ struct Hades2TrainerView: View {
             icon: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill",
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme),
             text: text,
-            shortcutText: shortcut.map { "⌃⌥\(model.shortcutDigit($0))" }
+            shortcutText: shortcut.map { model.shortcutText($0) }
         ) {
             model.feature(toggle, value: !enabled)
         }
@@ -788,7 +793,7 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Spacer()
-                    Button { model.disableAll() } label: { Label("全部关闭  ⌃⌥\(model.shortcutDigit(.disableAll))", systemImage: "power") }
+                    Button { model.disableAll() } label: { Label("全部关闭  \(model.shortcutText(.disableAll))", systemImage: "power") }
                         .disabled(!model.connected || model.busy || model.exiting)
                 }
                 HStack(spacing: 12) {
@@ -811,7 +816,7 @@ struct Hades2TrainerView: View {
             title: title,
             icon: icon,
             state: model.featurePresentation(key, enabled: enabled).trainerControlState(using: theme),
-            shortcutText: shortcut.map { "⌃⌥\(model.shortcutDigit($0))" },
+            shortcutText: shortcut.map { model.shortcutText($0) },
             action: action
         )
     }
@@ -823,7 +828,7 @@ struct Hades2TrainerView: View {
             icon: icon,
             state: model.featurePresentation(key, enabled: enabled).trainerControlState(using: theme),
             text: text,
-            shortcutText: shortcut.map { "⌃⌥\(model.shortcutDigit($0))" },
+            shortcutText: shortcut.map { model.shortcutText($0) },
             action: action
         )
     }
@@ -913,10 +918,11 @@ struct Hades2TrainerView: View {
             get: { elementInputs[element.id] ?? number(element.count) },
             set: { elementInputs[element.id] = $0 }
         )
+        let style = elementStyle(element.id)
         return TrainerAmountMetricCard(
             title: element.name + "元素",
-            icon: "atom",
-            tint: .secondary,
+            icon: style.icon,
+            tint: style.tint,
             text: binding,
             focus: $focusedField,
             focusValue: .element(element.id),
@@ -925,6 +931,17 @@ struct Hades2TrainerView: View {
             placeholder: "0",
             onLock: { model.lockElement(element.id, locked: !element.locked) }
         )
+    }
+
+    private func elementStyle(_ id: String) -> (icon: String, tint: Color) {
+        switch id {
+        case "Fire": return ("flame.fill", .orange)
+        case "Water": return ("drop.fill", .blue)
+        case "Earth": return ("leaf.fill", .green)
+        case "Air": return ("wind", .cyan)
+        case "Aether": return ("sparkles", .purple)
+        default: return ("circle.hexagongrid.fill", accent)
+        }
     }
 
     private func compactNumber(_ value: Double) -> String { String(format: "%.3g", value) }

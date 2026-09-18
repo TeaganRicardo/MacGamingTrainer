@@ -21,13 +21,9 @@ struct TrainerShortcutBadgeSlot: View {
     let text: String?
 
     var body: some View {
-        Group {
-            if let text {
-                TrainerShortcutBadge(text: text)
-            } else {
-                Color.clear.frame(width: 1, height: 1)
-            }
+        if let text, !text.isEmpty {
+            TrainerShortcutBadge(text: text)
+                .frame(minWidth: 52, alignment: .center)
         }
-        .frame(width: 52, alignment: .center)
     }
 }

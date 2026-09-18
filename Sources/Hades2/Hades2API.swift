@@ -54,7 +54,7 @@ enum Hades2Request {
     case setNextRoomReward(String?)
     case spawnReward(String)
     case listProfiles
-    case saveProfile(name: String, shortcuts: [String: Int])
+    case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
     case deleteProfile(String)
     case diagnostics, exportDiagnostics

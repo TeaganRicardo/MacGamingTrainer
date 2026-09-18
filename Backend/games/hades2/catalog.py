@@ -11,6 +11,8 @@ _LINKED_OFFICIAL_NAME_IDS = {
     'MetaCardPointsCommonDrop': 'MetaCardPointsCommon',
     'MemPointsCommonDrop': 'MemPointsCommon',
     'SpellDrop': 'SpellDrop_Store',
+    'ArmorBoost': 'ArmorBoost_Store',
+    'RoomRewardHealDrop': 'RoomRewardHealDrop_Store',
 }
 
 _LINKED_PROVISIONAL_RULES = {
@@ -18,21 +20,23 @@ _LINKED_PROVISIONAL_RULES = {
     # have an exact display string of their own. The modifier is therefore a
     # trainer-side composition and must remain distinguishable from official
     # localization provenance.
-    'RoomMoneyTinyDrop': ('RoomMoneyDrop', '少量'),
-    'EmptyMaxHealthSmallDrop': ('EmptyMaxHealthDrop', '小型'),
-    'MetaCurrencyBigDrop': ('MetaCurrency', '大量'),
-    'MetaCardPointsCommonBigDrop': ('MetaCardPointsCommon', '大量'),
-    'MemPointsCommonBigDrop': ('MemPointsCommon', '大量'),
+    'RoomMoneyTinyDrop': ('RoomMoneyDrop', '少量', 'Small '),
+    'EmptyMaxHealthSmallDrop': ('EmptyMaxHealthDrop', '小型', 'Small '),
+    'MetaCurrencyBigDrop': ('MetaCurrency', '大量', 'Large '),
+    'MetaCardPointsCommonBigDrop': ('MetaCardPointsCommon', '大量', 'Large '),
+    'MemPointsCommonBigDrop': ('MemPointsCommon', '大量', 'Large '),
 }
 
-_PROVISIONAL_ZH_NAMES = {
-    # The installed game's HelpText describes these exact pickups as the
-    # essence of the corresponding element, but the hidden Essence traits have
-    # no standalone DisplayName. Preserve that official terminology here.
-    'FireBoost': '火元素精华',
-    'WaterBoost': '水元素精华',
-    'EarthBoost': '土元素精华',
-    'AirBoost': '风元素精华',
+_PROVISIONAL_NAMES = {
+    # No standalone DisplayName exists for these runtime reward ids. These
+    # labels are deliberate trainer-side names built from terminology used by
+    # the installed game's own descriptions and data.
+    'FireBoost': ('火元素精华', 'Fire Essence'),
+    'WaterBoost': ('水元素精华', 'Water Essence'),
+    'EarthBoost': ('土元素精华', 'Earth Essence'),
+    'AirBoost': ('风元素精华', 'Air Essence'),
+    'ElementalBoost': ('元素精华', 'Elemental Essence'),
+    'StoreRewardRandomStack': ('随机祝福强化', 'Random Boon Upgrade'),
 }
 
 
@@ -40,27 +44,29 @@ def _clean(value):
     return localization._clean_display_name(value) if isinstance(value,str) else value
 
 
-def _fallback_name(item, identifier, english_name, linked_zh):
+def _fallback_names(item, identifier, english_name, linked_zh, linked_en):
     linked_id=_LINKED_OFFICIAL_NAME_IDS.get(identifier)
     if linked_id:
-        linked_name=_clean(linked_zh.get(linked_id))
-        if isinstance(linked_name,str) and linked_name:
-            return linked_name, 'official_linked_zh'
+        linked_zh_name=_clean(linked_zh.get(linked_id))
+        linked_en_name=_clean(linked_en.get(linked_id))
+        if isinstance(linked_zh_name,str) and linked_zh_name:
+            return linked_zh_name, 'official_linked_zh', linked_en_name or identifier, ('official_linked_en' if linked_en_name else 'identifier')
     rule=_LINKED_PROVISIONAL_RULES.get(identifier)
     if rule:
-        base_id,prefix=rule
-        base_name=_clean(linked_zh.get(base_id))
-        if isinstance(base_name,str) and base_name:
-            return prefix + base_name, 'provisional_zh'
-    provisional=_PROVISIONAL_ZH_NAMES.get(identifier)
+        base_id,zh_prefix,en_prefix=rule
+        base_zh=_clean(linked_zh.get(base_id))
+        base_en=_clean(linked_en.get(base_id))
+        if isinstance(base_zh,str) and base_zh:
+            return zh_prefix + base_zh, 'provisional_zh', (en_prefix + base_en) if base_en else identifier, ('provisional_en' if base_en else 'identifier')
+    provisional=_PROVISIONAL_NAMES.get(identifier)
     if provisional:
-        return provisional, 'provisional_zh'
+        return provisional[0], 'provisional_zh', provisional[1], 'provisional_en'
     if isinstance(english_name,str) and english_name:
-        return english_name, 'official_en'
+        return english_name, 'official_en', english_name, 'official_en'
     runtime_name=_clean(item.get('name')) if isinstance(item,dict) else None
     if isinstance(runtime_name,str) and runtime_name:
-        return runtime_name, 'runtime_fallback'
-    return identifier, 'identifier'
+        return runtime_name, 'runtime_fallback', identifier, 'identifier'
+    return identifier, 'identifier', identifier, 'identifier'
 
 
 def localize_catalog(decoded):
@@ -78,7 +84,7 @@ def localize_catalog(decoded):
     if not lookup:return decoded
     unique=set(lookup)
     linked_ids=set(_LINKED_OFFICIAL_NAME_IDS.values())
-    linked_ids.update(base_id for base_id,_ in _LINKED_PROVISIONAL_RULES.values())
+    linked_ids.update(base_id for base_id,_,_ in _LINKED_PROVISIONAL_RULES.values())
     localization_ids=unique | linked_ids
     zh=localization.official_display_names(localization_ids,'zh-CN')
     en=localization.official_display_names(localization_ids,'en')
@@ -91,16 +97,21 @@ def localize_catalog(decoded):
             if isinstance(item.get(key),str):item[key]=_clean(item[key])
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
-        if isinstance(official_en,str) and official_en:item['englishName']=official_en
+        if isinstance(official_en,str) and official_en:
+            item['englishName']=official_en
+            item['englishNameSource']='official_en'
         if isinstance(official_zh,str) and official_zh:
             # Keep the item label exactly equal to the game's official Chinese
             # DisplayName. Source/person grouping belongs in sectionTitle.
             item['name']=official_zh
             item['officialName']=True
             item['nameSource']='official_zh'
+            if not item.get('englishName'):
+                item['englishName']=identifier
+                item['englishNameSource']='identifier'
         else:
             item['officialName']=False
-            item['name'],item['nameSource']=_fallback_name(item,identifier,official_en,zh)
+            item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
             if item.get('kind')=='trait':fallback_special.append(identifier)
     for item in resources:
         if not isinstance(item,dict) or not isinstance(item.get('id'),str):continue
@@ -109,12 +120,16 @@ def localize_catalog(decoded):
             if isinstance(item.get(key),str):item[key]=_clean(item[key])
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
-        if isinstance(official_en,str) and official_en:item['englishName']=official_en
+        if isinstance(official_en,str) and official_en:
+            item['englishName']=official_en
+            item['englishNameSource']='official_en'
         if isinstance(official_zh,str) and official_zh:
             item['name']=official_zh;item['officialName']=True;item['nameSource']='official_zh'
+            if not item.get('englishName'):
+                item['englishName']=identifier;item['englishNameSource']='identifier'
         else:
             item['officialName']=False
-            item['name'],item['nameSource']=_fallback_name(item,identifier,official_en,zh)
+            item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
     if fallback_special:
         missing=set(fallback_special)
         warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []

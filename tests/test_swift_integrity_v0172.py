@@ -106,6 +106,7 @@ struct GameModuleDescriptor {
             ROOT / 'Sources/Core/Runtime/BackendClient.swift',
             descriptor_stub,
             ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift',
+            ROOT / 'Sources/Core/Input/HotkeyChord.swift',
             ROOT / 'Sources/Hades2/Hades2Types.swift',
             ROOT / 'Sources/Hades2/Hades2API.swift',
             ROOT / 'Sources/Hades2/Hades2BackendState.swift',

@@ -20,9 +20,23 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'RoomMoneyDrop': '金币',
             'EmptyMaxHealthDrop': '半人马之魂',
             'SpellDrop_Store': '月之礼赠',
+            'ArmorBoost_Store': '护盾饰符',
+            'RoomRewardHealDrop_Store': '新鲜食粮',
         }
     if language == 'en':
-        return {'EnglishTrait': 'English Trait', 'EnglishReward': 'English Reward'}
+        return {
+            'EnglishTrait': 'English Trait',
+            'EnglishReward': 'English Reward',
+            'GiftPoints': 'Nectar',
+            'MetaCurrency': 'Bones',
+            'MetaCardPointsCommon': 'Ashes',
+            'MemPointsCommon': 'Psyche',
+            'RoomMoneyDrop': 'Gold Crowns',
+            'EmptyMaxHealthDrop': 'Centaur Soul',
+            'SpellDrop_Store': 'Gift of the Moon',
+            'ArmorBoost_Store': 'Shield Charm',
+            'RoomRewardHealDrop_Store': 'Fresh Sustenance',
+        }
     return {}
 
 localization.official_display_names = fake_names
@@ -48,6 +62,10 @@ try:
             {'id':'EarthBoost','kind':'consumable','name':'EarthBoost'},
             {'id':'AirBoost','kind':'consumable','name':'AirBoost'},
             {'id':'SpellDrop','kind':'loot','name':'stale spell fallback'},
+            {'id':'ArmorBoost','kind':'consumable','name':'ArmorBoost'},
+            {'id':'RoomRewardHealDrop','kind':'consumable','name':'RoomRewardHealDrop'},
+            {'id':'ElementalBoost','kind':'consumable','name':'ElementalBoost'},
+            {'id':'StoreRewardRandomStack','kind':'consumable','name':'StoreRewardRandomStack'},
         ],
         'resources': [{'id':'UnknownResource','name':'已有中文兜底'}],
     }
@@ -64,30 +82,38 @@ assert rows['EnglishTrait']['officialName'] is False and rows['EnglishTrait']['n
 assert rows['InternalOnlyTrait']['name'] == 'InternalOnlyTrait'
 assert rows['InternalOnlyTrait']['officialName'] is False and rows['InternalOnlyTrait']['nameSource'] == 'runtime_fallback'
 assert rows['EnglishReward']['name'] == 'English Reward' and rows['EnglishReward']['nameSource'] == 'official_en'
-for identifier,expected in {
-    'GiftDrop':'蜜露',
-    'MetaCurrencyDrop':'骨骸',
-    'MetaCardPointsCommonDrop':'尘灰',
-    'MemPointsCommonDrop':'魂魄',
-    'SpellDrop':'月之礼赠',
-}.items():
-    assert rows[identifier]['name'] == expected
+for identifier,expected_zh,expected_en in [
+    ('GiftDrop','蜜露','Nectar'),
+    ('MetaCurrencyDrop','骨骸','Bones'),
+    ('MetaCardPointsCommonDrop','尘灰','Ashes'),
+    ('MemPointsCommonDrop','魂魄','Psyche'),
+    ('SpellDrop','月之礼赠','Gift of the Moon'),
+    ('ArmorBoost','护盾饰符','Shield Charm'),
+    ('RoomRewardHealDrop','新鲜食粮','Fresh Sustenance'),
+]:
+    assert rows[identifier]['name'] == expected_zh
+    assert rows[identifier]['englishName'] == expected_en
     assert rows[identifier]['officialName'] is False
     assert rows[identifier]['nameSource'] == 'official_linked_zh'
-for identifier,expected in {
-    'RoomMoneyTinyDrop':'少量金币',
-    'EmptyMaxHealthSmallDrop':'小型半人马之魂',
-    'MetaCurrencyBigDrop':'大量骨骸',
-    'MetaCardPointsCommonBigDrop':'大量尘灰',
-    'MemPointsCommonBigDrop':'大量魂魄',
-    'FireBoost':'火元素精华',
-    'WaterBoost':'水元素精华',
-    'EarthBoost':'土元素精华',
-    'AirBoost':'风元素精华',
-}.items():
-    assert rows[identifier]['name'] == expected
+    assert rows[identifier]['englishNameSource'] == 'official_linked_en'
+for identifier,expected_zh,expected_en in [
+    ('RoomMoneyTinyDrop','少量金币','Small Gold Crowns'),
+    ('EmptyMaxHealthSmallDrop','小型半人马之魂','Small Centaur Soul'),
+    ('MetaCurrencyBigDrop','大量骨骸','Large Bones'),
+    ('MetaCardPointsCommonBigDrop','大量尘灰','Large Ashes'),
+    ('MemPointsCommonBigDrop','大量魂魄','Large Psyche'),
+    ('FireBoost','火元素精华','Fire Essence'),
+    ('WaterBoost','水元素精华','Water Essence'),
+    ('EarthBoost','土元素精华','Earth Essence'),
+    ('AirBoost','风元素精华','Air Essence'),
+    ('ElementalBoost','元素精华','Elemental Essence'),
+    ('StoreRewardRandomStack','随机祝福强化','Random Boon Upgrade'),
+]:
+    assert rows[identifier]['name'] == expected_zh
+    assert rows[identifier]['englishName'] == expected_en
     assert rows[identifier]['officialName'] is False
     assert rows[identifier]['nameSource'] == 'provisional_zh'
+    assert rows[identifier]['englishNameSource'] == 'provisional_en'
 assert result['resources'][0]['name'] == '已有中文兜底'
 assert result['resources'][0]['officialName'] is False
 assert any('已保留并使用官方英文名或内部名称' in warning for warning in result.get('warnings', []))

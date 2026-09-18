@@ -98,6 +98,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
     let enabled: Bool
     let emptyLabel: String
     let actionTitle: String
+    let shortcutText: String?
     let itemLabel: (Item) -> String
     let onAction: (String) -> Void
 
@@ -127,6 +128,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
                 .frame(maxWidth: .infinity)
                 .disabled(!enabled || allItems.isEmpty)
 
+                TrainerShortcutBadgeSlot(text: shortcutText)
                 Button(actionTitle) {
                     guard hasSelection else { return }
                     onAction(selectedID)

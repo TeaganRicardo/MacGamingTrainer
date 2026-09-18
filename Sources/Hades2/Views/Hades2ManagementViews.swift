@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct Hades2SaveManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
@@ -222,26 +223,28 @@ struct Hades2DiagnosticsView: View {
 struct Hades2ShortcutSettingsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
+    @State private var capturing: ShortcutAction?
+    @State private var keyMonitor: Any?
 
     var body: some View {
-        TrainerSheetScaffold(title: "快捷键设置", width: 490) {
+        TrainerSheetScaffold(title: "快捷键设置", width: 560) {
             EmptyView()
         } content: {
-            Text("全局快捷键使用 Control + Option + 数字。")
+            Text("点击任一快捷键后直接按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。")
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ForEach(ShortcutAction.uiOrder) { action in
                 HStack {
                     Text(action.title)
                     Spacer()
-                    Text("⌃ Control  ⌥ Option +").foregroundStyle(.secondary)
-                    Picker("按键", selection: Binding(
-                        get: { model.shortcutDigit(action) },
-                        set: { model.setShortcut(action: action, digit: $0) }
-                    )) {
-                        ForEach(0..<10) { Text(String($0)).tag($0) }
+                    Button {
+                        beginCapture(action)
+                    } label: {
+                        Text(capturing == action ? "按下新快捷键…" : model.shortcutText(action))
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minWidth: 110)
                     }
-                    .labelsHidden()
-                    .frame(width: 65)
+                    .buttonStyle(.bordered)
                 }
             }
             if !model.shortcutError.isEmpty {
@@ -250,8 +253,40 @@ struct Hades2ShortcutSettingsView: View {
         } footer: {
             HStack {
                 Spacer()
-                Button("完成") { model.shortcutSettingsPresented = false }.keyboardShortcut(.defaultAction)
+                Button("完成") {
+                    stopCapture()
+                    model.shortcutSettingsPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
             }
         }
+        .onDisappear { stopCapture() }
+    }
+
+    private func beginCapture(_ action: ShortcutAction) {
+        stopCapture()
+        capturing = action
+        model.shortcutError = ""
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 {
+                stopCapture()
+                return nil
+            }
+            guard let chord = HotkeyChord.capture(event) else {
+                model.shortcutError = "无法识别该按键，请换一个组合。"
+                return nil
+            }
+            model.setShortcut(action: action, chord: chord)
+            stopCapture()
+            return nil
+        }
+    }
+
+    private func stopCapture() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+            self.keyMonitor = nil
+        }
+        capturing = nil
     }
 }

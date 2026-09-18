@@ -6,22 +6,16 @@ import time
 from .persistence import atomic_write_text, quarantine_corrupt_file, UnsupportedSchemaVersionError
 
 
-PROFILE_SCHEMA_VERSION = 3
+PROFILE_SCHEMA_VERSION = 4
 _PROFILE_FIELDS = frozenset(('schemaVersion','name','updatedAt','desired','shortcuts'))
 
-
-_SHORTCUT_DEFAULTS = {
-    'godMode': 1,
-    'infiniteHealth': 2,
-    'infiniteMana': 3,
-    'instantCastCooldown': 4,
-    'hexAlwaysReady': 5,
-    'infiniteAmmo': 6,
-    'damageEnabled': 7,
-    'autoMiniGames': 8,
-    'moneyMultiplierEnabled': 9,
-    'disableAll': 0,
-}
+_SHORTCUT_ACTIONS = (
+    'godMode','infiniteHealth','infiniteMana','instantCastCooldown','hexAlwaysReady',
+    'infiniteAmmo','damageEnabled','autoMiniGames','gardenQoL',
+    'boonRarityEnabled','forceLegendary','forceDuo',
+    'moneyMultiplierEnabled','resourceMultiplierEnabled',
+    'applyNextRoomReward','spawnOlympian','spawnPickup','spawnSpecial','disableAll',
+)
 
 
 def _profile_schema_version(payload):
@@ -32,25 +26,22 @@ def _profile_schema_version(payload):
 
 
 def _normalize_shortcuts(raw):
-    """Return a deterministic unique shortcut layout for profile payloads.
-
-    Shortcut assignments are normalized to the same unique 0-9 swap semantics
-    as the Swift shortcut editor.
-    """
+    """Validate current Profile shortcut chords without legacy coercion."""
     if not isinstance(raw,dict):return {}
-    valid={key:value for key,value in raw.items()
-           if key in _SHORTCUT_DEFAULTS and type(value) is int and 0<=value<=9}
-    if not valid:return {}
-    digits=dict(_SHORTCUT_DEFAULTS)
-    for action in _SHORTCUT_DEFAULTS:
-        if action not in valid:continue
-        wanted=valid[action]
-        current=digits[action]
-        if current==wanted:continue
-        other=next((key for key,value in digits.items() if value==wanted),None)
-        if other is not None:digits[other]=current
-        digits[action]=wanted
-    return digits
+    result={}
+    used=set()
+    for action in _SHORTCUT_ACTIONS:
+        row=raw.get(action)
+        if not isinstance(row,dict) or set(row)!= {'keyCode','modifiers','keyLabel'}:continue
+        key_code=row.get('keyCode');modifiers=row.get('modifiers');label=row.get('keyLabel')
+        if type(key_code) is not int or not 0<=key_code<=65535:continue
+        if type(modifiers) is not int or not 0<=modifiers<=0xFFFFFFFF:continue
+        if not isinstance(label,str) or not label or len(label)>16 or any(ord(ch)<32 for ch in label):continue
+        token=(key_code,modifiers)
+        if token in used:continue
+        used.add(token)
+        result[action]={'keyCode':key_code,'modifiers':modifiers,'keyLabel':label}
+    return result
 
 
 class Hades2ProfileService:

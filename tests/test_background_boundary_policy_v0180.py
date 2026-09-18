@@ -17,7 +17,7 @@ all_scheduled_timers = [
 assert all_scheduled_timers == [(root/'Sources/Hades2/Hades2Model.swift', 1)]
 
 start = model.index('pendingRestoreTimer = Timer.scheduledTimer')
-end = model.index('\n    func shortcutDigit', start)
+end = model.index('\n    func shortcutChord', start)
 watcher = model[start:end]
 assert 'repeats: true' in watcher
 assert 'pendingRestoreID != nil' in watcher

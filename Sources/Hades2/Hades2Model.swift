@@ -98,6 +98,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
     @Published var boons: [BoonOption] = []
+    @Published var selectedOlympianReward = ""
+    @Published var selectedPickupReward = ""
+    @Published var selectedSpecialReward = ""
+    @Published var selectedNextRoomReward = ""
     @Published var statSupport: [String: Bool] = [:]
     @Published var statAvailable: [String: Bool] = [:]
     @Published var graspValue: Double?
@@ -621,7 +625,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.setNextRoomReward(reward), title: reward == nil ? "清除下一房奖励" : "设置下一房奖励")
     }
 
-    private func shortcutPayload() -> [String: Int] { shortcutStore.payload() }
+    private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
 
     func saveProfile(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -716,41 +720,63 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func shortcutDigit(_ action: ShortcutAction) -> Int { shortcutStore.digit(action) }
+    func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
+    func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
 
-    func setShortcut(action: ShortcutAction, digit: Int) {
-        guard (0...9).contains(digit) else { return }
-        shortcutStore.set(action, digit: digit)
-        shortcutError = ""
-        installHotkeys()
+    func setShortcut(action: ShortcutAction, chord: HotkeyChord) {
+        shortcutError = shortcutStore.set(action, chord: chord) ?? ""
+        if shortcutError.isEmpty { installHotkeys() }
+    }
+
+    private func performShortcut(_ action: ShortcutAction) {
+        if action == .disableAll {
+            guard connected && !busy && !exiting else { return }
+            sendBarrier(.disableAll, title: "全部关闭")
+            return
+        }
+        guard !busy && !exiting else { return }
+        switch action {
+        case .godMode: guard canEditDesired else { return }; feature("godMode", value: !godMode)
+        case .infiniteHealth: guard canEditDesired else { return }; feature("infiniteHealth", value: !infiniteHealth)
+        case .infiniteMana: guard canEditDesired else { return }; feature("infiniteMana", value: !infiniteMana)
+        case .instantCastCooldown: guard canEditDesired else { return }; feature("instantCastCooldown", value: !instantCastCooldown)
+        case .hexAlwaysReady: guard canEditDesired else { return }; feature("hexAlwaysReady", value: !hexAlwaysReady)
+        case .infiniteAmmo: guard canEditDesired else { return }; feature("infiniteAmmo", value: !infiniteAmmo)
+        case .damageEnabled: guard canEditDesired else { return }; feature("damageEnabled", value: !damageEnabled)
+        case .autoMiniGames: guard canEditDesired else { return }; feature("autoMiniGames", value: !autoMiniGames)
+        case .gardenQoL: guard canEditDesired else { return }; feature("gardenQoL", value: !gardenQoL)
+        case .boonRarityEnabled:
+            guard canEditDesired else { return }; feature("boonRarityEnabled", value: !boonRarityEnabled)
+        case .forceLegendary:
+            guard canEditDesired else { return }
+            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: !boonForceLegendary, forceDuo: boonForceDuo)
+        case .forceDuo:
+            guard canEditDesired else { return }
+            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: boonForceLegendary, forceDuo: !boonForceDuo)
+        case .moneyMultiplierEnabled:
+            guard canEditDesired else { return }; feature("moneyMultiplierEnabled", value: !moneyMultiplierEnabled)
+        case .resourceMultiplierEnabled:
+            guard canEditDesired else { return }; feature("resourceMultiplierEnabled", value: !resourceMultiplierEnabled)
+        case .applyNextRoomReward:
+            guard canEditDesired else { return }; setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward)
+        case .spawnOlympian:
+            guard canSpawnReward, !selectedOlympianReward.isEmpty else { return }; spawnBoon(selectedOlympianReward)
+        case .spawnPickup:
+            guard canSpawnReward, !selectedPickupReward.isEmpty else { return }; spawnBoon(selectedPickupReward)
+        case .spawnSpecial:
+            guard canSpawnReward, !selectedSpecialReward.isEmpty else { return }; spawnBoon(selectedSpecialReward)
+        case .disableAll: break
+        }
     }
 
     private func installHotkeys() {
         hotkeys = nil
         let instance = GlobalHotkeys { [weak self] actionID in
-            guard let self = self, let action = ShortcutAction(rawValue: actionID) else { return }
-            if action == .disableAll {
-                guard self.connected && !self.busy && !self.exiting else { return }
-                self.sendBarrier(.disableAll, title: "全部关闭")
-                return
-            }
-            guard self.canEditDesired && !self.busy else { return }
-            switch action {
-            case .godMode: self.feature("godMode", value: !self.godMode)
-            case .infiniteHealth: self.feature("infiniteHealth", value: !self.infiniteHealth)
-            case .infiniteMana: self.feature("infiniteMana", value: !self.infiniteMana)
-            case .instantCastCooldown: self.feature("instantCastCooldown", value: !self.instantCastCooldown)
-            case .hexAlwaysReady: self.feature("hexAlwaysReady", value: !self.hexAlwaysReady)
-            case .infiniteAmmo: self.feature("infiniteAmmo", value: !self.infiniteAmmo)
-            case .damageEnabled: self.feature("damageEnabled", value: !self.damageEnabled)
-            case .autoMiniGames: self.feature("autoMiniGames", value: !self.autoMiniGames)
-            case .moneyMultiplierEnabled: self.feature("moneyMultiplierEnabled", value: !self.moneyMultiplierEnabled)
-            case .resourceMultiplierEnabled: self.feature("resourceMultiplierEnabled", value: !self.resourceMultiplierEnabled)
-            case .disableAll: break
-            }
+            guard let self, let action = ShortcutAction(rawValue: actionID) else { return }
+            self.performShortcut(action)
         }
         let bindings = ShortcutAction.uiOrder.map { action in
-            HotkeyBinding(actionID: action.rawValue, title: action.title, digit: shortcutDigit(action))
+            HotkeyBinding(actionID: action.rawValue, title: action.title, chord: shortcutChord(action))
         }
         shortcutError = instance.register(bindings)
         hotkeys = instance

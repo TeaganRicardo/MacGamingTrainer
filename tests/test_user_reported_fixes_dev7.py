@@ -28,7 +28,7 @@ def main():
     assert Hades2PreferenceStore.defaults()['boonRarity']['forceLegendary'] is False
     assert Hades2PreferenceStore.defaults()['boonRarity']['forceDuo'] is False
     assert DESIRED_STATE_SCHEMA_VERSION == 3
-    assert PROFILE_SCHEMA_VERSION == 3
+    assert PROFILE_SCHEMA_VERSION == 4
 
     # Legacy allow=true must not silently turn into a force action after upgrade.
     prefs = read('Backend/games/hades2/preferences.py')
