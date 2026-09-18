@@ -355,10 +355,19 @@ class Hades2Adapter(GameAdapter):
             try:
                 result=self.execute('status',{'includeCatalogs':True})
             except TransportError as e:
-                outcome=e.code
-                if e.code=='waiting':
-                    self.state['status']='waiting';result=dict(self.state,error=str(e))
+                message=str(e)
+                bootstrap_waiting=e.code=='lua_error' and any(marker in message for marker in (
+                    'Unsupported game runtime: missing table SessionState',
+                    'Unsupported game runtime: missing table GameState',
+                    'Unsupported game runtime: missing UpdateTimers',
+                ))
+                if e.code=='waiting' or bootstrap_waiting:
+                    outcome='waiting'
+                    self.state['status']='waiting'
+                    if bootstrap_waiting:self.state['scene']='loading'
+                    result=dict(self.state)
                 else:
+                    outcome=e.code
                     self.transport.detach();mark_disconnected(self.state);raise
             profile['firstStatusTotal']=time.monotonic()-phase
             return result
