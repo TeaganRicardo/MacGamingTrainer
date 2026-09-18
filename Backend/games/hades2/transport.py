@@ -1,6 +1,6 @@
 """Supergiant/Hades II LLDB+Lua transport. This is a game-specific transport, not framework core."""
 from pathlib import Path
-import subprocess, sys, time, json, logging
+import subprocess, sys, time, json
 sys.path.insert(0, subprocess.check_output(['xcrun','lldb','-P'], text=True).strip())
 import lldb
 from .config import GAME_SPEC
@@ -17,7 +17,7 @@ class Hades2LuaTransport:
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
         self.target=None; self.process=None; self.pid=None; self.addresses={}
-        self.last_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
+        self.last_duration=0; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
 
@@ -25,24 +25,14 @@ class Hades2LuaTransport:
         if self.process:
             if self.pid==pid and self.alive(): return
             self.detach()
-        started=time.monotonic();profile={}
-        self.last_attach_profile=profile
-        phase=time.monotonic()
         self.target=self.debugger.CreateTarget('') # Attach discovers the runtime image once; avoid a duplicate file target.
-        profile['createTarget']=time.monotonic()-phase
         error=lldb.SBError()
-        phase=time.monotonic()
         self.process=self.target.AttachToProcessWithID(self.listener,pid,error)
-        profile['attachProcess']=time.monotonic()-phase
         if error.Fail():
             self.process=None
-            profile['total']=time.monotonic()-started
-            logging.info('LLDBAttachProfile outcome=attach_denied total=%.3fs createTarget=%.3fs attachProcess=%.3fs',
-                         profile['total'],profile.get('createTarget',0.0),profile.get('attachProcess',0.0))
             raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
         self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None
         try:
-            phase=time.monotonic()
             self.runtime_uuid=self.target.GetModuleAtIndex(0).GetUUIDString()
             triple = self.target.GetTriple() or ''
             required_arch = GAME_SPEC.minimum_architecture
@@ -54,24 +44,11 @@ class Hades2LuaTransport:
             if not self.runtime_uuid or not arch_ok:
                 requirement = required_arch or '受支持架构'
                 raise TransportError('incompatible',f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。')
-            profile['identity']=time.monotonic()-phase
-            phase=time.monotonic()
             for name in self.symbols:
                 self.address(name)
-            profile['symbols']=time.monotonic()-phase
-        except Exception as exc:
-            profile['total']=time.monotonic()-started
-            logging.info('LLDBAttachProfile outcome=%s total=%.3fs createTarget=%.3fs attachProcess=%.3fs identity=%.3fs symbols=%.3fs',
-                         getattr(exc,'code',type(exc).__name__),profile['total'],profile.get('createTarget',0.0),
-                         profile.get('attachProcess',0.0),profile.get('identity',0.0),profile.get('symbols',0.0))
+        except Exception:
             self.detach(); raise
-        phase=time.monotonic()
         self.resume(time.monotonic()+3)
-        profile['resume']=time.monotonic()-phase
-        profile['total']=time.monotonic()-started
-        logging.info('LLDBAttachProfile outcome=ok total=%.3fs createTarget=%.3fs attachProcess=%.3fs identity=%.3fs symbols=%.3fs resume=%.3fs',
-                     profile['total'],profile.get('createTarget',0.0),profile.get('attachProcess',0.0),
-                     profile.get('identity',0.0),profile.get('symbols',0.0),profile.get('resume',0.0))
 
     def address(self,name):
         if name in self.addresses:return self.addresses[name]
