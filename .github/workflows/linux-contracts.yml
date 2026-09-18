@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/post-v0.1-improvements
+      - 'architecture/**'
   pull_request:
 
 permissions:
