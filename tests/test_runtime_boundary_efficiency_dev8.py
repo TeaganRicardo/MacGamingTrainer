@@ -72,4 +72,19 @@ assert '["includeCatalogs"]=false' in transport.sources[1]
 assert second['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert second['boons'][0]['id'] == 'ZeusUpgrade'
 
+# World::Update boundary contract: the live transport must break on the one
+# engine frame boundary we actually need, not on every Lua pcall and then
+# filter callers after repeatedly stopping the game.
+transport_source = (ROOT / 'Backend/games/hades2/transport.py').read_text()
+symbols = json.loads((ROOT / 'Backend/games/hades2/symbols.json').read_text())['symbols']
+world_symbol = '_ZN3sgg5World6UpdateEf'
+assert world_symbol in symbols
+boundary = transport_source[
+    transport_source.index('    def boundary('):
+    transport_source.index('    def execute(', transport_source.index('    def boundary('))
+]
+assert "BreakpointCreateByAddress(self.address('_ZN3sgg5World6UpdateEf'))" in boundary
+assert "BreakpointCreateByAddress(self.address('lua_pcallk'))" not in boundary
+assert "caller=='sgg::World::Update(float)'" not in boundary
+
 print('runtime_boundary_efficiency_dev8_ok')
