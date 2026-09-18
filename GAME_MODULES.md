@@ -1,4 +1,4 @@
-# Game module contract — v0.17.11
+# Game module contract — 0.1 baseline
 
 A normal new game should add only:
 
@@ -24,6 +24,8 @@ Sources/App.swift
 Backend/core/**
 build.sh
 ```
+
+The current host protocol is 5. Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
 ## Minimal backend adapter
 
@@ -76,32 +78,17 @@ struct ExampleModule: TrainerGameModule {
 }
 ```
 
-The descriptor containing id/protocol versions is generated from the manifest. Presentation stays in Swift and does not travel through the Python runtime manifest.
+The descriptor containing id/protocol versions is generated from the manifest. Presentation remains in Swift and does not travel through the Python runtime manifest.
 
 ## Shared UI rule
 
-`Core/UI` owns both low-level primitives and game-agnostic visual composites. Examples include:
+`Core/UI` owns game-agnostic visual primitives and composites. A game maps its own semantics into neutral visual inputs; Core must not learn Hades concepts such as God Mode, boon rarity, resources or CurrentRun.
 
-- `TrainerRow`, `TrainerToggleControl`, `TrainerIconLabel`
-- `TrainerFeatureToggleRow`, `TrainerFeatureMultiplierRow`
-- `TrainerMetricCard`, `TrainerStatMetricCard`, `TrainerInlineStatEditor`
-- `TrainerResourceEditor`, `TrainerGroupedOptionPicker`
-- `TrainerConnectionStatusCard`, `TrainerSection`, `TrainerSectionHeader`
-- `TrainerSheetScaffold`, `TrainerMessageBanner`
+The App/Host supplies the common Shell/Sidebar/Header, connection status and theme. Game modules compose those primitives rather than redrawing reusable switches, cards, fields, lock buttons or list rows locally.
 
-A game maps its own semantics into neutral visual inputs. For example, Hades decides whether a feature is active/dormant/detached and converts that to `TrainerFeatureControlState`; Core never receives `godMode`, `boonRarity`, `CurrentRun` or other game-domain concepts.
+## Manifest responsibility split
 
-Game modules may define pages/screens and compose these controls, but should not redraw reusable switches, cards, fields, lock buttons or list rows locally. A new visual composite belongs in Core only when its API can remain game-agnostic.
-
-The App/Host always supplies the common Shell/Sidebar/Header, connection status card and Theme, so global visual changes propagate automatically. Page width/minimum geometry, row chrome, section rhythm and sheet chrome are theme/Core concerns rather than game-view constants.
-
-The Host also owns target-application lifecycle coordination. It observes launch/activation/termination events and may request a connection while the game remains foreground; game views must not implement process polling or foreground-stealing connection helpers.
-
-## Manifest
-
-The same JSON file has two consumers with separate responsibilities.
-
-Runtime fields read by Backend Core:
+Runtime fields are consumed by Backend Core:
 
 ```json
 {
@@ -116,7 +103,7 @@ Runtime fields read by Backend Core:
 }
 ```
 
-Build-only fields are parsed by `Tools/module_support.py`:
+Build-only fields are consumed by `Tools/module_support.py`:
 
 ```json
 {
@@ -137,20 +124,12 @@ Build-only fields are parsed by `Tools/module_support.py`:
 }
 ```
 
-Do not put sidebar labels/icons/header text in the manifest; those are presentation and belong to the Swift module.
+Presentation labels/icons/header text belong in Swift, not the runtime manifest.
 
-## Game protocol rule
+## Protocol and timeout rules
 
-The generic host necessarily transports JSON-compatible dictionaries. A game module should isolate this untyped edge immediately:
+The generic host transports JSON-compatible dictionaries. Each game should isolate that untyped edge immediately behind a typed request encoder and state decoder. Hades II uses `Hades2Request/Hades2API` and `Hades2StatePatch`.
 
-- central request/command encoder
-- central state/payload decoder
-- typed game model above that boundary
+Core enforces timeouts but does not decide their game-specific budget. A timed-out backend request is terminal for that backend instance when execution outcome may be unknown. Recovery may restart the backend, but must never automatically replay an outcome-unknown non-idempotent request.
 
-Hades II uses `Hades2Request/Hades2API` and `Hades2StatePatch` as the reference pattern. A new game does not need to copy Hades feature semantics.
-
-## Request timeout rule
-
-Core provides timeout enforcement but does not know which operations are expensive. Each game request API should choose a timeout appropriate to the command and pass it through `TrainerBackendSession.send(...)`.
-
-Use short timeouts for status/read-only probes, moderate timeouts for normal mutations/connect/disconnect, and longer explicit timeouts for preparation/save/diagnostic operations. A timeout is terminal for the current backend instance because the execution outcome may be unknown. Core may restart the backend process, but it must not replay the timed-out non-idempotent request. Once recovery succeeds, Host-level target lifecycle coordination may issue a fresh `connect` request because connection is a separate idempotent lifecycle action.
+Target-process lifecycle coordination is Host-owned and event-driven. Game views must not add process polling or foreground-stealing connection helpers.
