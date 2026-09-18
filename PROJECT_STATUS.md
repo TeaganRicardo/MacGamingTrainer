@@ -11,7 +11,7 @@
 - Hades II module protocol: 5
 - Desired-state schema: 3
 - Profile schema: 4
-- Hades II Lua source revision: 25
+- Hades II Lua source revision: 26
 - Target game build last verified: Hades II 1.139672 / Steam build 24556151
 
 ## Verified on target Mac
@@ -34,18 +34,15 @@
 - Hades resident Lua revision 26 reloads correctly from the Build 2 bundle.
 - Live run catalog: 129 rewards and 97 resources; no list entry has an empty English label or an internal identifier standing in for English.
 - SpellDrop and TalentDrop both resolve to the Selene special-reward section. TalentDrop uses the official 繁星之路 · Path of Stars label.
-- Native TalentDrop interaction was verified without OCR: after pickup, ActiveScreens["TalentScreen"] was present, source was TalentDrop, current Hex was Leap, and 6 Talent points were available.
+- Native TalentDrop interaction was verified at runtime: after pickup, `ActiveScreens["TalentScreen"]` was present, source was `TalentDrop`, current Hex was `Summon`, and 2 Talent points were available. The rendered screen also showed the native `繁星之路` upgrade tree.
 - Profile schema 4 shortcut chords pass Linux Foundation-level semantic tests and the full target-Mac regression suite.
-- macOS synthetic key-event validation captured and registered a non-default Control+Shift+K chord as ⌃⇧K.
+- macOS synthetic key-event validation captured and persisted a non-default Control+Shift+K chord as `⌃⇧K` (`keyCode=40`, `modifiers=4608`), then restored the default Control+Option+1 chord.
 - Shortcut rows with no badge collapse instead of reserving the former 52pt empty slot.
-- Fire/Water/Earth/Air/Aether compile with distinct SF Symbols and semantic colors.
+- Fire/Water/Earth/Air/Aether compile with distinct SF Symbols and semantic colors. Target-Mac UI acceptance confirmed all five cards render on one row at normal display scale.
 
 ## In progress
 
 1. Passive waiting -> ready transition: bounded two-shot status probe per connection lifetime at 15s / 30s; no repeating timer. Full main-menu-to-run passive acceptance remains open.
-2. Manual visual acceptance only:
-   - confirm the 19-row shortcut settings sheet interaction/spacing in the actual UI;
-   - confirm the five element icons/colors at normal display scale.
 
 ## Deferred until correctness is stable
 
