@@ -26,6 +26,7 @@ tests=(
   tests/test_protocol_fixtures_v0180.py
   tests/test_reward_naming_audit.py
   tests/test_schema_versioning_v0180.py
+  tests/test_ui_component_boundary_v0175.py
 )
 
 for test_file in "${tests[@]}"; do
