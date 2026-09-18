@@ -116,7 +116,11 @@ enum Hades2Request {
             // four seconds while Steam/game process state is settling.
             return 15.0
         case .status:
-            return 8.0
+            // A live status request can spend up to ~3 s waiting for the Lua
+            // boundary, then still needs debugger stop/focus-restore/resume
+            // cleanup. Keep the host watchdog outside those transport deadlines
+            // so it never SIGTERMs the debugger owner mid-cleanup.
+            return 15.0
         case .connect:
             // LLDB attach + symbol validation + first Lua bootstrap is the slow
             // path. Real successful Hades II connections have taken >50 s on
