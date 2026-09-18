@@ -20,9 +20,12 @@ for retired in (
 ):
     assert retired not in model, retired
 
-# The host records target lifecycle intent through TrainerConnectionPolicy, but
-# debugger restart/connect work is consumed only while Trainer itself is active.
-assert 'guard NSApp.isActive else { return }' in host
+# A true target-process launch may consume the pending connect while Trainer is
+# backgrounded so attach time is paid during launch/loading. Ordinary activation
+# still cannot start debugger work in the background.
+assert 'reconcileAutomaticConnection(allowBackground: running)' in host
+assert 'private func reconcileAutomaticConnection(allowBackground: Bool = false)' in host
+assert 'guard allowBackground || NSApp.isActive else { return }' in host
 assert 'NSApplication.didBecomeActiveNotification' in host
 assert 'targetMonitor.refresh()' in host
 assert 'reconcileAutomaticConnection()' in host
