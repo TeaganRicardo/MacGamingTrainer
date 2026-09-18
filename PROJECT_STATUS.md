@@ -40,13 +40,16 @@
 - Shortcut rows with no badge collapse instead of reserving the former 52pt empty slot.
 - Fire/Water/Earth/Air/Aether compile with distinct SF Symbols and semantic colors. Target-Mac UI acceptance confirmed all five cards render on one row at normal display scale.
 
+## Cloud/Linux verification
+
+- `.github/workflows/linux-contracts.yml` runs a fixed Linux-safe contract suite on branch pushes and pull requests.
+- Current Build 2 HEAD passes backend compilation, module validation and all 18 Linux contract tests, including passive-ready scheduling and connect-profiling success/failure paths.
+- Mac/gameplay acceptance is intentionally user-operated from this point forward.
+
 ## Pending manual acceptance
 
-1. Passive waiting -> ready transition: implementation now schedules two independent one-shot probes at +15s and +30s from the waiting transition; no repeating timer. Automated regression covers scheduling/cancellation. The user will perform the remaining main-menu-to-run acceptance on the target Mac.
-
-## Deferred until correctness is manually accepted
-
-- LLDB attach latency profiling and optimization (#4).
+1. Passive waiting -> ready transition (#1): two independent one-shot probes are scheduled at +15s and +30s from the waiting transition; no repeating timer. Confirm main-menu -> save reaches ready/run without manual refresh.
+2. LLDB attach profiling (#4): observation-only `LLDBAttachProfile` and `ConnectProfile` records are implemented. Make one fresh connection and provide those two trainer.log lines before any optimization is attempted.
 
 ## Non-regression constraints
 
