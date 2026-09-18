@@ -4,6 +4,9 @@ ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
 contract = (ROOT / 'Sources/Core/Host/TrainerGameModule.swift').read_text()
+watcher_path = ROOT / 'Sources/Hades2/Services/Hades2RunLogWatcher.swift'
+assert watcher_path.exists(), 'Hades2 run-log watcher is missing'
+watcher = watcher_path.read_text()
 
 # A live Hades status request crosses LLDB and temporarily stops/resumes the
 # target. Readiness detection must therefore never be timer-driven while the
@@ -73,3 +76,25 @@ assert 'Timer.' not in host and 'scheduledTimer' not in host
 assert 'asyncAfter' not in foreground
 
 print('passive_ready_transition_ok')
+
+
+# Hades readiness is driven by real game log writes, never by a timer. The
+# watcher survives ordinary log truncation/replacement by tracking file identity
+# and offset, and recognizes both the start and end of a world load.
+for token in (
+    'DispatchSource.makeFileSystemObjectSource',
+    'World::Begin()',
+    'Finished loadScreen onExit',
+    'systemFileNumber',
+):
+    assert token in watcher, token
+assert 'Timer.' not in watcher
+assert 'asyncAfter' not in watcher
+
+for token in (
+    'Hades2RunLogWatcher',
+    'pendingRunReadySignal',
+    'handleRunLogReadySignal',
+    'consumeRunLogReadySignalIfPossible',
+):
+    assert token in model, token
