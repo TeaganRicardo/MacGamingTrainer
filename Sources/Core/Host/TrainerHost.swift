@@ -1,3 +1,5 @@
+import AppKit
+import Combine
 import SwiftUI
 
 struct TrainerHostView<Module: TrainerGameModule>: View {
@@ -71,6 +73,11 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .onChange(of: model.connected) { _, connected in
             connectionPolicy.connectionChanged(connected: connected)
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            targetMonitor.refresh()
+            reconcileAutomaticConnection()
+            model.hostDidBecomeActive()
+        }
     }
 
     private func handlePrimaryConnectionAction() {
@@ -82,6 +89,11 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     /// that backend reports available. There is no polling/retry timer: target
     /// launch/activation and backend lifecycle transitions are the only triggers.
     private func reconcileAutomaticConnection() {
+        // Attaching LLDB can stop the target for seconds. Never start that work
+        // while the trainer is in the background and the player is using the
+        // game; lifecycle events retain their pending intent until this app is
+        // foreground again.
+        guard NSApp.isActive else { return }
         if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
             backendAvailable: model.backendAvailable,
             busy: model.busy,
