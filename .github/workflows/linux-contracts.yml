@@ -1,0 +1,23 @@
+name: Linux contracts
+
+on:
+  push:
+    branches:
+      - main
+      - feature/post-v0.1-improvements
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Linux contract checks
+        run: bash Tools/run_linux_checks.sh
