@@ -26,3 +26,51 @@ valid = {
     'gardenQoL': chord(5,6144,'G'),
 }
 assert _normalize_shortcuts(valid) == valid
+
+
+# Duplicate chords are deterministic: action order owns the first valid chord.
+duplicated = {
+    'godMode': chord(18, 6144, '1'),
+    'infiniteHealth': chord(18, 6144, '1'),
+    'disableAll': chord(29, 6144, '0'),
+}
+assert _normalize_shortcuts(duplicated) == {
+    'godMode': chord(18, 6144, '1'),
+    'disableAll': chord(29, 6144, '0'),
+}
+
+# Chord envelope is deliberately strict. Legacy integers, unknown modifier
+# bits, booleans masquerading as ints, control characters and out-of-range
+# values are not persisted.
+invalid = {
+    'godMode': {'keyCode': True, 'modifiers': 6144, 'keyLabel': '1'},
+    'infiniteHealth': {'keyCode': 19, 'modifiers': -1, 'keyLabel': '2'},
+    'forceDuo': {'keyCode': 8, 'modifiers': 1, 'keyLabel': 'C'},
+    'infiniteMana': {'keyCode': 20, 'modifiers': 6144, 'keyLabel': '\n'},
+    'instantCastCooldown': {'keyCode': 70000, 'modifiers': 6144, 'keyLabel': '4'},
+    'hexAlwaysReady': {'keyCode': 23, 'modifiers': 6144, 'keyLabel': '5', 'extra': 1},
+}
+assert _normalize_shortcuts(invalid) == {}
+
+base = Path(tempfile.mkdtemp(prefix='mgt-profile-shortcuts-v4-'))
+service = Hades2ProfileService(base/'profiles')
+desired = {'godMode': False}
+service.save('chords', desired, valid)
+on_disk = json.loads(service.path('chords').read_text(encoding='utf-8'))
+assert on_disk['schemaVersion'] == 4
+assert on_disk['shortcuts'] == valid
+assert service.load('chords')['shortcuts'] == valid
+assert service.list() == [{'name':'chords','updatedAt':on_disk['updatedAt'],'shortcuts':valid}]
+
+# Current Profiles may omit shortcuts entirely; loading such a profile is an
+# empty shortcut patch and must not reset the user's local layout.
+path = service.path('no-shortcuts')
+path.write_text(json.dumps({
+    'schemaVersion': 4,
+    'name': 'no-shortcuts',
+    'updatedAt': '2026-09-18T00:00:00+0000',
+    'desired': desired,
+}), encoding='utf-8')
+assert service.load('no-shortcuts')['shortcuts'] == {}
+
+print('profile_shortcut_schema_v0180_ok')
