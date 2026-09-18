@@ -13,25 +13,26 @@ Current product baseline: **0.1**. The active development branch is **Build 2** 
 - Selene has two distinct native spawn paths: `SpellDrop` for choosing a Hex and `TalentDrop` for Path of Stars upgrades.
 - Hades resident runtime revision is 26.
 - Fire / Water / Earth / Air / Aether have distinct symbols and semantic colors.
-- Passive waiting -> ready handling uses two independent one-shot probes scheduled at +15 s and +30 s from the waiting transition. No repeating live-status timer was introduced.
-- Full Python regression, Swift parse/typecheck/build and target-Mac Build 2 acceptance were completed before the final passive-probe timing correction; the timing correction itself is covered by source-level regression and still needs the manual scenario below.
+- Fullscreen testing invalidated timer-driven waiting -> ready probes: every live status crosses LLDB, stops/resumes the target and can interact badly with fullscreen focus. Timed +15/+30 background probes have been removed. Automatic debugger work is consumed only while Trainer is foreground; Hades performs one silent waiting-status refresh when Trainer becomes active.
+- Hades status watchdog is 15 s so the host deadline sits outside the transport boundary + debugger cleanup deadlines instead of terminating the debugger owner mid-cleanup.
+- Linux contract coverage enforces the foreground-only lifecycle and timeout policy. The new lifecycle still needs one manual fullscreen acceptance pass.
 
 ### Manual target-Mac acceptance still required
 
 The user is the owner of Mac/gameplay validation from this point forward.
 
-1. **Passive waiting -> ready**
-   - Start Hades II and leave it at the main menu.
-   - Start/connect Trainer and confirm waiting/main-menu state.
-   - Enter a save without pressing Trainer refresh/reconnect.
-   - Confirm Trainer reaches ready/run automatically.
-   - Repeat once with the save transition occurring after the first +15 s probe so the +30 s probe is exercised.
+1. **Foreground-only waiting -> ready**
+   - Rebuild the latest branch.
+   - In fullscreen Hades, confirm Trainer does not issue live status probes merely because time passes while Trainer is backgrounded.
+   - Switch back to Trainer. Pending automatic attach or a single waiting-status refresh should happen there, where debugger pauses are visible and do not interrupt active gameplay.
+   - Once Trainer reports ready/run, return to Hades and confirm normal play remains smooth.
+   - Manual Refresh is the explicit fallback if the foreground refresh misses a scene transition.
 
 If this passes, close GitHub issue #1.
 
 ### Deferred performance work
 
-GitHub issue #4 remains intentionally open: profile LLDB attach latency by phase before optimizing anything. Measure first; do not change transport behavior from intuition.
+GitHub issue #4 remains intentionally open. The supplied old-build logs show roughly 33 s vs 14 s end-to-end connections but contain no phase-level profile lines. Rebuild after #1’s lifecycle correction, capture one fresh `LLDBAttachProfile` + `ConnectProfile` pair, then optimize only the measured bottleneck.
 
 Useful phases to measure:
 - `AttachToProcessWithID`
