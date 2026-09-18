@@ -128,6 +128,21 @@ if policy.connectRequested || policy.backendRestartRequested {
     fail("same target snapshot created a duplicate automatic connection request")
 }
 
+// A definitive launch notification starts a new target lifetime even when a
+// rapid restart prevented the presence monitor from observing an intermediate
+// running=false snapshot.
+var rapidRestartPolicy = TrainerConnectionPolicy()
+rapidRestartPolicy.targetStateChanged(running: true)
+rapidRestartPolicy.connectionChanged(connected: true)
+rapidRestartPolicy.userWillToggleConnection(currentlyConnected: true)
+rapidRestartPolicy.targetLaunched()
+if rapidRestartPolicy.automaticConnectionSuppressed {
+    fail("true launch inherited manual disconnect suppression from the old process")
+}
+if !rapidRestartPolicy.backgroundConnectionAllowed || !rapidRestartPolicy.connectRequested {
+    fail("true launch did not start a fresh automatic connection lifetime")
+}
+
 // Explicit reconnect clears the suppression immediately.
 policy.userWillToggleConnection(currentlyConnected: false)
 if policy.automaticConnectionSuppressed {
