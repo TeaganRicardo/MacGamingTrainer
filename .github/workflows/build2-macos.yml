@@ -45,9 +45,31 @@ jobs:
           mkdir -p artifacts
           ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "artifacts/MacGamingTrainer-0.1-build2-rc.zip"
 
+          staging="$(mktemp -d)"
+          ditto "dist/Mac Gaming Trainer.app" "$staging/Mac Gaming Trainer.app"
+          cat > "$staging/INSTALL.txt" <<'EOF'
+          Quit any existing Mac Gaming Trainer instance before replacing the app.
+          Drag "Mac Gaming Trainer.app" to /Applications, then open it from there.
+          EOF
+          hdiutil create -volname "Mac Gaming Trainer 0.1 Build 2 RC"             -srcfolder "$staging" -ov -format UDZO             "artifacts/MacGamingTrainer-0.1-build2-rc.dmg"
+          rm -rf "$staging"
+
+      - name: Verify DMG package
+        run: |
+          mountpoint="$(mktemp -d)"
+          hdiutil attach -readonly -nobrowse             -mountpoint "$mountpoint"             "artifacts/MacGamingTrainer-0.1-build2-rc.dmg"
+          trap 'hdiutil detach "$mountpoint" >/dev/null 2>&1 || true; rmdir "$mountpoint" 2>/dev/null || true' EXIT
+          codesign --verify --deep --strict "$mountpoint/Mac Gaming Trainer.app"
+          test -f "$mountpoint/INSTALL.txt"
+          hdiutil detach "$mountpoint"
+          trap - EXIT
+          rmdir "$mountpoint"
+
       - uses: actions/upload-artifact@v4
         with:
           name: MacGamingTrainer-0.1-build2-rc
-          path: artifacts/MacGamingTrainer-0.1-build2-rc.zip
+          path: |
+            artifacts/MacGamingTrainer-0.1-build2-rc.zip
+            artifacts/MacGamingTrainer-0.1-build2-rc.dmg
           if-no-files-found: error
           retention-days: 14
