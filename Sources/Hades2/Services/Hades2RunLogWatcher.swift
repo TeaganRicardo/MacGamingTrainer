@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Hades-specific readiness signal. It watches the game's own log directory
+/// Hades-specific readiness signal. It watches the game's own log writes
 /// instead of polling the process or crossing an LLDB boundary on a timer.
 final class Hades2RunLogWatcher {
     private let queue = DispatchQueue(label: "MacGamingTrainer.Hades2RunLogWatcher", qos: .utility)
@@ -9,7 +9,8 @@ final class Hades2RunLogWatcher {
     private let logURL: URL
     private let onReadySignal: () -> Void
 
-    private var source: DispatchSourceFileSystemObject?
+    private var directorySource: DispatchSourceFileSystemObject?
+    private var fileSource: DispatchSourceFileSystemObject?
     private var fileIdentity: UInt64?
     private var offset: UInt64 = 0
     private var lineBuffer = Data()
@@ -31,10 +32,16 @@ final class Hades2RunLogWatcher {
     }
 
     private func startLocked() {
-        guard source == nil,
+        guard directorySource == nil,
               FileManager.default.fileExists(atPath: directoryURL.path) else { return }
 
         primeCursorToEnd()
+        installDirectorySourceLocked()
+        installFileSourceLocked(readExisting: false)
+    }
+
+    private func installDirectorySourceLocked() {
+        guard directorySource == nil else { return }
         let fd = open(directoryURL.path, O_EVTONLY)
         guard fd >= 0 else { return }
 
@@ -51,16 +58,72 @@ final class Hades2RunLogWatcher {
                 self.startLocked()
                 return
             }
-            self.readNewContentLocked()
+
+            guard let metadata = self.metadata() else { return }
+            if self.fileSource == nil || self.fileIdentity != metadata.identity {
+                self.fileSource?.cancel()
+                self.fileSource = nil
+                self.fileIdentity = metadata.identity
+                self.offset = 0
+                self.lineBuffer.removeAll(keepingCapacity: false)
+                self.installFileSourceLocked(readExisting: true)
+            }
         }
         next.setCancelHandler { close(fd) }
-        source = next
+        directorySource = next
         next.resume()
     }
 
+    private func installFileSourceLocked(readExisting: Bool) {
+        guard fileSource == nil, let metadata = metadata() else { return }
+
+        if fileIdentity != metadata.identity {
+            fileIdentity = metadata.identity
+            offset = readExisting ? 0 : metadata.size
+            lineBuffer.removeAll(keepingCapacity: false)
+        }
+
+        let fd = open(logURL.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+
+        let next = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .revoke],
+            queue: queue
+        )
+        next.setEventHandler { [weak self, weak next] in
+            guard let self, let next else { return }
+            let data = next.data
+            if data.contains(.rename) || data.contains(.delete) || data.contains(.revoke) {
+                self.fileSource?.cancel()
+                self.fileSource = nil
+                self.fileIdentity = nil
+                self.offset = 0
+                self.lineBuffer.removeAll(keepingCapacity: false)
+
+                if self.metadata() != nil {
+                    self.installFileSourceLocked(readExisting: true)
+                }
+                return
+            }
+            self.readNewContentLocked()
+        }
+        next.setCancelHandler { close(fd) }
+        fileSource = next
+        next.resume()
+
+        if readExisting {
+            readNewContentLocked()
+        }
+    }
+
     private func stopLocked() {
-        source?.cancel()
-        source = nil
+        fileSource?.cancel()
+        fileSource = nil
+        directorySource?.cancel()
+        directorySource = nil
+        fileIdentity = nil
+        offset = 0
         lineBuffer.removeAll(keepingCapacity: false)
     }
 
