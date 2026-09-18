@@ -6,7 +6,7 @@ host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
 
 # Waiting completion is deliberately bounded: exactly two one-shot delays per
 # connection lifetime, never a repeating Timer or self-sustaining poll loop.
-assert 'private static let passiveReadyProbeDelays: [TimeInterval] = [5, 20]' in model
+assert 'private static let passiveReadyProbeDelays: [TimeInterval] = [15, 30]' in model
 block = model[model.index('    private func beginPassiveReadyProbes'):model.index('    private func send(')]
 assert 'DispatchQueue.main.asyncAfter' in block
 assert 'Timer.' not in block and 'scheduledTimer' not in block

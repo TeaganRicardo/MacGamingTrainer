@@ -143,7 +143,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // player is still at the main menu. Give that single connection lifetime
     // two bounded, one-shot opportunities to notice the first usable Lua
     // scene. This is intentionally not a repeating Timer / background poll.
-    private static let passiveReadyProbeDelays: [TimeInterval] = [5, 20]
+    private static let passiveReadyProbeDelays: [TimeInterval] = [15, 30]
     private var passiveReadyProbeWorkItem: DispatchWorkItem?
     private var passiveReadyProbeGeneration: UInt = 0
     private var passiveReadyProbeIndex = 0
