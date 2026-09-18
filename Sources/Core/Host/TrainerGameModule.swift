@@ -36,10 +36,18 @@ protocol TrainerHostModel: ObservableObject {
 
     func toggleConnectionFromHost()
     func refreshFromHost()
+    func hostDidBecomeActive()
     func restartBackendFromHost()
     func disableAllFromHost()
     func openLog()
     func prepareForTermination(completion: @escaping (Bool) -> Void)
+}
+
+extension TrainerHostModel {
+    /// App activation is a safe point for game modules to perform an optional
+    /// foreground-only refresh. The default is deliberately a no-op because
+    /// not every integration needs or can afford a live target boundary.
+    func hostDidBecomeActive() {}
 }
 
 /// Game modules supply business content and game-specific actions. The host
