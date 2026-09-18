@@ -143,13 +143,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private let mutationScheduler = Hades2MutationScheduler()
     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<String> = []
-    // A newly attached debugger can legitimately return `waiting` while the
-    // player is still at the main menu. Give that single connection lifetime
-    // two bounded, one-shot opportunities to notice the first usable Lua
-    // scene. This is intentionally not a repeating Timer / background poll.
-    private static let passiveReadyProbeDelays: [TimeInterval] = [15, 30]
-    private var passiveReadyProbeWorkItems: [DispatchWorkItem] = []
-    private var passiveReadyProbeGeneration: UInt = 0
     private var hotkeys: GlobalHotkeys?
     private var pendingRestoreTimer: Timer?
     private var shuttingDown = false
@@ -196,6 +189,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(connected ? .status : .scan, title: "刷新状态")
     }
 
+    func hostDidBecomeActive() {
+        guard connected,
+              status == "waiting",
+              backendAvailable,
+              !busy,
+              !exiting else { return }
+        send(.status, title: "检测可操作场景", announceSuccess: false)
+    }
+
     func toggleConnection() {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
@@ -239,7 +241,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func resetAfterBackendTermination() {
-        cancelPassiveReadyProbes()
         connected = false
         scene = "unknown"
         capabilities = [:]
@@ -273,7 +274,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func apply(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
         let wasConnected = connected
-        let previousStatus = status
         let oldPID = pid
         let desiredBeforeApply = Dictionary(uniqueKeysWithValues: desiredFeatureKeys.map { ($0, desiredFeatureEnabled($0)) })
 
@@ -380,35 +380,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.resources { resources = value }
         if let issue = patch.error, !issue.isEmpty { error = issue }
 
-        if connected && status == "waiting" && (!wasConnected || previousStatus != "waiting") {
-            beginPassiveReadyProbes()
-        } else if !connected || status != "waiting" {
-            cancelPassiveReadyProbes()
-        }
-    }
 
-    private func beginPassiveReadyProbes() {
-        cancelPassiveReadyProbes()
-        let generation = passiveReadyProbeGeneration
-        for delay in Self.passiveReadyProbeDelays {
-            let work = DispatchWorkItem { [weak self] in
-                guard let self,
-                      generation == self.passiveReadyProbeGeneration,
-                      self.connected,
-                      self.status == "waiting",
-                      !self.exiting,
-                      !self.busy else { return }
-                self.send(.status, title: "等待可操作场景", announceSuccess: false)
-            }
-            passiveReadyProbeWorkItems.append(work)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-        }
-    }
-
-    private func cancelPassiveReadyProbes() {
-        passiveReadyProbeWorkItems.forEach { $0.cancel() }
-        passiveReadyProbeWorkItems.removeAll()
-        passiveReadyProbeGeneration &+= 1
     }
 
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
@@ -799,7 +771,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func prepareForTermination(completion: @escaping (Bool) -> Void) {
         guard !exiting else { completion(true); return }
         exiting = true
-        cancelPassiveReadyProbes()
         invalidatePendingMutations()
         guard backendSession.isRunning else {
             finishExit(completion: completion)
