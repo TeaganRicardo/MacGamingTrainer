@@ -12,27 +12,11 @@ if not swiftc:
 harness = r'''
 import Foundation
 
-enum ShortcutAction: String, CaseIterable, Identifiable {
-    case godMode, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
-    case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
-    case boonRarityEnabled, forceLegendary, forceDuo
-    case moneyMultiplierEnabled, resourceMultiplierEnabled
-    case applyNextRoomReward, spawnOlympian, spawnPickup, spawnSpecial
-    case disableAll
-    var id: String { rawValue }
-    static let uiOrder: [ShortcutAction] = [
-        .godMode,.infiniteHealth,.infiniteMana,.instantCastCooldown,.hexAlwaysReady,
-        .infiniteAmmo,.damageEnabled,.autoMiniGames,.gardenQoL,
-        .boonRarityEnabled,.forceLegendary,.forceDuo,
-        .moneyMultiplierEnabled,.resourceMultiplierEnabled,
-        .spawnOlympian,.spawnPickup,.spawnSpecial,.applyNextRoomReward,.disableAll,
-    ]
-    static let legacyDigitActions: [ShortcutAction] = [
-        .godMode,.infiniteHealth,.infiniteMana,.instantCastCooldown,.hexAlwaysReady,
-        .infiniteAmmo,.damageEnabled,.autoMiniGames,.moneyMultiplierEnabled,.disableAll,
-    ]
-    var title: String { rawValue }
-}
+precondition(ShortcutAction.uiOrder.count == ShortcutAction.allCases.count)
+precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)) == Set(ShortcutAction.allCases.map(\.rawValue)))
+precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)).count == ShortcutAction.uiOrder.count)
+precondition(ShortcutAction.uiOrder.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
+
 
 func makeDefaults(_ suffix: String) -> UserDefaults {
     let suite = "mgt.shortcut.tests.\(suffix).\(UUID().uuidString)"
@@ -134,6 +118,7 @@ with tempfile.TemporaryDirectory() as td:
     subprocess.run([
         swiftc,
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
+        str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
         str(ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift'),
         str(main), '-o', str(binary),
     ], check=True)
