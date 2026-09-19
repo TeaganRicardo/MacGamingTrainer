@@ -10,9 +10,10 @@ router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
-assert 'previousModule.revision ~= 38' in lua
-assert 'version = 1, revision = 38' in lua
+assert 'previousModule.revision ~= 39' in lua
+assert 'version = 1, revision = 39' in lua
 assert 'specialChoiceOpens = {}' in lua
+assert 'specialChoiceRun = nil' in lua
 
 for token in ('openSpecialChoice = "open_special_choice"', 'case openSpecialChoice(source: String)', 'case .openSpecialChoice: return .openSpecialChoice'):
     assert token in api, token
@@ -84,13 +85,18 @@ assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in 
 assert 'CurrentRun.LastReward' in block, "Echo choice must preserve last-reward semantics"
 assert 'IsGameStateEligible' in block
 assert 'UpgradeOptions' in block
+assert 'if M.specialChoiceRun ~= CurrentRun then' in block
+assert 'M.specialChoiceRun = CurrentRun' in block
+assert 'M.specialChoiceOpens = {}' in block
 assert 'M.specialChoiceOpens[params.source] = (M.specialChoiceOpens[params.source] or 0) + 1' in block
 assert 'RandomSynchronize(8 + M.specialChoiceOpens[params.source])' in block
 assert 'RandomSynchronize(9)' not in block
-assert 'local traitData = type(option) == "table" and type(option.ItemName) == "string"' in block
-assert 'and TraitData[option.ItemName] or nil' in block
+assert 'option.Type ~= "Trait"' in block
+assert 'type(option.ItemName) == "string"' in block
+assert 'type(TraitData[option.ItemName]) == "table"' in block
 assert 'HeroHasTrait(option.ItemName)' in block
-assert 'IsTraitEligible(traitData)' in block
+assert 'CurrentRun.PickedTraits[option.ItemName]' in block
+assert 'IsTraitEligible' not in block, "fixed NPC choices must preserve their native eligibility rules"
 assert 'AddTraitToHero' not in block
 assert 'hadLootChoiceHistory' in block
 assert 'CurrentRun.LootChoiceHistory = nil' in block
