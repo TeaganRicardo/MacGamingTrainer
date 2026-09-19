@@ -1,35 +1,13 @@
 # Next Development Stage
 
-PR #7 remains DRAFT. r38 was superseded before manual acceptance by the native-parity re-review; current tester candidate is runtime r39.
+PR #7 remains DRAFT. Runtime r39 focused acceptance is **PASS** as of 2026-09-19.
 
-## Immediate — r39 focused acceptance
+## Current state
 
-Branch: `fix/special-choice-native-r39`. Runtime: revision 39.
-
-Why r39 supersedes r38:
-- fixed NPC choices now preserve the game's own special-choice eligibility rules instead of adding ordinary-boon `IsTraitEligible`;
-- repeat counters reset per run;
-- Trait detection follows the native `Type` field and fails closed on missing TraitData;
-- direct invocation of the six native NPC `*Choice` wrappers was explicitly rejected after installed-game audit because those wrappers depend on narrative-screen / live-NPC / room-presentation state.
-
-Automated status:
-- r39 native-parity contract RED on r38 → GREEN on r39;
-- full Linux contracts: PASS;
-- signed r39 Build 2 package: PASS on `e610f3aba74d5878d59d66d6476966ad06effec2`;
-- full macOS suite + real-save-tree sentinel is deferred while Hades II is running; this is a safety defer, not a failed test.
-
-Current tester artifact:
-- `/Users/gao/Downloads/Mac Gaming Trainer r39.app`
-- `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r39.zip`
-- SHA256 `5f1e8609a60e8b7f4387915b5d22a97d9d7865e7e46552025a068fe3930d1c73`
-
-Focused r39 manual acceptance:
-- fixed-choice source (Arachne/Narcissus is sufficient): obtain one blessing, reopen the same source, confirm the acquired blessing is not re-offered and the candidate set is no longer pinned to the first deterministic offer;
-- start a new run and open the same source once: the trainer counter must have reset, so the first-open path again uses the native seed-9 behavior;
-- loot-style source (Artemis/Athena is sufficient): obtain one trait, reopen, confirm native `SetTraitsOnLoot` produces a valid pool without offering the owned trait;
-- no need to repeat accepted r37 save/UI coverage unless this smoke exposes a regression.
-
-After focused PASS, continue directly to Batch B.
+- r39 special-choice native-parity follow-up: automated PASS + manual PASS.
+- Repeated special-choice opens succeeded in one run, then succeeded again after restore/relaunch in a different run.
+- No remaining r39 special-choice blocker is open.
+- Continue directly with Batch B; do not reopen Batch A unless a regression is demonstrated.
 
 ## Batch B — game speed + God Mode
 
@@ -57,7 +35,7 @@ Re-plan from installed game scripts before coding.
 
 ## Closure order
 
-r39 focused special-choice acceptance → Batch B → Batch C → Batch D → final consolidated regression → hosted CI recovery on exact head → PR #7 ready → merge only with explicit user authorization → sync PR #10.
+Batch B → Batch C → Batch D → final consolidated regression → hosted CI recovery on exact head → PR #7 ready → merge only with explicit user authorization → sync PR #10.
 
 ## Permanent workflow corrections
 
