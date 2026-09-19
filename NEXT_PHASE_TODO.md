@@ -1,71 +1,62 @@
-# Next development stage
+# Next Development Stage
 
-Current product baseline: **0.1**. Stable `main` remains Build 1. Build 2 release integration remains gated by the recovered pre-acceptance hardening branch.
+Current release integration is paused after revision-35 manual acceptance exposed multiple correctness/design gaps. Work proceeds in isolated repair batches; PR #7 remains DRAFT.
 
-## Immediate Phase 0 closure
+## Immediate: finish Batch A
 
-### Candidate
+Branch: `fix/batch-a-native-modals`. Runtime: revision 36.
 
-- Frozen previously verified release head: `efc21268b8c075bd8b8d5ff3726d4548cb6b88e7` / runtime revision 33.
-- Current hardening code head: `b09e49b15478588dfbd42ee44ef8a70d5f34e07a` / runtime revision 35.
-- Branch: `audit/preacceptance-hardening`.
-- The hardening branch is 15 commits ahead of the frozen release head and zero behind.
-- Revision-33 RC is superseded for final acceptance.
+Automated verification and first clean build are already PASS. Remaining steps:
+1. commit current handoff/plan state;
+2. rebuild from that exact final HEAD;
+3. package `MacGamingTrainer-0.1-build2-rc-r36.zip`;
+4. verify ZIP integrity, byte size and SHA256;
+5. update PR #7 and relevant issue comments with exact artifact identity;
+6. give the tester only the compiled App and the six focused Batch A checks.
 
-The hardening audit found and fixed release-path issues in lifecycle readiness, same-process Lua session hook ownership, game-speed reset recovery, exit cleanup, hotkey result reporting, process-query failure handling, staged-restore corruption handling, and contract-suite coverage.
+Batch A manual retest scope:
+- open sell UI and Cancel without selling;
+- open sell UI, sell one boon, then exit normally;
+- open one loot-style native three-choice source (Artemis/Athena preferred);
+- open one fixed-choice source (Arachne/Narcissus preferred);
+- confirm a normal special boon still direct-adds;
+- confirm Heracles/Moros contain no native-choice action row.
 
-### Target-Mac preflight — PASS
+Do not ask the tester to rerun game speed, sounds, God Mode, or the full lifecycle suite during Batch A unless a smoke regression appears.
 
-Completed on the authorized target Mac:
+## Batch B — game speed + God Mode
 
-1. clean branch/worktree verified;
-2. full Linux contracts PASS;
-3. full macOS contract suite PASS;
-4. two clean Hades II arm64 builds PASS;
-5. 0.1 / Build 2 package checks PASS;
-6. exactly one packaged game module;
-7. runtime revision 35 packaged;
-8. strict codesign + debugger entitlement PASS;
-9. no tracked-source mutation after either build.
+Re-plan implementation from the installed game scripts before coding.
+- Redefine game speed as trainer-global state that remains effective outside combat and does not depend on the current Hero being capturable.
+- Preserve native slowdown/time effects underneath the trainer factor instead of overwriting them.
+- Audit current installed scripts for hostile debuff/control pathways (polymorph, slow/time stop, poison/DOT and other forced control).
+- Replace the two-name God Mode effect list only after identifying a source-aware/common application boundary that avoids blocking player-selected/self effects.
+- Prefer static/script-contract coverage for the complete audited set, then ask for only representative manual checks.
 
-The final RC is packaged only after the final handoff/docs commit. Exact artifact HEAD, size and SHA256 are recorded in PR #7.
+## Batch C — Trainer Host feedback sounds
 
-### After preflight passes
+- Replace Glass/Pop/Tink with one coherent bundled sound family.
+- enabled/deferred/disabled must remain distinguishable at low volume.
+- Preserve post-result semantics: never play a success sound before backend confirmation.
+- Ensure completion playback is not swallowed by request latency or overlapping callbacks.
+- Keep this entirely Core/Trainer Host; no Hades-specific sound semantics.
 
-1. fast-forward `feature/post-v0.1-improvements` to the verified hardening head;
-2. update PR #7 / #1 / #11 to the exact revision-35 RC;
-3. run the full manual acceptance checklist in PR #7 / PROJECT_STATUS.md and preserve `trainer.log`;
-4. fix only a demonstrated acceptance regression if one appears;
-5. after manual PASS and healthy hosted CI on the exact current head, mark PR #7 ready and merge to `main`;
-6. verify merged `main` and capture the Build 2 release snapshot.
+## Batch D — residual readiness stutter
 
-### Non-blocking follow-up
+- Use the retained r35 logs as baseline.
+- Treat attach (~0.5s in observed runs) separately from first Lua/world boundary (~3–4s in observed runs).
+- Do not add periodic polling.
+- Target: attach can complete without synchronously freezing on world readiness; a lifecycle signal triggers the one required status/replay when ready.
 
-Issue #17 tracks a partial hand-edited schema-4 Profile shortcut collision. A RED→GREEN fix is retained on `fix/profile-shortcut-partial-conflict`. Normal Trainer-created Profiles contain the complete shortcut payload, so #17 does not block Phase 0.
+## Closure order
 
-## Phase 1 after Build 2
+Batch A focused PASS → Batch B focused PASS → Batch C sound PASS → Batch D lifecycle/performance PASS → final consolidated regression → hosted CI recovery on exact head → mark PR #7 ready → merge with explicit user authorization → sync PR #10.
 
-Draft PR #10 / issue #9 remains the mechanical cross-game module proof. Keep it draft during Phase 0.
+## Permanent workflow
 
-After Build 2 lands:
-1. synchronize PR #10 with the final Build 2 base;
-2. prove it is conflict-free;
-3. rerun Linux contracts and both macOS matrix entries;
-4. merge #10;
-5. close #9;
-6. advance roadmap #8 to Phase 2.
-
-## Deferred roadmap
-
-- Phase 2: shared optional save-management Host capability with game-owned parsing/semantics.
-- Phase 3: Hades II full save editor behind that capability.
-- Phase 4: explicit Hades-I architecture gate.
-- Phase 5: Hades I vertical slice.
-
-## Reliability constraints
-
-- No periodic LLDB/Lua polling.
-- No unsafe replay of non-idempotent mutations.
-- No game semantics in Core/Host.
-- No speculative LLDB optimization; #4 remains closed with a measured baseline.
-- Runtime source changes require a revision bump.
+- Each tester handoff is one exact HEAD + one prebuilt signed `.app` ZIP + SHA256.
+- Superseded RCs are never reused for PASS.
+- User reports can be concise; assistant maps them to test IDs and gathers logs via RDC.
+- Fix only demonstrated/root-caused failures, using RED→GREEN tests.
+- Retest affected paths plus high-value smoke only; carry forward unrelated PASS evidence when code did not touch it.
+- Keep GitHub status durable after each checkpoint.
