@@ -12,8 +12,6 @@ _PROFILE_FIELDS = frozenset(('schemaVersion','name','updatedAt','desired','short
 _SHORTCUT_MODIFIER_MASK = (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)
 
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
-_MAX_SHORTCUT_ACTIONS = 64
-
 
 
 def _profile_schema_version(payload):
@@ -30,7 +28,7 @@ def _normalize_shortcuts(raw):
     actions=sorted(
         action for action in raw
         if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)
-    )[:_MAX_SHORTCUT_ACTIONS]
+    )
     for action in actions:
         row=raw.get(action)
         if not isinstance(row,dict) or set(row)!= {'keyCode','modifiers','keyLabel'}:continue
