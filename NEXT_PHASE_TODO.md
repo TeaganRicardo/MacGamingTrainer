@@ -9,47 +9,30 @@ Integrated baseline:
 - PR #7 is merged.
 - Active unfinished work: `fix/batch-b-runtime-semantics-r40` / Draft PR #18.
 - r40 production implementation commit: `864ff8fcbf96c616564756d658d3535c1f570f94`.
-- r40 is **not verified yet**. Do not assume the prior source-level inspection is equivalent to running the tests.
+- r40 verified code/test head: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
+- automated/Linux/macOS/build/package gates and focused HeroHit manual acceptance are **PASS**.
 
 Read before coding:
 - `PROJECT_STATUS.md`;
 - `docs/superpowers/specs/2026-09-19-god-mode-hit-semantics-design.md`;
 - `docs/superpowers/plans/2026-09-19-god-mode-hit-semantics.md`.
 
-## First action in the next development thread
+## r40 acceptance checkpoint — PASS
 
-When an authorized build environment / target Mac is available:
+Verified on the authorized target Mac against exact code/test head `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`:
 
-1. Fetch `fix/batch-b-runtime-semantics-r40` and confirm the working tree is clean. Do not hard-reset unknown local changes.
-2. Run the focused God Mode contract:
-   `python3 tests/test_god_mode_hostile_effects.py`
-3. Run:
-   `bash Tools/run_linux_checks.sh`
-4. With Hades II stopped, wrap the macOS suite in the existing before/after real-save-tree hash sentinel and run:
-   `bash Tools/run_macos_checks.sh`
-5. Clean-build Hades II:
-   `rm -rf dist && ./build.sh hades2`
-6. Confirm packaged runtime revision 40, arm64, debugger entitlement, strict codesign, one packaged game module and a clean git diff.
-7. Only after those gates pass, cut an r40 tester App/ZIP and record exact size + SHA256.
+- save persistence path for `CurrentRun.Hero.Hits`: proven from installed Hades II 1.139672 scripts;
+- focused God Mode contract: PASS;
+- full Linux suite: PASS / `linux_checks_ok`;
+- full macOS suite: PASS / `macos_checks_ok`;
+- real-save-tree sentinel: `REAL_SAVE_TREE_UNCHANGED`;
+- clean Hades II build/package: PASS;
+- tester ZIP: `MacGamingTrainer-0.1-build2-rc-r40.zip`, 1,976,217 bytes, SHA256 `45b623fcb70986af6ad604b69f62192925b7fb9e97854573f7d7daab30acc0c0`;
+- manual HeroHit acceptance used hot backup `saves-20260920-011751-3qk9q5zy` before the test and `saves-20260920-012157-js8mys43` after it. Read-only extraction shows current-run Hero `Hits = 182` in both, `Health = 157` in both, and God Mode active in the after snapshot;
+- per owner instruction, a deliberate post-disable hit to prove resumed increment is not required for this slice;
+- Hecate polymorph and Mourning Fields miasma behavior is unchanged from the pre-existing implementation; r40 did not alter those effect blocks.
 
-If any gate fails, use systematic debugging and keep the r40 branch out of `main`.
-
-## r40 manual acceptance
-
-The new acceptance condition is stronger than "no damage":
-
-1. Record the save-visible/current HeroHit count before enabling God Mode.
-2. Enable God Mode.
-3. Take repeated ordinary hostile hits that would normally damage health/armor and produce hit reactions.
-4. Confirm health/armor are not lost through the blocked ordinary damage path.
-5. Confirm HeroHit remains exactly at the pre-God-Mode baseline.
-6. Exercise the already-audited Hecate polymorph and Mourning Fields miasma protections.
-7. Disable God Mode.
-8. Take one real normal hit.
-9. Confirm HeroHit resumes native counting and increments normally rather than staying frozen or jumping.
-10. Preserve `trainer.log` and the exact observation method used for the save-visible HeroHit value.
-
-If the save-visible HeroHit value is not actually backed by `CurrentRun.Hero.Hits`, stop and trace the persistence path before changing more runtime code.
+Next integration action: non-forced fast-forward PR #18 / `fix/batch-b-runtime-semantics-r40` into current `main`, then start the global game-speed slice from the new `main`.
 
 ## Continue Batch B only after the r40 slice is proven
 
