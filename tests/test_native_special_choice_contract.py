@@ -31,11 +31,15 @@ assert 'nativeChoice' in model
 assert '原生三选一' in view
 assert '直接添加' in view
 
-block = lua[lua.index('if command == "open_special_choice" then'):lua.index('if command == "spawn_reward" then')]
+definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
 for source in ('Narcissus', 'Echo', 'Medea', 'Icarus'):
-    assert source in block, source
-assert 'Arachne' not in block
-assert 'Circe' not in block
+    assert source in definitions, source
+assert 'Arachne' not in definitions
+assert 'Circe' not in definitions
+
+block = lua[lua.index('if command == "open_special_choice" then'):lua.index('if command == "spawn_reward" then')]
+assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in block
+assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
 assert 'OpenUpgradeChoiceMenu' in block
 assert 'thread(runChoice)' in block, "native menu must run on a game thread, never hold the LLDB boundary for player input"
 assert 'IsGameStateEligible' in block
