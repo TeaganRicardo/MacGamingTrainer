@@ -89,3 +89,13 @@ The UI disables 原生三选一 when the selected entry/source lacks native-choi
 - Do not modify original Hades II files.
 - No Hades-specific behavior is added to Core beyond generic feedback types/player.
 - Product remains 0.1 / Build 2 until Phase 0 manual acceptance passes.
+
+## 5. God Mode environmental/control immunity
+
+God Mode retains the existing outer Damage hook and unit invulnerability, and additionally blocks only audited hostile Hero effects that bypass damage/invulnerability:
+- HecatePolymorphStun (Hecate hostile polymorph pipeline)
+- MiasmaSlow (Fields/Mourning miasma terrain slow)
+
+The runtime hooks ApplyEffect only while God Mode is active, only when DestinationId is the current Hero, and only for the explicit denylist above. Enabling God Mode also clears those two effects if already present. Disabling restores the original ApplyEffect function and does not suppress unrelated debuffs, player buffs, TimeSlow, or generic SPEED effects.
+
+The existing Damage hook already covers ordinary enemy and environmental damage entering Damage(); no second damage path is added unless a concrete bypass is proven by tests/logs.
