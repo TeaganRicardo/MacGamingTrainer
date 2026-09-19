@@ -9,6 +9,8 @@ router = (ROOT/'Backend/games/hades2/command_router.py').read_text()
 termination = model[model.index('    private var runtimeCleanupRequired'):model.index('    private func finishExit')]
 assert 'failExit' not in termination
 assert 'let cleanupRequired = runtimeCleanupRequired' in termination
+assert 'dormantFeatures.values.contains(true)' in termination
+assert 'desiredFeatureKeys.contains(where: desiredFeatureEnabled)' in termination
 assert 'sendBarrier(.resetDesired' in termination
 assert 'guard self.connected, cleanupRequired else' in termination
 assert 'sendBarrier(.disableAll' in termination

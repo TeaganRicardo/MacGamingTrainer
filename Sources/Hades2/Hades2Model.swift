@@ -881,7 +881,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private var runtimeCleanupRequired: Bool {
-        if activeFeatures.values.contains(true) { return true }
+        if activeFeatures.values.contains(true) || dormantFeatures.values.contains(true) { return true }
+        if desiredFeatureKeys.contains(where: desiredFeatureEnabled) { return true }
         if abs(gameSpeed - 1.0) > 0.0001 || nextRoomReward != nil { return true }
         if healthLocked || manaLocked || armorLocked || moneyLocked || rerollsLocked { return true }
         if resources.contains(where: \.locked) || elements.contains(where: \.locked) { return true }
