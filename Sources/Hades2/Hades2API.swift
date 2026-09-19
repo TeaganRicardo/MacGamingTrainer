@@ -19,6 +19,7 @@ enum Hades2Command: String {
     case setNextRoomRewardDesired = "set_next_room_reward_desired"
     case spawnReward = "spawn_reward"
     case openSellTraits = "open_sell_traits"
+    case openSpecialChoice = "open_special_choice"
     case listProfiles = "list_profiles"
     case saveProfile = "save_profile"
     case loadProfile = "load_profile"
@@ -55,6 +56,7 @@ enum Hades2Request {
     case setNextRoomReward(String?)
     case spawnReward(String)
     case openSellTraits
+    case openSpecialChoice(source: String)
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
@@ -93,6 +95,7 @@ enum Hades2Request {
         case .setNextRoomReward: return .setNextRoomRewardDesired
         case .spawnReward: return .spawnReward
         case .openSellTraits: return .openSellTraits
+        case .openSpecialChoice: return .openSpecialChoice
         case .listProfiles: return .listProfiles
         case .saveProfile: return .saveProfile
         case .loadProfile: return .loadProfile
@@ -178,6 +181,8 @@ enum Hades2Request {
             return ["reward": reward]
         case .openSellTraits:
             return [:]
+        case .openSpecialChoice(let source):
+            return ["source": source]
         case .saveProfile(let name, let shortcuts):
             return ["name": name, "shortcuts": shortcuts]
         case .loadProfile(let name), .deleteProfile(let name):
