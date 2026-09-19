@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 37 then
+if previousModule and previousModule.revision ~= 38 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 37, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 38, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -28,7 +28,7 @@ if __MacGamingTrainerV1 == nil then
       moneyMultiplierEnabled = false, resourceMultiplierEnabled = false,
     },
     resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {},
-    catalogCache = {},
+    catalogCache = {}, specialChoiceOpens = {},
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
   }
@@ -3166,7 +3166,7 @@ if __MacGamingTrainerV1 == nil then
       if definition.mode == "loot" then
         requireFunctions("native special blessing loot choice", { "SetTraitsOnLoot" })
       else
-        requireFunctions("native special blessing fixed choice", { "PassRarityCheck" })
+        requireFunctions("native special blessing fixed choice", { "PassRarityCheck", "HeroHasTrait", "IsTraitEligible" })
       end
       if definition.post == "costume" then
         requireFunctions("Arachne costume application", { "SetupCostume" })
@@ -3191,6 +3191,8 @@ if __MacGamingTrainerV1 == nil then
         source.BoonGetColor = source.BoonGetColor or source.LootColor
 
         local args = {}
+        M.specialChoiceOpens[params.source] = (M.specialChoiceOpens[params.source] or 0) + 1
+        RandomSynchronize(8 + M.specialChoiceOpens[params.source])
         if definition.mode == "loot" then
           source.UpgradeOptions = nil
           SetTraitsOnLoot(source)
@@ -3204,7 +3206,13 @@ if __MacGamingTrainerV1 == nil then
 
           local priorityOptions, eligibleOptions = {}, {}
           for _, option in pairs(choiceData.UpgradeOptions) do
-            if type(option) == "table"
+            local traitData = type(option) == "table" and type(option.ItemName) == "string"
+              and TraitData[option.ItemName] or nil
+            local traitAvailable = traitData == nil or
+              (not HeroHasTrait(option.ItemName)
+                and (type(CurrentRun.PickedTraits) ~= "table" or not CurrentRun.PickedTraits[option.ItemName])
+                and IsTraitEligible(traitData))
+            if type(option) == "table" and traitAvailable
                 and (option.GameStateRequirements == nil or IsGameStateEligible(source, option.GameStateRequirements)) then
               local candidate = ShallowCopyTable(option)
               if definition.rarity ~= nil then candidate.Rarity = definition.rarity end
@@ -3221,7 +3229,6 @@ if __MacGamingTrainerV1 == nil then
             CurrentRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
           end
 
-          RandomSynchronize(9)
           source.UpgradeOptions = {}
           for _ = 1, 3 do
             local option = nil
