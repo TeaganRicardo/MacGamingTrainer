@@ -10,6 +10,7 @@ tests=(
   tests/test_catalog_naming.py
   tests/test_connect_phase_profile.py
   tests/test_corrupt_file_quarantine_v0180.py
+  tests/test_exit_semantics.py
   tests/test_hades2_adapter_round12.py
   tests/test_hades2_timeout_policy_v0177.py
   tests/test_hades2_session_hook_ownership.py
@@ -29,6 +30,7 @@ tests=(
   tests/test_reward_naming_audit.py
   tests/test_runtime_boundary_efficiency_dev8.py
   tests/test_shortcut_chord_semantics.py
+  tests/test_test_suite_discovery.py
   tests/test_schema_versioning_v0180.py
 )
 
