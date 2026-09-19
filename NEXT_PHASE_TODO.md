@@ -5,12 +5,11 @@ Updated: 2026-09-20
 ## Start here
 
 Integrated baseline:
-- `main` code/test milestone: r39 / `94e9128c43e5739b7ff1352d9ecaca81d7b3df7b`.
-- PR #7 is merged.
-- Active unfinished work: `fix/batch-b-runtime-semantics-r40` / Draft PR #18.
+- `main` now contains r40; verified code/test milestone: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
+- PR #7 (r39) and PR #18 (r40) are merged.
 - r40 production implementation commit: `864ff8fcbf96c616564756d658d3535c1f570f94`.
-- r40 verified code/test head: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
-- automated/Linux/macOS/build/package gates and focused HeroHit manual acceptance are **PASS**.
+- r40 automated/Linux/macOS/build/package gates and focused HeroHit manual acceptance are **PASS**.
+- Next active development slice: global Hades II game speed, from current `main` on a new isolated branch.
 
 Read before coding:
 - `PROJECT_STATUS.md`;
@@ -32,9 +31,9 @@ Verified on the authorized target Mac against exact code/test head `39c66b702d66
 - per owner instruction, a deliberate post-disable hit to prove resumed increment is not required for this slice;
 - Hecate polymorph and Mourning Fields miasma behavior is unchanged from the pre-existing implementation; r40 did not alter those effect blocks.
 
-Next integration action: non-forced fast-forward PR #18 / `fix/batch-b-runtime-semantics-r40` into current `main`, then start the global game-speed slice from the new `main`.
+r40 is integrated. Next action: create a new isolated game-speed branch from current `main`, re-audit Hades II 1.139672 time/speed ownership, write the design and RED contracts, then implement only the demonstrated minimal slice.
 
-## Continue Batch B only after the r40 slice is proven
+## Next Batch B slice
 
 ### Global game speed
 
@@ -97,7 +96,7 @@ Hosted Actions issue #16 remains tracked separately. If hosted jobs still fail b
 
 PR #10 is now based directly on `main` and remains DRAFT.
 
-Its branch is intentionally behind r39 and must not be synchronized in the middle of Batch B/C/D. After Phase 0 closes:
+Its branch is intentionally behind the current Phase 0 baseline and must not be synchronized in the middle of Batch B/C/D. After Phase 0 closes:
 1. update/rebase it against final `main`;
 2. resolve only real integration conflicts;
 3. rerun Linux + both macOS module builds;
