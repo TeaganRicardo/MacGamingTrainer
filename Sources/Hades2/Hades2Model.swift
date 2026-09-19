@@ -763,13 +763,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if shortcutError.isEmpty { installHotkeys() }
     }
 
+    private func featureHotkeyFeedback(_ key: String, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
+        guard targetEnabled else { return .disabled }
+        if activeFeatures[key] == true { return .enabled }
+        if dormantFeatures[key] == true || !connected || status != "ready" { return .deferred }
+        return nil
+    }
+
     private func performFeatureShortcut(_ key: String, current: Bool) {
         let targetEnabled = !current
         feature(key, value: targetEnabled) { [weak self] success in
             guard let self, success else { return }
-            TrainerHotkeyFeedbackPlayer.play(
-                .toggle(targetEnabled: targetEnabled, active: self.activeFeatures[key] == true)
-            )
+            if let feedback = self.featureHotkeyFeedback(key, targetEnabled: targetEnabled) {
+                TrainerHotkeyFeedbackPlayer.play(feedback)
+            }
         }
     }
 
