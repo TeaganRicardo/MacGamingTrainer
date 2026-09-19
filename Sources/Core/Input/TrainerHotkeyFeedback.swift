@@ -8,11 +8,6 @@ enum TrainerHotkeyFeedback {
     case deferred
     case disabled
 
-    static func toggle(targetEnabled: Bool, active: Bool) -> TrainerHotkeyFeedback {
-        guard targetEnabled else { return .disabled }
-        return active ? .enabled : .deferred
-    }
-
     fileprivate var systemSoundName: NSSound.Name {
         switch self {
         case .enabled: return NSSound.Name("Glass")
