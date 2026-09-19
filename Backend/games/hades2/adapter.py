@@ -462,8 +462,9 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 self._capture_runtime_preferences(self.state);self._save_preferences()
             self._overlay_preferences()
-            logging.info('Lua %s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
-                         command,self.transport.last_duration,self.state.get('scene'),
+            reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
+            logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
+                         command,reward_context,self.transport.last_duration,self.state.get('scene'),
                          self.state.get('desiredFeatures'),self.state.get('activeFeatures'),
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
