@@ -15,12 +15,12 @@ import Foundation
 if !Hades2RunLogRefreshGate.shouldConsume(
     pending: true, connected: true, backendAvailable: true, busy: false, exiting: false
 ) {
-    fatalError("a pending run-log signal must refresh even when the previous GUI snapshot was ready")
+    fatalError("an armed runtime-ready event must be consumable even if the previous GUI snapshot was ready")
 }
 if Hades2RunLogRefreshGate.shouldConsume(
     pending: false, connected: true, backendAvailable: true, busy: false, exiting: false
 ) {
-    fatalError("no pending run-log signal must mean no refresh")
+    fatalError("no pending lifecycle refresh must mean no Lua boundary")
 }
 if Hades2RunLogRefreshGate.shouldConsume(
     pending: true, connected: false, backendAvailable: true, busy: false, exiting: false
@@ -30,17 +30,7 @@ if Hades2RunLogRefreshGate.shouldConsume(
 if Hades2RunLogRefreshGate.shouldConsume(
     pending: true, connected: true, backendAvailable: true, busy: true, exiting: false
 ) {
-    fatalError("busy trainer must defer the run-log refresh")
-}
-if Hades2RunLogRefreshGate.shouldConsume(
-    pending: true, connected: true, backendAvailable: false, busy: false, exiting: false
-) {
-    fatalError("unavailable backend must defer the run-log refresh")
-}
-if Hades2RunLogRefreshGate.shouldConsume(
-    pending: true, connected: true, backendAvailable: true, busy: false, exiting: true
-) {
-    fatalError("exiting trainer must not refresh")
+    fatalError("busy trainer must defer the lifecycle refresh")
 }
 
 let fileManager = FileManager.default
@@ -52,73 +42,77 @@ try? fileManager.removeItem(at: directory)
 try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 try Data("seed\n".utf8).write(to: logURL)
 
-var signalCount = 0
-let watcher = Hades2RunLogWatcher {
-    signalCount += 1
+var events: [Hades2RunLogEvent] = []
+let watcher = Hades2RunLogWatcher { event in
+    events.append(event)
 }
 watcher.start()
 
-let setupDeadline = Date().addingTimeInterval(0.35)
-while Date() < setupDeadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+func pump(_ seconds: TimeInterval) {
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+    }
 }
 
-let handle = try FileHandle(forWritingTo: logURL)
-try handle.seekToEnd()
-try handle.write(contentsOf: Data("2026-09-19 [MainThread] World.cpp INFO| World::Begin()  -> Hub_PreRun\n".utf8))
-try handle.synchronize()
-try handle.close()
-
-let deadline = Date().addingTimeInterval(2.0)
-while signalCount < 1 && Date() < deadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-}
-if signalCount < 1 {
-    fatalError("appending a World::Begin line did not trigger the watcher")
+func append(_ text: String) throws {
+    let handle = try FileHandle(forWritingTo: logURL)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(text.utf8))
+    try handle.synchronize()
+    try handle.close()
 }
 
-// Hades may replace the log between launches. The watcher must follow the new
-// inode and consume only new content from that replacement.
+pump(0.35)
+
+try append("2026-09-19 [MainThread] World.cpp INFO| World::Begin() G_Intro -> G_Combat04\n")
+try append("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.04 seconds)\n")
+pump(0.35)
+if !events.isEmpty {
+    fatalError("ordinary room transition unexpectedly emitted lifecycle events: \(events)")
+}
+
+try append("2026-09-19 [MainThread] World.cpp INFO| World::Stop()\n")
+let stopDeadline = Date().addingTimeInterval(2)
+while events.count < 1 && Date() < stopDeadline { pump(0.01) }
+if events != [.worldStopped] {
+    fatalError("World::Stop did not emit exactly worldStopped: \(events)")
+}
+
+try append("2026-09-19 [MainThread] App.cpp INFO| App.Reset Start\n")
+try append("2026-09-19 [MainThread] LuaExt.cpp INFO| Lua interface destroyed\n")
+try append("2026-09-19 [MainThread] World.cpp INFO| World::Begin()  -> G_Intro\n")
+try append("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.18 seconds)\n")
+let resetDeadline = Date().addingTimeInterval(2)
+while events.count < 3 && Date() < resetDeadline { pump(0.01) }
+if events != [.worldStopped, .runtimeReset, .runtimeReady] {
+    fatalError("profile reset lifecycle was not coalesced correctly: \(events)")
+}
+
 let rotatedURL = directory.appendingPathComponent("Hades II.log.previous")
 try? fileManager.removeItem(at: rotatedURL)
 try fileManager.moveItem(at: logURL, to: rotatedURL)
 try Data("new session\n".utf8).write(to: logURL)
-
-let rotationSettleDeadline = Date().addingTimeInterval(0.5)
-while Date() < rotationSettleDeadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
+pump(0.5)
+try append("2026-09-19 [MainThread] App.cpp INFO| App.Reset Start\n2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.10 seconds)\n")
+let rotationDeadline = Date().addingTimeInterval(2)
+while events.count < 5 && Date() < rotationDeadline { pump(0.01) }
+if Array(events.suffix(2)) != [.runtimeReset, .runtimeReady] {
+    fatalError("log replacement lost reset lifecycle events: \(events)")
 }
 
-let replacement = try FileHandle(forWritingTo: logURL)
-try replacement.seekToEnd()
-try replacement.write(contentsOf: Data("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.100 seconds)\n".utf8))
-try replacement.synchronize()
-try replacement.close()
-
-let replacementDeadline = Date().addingTimeInterval(2.0)
-while signalCount < 2 && Date() < replacementDeadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-}
-if signalCount < 2 {
-    fatalError("replacing the Hades log lost subsequent readiness signals")
-}
-
-// Truncation without inode replacement is another ordinary logger behavior.
 let truncating = try FileHandle(forWritingTo: logURL)
 try truncating.truncate(atOffset: 0)
-try truncating.write(contentsOf: Data("2026-09-19 [MainThread] World.cpp INFO| World::Begin() Hub_PreRun -> F_Opening03\n".utf8))
+try truncating.write(contentsOf: Data("2026-09-19 [MainThread] LuaExt.cpp INFO| Lua interface destroyed\n2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.10 seconds)\n".utf8))
 try truncating.synchronize()
 try truncating.close()
-
-let truncationDeadline = Date().addingTimeInterval(2.0)
-while signalCount < 3 && Date() < truncationDeadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-}
-
+let truncationDeadline = Date().addingTimeInterval(2)
+while events.count < 7 && Date() < truncationDeadline { pump(0.01) }
 watcher.stop()
-if signalCount < 3 {
-    fatalError("truncating the Hades log lost subsequent readiness signals")
+if Array(events.suffix(2)) != [.runtimeReset, .runtimeReady] {
+    fatalError("log truncation lost reset lifecycle events: \(events)")
 }
+
 print("hades2_run_log_watcher_ok")
 """
 
