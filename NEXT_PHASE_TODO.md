@@ -7,7 +7,7 @@ Updated: 2026-09-20
 Integrated baseline:
 - `main` code/test milestone: r39 / `94e9128c43e5739b7ff1352d9ecaca81d7b3df7b`.
 - PR #7 is merged.
-- Active unfinished work: `fix/batch-b-runtime-semantics-r40`.
+- Active unfinished work: `fix/batch-b-runtime-semantics-r40` / Draft PR #18.
 - r40 production implementation commit: `864ff8fcbf96c616564756d658d3535c1f570f94`.
 - r40 is **not verified yet**. Do not assume the prior source-level inspection is equivalent to running the tests.
 
