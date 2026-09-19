@@ -18,7 +18,11 @@ assert "performFeatureShortcut" in model
 assert "TrainerHotkeyFeedbackPlayer.play" in model
 assert "guard success" in model
 assert "activeFeatures[key] == true" in model
-assert "targetEnabled:" in model
+assert "dormantFeatures[key] == true" in model
+assert "featureHotkeyFeedback" in model
+shortcut_block = model[model.index("private func performFeatureShortcut"):model.index("private func performDeferredToggleShortcut")]
+assert ".toggle(targetEnabled:" not in shortcut_block, "active=false alone must not be reported as deferred"
+assert "if let feedback" in shortcut_block
 
 # Future-result toggles have Hades semantics: enabling force flags waits for a
 # later boon choice, while disabling is immediately off.
