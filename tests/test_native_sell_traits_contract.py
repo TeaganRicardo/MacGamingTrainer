@@ -10,7 +10,7 @@ lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 
 for token in ('openSellTraits = "open_sell_traits"', 'case openSellTraits', 'case .openSellTraits: return .openSellTraits'):
     assert token in api, token
-assert 'case .openSellTraits: return [:]' in api
+assert 'case .openSellTraits:\n            return [:]' in api
 
 assert "'open_sell_traits'" in router
 assert "dict(params,requestId=rid)" in router or "params=dict(params,requestId=rid)" in router
