@@ -1,5 +1,5 @@
 from pathlib import Path
-import sys, tempfile
+import sys, tempfile, io, json, logging
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -25,6 +25,43 @@ class FakeTransport:
 
 transport = FakeTransport()
 a = Hades2Adapter(transport=transport)
+
+class LoggingTransport(FakeTransport):
+    def __init__(self):
+        super().__init__()
+        self.pid = 4242
+        self.live = True
+    def execute(self, source):
+        self.last_duration = 0.001
+        return json.dumps({
+            'status': 'ready',
+            'scene': 'run',
+            'capabilities': {},
+            'desiredFeatures': {},
+            'activeFeatures': {},
+            'dormantFeatures': {},
+            'featureErrors': {},
+        })
+
+log_stream = io.StringIO()
+log_handler = logging.StreamHandler(log_stream)
+root_logger = logging.getLogger()
+old_level = root_logger.level
+root_logger.addHandler(log_handler)
+root_logger.setLevel(logging.INFO)
+try:
+    logging_adapter = Hades2Adapter(transport=LoggingTransport())
+    logging_adapter.preference_initialized = True
+    logging_adapter.execute('spawn_reward', {
+        'reward': 'EmptyMaxHealthDrop',
+        'requestId': 'log-reward-1',
+    })
+finally:
+    root_logger.removeHandler(log_handler)
+    root_logger.setLevel(old_level)
+log_output = log_stream.getvalue()
+assert 'Lua spawn_reward' in log_output
+assert 'reward=EmptyMaxHealthDrop' in log_output
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 5
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
 assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 5
