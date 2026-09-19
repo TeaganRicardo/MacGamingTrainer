@@ -260,7 +260,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 applyPayload: { [weak self] payload in self?.apply(payload) },
                 resetGameState: { [weak self] in self?.resetAfterBackendTermination() },
                 log: { [weak self] line in self?.appendLog(line) },
-                onStatusChange: { [weak self] status in self?.backendStatus = status }
+                onStatusChange: { [weak self] status in
+                    self?.backendStatus = status
+                    if !status.busy {
+                        self?.consumeRunLogReadySignalIfPossible()
+                    }
+                }
             )
             send(.scan, title: "检测游戏")
         } catch {
