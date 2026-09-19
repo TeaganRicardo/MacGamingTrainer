@@ -155,6 +155,30 @@ Observed log evidence:
 
 The user completed the visual/behavioral checks and reported no remaining duplicate/re-offer issue. r39 focused acceptance is therefore closed as PASS.
 
+## Batch B / r40 God Mode hit-count slice — WIP
+
+Branch: `fix/batch-b-runtime-semantics-r40`.
+
+Implemented but not yet fully verified:
+- resident runtime 39 → 40;
+- God Mode captures the bound Hero's exact `Hits` baseline, including an original `nil`;
+- blocked `Damage` restores that baseline before returning;
+- the existing `UpdateTimers` guard reasserts the same baseline without adding a new loop;
+- release restores the baseline once more and clears all hit-baseline state;
+- explicit effect blocks remain only `HecatePolymorphStun` and `MiasmaSlow`; no global `ApplyEffect` hook was added.
+
+TDD/checkpoint commits:
+- RED contract: `5c59a2dcc26931cd8a0fb72c7b974a6048dea1e7`;
+- implementation: `864ff8fcbf96c616564756d658d3535c1f570f94`;
+- plan checkpoint: `f77ff40f1e5861206fcc87f23f2bdbe31873743e`.
+
+Verification limitation:
+- the available cloud container has no repository checkout or Lua runtime;
+- the authorized target Mac is currently offline;
+- therefore full focused test + `Tools/run_linux_checks.sh` are still pending and this branch must not advance the release branch yet.
+
+Manual r40 acceptance must verify both live behavior and the persisted/save-visible Hero hit count: repeated hostile hits under God Mode must not increase the baseline; after disabling God Mode, the next real hit must increment normally.
+
 ## Remaining Phase 0 repair batches
 
 1. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
