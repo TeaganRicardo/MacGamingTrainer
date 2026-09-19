@@ -43,9 +43,10 @@ Relevant commits already on that branch:
 - implementation plan: `6561b2783151be44afdf5ea0aa850b93be1bf670`;
 - hit-count contract commit: `5c59a2dcc26931cd8a0fb72c7b974a6048dea1e7`;
 - r40 implementation commit: `864ff8fcbf96c616564756d658d3535c1f570f94`;
-- pre-handoff checkpoint: `b384fb837ba848eb9ba7d08edaf0858083fed38f`.
+- pre-handoff checkpoint: `b384fb837ba848eb9ba7d08edaf0858083fed38f`;
+- verified r40 code/test head: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
 
-Implemented in the r40 branch, but **not yet accepted or integrated**:
+Implemented and accepted on the r40 branch, but **not yet integrated**:
 - resident runtime 39 -> 40;
 - God Mode captures the bound Hero's exact `CurrentRun.Hero.Hits` baseline;
 - an original `nil` baseline remains `nil` rather than becoming 0;
@@ -55,11 +56,21 @@ Implemented in the r40 branch, but **not yet accepted or integrated**:
 - no global `ApplyEffect` hook was added;
 - the explicit God Mode effect block list is still only `HecatePolymorphStun` and `MiasmaSlow`.
 
-Important verification correction:
-- the current cloud environment has no repository checkout or runnable Lua 5.2;
-- the authorized target Mac was offline when r40 was written;
-- therefore no authoritative command-run RED/GREEN, full focused test, Linux suite, macOS suite, build, or manual acceptance exists for r40 yet.
-- Treat r40 as **implementation present, verification pending**. Do not merge it until fresh command output exists.
+Verification checkpoint — 2026-09-20:
+- installed Hades II 1.139672 scripts prove `CurrentRun.Hero.Hits` is save-backed: `SaveLogic.lua` serializes `CurrentRun`, `EndRun()` moves that same run into `GameState.RunHistory`, and the latest-run Hero blacklist does not remove `Hits`;
+- focused `tests/test_god_mode_hostile_effects.py`: PASS / `god_mode_hostile_effects_ok`;
+- the first full Linux run exposed three stale revision-39 assertions in existing tests; root cause was incomplete test-contract propagation of the intentional r40 revision bump;
+- test-only commit `39c66b702d66c650eeb992f7016d5e9cb7c3f64c` advances those contracts to revision 40; no production code changed in that commit;
+- full `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`;
+- full `Tools/run_macos_checks.sh`: PASS / `macos_checks_ok`;
+- real Hades II save-tree before/after SHA-256 sentinel: `REAL_SAVE_TREE_UNCHANGED`;
+- clean Hades II build/package: PASS; packaged runtime 40, arm64, debugger entitlement, strict codesign, exactly one packaged game module and clean git diff all confirmed;
+- tester ZIP: `MacGamingTrainer-0.1-build2-rc-r40.zip`, size `1976217` bytes, SHA256 `45b623fcb70986af6ad604b69f62192925b7fb9e97854573f7d7daab30acc0c0`; ZIP integrity PASS;
+- focused real-game HeroHit acceptance: PASS using hot backups `saves-20260920-011751-3qk9q5zy` (`godmode测试前`) and `saves-20260920-012157-js8mys43` while r40 God Mode was active. Read-only SGB1 extraction shows `LUA_DATA.CurrentRun.Hero.Hits = 182` before and `182` after; `Health = 157` before and after; the after snapshot contains `MacGamingTrainerGodMode = true`. The latest completed historical run independently remains `Hero.Hits = 248`, confirming the current-run field was not confused with run history;
+- per owner instruction, the post-disable deliberate hit/increment check is not required for this slice. Release still restores/clears the baseline by contract and implementation review;
+- Hecate polymorph and Mourning Fields miasma interception are pre-existing r39 behavior and were not modified by r40, so this r40 acceptance does not claim a new manual retest of those paths.
+
+r40 is **verified and accepted for integration**.
 
 Design/plan:
 - `docs/superpowers/specs/2026-09-19-god-mode-hit-semantics-design.md`
@@ -69,9 +80,7 @@ Design/plan:
 
 ### Batch B — game speed + God Mode
 
-Still open after the r40 hit-count slice:
-- prove the save-visible HeroHit field is the same persistence path as `CurrentRun.Hero.Hits`;
-- fresh automated + target-Mac verification of the r40 hit invariant;
+Still open after the accepted r40 hit-count slice:
 - complete hostile debuff/control audit rather than guessing from effect names;
 - redesign game speed so the trainer factor is global across combat, non-combat and Crossroads while preserving native slow/time effects underneath it;
 - do not add periodic LLDB/Lua polling.
@@ -94,7 +103,7 @@ Then run final consolidated regression/acceptance.
 ## GitHub state
 
 - PR #7: MERGED into `main` at r39.
-- PR #18: DRAFT; active r40 God Mode hit-count slice. Do not merge until fresh automated/build/manual verification exists.
+- PR #18: DRAFT at this checkpoint; r40 God Mode hit-count slice is automated/build/manual accepted and ready for non-forced fast-forward integration.
 - PR #10: still DRAFT; retargeted to `main`. Its Phase 1 branch is intentionally unsynchronized with r39 until Phase 0 closes.
 - Issue #1: keep open as lifecycle/manual-acceptance umbrella until the remaining Phase 0 lifecycle checks close.
 - Issue #11: keep open for same-PID recovery/readiness performance until Batch D is accepted.

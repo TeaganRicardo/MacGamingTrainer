@@ -152,7 +152,7 @@ if M.godMode then restoreGodModeHitCount(CurrentRun.Hero) end
 
 Do not add another timer, thread, or hook.
 
-- [ ] **Step 7: Run the focused contract and verify GREEN**
+- [x] **Step 7: Run the focused contract and verify GREEN**
 
 Run:
 
@@ -162,7 +162,7 @@ python3 tests/test_god_mode_hostile_effects.py
 
 Expected: `god_mode_hostile_effects_ok`.
 
-- [ ] **Step 8: Run Linux contracts**
+- [x] **Step 8: Run Linux contracts**
 
 Run:
 
@@ -208,7 +208,7 @@ grep -n 'godModeHit\|restoreGodModeHitCount' Backend/games/hades2/runtime/hades.
 
 Expected: state declaration, one helper, install/release, Damage branch, and existing `enforceLocks`; no new polling loop.
 
-- [ ] **Step 3: Re-run focused + full Linux contracts**
+- [x] **Step 3: Re-run focused + full Linux contracts**
 
 ```bash
 python3 tests/test_god_mode_hostile_effects.py
@@ -217,9 +217,9 @@ bash Tools/run_linux_checks.sh
 
 Expected: both PASS.
 
-- [ ] **Step 4: Record manual acceptance target**
+- [x] **Step 4: Record manual acceptance target**
 
-Manual r40 acceptance must record the Hero hit counter before enabling God Mode, take repeated hostile hits, verify the counter is unchanged, disable God Mode, take one normal hit, and verify the counter increments exactly once.
+Manual r40 acceptance must establish the current Hero hit counter for the test interval, exercise ordinary hostile hits while r40 God Mode is active, and verify the save-backed counter remains unchanged. Per owner instruction on 2026-09-20, a deliberate post-disable hit/increment check is not required.
 
 
 ## Execution checkpoint — 2026-09-19
@@ -230,5 +230,20 @@ Manual r40 acceptance must record the Hero hit counter before enabling God Mode,
 - RED was reproduced against the exact r39 God Mode/revision structure in the available container; the new contract fails first on revision 39 and then on the absent hit-baseline lifecycle.
 - The updated r40 snippets satisfy the new source contract, including nil-preserving baseline state and restoration before the God Mode Damage early-return.
 - Review confirms there is still no `installHook("ApplyEffect"` and no new timer/thread/polling path.
-- Full repository `python3 tests/test_god_mode_hostile_effects.py` and `Tools/run_linux_checks.sh` remain **not run** at this checkpoint: the current container has no repository checkout, and the authorized target Mac is offline. These unchecked verification steps remain hard gates before this slice can be called verified or moved into the release branch.
-- Manual acceptance must additionally verify the persisted/save-visible Hero hit count, not only the live runtime field.
+- The original execution checkpoint above has now been superseded by the 2026-09-20 verification below.
+
+## Verification checkpoint — 2026-09-20
+
+- Verified code/test head: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
+- Installed Hades II 1.139672 scripts prove `CurrentRun.Hero.Hits` is part of the save-backed `CurrentRun` and remains on the latest completed run.
+- Focused God Mode contract: PASS / `god_mode_hostile_effects_ok`.
+- First full Linux run exposed only three stale revision-39 assertions. Root cause was incomplete propagation of the intentional resident revision bump; test-only commit `39c66b7` advances those contracts to 40.
+- Final full Linux suite: PASS / `linux_checks_ok`.
+- Full macOS suite: PASS / `macos_checks_ok`.
+- Real Hades II save-tree before/after sentinel: `REAL_SAVE_TREE_UNCHANGED`.
+- Clean package gate: PASS for runtime 40, arm64, debugger entitlement, strict codesign, one packaged Hades II module and clean git diff.
+- Tester ZIP: `MacGamingTrainer-0.1-build2-rc-r40.zip`, 1,976,217 bytes, SHA256 `45b623fcb70986af6ad604b69f62192925b7fb9e97854573f7d7daab30acc0c0`.
+- Focused real-game HeroHit acceptance: PASS. Hot backups `saves-20260920-011751-3qk9q5zy` and `saves-20260920-012157-js8mys43` were extracted read-only with `TheNormalnij/Hades-SavesExtractor` commit `0ad8d26968a5cc8fb6bd0548af39f455dff2e8c7`. `LUA_DATA.CurrentRun.Hero.Hits` is `182` in both, current Hero health is `157` in both, and the after snapshot carries `MacGamingTrainerGodMode = true`. Historical latest-run `Hero.Hits = 248` is distinct and unchanged.
+- Per owner instruction, the deliberate post-disable hit/increment check is omitted from acceptance.
+- Hecate polymorph and Mourning Fields miasma blocks are unchanged by r40 and are not claimed as newly manually retested here.
+- r40 is accepted for integration.
