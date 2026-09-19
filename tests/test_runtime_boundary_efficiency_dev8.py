@@ -59,13 +59,13 @@ assert adapter._catalog_initialized is True
 assert first['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert len(transport.sources) == 1
 assert len(transport.sources[0].encode('utf-8')) > 100_000
-assert 'revision = 39' in transport.sources[0]
+assert 'revision = 40' in transport.sources[0]
 assert '["includeCatalogs"]=true' in transport.sources[0]
 
 second = adapter.execute('status', {})
 assert len(transport.sources) == 2
 assert len(transport.sources[1].encode('utf-8')) < 2_000
-assert 'revision = 39' not in transport.sources[1]
+assert 'revision = 40' not in transport.sources[1]
 assert '["includeCatalogs"]=false' in transport.sources[1]
 # The Lua patch omits static catalogs after the first boundary, but the adapter
 # retains them in its authoritative merged state, so Host/UI responses lose no data.
