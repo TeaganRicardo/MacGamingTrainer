@@ -12,6 +12,37 @@ if not SWIFTC:
 main_source = r"""
 import Foundation
 
+if !Hades2RunLogRefreshGate.shouldConsume(
+    pending: true, connected: true, backendAvailable: true, busy: false, exiting: false
+) {
+    fatalError("a pending run-log signal must refresh even when the previous GUI snapshot was ready")
+}
+if Hades2RunLogRefreshGate.shouldConsume(
+    pending: false, connected: true, backendAvailable: true, busy: false, exiting: false
+) {
+    fatalError("no pending run-log signal must mean no refresh")
+}
+if Hades2RunLogRefreshGate.shouldConsume(
+    pending: true, connected: false, backendAvailable: true, busy: false, exiting: false
+) {
+    fatalError("detached trainer must not cross the Lua boundary")
+}
+if Hades2RunLogRefreshGate.shouldConsume(
+    pending: true, connected: true, backendAvailable: true, busy: true, exiting: false
+) {
+    fatalError("busy trainer must defer the run-log refresh")
+}
+if Hades2RunLogRefreshGate.shouldConsume(
+    pending: true, connected: true, backendAvailable: false, busy: false, exiting: false
+) {
+    fatalError("unavailable backend must defer the run-log refresh")
+}
+if Hades2RunLogRefreshGate.shouldConsume(
+    pending: true, connected: true, backendAvailable: true, busy: false, exiting: true
+) {
+    fatalError("exiting trainer must not refresh")
+}
+
 let fileManager = FileManager.default
 let directory = fileManager.homeDirectoryForCurrentUser
     .appendingPathComponent("Library/Application Support/Supergiant Games/Hades II", isDirectory: true)
@@ -98,6 +129,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
     main.write_text(textwrap.dedent(main_source), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        str(ROOT / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2RunLogWatcher.swift"),
         str(main),
         "-o", str(binary),
