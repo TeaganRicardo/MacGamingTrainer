@@ -5,11 +5,11 @@
 - Product: 0.1 / Build 2.
 - Stable `main`: Build 1.
 - Release PR: #7, still DRAFT.
-- Active repair branch: `fix/batch-a-native-modals`.
+- Active repair branch: `fix/special-choice-native-r39`.
 - Revision-35 acceptance remains failed/superseded.
 - Revision-36 Batch A native sell/native special-choice functionality: **manual PASS** on 2026-09-19.
-- Current r37 code head before this handoff-doc update: `c66dca0`.
-- Hades II resident runtime: revision 38.
+- Current r39 code/test head before this handoff-doc update: `e610f3aba74d5878d59d66d6476966ad06effec2`.
+- Hades II resident runtime: revision 39.
 - Host protocol 5; module protocol 5; desired-state schema 3; Profile schema 4.
 - Target game build audited: Hades II 1.139672 / Steam build 24556151.
 
@@ -107,9 +107,44 @@ Verification so far:
 - packaged runtime revision 38, arm64, debugger entitlement, strict codesign and ZIP integrity: PASS;
 - full exact-head macOS suite/save-tree sentinel is **deferred, not failed**, because Hades II was actively running on the target Mac when the final gate started. The gate exited before tests rather than disturb the live game.
 
+## r39 native-parity re-review
+
+Before manual r38 acceptance, the special-choice implementation was re-audited against the installed Hades II 1.139672 scripts, not only the public mirror.
+
+Findings:
+- Artemis / Athena / Dionysus / Hades are the highest-fidelity path: trainer code deep-copies the installed-game NPC source, calls native `SetTraitsOnLoot`, then opens the native `OpenUpgradeChoiceMenu`.
+- Arachne / Narcissus / Echo / Medea / Circe / Icarus cannot safely call their top-level native `*Choice` functions from an arbitrary trainer invocation. Those functions assume the live narrative screen and/or real NPC object and room-specific presentation state. Examples include `screen.PortraitId`, `screen.OnCloseFinishedFunctionName`, animations against `source.ObjectId`, Narcissus admirer objects, Circe/Medea cauldron presentation, and Icarus encounter exit state.
+- Therefore the fixed-choice path remains a deliberately thin adapter: installed-game `EnemyData` + `PresetEventArgs.*.UpgradeOptions` + native `IsGameStateEligible` / `PassRarityCheck` + native `OpenUpgradeChoiceMenu` + native selection/acquire handling. Only the NPC narrative/presentation wrapper and the trainer-only repeat semantics are reproduced locally.
+
+The re-review found three r38 deviations worth correcting:
+1. fixed-choice options were additionally passed through `IsTraitEligible`, even though the game's six fixed NPC choice functions do not use that ordinary-boon eligibility gate;
+2. the trainer repeat counter persisted across runs instead of resetting with `CurrentRun`;
+3. Trait-vs-non-Trait detection inferred from the presence of `TraitData` instead of the native option's `Type` field.
+
+r39 changes:
+- runtime 38 → 39;
+- remove `IsTraitEligible` from the fixed-NPC path, preserving the native special-choice eligibility rules;
+- use `option.Type == "Trait"` as the discriminator and fail closed if a declared Trait lacks installed `TraitData`;
+- retain only the trainer-required duplicate invariant for Trait options: reject a trait already owned by the hero or already recorded in `CurrentRun.PickedTraits`;
+- reset the per-source repeat counter whenever the `CurrentRun` table changes;
+- first open of a source in each run keeps native `RandomSynchronize(9)`; only trainer-only repeated opens advance 10, 11, ... so a second forced encounter is not deterministically identical.
+
+Verification:
+- r39 contract was observed RED against r38, then GREEN after the implementation change;
+- exact code/test head `e610f3aba74d5878d59d66d6476966ad06effec2`;
+- targeted native-special-choice contract: PASS;
+- full `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`;
+- clean Build 2 package: PASS;
+- app: `/Users/gao/Downloads/Mac Gaming Trainer r39.app`;
+- ZIP: `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r39.zip`;
+- ZIP size: 1,975,675 bytes;
+- SHA256: `5f1e8609a60e8b7f4387915b5d22a97d9d7865e7e46552025a068fe3930d1c73`;
+- packaged runtime 39, arm64, debugger entitlement, strict codesign and ZIP integrity: PASS;
+- full macOS suite/save-tree sentinel was safely skipped because Hades II was actively running; no game process was terminated and no save operation was performed.
+
 ## Remaining Phase 0 repair batches
 
-1. r38 focused manual acceptance: repeated fixed-choice and loot-style special choices.
+1. r39 focused manual acceptance: repeated fixed-choice and loot-style special choices.
 2. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
 3. Batch C: coherent Trainer Host enabled/deferred/disabled sound family + reliable delayed playback.
 4. Batch D: residual attach → Lua/world-readiness stutter.
