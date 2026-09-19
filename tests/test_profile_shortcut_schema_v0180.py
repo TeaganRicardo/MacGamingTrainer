@@ -20,6 +20,13 @@ assert _normalize_shortcuts({}) == {}
 assert _normalize_shortcuts({'godMode': 1, 'disableAll': 0}) == {}
 future = {'futureFeature': chord(18,6144,'1')}
 assert _normalize_shortcuts(future) == future
+future_collision = {
+    'aaaFutureFeature': chord(18,6144,'1'),
+    'godMode': chord(18,6144,'1'),
+}
+assert _normalize_shortcuts(future_collision) == future_collision, (
+    'backend must preserve unknown/known collisions for the Swift uiOrder owner to resolve'
+)
 assert _normalize_shortcuts({'bad action': chord(18,6144,'1')}) == {}
 assert _normalize_shortcuts({'../escape': chord(18,6144,'1')}) == {}
 
@@ -31,16 +38,15 @@ valid = {
 assert _normalize_shortcuts(valid) == valid
 
 
-# Duplicate chords are deterministic even for forward-compatible action IDs.
+# Backend preserves duplicate assignments instead of making UI-order decisions.
+# The current Swift shortcut store owns conflict resolution for action IDs it knows;
+# this also prevents an unknown future action from deleting a current assignment.
 duplicated = {
     'godMode': chord(18, 6144, '1'),
     'infiniteHealth': chord(18, 6144, '1'),
     'disableAll': chord(29, 6144, '0'),
 }
-assert _normalize_shortcuts(duplicated) == {
-    'godMode': chord(18, 6144, '1'),
-    'disableAll': chord(29, 6144, '0'),
-}
+assert _normalize_shortcuts(duplicated) == duplicated
 
 # Chord envelope is deliberately strict. Legacy integers, unknown modifier
 # bits, booleans masquerading as ints, control characters and out-of-range
