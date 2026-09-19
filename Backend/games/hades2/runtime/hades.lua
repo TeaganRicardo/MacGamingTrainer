@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 27 then
+if previousModule and previousModule.revision ~= 28 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 27, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 28, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -216,6 +216,8 @@ if __MacGamingTrainerV1 == nil then
     { id = "MaxManaDropBig", name = "超级灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
     { id = "RoomRewardHealDrop", name = "新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 10 },
     { id = "HealBigDrop", name = "超大份新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 20 },
+    { id = "HealDropMajor", name = "大型生命恢复", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 30 },
+    { id = "RoomRewardConsolationPrize", name = "红洋葱", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 40 },
     { id = "ArmorBoost", name = "护盾饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 10 },
     { id = "ArmorBigBoost", name = "埃癸斯饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 20 },
     { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
@@ -235,6 +237,29 @@ if __MacGamingTrainerV1 == nil then
     { id = "MetaCardPointsCommonBigDrop", name = "大量尘灰", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 35 },
     { id = "MemPointsCommonDrop", name = "魂魄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 40 },
     { id = "MemPointsCommonBigDrop", name = "大量魂魄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 45 },
+    { id = "OreFSilverDrop", name = "银矿", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 10 },
+    { id = "PlantFMolyDrop", name = "摩吕草", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 20 },
+    { id = "PlantFNightshadeDrop", name = "颠茄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 30 },
+    { id = "PlantGLotusDrop", name = "莲花", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 40 },
+    { id = "MetaFabricDrop", name = "命运丝线", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 50 },
+    { id = "TrashPointsDrop", name = "垃圾", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 60 },
+    { id = "MixerFBossDrop", name = "余烬", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 10 },
+    { id = "MixerGBossDrop", name = "珍珠", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 20 },
+    { id = "MixerHBossDrop", name = "泪珠", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 30 },
+    { id = "MixerIBossDrop", name = "玄象砂", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 40 },
+    { id = "MixerNBossDrop", name = "羊毛", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 50 },
+    { id = "MixerOBossDrop", name = "金苹果", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 60 },
+    { id = "MixerPBossDrop", name = "羽毛", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 70 },
+    { id = "MixerQBossDrop", name = "虚空之眼", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 80 },
+    { id = "Mixer5CommonDrop", name = "星尘", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 90 },
+    { id = "Mixer6CommonDrop", name = "黑暗", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 100 },
+    { id = "WeaponPointsRareDrop", name = "梦魇", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 10 },
+    { id = "CardUpgradePointsDrop", name = "月尘", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 20 },
+    { id = "FamiliarPointsDrop", name = "女巫之宝", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 30 },
+    { id = "CharonPointsDrop", name = "奥波勒斯信用点", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 40 },
+    { id = "GemPointsDrop", name = "宝石", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 50 },
+    { id = "GemPointsBigDrop", name = "大量宝石", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 60 },
+    { id = "DreamPointsDrop", name = "闪亮星星", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 70 },
     { id = "FireBoost", name = "火元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 10 },
     { id = "WaterBoost", name = "水元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 20 },
     { id = "EarthBoost", name = "土元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 30 },
@@ -1463,7 +1488,8 @@ if __MacGamingTrainerV1 == nil then
     local familyTitles = {
       money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
       healing = "恢复", armor = "护甲", hammer = "代达罗斯之锤", pom = "力量石榴",
-      utility = "其他局内奖励", meta = "局外资源奖励", element = "元素奖励",
+      utility = "其他局内奖励", meta = "局外资源奖励",
+      metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励",
     }
     local knownBoonIds = {}
     for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end

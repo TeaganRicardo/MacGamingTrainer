@@ -13,6 +13,29 @@ _LINKED_OFFICIAL_NAME_IDS = {
     'SpellDrop': 'SpellDrop_Store',
     'ArmorBoost': 'ArmorBoost_Store',
     'RoomRewardHealDrop': 'RoomRewardHealDrop_Store',
+    'HealBigDrop': 'RoomRewardBigHealDrop_Store',
+    'OreFSilverDrop': 'OreFSilver',
+    'PlantFMolyDrop': 'PlantFMoly',
+    'PlantFNightshadeDrop': 'PlantFNightshade',
+    'PlantGLotusDrop': 'PlantGLotus',
+    'MetaFabricDrop': 'MetaFabric',
+    'TrashPointsDrop': 'TrashPoints',
+    'MixerFBossDrop': 'MixerFBoss',
+    'MixerGBossDrop': 'MixerGBoss',
+    'MixerHBossDrop': 'MixerHBoss',
+    'MixerIBossDrop': 'MixerIBoss',
+    'MixerNBossDrop': 'MixerNBoss',
+    'MixerOBossDrop': 'MixerOBoss',
+    'MixerPBossDrop': 'MixerPBoss',
+    'MixerQBossDrop': 'MixerQBoss',
+    'Mixer5CommonDrop': 'Mixer5Common',
+    'Mixer6CommonDrop': 'Mixer6Common',
+    'WeaponPointsRareDrop': 'WeaponPointsRare',
+    'CardUpgradePointsDrop': 'CardUpgradePoints',
+    'FamiliarPointsDrop': 'FamiliarPoints',
+    'CharonPointsDrop': 'CharonPoints',
+    'GemPointsDrop': 'GemPoints',
+    'DreamPointsDrop': 'DreamPoints',
 }
 
 _LINKED_PROVISIONAL_RULES = {
@@ -27,6 +50,7 @@ _LINKED_PROVISIONAL_RULES = {
     'MetaCurrencyBigDrop': ('MetaCurrency', '大量', 'Large '),
     'MetaCardPointsCommonBigDrop': ('MetaCardPointsCommon', '大量', 'Large '),
     'MemPointsCommonBigDrop': ('MemPointsCommon', '大量', 'Large '),
+    'GemPointsBigDrop': ('GemPoints', '大量', 'Large '),
 }
 
 _PROVISIONAL_NAMES = {
@@ -39,6 +63,8 @@ _PROVISIONAL_NAMES = {
     'AirBoost': ('风元素精华', 'Air Essence'),
     'ElementalBoost': ('元素精华', 'Elemental Essence'),
     'StoreRewardRandomStack': ('随机祝福强化', 'Random Boon Upgrade'),
+    'HealDropMajor': ('大型生命恢复', 'Major Healing'),
+    'RoomRewardConsolationPrize': ('红洋葱', 'Red Onion'),
 }
 
 

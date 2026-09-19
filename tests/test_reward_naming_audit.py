@@ -34,15 +34,36 @@ for line in reward_block.splitlines():
     if identifier:
         reward_rows[identifier] = fields
 
-for identifier in (
-    'EmptyMaxHealthDrop', 'EmptyMaxHealthSmallDrop',
-    'MaxHealthDropSmall', 'MaxHealthDrop', 'MaxHealthDropBig',
-    'MaxManaDropSmall', 'MaxManaDrop', 'MaxManaDropBig',
-    'RoomRewardHealDrop', 'HealBigDrop',
-    'StoreRewardRandomStack', 'RerollDrop', 'LastStandDrop',
-    'ArmorBoost', 'ArmorBigBoost', 'ElementalBoost',
-):
+audited_debug_spawn_consumables = (
+    # Money
+    'RoomMoneyDrop', 'RoomMoneyBigDrop', 'RoomMoneyTripleDrop', 'RoomMoneySmallDrop', 'RoomMoneyTinyDrop',
+    # Health / mana / Selene path points
+    'MaxHealthDrop', 'MaxHealthDropSmall', 'MaxHealthDropBig', 'EmptyMaxHealthDrop', 'EmptyMaxHealthSmallDrop',
+    'MaxManaDrop', 'MaxManaDropSmall', 'MaxManaDropBig',
+    'TalentDrop', 'MinorTalentDrop', 'TalentBigDrop',
+    # Healing / partial rewards
+    'RoomRewardHealDrop', 'HealBigDrop', 'HealDropMajor', 'RoomRewardConsolationPrize',
+    'StoreRewardRandomStack', 'RerollDrop', 'LastStandDrop', 'ArmorBoost', 'ArmorBigBoost',
+    'FireBoost', 'AirBoost', 'EarthBoost', 'WaterBoost', 'ElementalBoost',
+    # Meta, basic / harvest / boss / advanced
+    'MetaCardPointsCommonDrop', 'MetaCardPointsCommonBigDrop', 'MemPointsCommonDrop', 'MemPointsCommonBigDrop',
+    'MetaCurrencyDrop', 'MetaCurrencyBigDrop', 'GiftDrop',
+    'OreFSilverDrop', 'PlantFMolyDrop', 'PlantFNightshadeDrop', 'PlantGLotusDrop', 'MetaFabricDrop', 'TrashPointsDrop',
+    'MixerFBossDrop', 'MixerGBossDrop', 'MixerHBossDrop', 'MixerIBossDrop',
+    'MixerNBossDrop', 'MixerOBossDrop', 'MixerPBossDrop', 'MixerQBossDrop', 'Mixer5CommonDrop', 'Mixer6CommonDrop',
+    'WeaponPointsRareDrop', 'CardUpgradePointsDrop', 'FamiliarPointsDrop', 'CharonPointsDrop',
+    'GemPointsDrop', 'GemPointsBigDrop', 'DreamPointsDrop',
+)
+assert len(audited_debug_spawn_consumables) == 60
+for identifier in audited_debug_spawn_consumables:
     assert identifier in reward_rows, identifier
+
+# RoomDataTest lists these separately as no-interact internals; trait-produced
+# drops are commented out there. Neither group belongs in the picker.
+for identifier in ('HealDrop', 'HealDropMinor', 'HealDropSuperMinor',
+                   'MedeaMoneyTinyDrop', 'PowerDrinkDrop', 'BloodDrop',
+                   'ManaDropMinorPoseidon', 'ManaDropMinor', 'ManaDropZeus', 'ManaDropMinorHound'):
+    assert identifier not in reward_rows, identifier
 
 for identifier in ('MinorTalentDrop', 'TalentDrop', 'TalentBigDrop'):
     row = reward_rows[identifier]

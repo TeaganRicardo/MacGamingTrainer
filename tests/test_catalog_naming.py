@@ -26,6 +26,10 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'SpellDrop_Store': '月之礼赠',
             'ArmorBoost_Store': '护盾饰符',
             'RoomRewardHealDrop_Store': '新鲜食粮',
+            'RoomRewardBigHealDrop_Store': '超大份新鲜食粮',
+            'OreFSilver': '银矿',
+            'MixerFBoss': '余烬',
+            'GemPoints': '宝石',
         }
     if language == 'en':
         return {
@@ -44,6 +48,10 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'SpellDrop_Store': 'Gift of the Moon',
             'ArmorBoost_Store': 'Shield Charm',
             'RoomRewardHealDrop_Store': 'Fresh Sustenance',
+            'RoomRewardBigHealDrop_Store': 'Big Fresh Sustenance',
+            'OreFSilver': 'Silver',
+            'MixerFBoss': 'Cinder',
+            'GemPoints': 'Gemstones',
         }
     return {}
 
@@ -78,6 +86,11 @@ try:
             {'id':'RoomRewardHealDrop','kind':'consumable','name':'RoomRewardHealDrop'},
             {'id':'ElementalBoost','kind':'consumable','name':'ElementalBoost'},
             {'id':'StoreRewardRandomStack','kind':'consumable','name':'StoreRewardRandomStack'},
+            {'id':'HealBigDrop','kind':'consumable','name':'HealBigDrop'},
+            {'id':'OreFSilverDrop','kind':'consumable','name':'OreFSilverDrop'},
+            {'id':'MixerFBossDrop','kind':'consumable','name':'MixerFBossDrop'},
+            {'id':'GemPointsDrop','kind':'consumable','name':'GemPointsDrop'},
+            {'id':'GemPointsBigDrop','kind':'consumable','name':'GemPointsBigDrop'},
         ],
         'resources': [{'id':'UnknownResource','name':'已有中文兜底'}],
     }
@@ -102,6 +115,10 @@ for identifier,expected_zh,expected_en in [
     ('SpellDrop','月之礼赠','Gift of the Moon'),
     ('ArmorBoost','护盾饰符','Shield Charm'),
     ('RoomRewardHealDrop','新鲜食粮','Fresh Sustenance'),
+    ('HealBigDrop','超大份新鲜食粮','Big Fresh Sustenance'),
+    ('OreFSilverDrop','银矿','Silver'),
+    ('MixerFBossDrop','余烬','Cinder'),
+    ('GemPointsDrop','宝石','Gemstones'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
@@ -120,6 +137,7 @@ for identifier,expected_zh,expected_en in [
     ('AirBoost','风元素精华','Air Essence'),
     ('ElementalBoost','元素精华','Elemental Essence'),
     ('StoreRewardRandomStack','随机祝福强化','Random Boon Upgrade'),
+    ('GemPointsBigDrop','大量宝石','Large Gemstones'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
