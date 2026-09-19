@@ -12,6 +12,7 @@ assert "enum TrainerHotkeyFeedback" in text
 for token in ("case enabled", "case deferred", "case disabled", "TrainerHotkeyFeedbackPlayer"):
     assert token in text, token
 assert "Hades" not in text and "godMode" not in text and "boon" not in text
+assert "static func toggle" not in text, "Core must not infer game-specific deferred semantics"
 assert len({name for name in ("Glass", "Pop", "Tink") if name in text}) == 3
 
 assert "performFeatureShortcut" in model
