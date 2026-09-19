@@ -54,20 +54,25 @@ Exact hardening head `b09e49b15478588dfbd42ee44ef8a70d5f34e07a` was also pushed 
 
 Every affected job has `steps=null` and `logs_url=null`. These runs provide no code-test result. The release branch was restored to the frozen revision-33 head after the probe.
 
-## Gate before manual acceptance
+## Target-Mac preflight — PASS
 
-Do **not** start final acceptance from the revision-33 RC.
+Fresh target-Mac preflight passed on the hardening branch after recovering the interrupted audit work:
 
-First verify the current hardening branch on the authorized target Mac:
+- `bash Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`;
+- `bash Tools/run_macos_checks.sh`: PASS / `macos_checks_ok`;
+- two consecutive clean `./build.sh hades2` builds: PASS;
+- CFBundleShortVersionString = `0.1`;
+- CFBundleVersion = `2`;
+- packaged game-module count = `1`;
+- packaged Hades runtime revision = `35`;
+- executable = Mach-O 64-bit `arm64`;
+- `com.apple.security.cs.debugger` entitlement present;
+- `codesign --verify --deep --strict`: PASS on both clean builds;
+- Git working tree remained clean after both builds.
 
-1. confirm exact branch/head and a clean worktree;
-2. run `bash Tools/run_macos_checks.sh`;
-3. build Hades II with `./build.sh hades2`;
-4. verify product 0.1 / Build 2, exactly one packaged module, arm64 output and strict codesign;
-5. repeat the clean build once to catch source-tree mutation or stale-package leakage;
-6. package a new revision-35 RC, run ZIP integrity, and record size + SHA256.
+The final revision-35 acceptance RC is built from the final pre-acceptance handoff head after this evidence-only documentation update. Its exact HEAD, byte size and SHA256 are recorded in PR #7 / the Phase 0 issue comments rather than committed into this file, avoiding an artifact-hash self-reference commit.
 
-Only after this preflight passes should the hardening head be fast-forwarded into `feature/post-v0.1-improvements` and used for final manual acceptance.
+Revision-33 RC remains superseded and MUST NOT be used for final PASS.
 
 ## Manual acceptance after preflight
 

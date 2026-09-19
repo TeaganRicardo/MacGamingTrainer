@@ -102,10 +102,10 @@
 **Interfaces:**
 - Produces: one new exact acceptance head and RC if any production/build change lands.
 
-- [ ] **Step 1:** Run full Linux contracts.
-- [ ] **Step 2:** Run Host connection policy and Hades log watcher harnesses.
-- [ ] **Step 3:** Build Hades II arm64 app, verify 0.1 / Build 2, one module, strict codesign.
-- [ ] **Step 4:** Run build twice from clean state and prove no tracked source mutation/stale package leakage.
+- [x] **Step 1:** Run full Linux contracts.
+- [x] **Step 2:** Run Host connection policy and Hades log watcher harnesses.
+- [x] **Step 3:** Build Hades II arm64 app, verify 0.1 / Build 2, one module, strict codesign.
+- [x] **Step 4:** Run build twice from clean state and prove no tracked source mutation/stale package leakage.
 - [x] **Step 5:** Review effective diff for correctness and Ponytail scope.
 - [ ] **Step 6:** Merge audit branch into `feature/post-v0.1-improvements` only if all Critical/Important findings are resolved.
 - [ ] **Step 7:** Reverify exact merged head, rebuild RC, record SHA256, update GitHub handoff state.
