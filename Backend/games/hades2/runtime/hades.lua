@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 30 then
+if previousModule and previousModule.revision ~= 32 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 30, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 32, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -284,9 +284,15 @@ if __MacGamingTrainerV1 == nil then
     { id = "Moros", name = "摩罗斯", order = 140 },
   }
   local nativeSpecialChoiceDefinitions = {
+    Artemis = { npc = "NPC_Artemis_Field_01", mode = "loot" },
+    Athena = { npc = "NPC_Athena_01", mode = "loot" },
+    Dionysus = { npc = "NPC_Dionysus_01", mode = "loot" },
+    Hades = { npc = "NPC_Hades_Field_01", mode = "loot" },
+    Arachne = { npc = "NPC_Arachne_01", choices = "ArachneCostumeChoices", post = "costume" },
     Narcissus = { npc = "NPC_Narcissus_01", choices = "NarcissusBenefitChoices" },
-    Echo = { npc = "NPC_Echo_01", choices = "EchoBenefitChoices", rarity = "Epic" },
+    Echo = { npc = "NPC_Echo_01", choices = "EchoBenefitChoices", rarity = "Epic", echoLastReward = true },
     Medea = { npc = "NPC_Medea_01", choices = "MedeaCurseChoices" },
+    Circe = { npc = "NPC_Circe_01", choices = "CirceBlessingChoices", circe = true },
     Icarus = { npc = "NPC_Icarus_01", choices = "IcarusBenefitChoices" },
   }
   local nativeSpecialChoiceSources = {}
@@ -299,6 +305,10 @@ if __MacGamingTrainerV1 == nil then
   end
   local trainerSource = "MacGamingTrainer"
   local trainerGodFlag = "MacGamingTrainerGodMode"
+  local godModeBlockedEffects = {
+    "HecatePolymorphStun",
+    "MiasmaSlow",
+  }
   local function requireFunctions(label, functions)
     for _, name in ipairs(functions) do
       if type(_G[name]) ~= "function" then error("Unsupported " .. label .. ": missing " .. name) end
@@ -409,6 +419,13 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseGodMode()
     M.godMode = false
+    local effectHero = M.godEffectBlockHero
+    if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        pcall(RemoveEffectBlock, { Id = effectHero.ObjectId, Name = effectName })
+      end
+    end
+    M.godEffectBlockHero = nil
     local hero = M.godHero
     if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag] then
       if type(SetUnitVulnerable) == "function" then
@@ -1888,9 +1905,19 @@ if __MacGamingTrainerV1 == nil then
     end)
   end
   local function installGodMode()
-    requireFunctions("god mode", { "Damage", "SetUnitInvulnerable", "SetUnitVulnerable" })
+    requireFunctions("god mode", {
+      "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
+      "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
+    })
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
+    if M.godEffectBlockHero ~= hero then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
+        ClearEffect({ Id = hero.ObjectId, Name = effectName })
+      end
+      M.godEffectBlockHero = hero
+    end
     if M.godHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag]) then
       SetUnitInvulnerable(hero, trainerGodFlag, { Silent = true })
       M.godHero = hero
@@ -3053,8 +3080,8 @@ if __MacGamingTrainerV1 == nil then
       if not ready() or sceneName() ~= "run" then error("Special blessing choice requires an active run room") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
       requireFunctions("native special blessing choice", {
-        "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable", "SpawnObstacle",
-        "Destroy", "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
+        "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable",
+        "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
       })
       if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
       local definition = nativeSpecialChoiceDefinitions[params.source]
@@ -3063,67 +3090,134 @@ if __MacGamingTrainerV1 == nil then
         error("Special blessing source data is unavailable")
       end
       local npcData = NPCData[definition.npc]
-      local choiceData = NPCData[definition.choices]
-      if type(npcData) ~= "table" or type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table" then
+      if type(npcData) ~= "table" then error("Special blessing source data is unavailable") end
+      local choiceData = definition.choices ~= nil and NPCData[definition.choices] or nil
+      if definition.mode ~= "loot"
+          and (type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table") then
         error("Special blessing choice data is unavailable")
       end
-      if type(MapState) ~= "table" or type(MapState.RoomRequiredObjects) ~= "table" then
-        error("Special blessing choice requires room object state")
+      if definition.mode == "loot" then
+        requireFunctions("native special blessing loot choice", { "SetTraitsOnLoot" })
+      else
+        requireFunctions("native special blessing fixed choice", { "PassRarityCheck" })
       end
+      if definition.post == "costume" then
+        requireFunctions("Arachne costume application", { "SetupCostume" })
+      end
+      if definition.circe then
+        requireFunctions("Circe familiar choice", { "GetProcessedTraitData", "SetTraitTextData" })
+      end
+
       return action(command, params, function()
         local source = ShallowCopyTable(npcData)
-        local priorityOptions, eligibleOptions = {}, {}
-        for _, option in ipairs(choiceData.UpgradeOptions) do
-          if type(option) == "table"
-              and (option.GameStateRequirements == nil or IsGameStateEligible(source, option.GameStateRequirements)) then
-            local candidate = ShallowCopyTable(option)
-            if definition.rarity ~= nil then candidate.Rarity = definition.rarity end
-            if type(CurrentRun) == "table" and CurrentRun.IsDreamRun
-                and type(TraitRarityData) == "table" and type(TraitRarityData.RarityUpgradeOrder) == "table" then
-              candidate.Rarity = TraitRarityData.RarityUpgradeOrder[CurrentRun.EnteredBiomes] or candidate.Rarity
-            end
-            if candidate.PriorityRequirements ~= nil and IsGameStateEligible(source, candidate.PriorityRequirements) then
-              priorityOptions[#priorityOptions + 1] = candidate
-            else
-              eligibleOptions[#eligibleOptions + 1] = candidate
-            end
-          end
-        end
-        if #priorityOptions + #eligibleOptions == 0 then error("No eligible special blessings are available") end
-
-        RandomSynchronize(9)
-        source.UpgradeOptions = {}
-        for _ = 1, 3 do
-          local option = nil
-          if #priorityOptions > 0 then option = RemoveRandomValue(priorityOptions)
-          elseif #eligibleOptions > 0 then option = RemoveRandomValue(eligibleOptions) end
-          if option ~= nil then source.UpgradeOptions[#source.UpgradeOptions + 1] = option end
-        end
-
-        local anchor = SpawnObstacle({
-          Name = "InvisibleTarget", DestinationId = CurrentRun.Hero.ObjectId, Group = "Standing",
-        })
-        if not finite(anchor) then error("Special blessing choice anchor could not be created") end
-
         source.Name = "MacGamingTrainerSpecial_" .. params.source
-        source.ObjectId = anchor
-        source.BlockReroll = true
+        source.ObjectId = -1
         source.CanDuplicate = false
-        source.DestroyOnPickup = true
+        source.DestroyOnPickup = false
         source.LastRewardEligible = false
-        source.GodLoot = false
-        source.TreatAsGodLootByShops = false
-        source.BlockDoubleBoon = true
         source.BanUnpickedBoonsEligible = false
         source.UpgradeScreenOpenFunctionName = nil
         source.UpgradeMenuOpenVoiceLines = nil
-        MapState.RoomRequiredObjects[anchor] = source
+        source.UseNarrativeContextArt = false
+        source.LightingColor = source.LightingColor or source.LootColor or { 255, 255, 255, 255 }
+        source.LootColor = source.LootColor or source.LightingColor
+        source.BoonGetColor = source.BoonGetColor or source.LootColor
 
-        local args = ShallowCopyTable(choiceData)
-        args.PortraitShift = nil
+        local args = {}
+        if definition.mode == "loot" then
+          source.UpgradeOptions = nil
+          SetTraitsOnLoot(source)
+          if type(source.UpgradeOptions) ~= "table" or #source.UpgradeOptions == 0 then
+            error("No eligible special blessings are available")
+          end
+        else
+          source.BlockReroll = true
+          args = ShallowCopyTable(choiceData)
+          args.PortraitShift = nil
+
+          local priorityOptions, eligibleOptions = {}, {}
+          for _, option in pairs(choiceData.UpgradeOptions) do
+            if type(option) == "table"
+                and (option.GameStateRequirements == nil or IsGameStateEligible(source, option.GameStateRequirements)) then
+              local candidate = ShallowCopyTable(option)
+              if definition.rarity ~= nil then candidate.Rarity = definition.rarity end
+              if candidate.PriorityRequirements ~= nil and IsGameStateEligible(source, candidate.PriorityRequirements) then
+                priorityOptions[#priorityOptions + 1] = candidate
+              else
+                eligibleOptions[#eligibleOptions + 1] = candidate
+              end
+            end
+          end
+          if #priorityOptions + #eligibleOptions == 0 then error("No eligible special blessings are available") end
+
+          if definition.echoLastReward and not CurrentRun.LastReward then
+            CurrentRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
+          end
+
+          RandomSynchronize(9)
+          source.UpgradeOptions = {}
+          for _ = 1, 3 do
+            local option = nil
+            if #priorityOptions > 0 then
+              option = RemoveRandomValue(priorityOptions)
+              if option ~= nil then option.SlotEntranceAnimation = option.PrioritySlotEntranceAnimation end
+            elseif #eligibleOptions > 0 then
+              option = RemoveRandomValue(eligibleOptions)
+              if option ~= nil and definition.rarity == nil and option.Rarity
+                  and #eligibleOptions > 0 and not PassRarityCheck(option.Rarity) then
+                option = RemoveRandomValue(eligibleOptions)
+              end
+            end
+            if option ~= nil then source.UpgradeOptions[#source.UpgradeOptions + 1] = option end
+          end
+
+          if CurrentRun.IsDreamRun and type(TraitRarityData) == "table"
+              and type(TraitRarityData.RarityUpgradeOrder) == "table" then
+            for _, option in ipairs(source.UpgradeOptions) do
+              option.Rarity = TraitRarityData.RarityUpgradeOrder[CurrentRun.EnteredBiomes] or option.Rarity
+            end
+          end
+
+          if definition.circe then
+            for _, option in ipairs(source.UpgradeOptions) do
+              if option.ItemName == "DoubleFamiliarTrait" then
+                local familiarTrait = nil
+                for _, traitData in ipairs(CurrentRun.Hero.Traits or {}) do
+                  if traitData.FamiliarTrait then familiarTrait = traitData; break end
+                end
+                if familiarTrait == nil then error("Circe familiar choice requires an active familiar trait") end
+                local rarity = option.Rarity or "Common"
+                local rarityLevels = type(TraitData.DoubleFamiliarTrait) == "table"
+                  and TraitData.DoubleFamiliarTrait.RarityLevels or nil
+                local rarityData = type(rarityLevels) == "table" and rarityLevels[rarity] or nil
+                if type(rarityData) ~= "table" or not finite(rarityData.Multiplier) then
+                  error("Circe familiar choice rarity data is unavailable")
+                end
+                SetTraitTextData(familiarTrait)
+                SessionMapState.OldFamiliarTrait = familiarTrait
+                local multiplier = rarityData.Multiplier + 1
+                local bonusStacks = type(TraitData[familiarTrait.Name]) == "table"
+                  and (TraitData[familiarTrait.Name].CirceBonusStacks or 0) or 0
+                local newFamiliarTrait = GetProcessedTraitData({
+                  Unit = CurrentRun.Hero, TraitName = familiarTrait.Name,
+                  StackNum = (familiarTrait.StackNum or 1) * multiplier + bonusStacks * (multiplier - 1),
+                })
+                SetTraitTextData(newFamiliarTrait)
+                SessionMapState.NewFamiliarTrait = newFamiliarTrait
+                if familiarTrait.FamiliarLastStandHealAmount ~= nil then
+                  SessionMapState.OldFamiliarTrait.ExtractData.TooltipLastStandAmount = 1
+                  SessionMapState.NewFamiliarTrait.ExtractData.TooltipLastStandAmount = multiplier
+                end
+                if type(TraitData[familiarTrait.Name]) == "table"
+                    and TraitData[familiarTrait.Name].CirceStatLine then
+                  SessionMapState.StatLine = TraitData[familiarTrait.Name].CirceStatLine
+                end
+              end
+            end
+          end
+        end
+
         if type(GameState.LootPickups) ~= "table" then
-          MapState.RoomRequiredObjects[anchor] = nil
-          pcall(Destroy, { Id = anchor })
           error("Special blessing choice requires loot pickup state")
         end
         local lootPickups = GameState.LootPickups
@@ -3132,20 +3226,16 @@ if __MacGamingTrainerV1 == nil then
         local history = hadLootChoiceHistory and CurrentRun.LootChoiceHistory or nil
         local historyCount = history and #history or 0
         local ownerRun = CurrentRun
-        local ownerMapState = MapState
 
         local function runChoice()
           local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
+          if ok and definition.post == "costume" then pcall(SetupCostume) end
           lootPickups[source.Name] = previousPickup
           if hadLootChoiceHistory then
             while #history > historyCount do table.remove(history) end
           elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
             CurrentRun.LootChoiceHistory = nil
           end
-          if ownerMapState == MapState and type(MapState.RoomRequiredObjects) == "table" then
-            MapState.RoomRequiredObjects[anchor] = nil
-          end
-          pcall(Destroy, { Id = anchor })
           if not ok and type(DebugPrint) == "function" then
             DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. tostring(message) })
           end

@@ -13,6 +13,7 @@ tests=(
   tests/test_hades2_adapter_round12.py
   tests/test_hades2_timeout_policy_v0177.py
   tests/test_hotkey_feedback_contract.py
+  tests/test_god_mode_hostile_effects.py
   tests/test_localization_cache_recovery_v0180.py
   tests/test_native_sell_traits_contract.py
   tests/test_native_special_choice_contract.py
