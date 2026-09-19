@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 26 then
+if previousModule and previousModule.revision ~= 27 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 26, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 27, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -206,20 +206,28 @@ if __MacGamingTrainerV1 == nil then
     { id = "RoomMoneyDrop", name = "金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 10 },
     { id = "RoomMoneyBigDrop", name = "大量金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 20 },
     { id = "RoomMoneyTripleDrop", name = "三份金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 30 },
-    { id = "EmptyMaxHealthSmallDrop", name = "小型半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 5 },
     { id = "MaxHealthDropSmall", name = "小型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 10 },
     { id = "MaxHealthDrop", name = "半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 20 },
-    { id = "MaxHealthDropBig", name = "大型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 30 },
-    { id = "MaxManaDropSmall", name = "小型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 10 },
-    { id = "MaxManaDrop", name = "灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 20 },
-    { id = "MaxManaDropBig", name = "大型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
+    { id = "MaxHealthDropBig", name = "超级半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 30 },
+    { id = "EmptyMaxHealthSmallDrop", name = "小型半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurSoul", familyOrder = 22, itemOrder = 10 },
+    { id = "EmptyMaxHealthDrop", name = "半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurSoul", familyOrder = 22, itemOrder = 20 },
+    { id = "MaxManaDropSmall", name = "小型灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 10 },
+    { id = "MaxManaDrop", name = "灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 20 },
+    { id = "MaxManaDropBig", name = "超级灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
+    { id = "RoomRewardHealDrop", name = "新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 10 },
+    { id = "HealBigDrop", name = "超大份新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 20 },
+    { id = "ArmorBoost", name = "护盾饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 10 },
+    { id = "ArmorBigBoost", name = "埃癸斯饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 20 },
     { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
     { id = "StackUpgrade", name = "力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 10 },
-    { id = "StackUpgradeBig", name = "大型力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
-    { id = "StackUpgradeTriple", name = "三重力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
-    { id = "MinorTalentDrop", name = "少量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 10 },
-    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
-    { id = "TalentBigDrop", name = "大量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 30 },
+    { id = "StackUpgradeBig", name = "超级力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
+    { id = "StackUpgradeTriple", name = "究极力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
+    { id = "StoreRewardRandomStack", name = "随机祝福强化", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 40 },
+    { id = "RerollDrop", name = "重掷次数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 10 },
+    { id = "LastStandDrop", name = "冥河之吻", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 20 },
+    { id = "MinorTalentDrop", name = "黯淡繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 30, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentBigDrop", name = "闪耀繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 40, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "GiftDrop", name = "蜜露", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 10 },
     { id = "MetaCurrencyDrop", name = "骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 20 },
     { id = "MetaCurrencyBigDrop", name = "大量骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 25 },
@@ -231,6 +239,7 @@ if __MacGamingTrainerV1 == nil then
     { id = "WaterBoost", name = "水元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 20 },
     { id = "EarthBoost", name = "土元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 30 },
     { id = "AirBoost", name = "风元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 40 },
+    { id = "ElementalBoost", name = "元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 50 },
     { id = "SpellDrop", name = "月之礼赠", category = "特殊祝福", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "TrialUpgrade", name = "卡俄斯祝福", category = "特殊祝福", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
   }
@@ -1452,9 +1461,9 @@ if __MacGamingTrainerV1 == nil then
     local result, allowed = setmetatable({}, arrayMeta), {}
     local officialSourceOrder = officialSpecialSourceOrder()
     local familyTitles = {
-      money = "金币", centaurHeart = "半人马之心", soulTonic = "灵魂滋补剂",
-      hammer = "代达罗斯之锤", pom = "力量石榴", talent = "星辰之路",
-      meta = "局外资源奖励", element = "元素奖励",
+      money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
+      healing = "恢复", armor = "护甲", hammer = "代达罗斯之锤", pom = "力量石榴",
+      utility = "其他局内奖励", meta = "局外资源奖励", element = "元素奖励",
     }
     local knownBoonIds = {}
     for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end
