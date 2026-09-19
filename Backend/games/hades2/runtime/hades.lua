@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 28 then
+if previousModule and previousModule.revision ~= 29 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 28, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 29, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -3028,6 +3028,15 @@ if __MacGamingTrainerV1 == nil then
         CurrentRun.NumRerolls = params.amount
         ShowRerollUI()
         UpdateRerollUI(params.amount)
+      end)
+    end
+    if command == "open_sell_traits" then
+      if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
+      requireFunctions("native boon sell screen", { "OpenSellTraitMenu", "AreScreensActive", "thread" })
+      if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
+      return action(command, params, function()
+        thread(OpenSellTraitMenu, {})
+        return nil
       end)
     end
     if command == "spawn_reward" then
