@@ -173,6 +173,13 @@ struct Hades2TrainerView: View {
         TrainerSection(title: "构筑数据", icon: "chart.bar.xaxis") {
             metaStatPanel
             boonRarityPanel
+            HStack {
+                Label("祝福管理", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
+                Spacer()
+                Button("打开祝福出售界面") { model.openSellTraits() }
+                    .disabled(!model.canOpenNativeBoonScreen)
+            }
+            .trainerPanel()
         }
     }
 
