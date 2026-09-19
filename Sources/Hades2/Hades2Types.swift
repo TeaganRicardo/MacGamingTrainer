@@ -18,6 +18,8 @@ struct BoonOption: Identifiable {
     let kind: String
     let group: String
     let sectionTitle: String
+    let sourceId: String
+    let nativeChoice: Bool
     let sortSection: Int
     let sortGroup: Int
     let sortOrder: Int
