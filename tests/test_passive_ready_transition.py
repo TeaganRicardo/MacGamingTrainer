@@ -104,7 +104,7 @@ print('passive_ready_transition_ok')
 # reset's load completes.
 for token in (
     'DispatchSource.makeFileSystemObjectSource',
-    'World::Stop()',
+    'Loading package: MainMenu.pkg',
     'App.Reset Start',
     'Lua interface destroyed',
     'Finished loadScreen onExit',
@@ -113,6 +113,7 @@ for token in (
 ):
     assert token in watcher, token
 assert 'World::Begin()' not in watcher
+assert 'World::Stop()' not in watcher
 assert 'Timer.' not in watcher
 assert 'asyncAfter' not in watcher
 
@@ -135,7 +136,7 @@ assert 'status == "waiting"' not in run_log_refresh
 event_start = model.index('    private func handleRunLogEvent(')
 event_end = model.index('\n    private func consumeRunLogReadySignalIfPossible()', event_start)
 event_block = model[event_start:event_end]
-for token in ('.worldStopped', '.runtimeReset', '.runtimeReady', 'activeFeatures = [:]', 'capabilities = capabilities.mapValues'):
+for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [:]', 'capabilities = capabilities.mapValues'):
     assert token in event_block, token
 
 backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
