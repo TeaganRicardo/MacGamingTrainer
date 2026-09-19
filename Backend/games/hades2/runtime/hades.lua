@@ -6,16 +6,16 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 39 then
+if previousModule and previousModule.revision ~= 40 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 39, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 40, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
-    godMode = false, infiniteHealth = false, infiniteMana = false,
+    godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
     resourceMultiplier = 2, resourceMultiplierEnabled = false,
@@ -447,7 +447,16 @@ if __MacGamingTrainerV1 == nil then
   local function releaseHeroDamageRouterIfUnused()
     if not M.godMode and not M.infiniteHealth and M.statTargets.enemyDamage == nil then releaseHook("Damage") end
   end
+  local function restoreGodModeHitCount(hero)
+    if M.godModeHitBaselineKnown and M.godModeHitHero == hero and type(hero) == "table" then
+      hero.Hits = M.godModeHitBaseline
+    end
+  end
   local function releaseGodMode()
+    restoreGodModeHitCount(M.godModeHitHero)
+    M.godModeHitHero = nil
+    M.godModeHitBaseline = nil
+    M.godModeHitBaselineKnown = false
     M.godMode = false
     local effectHero = M.godEffectBlockHero
     if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
@@ -1342,6 +1351,7 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     if not ready() then return end
+    if M.godMode then restoreGodModeHitCount(CurrentRun.Hero) end
     for vital in pairs(M.vitalLocks) do enforceVital(vital) end
     enforceElements()
     if M.instantCastCooldown then
@@ -1911,6 +1921,9 @@ if __MacGamingTrainerV1 == nil then
     installHook("Damage", function(original, victim, triggerArgs)
       if victim == CurrentRun.Hero then
         if M.godMode then
+          -- OnHit increments Hero.Hits before it reaches Damage(). Restore the
+          -- pre-God-Mode baseline before skipping the vanilla damage pipeline.
+          restoreGodModeHitCount(victim)
           -- Stop at the outer Lua damage entry. This skips armor loss, hit-stun,
           -- knockback and normal hostile on-hit processing inside Damage().
           return nil
@@ -1950,6 +1963,11 @@ if __MacGamingTrainerV1 == nil then
     })
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
+    if M.godModeHitHero ~= hero or not M.godModeHitBaselineKnown then
+      M.godModeHitHero = hero
+      M.godModeHitBaseline = hero.Hits
+      M.godModeHitBaselineKnown = true
+    end
     if M.godEffectBlockHero ~= hero then
       for _, effectName in ipairs(godModeBlockedEffects) do
         AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
