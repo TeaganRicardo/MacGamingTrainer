@@ -22,9 +22,6 @@ assert "'provisional_zh'" in catalog
 for essence in ('火元素精华', '水元素精华', '土元素精华', '风元素精华'):
     assert essence in catalog
 
-print('reward_naming_audit_ok')
-
-
 # Parse the declarative reward table and protect the audited full-release
 # spawn catalog. A missing row or wrong grouping is a user-visible catalog bug.
 reward_block = lua.split('local rewardDefinitions = {', 1)[1].split('  local elementNames =', 1)[0]
@@ -63,3 +60,5 @@ assert reward_rows['ElementalBoost'].get('family') == 'element'
 assert reward_rows['ElementalBoost'].get('category') == '元素奖励'
 assert reward_rows['MinorTalentDrop'].get('name') == '黯淡繁星之路'
 assert reward_rows['TalentBigDrop'].get('name') == '闪耀繁星之路'
+
+print('reward_naming_audit_ok')
