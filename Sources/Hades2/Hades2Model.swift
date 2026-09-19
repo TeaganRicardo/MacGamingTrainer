@@ -258,7 +258,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         } else {
             runLogWatcher.start()
             send(.connect, title: "连接游戏") { [weak self] _ in
-                self?.consumeRunLogReadySignalIfPossible()
+                guard let self else { return }
+                self.runLogWatcher.start()
+                self.consumeRunLogReadySignalIfPossible()
             }
         }
     }
