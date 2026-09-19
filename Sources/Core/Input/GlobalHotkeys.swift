@@ -37,13 +37,14 @@ struct HotkeyBinding {
 final class GlobalHotkeys {
     private var references: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
+    private var handlerInstallStatus: OSStatus = noErr
     private var eventActions: [UInt32: String] = [:]
     let action: (String) -> Void
 
     init(action: @escaping (String) -> Void) {
         self.action = action
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, context -> OSStatus in
+        handlerInstallStatus = InstallEventHandler(GetApplicationEventTarget(), { _, event, context -> OSStatus in
             guard let context = context, let event = event else { return OSStatus(eventNotHandledErr) }
             var id = EventHotKeyID()
             let result = GetEventParameter(
@@ -60,6 +61,9 @@ final class GlobalHotkeys {
     }
 
     func register(_ bindings: [HotkeyBinding]) -> String {
+        guard handlerInstallStatus == noErr, handler != nil else {
+            return "快捷键监听初始化失败（\(handlerInstallStatus)）。"
+        }
         references.forEach { UnregisterEventHotKey($0) }
         references.removeAll()
         eventActions.removeAll()
