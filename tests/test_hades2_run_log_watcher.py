@@ -67,16 +67,17 @@ pump(0.35)
 
 try append("2026-09-19 [MainThread] World.cpp INFO| World::Begin() G_Intro -> G_Combat04\n")
 try append("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.04 seconds)\n")
+try append("2026-09-19 [MainThread] World.cpp INFO| World::Stop()\n")
 pump(0.35)
 if !events.isEmpty {
-    fatalError("ordinary room transition unexpectedly emitted lifecycle events: \(events)")
+    fatalError("ordinary room/pause lifecycle unexpectedly emitted events: \(events)")
 }
 
-try append("2026-09-19 [MainThread] World.cpp INFO| World::Stop()\n")
-let stopDeadline = Date().addingTimeInterval(2)
-while events.count < 1 && Date() < stopDeadline { pump(0.01) }
-if events != [.worldStopped] {
-    fatalError("World::Stop did not emit exactly worldStopped: \(events)")
+try append("2026-09-19 [MainThread] GameAssetManager.cpp INFO| Loading package: MainMenu.pkg\n")
+let menuDeadline = Date().addingTimeInterval(2)
+while events.count < 1 && Date() < menuDeadline { pump(0.01) }
+if events.map({ String(describing: $0) }) != ["mainMenu"] {
+    fatalError("main-menu package load did not emit exactly mainMenu: \(events)")
 }
 
 try append("2026-09-19 [MainThread] App.cpp INFO| App.Reset Start\n")
@@ -85,7 +86,7 @@ try append("2026-09-19 [MainThread] World.cpp INFO| World::Begin()  -> G_Intro\n
 try append("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.18 seconds)\n")
 let resetDeadline = Date().addingTimeInterval(2)
 while events.count < 3 && Date() < resetDeadline { pump(0.01) }
-if events != [.worldStopped, .runtimeReset, .runtimeReady] {
+if events.map({ String(describing: $0) }) != ["mainMenu", "runtimeReset", "runtimeReady"] {
     fatalError("profile reset lifecycle was not coalesced correctly: \(events)")
 }
 
