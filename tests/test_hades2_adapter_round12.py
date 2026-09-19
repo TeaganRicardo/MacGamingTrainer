@@ -101,7 +101,7 @@ reset_adapter.preferences['godMode']=True
 reset_adapter.preference_initialized=True
 reset_adapter.preference_dirty=False
 recovered=reset_adapter.execute('status', {})
-assert len(reset_transport.sources) >= 3
+assert len(reset_transport.sources) == 3
 assert 'local previousModule' not in reset_transport.sources[0]
 assert 'local previousModule' in reset_transport.sources[1]
 assert any('"set_feature"' in source and 'godMode' in source for source in reset_transport.sources[2:])
@@ -150,8 +150,8 @@ assert a.delete_profile('模块化测试')['deleted']
 
 # Game-specific validation now lives behind the Hades adapter, not core server.
 calls = []
-def fake_execute(command, params, replay=False):
-    calls.append((command, dict(params), replay))
+def fake_execute(command, params, replay=False, read_only=False, batch=None):
+    calls.append((command, dict(params), replay, batch))
     return {'connected': True, 'status': 'ready'}
 a.execute = fake_execute
 assert a.dispatch('set_stat', {'stat':'enemyHealth','locked':True,'value':175}, 'r1')['status'] == 'ready'
@@ -192,8 +192,10 @@ a.preference_dirty = True
 transport.live = True
 calls.clear()
 a._replay_preferences(force_full=True)
-assert any(c=='set_stat' and p.get('stat')=='enemyHealth' for c,p,_ in calls)
-assert any(c=='set_next_room_reward' and p.get('reward')=='WeaponUpgrade' for c,p,_ in calls)
-assert any(c=='lock_resource' and p.get('resource')=='Money' for c,p,_ in calls)
+assert calls[-1][0] == 'replay_preferences' and calls[-1][2] is True
+replay_batch = calls[-1][3]
+assert any(c=='set_stat' and p.get('stat')=='enemyHealth' for c,p in replay_batch)
+assert any(c=='set_next_room_reward' and p.get('reward')=='WeaponUpgrade' for c,p in replay_batch)
+assert any(c=='lock_resource' and p.get('resource')=='Money' for c,p in replay_batch)
 
 print('hades2_adapter_round12_ok')
