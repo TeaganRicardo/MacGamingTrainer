@@ -87,7 +87,8 @@ assert 'UpgradeOptions' in block
 assert 'M.specialChoiceOpens[params.source] = (M.specialChoiceOpens[params.source] or 0) + 1' in block
 assert 'RandomSynchronize(8 + M.specialChoiceOpens[params.source])' in block
 assert 'RandomSynchronize(9)' not in block
-assert 'local traitData = type(option.ItemName) == "string" and TraitData[option.ItemName] or nil' in block
+assert 'local traitData = type(option) == "table" and type(option.ItemName) == "string"' in block
+assert 'and TraitData[option.ItemName] or nil' in block
 assert 'HeroHasTrait(option.ItemName)' in block
 assert 'IsTraitEligible(traitData)' in block
 assert 'AddTraitToHero' not in block
