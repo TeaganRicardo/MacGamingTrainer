@@ -14,21 +14,21 @@ Current product baseline: **0.1**. Stable `main` remains Build 1. Build 2 releas
 
 The hardening audit found and fixed release-path issues in lifecycle readiness, same-process Lua session hook ownership, game-speed reset recovery, exit cleanup, hotkey result reporting, process-query failure handling, staged-restore corruption handling, and contract-suite coverage.
 
-### Required target-Mac preflight
+### Target-Mac preflight — PASS
 
-From the exact hardening branch/head:
+Completed on the authorized target Mac:
 
-1. verify clean Git state and exact SHA;
-2. `bash Tools/run_macos_checks.sh`;
-3. `./build.sh hades2`;
-4. verify CFBundleShortVersionString = 0.1 and CFBundleVersion = 2;
-5. verify exactly one packaged game module;
-6. verify arm64 build and `codesign --verify --deep --strict`;
-7. repeat from a clean state and confirm no tracked-source mutation or stale package leakage;
-8. package a revision-35 RC;
-9. run ZIP integrity and record exact byte size + SHA256.
+1. clean branch/worktree verified;
+2. full Linux contracts PASS;
+3. full macOS contract suite PASS;
+4. two clean Hades II arm64 builds PASS;
+5. 0.1 / Build 2 package checks PASS;
+6. exactly one packaged game module;
+7. runtime revision 35 packaged;
+8. strict codesign + debugger entitlement PASS;
+9. no tracked-source mutation after either build.
 
-Hosted Actions cannot substitute for this preflight while #16 persists. Exact revision-35 CI probes have reproduced the same pre-step failure with `steps=null` and `logs_url=null`.
+The final RC is packaged only after the final handoff/docs commit. Exact artifact HEAD, size and SHA256 are recorded in PR #7.
 
 ### After preflight passes
 
