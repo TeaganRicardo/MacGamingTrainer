@@ -145,15 +145,17 @@ adapter.state.update({
     'nextRoomReward': None,
 })
 replay_calls = []
-def fake_execute(command, params, replay=False):
-    replay_calls.append((command, dict(params), replay))
+def fake_execute(command, params, replay=False, read_only=False, batch=None):
+    replay_calls.append((command, dict(params), replay, batch))
     return dict(adapter.state)
 adapter.execute = fake_execute
 adapter._replay_preferences(force_full=True)
+assert replay_calls[-1][0] == 'replay_preferences' and replay_calls[-1][2] is True
+replay_batch = replay_calls[-1][3]
 assert any(command == 'set_feature' and params.get('feature') == 'gardenQoL' and params.get('value') is True
-           for command, params, _ in replay_calls)
+           for command, params in replay_batch)
 assert not any(command in ('set_resource', 'set_element', 'set_rerolls', 'set_stat')
-               for command, _, _ in replay_calls)
+               for command, _ in replay_batch)
 
 print('preferences_schema_adapter_replay_ok')
 
