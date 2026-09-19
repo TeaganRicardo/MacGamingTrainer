@@ -28,25 +28,25 @@
 
 **Interfaces:** Consume native `OpenSellTraitMenu`, `ScreenData.SellTraits`, `CloseStoreScreen`; produce a trainer-owned named close callback for only the trainer-opened screen.
 
-- [ ] **Step 1: Write the failing contract**
+- [x] **Step 1: Write the failing contract**
 
 Assert the runtime deep-copies `ScreenData.SellTraits`, replaces the copied Close button handler, restores the original definition, delegates only when a real Store exists, and never creates `CurrentRun.CurrentRoom.Store`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 tests/test_native_sell_traits_contract.py`
 Expected: FAIL because r35 directly threads `OpenSellTraitMenu`.
 
-- [ ] **Step 3: Implement the minimal runtime fix**
+- [x] **Step 3: Implement the minimal runtime fix**
 
 Add the trainer close function and threaded wrapper; reuse native cleanup calls and keep sell option/selection behavior unchanged.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run: `python3 tests/test_native_sell_traits_contract.py`
 Expected: `native_sell_traits_contract_ok`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 `git commit -m "fix: allow trainer sell screen to close"`
 
@@ -56,27 +56,27 @@ Expected: `native_sell_traits_contract_ok`.
 
 **Interfaces:** Consume `EnemyData`, `PresetEventArgs`, existing `nativeSpecialChoiceDefinitions`; produce working `open_special_choice(source)` for the ten audited sources.
 
-- [ ] **Step 1: Write the failing contract**
+- [x] **Step 1: Write the failing contract**
 
 Require `EnemyData[definition.npc]`, `PresetEventArgs[definition.choices]`, and a deep-copied source. Reject any `NPCData[...]` lookup in the command block.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 tests/test_native_special_choice_contract.py`
 Expected: FAIL because r35 uses `NPCData`.
 
-- [ ] **Step 3: Implement the minimal data-source fix**
+- [x] **Step 3: Implement the minimal data-source fix**
 
 Switch only availability/lookups and source copy; retain current filtering, special cases, cleanup, and threaded menu behavior.
 
-- [ ] **Step 4: Bump runtime revision to 36**
+- [x] **Step 4: Bump runtime revision to 36**
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `python3 tests/test_native_special_choice_contract.py`
 Expected: `native_special_choice_contract_ok`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `git commit -m "fix: use native special choice data sources"`
 
@@ -86,29 +86,29 @@ Expected: `native_special_choice_contract_ok`.
 
 **Interfaces:** Consume existing `BoonOption.sourceId`, `BoonOption.nativeChoice`, and raw boons; produce derived special options and one unified special action for UI/hotkey.
 
-- [ ] **Step 1: Extend the failing contract**
+- [x] **Step 1: Extend the failing contract**
 
 Require `native-choice:` synthetic ids, kind `native_choice`, no standalone `Button("原生三选一")`, native rows routing to `.openSpecialChoice(source:)`, normal rows routing to `spawnBoon`, and `.spawnSpecial` hotkey using the same route.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run: `python3 tests/test_native_special_choice_contract.py`
 Expected: FAIL on the r35 standalone-button behavior.
 
-- [ ] **Step 3: Implement the smallest Swift model change**
+- [x] **Step 3: Implement the smallest Swift model change**
 
 Derive one synthetic option per distinct supported source and add one lookup/action path. Do not change backend protocol.
 
-- [ ] **Step 4: Update the special picker**
+- [x] **Step 4: Update the special picker**
 
 Use the derived option list, remove the standalone button, and route the picker action through the unified method.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run: `python3 tests/test_native_special_choice_contract.py`
 Expected: `native_special_choice_contract_ok`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 `git commit -m "feat: embed native choices in special source lists"`
 
@@ -116,18 +116,18 @@ Expected: `native_special_choice_contract_ok`.
 
 **Files:** handoff/status docs only after code verification.
 
-- [ ] **Step 1: Run targeted contracts**
+- [x] **Step 1: Run targeted contracts**
 
 `python3 tests/test_native_sell_traits_contract.py`
 `python3 tests/test_native_special_choice_contract.py`
 
-- [ ] **Step 2: Run full automated suites**
+- [x] **Step 2: Run full automated suites**
 
 `bash Tools/run_linux_checks.sh`
 `bash Tools/run_macos_checks.sh`
 Expected: both PASS.
 
-- [ ] **Step 3: Clean build and verify package**
+- [x] **Step 3: Clean build and verify package**
 
 `rm -rf dist && ./build.sh hades2`
 Verify 0.1 / Build 2, one module, runtime 36, arm64, debugger entitlement, strict codesign, clean git tree.
