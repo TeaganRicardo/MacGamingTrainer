@@ -63,22 +63,28 @@ UI adds one clearly labeled action in build/boon management: 打开祝福出售�
 
 Existing direct-add remains available.
 
-Add a second action mode for special blessings: 原生三选一. The selection in Trainer identifies a special source/family, not one exact trait. For a selected special trait, Trainer derives its sourceId and asks runtime to open the native source choice screen.
+Add a second action mode for special blessings: 原生三选一. The selected special trait provides a stable sourceId; the catalog also publishes nativeChoice so Swift never infers capability from localized labels.
 
-Runtime command open_special_choice receives source. It supports only source IDs that can be backed by current game data and native choice configuration.
-
-Implementation reuses the game's own source choice definitions and OpenUpgradeChoiceMenu:
-- Arachne -> NPCData.ArachneCostumeChoices
+Runtime command open_special_choice receives source and is limited to current-game sources whose normal reward can be reproduced by the generic native choice handler without missing functional preprocessing:
 - Narcissus -> NPCData.NarcissusBenefitChoices
-- Echo -> NPCData.EchoBenefitChoices
+- Echo -> NPCData.EchoBenefitChoices (native flow forces Epic before Dream overrides)
 - Medea -> NPCData.MedeaCurseChoices
-- Circe -> NPCData.CirceBlessingChoices
+- Icarus -> NPCData.IcarusBenefitChoices
 
-Where the game exposes a dedicated native choice function with required preprocessing, runtime calls that function rather than duplicating its logic. Sources without a complete native three-choice path in installed game data remain direct-add only.
+Arachne and Circe remain direct-add only in this iteration:
+- Arachne's normal flow requires ArachneArmorApply / SetupCostume after selection.
+- Circe's DoubleFamiliarTrait path prepares SessionMapState data before opening the menu.
+Calling only the generic menu for either source could show a valid-looking choice whose effect is incomplete.
 
-Selene SpellDrop and Chaos TrialUpgrade already have native loot objects and remain on their existing spawn path rather than being forced through NPC choice data.
+The trainer shallow-copies the game's current NPC/choice data, filters options through IsGameStateEligible, selects up to three using the game's priority/random rules, and opens OpenUpgradeChoiceMenu. Because the generic native handler requires screen.Source.ObjectId, the trainer creates one built-in InvisibleTarget as a temporary, non-visible source anchor. It is not a reward object and is destroyed/removed from room state after the menu closes.
 
-The UI disables 原生三选一 when the selected entry/source lacks native-choice capability.
+OpenUpgradeChoiceMenu must run through the game's thread(...) scheduler. The LLDB command only validates/builds the request and schedules the game thread, then returns immediately; player input must never hold the debugger boundary open.
+
+Trainer-specific LootPickups and LootChoiceHistory bookkeeping created by the virtual source is restored after the menu closes. The chosen trait itself remains native: HandleUpgradeChoiceSelection / AddTraitToHero and normal trait side effects are game-owned.
+
+Selene SpellDrop and Chaos TrialUpgrade keep their existing native loot spawn paths rather than being forced through the NPC choice bridge.
+
+The UI disables 原生三选一 when the selected entry/source has nativeChoice=false.
 
 ## Safety and lifecycle constraints
 
@@ -89,13 +95,3 @@ The UI disables 原生三选一 when the selected entry/source lacks native-choi
 - Do not modify original Hades II files.
 - No Hades-specific behavior is added to Core beyond generic feedback types/player.
 - Product remains 0.1 / Build 2 until Phase 0 manual acceptance passes.
-
-## 5. God Mode environmental/control immunity
-
-God Mode retains the existing outer Damage hook and unit invulnerability, and additionally blocks only audited hostile Hero effects that bypass damage/invulnerability:
-- HecatePolymorphStun (Hecate hostile polymorph pipeline)
-- MiasmaSlow (Fields/Mourning miasma terrain slow)
-
-The runtime hooks ApplyEffect only while God Mode is active, only when DestinationId is the current Hero, and only for the explicit denylist above. Enabling God Mode also clears those two effects if already present. Disabling restores the original ApplyEffect function and does not suppress unrelated debuffs, player buffs, TimeSlow, or generic SPEED effects.
-
-The existing Damage hook already covers ordinary enemy and environmental damage entering Damage(); no second damage path is added unless a concrete bypass is proven by tests/logs.
