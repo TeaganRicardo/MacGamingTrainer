@@ -12,6 +12,7 @@ tests=(
   tests/test_corrupt_file_quarantine_v0180.py
   tests/test_hades2_adapter_round12.py
   tests/test_hades2_timeout_policy_v0177.py
+  tests/test_hades2_session_hook_ownership.py
   tests/test_hotkey_feedback_contract.py
   tests/test_god_mode_hostile_effects.py
   tests/test_localization_cache_recovery_v0180.py

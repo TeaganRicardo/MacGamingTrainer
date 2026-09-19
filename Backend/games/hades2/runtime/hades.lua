@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 33 then
+if previousModule and previousModule.revision ~= 34 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 33, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 34, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -370,7 +370,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function owns(name)
     local hook = M.hooks[name]
-    return hook ~= nil and _G[name] == hook.wrapper
+    return hook ~= nil and _G[name] == hook.wrapper and hook.ownerSession == SessionState
   end
   local function releaseHook(name)
     local hook = M.hooks[name]
@@ -384,6 +384,7 @@ if __MacGamingTrainerV1 == nil then
     local ownerRun = CurrentRun
     local ownerHero = type(ownerRun) == "table" and ownerRun.Hero or nil
     local ownerSession = SessionState
+    hook.ownerSession = ownerSession
     -- Most combat hooks intentionally die with their Hero/run. Global-safe
     -- hooks installed while no Hero exists (Crossroads) are session-scoped;
     -- an explicit scope can opt into the same behavior. synchronize() still
