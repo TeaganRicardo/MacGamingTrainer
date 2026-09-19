@@ -100,7 +100,12 @@ Verification so far:
 - RED was observed on r37 with the new repeated-choice contract;
 - targeted `test_native_special_choice_contract.py`: PASS on r38;
 - full `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
-- exact-head macOS/build/package verification is pending before an r38 RC is handed to the tester.
+- clean Build 2 package verification on code/handoff head `c027b4157987eb5f714a403624e2ebb8c1e1079a`: PASS;
+- r38 tester app: `/Users/gao/Downloads/Mac Gaming Trainer r38.app`;
+- r38 ZIP: `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r38.zip`;
+- ZIP size: 1,975,661 bytes; SHA256: `9ad59988f4f4a48da8f7216bfd0b7729ae355fec833a9774ea60c162d3bc59d6`;
+- packaged runtime revision 38, arm64, debugger entitlement, strict codesign and ZIP integrity: PASS;
+- full exact-head macOS suite/save-tree sentinel is **deferred, not failed**, because Hades II was actively running on the target Mac when the final gate started. The gate exited before tests rather than disturb the live game.
 
 ## Remaining Phase 0 repair batches
 
