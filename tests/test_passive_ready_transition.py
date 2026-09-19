@@ -98,23 +98,46 @@ assert 'asyncAfter' not in foreground
 print('passive_ready_transition_ok')
 
 
-# Hades readiness is driven by real game log writes, never by a timer. The
-# watcher survives ordinary log truncation/replacement by tracking file identity
-# and offset, and recognizes both the start and end of a world load.
+# Hades lifecycle refreshes are driven by real game-log writes, never by a
+# timer. Ordinary room transitions must not cross LLDB: the expensive refresh
+# is armed only by a world stop / Lua-generation reset and consumed after that
+# reset's load completes.
 for token in (
     'DispatchSource.makeFileSystemObjectSource',
-    'World::Begin()',
+    'World::Stop()',
+    'App.Reset Start',
+    'Lua interface destroyed',
     'Finished loadScreen onExit',
+    'runtimeResetPending',
     'systemFileNumber',
 ):
     assert token in watcher, token
+assert 'World::Begin()' not in watcher
 assert 'Timer.' not in watcher
 assert 'asyncAfter' not in watcher
 
 for token in (
     'Hades2RunLogWatcher',
+    'Hades2RunLogEvent',
     'pendingRunReadySignal',
-    'handleRunLogReadySignal',
+    'handleRunLogEvent',
     'consumeRunLogReadySignalIfPossible',
 ):
     assert token in model, token
+
+consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
+consume_end = model.index('\n    func toggleConnection()', consume_start)
+run_log_refresh = model[consume_start:consume_end]
+assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
+assert 'status == "ready"' not in run_log_refresh
+assert 'status == "waiting"' not in run_log_refresh
+
+event_start = model.index('    private func handleRunLogEvent(')
+event_end = model.index('\n    private func consumeRunLogReadySignalIfPossible()', event_start)
+event_block = model[event_start:event_end]
+for token in ('.worldStopped', '.runtimeReset', '.runtimeReady', 'activeFeatures = [:]', 'capabilities = capabilities.mapValues'):
+    assert token in event_block, token
+
+backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
+assert 'if !status.busy' in backend_start
+assert 'consumeRunLogReadySignalIfPossible()' in backend_start

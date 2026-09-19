@@ -1,26 +1,33 @@
 import Darwin
 import Foundation
 
-/// Hades-specific readiness signal. It watches the game's own log writes
+enum Hades2RunLogEvent: Equatable {
+    case worldStopped
+    case runtimeReset
+    case runtimeReady
+}
+
+/// Hades-specific lifecycle signal. It watches the game's own log writes
 /// instead of polling the process or crossing an LLDB boundary on a timer.
 final class Hades2RunLogWatcher {
     private let queue = DispatchQueue(label: "MacGamingTrainer.Hades2RunLogWatcher", qos: .utility)
     private let directoryURL: URL
     private let logURL: URL
-    private let onReadySignal: () -> Void
+    private let onEvent: (Hades2RunLogEvent) -> Void
 
     private var directorySource: DispatchSourceFileSystemObject?
     private var fileSource: DispatchSourceFileSystemObject?
     private var fileIdentity: UInt64?
     private var offset: UInt64 = 0
     private var lineBuffer = Data()
+    private var runtimeResetPending = false
 
-    init(onReadySignal: @escaping () -> Void) {
+    init(onEvent: @escaping (Hades2RunLogEvent) -> Void) {
         let support = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Supergiant Games/Hades II", isDirectory: true)
         directoryURL = support
         logURL = support.appendingPathComponent("Hades II.log")
-        self.onReadySignal = onReadySignal
+        self.onEvent = onEvent
     }
 
     func start() {
@@ -66,6 +73,7 @@ final class Hades2RunLogWatcher {
                 self.fileIdentity = metadata.identity
                 self.offset = 0
                 self.lineBuffer.removeAll(keepingCapacity: false)
+                self.runtimeResetPending = false
                 self.installFileSourceLocked(readExisting: true)
             }
         }
@@ -100,6 +108,7 @@ final class Hades2RunLogWatcher {
                 self.fileIdentity = nil
                 self.offset = 0
                 self.lineBuffer.removeAll(keepingCapacity: false)
+                self.runtimeResetPending = false
 
                 if self.metadata() != nil {
                     self.installFileSourceLocked(readExisting: true)
@@ -125,6 +134,7 @@ final class Hades2RunLogWatcher {
         fileIdentity = nil
         offset = 0
         lineBuffer.removeAll(keepingCapacity: false)
+        runtimeResetPending = false
     }
 
     private func metadata() -> (identity: UInt64?, size: UInt64)? {
@@ -151,6 +161,7 @@ final class Hades2RunLogWatcher {
             fileIdentity = metadata.identity
             offset = 0
             lineBuffer.removeAll(keepingCapacity: false)
+            runtimeResetPending = false
         }
         guard metadata.size > offset,
               let handle = try? FileHandle(forReadingFrom: logURL) else { return }
@@ -169,15 +180,30 @@ final class Hades2RunLogWatcher {
 
     private func consumeLines(_ data: Data) {
         lineBuffer.append(data)
-        var foundSignal = false
+        var events: [Hades2RunLogEvent] = []
         while let newline = lineBuffer.firstIndex(of: 0x0A) {
             let line = String(decoding: lineBuffer[..<newline], as: UTF8.self)
             lineBuffer.removeSubrange(...newline)
-            if line.contains("World::Begin()") || line.contains("Finished loadScreen onExit") {
-                foundSignal = true
+
+            if line.contains("World::Stop()") {
+                events.append(.worldStopped)
+                continue
+            }
+            if line.contains("App.Reset Start") || line.contains("Lua interface destroyed") {
+                if !runtimeResetPending {
+                    runtimeResetPending = true
+                    events.append(.runtimeReset)
+                }
+                continue
+            }
+            if runtimeResetPending && line.contains("Finished loadScreen onExit") {
+                runtimeResetPending = false
+                events.append(.runtimeReady)
             }
         }
-        guard foundSignal else { return }
-        DispatchQueue.main.async { [onReadySignal] in onReadySignal() }
+        guard !events.isEmpty else { return }
+        DispatchQueue.main.async { [onEvent] in
+            for event in events { onEvent(event) }
+        }
     }
 }
