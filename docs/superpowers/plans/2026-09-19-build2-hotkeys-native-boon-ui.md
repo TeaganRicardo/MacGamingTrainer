@@ -2,24 +2,39 @@
 
 Goal: finish the pre-acceptance Build 2 follow-up without changing debugger lifecycle architecture.
 
-Architecture: Core owns generic hotkey feedback only. Hades II owns shortcut semantics and all game-native boon/God Mode behavior. Native modal actions are one-shot and never preference-replayed.
+## Completed implementation
 
-## Completed TDD tasks
+- [x] Shortcut v5 derives defaults from `ShortcutAction.uiOrder`, persists only explicit overrides, migrates v3/v4 layouts, and keeps settings order/default order aligned.
+- [x] Core/Host generic hotkey feedback: enabled / deferred / disabled.
+- [x] Native boon sell through `OpenSellTraitMenu`.
+- [x] Direct-add special blessings retained.
+- [x] Audited native special three-choice:
+  - loot-style: Artemis, Athena, Dionysus, Hades;
+  - fixed UpgradeOptions: Arachne, Narcissus, Echo, Medea, Circe, Icarus;
+  - Heracles/Moros remain direct-add only.
+- [x] No synthetic engine object is created for native choice UI.
+- [x] Echo/Arachne/Circe source-specific semantics are retained.
+- [x] God Mode uses exact engine-level blocks for `HecatePolymorphStun` and `MiasmaSlow`; no global `ApplyEffect` hook.
+- [x] Correctness/Ponytail review completed for the revision-32 follow-up.
+- [x] Follow-up PRs were integrated into `feature/post-v0.1-improvements`.
+- [x] Revision-32 integrated head passed Linux + macOS Build 2 and produced RC artifact 10578439397.
 
-- [x] Shortcut v5: derive defaults from ShortcutAction.uiOrder, persist only explicit overrides, migrate v3/v4 layouts, keep settings list and 1–9/A–Z defaults aligned.
-- [x] Generic hotkey feedback: Core enabled/deferred/disabled vocabulary and macOS system sounds; Hades maps actual async results after command completion.
-- [x] Native boon sell: one-shot open_sell_traits uses thread(OpenSellTraitMenu, {}) and native removal/payout rules.
-- [x] Native special choice: direct-add retained; audited 10-source native three-choice path uses sourceId/nativeChoice, OpenUpgradeChoiceMenu, no synthetic engine object, with Echo/Arachne/Circe functional handling.
-- [x] God Mode hostile control immunity: exact engine-level effect blocks for HecatePolymorphStun and MiasmaSlow, with symmetric cleanup and no global ApplyEffect hook.
+## Closure audit addition
+
+Interrupted-session review found one real issue: the trainer synthetic source name was assigned before native special-choice eligibility/rarity generation. Hades uses the native source name for `LootData/FieldLootData` and requirement logic.
+
+- [x] RED contract proves native source identity must survive `SetTraitsOnLoot` / `IsGameStateEligible`.
+- [x] Runtime fix delays the synthetic bookkeeping name until immediately before opening the native menu.
+- [x] Regression became GREEN.
+- [x] Runtime revision bumped to 33.
+- [x] Revision-dependent tests updated to 33.
 
 ## Final integration gate
 
-- [ ] Exact follow-up head passes Linux contracts.
-- [ ] Correctness + Ponytail review finds no Critical/Important issue.
-- [ ] Follow-up PR is integrated into feature/post-v0.1-improvements, never main.
-- [ ] Exact integrated parent head passes Linux contracts.
-- [ ] Exact integrated parent head passes macOS Build 2: host policy harness, Hades log watcher harness, arm64 build, version/module package validation, strict codesign, packaging and artifact upload.
-- [ ] Record artifact ID and inner RC SHA256.
-- [ ] Update PR #7 and Phase 0 issues with the new manual acceptance checklist.
+- [ ] Exact final revision-33 head passes Linux contracts.
+- [ ] Exact final revision-33 head passes macOS Build 2.
+- [ ] New RC artifact + inner SHA256 recorded.
+- [ ] PR #7 / #1 / #11 updated to the new exact artifact.
+- [ ] Target-Mac acceptance passes.
 
-Constraints: product remains 0.1 / Build 2; no periodic runtime polling; no second debugger attachment; no original game-file modification; no automatic replay of native modal commands.
+The revision-32 RC is superseded for final acceptance. Product remains 0.1 / Build 2 until the manual Phase 0 gate succeeds.
