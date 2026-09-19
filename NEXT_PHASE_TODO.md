@@ -9,7 +9,13 @@ Branch: `fix/special-choice-refresh-r38`. Runtime: revision 38.
 Automated status:
 - repeated-special-choice contract RED on r37 → GREEN on r38;
 - full Linux contracts: PASS;
-- exact-head macOS suite, signed build and package verification still required before tester handoff.
+- signed r38 Build 2 package: PASS on `c027b4157987eb5f714a403624e2ebb8c1e1079a`;
+- full macOS suite + real-save-tree sentinel is deferred until Hades II is not running; this is a safety defer, not a failed test.
+
+Current tester artifact:
+- `/Users/gao/Downloads/Mac Gaming Trainer r38.app`
+- `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r38.zip`
+- SHA256 `9ad59988f4f4a48da8f7216bfd0b7729ae355fec833a9774ea60c162d3bc59d6`
 
 Focused r38 manual acceptance:
 - choose one fixed-choice source such as Arachne/Narcissus, acquire one blessing, then open the same source again: the acquired blessing must not be offered again and the remaining offer must be regenerated;
