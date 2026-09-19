@@ -386,6 +386,19 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_boundary_duration,self._last_status_json_duration,self._last_status_localize_duration,
             )
 
+    @staticmethod
+    def _runtime_generation_missing(error):
+        message=str(error)
+        return error.code=='lua_error' and '__MacGamingTrainerV1' in message and 'nil value' in message
+
+    def _invalidate_runtime_generation(self):
+        self._runtime_bootstrapped=False
+        self._catalog_initialized=False
+        self.preference_dirty=True
+        clear_active(self.state,preserve_desired=True)
+        self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+        self._overlay_preferences()
+
     def execute(self,command,params,replay=False,read_only=False):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
@@ -409,8 +422,6 @@ class Hades2Adapter(GameAdapter):
             runtime_params=dict(params or {})
             if 'includeCatalogs' not in runtime_params:
                 runtime_params['includeCatalogs']=not self._catalog_initialized
-            dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
-            code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
             decode_metrics={}
             def decode_runtime(raw):
                 phase=time.monotonic()
@@ -424,11 +435,26 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_boundary_duration=0.0
                 self._last_status_json_duration=0.0
                 self._last_status_localize_duration=0.0
+            recovered_generation=False
             try:
-                decoded=execute_with_ledger(
-                    self.transport,command,code,decode_runtime,
-                    replay=replay,read_only=read_only,
-                )
+                while True:
+                    dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                    code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
+                    try:
+                        decoded=execute_with_ledger(
+                            self.transport,command,code,decode_runtime,
+                            replay=replay,read_only=read_only,
+                        )
+                        break
+                    except TransportError as error:
+                        if not self._runtime_generation_missing(error):
+                            raise
+                        self._invalidate_runtime_generation()
+                        if command!='status' or recovered_generation:
+                            raise
+                        recovered_generation=True
+                        runtime_params['includeCatalogs']=True
+                        logging.info('Lua runtime generation reset detected; re-bootstrap status in same debugger attachment')
             finally:
                 if command=='status':
                     self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
