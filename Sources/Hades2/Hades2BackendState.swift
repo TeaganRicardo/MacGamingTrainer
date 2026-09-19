@@ -207,6 +207,8 @@ struct Hades2StatePatch {
             category: row["category"] as? String ?? "神祇祝福",
             kind: row["kind"] as? String ?? "loot", group: row["group"] as? String ?? "pickup",
             sectionTitle: row["sectionTitle"] as? String ?? "",
+            sourceId: row["sourceId"] as? String ?? "",
+            nativeChoice: row["nativeChoice"] as? Bool ?? false,
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max
