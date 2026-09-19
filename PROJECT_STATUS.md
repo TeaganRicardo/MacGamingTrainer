@@ -52,7 +52,7 @@ The revision-33 special-choice regression completed its RED→GREEN cycle:
 - RED: native source-name ordering contract failed before the runtime fix;
 - GREEN: `native_special_choice_contract_ok` after the fix.
 
-Fresh full revision-33 Linux/macOS CI and a replacement RC are still required before manual acceptance. Two GitHub Actions attempts on the intermediate closure head failed before any workflow step/log blob was created; treat those as runner/startup failures, not as code evidence.
+Fresh equivalent revision-33 verification has now completed on the authorized target Mac from an exact detached worktree: full Linux contracts, Host policy harness, Hades log watcher harness, arm64 Hades II build, 0.1 / Build 2 package checks, one packaged module and strict codesign all passed. A replacement revision-33 RC was produced locally. GitHub Actions still intermittently fails jobs before checkout/any step with steps=null and no log blob; rerun cloud CI when runners recover for archival evidence, but do not treat those startup failures as code failures.
 
 ## Phase 0 issues
 
@@ -63,7 +63,7 @@ Fresh full revision-33 Linux/macOS CI and a replacement RC are still required be
 
 ## Pending manual acceptance
 
-Use only the replacement revision-33 RC produced after fresh Linux + macOS verification.
+Use only the final revision-33 RC recorded below after the final handoff-head verification.
 
 Acceptance must cover:
 1. background launch and automatic connection;
@@ -93,3 +93,15 @@ Acceptance must cover:
 - Native modal commands are one-shot and never preference-replayed.
 - Exit must never be permanently blocked by cleanup failure.
 - Runtime source changes must bump the resident revision.
+
+
+## Current revision-33 acceptance artifact
+
+The exact final handoff head is recorded in PR #7 after the final docs-only closure commit and local revalidation.
+
+Current locally produced RC location on the authorized target Mac:
+- `~/Downloads/MacGamingTrainer-0.1-build2-rc-r33.zip`
+
+The final SHA256/size are refreshed after this document commit so the RC, code head and handoff status remain aligned.
+
+GitHub Actions archival rerun remains pending only because the service is currently creating some jobs with no workflow steps/log blob.
