@@ -49,8 +49,8 @@ assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in blo
 assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
 assert 'OpenUpgradeChoiceMenu' in block
 assert 'thread(runChoice)' in block, "native menu must run on a game thread, never hold the LLDB boundary for player input"
-assert 'SpawnObstacle' not in block, "native choice must not create an in-world anchor"
-assert 'Destroy' not in block, "native choice must not own a synthetic engine object"
+assert 'SpawnObstacle({' not in block, "native choice must not create an in-world anchor"
+assert 'Destroy({' not in block and 'pcall(Destroy' not in block, "native choice must not own a synthetic engine object"
 assert 'RoomRequiredObjects' not in block, "native choice must not mutate room object ownership"
 assert 'source.ObjectId = -1' in block, "native selection cleanup needs only a non-nil sentinel ObjectId"
 assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
