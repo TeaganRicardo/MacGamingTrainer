@@ -28,11 +28,18 @@ assert 'let nativeChoice: Bool' in types
 assert 'sourceId: row["sourceId"] as? String ?? ""' in state
 assert 'nativeChoice: row["nativeChoice"] as? Bool ?? false' in state
 
-assert 'func openSpecialChoice' in model
-assert '.openSpecialChoice(source:' in model
-assert 'nativeChoice' in model
-assert '原生三选一' in view
-assert '直接添加' in view
+assert 'var specialRewardOptions: [BoonOption]' in model
+assert 'native-choice:' in model
+assert 'kind: "native_choice"' in model
+assert 'func performSpecialReward(_ reward: String)' in model
+assert '.openSpecialChoice(source: option.sourceId)' in model
+assert 'spawnBoon(option.id)' in model
+assert 'performSpecialReward(selectedSpecialReward)' in model
+assert 'var selectedSpecialRewardIsNativeChoice: Bool' in model
+assert 'model.specialRewardOptions' in view
+assert 'onAction: model.performSpecialReward' in view
+assert 'Button("原生三选一")' not in view
+assert 'model.selectedSpecialRewardIsNativeChoice ? "打开三选一" : "直接添加"' in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
 for source in (
