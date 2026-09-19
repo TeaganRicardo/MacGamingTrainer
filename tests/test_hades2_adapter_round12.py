@@ -84,7 +84,7 @@ class ResetTransport(FakeTransport):
         if self.fail_once:
             self.fail_once=False
             raise AdapterError('lua_error', '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)')
-        if '"set_feature"' in source and 'godMode' in source:
+        if '__MacGamingTrainerV1.dispatch("set_feature",' in source and 'godMode' in source:
             self.god_mode=True
         return json.dumps(reset_payload(self.god_mode))
 
