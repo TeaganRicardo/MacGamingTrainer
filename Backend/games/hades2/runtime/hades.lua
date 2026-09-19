@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 32 then
+if previousModule and previousModule.revision ~= 33 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 32, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 33, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -3110,7 +3110,7 @@ if __MacGamingTrainerV1 == nil then
 
       return action(command, params, function()
         local source = ShallowCopyTable(npcData)
-        source.Name = "MacGamingTrainerSpecial_" .. params.source
+        local syntheticName = "MacGamingTrainerSpecial_" .. params.source
         source.ObjectId = -1
         source.CanDuplicate = false
         source.DestroyOnPickup = false
@@ -3217,6 +3217,7 @@ if __MacGamingTrainerV1 == nil then
           end
         end
 
+        source.Name = syntheticName
         if type(GameState.LootPickups) ~= "table" then
           error("Special blessing choice requires loot pickup state")
         end
