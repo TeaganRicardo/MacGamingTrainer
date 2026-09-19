@@ -5,9 +5,9 @@ Updated: 2026-09-20
 ## Canonical integration state
 
 - Product: 0.1 / Build 2.
-- `main` now contains the verified r39 milestone. Code/test milestone SHA: `94e9128c43e5739b7ff1352d9ecaca81d7b3df7b`.
-- PR #7 was integrated by a non-forced fast-forward on 2026-09-20 after explicit owner instruction to land verified increments early instead of keeping one ever-growing Phase 0 PR.
-- Hades II resident runtime on the integrated milestone: revision 39.
+- `main` now contains the verified r40 God Mode hit-semantics slice. Verified code/test milestone SHA: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`; acceptance-evidence integration SHA: `7428c0b4afc72ca1e6c626c49ec1272f26957623`.
+- PR #7 (r39) and PR #18 (r40) were integrated by non-forced fast-forward under the small verified-slice policy.
+- Hades II resident runtime on the integrated milestone: revision 40.
 - Host protocol 5; module protocol 5; desired-state schema 3; Profile schema 4.
 - Target game build: Hades II 1.139672 / Steam build 24556151.
 - Future work should use small, independently verified branches/PRs and land completed slices into `main` instead of reopening a mega integration branch.
@@ -34,9 +34,9 @@ Exact-head GitHub-hosted runs for r39 still fail before step 0:
 
 That remains infrastructure issue #16, not code-test evidence. The owner explicitly changed integration policy on 2026-09-20 so this infrastructure failure did not keep the already locally verified/manual-accepted r39 milestone out of `main`.
 
-## Active work: Batch B / r40
+## r40 evidence integrated into main
 
-Active branch: `fix/batch-b-runtime-semantics-r40`.
+PR #18 / `fix/batch-b-runtime-semantics-r40` is merged into `main`.
 
 Relevant commits already on that branch:
 - design spec: `1e5be31957aa6519e8aaac62d1084c99a4169929`;
@@ -46,7 +46,7 @@ Relevant commits already on that branch:
 - pre-handoff checkpoint: `b384fb837ba848eb9ba7d08edaf0858083fed38f`;
 - verified r40 code/test head: `39c66b702d66c650eeb992f7016d5e9cb7c3f64c`.
 
-Implemented and accepted on the r40 branch, but **not yet integrated**:
+Integrated r40 behavior:
 - resident runtime 39 -> 40;
 - God Mode captures the bound Hero's exact `CurrentRun.Hero.Hits` baseline;
 - an original `nil` baseline remains `nil` rather than becoming 0;
@@ -70,7 +70,7 @@ Verification checkpoint — 2026-09-20:
 - per owner instruction, the post-disable deliberate hit/increment check is not required for this slice. Release still restores/clears the baseline by contract and implementation review;
 - Hecate polymorph and Mourning Fields miasma interception are pre-existing r39 behavior and were not modified by r40, so this r40 acceptance does not claim a new manual retest of those paths.
 
-r40 is **verified and accepted for integration**.
+r40 is **verified, accepted and integrated into `main`**.
 
 Design/plan:
 - `docs/superpowers/specs/2026-09-19-god-mode-hit-semantics-design.md`
@@ -103,7 +103,7 @@ Then run final consolidated regression/acceptance.
 ## GitHub state
 
 - PR #7: MERGED into `main` at r39.
-- PR #18: DRAFT at this checkpoint; r40 God Mode hit-count slice is automated/build/manual accepted and ready for non-forced fast-forward integration.
+- PR #18: MERGED into `main` at r40 by non-forced fast-forward; GitHub reports state `MERGED`.
 - PR #10: still DRAFT; retargeted to `main`. Its Phase 1 branch is intentionally unsynchronized with r39 until Phase 0 closes.
 - Issue #1: keep open as lifecycle/manual-acceptance umbrella until the remaining Phase 0 lifecycle checks close.
 - Issue #11: keep open for same-PID recovery/readiness performance until Batch D is accepted.
@@ -117,12 +117,11 @@ The following are no longer development bases once r39 is on `main`:
 - merged Batch A / special-choice r38/r39 branches after ancestry is reconfirmed.
 
 Retain:
-- `fix/batch-b-runtime-semantics-r40` — active;
 - `fix/profile-shortcut-partial-conflict` — issue #17;
 - `architecture/reference-module-proof` — PR #10;
 - unrelated `ci/lidkeep-rc1-build`.
 
-The merged audit/Batch A/r38/r39/release branches have been non-forced fast-forwarded to the current `main`, so they hold no unique commits. Delete them when branch-deletion tooling is available. Do not force-delete anything with unique commits.
+The merged audit/Batch A/r38/r39/r40/release branches have no development role once ancestry against current `main` is reconfirmed. Delete merged branches only after confirming they hold no unique commits; never force-delete anything with unique commits.
 
 ## Permanent non-regression constraints
 
