@@ -1,6 +1,6 @@
 # Pre-Acceptance Hardening Audit Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Perform one final correctness, build-system, lifecycle, and complexity audit before Build 2 manual acceptance; fix only demonstrated bugs or low-risk build defects and leave speculative refactors out.
 
@@ -34,11 +34,11 @@
 - Consumes: exact Build 2 head `efc21268b8c075bd8b8d5ff3726d4548cb6b88e7`.
 - Produces: ranked correctness/build/complexity findings with concrete paths and evidence.
 
-- [ ] **Step 1:** Inventory tracked files, line counts, largest files, dependency/import surface, test inventory, workflows, generated artifacts, and ignored/untracked build outputs.
-- [ ] **Step 2:** Scan source for TODO/FIXME/HACK, broad exception swallowing, force unwraps/fatal paths, timers/polling, process/shell mutation, global hook replacement, unbalanced observer/source lifecycle, and duplicate persistence/state owners.
-- [ ] **Step 3:** Compare all tests against `Tools/run_linux_checks.sh` and macOS workflow coverage.
-- [ ] **Step 4:** Inspect `build.sh` and module tooling for source-tree mutation, nondeterminism, stale output leakage, over-broad chmod/copy behavior, and package contamination.
-- [ ] **Step 5:** Run Ponytail repo-wide audit separately; do not apply complexity-only findings yet.
+- [x] **Step 1:** Inventory tracked files, line counts, largest files, dependency/import surface, test inventory, workflows, generated artifacts, and ignored/untracked build outputs.
+- [x] **Step 2:** Scan source for TODO/FIXME/HACK, broad exception swallowing, force unwraps/fatal paths, timers/polling, process/shell mutation, global hook replacement, unbalanced observer/source lifecycle, and duplicate persistence/state owners.
+- [x] **Step 3:** Compare all tests against `Tools/run_linux_checks.sh` and macOS workflow coverage.
+- [x] **Step 4:** Inspect `build.sh` and module tooling for source-tree mutation, nondeterminism, stale output leakage, over-broad chmod/copy behavior, and package contamination.
+- [x] **Step 5:** Run Ponytail repo-wide audit separately; do not apply complexity-only findings yet.
 
 ### Task 2: Correctness review of runtime boundaries
 
@@ -55,11 +55,11 @@
 - Consumes: process launch/reset/log events and JSONL request/response contract.
 - Produces: proven lifecycle/state/replay findings only.
 
-- [ ] **Step 1:** Trace launch -> attach -> bootstrap -> ready -> main menu -> same-PID reset -> replay -> ready.
-- [ ] **Step 2:** Verify every one-shot mutation is excluded from recovery replay.
-- [ ] **Step 3:** Verify every runtime hook/engine effect block has symmetric cleanup across scene/hero changes and detach/exit.
-- [ ] **Step 4:** Verify log watcher coalescing cannot silently drop a required reset/ready edge or create unbounded status work.
-- [ ] **Step 5:** For each demonstrated bug, write the smallest failing contract before any production change.
+- [x] **Step 1:** Trace launch -> attach -> bootstrap -> ready -> main menu -> same-PID reset -> replay -> ready.
+- [x] **Step 2:** Verify every one-shot mutation is excluded from recovery replay.
+- [x] **Step 3:** Verify every runtime hook/engine effect block has symmetric cleanup across scene/hero changes and detach/exit.
+- [x] **Step 4:** Verify log watcher coalescing cannot silently drop a required reset/ready edge or create unbounded status work.
+- [x] **Step 5:** For each demonstrated bug, write the smallest failing contract before any production change.
 
 ### Task 3: Correctness review of UI, hotkeys, catalog, and persistence
 
@@ -75,11 +75,11 @@
 - Consumes: uiOrder, persisted overrides, backend state snapshots, catalog metadata.
 - Produces: findings for migration collisions, stale feedback, localization/name identity, and persistence corruption risks.
 
-- [ ] **Step 1:** Verify shortcut migration preserves explicit overrides and deterministic defaults.
-- [ ] **Step 2:** Verify feedback sound is emitted only for successful toggle completion and cannot report stale previous state.
-- [ ] **Step 3:** Verify catalog source IDs/native-choice capability remain stable independent of localization.
-- [ ] **Step 4:** Verify atomic persistence/quarantine paths cannot partially overwrite current state.
-- [ ] **Step 5:** Add RED tests before any fix.
+- [x] **Step 1:** Verify shortcut migration preserves explicit overrides and deterministic defaults.
+- [x] **Step 2:** Verify feedback sound is emitted only for successful toggle completion and cannot report stale previous state.
+- [x] **Step 3:** Verify catalog source IDs/native-choice capability remain stable independent of localization.
+- [x] **Step 4:** Verify atomic persistence/quarantine paths cannot partially overwrite current state.
+- [x] **Step 5:** Add RED tests before any fix.
 
 ### Task 4: Apply only proven fixes
 
@@ -88,11 +88,11 @@
 **Interfaces:**
 - Produces: minimal production changes with regression coverage.
 
-- [ ] **Step 1:** For each finding, state one root-cause hypothesis and reproduce it.
-- [ ] **Step 2:** Add a RED regression.
-- [ ] **Step 3:** Implement the smallest fix.
-- [ ] **Step 4:** Run targeted GREEN test.
-- [ ] **Step 5:** Commit each independent fix separately.
+- [x] **Step 1:** For each finding, state one root-cause hypothesis and reproduce it.
+- [x] **Step 2:** Add a RED regression.
+- [x] **Step 3:** Implement the smallest fix.
+- [x] **Step 4:** Run targeted GREEN test.
+- [x] **Step 5:** Commit each independent fix separately.
 
 ### Task 5: Integration and handoff closure
 
@@ -106,6 +106,6 @@
 - [ ] **Step 2:** Run Host connection policy and Hades log watcher harnesses.
 - [ ] **Step 3:** Build Hades II arm64 app, verify 0.1 / Build 2, one module, strict codesign.
 - [ ] **Step 4:** Run build twice from clean state and prove no tracked source mutation/stale package leakage.
-- [ ] **Step 5:** Review effective diff for correctness and Ponytail scope.
+- [x] **Step 5:** Review effective diff for correctness and Ponytail scope.
 - [ ] **Step 6:** Merge audit branch into `feature/post-v0.1-improvements` only if all Critical/Important findings are resolved.
 - [ ] **Step 7:** Reverify exact merged head, rebuild RC, record SHA256, update GitHub handoff state.
