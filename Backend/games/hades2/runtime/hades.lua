@@ -314,6 +314,29 @@ if __MacGamingTrainerV1 == nil then
       if type(_G[name]) ~= "function" then error("Unsupported " .. label .. ": missing " .. name) end
     end
   end
+
+  function MacGamingTrainerCloseSellTraitScreen(screen, button)
+    if type(CurrentRun) == "table"
+        and type(CurrentRun.CurrentRoom) == "table"
+        and type(CurrentRun.CurrentRoom.Store) == "table"
+        and type(CurrentRun.CurrentRoom.Store.StoreOptions) == "table"
+        and type(CloseStoreScreen) == "function" then
+      return CloseStoreScreen(screen, button)
+    end
+
+    local components = type(screen) == "table" and screen.Components or nil
+    if type(components) ~= "table" then return end
+    AltAspectRatioFramesHide()
+    OnScreenCloseStarted(screen)
+    if screen.CloseAnimationName and components.ShopBackground then
+      SetAnimation({ Name = screen.CloseAnimationName, DestinationId = components.ShopBackground.Id })
+    end
+    CloseScreen(GetAllIds(screen.Components), 0.15)
+    OnScreenCloseFinished(screen)
+    ShowCombatUI(screen.Name)
+    SetPlayerVulnerable(screen.Name)
+  end
+
   local function sceneName()
     if type(CurrentHubRoom) == "table" then return "crossroads" end
     if type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
@@ -3079,10 +3102,38 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "open_sell_traits" then
       if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
-      requireFunctions("native boon sell screen", { "OpenSellTraitMenu", "AreScreensActive", "thread" })
+      requireFunctions("native boon sell screen", {
+        "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
+        "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation",
+        "CloseScreen", "GetAllIds", "OnScreenCloseFinished", "ShowCombatUI", "SetPlayerVulnerable",
+      })
+      if type(ScreenData) ~= "table" or type(ScreenData.SellTraits) ~= "table" then
+        error("Native boon sell screen data is unavailable")
+      end
       if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
       return action(command, params, function()
-        thread(OpenSellTraitMenu, {})
+        local function runSell()
+          local originalScreen = ScreenData.SellTraits
+          local trainerScreen = DeepCopyTable(ScreenData.SellTraits)
+          local closeButton = trainerScreen.ComponentData
+            and trainerScreen.ComponentData.ActionBar
+            and trainerScreen.ComponentData.ActionBar.Children
+            and trainerScreen.ComponentData.ActionBar.Children.CloseButton
+          if type(closeButton) ~= "table" or type(closeButton.Data) ~= "table" then
+            if type(DebugPrint) == "function" then
+              DebugPrint({ Text = "MacGamingTrainer native sell screen missing close button data" })
+            end
+            return
+          end
+          closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
+          ScreenData.SellTraits = trainerScreen
+          local ok, message = pcall(OpenSellTraitMenu, {})
+          if ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
+          if not ok and type(DebugPrint) == "function" then
+            DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. tostring(message) })
+          end
+        end
+        thread(runSell)
         return nil
       end)
     end
