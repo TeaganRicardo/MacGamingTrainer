@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 import time
 
 from .persistence import atomic_write_text, quarantine_corrupt_file, UnsupportedSchemaVersionError
@@ -10,13 +11,9 @@ PROFILE_SCHEMA_VERSION = 4
 _PROFILE_FIELDS = frozenset(('schemaVersion','name','updatedAt','desired','shortcuts'))
 _SHORTCUT_MODIFIER_MASK = (1 << 8) | (1 << 9) | (1 << 11) | (1 << 12)
 
-_SHORTCUT_ACTIONS = (
-    'godMode','infiniteHealth','infiniteMana','instantCastCooldown','hexAlwaysReady',
-    'infiniteAmmo','damageEnabled','autoMiniGames','gardenQoL',
-    'boonRarityEnabled','forceLegendary','forceDuo',
-    'moneyMultiplierEnabled','resourceMultiplierEnabled',
-    'applyNextRoomReward','spawnOlympian','spawnPickup','spawnSpecial','disableAll',
-)
+_SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+_MAX_SHORTCUT_ACTIONS = 64
+
 
 
 def _profile_schema_version(payload):
@@ -31,7 +28,11 @@ def _normalize_shortcuts(raw):
     if not isinstance(raw,dict):return {}
     result={}
     used=set()
-    for action in _SHORTCUT_ACTIONS:
+    actions=sorted(
+        action for action in raw
+        if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)
+    )[:_MAX_SHORTCUT_ACTIONS]
+    for action in actions:
         row=raw.get(action)
         if not isinstance(row,dict) or set(row)!= {'keyCode','modifiers','keyLabel'}:continue
         key_code=row.get('keyCode');modifiers=row.get('modifiers');label=row.get('keyLabel')
