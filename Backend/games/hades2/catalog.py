@@ -22,6 +22,8 @@ _LINKED_PROVISIONAL_RULES = {
     # localization provenance.
     'RoomMoneyTinyDrop': ('RoomMoneyDrop', '少量', 'Small '),
     'EmptyMaxHealthSmallDrop': ('EmptyMaxHealthDrop', '小型', 'Small '),
+    'MaxHealthDropSmall': ('MaxHealthDrop', '小型', 'Small '),
+    'MaxManaDropSmall': ('MaxManaDrop', '小型', 'Small '),
     'MetaCurrencyBigDrop': ('MetaCurrency', '大量', 'Large '),
     'MetaCardPointsCommonBigDrop': ('MetaCardPointsCommon', '大量', 'Large '),
     'MemPointsCommonBigDrop': ('MemPointsCommon', '大量', 'Large '),
@@ -97,6 +99,11 @@ def localize_catalog(decoded):
             if isinstance(item.get(key),str):item[key]=_clean(item[key])
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
+        variant_rule=_LINKED_PROVISIONAL_RULES.get(identifier)
+        if variant_rule and isinstance(official_zh,str) and official_zh:
+            base_zh=_clean(zh.get(variant_rule[0]))
+            if isinstance(base_zh,str) and base_zh and official_zh==base_zh:
+                official_zh=None
         if isinstance(official_en,str) and official_en:
             item['englishName']=official_en
             item['englishNameSource']='official_en'

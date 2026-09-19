@@ -59,7 +59,7 @@ assert adapter._catalog_initialized is True
 assert first['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert len(transport.sources) == 1
 assert len(transport.sources[0].encode('utf-8')) > 100_000
-assert 'revision = 26' in transport.sources[0]
+assert 'revision = 27' in transport.sources[0]
 assert '["includeCatalogs"]=true' in transport.sources[0]
 
 second = adapter.execute('status', {})
