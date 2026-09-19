@@ -142,13 +142,25 @@ Verification:
 - packaged runtime 39, arm64, debugger entitlement, strict codesign and ZIP integrity: PASS;
 - full macOS suite/save-tree sentinel was safely skipped because Hades II was actively running; no game process was terminated and no save operation was performed.
 
+## r39 focused manual acceptance — PASS
+
+Manual acceptance completed on 2026-09-19 with the signed r39 tester build.
+
+Observed log evidence:
+- runtime 39 active in the tested app;
+- repeated `open_special_choice` calls succeeded multiple times in the same run (`runCount=12`);
+- after restore/relaunch/reconnect, runtime 39 loaded again in a different run (`runCount=9`) and `open_special_choice` succeeded;
+- save restore completed successfully before the second run;
+- no r39 special-choice Lua error is present in the focused acceptance segment.
+
+The user completed the visual/behavioral checks and reported no remaining duplicate/re-offer issue. r39 focused acceptance is therefore closed as PASS.
+
 ## Remaining Phase 0 repair batches
 
-1. r39 focused manual acceptance: repeated fixed-choice and loot-style special choices.
-2. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
-3. Batch C: coherent Trainer Host enabled/deferred/disabled sound family + reliable delayed playback.
-4. Batch D: residual attach → Lua/world-readiness stutter.
-5. Final consolidated regression and release closure.
+1. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
+2. Batch C: coherent Trainer Host enabled/deferred/disabled sound family + reliable delayed playback.
+3. Batch D: residual attach → Lua/world-readiness stutter.
+4. Final consolidated regression and release closure.
 
 ## GitHub gates
 
