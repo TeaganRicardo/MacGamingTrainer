@@ -72,7 +72,7 @@ struct Hades2TrainerView: View {
     private var olympianBoons: [BoonOption] { sortedBoons(model.boons.filter { $0.group == "olympian" }) }
     private var pickupRewards: [BoonOption] { sortedBoons(model.boons.filter { $0.group == "pickup" }) }
     private var specialBoons: [BoonOption] {
-        sortedBoons(model.boons.filter { $0.group == "special" && (specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch)) })
+        sortedBoons(model.specialRewardOptions.filter { specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch) })
     }
     private var material: MaterialResource? { filtered.first { $0.id == selectedMaterial } }
 
@@ -747,39 +747,52 @@ struct Hades2TrainerView: View {
 
     private var boonPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            spawnRow(title: "诸神祝福", icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian)
+            spawnRow(title: "诸神祝福", icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             Divider()
-            spawnRow(title: "资源与常规掉落", icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup)
+            spawnRow(title: "资源与常规掉落", icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             Divider()
             HStack {
                 Label("特殊祝福", systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
                 Spacer()
                 TextField("搜索官方中英文名或内部 ID", text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
-            spawnRow(title: nil, icon: nil, options: specialBoons, selection: $model.selectedSpecialReward, shortcut: .spawnSpecial, actionTitle: "直接添加")
-            HStack {
-                Spacer()
-                Button("原生三选一") { model.openSpecialChoice() }
-                    .disabled(!model.canOpenSelectedSpecialChoice)
-            }
+            spawnRow(
+                title: nil,
+                icon: nil,
+                options: specialBoons,
+                selection: $model.selectedSpecialReward,
+                shortcut: .spawnSpecial,
+                enabled: model.canPerformSelectedSpecialReward,
+                actionTitle: model.selectedSpecialRewardIsNativeChoice ? "打开三选一" : "直接添加",
+                onAction: model.performSpecialReward
+            )
         }.trainerPanel()
     }
 
-    private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>, shortcut: ShortcutAction, actionTitle: String = "生成") -> some View {
+    private func spawnRow(
+        title: String?,
+        icon: String?,
+        options: [BoonOption],
+        selection: Binding<String>,
+        shortcut: ShortcutAction,
+        enabled: Bool,
+        actionTitle: String = "生成",
+        onAction: @escaping (String) -> Void
+    ) -> some View {
         TrainerGroupedOptionPicker(
             title: title,
             icon: icon,
             pickerLabel: title ?? "特殊祝福",
             selection: selection,
             sections: boonGroups(options),
-            enabled: model.canSpawnReward,
+            enabled: enabled,
             emptyLabel: "没有可用项目",
             actionTitle: actionTitle,
             shortcutText: model.shortcutText(shortcut),
             itemLabel: { option in
                 option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
             },
-            onAction: model.spawnBoon
+            onAction: onAction
         )
     }
 

@@ -156,11 +156,38 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
-    private var selectedSpecialBoon: BoonOption? {
-        boons.first { $0.id == selectedSpecialReward && $0.group == "special" }
+    var specialRewardOptions: [BoonOption] {
+        let specials = boons.filter { $0.group == "special" }
+        var seenSources = Set<String>()
+        var nativeActions: [BoonOption] = []
+        for option in specials where option.nativeChoice && !option.sourceId.isEmpty {
+            guard seenSources.insert(option.sourceId).inserted else { continue }
+            nativeActions.append(BoonOption(
+                id: "native-choice:\(option.sourceId)",
+                name: "触发原生三选一",
+                englishName: "",
+                category: option.category,
+                kind: "native_choice",
+                group: "special",
+                sectionTitle: option.sectionTitle,
+                sourceId: option.sourceId,
+                nativeChoice: true,
+                sortSection: option.sortSection,
+                sortGroup: option.sortGroup,
+                sortOrder: Int.min
+            ))
+        }
+        return specials + nativeActions
     }
-    var canOpenSelectedSpecialChoice: Bool {
-        canOpenNativeBoonScreen && selectedSpecialBoon?.nativeChoice == true
+    private var selectedSpecialBoon: BoonOption? {
+        specialRewardOptions.first { $0.id == selectedSpecialReward }
+    }
+    var selectedSpecialRewardIsNativeChoice: Bool {
+        selectedSpecialBoon?.kind == "native_choice"
+    }
+    var canPerformSelectedSpecialReward: Bool {
+        guard let option = selectedSpecialBoon else { return false }
+        return option.kind == "native_choice" ? canOpenNativeBoonScreen : canSpawnReward
     }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
@@ -684,11 +711,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.openSellTraits, title: "打开祝福出售界面")
     }
 
-    func openSpecialChoice() {
-        guard canOpenSelectedSpecialChoice,
-              let source = selectedSpecialBoon?.sourceId,
-              !source.isEmpty else { return }
-        send(.openSpecialChoice(source: source), title: "打开特殊祝福三选一")
+    func performSpecialReward(_ reward: String) {
+        guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
+        if option.kind == "native_choice" {
+            guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
+            send(.openSpecialChoice(source: option.sourceId), title: "打开特殊祝福三选一")
+        } else {
+            spawnBoon(option.id)
+        }
     }
 
     func setMultiplier(_ key: String, text: String) {
@@ -852,7 +882,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .spawnPickup:
             guard canSpawnReward, !selectedPickupReward.isEmpty else { return }; spawnBoon(selectedPickupReward)
         case .spawnSpecial:
-            guard canSpawnReward, !selectedSpecialReward.isEmpty else { return }; spawnBoon(selectedSpecialReward)
+            guard !selectedSpecialReward.isEmpty else { return }; performSpecialReward(selectedSpecialReward)
         case .disableAll: break
         }
     }
