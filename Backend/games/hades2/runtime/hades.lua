@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 34 then
+if previousModule and previousModule.revision ~= 35 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 34, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 35, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -1189,7 +1189,16 @@ if __MacGamingTrainerV1 == nil then
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
     if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then releaseInstantCastCooldown() end
     if M.hexAlwaysReady and not owns("SpellFire") then releaseHex() end
-    if M.gameSpeedActive and not owns("GameplaySetElapsedTimeMultiplier") then releaseGameSpeed() end
+    if M.gameSpeedActive and not owns("GameplaySetElapsedTimeMultiplier") then
+      -- App.Reset changes SessionState. Rebind the session-scoped hook without
+      -- undoing the already-applied process/global factor against a fresh Hero.
+      -- refreshSpeedGlobal() reapplies the effective global value and, when
+      -- synchronize() cleared gameSpeedHero above, applies the factor exactly
+      -- once to the new Hero identity.
+      releaseHook("GameplaySetElapsedTimeMultiplier")
+      installGameSpeedHook()
+      refreshSpeedGlobal()
+    end
     if M.infiniteAmmo and (not owns("HasHeroTraitValue") or not owns("UpdateWeaponAmmo")) then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
         and type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then releaseMiniGames() end
