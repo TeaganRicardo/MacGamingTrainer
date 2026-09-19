@@ -19,11 +19,19 @@ Current product baseline: **0.1**. Build 2 lives on `feature/post-v0.1-improveme
 
 ### Required before manual testing
 
-1. Obtain fresh GREEN Linux contracts on the exact final branch head.
-2. Obtain fresh GREEN macOS Build 2 on the same head.
-3. Produce a replacement Build 2 RC and record its artifact ID + inner SHA256.
-4. Update PR #7, #1 and #11 with that exact head/artifact.
-5. Do not use revision-32 artifact 10578439397 for final acceptance.
+Completed with equivalent target-Mac verification:
+1. full Linux contracts on the exact closure head;
+2. Host policy + Hades log watcher harnesses;
+3. arm64 Hades II build;
+4. 0.1 / Build 2 package + one-module checks;
+5. strict codesign;
+6. replacement revision-33 RC.
+
+Still pending for archival/cloud parity:
+- rerun Linux + macOS GitHub Actions when runner startup is healthy again;
+- replace/local-mirror the RC with a normal Actions artifact if desired for release bookkeeping.
+
+Do not use revision-32 artifact 10578439397 for final acceptance.
 
 ### Manual target-Mac acceptance
 
