@@ -1,10 +1,11 @@
 import Foundation
 
 /// Hades-specific shortcut persistence. Registration/capture mechanics live in
-/// Core; this store owns action semantics, defaults, local migration and
-/// collision handling.
+/// Core; this store owns action semantics, derived defaults, explicit user
+/// overrides and local migration.
 struct Hades2ShortcutStore {
     private(set) var chords: [ShortcutAction: HotkeyChord]
+    private var overrides: [ShortcutAction: HotkeyChord] = [:]
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -28,12 +29,19 @@ struct Hades2ShortcutStore {
     }
 
     mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> String? {
-        if let other = ShortcutAction.uiOrder.first(where: { $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers }) {
+        if let other = ShortcutAction.uiOrder.first(where: {
+            $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers
+        }) {
             return "快捷键 \(newChord.displayText) 已分配给「\(other.title)」。"
         }
-        chords[action] = newChord
-        defaults.set(newChord.payload, forKey: key(action))
-        defaults.set(4, forKey: "shortcut.layoutVersion")
+
+        if newChord == Self.defaultLayout()[action] {
+            overrides[action] = nil
+        } else {
+            overrides[action] = newChord
+        }
+        rebuildResolvedLayout()
+        persistOverrides()
         return nil
     }
 
@@ -49,89 +57,146 @@ struct Hades2ShortcutStore {
         }
         guard !patch.isEmpty else { return }
 
-        var next = chords
-        for (action, proposed) in patch { next[action] = proposed }
-
-        // Apply imported assignments as one layout. Non-imported actions that
-        // collide with an imported chord are moved to a free default slot.
-        // This allows valid Profile swaps without comparing each assignment
-        // against the stale pre-import layout.
-        var used = patchTokens
-        let defaultsLayout = Self.defaultLayout()
-        for action in ShortcutAction.uiOrder where patch[action] == nil {
-            var current = next[action] ?? defaultsLayout[action]!
-            if used.contains(Self.token(current)) {
-                if let preferred = defaultsLayout[action], !used.contains(Self.token(preferred)) {
-                    current = preferred
-                } else if let free = ShortcutAction.uiOrder.enumerated()
-                    .compactMap({ HotkeyChord.controlOptionDefault(index: $0.offset) })
-                    .first(where: { !used.contains(Self.token($0)) }) {
-                    current = free
-                }
-            }
-            next[action] = current
-            used.insert(Self.token(current))
+        // A Profile is an explicit user layout. Keep every imported assignment
+        // fixed; only actions absent from the Profile are allowed to reflow.
+        for (action, proposed) in patch {
+            overrides[action] = proposed
         }
-        chords = next
-        persistCurrentLayout()
+        rebuildResolvedLayout()
+        persistOverrides()
     }
 
     private mutating func loadAndMigrate() {
         let layoutVersion = defaults.integer(forKey: "shortcut.layoutVersion")
-        if layoutVersion >= 4 {
-            for action in ShortcutAction.uiOrder {
-                if let value = defaults.object(forKey: key(action)), let parsed = HotkeyChord(payload: value) {
-                    chords[action] = parsed
-                }
-            }
-            repairCollisions()
+
+        if layoutVersion >= 5 {
+            loadPersistedOverrides()
+            rebuildResolvedLayout()
             return
         }
 
-        // Layout v3 stored Control+Option digits only. This is local UserDefaults
-        // migration, not Profile compatibility: current Profile schema stores
-        // full chord objects.
+        if layoutVersion == 4 {
+            migrateV4Layout()
+            rebuildResolvedLayout()
+            persistOverrides()
+            return
+        }
+
         if layoutVersion == 3 {
-            for action in ShortcutAction.legacyDigitActions {
-                guard let digit = defaults.object(forKey: key(action)) as? Int,
-                      let oldChord = HotkeyChord.controlOptionDigit(digit) else { continue }
-                assignMigrated(action, oldChord)
-            }
+            migrateV3Digits()
+            rebuildResolvedLayout()
+            persistOverrides()
+            return
         }
-        persistCurrentLayout()
+
+        // Pre-v3 layouts have already had two historical migrations in released
+        // builds. Treat an unrecognized/empty layout as derived defaults rather
+        // than pinning another obsolete ordering forever.
+        rebuildResolvedLayout()
+        persistOverrides()
     }
 
-    private mutating func assignMigrated(_ action: ShortcutAction, _ proposed: HotkeyChord) {
-        if let other = ShortcutAction.uiOrder.first(where: {
-            $0 != action && chord($0).keyCode == proposed.keyCode && chord($0).modifiers == proposed.modifiers
-        }) {
-            let previous = chord(action)
-            chords[other] = previous
-        }
-        chords[action] = proposed
-    }
-
-    private mutating func repairCollisions() {
+    private mutating func loadPersistedOverrides() {
+        overrides.removeAll()
         var used = Set<String>()
-        let defaultsLayout = Self.defaultLayout()
         for action in ShortcutAction.uiOrder {
-            var current = chord(action)
-            var token = Self.token(current)
-            if used.contains(token), let fallback = defaultsLayout[action] {
-                current = fallback
-                token = Self.token(current)
-            }
-            if used.contains(token),
-               let free = ShortcutAction.uiOrder.enumerated()
-                .compactMap({ HotkeyChord.controlOptionDefault(index: $0.offset) })
-                .first(where: { !used.contains(Self.token($0)) }) {
-                current = free
-                token = Self.token(current)
-            }
-            chords[action] = current
+            guard let value = defaults.object(forKey: key(action)),
+                  let parsed = HotkeyChord(payload: value) else { continue }
+            let token = Self.token(parsed)
+            guard !used.contains(token) else { continue }
+            overrides[action] = parsed
             used.insert(token)
         }
-        persistCurrentLayout()
+    }
+
+    private mutating func migrateV3Digits() {
+        overrides.removeAll()
+        let legacyDefaults: [ShortcutAction: Int] = [
+            .godMode: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
+            .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
+            .moneyMultiplierEnabled: 9, .disableAll: 0,
+        ]
+        var used = Set<String>()
+        for action in ShortcutAction.legacyDigitActions {
+            guard let digit = defaults.object(forKey: key(action)) as? Int,
+                  digit != legacyDefaults[action],
+                  let chord = HotkeyChord.controlOptionDigit(digit) else { continue }
+            let token = Self.token(chord)
+            guard !used.contains(token) else { continue }
+            overrides[action] = chord
+            used.insert(token)
+        }
+    }
+
+    private mutating func migrateV4Layout() {
+        overrides.removeAll()
+        let currentDefaults = Self.defaultLayout()
+        let brokenDefaults = Self.knownBrokenV4MigratedLayout()
+        var used = Set<String>()
+
+        for action in ShortcutAction.uiOrder {
+            guard let value = defaults.object(forKey: key(action)),
+                  let parsed = HotkeyChord(payload: value) else { continue }
+
+            // v4 wrote every computed default to disk. It also produced one
+            // deterministic scrambled layout when upgrading untouched v3
+            // digits. Both are derived state, not user intent.
+            if parsed == currentDefaults[action] || parsed == brokenDefaults[action] {
+                continue
+            }
+
+            let token = Self.token(parsed)
+            guard !used.contains(token) else { continue }
+            overrides[action] = parsed
+            used.insert(token)
+        }
+    }
+
+    private static func knownBrokenV4MigratedLayout() -> [ShortcutAction: HotkeyChord] {
+        var layout = defaultLayout()
+        let legacyDefaults: [ShortcutAction: Int] = [
+            .godMode: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
+            .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
+            .moneyMultiplierEnabled: 9, .disableAll: 0,
+        ]
+        for action in ShortcutAction.legacyDigitActions {
+            guard let digit = legacyDefaults[action],
+                  let proposed = HotkeyChord.controlOptionDigit(digit) else { continue }
+            if let other = ShortcutAction.uiOrder.first(where: {
+                $0 != action && layout[$0].map(Self.token) == Self.token(proposed)
+            }) {
+                layout[other] = layout[action]
+            }
+            layout[action] = proposed
+        }
+        return layout
+    }
+
+    private mutating func rebuildResolvedLayout() {
+        let defaultLayout = Self.defaultLayout()
+        var next: [ShortcutAction: HotkeyChord] = [:]
+        var used = Set(overrides.values.map(Self.token))
+
+        for action in ShortcutAction.uiOrder {
+            if let explicit = overrides[action] {
+                next[action] = explicit
+                continue
+            }
+
+            if let preferred = defaultLayout[action], !used.contains(Self.token(preferred)) {
+                next[action] = preferred
+                used.insert(Self.token(preferred))
+                continue
+            }
+
+            if let free = ShortcutAction.uiOrder.enumerated()
+                .compactMap({ HotkeyChord.controlOptionDefault(index: $0.offset) })
+                .first(where: { !used.contains(Self.token($0)) }) {
+                next[action] = free
+                used.insert(Self.token(free))
+            }
+        }
+        chords = next
     }
 
     private static func token(_ chord: HotkeyChord) -> String {
@@ -142,10 +207,14 @@ struct Hades2ShortcutStore {
         "shortcut.action.\(action.rawValue)"
     }
 
-    private func persistCurrentLayout() {
+    private func persistOverrides() {
         for action in ShortcutAction.uiOrder {
-            defaults.set(chord(action).payload, forKey: key(action))
+            if let explicit = overrides[action] {
+                defaults.set(explicit.payload, forKey: key(action))
+            } else {
+                defaults.removeObject(forKey: key(action))
+            }
         }
-        defaults.set(4, forKey: "shortcut.layoutVersion")
+        defaults.set(5, forKey: "shortcut.layoutVersion")
     }
 }

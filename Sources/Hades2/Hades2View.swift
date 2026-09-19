@@ -173,6 +173,13 @@ struct Hades2TrainerView: View {
         TrainerSection(title: "构筑数据", icon: "chart.bar.xaxis") {
             metaStatPanel
             boonRarityPanel
+            HStack {
+                Label("祝福管理", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
+                Spacer()
+                Button("打开祝福出售界面") { model.openSellTraits() }
+                    .disabled(!model.canOpenNativeBoonScreen)
+            }
+            .trainerPanel()
         }
     }
 
@@ -749,11 +756,16 @@ struct Hades2TrainerView: View {
                 Spacer()
                 TextField("搜索官方中英文名或内部 ID", text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
-            spawnRow(title: nil, icon: nil, options: specialBoons, selection: $model.selectedSpecialReward, shortcut: .spawnSpecial)
+            spawnRow(title: nil, icon: nil, options: specialBoons, selection: $model.selectedSpecialReward, shortcut: .spawnSpecial, actionTitle: "直接添加")
+            HStack {
+                Spacer()
+                Button("原生三选一") { model.openSpecialChoice() }
+                    .disabled(!model.canOpenSelectedSpecialChoice)
+            }
         }.trainerPanel()
     }
 
-    private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>, shortcut: ShortcutAction) -> some View {
+    private func spawnRow(title: String?, icon: String?, options: [BoonOption], selection: Binding<String>, shortcut: ShortcutAction, actionTitle: String = "生成") -> some View {
         TrainerGroupedOptionPicker(
             title: title,
             icon: icon,
@@ -762,7 +774,7 @@ struct Hades2TrainerView: View {
             sections: boonGroups(options),
             enabled: model.canSpawnReward,
             emptyLabel: "没有可用项目",
-            actionTitle: "生成",
+            actionTitle: actionTitle,
             shortcutText: model.shortcutText(shortcut),
             itemLabel: { option in
                 option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
