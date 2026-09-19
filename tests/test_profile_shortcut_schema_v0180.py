@@ -27,6 +27,13 @@ future_collision = {
 assert _normalize_shortcuts(future_collision) == future_collision, (
     'backend must preserve unknown/known collisions for the Swift uiOrder owner to resolve'
 )
+many_future = {
+    f'futureFeature{i}': chord(100 + i, 6144, f'K{i}')
+    for i in range(70)
+}
+assert _normalize_shortcuts(many_future) == many_future, (
+    'normalization must not silently truncate forward-compatible action IDs'
+)
 assert _normalize_shortcuts({'bad action': chord(18,6144,'1')}) == {}
 assert _normalize_shortcuts({'../escape': chord(18,6144,'1')}) == {}
 
