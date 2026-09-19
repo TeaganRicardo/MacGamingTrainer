@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 31 then
+if previousModule and previousModule.revision ~= 32 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 31, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 32, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -305,6 +305,10 @@ if __MacGamingTrainerV1 == nil then
   end
   local trainerSource = "MacGamingTrainer"
   local trainerGodFlag = "MacGamingTrainerGodMode"
+  local godModeBlockedEffects = {
+    "HecatePolymorphStun",
+    "MiasmaSlow",
+  }
   local function requireFunctions(label, functions)
     for _, name in ipairs(functions) do
       if type(_G[name]) ~= "function" then error("Unsupported " .. label .. ": missing " .. name) end
@@ -415,6 +419,13 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseGodMode()
     M.godMode = false
+    local effectHero = M.godEffectBlockHero
+    if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        pcall(RemoveEffectBlock, { Id = effectHero.ObjectId, Name = effectName })
+      end
+    end
+    M.godEffectBlockHero = nil
     local hero = M.godHero
     if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag] then
       if type(SetUnitVulnerable) == "function" then
@@ -1894,9 +1905,19 @@ if __MacGamingTrainerV1 == nil then
     end)
   end
   local function installGodMode()
-    requireFunctions("god mode", { "Damage", "SetUnitInvulnerable", "SetUnitVulnerable" })
+    requireFunctions("god mode", {
+      "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
+      "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
+    })
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
+    if M.godEffectBlockHero ~= hero then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
+        ClearEffect({ Id = hero.ObjectId, Name = effectName })
+      end
+      M.godEffectBlockHero = hero
+    end
     if M.godHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag]) then
       SetUnitInvulnerable(hero, trainerGodFlag, { Silent = true })
       M.godHero = hero
