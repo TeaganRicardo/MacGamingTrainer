@@ -37,9 +37,12 @@ for source in ('Narcissus', 'Echo', 'Medea', 'Icarus'):
 assert 'Arachne' not in block
 assert 'Circe' not in block
 assert 'OpenUpgradeChoiceMenu' in block
+assert 'thread(runChoice)' in block, "native menu must run on a game thread, never hold the LLDB boundary for player input"
 assert 'IsGameStateEligible' in block
 assert 'UpgradeOptions' in block
 assert 'AddTraitToHero' not in block
+assert 'hadLootChoiceHistory' in block
+assert 'CurrentRun.LootChoiceHistory = nil' in block
 
 spawn = lua[lua.index('if command == "spawn_reward" then'):]
 assert 'entry.kind == "trait"' in spawn
