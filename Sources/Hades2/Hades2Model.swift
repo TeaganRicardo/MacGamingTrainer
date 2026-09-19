@@ -509,13 +509,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // creates visible frame-time spikes. Runtime state is refreshed by user-driven
     // requests (and the explicit Refresh action) instead.
 
-    func enqueueMutation(key: String, request: Hades2Request, title: String, delay: TimeInterval = 0.35) {
+    func enqueueMutation(key: String, request: Hades2Request, title: String, delay: TimeInterval = 0.35, completion: ((Bool) -> Void)? = nil) {
         mutationScheduler.schedule(key: key, delay: delay) { [weak self] in
-            self?.send(request, title: title, coalesceKey: key, announceSuccess: false)
+            self?.send(request, title: title, coalesceKey: key, announceSuccess: false, completion: completion)
         }
     }
 
-    func feature(_ key: String, value: Any) {
+    func feature(_ key: String, value: Any, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired else { return }
         if let enabled = value as? Bool {
             if enabled { beginFeatureActivationGrace(key) }
@@ -542,7 +542,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             else if let value = value as? Int { gameSpeed = Double(value) }
         default: break
         }
-        send(.setDesired(feature: key, value: value), title: "更新功能")
+        send(.setDesired(feature: key, value: value), title: "更新功能", completion: completion)
     }
 
     private func amountValue(_ text: String) -> Int? {
@@ -622,11 +622,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.lockElement(element: element, locked: locked), title: locked ? "锁定元素数量" : "解除元素锁定")
     }
 
-    func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool) {
+    func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired, ["Common", "Rare", "Epic", "Heroic"].contains(target),
               let value = Double(multiplier), value.isFinite, (0...1000).contains(value) else { return }
         boonRarityTarget = target; boonRarityMultiplier = value; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
-        enqueueMutation(key: "boon.rarity", request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo), title: "更新祝福稀有度")
+        enqueueMutation(
+            key: "boon.rarity",
+            request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
+            title: "更新祝福稀有度",
+            completion: completion
+        )
     }
 
 
@@ -739,35 +744,71 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if shortcutError.isEmpty { installHotkeys() }
     }
 
+    private func performFeatureShortcut(_ key: String, current: Bool) {
+        let targetEnabled = !current
+        feature(key, value: targetEnabled) { [weak self] success in
+            guard let self, success else { return }
+            TrainerHotkeyFeedbackPlayer.play(
+                .toggle(targetEnabled: targetEnabled, active: self.activeFeatures[key] == true)
+            )
+        }
+    }
+
+    private func performDeferredToggleShortcut(targetEnabled: Bool, success: Bool) {
+        guard success else { return }
+        TrainerHotkeyFeedbackPlayer.play(targetEnabled ? .deferred : .disabled)
+    }
+
     private func performShortcut(_ action: ShortcutAction) {
         if action == .disableAll {
             guard connected && !busy && !exiting else { return }
-            sendBarrier(.disableAll, title: "全部关闭")
+            sendBarrier(.disableAll, title: "全部关闭") { success in
+                if success { TrainerHotkeyFeedbackPlayer.play(.disabled) }
+            }
             return
         }
         guard !busy && !exiting else { return }
         switch action {
-        case .godMode: guard canEditDesired else { return }; feature("godMode", value: !godMode)
-        case .infiniteHealth: guard canEditDesired else { return }; feature("infiniteHealth", value: !infiniteHealth)
-        case .infiniteMana: guard canEditDesired else { return }; feature("infiniteMana", value: !infiniteMana)
-        case .instantCastCooldown: guard canEditDesired else { return }; feature("instantCastCooldown", value: !instantCastCooldown)
-        case .hexAlwaysReady: guard canEditDesired else { return }; feature("hexAlwaysReady", value: !hexAlwaysReady)
-        case .infiniteAmmo: guard canEditDesired else { return }; feature("infiniteAmmo", value: !infiniteAmmo)
-        case .damageEnabled: guard canEditDesired else { return }; feature("damageEnabled", value: !damageEnabled)
-        case .autoMiniGames: guard canEditDesired else { return }; feature("autoMiniGames", value: !autoMiniGames)
-        case .gardenQoL: guard canEditDesired else { return }; feature("gardenQoL", value: !gardenQoL)
+        case .godMode: guard canEditDesired else { return }; performFeatureShortcut("godMode", current: godMode)
+        case .infiniteHealth: guard canEditDesired else { return }; performFeatureShortcut("infiniteHealth", current: infiniteHealth)
+        case .infiniteMana: guard canEditDesired else { return }; performFeatureShortcut("infiniteMana", current: infiniteMana)
+        case .instantCastCooldown: guard canEditDesired else { return }; performFeatureShortcut("instantCastCooldown", current: instantCastCooldown)
+        case .hexAlwaysReady: guard canEditDesired else { return }; performFeatureShortcut("hexAlwaysReady", current: hexAlwaysReady)
+        case .infiniteAmmo: guard canEditDesired else { return }; performFeatureShortcut("infiniteAmmo", current: infiniteAmmo)
+        case .damageEnabled: guard canEditDesired else { return }; performFeatureShortcut("damageEnabled", current: damageEnabled)
+        case .autoMiniGames: guard canEditDesired else { return }; performFeatureShortcut("autoMiniGames", current: autoMiniGames)
+        case .gardenQoL: guard canEditDesired else { return }; performFeatureShortcut("gardenQoL", current: gardenQoL)
         case .boonRarityEnabled:
-            guard canEditDesired else { return }; feature("boonRarityEnabled", value: !boonRarityEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("boonRarityEnabled", current: boonRarityEnabled)
         case .forceLegendary:
             guard canEditDesired else { return }
-            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: !boonForceLegendary, forceDuo: boonForceDuo)
+            let targetEnabled = !boonForceLegendary
+            setBoonRarity(
+                target: boonRarityTarget,
+                multiplier: String(boonRarityMultiplier),
+                forceLegendary: targetEnabled,
+                forceDuo: boonForceDuo
+            ) { [weak self] success in
+                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+            }
         case .forceDuo:
             guard canEditDesired else { return }
-            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: boonForceLegendary, forceDuo: !boonForceDuo)
+            let targetEnabled = !boonForceDuo
+            setBoonRarity(
+                target: boonRarityTarget,
+                multiplier: String(boonRarityMultiplier),
+                forceLegendary: boonForceLegendary,
+                forceDuo: targetEnabled
+            ) { [weak self] success in
+                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+            }
         case .moneyMultiplierEnabled:
-            guard canEditDesired else { return }; feature("moneyMultiplierEnabled", value: !moneyMultiplierEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("moneyMultiplierEnabled", current: moneyMultiplierEnabled)
         case .resourceMultiplierEnabled:
-            guard canEditDesired else { return }; feature("resourceMultiplierEnabled", value: !resourceMultiplierEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("resourceMultiplierEnabled", current: resourceMultiplierEnabled)
         case .applyNextRoomReward:
             guard canEditDesired else { return }; setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward)
         case .spawnOlympian:
