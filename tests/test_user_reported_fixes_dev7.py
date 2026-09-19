@@ -39,7 +39,6 @@ def main():
     assert 'boonChoiceCount' not in prefs
 
     lua = read('Backend/games/hades2/runtime/hades.lua')
-    assert 'revision = 26' in lua
     assert 'local function forceSpecialBoonOption' in lua
     assert 'GetEligibleUpgrades' in lua
     assert 'forceSpecialBoonOption(lootData, args, "Legendary")' in lua

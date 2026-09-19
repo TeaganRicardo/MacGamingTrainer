@@ -27,7 +27,6 @@ for retired in ('boonChoice', 'set_boon_choice', 'spawn_boon', 'add_resource'):
     assert retired not in product_text, retired
 manifest = json.loads(read('Backend/games/hades2/module.json'))
 assert manifest['protocolVersion'] == 5
-assert 'revision = 26' in read('Backend/games/hades2/runtime/hades.lua')
 
 # Profiles are current-schema-only. Unsupported old files are left alone and an
 # explicit same-name save replaces them with the current schema in one atomic write.

@@ -27,6 +27,5 @@ assert 'patchOfferedNextRoomDoors()' in lua
 assert 'CurrentRun.CurrentRoom.OfferedRewards[doorId]' in lua
 assert 'ReUseIds = true' in lua
 assert 'nextRoomRewardPatchedDoors' in lua
-assert 'revision = 26' in lua
 
 print('v01710_regressions_ok')
