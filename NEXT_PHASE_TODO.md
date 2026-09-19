@@ -1,28 +1,23 @@
 # Next Development Stage
 
-PR #7 remains DRAFT. r36 native modal functionality is manually accepted; r37 is a safety/UI follow-up.
+PR #7 remains DRAFT. r37 checks are accepted except for the repeated special-choice bug now repaired in runtime r38.
 
-## Immediate — finalize r37
+## Immediate — finalize r38
 
-Branch: `fix/batch-a-native-modals`. Runtime: revision 37.
+Branch: `fix/special-choice-refresh-r38`. Runtime: revision 38.
 
-Remaining release-candidate steps:
-1. commit this handoff status;
-2. run fresh exact-HEAD Linux/macOS verification, with the real-save-tree hash sentinel around macOS tests;
-3. clean-build Build 2 from the exact final HEAD;
-4. verify 0.1 / Build 2, one Hades II module, runtime 37, arm64, debugger entitlement, strict codesign;
-5. create `Mac Gaming Trainer r37.app` and `MacGamingTrainer-0.1-build2-rc-r37.zip`;
-6. verify ZIP integrity and record exact SHA256/size;
-7. push the exact candidate to the release branch and update PR #7;
-8. keep PR #7 DRAFT.
+Automated status:
+- repeated-special-choice contract RED on r37 → GREEN on r38;
+- full Linux contracts: PASS;
+- exact-head macOS suite, signed build and package verification still required before tester handoff.
 
-Focused r37 manual smoke only:
-- confirm `出售祝福` sits below the three generation controls and its button is `出售`;
-- confirm special native-choice rows render as `XXX的祝福 · XXX Boon` and the action button is always `生成`;
-- confirm Heracles/Moros do not appear as special-boon source groups;
-- with Hades II stopped, use `直接恢复` on the known-good `修改器测试` backup and confirm no new `恢复前自动备份` appears; launch once and confirm the save is present.
+Focused r38 manual acceptance:
+- choose one fixed-choice source such as Arachne/Narcissus, acquire one blessing, then open the same source again: the acquired blessing must not be offered again and the remaining offer must be regenerated;
+- repeat with a loot-style source such as Artemis/Athena: the native pool must regenerate and the acquired trait must not be offered as a duplicate;
+- optionally reopen a source without taking an option first; the trainer should no longer be pinned to the constant seed-9 offer;
+- no need to repeat r37 save/UI checks unless a smoke regression appears.
 
-Do not retest r36 selling/native-choice behavior unless the above smoke exposes a regression.
+After focused PASS, continue directly to Batch B.
 
 ## Batch B — game speed + God Mode
 
@@ -57,6 +52,8 @@ r37 focused smoke → Batch B → Batch C → Batch D → final consolidated reg
 - No test may point a destructive filesystem operation at a real user directory.
 - Filesystem tests must receive a temporary root explicitly.
 - For target-Mac full suites, keep a before/after hash sentinel on Hades II saves until this release closes.
+- GitHub remains the source of truth; code/docs/version state are updated there before each tester handoff.
+- Prefer the development environment + GitHub connector for normal development. Use RDC only for target-Mac-specific build/game work.
 - Each tester handoff is one exact HEAD + one prebuilt signed App/ZIP + SHA256.
 - Superseded RCs are never reused for PASS.
 - Fix demonstrated/root-caused failures with RED→GREEN coverage.
