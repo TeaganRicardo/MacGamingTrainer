@@ -7,6 +7,7 @@ sys.path.insert(0, str(root/'Backend'))
 from games.hades2 import preparation as prep
 from core.adapter import AdapterError
 from games.hades2.adapter import Hades2Adapter, TOGGLES, STAT_RULES
+import games.hades2.adapter as adapter_module
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
 prep.DATA = base
@@ -130,6 +131,39 @@ assert mutation_adapter.preference_dirty is True
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 5
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
 assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 5
+
+# A process-query failure is not evidence that Hades stopped. Preserve the
+# existing debugger/session state and surface the query error instead of
+# detaching or projecting not_running.
+scan_transport = FakeTransport()
+scan_transport.pid = 4242
+scan_transport.live = True
+scan_adapter = Hades2Adapter(transport=scan_transport)
+scan_adapter.state.update(pid=4242, connected=True, status='ready', scene='run')
+old_compatibility = adapter_module.preparation.compatibility
+old_run = adapter_module.subprocess.run
+class FailedProcessQuery:
+    returncode = 2
+    stdout = ''
+    stderr = 'pgrep permission denied'
+try:
+    adapter_module.preparation.compatibility = lambda strict=False: {
+        'version':'139672', 'steam_build':'24556151', 'warnings':[],
+    }
+    adapter_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
+    try:
+        scan_adapter.scan()
+    except RuntimeError as error:
+        assert '查询 Hades II 进程失败' in str(error)
+    else:
+        raise AssertionError('pgrep failure was misreported as game-not-running')
+    assert scan_transport.pid == 4242 and scan_transport.live is True
+    assert scan_adapter.state['pid'] == 4242
+    assert scan_adapter.state['connected'] is True
+finally:
+    adapter_module.preparation.compatibility = old_compatibility
+    adapter_module.subprocess.run = old_run
+
 
 # Offline desired profile semantics survived the module move.
 state = a.set_desired('gardenQoL', True)

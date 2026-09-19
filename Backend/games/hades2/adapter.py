@@ -309,8 +309,11 @@ class Hades2Adapter(GameAdapter):
         except Exception:
             self.state['status']='incompatible'
             raise
-        result=subprocess.run(['pgrep','-x',GAME_SPEC.process_name],capture_output=True,text=True,timeout=5)
-        pids=[int(x) for x in result.stdout.split()]
+        result=subprocess.run(['/usr/bin/pgrep','-x',GAME_SPEC.process_name],capture_output=True,text=True,timeout=5)
+        if result.returncode not in (0,1):
+            detail=(result.stderr or result.stdout).strip() or '未知错误'
+            raise RuntimeError(f'查询 {GAME_SPEC.display_name} 进程失败（{result.returncode}）：{detail}')
+        pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
         pid=pids[0] if pids else None
         if self.transport.pid and (pid!=self.transport.pid or not self.transport.alive()):
