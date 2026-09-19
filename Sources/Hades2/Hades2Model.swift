@@ -141,6 +141,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var saveManagerPresented = false
 
     private let mutationScheduler = Hades2MutationScheduler()
+    private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] event in
+        self?.handleRunLogEvent(event)
+    }
+    private var pendingRunReadySignal = false
     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<String> = []
     private var hotkeys: GlobalHotkeys?
@@ -151,6 +155,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetVitals: Bool { connected && capabilities["setVitals"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
+    var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
+    private var selectedSpecialBoon: BoonOption? {
+        boons.first { $0.id == selectedSpecialReward && $0.group == "special" }
+    }
+    var canOpenSelectedSpecialChoice: Bool {
+        canOpenNativeBoonScreen && selectedSpecialBoon?.nativeChoice == true
+    }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
     func supportsFeature(_ key: String) -> Bool { featureSupport[key] ?? true }
@@ -178,8 +189,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     init() {
         DispatchQueue.main.async { [weak self] in
-            self?.installHotkeys()
-            self?.startBackend()
+            guard let self else { return }
+            self.runLogWatcher.start()
+            self.installHotkeys()
+            self.startBackend()
         }
     }
 
@@ -198,11 +211,55 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.status, title: "检测可操作场景", announceSuccess: false)
     }
 
+    private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
+        guard !exiting else { return }
+        switch event {
+        case .mainMenu, .runtimeReset:
+            guard connected else { return }
+            pendingRunReadySignal = false
+            invalidatePendingMutations()
+            status = "waiting"
+            scene = event == .mainMenu ? "main_menu" : "loading"
+            activeFeatures = [:]
+            dormantFeatures = Dictionary(uniqueKeysWithValues:
+                desiredFeatureKeys.filter { desiredFeatureEnabled($0) }.map { ($0, true) }
+            )
+            capabilities = capabilities.mapValues { _ in false }
+            capabilities["hotBackup"] = true
+            capabilities["diagnostics"] = true
+            statAvailable = statAvailable.mapValues { _ in false }
+            activationGraceWorkItems.values.forEach { $0.cancel() }
+            activationGraceWorkItems = [:]
+            activationGraceFeatures = []
+        case .runtimeReady:
+            guard connected else { return }
+            pendingRunReadySignal = true
+            consumeRunLogReadySignalIfPossible()
+        }
+    }
+
+    private func consumeRunLogReadySignalIfPossible() {
+        guard Hades2RunLogRefreshGate.shouldConsume(
+            pending: pendingRunReadySignal,
+            connected: connected,
+            backendAvailable: backendAvailable,
+            busy: busy,
+            exiting: exiting
+        ) else { return }
+        pendingRunReadySignal = false
+        send(.status, title: "检测可操作场景", announceSuccess: false) { [weak self] _ in
+            self?.consumeRunLogReadySignalIfPossible()
+        }
+    }
+
     func toggleConnection() {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
         } else {
-            send(.connect, title: "连接游戏")
+            runLogWatcher.start()
+            send(.connect, title: "连接游戏") { [weak self] _ in
+                self?.consumeRunLogReadySignalIfPossible()
+            }
         }
     }
 
@@ -231,7 +288,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 applyPayload: { [weak self] payload in self?.apply(payload) },
                 resetGameState: { [weak self] in self?.resetAfterBackendTermination() },
                 log: { [weak self] line in self?.appendLog(line) },
-                onStatusChange: { [weak self] status in self?.backendStatus = status }
+                onStatusChange: { [weak self] status in
+                    self?.backendStatus = status
+                    if !status.busy {
+                        self?.consumeRunLogReadySignalIfPossible()
+                    }
+                }
             )
             send(.scan, title: "检测游戏")
         } catch {
@@ -255,6 +317,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         pendingRestoreTimer?.invalidate()
         pendingRestoreTimer = nil
         pendingRestoreID = nil
+        pendingRunReadySignal = false
         pid = nil
         runtimeIssue = ""
         health = nil
@@ -453,13 +516,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // creates visible frame-time spikes. Runtime state is refreshed by user-driven
     // requests (and the explicit Refresh action) instead.
 
-    func enqueueMutation(key: String, request: Hades2Request, title: String, delay: TimeInterval = 0.35) {
+    func enqueueMutation(key: String, request: Hades2Request, title: String, delay: TimeInterval = 0.35, completion: ((Bool) -> Void)? = nil) {
         mutationScheduler.schedule(key: key, delay: delay) { [weak self] in
-            self?.send(request, title: title, coalesceKey: key, announceSuccess: false)
+            self?.send(request, title: title, coalesceKey: key, announceSuccess: false, completion: completion)
         }
     }
 
-    func feature(_ key: String, value: Any) {
+    func feature(_ key: String, value: Any, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired else { return }
         if let enabled = value as? Bool {
             if enabled { beginFeatureActivationGrace(key) }
@@ -486,7 +549,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             else if let value = value as? Int { gameSpeed = Double(value) }
         default: break
         }
-        send(.setDesired(feature: key, value: value), title: "更新功能")
+        send(.setDesired(feature: key, value: value), title: "更新功能", completion: completion)
     }
 
     private func amountValue(_ text: String) -> Int? {
@@ -566,11 +629,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.lockElement(element: element, locked: locked), title: locked ? "锁定元素数量" : "解除元素锁定")
     }
 
-    func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool) {
+    func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired, ["Common", "Rare", "Epic", "Heroic"].contains(target),
               let value = Double(multiplier), value.isFinite, (0...1000).contains(value) else { return }
         boonRarityTarget = target; boonRarityMultiplier = value; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
-        enqueueMutation(key: "boon.rarity", request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo), title: "更新祝福稀有度")
+        enqueueMutation(
+            key: "boon.rarity",
+            request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
+            title: "更新祝福稀有度",
+            completion: completion
+        )
     }
 
 
@@ -607,6 +675,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
         send(.spawnReward(loot), title: "生成掉落物")
+    }
+
+    func openSellTraits() {
+        guard canOpenNativeBoonScreen else { return }
+        send(.openSellTraits, title: "打开祝福出售界面")
+    }
+
+    func openSpecialChoice() {
+        guard canOpenSelectedSpecialChoice,
+              let source = selectedSpecialBoon?.sourceId,
+              !source.isEmpty else { return }
+        send(.openSpecialChoice(source: source), title: "打开特殊祝福三选一")
     }
 
     func setMultiplier(_ key: String, text: String) {
@@ -683,35 +763,78 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if shortcutError.isEmpty { installHotkeys() }
     }
 
+    private func featureHotkeyFeedback(_ key: String, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
+        guard targetEnabled else { return .disabled }
+        if activeFeatures[key] == true { return .enabled }
+        if dormantFeatures[key] == true || !connected || status != "ready" { return .deferred }
+        return nil
+    }
+
+    private func performFeatureShortcut(_ key: String, current: Bool) {
+        let targetEnabled = !current
+        feature(key, value: targetEnabled) { [weak self] success in
+            guard let self, success else { return }
+            if let feedback = self.featureHotkeyFeedback(key, targetEnabled: targetEnabled) {
+                TrainerHotkeyFeedbackPlayer.play(feedback)
+            }
+        }
+    }
+
+    private func performDeferredToggleShortcut(targetEnabled: Bool, success: Bool) {
+        guard success else { return }
+        TrainerHotkeyFeedbackPlayer.play(targetEnabled ? .deferred : .disabled)
+    }
+
     private func performShortcut(_ action: ShortcutAction) {
         if action == .disableAll {
             guard connected && !busy && !exiting else { return }
-            sendBarrier(.disableAll, title: "全部关闭")
+            sendBarrier(.disableAll, title: "全部关闭") { success in
+                if success { TrainerHotkeyFeedbackPlayer.play(.disabled) }
+            }
             return
         }
         guard !busy && !exiting else { return }
         switch action {
-        case .godMode: guard canEditDesired else { return }; feature("godMode", value: !godMode)
-        case .infiniteHealth: guard canEditDesired else { return }; feature("infiniteHealth", value: !infiniteHealth)
-        case .infiniteMana: guard canEditDesired else { return }; feature("infiniteMana", value: !infiniteMana)
-        case .instantCastCooldown: guard canEditDesired else { return }; feature("instantCastCooldown", value: !instantCastCooldown)
-        case .hexAlwaysReady: guard canEditDesired else { return }; feature("hexAlwaysReady", value: !hexAlwaysReady)
-        case .infiniteAmmo: guard canEditDesired else { return }; feature("infiniteAmmo", value: !infiniteAmmo)
-        case .damageEnabled: guard canEditDesired else { return }; feature("damageEnabled", value: !damageEnabled)
-        case .autoMiniGames: guard canEditDesired else { return }; feature("autoMiniGames", value: !autoMiniGames)
-        case .gardenQoL: guard canEditDesired else { return }; feature("gardenQoL", value: !gardenQoL)
+        case .godMode: guard canEditDesired else { return }; performFeatureShortcut("godMode", current: godMode)
+        case .infiniteHealth: guard canEditDesired else { return }; performFeatureShortcut("infiniteHealth", current: infiniteHealth)
+        case .infiniteMana: guard canEditDesired else { return }; performFeatureShortcut("infiniteMana", current: infiniteMana)
+        case .instantCastCooldown: guard canEditDesired else { return }; performFeatureShortcut("instantCastCooldown", current: instantCastCooldown)
+        case .hexAlwaysReady: guard canEditDesired else { return }; performFeatureShortcut("hexAlwaysReady", current: hexAlwaysReady)
+        case .infiniteAmmo: guard canEditDesired else { return }; performFeatureShortcut("infiniteAmmo", current: infiniteAmmo)
+        case .damageEnabled: guard canEditDesired else { return }; performFeatureShortcut("damageEnabled", current: damageEnabled)
+        case .autoMiniGames: guard canEditDesired else { return }; performFeatureShortcut("autoMiniGames", current: autoMiniGames)
+        case .gardenQoL: guard canEditDesired else { return }; performFeatureShortcut("gardenQoL", current: gardenQoL)
         case .boonRarityEnabled:
-            guard canEditDesired else { return }; feature("boonRarityEnabled", value: !boonRarityEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("boonRarityEnabled", current: boonRarityEnabled)
         case .forceLegendary:
             guard canEditDesired else { return }
-            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: !boonForceLegendary, forceDuo: boonForceDuo)
+            let targetEnabled = !boonForceLegendary
+            setBoonRarity(
+                target: boonRarityTarget,
+                multiplier: String(boonRarityMultiplier),
+                forceLegendary: targetEnabled,
+                forceDuo: boonForceDuo
+            ) { [weak self] success in
+                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+            }
         case .forceDuo:
             guard canEditDesired else { return }
-            setBoonRarity(target: boonRarityTarget, multiplier: String(boonRarityMultiplier), forceLegendary: boonForceLegendary, forceDuo: !boonForceDuo)
+            let targetEnabled = !boonForceDuo
+            setBoonRarity(
+                target: boonRarityTarget,
+                multiplier: String(boonRarityMultiplier),
+                forceLegendary: boonForceLegendary,
+                forceDuo: targetEnabled
+            ) { [weak self] success in
+                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+            }
         case .moneyMultiplierEnabled:
-            guard canEditDesired else { return }; feature("moneyMultiplierEnabled", value: !moneyMultiplierEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("moneyMultiplierEnabled", current: moneyMultiplierEnabled)
         case .resourceMultiplierEnabled:
-            guard canEditDesired else { return }; feature("resourceMultiplierEnabled", value: !resourceMultiplierEnabled)
+            guard canEditDesired else { return }
+            performFeatureShortcut("resourceMultiplierEnabled", current: resourceMultiplierEnabled)
         case .applyNextRoomReward:
             guard canEditDesired else { return }; setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward)
         case .spawnOlympian:

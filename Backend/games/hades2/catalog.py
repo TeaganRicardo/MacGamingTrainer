@@ -13,6 +13,29 @@ _LINKED_OFFICIAL_NAME_IDS = {
     'SpellDrop': 'SpellDrop_Store',
     'ArmorBoost': 'ArmorBoost_Store',
     'RoomRewardHealDrop': 'RoomRewardHealDrop_Store',
+    'HealBigDrop': 'RoomRewardBigHealDrop_Store',
+    'OreFSilverDrop': 'OreFSilver',
+    'PlantFMolyDrop': 'PlantFMoly',
+    'PlantFNightshadeDrop': 'PlantFNightshade',
+    'PlantGLotusDrop': 'PlantGLotus',
+    'MetaFabricDrop': 'MetaFabric',
+    'TrashPointsDrop': 'TrashPoints',
+    'MixerFBossDrop': 'MixerFBoss',
+    'MixerGBossDrop': 'MixerGBoss',
+    'MixerHBossDrop': 'MixerHBoss',
+    'MixerIBossDrop': 'MixerIBoss',
+    'MixerNBossDrop': 'MixerNBoss',
+    'MixerOBossDrop': 'MixerOBoss',
+    'MixerPBossDrop': 'MixerPBoss',
+    'MixerQBossDrop': 'MixerQBoss',
+    'Mixer5CommonDrop': 'Mixer5Common',
+    'Mixer6CommonDrop': 'Mixer6Common',
+    'WeaponPointsRareDrop': 'WeaponPointsRare',
+    'CardUpgradePointsDrop': 'CardUpgradePoints',
+    'FamiliarPointsDrop': 'FamiliarPoints',
+    'CharonPointsDrop': 'CharonPoints',
+    'GemPointsDrop': 'GemPoints',
+    'DreamPointsDrop': 'DreamPoints',
 }
 
 _LINKED_PROVISIONAL_RULES = {
@@ -22,9 +45,12 @@ _LINKED_PROVISIONAL_RULES = {
     # localization provenance.
     'RoomMoneyTinyDrop': ('RoomMoneyDrop', '少量', 'Small '),
     'EmptyMaxHealthSmallDrop': ('EmptyMaxHealthDrop', '小型', 'Small '),
+    'MaxHealthDropSmall': ('MaxHealthDrop', '小型', 'Small '),
+    'MaxManaDropSmall': ('MaxManaDrop', '小型', 'Small '),
     'MetaCurrencyBigDrop': ('MetaCurrency', '大量', 'Large '),
     'MetaCardPointsCommonBigDrop': ('MetaCardPointsCommon', '大量', 'Large '),
     'MemPointsCommonBigDrop': ('MemPointsCommon', '大量', 'Large '),
+    'GemPointsBigDrop': ('GemPoints', '大量', 'Large '),
 }
 
 _PROVISIONAL_NAMES = {
@@ -37,6 +63,8 @@ _PROVISIONAL_NAMES = {
     'AirBoost': ('风元素精华', 'Air Essence'),
     'ElementalBoost': ('元素精华', 'Elemental Essence'),
     'StoreRewardRandomStack': ('随机祝福强化', 'Random Boon Upgrade'),
+    'HealDropMajor': ('大型生命恢复', 'Major Healing'),
+    'RoomRewardConsolationPrize': ('红洋葱', 'Red Onion'),
 }
 
 
@@ -97,6 +125,11 @@ def localize_catalog(decoded):
             if isinstance(item.get(key),str):item[key]=_clean(item[key])
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
+        variant_rule=_LINKED_PROVISIONAL_RULES.get(identifier)
+        if variant_rule and isinstance(official_zh,str) and official_zh:
+            base_zh=_clean(zh.get(variant_rule[0]))
+            if isinstance(base_zh,str) and base_zh and official_zh==base_zh:
+                official_zh=None
         if isinstance(official_en,str) and official_en:
             item['englishName']=official_en
             item['englishNameSource']='official_en'

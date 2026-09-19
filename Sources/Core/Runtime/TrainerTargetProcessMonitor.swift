@@ -12,6 +12,7 @@ import Foundation
 /// the case where the target game was already running before the trainer launched.
 final class TrainerTargetProcessMonitor: ObservableObject {
     @Published private(set) var isRunning: Bool
+    @Published private(set) var launchGeneration: UInt = 0
     @Published private(set) var activationGeneration: UInt = 0
 
     private let processName: String
@@ -35,6 +36,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
             guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
             self.isRunning = true
+            self.launchGeneration &+= 1
         })
         observers.append(center.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,

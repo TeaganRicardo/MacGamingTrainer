@@ -30,7 +30,7 @@ class Hades2CommandRouter:
         elif command=='connect':result=adapter.connect()
         elif command=='disconnect':result=adapter.disconnect()
         elif command=='reset_desired':result=adapter.reset_desired()
-        elif command in ('status','disable_all','set_desired','set_vital','set_counter','lock_vital','set_stat','set_element','lock_element','set_resource','lock_resource','set_rerolls','lock_rerolls','spawn_reward'):
+        elif command in ('status','disable_all','set_desired','set_vital','set_counter','lock_vital','set_stat','set_element','lock_element','set_resource','lock_resource','set_rerolls','lock_rerolls','spawn_reward','open_sell_traits','open_special_choice'):
             if command=='set_desired':
                 feature=params.get('feature');value=params.get('value')
                 if feature not in TOGGLES+MULTIPLIERS:raise ValueError('未知功能。')
@@ -78,7 +78,10 @@ class Hades2CommandRouter:
                 if type(params.get('locked')) is not bool:raise ValueError('锁定值必须为布尔值。')
             if command=='spawn_reward':
                 if not isinstance(params.get('reward'),str) or not params['reward']:raise ValueError('请选择掉落物或祝福。')
-            if command in ('set_resource','set_rerolls','spawn_reward','lock_resource','lock_rerolls'):
+            if command=='open_special_choice':
+                source=params.get('source')
+                if not isinstance(source,str) or not source:raise ValueError('请选择支持原生三选一的特殊祝福来源。')
+            if command in ('set_resource','set_rerolls','spawn_reward','open_sell_traits','open_special_choice','lock_resource','lock_rerolls'):
                 params=dict(params,requestId=rid)
             result=adapter.set_desired(feature,value) if command=='set_desired' else adapter.execute(command,params)
         elif command=='set_boon_rarity_desired':

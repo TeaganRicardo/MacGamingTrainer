@@ -27,6 +27,10 @@
     },
     "_ZN3sgg13ConfigOptions20RequireFocusToUpdateE": {
       "rva": 100793566
+    },
+    "_ZN3sgg5World6UpdateEf": {
+      "rva": 2463068,
+      "prefix": "ff0307d1ef3b126ded33136deb2b146d"
     }
   }
 }

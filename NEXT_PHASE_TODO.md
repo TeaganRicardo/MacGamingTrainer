@@ -1,62 +1,68 @@
 # Next development stage
 
-Current product baseline: **0.1**. The active development branch is **Build 2** on `feature/post-v0.1-improvements`. Stable `main` and the published `v0.1` release remain Build 1 until Build 2 is deliberately merged/released.
+Current product baseline: **0.1**. Build 2 lives on `feature/post-v0.1-improvements`; stable `main` and the published v0.1 release remain Build 1 until Phase 0 target-Mac acceptance succeeds.
 
-## Build 2 stabilization gate
+## Immediate Phase 0 closure
 
-### Completed in code and automated regression
+### Code complete
 
-- Profile shortcut schema 4: arbitrary supported key chords, deterministic conflict handling, atomic Profile application, and one-time local UserDefaults migration from the previous digit layout.
-- All fixed actionable controls have configurable shortcuts. Defaults follow visible order: Control+Option+1...9, then A...J.
-- Rows without a shortcut badge no longer reserve the former empty shortcut column.
-- Catalog presentation uses Chinese · English labels with source provenance. Trainer-authored/composed names are listed in `docs/PROVISIONAL_CATALOG_NAMES.md`.
-- Selene has two distinct native spawn paths: `SpellDrop` for choosing a Hex and `TalentDrop` for Path of Stars upgrades.
-- Hades resident runtime revision is 26.
-- Fire / Water / Earth / Air / Aether have distinct symbols and semantic colors.
-- Fullscreen testing invalidated timer-driven waiting -> ready probes: every live status crosses LLDB, stops/resumes the target and can interact badly with fullscreen focus. Timed +15/+30 background probes have been removed. Automatic debugger work is consumed only while Trainer is foreground; Hades performs one silent waiting-status refresh when Trainer becomes active.
-- Hades status watchdog is 15 s so the host deadline sits outside the transport boundary + debugger cleanup deadlines instead of terminating the debugger owner mid-cleanup.
-- Linux contract coverage enforces the foreground-only lifecycle and timeout policy. The new lifecycle still needs one manual fullscreen acceptance pass.
+- Background auto-connect is event-driven and bounded to a true target-process launch.
+- Same-PID Lua runtime resets rebuild inside the existing debugger attachment.
+- Persistent desired state is replayed in one Lua/LLDB batch.
+- Shortcut defaults and settings-list order share `ShortcutAction.uiOrder`; untouched defaults flow 1-9 then A-Z.
+- Generic hotkey sounds distinguish enabled / deferred / disabled.
+- Native boon selling uses `OpenSellTraitMenu`.
+- Special blessings keep direct-add and expose audited native three-choice where the game has a real native flow.
+- God Mode blocks only audited hostile control effects through native effect blocks.
+- Runtime revision is 33.
+- Revision 33 preserves the native NPC source name through choice eligibility/rarity generation and applies the trainer bookkeeping name only immediately before the native menu opens.
 
-### Manual target-Mac acceptance still required
+### Required before manual testing
 
-The user is the owner of Mac/gameplay validation from this point forward.
+1. Obtain fresh GREEN Linux contracts on the exact final branch head.
+2. Obtain fresh GREEN macOS Build 2 on the same head.
+3. Produce a replacement Build 2 RC and record its artifact ID + inner SHA256.
+4. Update PR #7, #1 and #11 with that exact head/artifact.
+5. Do not use revision-32 artifact 10578439397 for final acceptance.
 
-1. **Foreground-only waiting -> ready**
-   - Rebuild the latest branch.
-   - In fullscreen Hades, confirm Trainer does not issue live status probes merely because time passes while Trainer is backgrounded.
-   - Switch back to Trainer. Pending automatic attach or a single waiting-status refresh should happen there, where debugger pauses are visible and do not interrupt active gameplay.
-   - Once Trainer reports ready/run, return to Hades and confirm normal play remains smooth.
-   - Manual Refresh is the explicit fallback if the foreground refresh misses a scene transition.
+### Manual target-Mac acceptance
 
-If this passes, close GitHub issue #1.
+Run the complete checklist recorded in PR #7 / PROJECT_STATUS.md. Preserve `trainer.log`.
 
-### Deferred performance work
+If acceptance passes:
+1. close #1 and #11 with the log/result summary;
+2. mark PR #7 ready;
+3. merge PR #7 to `main`;
+4. verify the merged `main` result;
+5. capture the Build 2 release snapshot per VERSIONING.md.
 
-GitHub issue #4 remains intentionally open. The supplied old-build logs show roughly 33 s vs 14 s end-to-end connections but contain no phase-level profile lines. Rebuild after #1’s lifecycle correction, capture one fresh `LLDBAttachProfile` + `ConnectProfile` pair, then optimize only the measured bottleneck.
+If acceptance fails:
+- leave PR #7 draft and #1/#11 open;
+- attach the complete log and reproduce from the exact RC;
+- fix only the demonstrated regression before another RC.
 
-Useful phases to measure:
-- `AttachToProcessWithID`
-- symbol/module validation
-- process resume / first usable Lua boundary
-- resident bootstrap/revision synchronization
-- catalog/localization hydration
+## Phase 1 after Build 2
 
-No optimization should add periodic status polling or unsafe retry of outcome-unknown mutations.
+Draft PR #10 / issue #9 contains the mechanical cross-game module proof. Keep it draft during Phase 0.
+
+Before Phase 1 merge:
+1. synchronize its head with the final Build 2 base;
+2. ensure the PR is conflict-free;
+3. rerun Linux contracts and both macOS matrix entries;
+4. after Build 2 lands on `main`, retarget/update as required and merge;
+5. then begin Phase 2 save-management capability work.
+
+## Deferred roadmap
+
+- Phase 2: shared optional save-management Host capability with game-owned parsing/semantics.
+- Phase 3: Hades II full save editor behind that capability.
+- Phase 4: explicit Hades-I architecture gate.
+- Phase 5: Hades I vertical slice.
 
 ## Reliability constraints
 
-- No periodic LLDB/Lua status polling.
-- No unsafe replay of outcome-unknown non-idempotent mutations.
-- No legacy Profile compatibility layer.
-- No 4+ boon-choice UI/hack.
-- Hades-specific semantics remain outside Core.
-- Exit must never be permanently blocked by cleanup failure.
-- Runtime source changes that affect the resident module must bump its revision so a surviving game process reloads the new code.
-
-## After Build 2
-
-Once issue #1 is manually accepted:
-
-1. profile issue #4 and optimize only measured attach bottlenecks;
-2. decide explicitly whether Build 2 should be merged/released as the next 0.1 build or versioned as 0.1.x;
-3. only then resume deferred transport/read-only or second-game framework work.
+- No periodic LLDB/Lua polling.
+- No unsafe replay of non-idempotent mutations.
+- No game semantics in Core/Host.
+- No speculative LLDB optimization; #4 is already closed with a measured baseline.
+- Runtime source changes require a revision bump.

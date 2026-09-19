@@ -11,8 +11,10 @@ struct TrainerConnectionPolicy {
     private(set) var connectRequested = false
     private(set) var backendRestartRequested = false
     private(set) var automaticConnectionSuppressed = false
+    private(set) var backgroundConnectionAllowed = false
 
     mutating func targetStateChanged(running: Bool) {
+        guard targetRunning != running else { return }
         targetRunning = running
         if running {
             // A real target-process lifetime resets an explicit detach from the
@@ -24,7 +26,16 @@ struct TrainerConnectionPolicy {
             backendRestartRequested = false
             connectRequested = false
             automaticConnectionSuppressed = false
+            backgroundConnectionAllowed = false
         }
+    }
+
+    mutating func targetLaunched() {
+        targetRunning = true
+        automaticConnectionSuppressed = false
+        backgroundConnectionAllowed = true
+        backendRestartRequested = true
+        connectRequested = true
     }
 
     mutating func targetActivated() {
@@ -54,11 +65,13 @@ struct TrainerConnectionPolicy {
     mutating func userWillToggleConnection(currentlyConnected: Bool) {
         if currentlyConnected {
             automaticConnectionSuppressed = true
+            backgroundConnectionAllowed = false
             connectRequested = false
         } else {
             // An explicit reconnect is user intent, so future lifecycle events
             // may also reconnect if this immediate attempt does not succeed.
             automaticConnectionSuppressed = false
+            backgroundConnectionAllowed = false
         }
     }
 
@@ -66,6 +79,7 @@ struct TrainerConnectionPolicy {
         guard connected else { return }
         connectRequested = false
         automaticConnectionSuppressed = false
+        backgroundConnectionAllowed = false
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
@@ -105,6 +119,7 @@ struct TrainerConnectionPolicy {
               !connected,
               actionsEnabled else { return false }
         connectRequested = false
+        backgroundConnectionAllowed = false
         return true
     }
 }

@@ -19,9 +19,17 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'MemPointsCommon': '魂魄',
             'RoomMoneyDrop': '金币',
             'EmptyMaxHealthDrop': '半人马之魂',
+            'MaxHealthDrop': '半人马之心',
+            'MaxHealthDropSmall': '半人马之心',
+            'MaxManaDrop': '灵魂之水',
+            'MaxManaDropSmall': '灵魂之水',
             'SpellDrop_Store': '月之礼赠',
             'ArmorBoost_Store': '护盾饰符',
             'RoomRewardHealDrop_Store': '新鲜食粮',
+            'RoomRewardBigHealDrop_Store': '超大份新鲜食粮',
+            'OreFSilver': '银矿',
+            'MixerFBoss': '余烬',
+            'GemPoints': '宝石',
         }
     if language == 'en':
         return {
@@ -33,9 +41,17 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'MemPointsCommon': 'Psyche',
             'RoomMoneyDrop': 'Gold Crowns',
             'EmptyMaxHealthDrop': 'Centaur Soul',
+            'MaxHealthDrop': 'Centaur Heart',
+            'MaxHealthDropSmall': 'Centaur Heart',
+            'MaxManaDrop': 'Soul Tonic',
+            'MaxManaDropSmall': 'Soul Tonic',
             'SpellDrop_Store': 'Gift of the Moon',
             'ArmorBoost_Store': 'Shield Charm',
             'RoomRewardHealDrop_Store': 'Fresh Sustenance',
+            'RoomRewardBigHealDrop_Store': 'Big Fresh Sustenance',
+            'OreFSilver': 'Silver',
+            'MixerFBoss': 'Cinder',
+            'GemPoints': 'Gemstones',
         }
     return {}
 
@@ -57,6 +73,10 @@ try:
             {'id':'MemPointsCommonBigDrop','kind':'consumable','name':'大量心智'},
             {'id':'RoomMoneyTinyDrop','kind':'consumable','name':'tiny money'},
             {'id':'EmptyMaxHealthSmallDrop','kind':'consumable','name':'small soul'},
+            {'id':'MaxHealthDrop','kind':'consumable','name':'heart'},
+            {'id':'MaxHealthDropSmall','kind':'consumable','name':'small heart'},
+            {'id':'MaxManaDrop','kind':'consumable','name':'tonic'},
+            {'id':'MaxManaDropSmall','kind':'consumable','name':'small tonic'},
             {'id':'FireBoost','kind':'consumable','name':'FireBoost'},
             {'id':'WaterBoost','kind':'consumable','name':'WaterBoost'},
             {'id':'EarthBoost','kind':'consumable','name':'EarthBoost'},
@@ -66,6 +86,11 @@ try:
             {'id':'RoomRewardHealDrop','kind':'consumable','name':'RoomRewardHealDrop'},
             {'id':'ElementalBoost','kind':'consumable','name':'ElementalBoost'},
             {'id':'StoreRewardRandomStack','kind':'consumable','name':'StoreRewardRandomStack'},
+            {'id':'HealBigDrop','kind':'consumable','name':'HealBigDrop'},
+            {'id':'OreFSilverDrop','kind':'consumable','name':'OreFSilverDrop'},
+            {'id':'MixerFBossDrop','kind':'consumable','name':'MixerFBossDrop'},
+            {'id':'GemPointsDrop','kind':'consumable','name':'GemPointsDrop'},
+            {'id':'GemPointsBigDrop','kind':'consumable','name':'GemPointsBigDrop'},
         ],
         'resources': [{'id':'UnknownResource','name':'已有中文兜底'}],
     }
@@ -90,6 +115,10 @@ for identifier,expected_zh,expected_en in [
     ('SpellDrop','月之礼赠','Gift of the Moon'),
     ('ArmorBoost','护盾饰符','Shield Charm'),
     ('RoomRewardHealDrop','新鲜食粮','Fresh Sustenance'),
+    ('HealBigDrop','超大份新鲜食粮','Big Fresh Sustenance'),
+    ('OreFSilverDrop','银矿','Silver'),
+    ('MixerFBossDrop','余烬','Cinder'),
+    ('GemPointsDrop','宝石','Gemstones'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
@@ -108,12 +137,23 @@ for identifier,expected_zh,expected_en in [
     ('AirBoost','风元素精华','Air Essence'),
     ('ElementalBoost','元素精华','Elemental Essence'),
     ('StoreRewardRandomStack','随机祝福强化','Random Boon Upgrade'),
+    ('GemPointsBigDrop','大量宝石','Large Gemstones'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
     assert rows[identifier]['officialName'] is False
     assert rows[identifier]['nameSource'] == 'provisional_zh'
     assert rows[identifier]['englishNameSource'] == 'provisional_en'
+assert rows['MaxHealthDrop']['name'] == '半人马之心'
+assert rows['MaxHealthDropSmall']['name'] == '小型半人马之心'
+assert rows['MaxHealthDropSmall']['englishName'] == 'Small Centaur Heart'
+assert rows['MaxHealthDropSmall']['officialName'] is False
+assert rows['MaxHealthDropSmall']['nameSource'] == 'provisional_zh'
+assert rows['MaxManaDrop']['name'] == '灵魂之水'
+assert rows['MaxManaDropSmall']['name'] == '小型灵魂之水'
+assert rows['MaxManaDropSmall']['englishName'] == 'Small Soul Tonic'
+assert rows['MaxManaDropSmall']['officialName'] is False
+assert rows['MaxManaDropSmall']['nameSource'] == 'provisional_zh'
 assert result['resources'][0]['name'] == '已有中文兜底'
 assert result['resources'][0]['officialName'] is False
 assert any('已保留并使用官方英文名或内部名称' in warning for warning in result.get('warnings', []))

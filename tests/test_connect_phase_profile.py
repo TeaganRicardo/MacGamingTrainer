@@ -145,3 +145,78 @@ transport_source = (ROOT / 'Backend/games/hades2/transport.py').read_text()
 assert "self.last_attach_profile={'reused':True,'total':0.0}" in transport_source
 
 print('connect_phase_profile_failure_paths_ok')
+
+
+# A status that reaches the LLDB/Lua boundary but returns "waiting" still spent
+# real debugger time. ConnectProfile must preserve that boundary duration so a
+# manual #4 sample does not report a misleading 0.000s firstLuaBoundary.
+class WaitingTransport(FakeTransport):
+    def execute(self, source):
+        self.last_duration = 2.750
+        raise adapter_module.TransportError('waiting', 'simulated waiting')
+
+
+waiting_transport = WaitingTransport()
+waiting_adapter = adapter_module.Hades2Adapter(transport=waiting_transport)
+waiting_adapter.preference_initialized = True
+waiting_adapter.preference_dirty = False
+
+
+def waiting_scan():
+    waiting_adapter.state['pid'] = 4343
+    waiting_adapter.state['status'] = 'disconnected'
+    return dict(waiting_adapter.state)
+
+
+waiting_adapter.scan = waiting_scan
+waiting_stream = StringIO()
+waiting_handler = logging.StreamHandler(waiting_stream)
+root_logger.addHandler(waiting_handler)
+root_logger.setLevel(logging.INFO)
+try:
+    waiting_result = waiting_adapter.connect()
+finally:
+    root_logger.removeHandler(waiting_handler)
+    root_logger.setLevel(old_level)
+
+assert waiting_result['status'] == 'waiting'
+assert waiting_adapter._last_status_boundary_duration == 2.750
+waiting_log = waiting_stream.getvalue()
+assert 'ConnectProfile outcome=waiting' in waiting_log
+assert 'firstLuaBoundary=2.750s' in waiting_log
+
+print('connect_phase_profile_waiting_ok')
+
+
+# Background launch attach can reach World::Update before Hades has finished
+# publishing its Lua game globals. During the initial connect only, that exact
+# bootstrap-not-ready condition is waiting, not an incompatible/disconnect.
+class EarlyRuntimeTransport(FakeTransport):
+    def execute(self, source):
+        self.last_duration = 0.050
+        raise adapter_module.TransportError(
+            'lua_error',
+            '[string "MacGamingTrainer"]:7: Unsupported game runtime: missing table SessionState',
+        )
+
+
+early_transport = EarlyRuntimeTransport()
+early_adapter = adapter_module.Hades2Adapter(transport=early_transport)
+early_adapter.preference_initialized = True
+early_adapter.preference_dirty = False
+
+
+def early_scan():
+    early_adapter.state['pid'] = 4444
+    early_adapter.state['status'] = 'disconnected'
+    return dict(early_adapter.state)
+
+
+early_adapter.scan = early_scan
+early_result = early_adapter.connect()
+assert early_result['status'] == 'waiting'
+assert early_result['connected'] is True
+assert early_transport.alive() is True
+assert early_adapter._last_status_boundary_duration == 0.050
+
+print('connect_phase_profile_early_runtime_ok')

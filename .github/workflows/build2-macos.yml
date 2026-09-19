@@ -1,0 +1,56 @@
+name: Build 2 macOS
+
+on:
+  push:
+    branches:
+      - feature/post-v0.1-improvements
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run host connection policy harness
+        run: python3 tests/test_host_connection_policy_dev8.py
+
+      - name: Run Hades log watcher harness
+        run: python3 tests/test_hades2_run_log_watcher.py
+
+      - name: Build Hades II trainer
+        run: |
+          chmod +x build.sh Tools/*.py
+          ./build.sh hades2
+
+      - name: Verify Build 2 package
+        run: |
+          app="dist/Mac Gaming Trainer.app"
+          test -d "$app"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
+          test "$version" = "0.1"
+          test "$build" = "2"
+          test -f "$app/Contents/Resources/Backend/games/hades2/module.json"
+          count=$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')
+          test "$count" = "1"
+          codesign --verify --deep --strict "$app"
+
+      - name: Package release candidate
+        run: |
+          mkdir -p artifacts
+          ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "artifacts/MacGamingTrainer-0.1-build2-rc.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MacGamingTrainer-0.1-build2-rc
+          path: artifacts/MacGamingTrainer-0.1-build2-rc.zip
+          if-no-files-found: error
+          retention-days: 14

@@ -198,7 +198,7 @@ class Hades2LuaTransport:
         if error.Fail() or original not in (b'\x00',b'\x01'):raise TransportError('incompatible','后台运行标志无法验证。')
         self.focus_original=original
         if self.process.WriteMemory(focus,b'\x00',error)!=1 or error.Fail():raise TransportError('memory_error',str(error))
-        bp=self.target.BreakpointCreateByAddress(self.address('lua_pcallk'))
+        bp=self.target.BreakpointCreateByAddress(self.address('_ZN3sgg5World6UpdateEf'))
         try:
             self.resume(deadline,breakpoint_expected=True)
             while time.monotonic()<deadline:
@@ -210,12 +210,11 @@ class Hades2LuaTransport:
                 matching=[th for th in self.process if th.GetStopReason()==lldb.eStopReasonBreakpoint and th.GetStopReasonDataAtIndex(0)==bp.GetID()]
                 if not matching:raise TransportError('unexpected_stop','游戏发生非预期停顿，已停止当前操作。')
                 th=matching[0]
-                frame=th.GetFrameAtIndex(0);caller=th.GetFrameAtIndex(1).GetFunctionName() or ''
-                L=frame.FindRegister('x0').GetValueAsUnsigned()
-                err=lldb.SBError();root=self.process.ReadPointerFromMemory(self.address('_ZN3sgg13ScriptManager12LuaInterfaceE'),err)
-                if th.GetName()=='MainThread' and caller=='sgg::World::Update(float)' and L and root==L and err.Success():return th,L
+                err=lldb.SBError()
+                L=self.process.ReadPointerFromMemory(self.address('_ZN3sgg13ScriptManager12LuaInterfaceE'),err)
+                if th.GetName()=='MainThread' and L and err.Success():return th,L
                 self.resume(deadline,breakpoint_expected=True)
-            raise TransportError('waiting','等待局内 Lua 调用超时。请进入存档并关闭暂停菜单后重试。')
+            raise TransportError('waiting','等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。')
         finally:
             self.target.BreakpointDelete(bp.GetID())
 

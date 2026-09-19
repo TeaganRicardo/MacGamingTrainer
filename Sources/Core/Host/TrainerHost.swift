@@ -58,9 +58,19 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             }
             reconcileAutomaticConnection()
         }
-        .onChange(of: targetMonitor.activationGeneration) { _, _ in
-            connectionPolicy.targetActivated()
+        .onChange(of: targetMonitor.launchGeneration) { _, _ in
+            // Only a real NSWorkspace launch may grant the one background
+            // debugger-attach opportunity. Initial process discovery remains
+            // foreground-only.
+            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
+            connectionPolicy.targetLaunched()
             reconcileAutomaticConnection()
+        }
+        .onChange(of: targetMonitor.activationGeneration) { _, _ in
+            // Target activation can arrive before this app's resign-active
+            // notification. Record the opportunity only; consume it when the
+            // trainer itself becomes foreground again.
+            connectionPolicy.targetActivated()
         }
         .onChange(of: model.backendAvailable) { _, available in
             if available { connectionPolicy.backendBecameAvailable() }
@@ -75,6 +85,10 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             targetMonitor.refresh()
+            // Repair policy state synchronously even when the published
+            // isRunning value did not change and SwiftUI therefore emits no
+            // onChange callback.
+            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
             reconcileAutomaticConnection()
             model.hostDidBecomeActive()
         }
@@ -89,11 +103,11 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     /// that backend reports available. There is no polling/retry timer: target
     /// launch/activation and backend lifecycle transitions are the only triggers.
     private func reconcileAutomaticConnection() {
-        // Attaching LLDB can stop the target for seconds. Never start that work
-        // while the trainer is in the background and the player is using the
-        // game; lifecycle events retain their pending intent until this app is
-        // foreground again.
-        guard NSApp.isActive else { return }
+        // A true target-process launch grants one background connect chance
+        // that survives transient Host/backend busy states until consumed.
+        // Target activation never grants this, so active gameplay cannot gain
+        // a surprise LLDB attach merely from Alt-Tab.
+        guard connectionPolicy.backgroundConnectionAllowed || NSApp.isActive else { return }
         if connectionPolicy.consumeAutomaticBackendRestartIfEligible(
             backendAvailable: model.backendAvailable,
             busy: model.busy,

@@ -43,6 +43,31 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
     fail("launch connect was not one-shot")
 }
 
+// Merely discovering an already-running target is not a true launch and must
+// never grant background debugger permission. Only the explicit launch event
+// may do so.
+var launchPolicy = TrainerConnectionPolicy()
+launchPolicy.targetStateChanged(running: true)
+if launchPolicy.backgroundConnectionAllowed {
+    fail("initial running snapshot incorrectly granted background permission")
+}
+launchPolicy.targetLaunched()
+if !launchPolicy.backgroundConnectionAllowed {
+    fail("explicit launch did not grant background connection permission")
+}
+if launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: true, connected: false, actionsEnabled: true) {
+    fail("background launch connected while busy")
+}
+if !launchPolicy.backgroundConnectionAllowed {
+    fail("busy state discarded background launch permission")
+}
+if !launchPolicy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false, connected: false, actionsEnabled: true) {
+    fail("deferred background launch connect was lost")
+}
+if launchPolicy.backgroundConnectionAllowed {
+    fail("background launch permission survived connect consumption")
+}
+
 // Busy state defers the same bounded activation request instead of discarding it.
 policy.targetActivated()
 if policy.consumeAutomaticBackendRestartIfEligible(backendAvailable: false, busy: true, actionsEnabled: true) {
@@ -87,6 +112,35 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
 }
 if !policy.automaticConnectionSuppressed {
     fail("manual detach suppression was not retained")
+}
+
+// A foreground snapshot of the same still-running target must be idempotent.
+// Trainer activation uses this to repair missed workspace notifications without
+// treating every Alt-Tab as a new game lifetime or clearing manual detach.
+policy.targetStateChanged(running: true)
+policy.connectionChanged(connected: true)
+policy.userWillToggleConnection(currentlyConnected: true)
+policy.targetStateChanged(running: true)
+if !policy.automaticConnectionSuppressed {
+    fail("same target snapshot cleared manual disconnect suppression")
+}
+if policy.connectRequested || policy.backendRestartRequested {
+    fail("same target snapshot created a duplicate automatic connection request")
+}
+
+// A definitive launch notification starts a new target lifetime even when a
+// rapid restart prevented the presence monitor from observing an intermediate
+// running=false snapshot.
+var rapidRestartPolicy = TrainerConnectionPolicy()
+rapidRestartPolicy.targetStateChanged(running: true)
+rapidRestartPolicy.connectionChanged(connected: true)
+rapidRestartPolicy.userWillToggleConnection(currentlyConnected: true)
+rapidRestartPolicy.targetLaunched()
+if rapidRestartPolicy.automaticConnectionSuppressed {
+    fail("true launch inherited manual disconnect suppression from the old process")
+}
+if !rapidRestartPolicy.backgroundConnectionAllowed || !rapidRestartPolicy.connectRequested {
+    fail("true launch did not start a fresh automatic connection lifetime")
 }
 
 // Explicit reconnect clears the suppression immediately.

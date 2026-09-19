@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 26 then
+if previousModule and previousModule.revision ~= 33 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 26, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 33, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -206,20 +206,30 @@ if __MacGamingTrainerV1 == nil then
     { id = "RoomMoneyDrop", name = "金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 10 },
     { id = "RoomMoneyBigDrop", name = "大量金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 20 },
     { id = "RoomMoneyTripleDrop", name = "三份金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 30 },
-    { id = "EmptyMaxHealthSmallDrop", name = "小型半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 5 },
     { id = "MaxHealthDropSmall", name = "小型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 10 },
     { id = "MaxHealthDrop", name = "半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 20 },
-    { id = "MaxHealthDropBig", name = "大型半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 30 },
-    { id = "MaxManaDropSmall", name = "小型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 10 },
-    { id = "MaxManaDrop", name = "灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 20 },
-    { id = "MaxManaDropBig", name = "大型灵魂滋补剂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
+    { id = "MaxHealthDropBig", name = "超级半人马之心", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurHeart", familyOrder = 20, itemOrder = 30 },
+    { id = "EmptyMaxHealthSmallDrop", name = "小型半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurSoul", familyOrder = 22, itemOrder = 10 },
+    { id = "EmptyMaxHealthDrop", name = "半人马之魂", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "centaurSoul", familyOrder = 22, itemOrder = 20 },
+    { id = "MaxManaDropSmall", name = "小型灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 10 },
+    { id = "MaxManaDrop", name = "灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 20 },
+    { id = "MaxManaDropBig", name = "超级灵魂之水", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "soulTonic", familyOrder = 25, itemOrder = 30 },
+    { id = "RoomRewardHealDrop", name = "新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 10 },
+    { id = "HealBigDrop", name = "超大份新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 20 },
+    { id = "HealDropMajor", name = "大型生命恢复", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 30 },
+    { id = "RoomRewardConsolationPrize", name = "红洋葱", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 40 },
+    { id = "ArmorBoost", name = "护盾饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 10 },
+    { id = "ArmorBigBoost", name = "埃癸斯饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 20 },
     { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
     { id = "StackUpgrade", name = "力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 10 },
-    { id = "StackUpgradeBig", name = "大型力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
-    { id = "StackUpgradeTriple", name = "三重力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
-    { id = "MinorTalentDrop", name = "少量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 10 },
-    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
-    { id = "TalentBigDrop", name = "大量星辰之路点数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "talent", familyOrder = 50, itemOrder = 30 },
+    { id = "StackUpgradeBig", name = "超级力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
+    { id = "StackUpgradeTriple", name = "究极力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
+    { id = "StoreRewardRandomStack", name = "随机祝福强化", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 40 },
+    { id = "RerollDrop", name = "重掷次数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 10 },
+    { id = "LastStandDrop", name = "冥河之吻", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 20 },
+    { id = "MinorTalentDrop", name = "黯淡繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 30, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentBigDrop", name = "闪耀繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 40, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "GiftDrop", name = "蜜露", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 10 },
     { id = "MetaCurrencyDrop", name = "骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 20 },
     { id = "MetaCurrencyBigDrop", name = "大量骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 25 },
@@ -227,10 +237,34 @@ if __MacGamingTrainerV1 == nil then
     { id = "MetaCardPointsCommonBigDrop", name = "大量尘灰", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 35 },
     { id = "MemPointsCommonDrop", name = "魂魄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 40 },
     { id = "MemPointsCommonBigDrop", name = "大量魂魄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 45 },
+    { id = "OreFSilverDrop", name = "银矿", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 10 },
+    { id = "PlantFMolyDrop", name = "摩吕草", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 20 },
+    { id = "PlantFNightshadeDrop", name = "颠茄", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 30 },
+    { id = "PlantGLotusDrop", name = "莲花", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 40 },
+    { id = "MetaFabricDrop", name = "命运丝线", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 50 },
+    { id = "TrashPointsDrop", name = "垃圾", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaHarvest", familyOrder = 62, itemOrder = 60 },
+    { id = "MixerFBossDrop", name = "余烬", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 10 },
+    { id = "MixerGBossDrop", name = "珍珠", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 20 },
+    { id = "MixerHBossDrop", name = "泪珠", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 30 },
+    { id = "MixerIBossDrop", name = "玄象砂", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 40 },
+    { id = "MixerNBossDrop", name = "羊毛", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 50 },
+    { id = "MixerOBossDrop", name = "金苹果", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 60 },
+    { id = "MixerPBossDrop", name = "羽毛", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 70 },
+    { id = "MixerQBossDrop", name = "虚空之眼", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 80 },
+    { id = "Mixer5CommonDrop", name = "星尘", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 90 },
+    { id = "Mixer6CommonDrop", name = "黑暗", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaBoss", familyOrder = 64, itemOrder = 100 },
+    { id = "WeaponPointsRareDrop", name = "梦魇", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 10 },
+    { id = "CardUpgradePointsDrop", name = "月尘", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 20 },
+    { id = "FamiliarPointsDrop", name = "女巫之宝", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 30 },
+    { id = "CharonPointsDrop", name = "奥波勒斯信用点", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 40 },
+    { id = "GemPointsDrop", name = "宝石", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 50 },
+    { id = "GemPointsBigDrop", name = "大量宝石", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 60 },
+    { id = "DreamPointsDrop", name = "闪亮星星", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "metaAdvanced", familyOrder = 66, itemOrder = 70 },
     { id = "FireBoost", name = "火元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 10 },
     { id = "WaterBoost", name = "水元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 20 },
     { id = "EarthBoost", name = "土元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 30 },
     { id = "AirBoost", name = "风元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 40 },
+    { id = "ElementalBoost", name = "元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 50 },
     { id = "SpellDrop", name = "月之礼赠", category = "特殊祝福", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "TrialUpgrade", name = "卡俄斯祝福", category = "特殊祝福", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
   }
@@ -249,6 +283,21 @@ if __MacGamingTrainerV1 == nil then
     { id = "Heracles", name = "赫拉克勒斯", order = 130 },
     { id = "Moros", name = "摩罗斯", order = 140 },
   }
+  local nativeSpecialChoiceDefinitions = {
+    Artemis = { npc = "NPC_Artemis_Field_01", mode = "loot" },
+    Athena = { npc = "NPC_Athena_01", mode = "loot" },
+    Dionysus = { npc = "NPC_Dionysus_01", mode = "loot" },
+    Hades = { npc = "NPC_Hades_Field_01", mode = "loot" },
+    Arachne = { npc = "NPC_Arachne_01", choices = "ArachneCostumeChoices", post = "costume" },
+    Narcissus = { npc = "NPC_Narcissus_01", choices = "NarcissusBenefitChoices" },
+    Echo = { npc = "NPC_Echo_01", choices = "EchoBenefitChoices", rarity = "Epic", echoLastReward = true },
+    Medea = { npc = "NPC_Medea_01", choices = "MedeaCurseChoices" },
+    Circe = { npc = "NPC_Circe_01", choices = "CirceBlessingChoices", circe = true },
+    Icarus = { npc = "NPC_Icarus_01", choices = "IcarusBenefitChoices" },
+  }
+  local nativeSpecialChoiceSources = {}
+  for sourceId in pairs(nativeSpecialChoiceDefinitions) do nativeSpecialChoiceSources[sourceId] = true end
+
   local specialTraitSources, specialTraitSourceOrder = {}, {}
   for _, source in ipairs(specialSourceDefinitions) do
     specialTraitSources[source.id] = source.name
@@ -256,6 +305,10 @@ if __MacGamingTrainerV1 == nil then
   end
   local trainerSource = "MacGamingTrainer"
   local trainerGodFlag = "MacGamingTrainerGodMode"
+  local godModeBlockedEffects = {
+    "HecatePolymorphStun",
+    "MiasmaSlow",
+  }
   local function requireFunctions(label, functions)
     for _, name in ipairs(functions) do
       if type(_G[name]) ~= "function" then error("Unsupported " .. label .. ": missing " .. name) end
@@ -366,6 +419,13 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseGodMode()
     M.godMode = false
+    local effectHero = M.godEffectBlockHero
+    if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        pcall(RemoveEffectBlock, { Id = effectHero.ObjectId, Name = effectName })
+      end
+    end
+    M.godEffectBlockHero = nil
     local hero = M.godHero
     if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag] then
       if type(SetUnitVulnerable) == "function" then
@@ -1452,9 +1512,10 @@ if __MacGamingTrainerV1 == nil then
     local result, allowed = setmetatable({}, arrayMeta), {}
     local officialSourceOrder = officialSpecialSourceOrder()
     local familyTitles = {
-      money = "金币", centaurHeart = "半人马之心", soulTonic = "灵魂滋补剂",
-      hammer = "代达罗斯之锤", pom = "力量石榴", talent = "星辰之路",
-      meta = "局外资源奖励", element = "元素奖励",
+      money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
+      healing = "恢复", armor = "护甲", hammer = "代达罗斯之锤", pom = "力量石榴",
+      utility = "其他局内奖励", meta = "局外资源奖励",
+      metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励",
     }
     local knownBoonIds = {}
     for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end
@@ -1556,6 +1617,7 @@ if __MacGamingTrainerV1 == nil then
           local item = {
             id = id, name = traitName, category = "特殊祝福", group = "special", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
+            nativeChoice = nativeSpecialChoiceSources[source.id] == true,
             sortSection = 30, sortGroup = officialSourceOrder[source.id] or specialTraitSourceOrder[source.id] or 999, sortOrder = index,
           }
           allowed[id] = item; result[#result + 1] = item
@@ -1843,9 +1905,19 @@ if __MacGamingTrainerV1 == nil then
     end)
   end
   local function installGodMode()
-    requireFunctions("god mode", { "Damage", "SetUnitInvulnerable", "SetUnitVulnerable" })
+    requireFunctions("god mode", {
+      "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
+      "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
+    })
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
+    if M.godEffectBlockHero ~= hero then
+      for _, effectName in ipairs(godModeBlockedEffects) do
+        AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
+        ClearEffect({ Id = hero.ObjectId, Name = effectName })
+      end
+      M.godEffectBlockHero = hero
+    end
     if M.godHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag]) then
       SetUnitInvulnerable(hero, trainerGodFlag, { Silent = true })
       M.godHero = hero
@@ -2993,6 +3065,184 @@ if __MacGamingTrainerV1 == nil then
         CurrentRun.NumRerolls = params.amount
         ShowRerollUI()
         UpdateRerollUI(params.amount)
+      end)
+    end
+    if command == "open_sell_traits" then
+      if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
+      requireFunctions("native boon sell screen", { "OpenSellTraitMenu", "AreScreensActive", "thread" })
+      if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
+      return action(command, params, function()
+        thread(OpenSellTraitMenu, {})
+        return nil
+      end)
+    end
+    if command == "open_special_choice" then
+      if not ready() or sceneName() ~= "run" then error("Special blessing choice requires an active run room") end
+      if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
+      requireFunctions("native special blessing choice", {
+        "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable",
+        "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
+      })
+      if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
+      local definition = nativeSpecialChoiceDefinitions[params.source]
+      if type(definition) ~= "table" then error("Special blessing source has no audited native choice flow") end
+      if type(NPCData) ~= "table" or type(TraitData) ~= "table" then
+        error("Special blessing source data is unavailable")
+      end
+      local npcData = NPCData[definition.npc]
+      if type(npcData) ~= "table" then error("Special blessing source data is unavailable") end
+      local choiceData = definition.choices ~= nil and NPCData[definition.choices] or nil
+      if definition.mode ~= "loot"
+          and (type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table") then
+        error("Special blessing choice data is unavailable")
+      end
+      if definition.mode == "loot" then
+        requireFunctions("native special blessing loot choice", { "SetTraitsOnLoot" })
+      else
+        requireFunctions("native special blessing fixed choice", { "PassRarityCheck" })
+      end
+      if definition.post == "costume" then
+        requireFunctions("Arachne costume application", { "SetupCostume" })
+      end
+      if definition.circe then
+        requireFunctions("Circe familiar choice", { "GetProcessedTraitData", "SetTraitTextData" })
+      end
+
+      return action(command, params, function()
+        local source = ShallowCopyTable(npcData)
+        local syntheticName = "MacGamingTrainerSpecial_" .. params.source
+        source.ObjectId = -1
+        source.CanDuplicate = false
+        source.DestroyOnPickup = false
+        source.LastRewardEligible = false
+        source.BanUnpickedBoonsEligible = false
+        source.UpgradeScreenOpenFunctionName = nil
+        source.UpgradeMenuOpenVoiceLines = nil
+        source.UseNarrativeContextArt = false
+        source.LightingColor = source.LightingColor or source.LootColor or { 255, 255, 255, 255 }
+        source.LootColor = source.LootColor or source.LightingColor
+        source.BoonGetColor = source.BoonGetColor or source.LootColor
+
+        local args = {}
+        if definition.mode == "loot" then
+          source.UpgradeOptions = nil
+          SetTraitsOnLoot(source)
+          if type(source.UpgradeOptions) ~= "table" or #source.UpgradeOptions == 0 then
+            error("No eligible special blessings are available")
+          end
+        else
+          source.BlockReroll = true
+          args = ShallowCopyTable(choiceData)
+          args.PortraitShift = nil
+
+          local priorityOptions, eligibleOptions = {}, {}
+          for _, option in pairs(choiceData.UpgradeOptions) do
+            if type(option) == "table"
+                and (option.GameStateRequirements == nil or IsGameStateEligible(source, option.GameStateRequirements)) then
+              local candidate = ShallowCopyTable(option)
+              if definition.rarity ~= nil then candidate.Rarity = definition.rarity end
+              if candidate.PriorityRequirements ~= nil and IsGameStateEligible(source, candidate.PriorityRequirements) then
+                priorityOptions[#priorityOptions + 1] = candidate
+              else
+                eligibleOptions[#eligibleOptions + 1] = candidate
+              end
+            end
+          end
+          if #priorityOptions + #eligibleOptions == 0 then error("No eligible special blessings are available") end
+
+          if definition.echoLastReward and not CurrentRun.LastReward then
+            CurrentRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
+          end
+
+          RandomSynchronize(9)
+          source.UpgradeOptions = {}
+          for _ = 1, 3 do
+            local option = nil
+            if #priorityOptions > 0 then
+              option = RemoveRandomValue(priorityOptions)
+              if option ~= nil then option.SlotEntranceAnimation = option.PrioritySlotEntranceAnimation end
+            elseif #eligibleOptions > 0 then
+              option = RemoveRandomValue(eligibleOptions)
+              if option ~= nil and definition.rarity == nil and option.Rarity
+                  and #eligibleOptions > 0 and not PassRarityCheck(option.Rarity) then
+                option = RemoveRandomValue(eligibleOptions)
+              end
+            end
+            if option ~= nil then source.UpgradeOptions[#source.UpgradeOptions + 1] = option end
+          end
+
+          if CurrentRun.IsDreamRun and type(TraitRarityData) == "table"
+              and type(TraitRarityData.RarityUpgradeOrder) == "table" then
+            for _, option in ipairs(source.UpgradeOptions) do
+              option.Rarity = TraitRarityData.RarityUpgradeOrder[CurrentRun.EnteredBiomes] or option.Rarity
+            end
+          end
+
+          if definition.circe then
+            for _, option in ipairs(source.UpgradeOptions) do
+              if option.ItemName == "DoubleFamiliarTrait" then
+                local familiarTrait = nil
+                for _, traitData in ipairs(CurrentRun.Hero.Traits or {}) do
+                  if traitData.FamiliarTrait then familiarTrait = traitData; break end
+                end
+                if familiarTrait == nil then error("Circe familiar choice requires an active familiar trait") end
+                local rarity = option.Rarity or "Common"
+                local rarityLevels = type(TraitData.DoubleFamiliarTrait) == "table"
+                  and TraitData.DoubleFamiliarTrait.RarityLevels or nil
+                local rarityData = type(rarityLevels) == "table" and rarityLevels[rarity] or nil
+                if type(rarityData) ~= "table" or not finite(rarityData.Multiplier) then
+                  error("Circe familiar choice rarity data is unavailable")
+                end
+                SetTraitTextData(familiarTrait)
+                SessionMapState.OldFamiliarTrait = familiarTrait
+                local multiplier = rarityData.Multiplier + 1
+                local bonusStacks = type(TraitData[familiarTrait.Name]) == "table"
+                  and (TraitData[familiarTrait.Name].CirceBonusStacks or 0) or 0
+                local newFamiliarTrait = GetProcessedTraitData({
+                  Unit = CurrentRun.Hero, TraitName = familiarTrait.Name,
+                  StackNum = (familiarTrait.StackNum or 1) * multiplier + bonusStacks * (multiplier - 1),
+                })
+                SetTraitTextData(newFamiliarTrait)
+                SessionMapState.NewFamiliarTrait = newFamiliarTrait
+                if familiarTrait.FamiliarLastStandHealAmount ~= nil then
+                  SessionMapState.OldFamiliarTrait.ExtractData.TooltipLastStandAmount = 1
+                  SessionMapState.NewFamiliarTrait.ExtractData.TooltipLastStandAmount = multiplier
+                end
+                if type(TraitData[familiarTrait.Name]) == "table"
+                    and TraitData[familiarTrait.Name].CirceStatLine then
+                  SessionMapState.StatLine = TraitData[familiarTrait.Name].CirceStatLine
+                end
+              end
+            end
+          end
+        end
+
+        source.Name = syntheticName
+        if type(GameState.LootPickups) ~= "table" then
+          error("Special blessing choice requires loot pickup state")
+        end
+        local lootPickups = GameState.LootPickups
+        local previousPickup = lootPickups[source.Name]
+        local hadLootChoiceHistory = type(CurrentRun.LootChoiceHistory) == "table"
+        local history = hadLootChoiceHistory and CurrentRun.LootChoiceHistory or nil
+        local historyCount = history and #history or 0
+        local ownerRun = CurrentRun
+
+        local function runChoice()
+          local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
+          if ok and definition.post == "costume" then pcall(SetupCostume) end
+          lootPickups[source.Name] = previousPickup
+          if hadLootChoiceHistory then
+            while #history > historyCount do table.remove(history) end
+          elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
+            CurrentRun.LootChoiceHistory = nil
+          end
+          if not ok and type(DebugPrint) == "function" then
+            DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. tostring(message) })
+          end
+        end
+        thread(runChoice)
+        return nil
       end)
     end
     if command == "spawn_reward" then

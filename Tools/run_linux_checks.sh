@@ -12,10 +12,14 @@ tests=(
   tests/test_corrupt_file_quarantine_v0180.py
   tests/test_hades2_adapter_round12.py
   tests/test_hades2_timeout_policy_v0177.py
+  tests/test_hotkey_feedback_contract.py
+  tests/test_god_mode_hostile_effects.py
   tests/test_localization_cache_recovery_v0180.py
   tests/test_module_contract_round13.py
   tests/test_packaged_module_round14.py
   tests/test_cross_game_isolation.py
+  tests/test_native_sell_traits_contract.py
+  tests/test_native_special_choice_contract.py
   tests/test_passive_ready_transition.py
   tests/test_persistence_integrity_v0180.py
   tests/test_post_v01_feature_contracts.py
@@ -25,6 +29,8 @@ tests=(
   tests/test_profile_shortcut_schema_v0180.py
   tests/test_protocol_fixtures_v0180.py
   tests/test_reward_naming_audit.py
+  tests/test_runtime_boundary_efficiency_dev8.py
+  tests/test_shortcut_chord_semantics.py
   tests/test_schema_versioning_v0180.py
   tests/test_ui_component_boundary_v0175.py
 )
