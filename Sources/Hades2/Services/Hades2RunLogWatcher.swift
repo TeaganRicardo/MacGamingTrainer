@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 enum Hades2RunLogEvent: Equatable {
-    case worldStopped
+    case mainMenu
     case runtimeReset
     case runtimeReady
 }
@@ -185,8 +185,8 @@ final class Hades2RunLogWatcher {
             let line = String(decoding: lineBuffer[..<newline], as: UTF8.self)
             lineBuffer.removeSubrange(...newline)
 
-            if line.contains("World::Stop()") {
-                events.append(.worldStopped)
+            if line.contains("Loading package: MainMenu.pkg") {
+                events.append(.mainMenu)
                 continue
             }
             if line.contains("App.Reset Start") || line.contains("Lua interface destroyed") {
