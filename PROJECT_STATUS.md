@@ -5,71 +5,77 @@
 - Product version: 0.1
 - Development build: 2
 - Published/stable baseline: v0.1 / Build 1 on `main`
-- Active development branch: `feature/post-v0.1-improvements`
-- Parent PR: #7 (draft until target-Mac Phase 0 acceptance passes)
+- Release branch: `feature/post-v0.1-improvements`, intentionally frozen at revision-33 head `efc21268b8c075bd8b8d5ff3726d4548cb6b88e7` until the hardening candidate passes target-Mac preflight
+- Pre-acceptance hardening branch: `audit/preacceptance-hardening`
+- Hardening code head: `b09e49b15478588dfbd42ee44ef8a70d5f34e07a`
+- Parent release PR: #7 (DRAFT)
 - Host protocol: 5
 - Hades II module protocol: 5
 - Desired-state schema: 3
 - Profile schema: 4
-- Hades II resident Lua revision: 33
+- Hades II resident Lua revision on the hardening candidate: **35**
 - Target game build last audited: Hades II 1.139672 / Steam build 24556151
 
-## Phase 0 implementation state
+## Phase 0 hardening state
 
-Implemented and covered by contracts/builds before the final revision-33 closure rerun:
+The interrupted pre-acceptance audit was recovered before final manual testing. It contains 15 commits on top of the previously frozen revision-33 release head and is zero commits behind that head.
 
-- event-driven background auto-connect: only a true target-process launch may consume the bounded background-connect opportunity;
-- Hades readiness from Hades II.log events; no periodic LLDB/Lua polling;
-- direct `sgg::World::Update(float)` debugger boundary;
-- same-PID Lua-generation recovery without a second debugger attach;
-- durable desired-state recovery replayed in one Lua/LLDB batch;
-- automatic shortcut ordering from `ShortcutAction.uiOrder` with explicit user overrides only;
-- generic Host/Core hotkey feedback sounds: enabled / deferred / disabled;
-- native Hades boon-sale screen through `OpenSellTraitMenu`;
-- direct-add special blessings retained;
-- native special three-choice for Artemis, Athena, Dionysus, Hades, Arachne, Narcissus, Echo, Medea, Circe and Icarus;
-- Heracles/Moros remain direct-add only;
-- God Mode engine-level effect blocks for `HecatePolymorphStun` and `MiasmaSlow`;
-- full interactable reward catalog audit against the installed game data.
+The hardening candidate retains all revision-33 behavior and additionally fixes demonstrated release-path problems:
 
-Revision 33 adds one closure fix found during interrupted-session review: native special-choice source identity now stays unchanged while the game generates/filters native choices. The trainer-only synthetic bookkeeping name is applied only after native eligibility/rarity generation, preventing `LootData/FieldLootData` lookup and requirement logic from seeing a fake source name.
+- force-Legendary / force-Duo hotkey feedback now reports enabled when the parent boon-rarity runtime is already active, deferred only when it is actually deferred, and disabled when turned off;
+- a failed `/usr/bin/pgrep` query no longer masquerades as game termination or destroys an existing debugger/session state;
+- the Hades run-log watcher is idempotently re-armed after a successful connect so a first-ever launch cannot permanently miss lifecycle events when the log directory appears late;
+- current Profile shortcut payloads preserve forward-compatible action IDs without backend-side ordering/deduplication decisions;
+- macOS CI now runs the complete contract suite rather than two hand-picked harnesses;
+- stale Hades Lua hooks are session-owned. Revision 34 made a hook from an old `SessionState` ineligible as a current hook;
+- revision 35 rebinds the session-scoped game-speed hook after an App.Reset without dividing the already-applied process/global factor against a newly-created Hero;
+- application termination now cleans dormant and desired runtime state as well as state already reported active;
+- corrupt staged-restore transaction markers are quarantined instead of poisoning every future save-manager scan;
+- global hotkey event-handler installation failure is surfaced to the UI instead of silently accepting registrations that cannot fire;
+- orphaned Lua mock harnesses that were outside the active test runners were removed rather than carried as false coverage.
 
-## Known automated evidence
+No periodic LLDB/Lua polling, second same-PID debugger attachment, automatic replay of non-idempotent mutations, or game-specific Core/Host semantics were introduced.
 
-The previous integrated revision-32 candidate passed:
-- Linux contracts: run 35425398150;
-- macOS Build 2: run 35425398158;
-- Host connection policy harness;
-- Hades log watcher harness;
-- native arm64 build;
-- 0.1 / Build 2 package/version/module checks;
-- `codesign --verify --deep --strict`;
-- artifact packaging/upload.
+## Verification evidence
 
-That revision-32 artifact (ID 10578439397, inner SHA256 `e7d57b865a422d92b01a0ddb2843b37c0d7a34208949432333b27b312f91d2f8`) is superseded and MUST NOT be used for final acceptance because revision 33 changed runtime behavior.
+Revision 33 previously passed the full target-Mac build/package/signing gate and produced:
+- `~/Downloads/MacGamingTrainer-0.1-build2-rc-r33.zip`
+- SHA256 `b65af9d99221399dd561b54aec479abb4919d9e55828539c0ab75af6204ad4cc`
 
-The revision-33 special-choice regression completed its RED→GREEN cycle:
-- RED: native source-name ordering contract failed before the runtime fix;
-- GREEN: `native_special_choice_contract_ok` after the fix.
+That artifact is now **superseded for final acceptance** because the recovered hardening audit contains runtime and lifecycle fixes. It may be retained only as a comparison artifact.
 
-Fresh equivalent revision-33 verification has now completed on the authorized target Mac from an exact detached worktree: full Linux contracts, Host policy harness, Hades log watcher harness, arm64 Hades II build, 0.1 / Build 2 package checks, one packaged module and strict codesign all passed. A replacement revision-33 RC was produced locally. GitHub Actions still intermittently fails jobs before checkout/any step with steps=null and no log blob; rerun cloud CI when runners recover for archival evidence, but do not treat those startup failures as code failures.
+Targeted RED→GREEN regression evidence exists on the hardening branch for the fixes above. The effective hardening diff has been re-reviewed for lifecycle/replay boundaries and Ponytail scope; no additional Critical/Important code finding is currently open.
 
-## Phase 0 issues
+Exact hardening head `b09e49b15478588dfbd42ee44ef8a70d5f34e07a` was also pushed temporarily through the release branch solely to trigger hosted CI. Four independent jobs reproduced issue #16 before step 0:
+- push Linux: run 35436986992;
+- push macOS: run 35436986984;
+- PR Linux: run 35436988750;
+- PR macOS: run 35436988751.
 
-- #4 attach profiling: CLOSED with measured baseline. Do not reopen unless new measurements justify work.
-- #1 passive/background ready lifecycle: OPEN until target-Mac acceptance.
-- #11 background attach + same-PID recovery performance: OPEN until target-Mac acceptance.
-- PR #7: OPEN/DRAFT; do not merge to `main` until #1/#11 pass.
+Every affected job has `steps=null` and `logs_url=null`. These runs provide no code-test result. The release branch was restored to the frozen revision-33 head after the probe.
 
-## Pending manual acceptance
+## Gate before manual acceptance
 
-Use only the final revision-33 RC recorded below after the final handoff-head verification.
+Do **not** start final acceptance from the revision-33 RC.
+
+First verify the current hardening branch on the authorized target Mac:
+
+1. confirm exact branch/head and a clean worktree;
+2. run `bash Tools/run_macos_checks.sh`;
+3. build Hades II with `./build.sh hades2`;
+4. verify product 0.1 / Build 2, exactly one packaged module, arm64 output and strict codesign;
+5. repeat the clean build once to catch source-tree mutation or stale-package leakage;
+6. package a new revision-35 RC, run ZIP integrity, and record size + SHA256.
+
+Only after this preflight passes should the hardening head be fast-forwarded into `feature/post-v0.1-improvements` and used for final manual acceptance.
+
+## Manual acceptance after preflight
 
 Acceptance must cover:
 1. background launch and automatic connection;
 2. first save entry and two same-process main-menu → save re-entries without the previous multi-second recovery stall;
 3. at least one persistent modifier verified by actual gameplay effect, not UI color alone;
-4. active/deferred/disabled hotkey sounds;
+4. active / deferred / disabled hotkey sounds, including force-Legendary or force-Duo while boon-rarity control is already active;
 5. shortcut list/default order 1-9 then A-Z with explicit overrides preserved;
 6. automatic state/indicator recovery after re-entry and no second debugger attach / `attach_denied`;
 7. native boon selling;
@@ -77,13 +83,14 @@ Acceptance must cover:
 9. God Mode Hecate polymorph + Mourning Fields miasma blocking without suppressing ordinary player/self-selected effects;
 10. preserved `trainer.log` for the complete run.
 
-## Next phases
+## Phase 0 issues
 
-- Phase 1 cross-game isolation proof exists on draft PR #10 / issue #9. It must be synchronized with the final Phase 0 branch, reverified, and only merged after Build 2 lands on `main`.
-- Phase 2 shared optional save-management capability: not started.
-- Phase 3 Hades II full save editor: not started.
-- Phase 4 pre-Hades-I architecture gate: not started.
-- Phase 5 Hades I vertical slice: blocked by Phases 0-4.
+- #1: OPEN until target-Mac acceptance.
+- #11: OPEN until target-Mac acceptance.
+- #16: OPEN; hosted Actions startup/admission failure.
+- #17: OPEN, non-blocking; partial hand-edited schema-4 Profile shortcut conflict has a proven fix on `fix/profile-shortcut-partial-conflict` and is deferred until after Phase 0.
+- PR #7: OPEN/DRAFT; do not merge to `main` before hardening preflight + manual acceptance + healthy hosted CI.
+- PR #10: keep DRAFT and do not synchronize with the hardening candidate until Phase 0 is finalized.
 
 ## Non-regression constraints
 
@@ -92,16 +99,4 @@ Acceptance must cover:
 - No game-specific semantics in Core/Host.
 - Native modal commands are one-shot and never preference-replayed.
 - Exit must never be permanently blocked by cleanup failure.
-- Runtime source changes must bump the resident revision.
-
-
-## Current revision-33 acceptance artifact
-
-The exact final handoff head is recorded in PR #7 after the final docs-only closure commit and local revalidation.
-
-Current locally produced RC location on the authorized target Mac:
-- `~/Downloads/MacGamingTrainer-0.1-build2-rc-r33.zip`
-
-The final SHA256/size are refreshed after this document commit so the RC, code head and handoff status remain aligned.
-
-GitHub Actions archival rerun remains pending only because the service is currently creating some jobs with no workflow steps/log blob.
+- Runtime source changes require a revision bump.
