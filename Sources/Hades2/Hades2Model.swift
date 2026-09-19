@@ -155,6 +155,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetVitals: Bool { connected && capabilities["setVitals"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
+    var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
     func supportsFeature(_ key: String) -> Bool { featureSupport[key] ?? true }
@@ -668,6 +669,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
         send(.spawnReward(loot), title: "生成掉落物")
+    }
+
+    func openSellTraits() {
+        guard canOpenNativeBoonScreen else { return }
+        send(.openSellTraits, title: "打开祝福出售界面")
     }
 
     func setMultiplier(_ key: String, text: String) {
