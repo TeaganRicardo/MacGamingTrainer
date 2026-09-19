@@ -97,10 +97,34 @@ Interfaces:
 - [ ] Step 5: Run tests and verify GREEN.
 - [ ] Step 6: Commit.
 
-### Task 5: Integrated verification and RC
+### Task 6 (superseded below): Integrated verification and RC
 
 - [ ] Step 1: Run full Linux contracts on exact final head.
 - [ ] Step 2: Run full macOS Build 2 workflow on exact final head.
 - [ ] Step 3: Review diff for Core/Hades boundary leakage and non-idempotent replay.
+- [ ] Step 4: Package RC and record artifact ID plus inner SHA256.
+- [ ] Step 5: Update parent PR #7 and Phase 0 issues with new manual acceptance checklist.
+
+### Task 5: God Mode hostile effect immunity
+
+Files:
+- Modify Backend/games/hades2/runtime/hades.lua
+- Modify existing runtime contract tests.
+
+Interfaces:
+- God Mode continues to own Damage routing and unit invulnerability.
+- Adds a reversible ApplyEffect hook scoped to the current Hero and explicit hostile-effect denylist.
+
+- [ ] Step 1: Write RED tests proving HecatePolymorphStun and MiasmaSlow are blocked for CurrentRun.Hero while unrelated effects still pass through.
+- [ ] Step 2: Verify RED.
+- [ ] Step 3: Implement the minimal ApplyEffect hook and clear already-active audited effects when enabling God Mode.
+- [ ] Step 4: Verify GREEN and cleanup restoration.
+- [ ] Step 5: Commit.
+
+### Task 6: Integrated verification and RC
+
+- [ ] Step 1: Run full Linux contracts on exact final head.
+- [ ] Step 2: Run full macOS Build 2 workflow on exact final head.
+- [ ] Step 3: Review diff for Core/Hades boundary leakage, non-idempotent replay and over-broad effect suppression.
 - [ ] Step 4: Package RC and record artifact ID plus inner SHA256.
 - [ ] Step 5: Update parent PR #7 and Phase 0 issues with new manual acceptance checklist.
