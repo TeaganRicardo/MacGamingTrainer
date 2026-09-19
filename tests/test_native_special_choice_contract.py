@@ -53,6 +53,10 @@ assert 'SpawnObstacle({' not in block, "native choice must not create an in-worl
 assert 'Destroy({' not in block and 'pcall(Destroy' not in block, "native choice must not own a synthetic engine object"
 assert 'RoomRequiredObjects' not in block, "native choice must not mutate room object ownership"
 assert 'source.ObjectId = -1' in block, "native selection cleanup needs only a non-nil sentinel ObjectId"
+assert 'local syntheticName = "MacGamingTrainerSpecial_" .. params.source' in block
+native_name_assignment = block.index('source.Name = syntheticName')
+assert native_name_assignment > block.index('SetTraitsOnLoot(source)'), "loot-style choices must build from the native source name"
+assert native_name_assignment > block.index('IsGameStateEligible(source, option.GameStateRequirements)'), "fixed choices must evaluate requirements against the native source name"
 assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
 assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
 assert 'CurrentRun.LastReward' in block, "Echo choice must preserve last-reward semantics"
