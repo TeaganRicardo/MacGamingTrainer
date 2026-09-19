@@ -5,6 +5,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from games.hades2 import preparation as prep
+from core.adapter import AdapterError
 from games.hades2.adapter import Hades2Adapter, TOGGLES, STAT_RULES
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
@@ -62,6 +63,70 @@ finally:
 log_output = log_stream.getvalue()
 assert 'Lua spawn_reward' in log_output
 assert 'reward=EmptyMaxHealthDrop' in log_output
+
+def reset_payload(god_mode=False):
+    desired={key:(key=='godMode' and god_mode) for key in TOGGLES}
+    active=dict(desired)
+    return {
+        'status':'ready','scene':'run','capabilities':{'setFeature':True},
+        'desiredFeatures':desired,'activeFeatures':active,'dormantFeatures':{},'featureErrors':{},
+        'damageMultiplier':2.0,'moneyMultiplier':2.0,'resourceMultiplier':2.0,'gameSpeed':1.0,
+        'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
+        'nextRoomReward':None,'stats':{},'resources':[],'elements':[],'boons':[],'rewards':[],
+    }
+
+class ResetTransport(FakeTransport):
+    def __init__(self, fail_once=True):
+        super().__init__()
+        self.pid=4242;self.live=True;self.fail_once=fail_once;self.sources=[];self.god_mode=False
+    def execute(self, source):
+        self.sources.append(source);self.last_duration=0.001
+        if self.fail_once:
+            self.fail_once=False
+            raise AdapterError('lua_error', '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)')
+        if '"set_feature"' in source and 'godMode' in source:
+            self.god_mode=True
+        return json.dumps(reset_payload(self.god_mode))
+
+# A profile reload destroys/recreates Hades' Lua VM without changing the PID or
+# debugger attachment. A read-only status refresh must recognize the vanished
+# resident module, bootstrap the new Lua generation exactly once, and replay the
+# durable desired profile without requiring a debugger reconnect.
+reset_transport=ResetTransport()
+reset_adapter=Hades2Adapter(transport=reset_transport)
+reset_adapter._runtime_bootstrapped=True
+reset_adapter._catalog_initialized=True
+reset_adapter.preferences=reset_adapter._default_preferences()
+reset_adapter.preferences['godMode']=True
+reset_adapter.preference_initialized=True
+reset_adapter.preference_dirty=False
+recovered=reset_adapter.execute('status', {})
+assert len(reset_transport.sources) >= 3
+assert 'local previousModule' not in reset_transport.sources[0]
+assert 'local previousModule' in reset_transport.sources[1]
+assert any('"set_feature"' in source and 'godMode' in source for source in reset_transport.sources[2:])
+assert recovered['activeFeatures']['godMode'] is True
+assert reset_adapter._runtime_bootstrapped is True
+assert reset_adapter._catalog_initialized is True
+assert reset_adapter.preference_dirty is False
+
+# Non-idempotent mutations are never replayed after an outcome error. Mark the
+# cached generation stale so the next status can heal it, but surface this
+# command's failure unchanged.
+mutation_transport=ResetTransport()
+mutation_adapter=Hades2Adapter(transport=mutation_transport)
+mutation_adapter._runtime_bootstrapped=True
+mutation_adapter._catalog_initialized=True
+try:
+    mutation_adapter.execute('spawn_reward', {'reward':'EmptyMaxHealthDrop','requestId':'generation-reset-mutation'})
+except AdapterError as error:
+    assert error.code == 'lua_error'
+else:
+    raise AssertionError('lost Lua generation unexpectedly replayed spawn_reward')
+assert len(mutation_transport.sources) == 1
+assert mutation_adapter._runtime_bootstrapped is False
+assert mutation_adapter._catalog_initialized is False
+assert mutation_adapter.preference_dirty is True
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 5
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
 assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 5
