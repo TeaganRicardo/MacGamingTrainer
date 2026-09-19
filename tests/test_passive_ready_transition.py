@@ -125,3 +125,7 @@ run_log_refresh = model[consume_start:consume_end]
 assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
 assert 'status == "ready"' not in run_log_refresh
 assert 'status == "waiting"' not in run_log_refresh
+
+backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
+assert 'if !status.busy' in backend_start
+assert 'consumeRunLogReadySignalIfPossible()' in backend_start
