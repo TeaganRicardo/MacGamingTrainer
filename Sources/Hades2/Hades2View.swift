@@ -173,13 +173,6 @@ struct Hades2TrainerView: View {
         TrainerSection(title: "构筑数据", icon: "chart.bar.xaxis") {
             metaStatPanel
             boonRarityPanel
-            HStack {
-                Label("祝福管理", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
-                Spacer()
-                Button("打开祝福出售界面") { model.openSellTraits() }
-                    .disabled(!model.canOpenNativeBoonScreen)
-            }
-            .trainerPanel()
         }
     }
 
@@ -763,9 +756,16 @@ struct Hades2TrainerView: View {
                 selection: $model.selectedSpecialReward,
                 shortcut: .spawnSpecial,
                 enabled: model.canPerformSelectedSpecialReward,
-                actionTitle: model.selectedSpecialRewardIsNativeChoice ? "打开三选一" : "直接添加",
+                actionTitle: "生成",
                 onAction: model.performSpecialReward
             )
+            Divider()
+            HStack {
+                Label("出售祝福", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
+                Spacer()
+                Button("出售") { model.openSellTraits() }
+                    .disabled(!model.canOpenNativeBoonScreen)
+            }
         }.trainerPanel()
     }
 

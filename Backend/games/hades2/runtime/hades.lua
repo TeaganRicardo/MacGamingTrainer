@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 36 then
+if previousModule and previousModule.revision ~= 37 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 36, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 37, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -280,8 +280,6 @@ if __MacGamingTrainerV1 == nil then
     { id = "Icarus", name = "伊卡洛斯", order = 100 },
     { id = "Medea", name = "美狄亚", order = 110 },
     { id = "Arachne", name = "阿拉克涅", order = 120 },
-    { id = "Heracles", name = "赫拉克勒斯", order = 130 },
-    { id = "Moros", name = "摩罗斯", order = 140 },
   }
   local nativeSpecialChoiceDefinitions = {
     Artemis = { npc = "NPC_Artemis_Field_01", mode = "loot" },
@@ -1500,7 +1498,7 @@ if __MacGamingTrainerV1 == nil then
     Artemis = "NPC_Artemis_01", Athena = "NPC_Athena_01", Dionysus = "NPC_Dionysus_01",
     Echo = "NPC_Echo_01", Hades = "NPC_Hades_Field_01", Narcissus = "NPC_Narcissus_01",
     Circe = "NPC_Circe_01", Icarus = "NPC_Icarus_01", Medea = "NPC_Medea_01",
-    Arachne = "NPC_Arachne_01", Heracles = "NPC_Heracles_01", Moros = "NPC_Moros_01",
+    Arachne = "NPC_Arachne_01",
   }
   local function officialSpecialSourceOrder()
     local order, codexRank = {}, {}

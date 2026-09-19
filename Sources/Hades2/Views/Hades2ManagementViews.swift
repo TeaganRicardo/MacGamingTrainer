@@ -17,7 +17,7 @@ struct Hades2SaveManagerView: View {
             Button("刷新") { model.refreshBackups() }
                 .disabled(model.saveManagerBusy)
         } content: {
-            Text("创建备份可在游戏运行时进行。运行中选择恢复会暂存任务；退出 Hades II 后 Trainer 会自动执行校验恢复，并在恢复前创建安全备份。")
+            Text("创建备份可在游戏运行时进行。运行中选择恢复会暂存任务；退出 Hades II 后 Trainer 会自动执行校验恢复。恢复时可选择是否保留当前存档备份。")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -107,9 +107,10 @@ struct Hades2SaveManagerView: View {
         .interactiveDismissDisabled(model.saveManagerBusy)
         .alert("恢复所选存档？", isPresented: $confirmRestore) {
             Button("取消", role: .cancel) { }
-            Button("备份当前并恢复") { model.restoreBackup(selectedBackup) }
+            Button("备份当前并恢复") { model.restoreBackup(selectedBackup, backupCurrent: true) }
+            Button("直接恢复", role: .destructive) { model.restoreBackup(selectedBackup, backupCurrent: false) }
         } message: {
-            Text("将恢复“\(model.backups.first(where: { $0.id == selectedBackup })?.name ?? selectedBackup)”。若游戏仍在运行，会先暂存任务并在退出后自动执行。")
+            Text("将恢复“\(model.backups.first(where: { $0.id == selectedBackup })?.name ?? selectedBackup)”。“直接恢复”不会创建“恢复前自动备份”，但失败时仍会使用临时回滚副本保护当前存档。若游戏仍在运行，会先暂存任务并在退出后自动执行。")
         }
         .alert("删除所选备份？", isPresented: $confirmDelete) {
             Button("取消", role: .cancel) { }

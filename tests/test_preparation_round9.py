@@ -138,3 +138,102 @@ assert not marker.exists()
 assert len(list(prep.DATA.glob('staged-restore.json.corrupt-*'))) == 2
 
 print('preparation_round9_staged_ok')
+
+
+# Restore must never make the watched Hades II save root disappear. Steam Cloud
+# observes the root continuously; renaming the whole directory can make the
+# next launch see an empty profile even when the transaction later succeeds.
+from games.hades2 import save_service
+base3=Path(tempfile.mkdtemp(prefix='trainer-prep-root-continuity-r20-'))
+prep.DATA=base3/'data';prep.SAVES=base3/'saves';prep.SAVES.mkdir(parents=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'target-good')
+(prep.SAVES/'activeProfile').write_bytes(b'Profile1')
+prep._require_stopped=lambda:None
+target=prep.backup_saves(run_count=60,allow_running=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'current-newer')
+real_replace=save_service.os.replace
+root_gap=None
+def guard_save_root(source,destination):
+    global root_gap
+    root_existed=prep.SAVES.exists()
+    result=real_replace(source,destination)
+    if root_existed and not prep.SAVES.exists():
+        root_gap=f'save root disappeared during replace: {source} -> {destination}'
+        raise AssertionError(root_gap)
+    return result
+save_service.os.replace=guard_save_root
+try:
+    try:
+        prep.restore_saves(target['backupId'],run_count=61)
+    except AssertionError:
+        pass
+finally:
+    save_service.os.replace=real_replace
+    if not prep.SAVES.exists():
+        rollbacks=list(base3.glob('.trainer-save-rollback-*'))
+        if rollbacks:
+            real_replace(rollbacks[0],prep.SAVES)
+assert root_gap is None,root_gap
+assert (prep.SAVES/'Profile1.sav').read_bytes()==b'target-good'
+
+# Direct restore skips the persistent "恢复前自动备份" but keeps transaction
+# rollback semantics. Staged restore must preserve that choice until exit.
+base4=Path(tempfile.mkdtemp(prefix='trainer-prep-direct-restore-r20-'))
+prep.DATA=base4/'data';prep.SAVES=base4/'saves';prep.SAVES.mkdir(parents=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'direct-target')
+(prep.SAVES/'activeProfile').write_bytes(b'Profile1')
+prep._require_stopped=lambda:None
+direct_target=prep.backup_saves(run_count=70,allow_running=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'direct-current')
+before_ids={row['id'] for row in prep.list_save_backups()}
+direct=prep.restore_saves(direct_target['backupId'],run_count=71,backup_current=False)
+after_ids={row['id'] for row in prep.list_save_backups()}
+assert before_ids==after_ids,'direct restore created a persistent pre-restore backup'
+assert direct['previousBackupId'] is None
+assert (prep.SAVES/'Profile1.sav').read_bytes()==b'direct-target'
+assert not list(base4.glob('.trainer-save-rollback-*'))
+
+(prep.SAVES/'Profile1.sav').write_bytes(b'pending-current')
+staged_direct=prep.stage_restore(direct_target['backupId'],run_count=72,backup_current=False)
+assert staged_direct['backupCurrent'] is False
+assert prep.staged_restore()['backupCurrent'] is False
+applied_direct=prep.apply_staged_restore()
+assert applied_direct['restore']['previousBackupId'] is None
+assert (prep.SAVES/'Profile1.sav').read_bytes()==b'direct-target'
+
+print('preparation_round20_restore_transaction_ok')
+
+
+# If both target installation and rollback fail during a direct restore, the
+# temporary snapshot is the only remaining copy of the previous saves and must
+# be preserved for manual recovery.
+base5=Path(tempfile.mkdtemp(prefix='trainer-prep-direct-rollback-failure-r20-'))
+prep.DATA=base5/'data';prep.SAVES=base5/'saves';prep.SAVES.mkdir(parents=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'rollback-original')
+(prep.SAVES/'activeProfile').write_bytes(b'Profile1')
+prep._require_stopped=lambda:None
+failure_target=prep.backup_saves(run_count=80,allow_running=True)
+(prep.SAVES/'Profile1.sav').write_bytes(b'rollback-current')
+real_install=save_service._install_snapshot_in_place
+install_calls=0
+def failing_install(source_root, files):
+    global install_calls
+    install_calls += 1
+    raise RuntimeError('forced install failure')
+save_service._install_snapshot_in_place=failing_install
+try:
+    try:
+        prep.restore_saves(failure_target['backupId'],run_count=81,backup_current=False)
+    except RuntimeError as error:
+        message=str(error)
+    else:
+        raise AssertionError('double install failure unexpectedly succeeded')
+finally:
+    save_service._install_snapshot_in_place=real_install
+preserved=list(base5.glob('.trainer-save-rollback-*'))
+assert install_calls==2,install_calls
+assert '回滚未完成' in message
+assert len(preserved)==1,'failed direct rollback deleted the only recovery copy'
+assert (preserved[0]/'Profile1.sav').read_bytes()==b'rollback-current'
+
+print('preparation_round20_failed_rollback_preserved_ok')
