@@ -1,106 +1,25 @@
 # Build 2 Hotkeys and Native Boon UI Implementation Plan
 
-> For agentic workers: use subagent-driven-development or executing-plans task-by-task. Steps use checkbox syntax.
+Goal: finish the pre-acceptance Build 2 follow-up without changing debugger lifecycle architecture.
 
-Goal: Add generic hotkey feedback, self-reflowing default shortcuts, native boon selling, and native special-blessing choice screens without expanding the debugger lifecycle architecture.
+Architecture: Core owns generic hotkey feedback only. Hades II owns shortcut semantics and all game-native boon/God Mode behavior. Native modal actions are one-shot and never preference-replayed.
 
-Architecture: Core owns only generic hotkey feedback and Carbon registration mechanics. Hades II owns shortcut semantics/persistence and all game-native boon operations. Native Hades UI is invoked through one-shot module commands; special-choice UI uses an internal InvisibleTarget anchor required by the native handler, never a visible fake reward.
+## Completed TDD tasks
 
-Tech Stack: Swift, SwiftUI, AppKit, Carbon, Python backend protocol, embedded Hades II Lua runtime, GitHub Actions.
+- [x] Shortcut v5: derive defaults from ShortcutAction.uiOrder, persist only explicit overrides, migrate v3/v4 layouts, keep settings list and 1–9/A–Z defaults aligned.
+- [x] Generic hotkey feedback: Core enabled/deferred/disabled vocabulary and macOS system sounds; Hades maps actual async results after command completion.
+- [x] Native boon sell: one-shot open_sell_traits uses thread(OpenSellTraitMenu, {}) and native removal/payout rules.
+- [x] Native special choice: direct-add retained; audited 10-source native three-choice path uses sourceId/nativeChoice, OpenUpgradeChoiceMenu, no synthetic engine object, with Echo/Arachne/Circe functional handling.
+- [x] God Mode hostile control immunity: exact engine-level effect blocks for HecatePolymorphStun and MiasmaSlow, with symmetric cleanup and no global ApplyEffect hook.
 
-Spec: docs/superpowers/specs/2026-09-19-build2-hotkeys-native-boon-ui-design.md
+## Final integration gate
 
-## Global Constraints
+- [ ] Exact follow-up head passes Linux contracts.
+- [ ] Correctness + Ponytail review finds no Critical/Important issue.
+- [ ] Follow-up PR is integrated into feature/post-v0.1-improvements, never main.
+- [ ] Exact integrated parent head passes Linux contracts.
+- [ ] Exact integrated parent head passes macOS Build 2: host policy harness, Hades log watcher harness, arm64 build, version/module package validation, strict codesign, packaging and artifact upload.
+- [ ] Record artifact ID and inner RC SHA256.
+- [ ] Update PR #7 and Phase 0 issues with the new manual acceptance checklist.
 
-- Product remains 0.1 / Build 2.
-- No polling/timers for runtime state.
-- No automatic replay of native-screen-opening mutations.
-- No original Hades II file modification.
-- Core cannot contain Hades-specific semantics.
-- TDD RED must be observed before each production change.
-
----
-
-### Task 1: Shortcut default reflow and v5 migration
-
-Files:
-- Modify Sources/Hades2/Services/Hades2ShortcutStore.swift
-- Modify tests/test_shortcut_chord_semantics.py
-
-Interfaces:
-- Consumes ShortcutAction.uiOrder and HotkeyChord.controlOptionDefault(index:).
-- Produces v5 shortcut persistence where only explicit overrides are stored.
-
-- [ ] Step 1: Write failing tests for v4-derived defaults reflowing and explicit overrides surviving.
-- [ ] Step 2: Run the shortcut harness and verify RED.
-- [ ] Step 3: Implement minimal v5 override persistence and migration.
-- [ ] Step 4: Run shortcut tests and verify GREEN.
-- [ ] Step 5: Commit.
-
-### Task 2: Core generic hotkey feedback
-
-Files:
-- Create Sources/Core/Input/TrainerHotkeyFeedback.swift
-- Modify Sources/Hades2/Hades2Model.swift
-- Create or modify a Swift contract test under tests/.
-
-Interfaces:
-- Produces TrainerHotkeyFeedback with enabled, deferred, disabled.
-- Produces TrainerHotkeyFeedbackPlayer.play(_:).
-- Hades calls the player only after successful async completion.
-
-- [ ] Step 1: Write failing tests for generic Core ownership, state mapping and no feedback on failure.
-- [ ] Step 2: Run tests and verify RED.
-- [ ] Step 3: Implement Core system-sound player and Hades completion mapping.
-- [ ] Step 4: Run tests and verify GREEN.
-- [ ] Step 5: Commit.
-
-### Task 3: Native boon sell screen
-
-Files:
-- Modify Sources/Hades2/Hades2API.swift
-- Modify Sources/Hades2/Hades2Model.swift
-- Modify Sources/Hades2/Hades2View.swift
-- Modify Backend/games/hades2/adapter.py only if explicit allowlisting requires it.
-- Modify Backend/games/hades2/runtime/hades.lua
-- Add or modify backend contract tests.
-
-Interfaces:
-- Produces request/command open_sell_traits.
-- Runtime requires active run, stable scene, no conflicting active screen, and OpenSellTraitMenu.
-
-- [ ] Step 1: Write failing command/runtime/UI contract.
-- [ ] Step 2: Run tests and verify RED.
-- [ ] Step 3: Implement one-shot command and UI button.
-- [ ] Step 4: Run tests and verify GREEN.
-- [ ] Step 5: Commit.
-
-### Task 4: Native special-blessing choice mode
-
-Files:
-- Modify Backend/games/hades2/runtime/hades.lua
-- Modify Sources/Hades2/Hades2API.swift
-- Modify Sources/Hades2/Hades2Model.swift
-- Modify Sources/Hades2/Hades2View.swift
-- Modify catalog payload parsing/types only if a nativeChoice capability field is needed.
-- Add or modify backend and Swift contract tests.
-
-Interfaces:
-- Produces command open_special_choice with source.
-- Catalog exposes whether a special source supports native choice.
-- Direct-add remains unchanged.
-
-- [ ] Step 1: Write failing tests for direct-add preservation, audited native sources, native screen use and one-shot semantics.
-- [ ] Step 2: Run tests and verify RED.
-- [ ] Step 3: Implement audited source mapping and command.
-- [ ] Step 4: Add UI dual actions 直接添加 / 原生三选一.
-- [ ] Step 5: Run tests and verify GREEN.
-- [ ] Step 6: Commit.
-
-### Task 5: Integrated verification and RC
-
-- [ ] Step 1: Run full Linux contracts on exact final head.
-- [ ] Step 2: Run full macOS Build 2 workflow on exact final head.
-- [ ] Step 3: Review diff for Core/Hades boundary leakage and non-idempotent replay.
-- [ ] Step 4: Package RC and record artifact ID plus inner SHA256.
-- [ ] Step 5: Update parent PR #7 and Phase 0 issues with new manual acceptance checklist.
+Constraints: product remains 0.1 / Build 2; no periodic runtime polling; no second debugger attachment; no original game-file modification; no automatic replay of native modal commands.
