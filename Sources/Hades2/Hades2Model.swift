@@ -156,6 +156,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
+    private var selectedSpecialBoon: BoonOption? {
+        boons.first { $0.id == selectedSpecialReward && $0.group == "special" }
+    }
+    var canOpenSelectedSpecialChoice: Bool {
+        canOpenNativeBoonScreen && selectedSpecialBoon?.nativeChoice == true
+    }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
     func supportsFeature(_ key: String) -> Bool { featureSupport[key] ?? true }
@@ -674,6 +680,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
         send(.openSellTraits, title: "打开祝福出售界面")
+    }
+
+    func openSpecialChoice() {
+        guard canOpenSelectedSpecialChoice,
+              let source = selectedSpecialBoon?.sourceId,
+              !source.isEmpty else { return }
+        send(.openSpecialChoice(source: source), title: "打开特殊祝福三选一")
     }
 
     func setMultiplier(_ key: String, text: String) {
