@@ -3054,7 +3054,7 @@ if __MacGamingTrainerV1 == nil then
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
       requireFunctions("native special blessing choice", {
         "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable", "SpawnObstacle",
-        "Destroy", "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize",
+        "Destroy", "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
       })
       if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
       local allowedNativeSources = { Narcissus = true, Echo = true, Medea = true, Icarus = true }
@@ -3122,17 +3122,36 @@ if __MacGamingTrainerV1 == nil then
 
         local args = ShallowCopyTable(choiceData)
         args.PortraitShift = nil
-        local lootPickups = type(GameState.LootPickups) == "table" and GameState.LootPickups or nil
-        local previousPickup = lootPickups and lootPickups[source.Name] or nil
-        local history = type(CurrentRun.LootChoiceHistory) == "table" and CurrentRun.LootChoiceHistory or nil
+        if type(GameState.LootPickups) ~= "table" then
+          MapState.RoomRequiredObjects[anchor] = nil
+          pcall(Destroy, { Id = anchor })
+          error("Special blessing choice requires loot pickup state")
+        end
+        local lootPickups = GameState.LootPickups
+        local previousPickup = lootPickups[source.Name]
+        local hadLootChoiceHistory = type(CurrentRun.LootChoiceHistory) == "table"
+        local history = hadLootChoiceHistory and CurrentRun.LootChoiceHistory or nil
         local historyCount = history and #history or 0
-        local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
+        local ownerRun = CurrentRun
+        local ownerMapState = MapState
 
-        if lootPickups then lootPickups[source.Name] = previousPickup end
-        if history then while #history > historyCount do table.remove(history) end end
-        MapState.RoomRequiredObjects[anchor] = nil
-        pcall(Destroy, { Id = anchor })
-        if not ok then error("Native special blessing choice failed: " .. tostring(message)) end
+        local function runChoice()
+          local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
+          lootPickups[source.Name] = previousPickup
+          if hadLootChoiceHistory then
+            while #history > historyCount do table.remove(history) end
+          elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
+            CurrentRun.LootChoiceHistory = nil
+          end
+          if ownerMapState == MapState and type(MapState.RoomRequiredObjects) == "table" then
+            MapState.RoomRequiredObjects[anchor] = nil
+          end
+          pcall(Destroy, { Id = anchor })
+          if not ok and type(DebugPrint) == "function" then
+            DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. tostring(message) })
+          end
+        end
+        thread(runChoice)
         return nil
       end)
     end
