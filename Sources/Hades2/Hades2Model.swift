@@ -780,9 +780,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func performDeferredToggleShortcut(targetEnabled: Bool, success: Bool) {
+    private func performBoonForceShortcutFeedback(targetEnabled: Bool, success: Bool) {
         guard success else { return }
-        TrainerHotkeyFeedbackPlayer.play(targetEnabled ? .deferred : .disabled)
+        let feedback: TrainerHotkeyFeedback
+        if !targetEnabled {
+            feedback = .disabled
+        } else if activeFeatures["boonRarityEnabled"] == true {
+            feedback = .enabled
+        } else {
+            feedback = .deferred
+        }
+        TrainerHotkeyFeedbackPlayer.play(feedback)
     }
 
     private func performShortcut(_ action: ShortcutAction) {
@@ -816,7 +824,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 forceLegendary: targetEnabled,
                 forceDuo: boonForceDuo
             ) { [weak self] success in
-                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+                self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
         case .forceDuo:
             guard canEditDesired else { return }
@@ -827,7 +835,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 forceLegendary: boonForceLegendary,
                 forceDuo: targetEnabled
             ) { [weak self] success in
-                self?.performDeferredToggleShortcut(targetEnabled: targetEnabled, success: success)
+                self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
         case .moneyMultiplierEnabled:
             guard canEditDesired else { return }
