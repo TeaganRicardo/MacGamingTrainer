@@ -5,77 +5,106 @@
 - Product: 0.1 / Build 2.
 - Stable `main`: Build 1.
 - Release PR: #7, still DRAFT.
-- Release branch `feature/post-v0.1-improvements`: revision-35 acceptance head `17fb237e0e609623b7f4c281c744382804a42e9a`.
-- Revision-35 manual acceptance: FAILED; do not merge and do not use r35 as a final PASS artifact.
 - Active repair branch: `fix/batch-a-native-modals`.
-- Batch A current code head before this handoff-doc update: `0c3b5b7b7cf8f1128899dc3fe9d915102f130906`.
-- Hades II resident runtime in Batch A: revision 36.
+- Revision-35 acceptance remains failed/superseded.
+- Revision-36 Batch A native sell/native special-choice functionality: **manual PASS** on 2026-09-19.
+- Current r37 code head before this handoff-doc update: `c66dca0`.
+- Hades II resident runtime: revision 37.
 - Host protocol 5; module protocol 5; desired-state schema 3; Profile schema 4.
 - Target game build audited: Hades II 1.139672 / Steam build 24556151.
 
-## Revision-35 manual acceptance findings
+## r35 findings carried forward
 
-User retained two run logs and reported:
-- Test 1: initial/transition stutter remains, but is materially reduced.
-- Test 2/5: same-process recovery is basically usable, but game-speed falls back after combat and cannot be re-applied in non-combat/crossroads-style states. This is a contract/design defect for Batch B.
-- Test 3: not tested.
-- Test 4: first-toggle latency can swallow feedback; Glass/Pop/Tink do not read as one sound family and deferred/disabled are too weak. Redesign in Batch C.
-- Test 6: native boon selling opens and can sell, but cannot exit. Batch A root cause found and fixed in code.
-- Test 7: direct-add works; native three-choice repeatedly fails. User requires one `触发原生三选一` item inside each supported source group, not a separate global button. Batch A implements this.
-- Test 8: Hecate polymorph still bypasses God Mode. Broader hostile-debuff audit is Batch B.
-- Test 9: exit/desired-state cleanup passed and is carried forward unless touched by later work.
+- Game speed falls back after combat and cannot be applied globally in non-combat/crossroads-style states: Batch B.
+- Feedback sounds are not a coherent family and delayed first operations can swallow feedback: Batch C.
+- Hecate polymorph bypasses God Mode; broader hostile-debuff audit required: Batch B.
+- Residual attach/world-readiness stutter remains: Batch D.
+- Exit/desired-state cleanup passed and remains carry-forward PASS unless touched.
 
 ## Batch A — native modal correctness
 
-Design: `docs/superpowers/specs/2026-09-19-batch-a-native-modals-design.md`.
-Plan: `docs/superpowers/plans/2026-09-19-batch-a-native-modals.md`.
+r36 fixed:
+- trainer-opened boon selling can sell and close from arbitrary run rooms without fabricating Store state;
+- native special-choice data comes from installed-game `EnemyData` / `PresetEventArgs`;
+- supported source choices open through the native choice screen;
+- direct-add remains separate;
+- native choice is embedded into the source list instead of a global button.
 
-Implemented on `fix/batch-a-native-modals`:
-- trainer-opened sell screen temporarily uses a copied `ScreenData.SellTraits` whose Close button calls a trainer-owned close handler;
-- the close handler delegates to native `CloseStoreScreen` only when a real room Store exists, otherwise performs equivalent generic cleanup without fabricating Store state;
-- fallback close disables purchase inputs before screen teardown;
-- special-choice source lookup now uses installed-game globals `EnemyData` and `PresetEventArgs` instead of nonexistent `NPCData` entries;
-- source data is deep-copied before native choice generation;
-- runtime revision advanced 35 → 36;
-- special picker derives one synthetic `触发原生三选一` row per supported source;
-- the standalone bottom native-choice button is removed;
-- direct-add and `spawnSpecial` hotkey share the same special-reward action path;
-- Heracles/Moros remain without a native-choice row.
+User manually confirmed the r36 functionality as normal on 2026-09-19. The uploaded acceptance log also records repeated r36 `open_special_choice`, `open_sell_traits`, and direct `spawn_reward` successes.
 
-## Batch A verification evidence
+## r37 safety/UI follow-up
 
-- RED→GREEN `test_native_sell_traits_contract.py`: PASS.
-- RED→GREEN `test_native_special_choice_contract.py`: PASS.
-- Full `bash Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
-- Full `bash Tools/run_macos_checks.sh`: PASS / `macos_checks_ok`.
-- Ponytail review: no worthwhile abstraction/refactor to remove; keep the localized model/runtime changes.
-- Correctness review added native-equivalent `UseableOff` cleanup before trainer sell-screen teardown.
-- Clean `./build.sh hades2`: PASS on code head `0c3b5b7b7cf8f1128899dc3fe9d915102f130906`.
-- Build checks: 0.1 / Build 2, one module, runtime 36, Mach-O arm64, debugger entitlement present, strict codesign PASS, clean worktree.
+Implemented after r36 acceptance:
+- `祝福管理` renamed/moved to `生成内容` as `出售祝福`; control text is `出售`;
+- every generation action button is consistently `生成`;
+- native special-choice rows are named `<中文来源>的祝福 · <English Source> Boon`;
+- installed-game audit confirmed Heracles and Moros have no legal boon/trait pools in 1.139672; both false special-source registry/codex entries were removed;
+- runtime advanced 36 → 37 because `hades.lua` source registry changed;
+- restore confirmation now offers `备份当前并恢复` or `直接恢复`;
+- `直接恢复` creates no persistent `恢复前自动备份`, but still uses a temporary rollback snapshot and preserves it if rollback itself fails;
+- restore no longer renames/removes the whole Hades II save root; target files are verified and atomically replaced in-place.
 
-Final Batch A RC is intentionally built only after this handoff documentation commit. Exact final HEAD, ZIP size and SHA256 are recorded in PR #7 so artifact identity does not require a self-referential repository commit.
+## Save-loss incident — confirmed root cause
+
+The repeated save wipes during development were caused by **our macOS watcher test**, not r36 native-modal code and not Steam Cloud.
+
+`tests/test_hades2_run_log_watcher.py` constructed the real path
+`~/Library/Application Support/Supergiant Games/Hades II` and executed `removeItem(at: directory)` before creating its fixture log. Therefore every execution of that test deleted the real Hades II user directory.
+
+Evidence:
+- Steam AutoCloud at 19:35 and 20:55 reported all `Profile1*.sav` files already missing on launch while sync was disabled/offline; Steam was observing the loss, not downloading a replacement.
+- The destructive test was part of `Tools/run_macos_checks.sh`, matching the repeated preflight pattern.
+- Re-running the old test reproduced the deletion; the repaired test now receives a temporary directory explicitly.
+- After repair, a full macOS suite wrapped by before/after SHA-256 snapshots reported `REAL_SAVE_TREE_UNCHANGED`.
+
+A separate audit also found the pre-existing save restore implementation (present since baseline commit `31297c9`) temporarily renamed the entire save root for rollback. That was a genuine additional race risk and is fixed in r37, but it is not recorded as the direct cause of the observed 19:35/20:55 wipes.
+
+## User save recovery
+
+After the final destructive-test reproduction, Steam `remotecache.vdf` SHA-1 values for the user's last post-recovery `Profile1.sav` and `Profile1_Temp.sav` matched backup:
+`saves-20260919-042934-zargb7u4` / `修改器测试`.
+
+That backup was restored with the new root-stable path while Hades II was stopped. All 17 files were then verified against the backup manifest; the three Profile SHA-256 values matched exactly. The destructive-test residue was separately copied to `/tmp/mgt-destructive-watcher-evidence-20260919-213445`.
+
+## r37 verification evidence so far
+
+- RED→GREEN save-root continuity test: PASS.
+- RED→GREEN direct-restore persistent-backup behavior: PASS.
+- RED→GREEN failed-direct-rollback preservation: PASS.
+- RED→GREEN restore protocol/UI contract: PASS.
+- RED→GREEN watcher temporary-directory isolation: PASS.
+- Native sell / native special-choice contracts: PASS.
+- Full `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
+- Full `Tools/run_macos_checks.sh`: PASS / `macos_checks_ok`.
+- Real Hades II save tree before/after full macOS suite: byte hashes unchanged.
+- Test tree audit: no test references the real Hades II Application Support path or `homeDirectoryForCurrentUser`.
+
+Final clean build/package verification is still required after this handoff documentation commit.
 
 ## Remaining Phase 0 repair batches
 
-1. Batch A manual retest: sell Cancel/exit + sell-then-exit; one loot-style native choice; one fixed-choice native choice; direct-add regression; Heracles/Moros no native row.
-2. Batch B: global game-speed semantics plus comprehensive hostile-debuff/God Mode audit.
-3. Batch C: coherent Trainer Host enabled/deferred/disabled sound family and reliable delayed playback behavior.
-4. Batch D: remaining attach→Lua/world readiness stutter after correctness work is stable.
+1. r37 focused smoke: UI naming/order plus one safe restore smoke using a known-good backup.
+2. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
+3. Batch C: coherent Trainer Host enabled/deferred/disabled sound family + reliable delayed playback.
+4. Batch D: residual attach → Lua/world-readiness stutter.
+5. Final consolidated regression and release closure.
 
 ## GitHub gates
 
-- PR #7: keep DRAFT; do not merge until repair batches and required manual acceptance are complete.
-- #1/#11: remain open until lifecycle/performance acceptance completes.
-- #16: hosted Actions admission/startup failure remains infrastructure-only when `steps=null` / `logs_url=null`.
-- #17: non-blocking partial hand-edited schema-4 Profile shortcut collision; proven fix remains deferred.
-- PR #10: keep DRAFT and do not synchronize/merge until Phase 0 closes.
+- PR #7 remains DRAFT; do not merge until remaining repair batches and final acceptance close.
+- #1/#11 remain open until lifecycle/performance acceptance closes.
+- #16 remains hosted Actions infrastructure-only when jobs fail before step 0.
+- #17 remains non-blocking/deferred.
+- PR #10 remains DRAFT and unsynchronized until Phase 0 closes.
 
 ## Non-regression constraints
 
+- Tests must never mutate real user/game data. All filesystem mutation tests use isolated temporary roots.
 - No periodic LLDB/Lua polling.
 - No unsafe replay of outcome-unknown non-idempotent mutations.
 - No game-specific semantics in Core/Host.
 - Native modal commands are one-shot and never preference-replayed.
-- Exit must never be permanently blocked by cleanup failure.
+- Save restore must never make the Hades II save root disappear.
+- A failed rollback must preserve the last recoverable copy.
 - Runtime source changes require a revision bump.
-- Every manual-test request must ship a prebuilt signed `.app` ZIP; the tester does not compile.
+- Every manual-test request ships a prebuilt signed `.app` ZIP; the tester does not compile.
