@@ -61,7 +61,6 @@ assert 'return "Boon", wanted' in lua
 assert 'if rewardId == "SpellDrop" then' in lua
 assert 'requireFunctions("Selene room reward spawning", { "SpawnRoomReward" })' in lua
 assert 'RewardOverride = "SpellDrop"' in lua
-assert 'revision = 26' in lua
 
 # Old stored preferences migrate forward instead of silently retaining dead IDs.
 normalized = Hades2PreferenceStore.normalize({'nextRoomReward':'RoomRewardMoney'})

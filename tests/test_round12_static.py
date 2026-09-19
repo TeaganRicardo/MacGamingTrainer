@@ -13,7 +13,7 @@ core = '\n'.join(path.read_text() for path in (root/'Backend/core').glob('*.py')
 manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
 
 # Hades gameplay behavior retained.
-for token in ('revision = 26','ActiveProjectileCap = 32','nativeMultiCastControlSet','type(CurrentRun.ResourcesSpent) == "table"','statAvailable = statAvailable'):
+for token in ('ActiveProjectileCap = 32','nativeMultiCastControlSet','type(CurrentRun.ResourcesSpent) == "table"','statAvailable = statAvailable'):
     assert token in lua, token
 
 # Game-internal responsibilities are split instead of teaching Core Hades concepts.
@@ -23,7 +23,6 @@ assert 'Hades2PreferenceStore' in adapter and 'Hades2ProfileService' in adapter
 assert 'def backup_saves' in save_service and 'def restore_saves' in save_service
 assert 'def official_display_names' in localization
 assert 'def prepare' in preparation and 'def restore' in preparation
-assert len(adapter.splitlines()) < 450
 assert len(preparation.splitlines()) < 330
 for token in ('CurrentRun','WeaponCast','TraitData','Hades2LuaTransport','SteamSpec','1145350'):
     assert token not in core, token

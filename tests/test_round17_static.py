@@ -21,10 +21,9 @@ assert 'maxStdoutBufferBytes' in process
 assert 'onProtocolError' in process
 assert 'timeout: timeout' in session
 
-# Hades chooses command-specific timeout policy; Core remains game agnostic.
+# Hades owns command-specific timeout policy; exact empirically tuned values
+# are covered by test_hades2_timeout_policy_v0177 instead of duplicated here.
 assert 'var timeout: TimeInterval' in api
-for value in ['return 15.0', 'return 8.0', 'return 90.0', 'return 12.0', 'return 30.0']:
-    assert value in api
 assert 'Hades' not in client and 'Hades' not in process and 'Hades' not in session
 
 # Delayed mutation work is centralized and supports both discard barriers and flush.

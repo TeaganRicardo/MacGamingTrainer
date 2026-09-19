@@ -19,16 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run host connection policy harness
-        run: python3 tests/test_host_connection_policy_dev8.py
-
-      - name: Run Hades log watcher harness
-        run: python3 tests/test_hades2_run_log_watcher.py
+      - name: Run full macOS contract suite
+        run: bash Tools/run_macos_checks.sh
 
       - name: Build Hades II trainer
-        run: |
-          chmod +x build.sh Tools/*.py
-          ./build.sh hades2
+        run: ./build.sh hades2
 
       - name: Verify Build 2 package
         run: |
