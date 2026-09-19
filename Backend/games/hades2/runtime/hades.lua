@@ -326,6 +326,14 @@ if __MacGamingTrainerV1 == nil then
 
     local components = type(screen) == "table" and screen.Components or nil
     if type(components) ~= "table" then return end
+    local purchaseIds = {}
+    for name, component in pairs(components) do
+      if type(name) == "string" and name:match("^PurchaseButton%d+$")
+          and type(component) == "table" and component.Id ~= nil then
+        purchaseIds[#purchaseIds + 1] = component.Id
+      end
+    end
+    UseableOff({ Ids = purchaseIds })
     AltAspectRatioFramesHide()
     OnScreenCloseStarted(screen)
     if screen.CloseAnimationName and components.ShopBackground then
@@ -3104,7 +3112,7 @@ if __MacGamingTrainerV1 == nil then
       if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
       requireFunctions("native boon sell screen", {
         "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
-        "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation",
+        "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation", "UseableOff",
         "CloseScreen", "GetAllIds", "OnScreenCloseFinished", "ShowCombatUI", "SetPlayerVulnerable",
       })
       if type(ScreenData) ~= "table" or type(ScreenData.SellTraits) ~= "table" then

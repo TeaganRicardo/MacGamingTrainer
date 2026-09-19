@@ -35,6 +35,8 @@ assert 'return action(command, params' in block
 close_block = lua[lua.index('function MacGamingTrainerCloseSellTraitScreen'):lua.index('if command == "open_sell_traits" then')]
 assert 'CloseStoreScreen(screen, button)' in close_block
 assert 'CurrentRun.CurrentRoom.Store.StoreOptions' in close_block
+assert 'PurchaseButton' in close_block
+assert 'UseableOff({ Ids = purchaseIds })' in close_block
 assert 'AltAspectRatioFramesHide()' in close_block
 assert 'OnScreenCloseStarted(screen)' in close_block
 assert 'CloseScreen(GetAllIds(screen.Components), 0.15)' in close_block
