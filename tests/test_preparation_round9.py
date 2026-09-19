@@ -119,4 +119,22 @@ prep.stage_restore(other['id'],run_count=52)
 assert prep.cancel_staged_restore()['cancelled'] is True
 assert prep.cancel_staged_restore()['cancelled'] is False
 
+# A corrupted transaction marker is not save data. It must be quarantined so
+# every future scan does not fail forever on an impossible pending restore.
+marker = prep.DATA/'staged-restore.json'
+marker.write_text('{ broken json', encoding='utf-8')
+assert prep.staged_restore() is None
+assert not marker.exists()
+assert len(list(prep.DATA.glob('staged-restore.json.corrupt-*'))) == 1
+
+# Invalid transaction metadata is handled the same way.
+marker.write_text(json.dumps({
+    'backupId': other['id'],
+    'runCount': -1,
+    'stagedAt': '2026-09-19T00:00:00+00:00',
+}), encoding='utf-8')
+assert prep.staged_restore() is None
+assert not marker.exists()
+assert len(list(prep.DATA.glob('staged-restore.json.corrupt-*'))) == 2
+
 print('preparation_round9_staged_ok')
