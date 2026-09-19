@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 35 then
+if previousModule and previousModule.revision ~= 36 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 35, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 36, damageMultiplier = 2, damageEnabled = false,
     gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
     gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
     godMode = false, infiniteHealth = false, infiniteMana = false,
@@ -3141,18 +3141,18 @@ if __MacGamingTrainerV1 == nil then
       if not ready() or sceneName() ~= "run" then error("Special blessing choice requires an active run room") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
       requireFunctions("native special blessing choice", {
-        "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable",
+        "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable", "DeepCopyTable",
         "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
       })
       if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
       local definition = nativeSpecialChoiceDefinitions[params.source]
       if type(definition) ~= "table" then error("Special blessing source has no audited native choice flow") end
-      if type(NPCData) ~= "table" or type(TraitData) ~= "table" then
+      if type(EnemyData) ~= "table" or type(PresetEventArgs) ~= "table" or type(TraitData) ~= "table" then
         error("Special blessing source data is unavailable")
       end
-      local npcData = NPCData[definition.npc]
+      local npcData = EnemyData[definition.npc]
       if type(npcData) ~= "table" then error("Special blessing source data is unavailable") end
-      local choiceData = definition.choices ~= nil and NPCData[definition.choices] or nil
+      local choiceData = definition.choices ~= nil and PresetEventArgs[definition.choices] or nil
       if definition.mode ~= "loot"
           and (type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table") then
         error("Special blessing choice data is unavailable")
@@ -3170,7 +3170,7 @@ if __MacGamingTrainerV1 == nil then
       end
 
       return action(command, params, function()
-        local source = ShallowCopyTable(npcData)
+        local source = DeepCopyTable(npcData)
         local syntheticName = "MacGamingTrainerSpecial_" .. params.source
         source.ObjectId = -1
         source.CanDuplicate = false

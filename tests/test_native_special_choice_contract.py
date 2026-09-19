@@ -10,6 +10,9 @@ router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
+assert 'previousModule.revision ~= 36' in lua
+assert 'version = 1, revision = 36' in lua
+
 for token in ('openSpecialChoice = "open_special_choice"', 'case openSpecialChoice(source: String)', 'case .openSpecialChoice: return .openSpecialChoice'):
     assert token in api, token
 assert 'return ["source": source]' in api
@@ -47,6 +50,12 @@ for source in ('Arachne', 'Narcissus', 'Echo', 'Medea', 'Circe', 'Icarus'):
 block = lua[lua.index('if command == "open_special_choice" then'):lua.index('if command == "spawn_reward" then')]
 assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in block
 assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
+assert 'type(EnemyData) ~= "table"' in block
+assert 'type(PresetEventArgs) ~= "table"' in block
+assert 'local npcData = EnemyData[definition.npc]' in block
+assert 'local choiceData = definition.choices ~= nil and PresetEventArgs[definition.choices] or nil' in block
+assert 'local source = DeepCopyTable(npcData)' in block
+assert 'NPCData[' not in block, "native choice data must come from the globals used by the installed game"
 assert 'OpenUpgradeChoiceMenu' in block
 assert 'thread(runChoice)' in block, "native menu must run on a game thread, never hold the LLDB boundary for player input"
 assert 'SpawnObstacle({' not in block, "native choice must not create an in-world anchor"
