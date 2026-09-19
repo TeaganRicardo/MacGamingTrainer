@@ -1,27 +1,33 @@
 # Next Development Stage
 
-PR #7 remains DRAFT. r37 checks are accepted except for the repeated special-choice bug now repaired in runtime r38.
+PR #7 remains DRAFT. r38 was superseded before manual acceptance by the native-parity re-review; current tester candidate is runtime r39.
 
-## Immediate — finalize r38
+## Immediate — r39 focused acceptance
 
-Branch: `fix/special-choice-refresh-r38`. Runtime: revision 38.
+Branch: `fix/special-choice-native-r39`. Runtime: revision 39.
+
+Why r39 supersedes r38:
+- fixed NPC choices now preserve the game's own special-choice eligibility rules instead of adding ordinary-boon `IsTraitEligible`;
+- repeat counters reset per run;
+- Trait detection follows the native `Type` field and fails closed on missing TraitData;
+- direct invocation of the six native NPC `*Choice` wrappers was explicitly rejected after installed-game audit because those wrappers depend on narrative-screen / live-NPC / room-presentation state.
 
 Automated status:
-- repeated-special-choice contract RED on r37 → GREEN on r38;
+- r39 native-parity contract RED on r38 → GREEN on r39;
 - full Linux contracts: PASS;
-- signed r38 Build 2 package: PASS on `c027b4157987eb5f714a403624e2ebb8c1e1079a`;
-- full macOS suite + real-save-tree sentinel is deferred until Hades II is not running; this is a safety defer, not a failed test.
+- signed r39 Build 2 package: PASS on `e610f3aba74d5878d59d66d6476966ad06effec2`;
+- full macOS suite + real-save-tree sentinel is deferred while Hades II is running; this is a safety defer, not a failed test.
 
 Current tester artifact:
-- `/Users/gao/Downloads/Mac Gaming Trainer r38.app`
-- `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r38.zip`
-- SHA256 `9ad59988f4f4a48da8f7216bfd0b7729ae355fec833a9774ea60c162d3bc59d6`
+- `/Users/gao/Downloads/Mac Gaming Trainer r39.app`
+- `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r39.zip`
+- SHA256 `5f1e8609a60e8b7f4387915b5d22a97d9d7865e7e46552025a068fe3930d1c73`
 
-Focused r38 manual acceptance:
-- choose one fixed-choice source such as Arachne/Narcissus, acquire one blessing, then open the same source again: the acquired blessing must not be offered again and the remaining offer must be regenerated;
-- repeat with a loot-style source such as Artemis/Athena: the native pool must regenerate and the acquired trait must not be offered as a duplicate;
-- optionally reopen a source without taking an option first; the trainer should no longer be pinned to the constant seed-9 offer;
-- no need to repeat r37 save/UI checks unless a smoke regression appears.
+Focused r39 manual acceptance:
+- fixed-choice source (Arachne/Narcissus is sufficient): obtain one blessing, reopen the same source, confirm the acquired blessing is not re-offered and the candidate set is no longer pinned to the first deterministic offer;
+- start a new run and open the same source once: the trainer counter must have reset, so the first-open path again uses the native seed-9 behavior;
+- loot-style source (Artemis/Athena is sufficient): obtain one trait, reopen, confirm native `SetTraitsOnLoot` produces a valid pool without offering the owned trait;
+- no need to repeat accepted r37 save/UI coverage unless this smoke exposes a regression.
 
 After focused PASS, continue directly to Batch B.
 
@@ -51,7 +57,7 @@ Re-plan from installed game scripts before coding.
 
 ## Closure order
 
-r37 focused smoke → Batch B → Batch C → Batch D → final consolidated regression → hosted CI recovery on exact head → PR #7 ready → merge only with explicit user authorization → sync PR #10.
+r39 focused special-choice acceptance → Batch B → Batch C → Batch D → final consolidated regression → hosted CI recovery on exact head → PR #7 ready → merge only with explicit user authorization → sync PR #10.
 
 ## Permanent workflow corrections
 
