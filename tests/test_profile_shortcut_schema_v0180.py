@@ -18,7 +18,10 @@ def chord(code, modifiers, label):
 assert _normalize_shortcuts(None) == {}
 assert _normalize_shortcuts({}) == {}
 assert _normalize_shortcuts({'godMode': 1, 'disableAll': 0}) == {}
-assert _normalize_shortcuts({'unknown': chord(18,6144,'1')}) == {}
+future = {'futureFeature': chord(18,6144,'1')}
+assert _normalize_shortcuts(future) == future
+assert _normalize_shortcuts({'bad action': chord(18,6144,'1')}) == {}
+assert _normalize_shortcuts({'../escape': chord(18,6144,'1')}) == {}
 
 valid = {
     'godMode': chord(18,6144,'1'),
@@ -28,7 +31,7 @@ valid = {
 assert _normalize_shortcuts(valid) == valid
 
 
-# Duplicate chords are deterministic: action order owns the first valid chord.
+# Duplicate chords are deterministic even for forward-compatible action IDs.
 duplicated = {
     'godMode': chord(18, 6144, '1'),
     'infiniteHealth': chord(18, 6144, '1'),
@@ -74,3 +77,7 @@ path.write_text(json.dumps({
 assert service.load('no-shortcuts')['shortcuts'] == {}
 
 print('profile_shortcut_schema_v0180_ok')
+
+# Backend persistence must not mirror Swift's action enum; future shortcut actions
+# should not require a second manual allowlist update.
+assert '_SHORTCUT_ACTIONS = (' not in (root/'Backend/games/hades2/profile_service.py').read_text()
