@@ -207,12 +207,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
         guard !exiting else { return }
         switch event {
-        case .worldStopped, .runtimeReset:
+        case .mainMenu, .runtimeReset:
             guard connected else { return }
             pendingRunReadySignal = false
             invalidatePendingMutations()
             status = "waiting"
-            scene = event == .worldStopped ? "main_menu" : "loading"
+            scene = event == .mainMenu ? "main_menu" : "loading"
             activeFeatures = [:]
             dormantFeatures = Dictionary(uniqueKeysWithValues:
                 desiredFeatureKeys.filter { desiredFeatureEnabled($0) }.map { ($0, true) }
