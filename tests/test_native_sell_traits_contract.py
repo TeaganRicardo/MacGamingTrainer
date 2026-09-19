@@ -21,11 +21,27 @@ for token in (
     'sceneName() ~= "run"',
     'AreScreensActive',
     'OpenSellTraitMenu',
-    'thread(OpenSellTraitMenu',
+    'DeepCopyTable(ScreenData.SellTraits)',
+    'MacGamingTrainerCloseSellTraitScreen',
+    'ScreenData.SellTraits = trainerScreen',
+    'ScreenData.SellTraits = originalScreen',
+    'thread(runSell)',
 ):
     assert token in block, token
+assert 'thread(OpenSellTraitMenu' not in block, "sell UI must stay wrapped until its temporary screen definition is restored"
 assert 'OpenSellTraitMenu({})' not in block, "native sell UI must not block the LLDB dispatch synchronously"
 assert 'return action(command, params' in block
+
+close_block = lua[lua.index('function MacGamingTrainerCloseSellTraitScreen'):lua.index('if command == "open_sell_traits" then')]
+assert 'CloseStoreScreen(screen, button)' in close_block
+assert 'CurrentRun.CurrentRoom.Store.StoreOptions' in close_block
+assert 'AltAspectRatioFramesHide()' in close_block
+assert 'OnScreenCloseStarted(screen)' in close_block
+assert 'CloseScreen(GetAllIds(screen.Components), 0.15)' in close_block
+assert 'OnScreenCloseFinished(screen)' in close_block
+assert 'ShowCombatUI(screen.Name)' in close_block
+assert 'SetPlayerVulnerable(screen.Name)' in close_block
+assert 'CurrentRun.CurrentRoom.Store =' not in close_block, "trainer must never fabricate Store state"
 
 assert 'func openSellTraits()' in model
 assert '.openSellTraits' in model
