@@ -9,7 +9,7 @@
 - Revision-35 acceptance remains failed/superseded.
 - Revision-36 Batch A native sell/native special-choice functionality: **manual PASS** on 2026-09-19.
 - Current r37 code head before this handoff-doc update: `c66dca0`.
-- Hades II resident runtime: revision 37.
+- Hades II resident runtime: revision 38.
 - Host protocol 5; module protocol 5; desired-state schema 3; Profile schema 4.
 - Target game build audited: Hades II 1.139672 / Steam build 24556151.
 
@@ -81,9 +81,30 @@ That backup was restored with the new root-stable path while Hades II was stoppe
 
 Final clean build/package verification is still required after this handoff documentation commit.
 
+## r38 special-choice refresh follow-up
+
+The user accepted the remaining r37 checks, then found one native special-choice regression: repeatedly opening the same source returned the same three-option list and could offer an already acquired special trait again.
+
+Root cause:
+- the trainer's fixed-choice path copied the vanilla NPC helper's constant `RandomSynchronize(9)`; vanilla encounters normally open once, but trainer-forced repetition therefore reproduced the same deterministic offer;
+- unlike loot-style sources that already pass through `SetTraitsOnLoot -> GetEligibleUpgrades`, the trainer's fixed-choice path only evaluated game-state requirements and skipped the native owned-trait/eligibility filters.
+
+r38 fix on `fix/special-choice-refresh-r38`:
+- runtime advanced 37 → 38;
+- each special source keeps a session-local open counter; first trainer open keeps seed 9, subsequent opens advance the seed per source;
+- fixed-choice options whose `ItemName` resolves to a trait are excluded when the hero already owns them, when the run has already picked them, or when native `IsTraitEligible` rejects them;
+- non-trait fixed options preserve their prior game-state eligibility behavior;
+- loot-style sources continue to use native `SetTraitsOnLoot` and receive the same per-source refreshed RNG stream.
+
+Verification so far:
+- RED was observed on r37 with the new repeated-choice contract;
+- targeted `test_native_special_choice_contract.py`: PASS on r38;
+- full `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
+- exact-head macOS/build/package verification is pending before an r38 RC is handed to the tester.
+
 ## Remaining Phase 0 repair batches
 
-1. r37 focused smoke: UI naming/order plus one safe restore smoke using a known-good backup.
+1. r38 focused manual acceptance: repeated fixed-choice and loot-style special choices.
 2. Batch B: global game-speed semantics + comprehensive hostile-debuff/God Mode audit.
 3. Batch C: coherent Trainer Host enabled/deferred/disabled sound family + reliable delayed playback.
 4. Batch D: residual attach → Lua/world-readiness stutter.
@@ -107,4 +128,6 @@ Final clean build/package verification is still required after this handoff docu
 - Save restore must never make the Hades II save root disappear.
 - A failed rollback must preserve the last recoverable copy.
 - Runtime source changes require a revision bump.
+- GitHub is the durable source of truth for code, versions, RC identity and handoff documents.
+- Development/review should run in the development environment or through the GitHub connector; RDC is reserved for target-Mac-only build/game verification.
 - Every manual-test request ships a prebuilt signed `.app` ZIP; the tester does not compile.
