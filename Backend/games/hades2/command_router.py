@@ -128,16 +128,18 @@ class Hades2CommandRouter:
         elif command=='restore_backup':
             backup_id=params.get('backupId')
             if not isinstance(backup_id,str) or not backup_id:raise ValueError('请选择存档备份。')
+            backup_current=params.get('backupCurrent',True)
+            if type(backup_current) is not bool:raise ValueError('恢复备份选项无效。')
             run_count=adapter.state.get('runCount') if isinstance(getattr(adapter,'state',None),dict) else None
             game_running=adapter.transport.alive()
             if not game_running:
                 try: game_running=bool(adapter.scan().get('pid'))
                 except Exception: game_running=False
             if game_running:
-                info=save_service.stage_restore(backup_id,run_count=run_count)
+                info=save_service.stage_restore(backup_id,run_count=run_count,backup_current=backup_current)
                 result=dict(operation=info,backups=save_service.list_save_backups(),pendingRestore=save_service.staged_restore())
             else:
-                info=save_service.restore_saves(backup_id,run_count=run_count)
+                info=save_service.restore_saves(backup_id,run_count=run_count,backup_current=backup_current)
                 save_service.cancel_staged_restore()
                 result=dict(operation=info,backups=save_service.list_save_backups(),pendingRestore=None)
         elif command=='cancel_staged_restore':

@@ -66,7 +66,7 @@ enum Hades2Request {
     case listBackups
     case renameBackup(id: String, name: String)
     case openBackupFolder(String?)
-    case restoreBackup(String)
+    case restoreBackup(String, backupCurrent: Bool)
     case deleteBackup(String)
     case cancelStagedRestore
     case prepare, restore
@@ -193,7 +193,9 @@ enum Hades2Request {
             return ["backupId": id, "name": name]
         case .openBackupFolder(let id):
             return id.map { ["backupId": $0] } ?? [:]
-        case .restoreBackup(let id), .deleteBackup(let id):
+        case .restoreBackup(let id, let backupCurrent):
+            return ["backupId": id, "backupCurrent": backupCurrent]
+        case .deleteBackup(let id):
             return ["backupId": id]
         default:
             return [:]

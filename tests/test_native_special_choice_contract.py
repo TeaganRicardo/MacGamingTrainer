@@ -10,8 +10,8 @@ router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
-assert 'previousModule.revision ~= 36' in lua
-assert 'version = 1, revision = 36' in lua
+assert 'previousModule.revision ~= 37' in lua
+assert 'version = 1, revision = 37' in lua
 
 for token in ('openSpecialChoice = "open_special_choice"', 'case openSpecialChoice(source: String)', 'case .openSpecialChoice: return .openSpecialChoice'):
     assert token in api, token
@@ -35,11 +35,16 @@ assert 'func performSpecialReward(_ reward: String)' in model
 assert '.openSpecialChoice(source: option.sourceId)' in model
 assert 'spawnBoon(option.id)' in model
 assert 'performSpecialReward(selectedSpecialReward)' in model
-assert 'var selectedSpecialRewardIsNativeChoice: Bool' in model
+assert 'name: "\\(option.sectionTitle)的祝福"' in model
+assert 'englishName: "\\(option.sourceId) Boon"' in model
 assert 'model.specialRewardOptions' in view
 assert 'onAction: model.performSpecialReward' in view
 assert 'Button("原生三选一")' not in view
-assert 'model.selectedSpecialRewardIsNativeChoice ? "打开三选一" : "直接添加"' in view
+assert 'actionTitle: "生成"' in view
+assert 'selectedSpecialRewardIsNativeChoice' not in view
+assert 'Button("出售")' in view
+assert 'Label("出售祝福"' in view
+assert '祝福管理' not in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
 for source in (
@@ -88,5 +93,9 @@ assert 'AddTraitToHero' in spawn
 
 # Catalog advertises the capability instead of making Swift infer it from localized names.
 assert 'nativeChoice = nativeSpecialChoiceSources[source.id] == true' in lua
+source_registry = lua[lua.index('local specialSourceDefinitions'):lua.index('local nativeSpecialChoiceDefinitions')]
+assert 'Heracles' not in source_registry and 'Moros' not in source_registry
+codex_registry = lua[lua.index('local specialSourceCodexIds'):lua.index('local function officialSpecialSourceOrder')]
+assert 'Heracles' not in codex_registry and 'Moros' not in codex_registry
 
 print('native_special_choice_contract_ok')

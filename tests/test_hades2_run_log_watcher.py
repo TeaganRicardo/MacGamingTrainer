@@ -34,8 +34,10 @@ if Hades2RunLogRefreshGate.shouldConsume(
 }
 
 let fileManager = FileManager.default
-let directory = fileManager.homeDirectoryForCurrentUser
-    .appendingPathComponent("Library/Application Support/Supergiant Games/Hades II", isDirectory: true)
+guard CommandLine.arguments.count == 2 else {
+    fatalError("temporary Hades support directory argument required")
+}
+let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let logURL = directory.appendingPathComponent("Hades II.log")
 
 try? fileManager.removeItem(at: directory)
@@ -43,7 +45,7 @@ try fileManager.createDirectory(at: directory, withIntermediateDirectories: true
 try Data("seed\n".utf8).write(to: logURL)
 
 var events: [Hades2RunLogEvent] = []
-let watcher = Hades2RunLogWatcher { event in
+let watcher = Hades2RunLogWatcher(directoryURL: directory) { event in
     events.append(event)
 }
 watcher.start()
@@ -129,7 +131,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
         str(main),
         "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc = subprocess.run([str(binary)], cwd=ROOT, text=True, capture_output=True, timeout=10)
+    support = td / "fake-hades-support"
+    proc = subprocess.run([str(binary), str(support)], cwd=ROOT, text=True, capture_output=True, timeout=10)
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)

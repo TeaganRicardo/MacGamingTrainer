@@ -164,8 +164,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard seenSources.insert(option.sourceId).inserted else { continue }
             nativeActions.append(BoonOption(
                 id: "native-choice:\(option.sourceId)",
-                name: "触发原生三选一",
-                englishName: "",
+                name: "\(option.sectionTitle)的祝福",
+                englishName: "\(option.sourceId) Boon",
                 category: option.category,
                 kind: "native_choice",
                 group: "special",
@@ -181,9 +181,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     private var selectedSpecialBoon: BoonOption? {
         specialRewardOptions.first { $0.id == selectedSpecialReward }
-    }
-    var selectedSpecialRewardIsNativeChoice: Bool {
-        selectedSpecialBoon?.kind == "native_choice"
     }
     var canPerformSelectedSpecialReward: Bool {
         guard let option = selectedSpecialBoon else { return false }
@@ -761,11 +758,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.openBackupFolder(backupID), title: backupID == nil ? "打开备份目录" : "在文件夹中显示")
     }
 
-    func restoreBackup(_ backupID: String) {
+    func restoreBackup(_ backupID: String, backupCurrent: Bool) {
         guard backups.contains(where: { $0.id == backupID && $0.valid }) else {
             error = "请选择校验通过的备份。"; return
         }
-        sendBarrier(.restoreBackup(backupID), title: "恢复所选存档")
+        sendBarrier(.restoreBackup(backupID, backupCurrent: backupCurrent), title: "恢复所选存档")
     }
 
     func deleteBackup(_ backupID: String) {

@@ -22,10 +22,10 @@ final class Hades2RunLogWatcher {
     private var lineBuffer = Data()
     private var runtimeResetPending = false
 
-    init(onEvent: @escaping (Hades2RunLogEvent) -> Void) {
-        let support = FileManager.default.homeDirectoryForCurrentUser
+    init(directoryURL: URL? = nil, onEvent: @escaping (Hades2RunLogEvent) -> Void) {
+        let support = directoryURL ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Supergiant Games/Hades II", isDirectory: true)
-        directoryURL = support
+        self.directoryURL = support
         logURL = support.appendingPathComponent("Hades II.log")
         self.onEvent = onEvent
     }
