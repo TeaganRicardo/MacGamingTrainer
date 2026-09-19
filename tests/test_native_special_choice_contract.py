@@ -32,16 +32,30 @@ assert '原生三选一' in view
 assert '直接添加' in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
-for source in ('Narcissus', 'Echo', 'Medea', 'Icarus'):
+for source in (
+    'Artemis', 'Athena', 'Dionysus', 'Hades',
+    'Arachne', 'Narcissus', 'Echo', 'Medea', 'Circe', 'Icarus',
+):
     assert source in definitions, source
-assert 'Arachne' not in definitions
-assert 'Circe' not in definitions
+for source in ('Heracles', 'Moros'):
+    assert source not in definitions, source
+for source in ('Artemis', 'Athena', 'Dionysus', 'Hades'):
+    assert source + ' = { npc = ' in definitions and 'mode = "loot"' in definitions
+for source in ('Arachne', 'Narcissus', 'Echo', 'Medea', 'Circe', 'Icarus'):
+    assert source + ' = { npc = ' in definitions and 'choices = ' in definitions
 
 block = lua[lua.index('if command == "open_special_choice" then'):lua.index('if command == "spawn_reward" then')]
 assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in block
 assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
 assert 'OpenUpgradeChoiceMenu' in block
 assert 'thread(runChoice)' in block, "native menu must run on a game thread, never hold the LLDB boundary for player input"
+assert 'SpawnObstacle({' not in block, "native choice must not create an in-world anchor"
+assert 'Destroy({' not in block and 'pcall(Destroy' not in block, "native choice must not own a synthetic engine object"
+assert 'RoomRequiredObjects' not in block, "native choice must not mutate room object ownership"
+assert 'source.ObjectId = -1' in block, "native selection cleanup needs only a non-nil sentinel ObjectId"
+assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
+assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
+assert 'CurrentRun.LastReward' in block, "Echo choice must preserve last-reward semantics"
 assert 'IsGameStateEligible' in block
 assert 'UpgradeOptions' in block
 assert 'AddTraitToHero' not in block
