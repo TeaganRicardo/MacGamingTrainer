@@ -29,7 +29,7 @@ assert 'definition.Name' in lua
 assert 'type(ConsumableData[id]) == "table"' in lua
 assert 'type(LootData[id]) == "table"' in lua
 assert 'RuntimeFutureReward' not in lua  # test-only name comes from the mock
-assert 'revision = 33' in lua
+assert 'revision = 34' in lua
 
 # Hades SJSON display strings contain presentation tags. They must never leak to
 # the UI as literal (#Echo), #Echo or {#Echo} text.
