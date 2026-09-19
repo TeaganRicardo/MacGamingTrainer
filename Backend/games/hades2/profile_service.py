@@ -27,7 +27,6 @@ def _normalize_shortcuts(raw):
     """Validate current Profile shortcut chords without legacy coercion."""
     if not isinstance(raw,dict):return {}
     result={}
-    used=set()
     actions=sorted(
         action for action in raw
         if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)
@@ -39,9 +38,6 @@ def _normalize_shortcuts(raw):
         if type(key_code) is not int or not 0<=key_code<=65535:continue
         if type(modifiers) is not int or not 0<=modifiers<=0xFFFFFFFF or modifiers & ~_SHORTCUT_MODIFIER_MASK:continue
         if not isinstance(label,str) or not label or len(label)>16 or any(ord(ch)<32 for ch in label):continue
-        token=(key_code,modifiers)
-        if token in used:continue
-        used.add(token)
         result[action]={'keyCode':key_code,'modifiers':modifiers,'keyLabel':label}
     return result
 
