@@ -6,6 +6,7 @@ version preparation stay in preparation.py.
 from pathlib import Path
 import datetime
 import json
+import logging
 import os
 import re
 import shutil
@@ -13,6 +14,7 @@ import tempfile
 import time
 
 from . import preparation as _preparation
+from .persistence import quarantine_corrupt_file
 
 # Keep these indirections tiny and explicit so tests can inject a temporary save
 # root without coupling the save service to executable preparation internals.
@@ -229,21 +231,32 @@ def staged_restore():
         return None
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(data, dict):
+            raise ValueError('暂存恢复记录无效。')
         backup_id = data.get('backupId')
         if not isinstance(backup_id, str) or not backup_id:
             raise ValueError('暂存恢复记录无效。')
+        run_count = data.get('runCount')
+        if run_count is not None and (type(run_count) is not int or not 0 <= run_count <= 99_999_999):
+            raise ValueError('暂存恢复记录 Run Count 无效。')
+        staged_at = data.get('stagedAt', '')
+        if not isinstance(staged_at, str) or len(staged_at) > 128:
+            raise ValueError('暂存恢复记录时间无效。')
         root = _save_backup_path(backup_id)
         _save_manifest(root)
-        return {'backupId': backup_id, 'runCount': data.get('runCount'), 'stagedAt': data.get('stagedAt', '')}
-    except Exception:
-        logging.exception('Invalid staged restore marker') if 'logging' in globals() else None
-        raise
+        return {'backupId': backup_id, 'runCount': run_count, 'stagedAt': staged_at}
+    except Exception as error:
+        quarantined = quarantine_corrupt_file(path)
+        logging.warning('Invalid staged restore marker quarantined=%s: %s', quarantined, error)
+        if quarantined is None and path.exists():
+            raise RuntimeError('暂存恢复记录损坏且无法安全隔离；请检查文件权限。') from error
+        return None
 
 
 def stage_restore(backup_id, run_count=None):
     root = _save_backup_path(backup_id)
     _save_manifest(root)
-    if run_count is not None and (type(run_count) is not int or isinstance(run_count, bool) or run_count < 0):
+    if run_count is not None and (type(run_count) is not int or not 0 <= run_count <= 99_999_999):
         raise ValueError('Run Count 无效。')
     now = datetime.datetime.now().astimezone().isoformat()
     _write_json(_staged_restore_path(), {'backupId': backup_id, 'runCount': run_count, 'stagedAt': now})
