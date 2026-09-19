@@ -3057,10 +3057,9 @@ if __MacGamingTrainerV1 == nil then
         "Destroy", "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
       })
       if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
-      local allowedNativeSources = { Narcissus = true, Echo = true, Medea = true, Icarus = true }
-      if not allowedNativeSources[params.source] then error("Special blessing source has no audited native choice flow") end
       local definition = nativeSpecialChoiceDefinitions[params.source]
-      if type(definition) ~= "table" or type(NPCData) ~= "table" or type(TraitData) ~= "table" then
+      if type(definition) ~= "table" then error("Special blessing source has no audited native choice flow") end
+      if type(NPCData) ~= "table" or type(TraitData) ~= "table" then
         error("Special blessing source data is unavailable")
       end
       local npcData = NPCData[definition.npc]
