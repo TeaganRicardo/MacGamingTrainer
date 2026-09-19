@@ -21,13 +21,17 @@ assert "guard success" in model
 assert "activeFeatures[key] == true" in model
 assert "dormantFeatures[key] == true" in model
 assert "featureHotkeyFeedback" in model
-shortcut_block = model[model.index("private func performFeatureShortcut"):model.index("private func performDeferredToggleShortcut")]
+shortcut_block = model[model.index("private func performFeatureShortcut"):model.index("private func performBoonForceShortcutFeedback")]
 assert ".toggle(targetEnabled:" not in shortcut_block, "active=false alone must not be reported as deferred"
 assert "if let feedback" in shortcut_block
 
-# Future-result toggles have Hades semantics: enabling force flags waits for a
-# later boon choice, while disabling is immediately off.
-assert "performDeferredToggleShortcut" in model
+# Force Legendary / Duo are immediately active when the boon-rarity runtime
+# hook is already active. They are deferred only while that parent runtime is
+# dormant/unavailable; disabling is immediately off.
+assert "performBoonForceShortcutFeedback" in model
+force_helper = model[model.index("private func performBoonForceShortcutFeedback"):model.index("private func performShortcut")]
+assert 'activeFeatures["boonRarityEnabled"] == true' in force_helper
+assert ".enabled" in force_helper and ".deferred" in force_helper and ".disabled" in force_helper
 assert "forceLegendary" in model and "forceDuo" in model
 
 print("hotkey_feedback_contract_ok")
