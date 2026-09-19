@@ -295,7 +295,7 @@ class Hades2Adapter(GameAdapter):
         for element,amount in wanted_elements.items():pending.append(('set_element',{'element':element,'amount':int(amount)}));pending.append(('lock_element',{'element':element,'locked':True}))
         reward=self.preferences.get('nextRoomReward')
         if force_full or self.state.get('nextRoomReward')!=reward:pending.append(('set_next_room_reward',{'reward':reward}))
-        for command,params in pending:self.execute(command,params,replay=True)
+        if pending:self.execute('replay_preferences',{},replay=True,batch=pending)
         self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
         self._capture_runtime_preferences(self.state);self._save_preferences();self._overlay_preferences()
         return dict(self.state)
@@ -399,7 +399,7 @@ class Hades2Adapter(GameAdapter):
         self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
         self._overlay_preferences()
 
-    def execute(self,command,params,replay=False,read_only=False):
+    def execute(self,command,params,replay=False,read_only=False,batch=None):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
         # maintenance, so this is not yet a strict transport/Lua snapshot API.
@@ -438,7 +438,15 @@ class Hades2Adapter(GameAdapter):
             recovered_generation=False
             try:
                 while True:
-                    dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                    if batch is None:
+                        dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                    else:
+                        calls=[]
+                        for batch_command,batch_params in batch:
+                            item_params=dict(batch_params or {});item_params['includeCatalogs']=False
+                            calls.append('__MacGamingTrainerV1.dispatch('+lua_value(batch_command)+','+lua_value(item_params)+')')
+                        calls.append('return __MacGamingTrainerV1.dispatch("status",{["includeCatalogs"]=false})')
+                        dispatch='return __MacGamingTrainerV1.json((function() '+ ';'.join(calls) +' end)())'
                     code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
                     try:
                         decoded=execute_with_ledger(
