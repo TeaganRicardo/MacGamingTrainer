@@ -141,8 +141,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var saveManagerPresented = false
 
     private let mutationScheduler = Hades2MutationScheduler()
-    private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] in
-        self?.handleRunLogReadySignal()
+    private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] event in
+        self?.handleRunLogEvent(event)
     }
     private var pendingRunReadySignal = false
     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
@@ -204,10 +204,31 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.status, title: "检测可操作场景", announceSuccess: false)
     }
 
-    private func handleRunLogReadySignal() {
+    private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
         guard !exiting else { return }
-        pendingRunReadySignal = true
-        consumeRunLogReadySignalIfPossible()
+        switch event {
+        case .worldStopped, .runtimeReset:
+            guard connected else { return }
+            pendingRunReadySignal = false
+            invalidatePendingMutations()
+            status = "waiting"
+            scene = event == .worldStopped ? "main_menu" : "loading"
+            activeFeatures = [:]
+            dormantFeatures = Dictionary(uniqueKeysWithValues:
+                desiredFeatureKeys.filter { desiredFeatureEnabled($0) }.map { ($0, true) }
+            )
+            capabilities = capabilities.mapValues { _ in false }
+            capabilities["hotBackup"] = true
+            capabilities["diagnostics"] = true
+            statAvailable = statAvailable.mapValues { _ in false }
+            activationGraceWorkItems.values.forEach { $0.cancel() }
+            activationGraceWorkItems = [:]
+            activationGraceFeatures = []
+        case .runtimeReady:
+            guard connected else { return }
+            pendingRunReadySignal = true
+            consumeRunLogReadySignalIfPossible()
+        }
     }
 
     private func consumeRunLogReadySignalIfPossible() {
