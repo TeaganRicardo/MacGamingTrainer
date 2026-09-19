@@ -118,3 +118,10 @@ for token in (
     'consumeRunLogReadySignalIfPossible',
 ):
     assert token in model, token
+
+consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
+consume_end = model.index('\n    func toggleConnection()', consume_start)
+run_log_refresh = model[consume_start:consume_end]
+assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
+assert 'status == "ready"' not in run_log_refresh
+assert 'status == "waiting"' not in run_log_refresh
