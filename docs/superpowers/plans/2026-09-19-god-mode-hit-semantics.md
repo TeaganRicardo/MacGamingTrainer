@@ -31,7 +31,7 @@
 - Consumes: `Backend/games/hades2/runtime/hades.lua` as source text.
 - Produces: a static regression contract that requires the hit-baseline lifecycle and revision 40.
 
-- [ ] **Step 1: Extend the existing static contract**
+- [x] **Step 1: Extend the existing static contract**
 
 Add assertions equivalent to:
 
@@ -69,7 +69,7 @@ python3 tests/test_god_mode_hostile_effects.py
 
 Expected: FAIL because r39 has no hit baseline and revision is still 39.
 
-- [ ] **Step 3: Commit the RED contract**
+- [x] **Step 3: Commit the RED contract**
 
 ```bash
 git add tests/test_god_mode_hostile_effects.py
@@ -86,11 +86,11 @@ git commit -m "test: lock god mode hit counter semantics"
 - Consumes: existing `ensureHeroDamageRouter`, `installGodMode`, `releaseGodMode`, and `enforceLocks`.
 - Produces: `restoreGodModeHitCount(hero)`, plus resident state `godModeHitHero`, `godModeHitBaseline`, and `godModeHitBaselineKnown`.
 
-- [ ] **Step 1: Bump resident runtime revision**
+- [x] **Step 1: Bump resident runtime revision**
 
 Change both revision checks/state declarations from 39 to 40.
 
-- [ ] **Step 2: Add exact baseline state**
+- [x] **Step 2: Add exact baseline state**
 
 Extend `M` with:
 
@@ -98,7 +98,7 @@ Extend `M` with:
 godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false,
 ```
 
-- [ ] **Step 3: Add one restoration helper**
+- [x] **Step 3: Add one restoration helper**
 
 Place near the God Mode release helpers:
 
@@ -110,7 +110,7 @@ local function restoreGodModeHitCount(hero)
 end
 ```
 
-- [ ] **Step 4: Restore immediately at the blocked damage boundary**
+- [x] **Step 4: Restore immediately at the blocked damage boundary**
 
 In the existing `if M.godMode then` branch of the shared `Damage` hook:
 
@@ -121,7 +121,7 @@ return nil
 
 Do not call the original `Damage`.
 
-- [ ] **Step 5: Capture and release the baseline**
+- [x] **Step 5: Capture and release the baseline**
 
 When `installGodMode` binds a new Hero:
 
@@ -142,7 +142,7 @@ M.godModeHitBaseline = nil
 M.godModeHitBaselineKnown = false
 ```
 
-- [ ] **Step 6: Enforce from the existing frame guard**
+- [x] **Step 6: Enforce from the existing frame guard**
 
 Inside `enforceLocks()`, after confirming the current Hero is available:
 
@@ -172,7 +172,7 @@ bash Tools/run_linux_checks.sh
 
 Expected: `linux_checks_ok`.
 
-- [ ] **Step 9: Commit the implementation**
+- [x] **Step 9: Commit the implementation**
 
 ```bash
 git add Backend/games/hades2/runtime/hades.lua tests/test_god_mode_hostile_effects.py
@@ -188,7 +188,7 @@ git commit -m "fix: keep god mode hits out of run state"
 - Consumes: Task 2 implementation and the 1.139672 source audit.
 - Produces: a reviewed r40 God Mode hit-semantics candidate.
 
-- [ ] **Step 1: Verify no forbidden broad interception**
+- [x] **Step 1: Verify no forbidden broad interception**
 
 Run:
 
@@ -198,7 +198,7 @@ grep -n 'installHook("ApplyEffect"' Backend/games/hades2/runtime/hades.lua && ex
 
 Expected: no match.
 
-- [ ] **Step 2: Verify only the existing guard enforces the baseline**
+- [x] **Step 2: Verify only the existing guard enforces the baseline**
 
 Run:
 
@@ -220,3 +220,15 @@ Expected: both PASS.
 - [ ] **Step 4: Record manual acceptance target**
 
 Manual r40 acceptance must record the Hero hit counter before enabling God Mode, take repeated hostile hits, verify the counter is unchanged, disable God Mode, take one normal hit, and verify the counter increments exactly once.
+
+
+## Execution checkpoint — 2026-09-19
+
+- Isolated branch: `fix/batch-b-runtime-semantics-r40`.
+- RED contract commit: `5c59a2dcc26931cd8a0fb72c7b974a6048dea1e7`.
+- r40 implementation commit: `864ff8fcbf96c616564756d658d3535c1f570f94`.
+- RED was reproduced against the exact r39 God Mode/revision structure in the available container; the new contract fails first on revision 39 and then on the absent hit-baseline lifecycle.
+- The updated r40 snippets satisfy the new source contract, including nil-preserving baseline state and restoration before the God Mode Damage early-return.
+- Review confirms there is still no `installHook("ApplyEffect"` and no new timer/thread/polling path.
+- Full repository `python3 tests/test_god_mode_hostile_effects.py` and `Tools/run_linux_checks.sh` remain **not run** at this checkpoint: the current container has no repository checkout, and the authorized target Mac is offline. These unchecked verification steps remain hard gates before this slice can be called verified or moved into the release branch.
+- Manual acceptance must additionally verify the persisted/save-visible Hero hit count, not only the live runtime field.
