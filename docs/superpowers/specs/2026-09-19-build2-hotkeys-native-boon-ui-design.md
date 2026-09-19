@@ -8,6 +8,7 @@ This follow-up keeps product version at 0.1 / Build 2 and adds four related chan
 2. Automatic default shortcut reflow when Hades actions are added or reordered.
 3. A native Hades II boon-removal entry point.
 4. A native Hades II special-blessing three-choice entry point while retaining direct-add behavior.
+5. God Mode immunity to audited hostile control/environment effects that bypass normal Damage routing.
 
 The already-landed single-boundary preference replay fix remains unchanged.
 
@@ -63,28 +64,39 @@ UI adds one clearly labeled action in build/boon management: 打开祝福出售�
 
 Existing direct-add remains available.
 
-Add a second action mode for special blessings: 原生三选一. The selected special trait provides a stable sourceId; the catalog also publishes nativeChoice so Swift never infers capability from localized labels.
+The second action, 原生三选一, is source-based. The selected catalog row carries stable sourceId and nativeChoice fields; Swift never infers capability from localized names.
 
-Runtime command open_special_choice receives source and is limited to current-game sources whose normal reward can be reproduced by the generic native choice handler without missing functional preprocessing:
-- Narcissus -> NPCData.NarcissusBenefitChoices
-- Echo -> NPCData.EchoBenefitChoices (native flow forces Epic before Dream overrides)
-- Medea -> NPCData.MedeaCurseChoices
-- Icarus -> NPCData.IcarusBenefitChoices
+Audited native-choice sources in Hades II 1.139672:
+- loot-style native choice through SetTraitsOnLoot: Artemis, Athena, Dionysus, Hades;
+- fixed UpgradeOptions choice data: Arachne, Narcissus, Echo, Medea, Circe, Icarus;
+- Heracles and Moros remain direct-add only because no equivalent native three-choice flow was found.
 
-Arachne and Circe remain direct-add only in this iteration:
-- Arachne's normal flow requires ArachneArmorApply / SetupCostume after selection.
-- Circe's DoubleFamiliarTrait path prepares SessionMapState data before opening the menu.
-Calling only the generic menu for either source could show a valid-looking choice whose effect is incomplete.
+The trainer shallow-copies current game NPC/choice data and opens OpenUpgradeChoiceMenu on the game's thread scheduler so player input never holds an LLDB boundary. The synthetic source uses a non-engine sentinel ObjectId (-1) only because HandleUpgradeChoiceSelection indexes RoomRequiredObjects[source.ObjectId]; it never creates or destroys an engine object and never takes room-object ownership.
 
-The trainer shallow-copies the game's current NPC/choice data, filters options through IsGameStateEligible, selects up to three using the game's priority/random rules, and opens OpenUpgradeChoiceMenu. Because the generic native handler requires screen.Source.ObjectId, the trainer creates one built-in InvisibleTarget as a temporary, non-visible source anchor. It is not a reward object and is destroyed/removed from room state after the menu closes.
+Functional source-specific behavior is preserved where the generic menu alone is insufficient:
+- Echo keeps Epic choice rarity and LastReward fallback semantics;
+- Arachne runs SetupCostume after the native choice closes;
+- Circe preserves DoubleFamiliarTrait preprocessing through SessionMapState.
 
-OpenUpgradeChoiceMenu must run through the game's thread(...) scheduler. The LLDB command only validates/builds the request and schedules the game thread, then returns immediately; player input must never hold the debugger boundary open.
+Trainer-created LootPickups/LootChoiceHistory bookkeeping is restored after the menu closes. The selected trait itself is still applied by native HandleUpgradeChoiceSelection / AddTraitToHero.
 
-Trainer-specific LootPickups and LootChoiceHistory bookkeeping created by the virtual source is restored after the menu closes. The chosen trait itself remains native: HandleUpgradeChoiceSelection / AddTraitToHero and normal trait side effects are game-owned.
+Selene SpellDrop and Chaos TrialUpgrade keep their existing native spawn paths instead of being forced through this bridge.
 
-Selene SpellDrop and Chaos TrialUpgrade keep their existing native loot spawn paths rather than being forced through the NPC choice bridge.
+The UI disables 原生三选一 when nativeChoice=false.
 
-The UI disables 原生三选一 when the selected entry/source has nativeChoice=false.
+## 5. God Mode hostile effect immunity
+
+God Mode already stops the outer Damage path and owns the trainer invulnerability flag. Two audited hostile effects bypass that damage path and alter player control directly:
+- HecatePolymorphStun;
+- MiasmaSlow.
+
+God Mode uses the game's engine-level AddEffectBlock / RemoveEffectBlock API for exactly those two names and clears an already-active instance when enabled. This catches projectile/terrain application without a broad ApplyEffect hook.
+
+The denylist deliberately excludes:
+- ChaosStun, because it is a player-accepted Chaos curse;
+- ChronosPolymorphStun, because it appears in scripted presentation/progression paths;
+- MedeaPoison, whose damage remains covered by the existing Damage route;
+- unrelated buffs, slows and player effects.
 
 ## Safety and lifecycle constraints
 
