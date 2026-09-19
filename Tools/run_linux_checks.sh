@@ -15,6 +15,7 @@ tests=(
   tests/test_hotkey_feedback_contract.py
   tests/test_localization_cache_recovery_v0180.py
   tests/test_native_sell_traits_contract.py
+  tests/test_native_special_choice_contract.py
   tests/test_passive_ready_transition.py
   tests/test_persistence_integrity_v0180.py
   tests/test_post_v01_feature_contracts.py
