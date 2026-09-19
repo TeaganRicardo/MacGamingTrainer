@@ -94,6 +94,7 @@ Then run final consolidated regression/acceptance.
 ## GitHub state
 
 - PR #7: MERGED into `main` at r39.
+- PR #18: DRAFT; active r40 God Mode hit-count slice. Do not merge until fresh automated/build/manual verification exists.
 - PR #10: still DRAFT; retargeted to `main`. Its Phase 1 branch is intentionally unsynchronized with r39 until Phase 0 closes.
 - Issue #1: keep open as lifecycle/manual-acceptance umbrella until the remaining Phase 0 lifecycle checks close.
 - Issue #11: keep open for same-PID recovery/readiness performance until Batch D is accepted.
@@ -112,7 +113,7 @@ Retain:
 - `architecture/reference-module-proof` — PR #10;
 - unrelated `ci/lidkeep-rc1-build`.
 
-Delete stale merged branches when branch-deletion tooling is available; do not force-delete anything with unique commits.
+The merged audit/Batch A/r38/r39/release branches have been non-forced fast-forwarded to the current `main`, so they hold no unique commits. Delete them when branch-deletion tooling is available. Do not force-delete anything with unique commits.
 
 ## Permanent non-regression constraints
 
