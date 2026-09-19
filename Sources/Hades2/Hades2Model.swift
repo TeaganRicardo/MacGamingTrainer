@@ -211,16 +211,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func consumeRunLogReadySignalIfPossible() {
-        guard pendingRunReadySignal else { return }
-        if status == "ready" {
-            pendingRunReadySignal = false
-            return
-        }
-        guard connected,
-              status == "waiting",
-              backendAvailable,
-              !busy,
-              !exiting else { return }
+        guard Hades2RunLogRefreshGate.shouldConsume(
+            pending: pendingRunReadySignal,
+            connected: connected,
+            backendAvailable: backendAvailable,
+            busy: busy,
+            exiting: exiting
+        ) else { return }
         pendingRunReadySignal = false
         send(.status, title: "检测可操作场景", announceSuccess: false) { [weak self] _ in
             self?.consumeRunLogReadySignalIfPossible()
