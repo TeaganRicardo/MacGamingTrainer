@@ -36,7 +36,7 @@ A module declares a `saveManagement` section in `module.json`:
 - restore policy: `hotPreferred` or `stoppedOnly`;
 - whether a busy restore may be staged.
 
-The module may implement an optional provider when static patterns are insufficient. A provider may refine the resolved real-save file set and may report a live restore as busy. It does not copy files, write manifests, restore data, manage rollback copies, or manage staged transactions.
+The module may implement an optional provider when static patterns are insufficient. A provider may refine the resolved real-save file set, may report a live restore as busy, and may optionally describe snapshot naming. Naming description is read-only: the provider may return a default display name plus short game-specific naming details derived from the resolved save files. Core validates and stores those strings; the provider never writes snapshot metadata directly. It does not copy files, write manifests, restore data, manage rollback copies, or manage staged transactions.
 
 ### Backend Core
 
@@ -128,6 +128,17 @@ Declarative resolution uses only explicit include patterns. It never falls back 
 
 Provider results pass through the same Core validation. Provider output cannot expand the allowed roots.
 
+An optional provider may also implement:
+
+```text
+describe_snapshot(files, created_at) -> {
+  "defaultName": String?,
+  "nameDetails": [String]
+}
+```
+
+`created_at` is the local wall-clock timestamp Core will store. Core accepts at most four short non-empty detail strings, validates the returned default name with the same rules as user-visible snapshot names, and falls back to the generic timestamp name when the hook is absent or returns no default name. These details are descriptive only and never affect restore behavior.
+
 ## Snapshot format
 
 New snapshots live at:
@@ -148,6 +159,7 @@ snapshotId
 gameId
 createdAt
 displayName
+nameDetails[]
 hot
 files[]:
   rootId
@@ -156,7 +168,7 @@ files[]:
   size
 ```
 
-Snapshots have stable physical IDs. Rename edits only `displayName`.
+Snapshots have stable physical IDs. Rename edits only `displayName`. Snapshot timestamps use local wall-clock values without a timezone suffix. A provider may supply the initial `displayName` and short `nameDetails`; otherwise Core uses its generic local-time default.
 
 A snapshot is valid only if its manifest is valid, every listed file matches size/hash, no unexpected file exists under `files/`, and no symlink is present.
 
@@ -234,7 +246,7 @@ It stores:
 
 - snapshot ID;
 - whether a persistent pre-restore snapshot is requested;
-- staged timestamp.
+- staged timestamp as local wall-clock time without a timezone suffix.
 
 Only one pending restore exists per game.
 
@@ -282,21 +294,48 @@ The Hades-specific `Hades2SaveManagerView`, Hades backup state, Hades backup req
 
 The Host exposes one save-management entry when the active module declares support.
 
-The new sheet uses a two-pane management layout:
+The save manager is a single-column chronological inventory, newest first. It deliberately avoids a permanent inspector/selection pane.
 
-- left: snapshot inventory, validity state, creation time, file count and live-backup badge;
-- right: current save-management capabilities and selected snapshot actions;
-- top: pending-restore notice when present;
+Top controls:
+
 - primary action: create snapshot;
-- selected actions: rename, reveal in Finder, restore, delete;
-- restore option: preserve current save as a normal snapshot before restore;
-- invalid snapshots remain visible and deletable but cannot be restored.
+- refresh;
+- open snapshot directory;
+- when multiple snapshots are selected, a compact bulk-action area reports the selection count and exposes only actions that make sense for all selected items.
 
-Restore has one user action. The backend decides whether it can restore immediately, hot-restore, or stage because files are busy. The UI does not ask the user to reason about process/file locking.
+Each snapshot row contains:
 
-When a restore is staged, the sheet reports that current files are busy and the restore will run on target exit. The user can cancel it.
+- a multi-select checkbox;
+- display name;
+- optional `热备份` badge beside the name;
+- local timestamp with no timezone text;
+- file count;
+- optional provider-supplied `nameDetails`;
+- validity/error state;
+- a restore action when the snapshot is valid;
+- an ellipsis menu used for secondary actions and as the extension point for future snapshot operations.
 
-The model owns selection-independent data only. Transient editor state such as rename text and confirmation presentation stays in the View.
+Double-clicking the display name enters inline rename editing. Rename is committed on Return/focus loss and cancelled with Escape. The ellipsis menu does not need a duplicate rename command.
+
+Multi-selection is independent from restore. Restore remains a single-snapshot operation initiated from that row. Bulk management initially supports deletion of selected snapshots; the selection model and ellipsis affordance leave room for later batch operations without inventing disabled placeholders now.
+
+The ellipsis menu initially contains only meaningful secondary operations such as Reveal in Finder and Delete. No non-functional future commands are shown.
+
+Pending restore appears as a persistent notice above the inventory with the snapshot name and a cancel action.
+
+Restore uses one confirmation sheet/dialog containing:
+
+- the target snapshot name;
+- a `恢复前保留当前存档` toggle;
+- Cancel and Restore.
+
+The backend decides whether restore runs immediately, hot-restores, or stages because files are busy. The UI never asks the user to reason about process/file locking.
+
+Invalid snapshots remain visible, selectable for bulk deletion, revealable, and deletable, but cannot be restored.
+
+`TrainerSaveManagerModel` owns only shared data and request state: snapshot inventory, pending restore, busy/error/notice state. Selection, inline rename editing, restore candidate, delete confirmation, and other transient presentation state remain in the View.
+
+When a restore is staged, the sheet reports that the restore will run on target exit. The existing `TrainerTargetProcessMonitor` stopped transition triggers one `core.save.apply_staged` request. There is no save-manager polling timer.
 
 ## Error handling
 
