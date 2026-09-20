@@ -53,11 +53,19 @@ These had no unique commits/files relative to main and are not execution bases:
 
 #### Historical audit evidence, not missing product code
 
+- `audit/post-fix-linux-review-20260921` — corrected-main source/review evidence; its current file tree is already represented on main.
 - `audit/fix-future-schema-runtime-cleanup` — its forward-schema teardown regression is already present on main.
 - `audit/fix-save-target-probe-fail-closed` — equivalent implementation/regression is already on main via `6e1069dd...`.
 - `audit/fix-staged-restore-marker` — older, weaker staged-claim implementation; current main contains the stronger applying/applied/indeterminate model and must not be downgraded.
 - `audit/post-merge-linux-review-20260921` — temporary source-snapshot workflow evidence only.
 - `audit/pre-feature-deep-review-20260920` — PR #40 audit history; squash-merged into main.
+
+#### Branches identical to current main
+
+- `audit/ai-governance-20260921`
+- `governance/ai-development-audit-20260921`
+
+Both compared identical to main and contain no unique product or documentation delta.
 
 #### Squash-merged / superseded implementation branches
 
@@ -80,6 +88,7 @@ Git commit ancestry still reports divergence because these were squash-merged or
 - `fix/save-storage-root-containment` -> `40f73d79...`.
 - `fix/save-empty-error-code` -> `dc565f59...`.
 - `fix/invalid-snapshot-row-sanitization` -> `9b15d839...`.
+- `fix/post-merge-review-save-completion` — PR #42 historical repair branch; its callback-completion fix and tests are squash-merged in `ee258442...`.
 
 #### Historical documentation-only branches
 
@@ -106,6 +115,7 @@ The connector still does not expose a safe delete-ref action. Branches were ther
 - Linux contracts intentionally use a curated cross-platform subset.
 - `tests/test_test_suite_discovery.py` asserts the exhaustive macOS discovery contract.
 - PR #42 added `test_core_save_swift_model_round20.py` to the permanent Linux subset after the unavailable-backend completion defect was found.
+- this round adds `test_core_save_service.py` to the permanent Linux subset so interrupted-rollback recovery discovery is continuously covered on Linux.
 - the module matrix still builds Hades II and the permanent reference fixture independently and verifies one-module package isolation.
 
 ### Handoff consistency
@@ -316,7 +326,29 @@ Repair head `e2959626209fdcc1665c376cf36b93a8c2a959d2`:
 - module matrix `35528506352`: PASS;
 - Build 2 macOS `35528506442`: PASS.
 
-A final merge-candidate CI run is still required after removing the temporary source-snapshot workflow and committing this audit/handoff documentation.
+The end-to-end regression was then strengthened to reproduce target-write failure followed by rollback interruption, and `test_core_save_service.py` was added to the permanent Linux gate.
+
+### Final merge-candidate CI
+
+Final tested product/test head:
+`d4b1bbb1d5215b59e95ebae46cf021def16657c8`
+
+Temporary source-snapshot workflow was removed before this final candidate.
+
+Fresh evidence:
+- Linux contracts `35528849520`: PASS;
+- module matrix `35528849519`: PASS; Hades II and reference fixture both build and package in isolation;
+- Build 2 macOS `35528849516`: PASS; exhaustive test suite, Hades II build, package verification and RC artifact upload all succeeded.
+
+The final macOS log explicitly records PASS for:
+- `test_core_save_service.py` -> `core_save_service_ok`;
+- `test_core_save_swift_model_round20.py` -> `core_save_swift_model_round20_ok`;
+- `test_core_save_ui_round20.py` -> `core_save_ui_round20_ok`;
+- the four Linux platform-only tests:
+  - `core_save_batch_delete_round20_ok`;
+  - `core_save_rename_completion_round24_ok`;
+  - `hades2_run_log_watcher_ok`;
+  - `trainer_log_sink_shared_append_ok`.
 
 ## Remaining non-blocking hardening ceilings
 
@@ -330,9 +362,15 @@ One new Important product defect was found and repaired: persistent discovery of
 
 No other Critical/Important product defect or real unmerged historical branch implementation was found.
 
-Final verdict remains **pending** until:
-1. temporary audit workflow is removed;
-2. final merge-candidate Linux/module/macOS gates pass;
-3. branch remains `behind=0`;
-4. PROJECT_STATUS and roadmap issue #8 are synchronized to this round;
-5. PR #41 is merged and merged-main verification is checked.
+The repair is **ready to merge**:
+- temporary audit workflow is removed;
+- final Linux/module/macOS gates pass on `d4b1bbb...`;
+- branch was synchronized with current main through a real two-parent merge and had `behind=0` before final documentation closeout;
+- PROJECT_STATUS on the repair branch reflects the round-2 gate;
+- roadmap issue #8 has been frozen on the round-2 audit repair instead of incorrectly allowing Save Editor work.
+
+Remaining closeout:
+1. merge PR #41;
+2. verify merged-main push CI;
+3. update PROJECT_STATUS and roadmap issue #8 to the merged SHA;
+4. only then reopen the Hades II Save Editor design gate.
