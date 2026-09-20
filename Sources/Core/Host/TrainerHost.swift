@@ -6,10 +6,13 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
     @ObservedObject var model: Module.Model
     @StateObject private var targetMonitor: TrainerTargetProcessMonitor
+    @StateObject private var saveManager: TrainerSaveManagerModel
     @State private var connectionPolicy = TrainerConnectionPolicy()
+    @State private var saveManagerPresented = false
 
-    init(model: Module.Model) {
+    init(model: Module.Model, session: TrainerBackendSession) {
         self.model = model
+        _saveManager = StateObject(wrappedValue: TrainerSaveManagerModel(session: session))
         _targetMonitor = StateObject(wrappedValue: TrainerTargetProcessMonitor(
             processName: Module.descriptor.targetProcessName,
             bundleIdentifier: Module.descriptor.targetBundleIdentifier
@@ -23,7 +26,18 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 presentation: Module.presentation,
                 connected: model.connected
             ) {
-                Module.makeSidebarActions(model: model)
+                VStack(alignment: .leading, spacing: 16) {
+                    Module.makeSidebarActions(model: model)
+                    if Module.descriptor.supportsSaveManagement {
+                        Button {
+                            saveManagerPresented = true
+                            saveManager.refresh()
+                        } label: {
+                            Label("存档管理", systemImage: "externaldrive")
+                        }
+                        .disabled(!model.backendAvailable)
+                    }
+                }
             }
         } content: {
             VStack(alignment: .leading, spacing: theme.pageSpacing) {
@@ -53,6 +67,9 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onChange(of: targetMonitor.isRunning) { _, running in
             connectionPolicy.targetStateChanged(running: running)
+            if !running, Module.descriptor.supportsSaveManagement, model.backendAvailable {
+                saveManager.applyStagedIfPossible()
+            }
             if !running, model.backendAvailable && !model.busy {
                 model.refreshFromHost()
             }
@@ -73,8 +90,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             connectionPolicy.targetActivated()
         }
         .onChange(of: model.backendAvailable) { _, available in
-            if available { connectionPolicy.backendBecameAvailable() }
-            else { connectionPolicy.backendBecameUnavailable() }
+            if available {
+                connectionPolicy.backendBecameAvailable()
+                if Module.descriptor.supportsSaveManagement, !targetMonitor.isRunning {
+                    saveManager.applyStagedIfPossible()
+                }
+            } else {
+                connectionPolicy.backendBecameUnavailable()
+            }
             reconcileAutomaticConnection()
         }
         .onChange(of: model.busy) { _, _ in
@@ -82,6 +105,9 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onChange(of: model.connected) { _, connected in
             connectionPolicy.connectionChanged(connected: connected)
+        }
+        .sheet(isPresented: $saveManagerPresented) {
+            TrainerSaveManagerView(model: saveManager)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             targetMonitor.refresh()

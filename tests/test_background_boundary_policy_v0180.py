@@ -6,24 +6,14 @@ texts = {path: path.read_text() for path in hades_sources}
 model = texts[root/'Sources/Hades2/Hades2Model.swift']
 
 # Repeating timers are a known performance hazard because status/connect can
-# cross the LLDB/Lua boundary.  The only repeating Hades timer retained by the
-# current design is the staged-save-restore watcher, whose scan is gated on a
-# pending restore and does not invoke live Lua status.
+# cross the LLDB/Lua boundary. Save restore is now Host-event-driven as well,
+# so Hades owns no repeating Timer.scheduledTimer path at all.
 all_scheduled_timers = [
     (path, text.count('Timer.scheduledTimer'))
     for path, text in texts.items()
     if 'Timer.scheduledTimer' in text
 ]
-assert all_scheduled_timers == [(root/'Sources/Hades2/Hades2Model.swift', 1)]
-
-start = model.index('pendingRestoreTimer = Timer.scheduledTimer')
-end = model.index('\n    func shortcutChord', start)
-watcher = model[start:end]
-assert 'repeats: true' in watcher
-assert 'pendingRestoreID != nil' in watcher
-assert 'self.send(.scan' in watcher
-for forbidden in ('.status', '.connect', '.listBackups', '.loadProfile', '.saveProfile'):
-    assert forbidden not in watcher
+assert all_scheduled_timers == []
 
 # The removed feature-state polling regression must stay removed.
 for forbidden in ('featureStateTimer', 'updateFeatureStatePolling', '同步功能状态'):

@@ -25,7 +25,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     ]
     @Published var connected = false
     @Published private(set) var backendStatus = TrainerBackendStatus()
-    private let backendSession = TrainerBackendSession()
+    private let backendSession: TrainerBackendSession
     private let logSink = TrainerLogSink()
     private lazy var api = Hades2API(session: backendSession)
     var backendAvailable: Bool { backendStatus.backendAvailable }
@@ -36,12 +36,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var operation: String { backendStatus.operation }
     var connectionDetailText: String { "版本 \(version)" + (pid.map { " · PID \($0)" } ?? "") }
     var hostActionsEnabled: Bool { !busy && !exiting && protocolCompatible }
-    /// Save-management UI should remain usable while the staged-restore watcher
-    /// performs its passive process scan. All actual save operations still own
-    /// the normal busy state.
-    var saveManagerBusy: Bool {
-        busy && operation != "等待游戏退出并恢复存档"
-    }
     var error: String {
         get { backendStatus.error }
         set { backendStatus.error = newValue }
@@ -128,18 +122,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var enemyDamageLocked = false
     @Published var enemyHealthLocked = false
     @Published var elements: [ElementCount] = []
-    @Published var backups: [SaveBackup] = []
     @Published var profiles: [TrainerProfile] = []
     @Published var diagnostics: [DiagnosticCheck] = []
     @Published var diagnosticsPassed = 0
     @Published var diagnosticsTotal = 0
-    @Published var pendingRestoreID: String?
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
     @Published var shortcutError = ""
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
-    @Published var saveManagerPresented = false
 
     private let mutationScheduler = Hades2MutationScheduler()
     private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] event in
@@ -149,7 +140,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<String> = []
     private var hotkeys: GlobalHotkeys?
-    private var pendingRestoreTimer: Timer?
     private var shuttingDown = false
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     var canEditDesired: Bool { backendAvailable && !exiting }
@@ -212,7 +202,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init() {
+    init(session: TrainerBackendSession) {
+        backendSession = session
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.runLogWatcher.start()
@@ -250,7 +241,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 desiredFeatureKeys.filter { desiredFeatureEnabled($0) }.map { ($0, true) }
             )
             capabilities = capabilities.mapValues { _ in false }
-            capabilities["hotBackup"] = true
             capabilities["diagnostics"] = true
             statAvailable = statAvailable.mapValues { _ in false }
             activationGraceWorkItems.values.forEach { $0.cancel() }
@@ -294,7 +284,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func restartBackendFromHost() { restartBackend() }
 
     func launchGame() { send(.launch, title: "启动游戏") }
-    func refreshBackups() { send(.listBackups, title: "读取备份列表") }
     func prepareDebugging() { send(.prepare, title: "准备调试签名") }
     func restoreOriginalSignature() { send(.restore, title: "恢复原始签名") }
     func disableAll() { sendBarrier(.disableAll, title: "全部关闭") }
@@ -341,9 +330,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
         invalidatePendingMutations()
-        pendingRestoreTimer?.invalidate()
-        pendingRestoreTimer = nil
-        pendingRestoreID = nil
         pendingRunReadySignal = false
         pid = nil
         runtimeIssue = ""
@@ -429,7 +415,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             applyStat(stats["enemyDamage"], value: &enemyDamageValue, locked: &enemyDamageLocked)
             applyStat(stats["enemyHealth"], value: &enemyHealthValue, locked: &enemyHealthLocked)
         }
-        if let value = patch.backups { backups = value }
         if let value = patch.profiles { profiles = value }
         if let value = patch.diagnostics {
             diagnostics = value
@@ -449,10 +434,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             }
         }
 
-        if patch.pendingRestoreID.isPresent {
-            pendingRestoreID = patch.pendingRestoreID.value
-            updatePendingRestorePolling()
-        }
         if let shortcuts = patch.shortcuts { applyProfileShortcuts(shortcuts) }
         if patch.health.isPresent { health = patch.health.value }
         if patch.maxHealth.isPresent { maxHealth = patch.maxHealth.value }
@@ -721,7 +702,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func listProfiles() { send(.listProfiles, title: "读取自定义配置") }
     func runDiagnostics() { send(.diagnostics, title: "运行自检") }
     func exportDiagnostics() { send(.exportDiagnostics, title: "导出诊断包") }
-    func cancelStagedRestore() { send(.cancelStagedRestore, title: "取消暂存恢复") }
 
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
@@ -768,45 +748,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         enqueueMutation(key: "counter.\(counter)", request: .setCounter(counter: counter, value: value), title: "更新局内计数")
     }
 
-    func createBackup() {
-        send(.backup(runCount: runCount), title: "备份存档") { [weak self] success in
-            if success { self?.send(.listBackups, title: "刷新备份列表") }
-        }
-    }
-
-    func renameBackup(_ backupID: String, name: String) {
-        guard backups.contains(where: { $0.id == backupID }), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        send(.renameBackup(id: backupID, name: name), title: "重命名备份")
-    }
-
-    func openBackupFolder(_ backupID: String? = nil) {
-        send(.openBackupFolder(backupID), title: backupID == nil ? "打开备份目录" : "在文件夹中显示")
-    }
-
-    func restoreBackup(_ backupID: String, backupCurrent: Bool) {
-        guard backups.contains(where: { $0.id == backupID && $0.valid }) else {
-            error = "请选择校验通过的备份。"; return
-        }
-        sendBarrier(.restoreBackup(backupID, backupCurrent: backupCurrent), title: "恢复所选存档")
-    }
-
-    func deleteBackup(_ backupID: String) {
-        guard backups.contains(where: { $0.id == backupID }) else { return }
-        send(.deleteBackup(backupID), title: "删除存档备份")
-    }
-
     private func applyProfileShortcuts(_ values: [String: Any]) {
         shortcutStore.applyProfile(values)
         installHotkeys()
-    }
-
-    private func updatePendingRestorePolling() {
-        pendingRestoreTimer?.invalidate(); pendingRestoreTimer = nil
-        guard pendingRestoreID != nil, backendSession.isRunning else { return }
-        pendingRestoreTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
-            guard let self = self, self.pendingRestoreID != nil, !self.busy, !self.exiting else { return }
-            self.send(.scan, title: "等待游戏退出并恢复存档", announceSuccess: false)
-        }
     }
 
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
@@ -981,9 +925,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func finishExit(completion: @escaping (Bool) -> Void) {
-        pendingRestoreTimer?.invalidate()
-        pendingRestoreTimer = nil
-        pendingRestoreID = nil
         invalidatePendingMutations()
         shuttingDown = true
         backendSession.stop(suppressTerminationError: true)

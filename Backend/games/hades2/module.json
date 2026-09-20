@@ -27,5 +27,22 @@
   "targetApplication": {
     "processName": "Hades II",
     "bundleIdentifier": "com.supergiantgames.macos.hades2"
+  },
+  "saveManagement": {
+    "roots": [
+      {
+        "id": "main",
+        "path": "~/Library/Application Support/Supergiant Games/Hades II",
+        "include": [
+          "Profile*.sav",
+          "activeProfile",
+          "saveinfo"
+        ]
+      }
+    ],
+    "provider": "games.hades2.save_provider:Hades2SaveProvider",
+    "hotBackup": true,
+    "restorePolicy": "hotPreferred",
+    "stagedRestore": true
   }
 }

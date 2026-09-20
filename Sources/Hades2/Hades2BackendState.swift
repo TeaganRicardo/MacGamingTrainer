@@ -62,12 +62,10 @@ struct Hades2StatePatch {
     let statSupport: [String: Bool]?
     let statAvailable: [String: Bool]?
     let stats: [String: Hades2StatSnapshot]?
-    let backups: [SaveBackup]?
     let profiles: [TrainerProfile]?
     let diagnostics: [DiagnosticCheck]?
     let diagnosticsPassed: Int?
     let diagnosticsTotal: Int?
-    let pendingRestoreID: Hades2FieldPatch<String>
     let shortcuts: [String: Any]?
 
     let health: Hades2FieldPatch<Double>
@@ -142,15 +140,10 @@ struct Hades2StatePatch {
             }
         } else { stats = nil }
 
-        backups = (payload["backups"] as? [[String: Any]])?.compactMap(Self.decodeBackup)
         profiles = (payload["profiles"] as? [[String: Any]])?.compactMap(Self.decodeProfile)
         diagnostics = (payload["checks"] as? [[String: Any]])?.compactMap(Self.decodeDiagnostic)
         diagnosticsPassed = payload["passed"] as? Int
         diagnosticsTotal = payload["total"] as? Int
-        if payload.keys.contains("pendingRestore") {
-            let row = payload["pendingRestore"] as? [String: Any]
-            pendingRestoreID = .present(row?["backupId"] as? String)
-        } else { pendingRestoreID = .absent }
         shortcuts = payload["shortcuts"] as? [String: Any]
 
         health = Self.numberField(payload, "health")
@@ -212,17 +205,6 @@ struct Hades2StatePatch {
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max
-        )
-    }
-
-    private static func decodeBackup(_ row: [String: Any]) -> SaveBackup? {
-        guard let id = row["id"] as? String else { return nil }
-        return SaveBackup(
-            id: id, name: row["name"] as? String ?? id,
-            createdAt: row["createdAt"] as? String ?? id, fileCount: row["fileCount"] as? Int ?? 0,
-            runCount: row["runCount"] as? Int, hotBackup: row["hotBackup"] as? Bool ?? false,
-            path: row["path"] as? String ?? "", valid: row["valid"] as? Bool ?? false,
-            error: row["error"] as? String ?? ""
         )
     }
 

@@ -33,13 +33,12 @@ assert 'func invalidateAll()' in scheduler
 assert 'func flushAll()' in scheduler
 assert 'sendBarrier(.disableAll' in model
 assert 'sendBarrier(.loadProfile' in model
-assert 'sendBarrier(.restoreBackup' in model
 assert 'sendBarrier(.disconnect' in model
 assert 'flushPendingMutations()' in model
 
-# Backend termination must also tear down restore/session identity state.
+# Backend termination must tear down Hades runtime/session identity state.
 reset = model[model.index('private func resetAfterBackendTermination'):model.index('private func apply(', model.index('private func resetAfterBackendTermination'))]
-for token in ['pendingRestoreTimer?.invalidate()', 'pendingRestoreID = nil', 'pid = nil', 'invalidatePendingMutations()']:
+for token in ['pid = nil', 'invalidatePendingMutations()']:
     assert token in reset
 
 with (ROOT / 'Info.plist').open('rb') as handle:

@@ -9,7 +9,7 @@ struct Hades2GameModule: TrainerGameModule {
         headerTitle: "HADES II"
     )
 
-    static func makeModel() -> Hades2TrainerModel { Hades2TrainerModel() }
+    static func makeModel(session: TrainerBackendSession) -> Hades2TrainerModel { Hades2TrainerModel(session: session) }
     static func makeContent(model: Hades2TrainerModel) -> Hades2TrainerView { Hades2TrainerView(model: model) }
     static func makeSidebarActions(model: Hades2TrainerModel) -> Hades2SidebarActions { Hades2SidebarActions(model: model) }
     static func makeHeaderActions(model: Hades2TrainerModel) -> Hades2HeaderActions { Hades2HeaderActions(model: model) }
