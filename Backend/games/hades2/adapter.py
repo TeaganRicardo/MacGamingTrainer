@@ -9,6 +9,7 @@ from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, disconnected_capabilities
 from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
 from .preferences import Hades2PreferenceStore
+from .persistence import PersistenceError
 from .profile_service import Hades2ProfileService
 from .command_router import Hades2CommandRouter
 TransportError = AdapterError
@@ -479,15 +480,22 @@ class Hades2Adapter(GameAdapter):
         if read_only and command!='status':raise ValueError('read_only 仅允许 status。')
         teardown=not read_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
-        # Lua boundary.  Even if runtime teardown later fails, a future trainer
-        # session must not replay features that the user explicitly closed.
-        if teardown:self._reset_preferences()
+        # Lua boundary. If that write is explicitly blocked/failed, still make a
+        # best-effort runtime teardown; report the persistence error afterwards
+        # without pretending the durable state was reset.
+        teardown_persistence_error=None
+        if teardown:
+            try:self._reset_preferences()
+            except PersistenceError as error:
+                teardown_persistence_error=error
+                logging.warning('Durable teardown reset failed; continuing runtime cleanup: %s',error)
         if command in ('disable_all','cleanup') and not self.transport.alive():
             # Explicit teardown must never be faked. Reattach to the same live
             # process so app exit / “全部关闭” can really clear resident hooks.
             self.scan()
             if not self.state.get('pid'):
                 clear_active(self.state);self.state.update(connected=False,status='not_running')
+                if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
             self.transport.attach(self.state['pid']);self.state['connected']=True
         if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
@@ -573,9 +581,11 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                self._capture_runtime_preferences(self.state);self._save_preferences()
+                if teardown_persistence_error is None:
+                    self._capture_runtime_preferences(self.state);self._save_preferences()
             self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
+            if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
                          command,reward_context,self.transport.last_duration,self.state.get('scene'),
