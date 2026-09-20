@@ -14,7 +14,7 @@ for token in (
     "struct TrainerSaveManagerView",
     "@State private var selectedIDs: Set<String>",
     "@State private var editingID:",
-    "@FocusState",
+    "TrainerInlineNameEditor",
     ".onTapGesture(count: 2)",
     'TrainerPillBadge(text: "热备份"',
     "TrainerOverflowMenu",
@@ -35,6 +35,7 @@ assert "NavigationSplitView" not in view
 assert "Inspector" not in view
 assert "Hades" not in view
 assert "Timer.scheduledTimer" not in view
+assert "@FocusState" not in view
 
 for token in (
     "@StateObject private var saveManager: TrainerSaveManagerModel",
