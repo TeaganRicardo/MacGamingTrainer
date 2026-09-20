@@ -15,7 +15,7 @@ struct TrainerSaveManagerView: View {
     @State private var confirmDelete = false
 
     var body: some View {
-        TrainerSheetScaffold(title: "存档管理", icon: "externaldrive.fill", width: 760) {
+        TrainerSheetScaffold(title: "存档管理", icon: "externaldrive.fill", width: 780) {
             if model.busy { ProgressView().controlSize(.small) }
             Button { model.reveal() } label: { Label("打开存档目录", systemImage: "folder") }
                 .disabled(model.busy)
@@ -43,40 +43,28 @@ struct TrainerSaveManagerView: View {
                 TrainerMessageBanner(text: model.notice, icon: "checkmark.circle", color: theme.success)
             }
 
-            HStack(spacing: 10) {
-                Button { model.backup() } label: {
-                    Label("创建备份", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.busy)
+            TrainerSection(title: "备份历史", icon: "clock.arrow.circlepath") {
+                saveActions
 
-                Spacer()
-
-                if !selectedIDs.isEmpty {
-                    Text("已选 \(selectedIDs.count) 项")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button(role: .destructive) {
-                        deleteIDs = selectedIDs
-                        confirmDelete = true
-                    } label: {
-                        Label("删除所选", systemImage: "trash")
-                    }
-                    .disabled(model.busy)
-                }
-            }
-
-            ScrollView {
-                LazyVStack(spacing: 8) {
+                ScrollView {
                     if model.snapshots.isEmpty {
-                        TrainerEmptyState(text: "暂无存档备份。")
-                    }
-                    ForEach(model.snapshots) { snapshot in
-                        snapshotRow(snapshot)
+                        VStack(spacing: 1) {
+                            TrainerRow {
+                                TrainerEmptyState(text: "暂无存档备份。")
+                            }
+                        }
+                        .trainerGroupedRows()
+                    } else {
+                        LazyVStack(spacing: 1) {
+                            ForEach(model.snapshots) { snapshot in
+                                snapshotRow(snapshot)
+                            }
+                        }
+                        .trainerGroupedRows()
                     }
                 }
+                .frame(minHeight: 320, maxHeight: 540)
             }
-            .frame(minHeight: 300, maxHeight: 520)
         } footer: {
             HStack {
                 Spacer()
@@ -121,32 +109,56 @@ struct TrainerSaveManagerView: View {
         }
     }
 
+    private var saveActions: some View {
+        HStack(spacing: 10) {
+            Button { model.backup() } label: {
+                Label("创建备份", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.busy)
+
+            Spacer()
+
+            if !selectedIDs.isEmpty {
+                Text("已选 \(selectedIDs.count) 项")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button(role: .destructive) {
+                    deleteIDs = selectedIDs
+                    confirmDelete = true
+                } label: {
+                    Label("删除所选", systemImage: "trash")
+                }
+                .disabled(model.busy)
+            }
+        }
+        .trainerPanel(padding: 14)
+    }
+
     @ViewBuilder
     private func snapshotRow(_ snapshot: TrainerSaveSnapshot) -> some View {
-        TrainerListCard {
-            HStack(alignment: .top, spacing: 12) {
-                Button {
+        TrainerRow(minimumHeight: 82, opacity: snapshot.valid ? 1 : 0.72) {
+            HStack(alignment: .center, spacing: 14) {
+                TrainerSelectionControl(
+                    selected: selectedIDs.contains(snapshot.id),
+                    enabled: !model.busy,
+                    helpText: "选择以进行批量管理"
+                ) {
                     toggleSelection(snapshot.id)
-                } label: {
-                    Image(systemName: selectedIDs.contains(snapshot.id) ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(selectedIDs.contains(snapshot.id) ? theme.accent : .secondary)
                 }
-                .buttonStyle(.plain)
-                .disabled(model.busy)
-                .help("选择以进行批量管理")
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         if editingID == snapshot.id {
                             TextField("存档名称", text: $renameText)
                                 .textFieldStyle(.plain)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.headline.weight(.semibold))
                                 .focused($renameFocused)
                                 .onSubmit { commitRename() }
                                 .onExitCommand { cancelRename() }
                         } else {
                             Text(snapshot.name)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.headline.weight(.semibold))
                                 .lineLimit(1)
                                 .onTapGesture(count: 2) { beginRename(snapshot) }
                                 .help("双击重命名")
@@ -156,9 +168,10 @@ struct TrainerSaveManagerView: View {
                         }
                     }
 
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         if !snapshot.createdAt.isEmpty {
                             Text(snapshot.createdAt.replacingOccurrences(of: "T", with: " "))
+                            Text("·")
                         }
                         Text("\(snapshot.fileCount) 个文件")
                     }
@@ -186,7 +199,7 @@ struct TrainerSaveManagerView: View {
                     preserveCurrent = true
                     restoreCandidate = snapshot
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(model.busy || !snapshot.valid)
 
@@ -260,15 +273,31 @@ private struct TrainerSaveRestoreConfirmationView: View {
     let onRestore: () -> Void
 
     var body: some View {
-        TrainerSheetScaffold(title: "恢复存档", icon: "arrow.counterclockwise", width: 440) {
+        TrainerSheetScaffold(title: "恢复存档", icon: "arrow.counterclockwise", width: 460) {
             EmptyView()
         } content: {
-            Text("将恢复“\(snapshot.name)”。")
-                .font(.headline)
-            Text("Trainer 会自动决定立即恢复、热替换或等待游戏退出；无需手动判断文件是否被占用。")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Toggle("恢复前保留当前存档", isOn: $preserveCurrent)
+            TrainerSection(title: "恢复选项", icon: "arrow.counterclockwise") {
+                VStack(spacing: 1) {
+                    TrainerRow {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(snapshot.name)
+                                .font(.headline.weight(.semibold))
+                            Text("Trainer 会自动决定立即恢复、热替换或等待游戏退出；无需手动判断文件是否被占用。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    TrainerRow {
+                        TrainerCheckboxControl(
+                            title: "恢复前保留当前存档",
+                            isOn: preserveCurrent,
+                            onChange: { preserveCurrent = $0 }
+                        )
+                    }
+                }
+                .trainerGroupedRows()
+            }
         } footer: {
             HStack {
                 Spacer()
