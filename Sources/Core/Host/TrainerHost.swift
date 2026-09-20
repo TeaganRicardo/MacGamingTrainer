@@ -35,7 +35,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                         } label: {
                             Label("存档管理", systemImage: "externaldrive")
                         }
-                        .disabled(!model.backendAvailable || model.busy)
+                        .disabled(!model.backendAvailable)
                     }
                 }
             }
