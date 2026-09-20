@@ -2,48 +2,64 @@
 
 Updated: 2026-09-20
 
-This is the canonical development handoff. Historical implementation plans, closed PRs and old branches are evidence only; current code, this file, open issues and the roadmap issue are execution authority.
+This is the canonical development handoff. Historical implementation plans, closed PRs and old branches are evidence only; current code, this file, open issues and roadmap issue #8 are execution authority.
 
 ## Current baseline
 
 - Default branch: `main`.
-- Verified code baseline: `7471edf9dfaa20a56936de0497883c296b7afac3` (`fix: resolve partial shortcut Profile override collisions`). Subsequent documentation-only commits do not change that code evidence.
+- Verified code baseline: `b65126df625d8b431cf3671351c67142ee8f897b` (`fix: guard deferred probe on lifecycle watcher availability`). Documentation-only commits after this SHA do not change the code evidence.
 - Hades II resident runtime: revision 41.
 - Hades II module protocol: 5.
 - Target game baseline used by current runtime contracts: Hades II 1.139672 / Steam build 24556151.
 - Process Time Warp + mapped speed slider are shared Host/Core infrastructure.
 - Core Save Management is integrated and optional per game module.
-- Phase 1 cross-game isolation proof is integrated through the permanent non-production `reference_fixture`.
+- Phase 1 cross-game isolation is integrated through the permanent non-production `reference_fixture`.
 - Generic hotkey feedback sounds are integrated: enabled / deferred / disabled.
 - Shortcut partial-Profile/local-override collision is fixed.
+- Batch D lifecycle code changes are integrated; only target-Mac performance acceptance remains open.
 
 ## Exact merged-main verification
 
-For `7471edf9dfaa20a56936de0497883c296b7afac3`:
+For `b65126df625d8b431cf3671351c67142ee8f897b`:
 
-- Linux contracts run `35507015701`: PASS.
-- Module build matrix run `35507015708`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
-- Build 2 macOS run `35507015713`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
-- Hosted Actions step-0 admission has recovered; issue #16 is closed.
+- Linux contracts run `35509175512`: PASS.
+- Module build matrix run `35509175516`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
+- Build 2 macOS run `35509175497`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
+
+Current RC:
+- GitHub artifact id: `10604489234`.
+- Artifact: `MacGamingTrainer-0.1-build2-rc`.
+- Deliverable: `MacGamingTrainer-0.1-build2-rc.zip`.
+- Deliverable SHA256: `28905697a52fe8798605ebbb7ad22fc992c8c8fbcd53fb850ebea391eb41992b`.
+
+Hosted Actions step-0 admission is healthy; issue #16 remains closed.
 
 ## Completed recent work
 
 - PR #21: generic Process Time Warp + mapped speed slider.
 - PR #22: repository handoff/history cleanup.
 - PR #23: current-architecture cross-game isolation proof; issue #9 closed; old PR #10 superseded.
-- PR #24: partial shortcut Profile conflict fix with explicit RED -> GREEN evidence; issue #17 closed.
-- Batch C Host feedback sounds were already integrated in commit `6e4fac50301a4906600ce072a7a50e81fdc2c065` and remain covered by `test_hotkey_feedback_contract.py`.
+- PR #24: partial shortcut Profile conflict fix; issue #17 closed.
+- PR #25: canonical status refresh.
+- PR #26: same-PID runtime-reset signal invalidates backend generation bookkeeping before ready refresh, removing the normal doomed first resident status.
+- PR #27: true-launch automatic connection can attach without an immediate pre-ready Lua/world probe; foreground/manual connect still probes immediately.
+- PR #28: deferred launch probing is used only when the Hades lifecycle directory is observable; first-ever/no-directory launches fall back to the prior bounded immediate probe.
+
+No PR #26–#28 change touched `hades.lua`; resident revision remains 41.
 
 ## Active work, in order
 
-1. **Attach / world-readiness stutter — issues #1 and #11**
-   - distinguish LLDB attach cost from first Lua boundary, runtime re-bootstrap and durable-preference replay;
-   - preserve true-launch-only bounded background attach;
-   - preserve same-PID single-debugger-attachment recovery;
-   - remove redundant/avoidable boundaries rather than adding polling;
-   - final acceptance requires repeated main-menu/save re-entry without severe serialized stalls and with persistent features correctly reapplied.
+1. **Manual lifecycle performance acceptance — issues #1 and #11**
+   - use the exact RC above;
+   - verify true-launch background auto-connect without a visible pre-ready multi-second stall;
+   - return to main menu and re-enter the same save twice with at least one persistent feature enabled;
+   - confirm desired state automatically becomes active again;
+   - confirm no second debugger attachment / `attach_denied`;
+   - inspect `trainer.log` for the reduced boundary sequence.
+   - Do not further merge bootstrap + replay unless the new sample still shows a severe visible stall.
 
 2. **Save-management hardening / Hades II save-editor expansion**
+   - begin after #11 acceptance;
    - build on the proven optional Core capability;
    - keep save schema, parsing, validation and editing semantics inside the Hades II module.
 
@@ -53,23 +69,34 @@ For `7471edf9dfaa20a56936de0497883c296b7afac3`:
 4. **Hades I vertical slice**
    - begin only after the architecture gate.
 
-## Current lifecycle evidence
+## Lifecycle evidence and expected behavior
 
-The code already records separate attach/connect phases:
+The code records separate phases:
 
 - `LLDBAttachProfile`: createTarget / attachProcess / identity / symbols / resume.
 - `ConnectProfile`: scan / attachTotal / firstStatusTotal / firstLuaBoundary / JSON decode / localization.
 - `LuaBoundary`: command / duration / outcome / transport crossing / replay flag.
 
-Current same-PID recovery is event-driven through the Hades II run log and does not use periodic LLDB/Lua polling. Runtime-generation loss is re-bootstrapped inside the existing debugger attachment.
+Old target-Mac evidence showed the actual bottleneck was primarily Lua/world readiness rather than debugger attach. A representative same-PID reset paid about 1.344 s for the doomed resident status, 1.799 s for re-bootstrap status and 0.699 s for replay. The old log also contained many ~3.22–3.25 s pre-ready waiting status boundaries.
 
-The next lifecycle change must be driven by measured phase evidence from #11 rather than by adding retry loops.
+Current intended flow:
+
+- True launch, lifecycle observable:
+  `scan -> LLDB attach -> waiting/loading (zero Lua boundary) -> runtimeReady -> bootstrap/status -> optional batched replay`.
+- True launch, lifecycle directory unavailable:
+  bounded fallback to the previous immediate connect/status path.
+- Same-PID runtime reset, normal signaled path:
+  `runtimeReset bookkeeping (zero Lua boundary) -> runtimeReady -> bootstrap/status -> optional batched replay`.
+- Missing lifecycle signal:
+  existing status-side missing-generation fallback remains.
+
+No periodic LLDB/Lua polling is present.
 
 ## GitHub state
 
 Open:
-- issue #1 — lifecycle/manual-acceptance umbrella; Batch D remains.
-- issue #11 — attach/world-readiness performance.
+- issue #1 — lifecycle/manual-acceptance umbrella.
+- issue #11 — exact RC manual performance acceptance.
 - issue #8 — current roadmap.
 
 Closed:
@@ -78,7 +105,7 @@ Closed:
 - issue #17 — partial shortcut Profile collision fixed.
 - PR #10 — superseded by merged PR #23.
 - PR #19 — superseded by merged PR #21.
-- PR #21, #22, #23, #24 — merged.
+- PR #21 through #28 — merged as applicable.
 
 ## Branch hygiene
 
@@ -97,11 +124,16 @@ Remote branches eligible for deletion once a supported delete-ref interface is a
 - `feature/process-time-warp-host`
 - `fix/batch-a-native-modals`
 - `fix/batch-b-runtime-semantics-r40`
+- `fix/defer-launch-runtime-probe`
+- `fix/deferred-log-availability-guard`
 - `fix/profile-shortcut-partial-conflict`
 - `fix/profile-shortcut-partial-conflict-v2`
+- `fix/proactive-runtime-reset-bootstrap`
 - `fix/special-choice-native-r39`
 - `fix/special-choice-refresh-r38`
+- `maintenance/current-status-20260920`
 - `maintenance/repo-hygiene-20260920`
+- `maintenance/status-after-lifecycle-fixes`
 - `refactor/save-management`
 - `spike/generic-process-time-warp`
 - `spike/generic-process-timewarp`
