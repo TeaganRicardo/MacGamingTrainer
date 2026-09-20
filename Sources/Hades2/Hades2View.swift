@@ -196,12 +196,11 @@ struct Hades2TrainerView: View {
     }
 
     private var gameSpeedMapping: TrainerSliderMapping {
-        .centeredLogarithmic(
-            range: 0.1...5.0,
-            pivot: 1.0,
+        .anchoredLogarithmic(
+            values: [0.1, 0.5, 1.0, 2.0, 5.0],
             step: 0.1,
-            detents: [0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
-            snapDistance: 0.025
+            detents: [0.5, 1.0, 2.0],
+            snapDistance: 0.0125
         )
     }
 
@@ -249,7 +248,7 @@ struct Hades2TrainerView: View {
                     mapping: gameSpeedMapping,
                     enabled: model.canEditDesired
                 )
-                .frame(maxWidth: 360)
+                .frame(width: 200)
             }
             .trainerPanel()
         }
