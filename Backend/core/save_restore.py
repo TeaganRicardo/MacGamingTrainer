@@ -42,8 +42,9 @@ class SaveRestoreTransaction:
         raise SaveRestoreError(message)
 
     def _transaction_parent(self):
-        parent = self.store.root / 'transactions'
-        if self.store.root.is_symlink() or parent.is_symlink():
+        root = self.store.ensure_storage_root()
+        parent = root / 'transactions'
+        if parent.is_symlink():
             raise SaveRestoreError('Save transaction storage path is unsafe.')
         parent.mkdir(parents=True, exist_ok=True)
         if parent.is_symlink() or not parent.is_dir():
