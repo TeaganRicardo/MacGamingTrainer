@@ -4,12 +4,14 @@ struct TrainerMappedSlider: View {
     @Binding var value: Double
     let mapping: TrainerSliderMapping
     var enabled = true
+    var onPreviewValue: ((Double) -> Void)? = nil
 
     @Environment(\.trainerTheme) private var theme
     @State private var displayPosition: Double?
     @State private var dragOffset: CGFloat?
     @State private var isDragging = false
     @State private var lastLocalValue: Double?
+    @State private var lastPreviewValue: Double?
 
     private let thumbDiameter: CGFloat = 20
 
@@ -45,8 +47,8 @@ struct TrainerMappedSlider: View {
                 }
 
                 Circle()
-                    .fill(theme.accent)
-                    .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 0.5))
+                    .fill(Color.white)
+                    .overlay(Circle().stroke(Color.black.opacity(0.16), lineWidth: 0.5))
                     .shadow(color: Color.black.opacity(0.28), radius: 1.5, x: 0, y: 1)
                     .frame(width: thumbDiameter, height: thumbDiameter)
                     .position(x: thumbX, y: proxy.size.height / 2)
@@ -64,10 +66,16 @@ struct TrainerMappedSlider: View {
                         }
                         let adjustedX = gesture.location.x - (dragOffset ?? 0)
                         let rawPosition = min(max(Double((adjustedX - thumbRadius) / trackWidth), 0), 1)
+                        let visualPosition = mapping.magnetizedPosition(rawPosition)
                         var transaction = Transaction()
                         transaction.animation = nil
                         withTransaction(transaction) {
-                            displayPosition = mapping.magnetizedPosition(rawPosition)
+                            displayPosition = visualPosition
+                        }
+                        let previewValue = mapping.value(at: visualPosition)
+                        if lastPreviewValue.map({ abs($0 - previewValue) >= 0.000001 }) ?? true {
+                            lastPreviewValue = previewValue
+                            onPreviewValue?(previewValue)
                         }
                     }
                     .onEnded { gesture in
@@ -81,6 +89,7 @@ struct TrainerMappedSlider: View {
                             displayPosition = finalPosition
                         }
                         dragOffset = nil
+                        lastPreviewValue = nil
                         isDragging = false
                     }
             )
