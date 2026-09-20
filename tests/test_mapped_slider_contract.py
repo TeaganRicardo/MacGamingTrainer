@@ -27,16 +27,22 @@ assert ".interactiveSpring(" in component_text
 assert ".accessibilityRepresentation" in component_text
 assert "@Environment(\\.trainerTheme)" in component_text
 assert ".fill(theme.accent)" in component_text
+assert "Circle()\n                    .fill(Color.white)" in component_text
+assert "let onPreviewValue: ((Double) -> Void)?" in component_text
 changed_block = component_text[component_text.index(".onChanged"):component_text.index(".onEnded")]
 ended_block = component_text[component_text.index(".onEnded"):component_text.index(".accessibilityRepresentation")]
 assert "commit(" not in changed_block
 assert "value =" not in changed_block
+assert "onPreviewValue?(" in changed_block
 assert "commit(" in ended_block
 assert "TrainerMappedSlider(" in view
 assert ".frame(width: 200)" in view
-assert "text: $gameSpeedInput" in view
+assert "text: gameSpeedInputBinding" in view
 assert "gameSpeedSliderValue" in view
+assert "gameSpeedPreview" in view
+assert "onPreviewValue:" in view
 assert "gameSpeedInput: gameSpeedInput" in view
+assert "gameSpeedInput: gameSpeedPreview" not in view
 assert "ForEach([0.25, 0.5, 1.0, 1.5, 2.0, 3.0]" not in view
 assert "gameSpeedInput" in snapshots
 assert 'coalesceKey: "feature.gameSpeed"' in model
@@ -55,8 +61,8 @@ let mapping = TrainerSliderMapping.anchoredLogarithmic(
     values: [0.1, 0.5, 1.0, 2.0, 5.0],
     step: 0.1,
     detents: [0.5, 1.0, 2.0],
-    magnetDistance: 0.075,
-    settleDistance: 0.035
+    magnetDistance: 0.10,
+    settleDistance: 0.04
 )
 
 let expectedAnchors: [(Double, Double)] = [
@@ -76,12 +82,13 @@ for value in [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0, 4.4, 5.0] {
 
 let one = mapping.position(for: 1.0)
 let strong = one + 0.030
-let soft = one + 0.060
-let outside = one + 0.080
+let soft = one + 0.070
+let outside = one + 0.110
 
 let strongMagnet = mapping.magnetizedPosition(strong)
 if !(strongMagnet > one && strongMagnet < strong) { fail("magnetic pull") }
-if strongMagnet - one < 0.008 { fail("magnet must not pin pointer motion") }
+if strongMagnet - one > 0.015 { fail("magnetic pull must be perceptible") }
+if strongMagnet - one < 0.003 { fail("magnet must not pin pointer motion") }
 
 let softMagnet = mapping.magnetizedPosition(soft)
 if !(softMagnet > one && softMagnet < soft) { fail("soft magnetic pull") }
@@ -91,9 +98,9 @@ if !approx(mapping.settledPosition(strong), one) { fail("release snap core") }
 if !approx(mapping.settledPosition(soft), softMagnet) { fail("release keeps continuous visual position") }
 if !approx(mapping.settledPosition(outside), outside) { fail("release outside range") }
 
-var previous = mapping.magnetizedPosition(one - 0.075)
-for i in 1...150 {
-    let p = one - 0.075 + Double(i) * 0.001
+var previous = mapping.magnetizedPosition(one - 0.10)
+for i in 1...200 {
+    let p = one - 0.10 + Double(i) * 0.001
     let current = mapping.magnetizedPosition(p)
     if current + 0.0000001 < previous { fail("magnetic curve monotonic") }
     previous = current
@@ -101,7 +108,7 @@ for i in 1...150 {
 if abs(mapping.magnetizedPosition(one - 0.0001) - mapping.magnetizedPosition(one + 0.0001)) > 0.0001 {
     fail("magnetic center continuity")
 }
-if abs(mapping.magnetizedPosition(one + 0.0749) - (one + 0.0749)) > 0.0001 {
+if abs(mapping.magnetizedPosition(one + 0.0999) - (one + 0.0999)) > 0.0001 {
     fail("magnetic edge continuity")
 }
 
