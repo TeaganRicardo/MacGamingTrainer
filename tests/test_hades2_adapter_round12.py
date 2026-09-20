@@ -111,6 +111,33 @@ assert reset_adapter._runtime_bootstrapped is True
 assert reset_adapter._catalog_initialized is True
 assert reset_adapter.preference_dirty is False
 
+# The run-log watcher knows when Hades has destroyed its Lua generation. That
+# explicit lifecycle signal must invalidate only backend bookkeeping and cross
+# zero Lua boundaries. The next ready status should bootstrap directly, so
+# same-PID recovery uses bootstrap + one batched replay instead of first paying
+# an avoidable failed resident-dispatch boundary.
+proactive_transport=ResetTransport(fail_once=False)
+proactive_adapter=Hades2Adapter(transport=proactive_transport)
+proactive_adapter._runtime_bootstrapped=True
+proactive_adapter._catalog_initialized=True
+proactive_adapter.preferences=proactive_adapter._default_preferences()
+proactive_adapter.preferences['godMode']=True
+proactive_adapter.preference_initialized=True
+proactive_adapter.preference_dirty=False
+invalidated=proactive_adapter.dispatch('runtime_reset', {}, 'runtime-reset-signal')
+assert proactive_transport.sources == []
+assert invalidated['connected'] is True
+assert invalidated['status'] == 'waiting'
+assert proactive_adapter._runtime_bootstrapped is False
+assert proactive_adapter._catalog_initialized is False
+assert proactive_adapter.preference_dirty is True
+proactive_recovered=proactive_adapter.execute('status', {})
+assert len(proactive_transport.sources) == 2
+assert 'local previousModule' in proactive_transport.sources[0]
+assert '"set_feature"' in proactive_transport.sources[1] and 'godMode' in proactive_transport.sources[1]
+assert proactive_recovered['activeFeatures']['godMode'] is True
+assert proactive_adapter.preference_dirty is False
+
 # Non-idempotent mutations are never replayed after an outcome error. Mark the
 # cached generation stale so the next status can heal it, but surface this
 # command's failure unchanged.
