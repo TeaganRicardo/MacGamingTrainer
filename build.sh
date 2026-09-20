@@ -192,6 +192,7 @@ else
 fi
 codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
 codesign --verify --strict "$TIME_WARP_DYLIB"
+cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
 
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
