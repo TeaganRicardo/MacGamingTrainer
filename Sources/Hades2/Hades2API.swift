@@ -34,7 +34,8 @@ enum Hades2Command: String {
 /// Typed Hades module-protocol-v5 request boundary. Command spelling and JSON parameter
 /// keys live here rather than being duplicated through the store and views.
 enum Hades2Request {
-    case scan, status, connect, disconnect, launch, disableAll, runtimeReset, resetDesired
+    case scan, status, disconnect, launch, disableAll, runtimeReset, resetDesired
+    case connect(probeRuntime: Bool)
     case setDesired(feature: String, value: Any)
     case setVital(vital: String, field: String, value: Double)
     case setCounter(counter: String, value: Double)
@@ -62,7 +63,7 @@ enum Hades2Request {
         switch self {
         case .scan: return .scan
         case .status: return .status
-        case .connect: return .connect
+        case .connect(_): return .connect
         case .disconnect: return .disconnect
         case .launch: return .launch
         case .disableAll: return .disableAll
@@ -108,7 +109,7 @@ enum Hades2Request {
             // cleanup. Keep the host watchdog outside those transport deadlines
             // so it never SIGTERMs the debugger owner mid-cleanup.
             return 15.0
-        case .connect:
+        case .connect(_):
             // LLDB attach + symbol validation + first Lua bootstrap is the slow
             // path. Real successful Hades II connections have taken >50 s on
             // the target Mac; a 12 s watchdog incorrectly killed healthy attach.
@@ -128,6 +129,8 @@ enum Hades2Request {
 
     var params: [String: Any] {
         switch self {
+        case .connect(let probeRuntime):
+            return ["probeRuntime": probeRuntime]
         case .setDesired(let feature, let value):
             return ["feature": feature, "value": value]
         case .setVital(let vital, let field, let value):

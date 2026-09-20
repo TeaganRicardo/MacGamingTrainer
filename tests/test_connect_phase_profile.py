@@ -220,3 +220,54 @@ assert early_transport.alive() is True
 assert early_adapter._last_status_boundary_duration == 0.050
 
 print('connect_phase_profile_early_runtime_ok')
+
+
+# A true target-process launch may attach before Hades has published a usable
+# Lua world. The background launch path must be able to attach without spending
+# a full World::Update timeout on an immediately-doomed status probe. Readiness
+# is supplied later by the existing event-driven run-log signal.
+class DeferredProbeTransport(FakeTransport):
+    def __init__(self):
+        super().__init__()
+        self.execute_count = 0
+
+    def execute(self, source):
+        self.execute_count += 1
+        return super().execute(source)
+
+
+deferred_transport = DeferredProbeTransport()
+deferred_adapter = adapter_module.Hades2Adapter(transport=deferred_transport)
+deferred_adapter.preference_initialized = True
+deferred_adapter.preference_dirty = True
+
+
+def deferred_scan():
+    deferred_adapter.state['pid'] = 4545
+    deferred_adapter.state['status'] = 'disconnected'
+    return dict(deferred_adapter.state)
+
+
+deferred_adapter.scan = deferred_scan
+deferred_stream = StringIO()
+deferred_handler = logging.StreamHandler(deferred_stream)
+root_logger.addHandler(deferred_handler)
+root_logger.setLevel(logging.INFO)
+try:
+    deferred_result = deferred_adapter.connect(probe_runtime=False)
+finally:
+    root_logger.removeHandler(deferred_handler)
+    root_logger.setLevel(old_level)
+
+assert deferred_transport.alive() is True
+assert deferred_transport.execute_count == 0
+assert deferred_result['connected'] is True
+assert deferred_result['status'] == 'waiting'
+assert deferred_result['scene'] == 'loading'
+assert deferred_adapter._runtime_bootstrapped is False
+deferred_log = deferred_stream.getvalue()
+assert 'ConnectProfile outcome=deferred' in deferred_log
+assert 'firstStatusTotal=0.000s' in deferred_log
+assert 'firstLuaBoundary=0.000s' in deferred_log
+
+print('connect_phase_profile_deferred_probe_ok')

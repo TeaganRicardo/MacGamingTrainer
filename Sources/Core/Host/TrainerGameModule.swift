@@ -36,6 +36,7 @@ protocol TrainerHostModel: ObservableObject {
     var hostActionsEnabled: Bool { get }
 
     func toggleConnectionFromHost()
+    func connectAutomaticallyFromHost(targetJustLaunched: Bool)
     func refreshFromHost()
     func hostDidBecomeActive()
     func restartBackendFromHost()
@@ -45,6 +46,12 @@ protocol TrainerHostModel: ObservableObject {
 }
 
 extension TrainerHostModel {
+    /// Automatic target connection carries only generic lifecycle context.
+    /// Modules that do not care about launch timing keep the normal toggle path.
+    func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
+        toggleConnectionFromHost()
+    }
+
     /// App activation is a safe point for game modules to perform an optional
     /// foreground-only refresh. The default is deliberately a no-op because
     /// not every integration needs or can afford a live target boundary.

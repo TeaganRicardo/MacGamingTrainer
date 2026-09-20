@@ -393,7 +393,7 @@ class Hades2Adapter(GameAdapter):
             self.state['scene']='unknown'
             self.state['capabilities']=disconnected_capabilities()
         return dict(self.state)
-    def connect(self):
+    def connect(self,probe_runtime=True):
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
@@ -410,6 +410,13 @@ class Hades2Adapter(GameAdapter):
             # manual detach, then use dispatch-only payloads for subsequent calls.
             self._runtime_bootstrapped=False
             self.state['connected']=True
+            if not probe_runtime:
+                outcome='deferred'
+                self._catalog_initialized=False
+                clear_active(self.state,preserve_desired=True)
+                self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+                self._overlay_preferences()
+                return dict(self.state)
             phase=time.monotonic()
             try:
                 result=self.execute('status',{'includeCatalogs':True})
