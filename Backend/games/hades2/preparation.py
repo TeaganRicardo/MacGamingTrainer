@@ -170,10 +170,7 @@ def _atomic_install(source, destination, expected_current):
 
 
 def _prepared_hashes(record):
-    return {
-        value for key in ('prepared_sha256', 'previous_prepared_sha256')
-        if isinstance((value := record.get(key)), str) and value
-    }
+    return {value for key in ('prepared_sha256', 'previous_prepared_sha256') if isinstance((value := record.get(key)), str) and value}
 
 
 def _stage_prepared(root, record, original, previous_prepared_sha256=None):
@@ -191,16 +188,12 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
         '--entitlements', str(entitlement_path), str(staged))
     run('/usr/bin/codesign', '--verify', '--strict', str(staged))
     prepared_entitlements = _entitlements(staged)
-    if (_uuid(staged) != UUID
-            or not prepared_entitlements.get('com.apple.security.get-task-allow')
+    if (_uuid(staged) != UUID or not prepared_entitlements.get('com.apple.security.get-task-allow')
             or not prepared_entitlements.get('com.apple.security.cs.disable-library-validation')):
         raise RuntimeError('调试签名校验失败；未修改游戏。')
-
     record.update(status='staged', prepared_sha256=sha(staged))
-    if previous_prepared_sha256:
-        record['previous_prepared_sha256'] = previous_prepared_sha256
-    else:
-        record.pop('previous_prepared_sha256', None)
+    if previous_prepared_sha256: record['previous_prepared_sha256'] = previous_prepared_sha256
+    else: record.pop('previous_prepared_sha256', None)
     _write_json(root / 'manifest.json', record)
     return staged
 
@@ -229,13 +222,7 @@ def prepare():
         record.pop('previous_prepared_sha256', None)
         record['status'] = 'prepared'
         _write_json(root / 'manifest.json', record)
-        return {
-            'prepared': True,
-            'already_prepared': False,
-            'upgraded': True,
-            'backup': str(root),
-            'manifest': record,
-        }
+        return {'prepared': True, 'already_prepared': False, 'upgraded': True, 'backup': str(root), 'manifest': record}
 
     if _entitlements(exe).get('com.apple.security.get-task-allow') or current != ORIGINAL_SHA256:
         raise RuntimeError('当前可执行文件不是已验证的原版；拒绝将已修改文件备份为原版。')
