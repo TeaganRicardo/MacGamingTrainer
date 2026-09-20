@@ -5,6 +5,7 @@ struct TrainerSliderMapping {
     let step: Double
     let detents: [Double]
     let magnetDistance: Double
+    let settleDistance: Double
 
     var range: ClosedRange<Double> { anchors[0]...anchors[anchors.count - 1] }
     var marks: [Double] { anchors }
@@ -13,18 +14,21 @@ struct TrainerSliderMapping {
         values: [Double],
         step: Double,
         detents: [Double] = [],
-        magnetDistance: Double = 0.065
+        magnetDistance: Double = 0.075,
+        settleDistance: Double = 0.035
     ) -> TrainerSliderMapping {
         precondition(values.count >= 2)
         precondition(values.allSatisfy { $0.isFinite && $0 > 0 })
         precondition(zip(values, values.dropFirst()).allSatisfy(<))
         precondition(step > 0 && magnetDistance >= 0)
+        precondition(settleDistance >= 0 && settleDistance <= magnetDistance)
         let range = values[0]...values[values.count - 1]
         return TrainerSliderMapping(
             anchors: values,
             step: step,
             detents: detents.filter(range.contains).sorted(),
-            magnetDistance: magnetDistance
+            magnetDistance: magnetDistance,
+            settleDistance: settleDistance
         )
     }
 
@@ -64,9 +68,8 @@ struct TrainerSliderMapping {
 
     func settledPosition(_ position: Double) -> Double {
         let position = min(max(position, 0), 1)
-        guard magnetDistance > 0, let detent = nearestDetent(to: position),
-              abs(position - detent) <= magnetDistance else { return position }
-        return detent
+        guard let detent = nearestDetent(to: position) else { return position }
+        return abs(position - detent) <= settleDistance ? detent : magnetizedPosition(position)
     }
 
     func value(at position: Double) -> Double {
