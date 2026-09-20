@@ -65,7 +65,28 @@ Broad exception sites and destructive filesystem operations were reviewed manual
 
 ## Findings
 
-No new Critical or Important finding was discovered after merge.
+The initial broad pass found no Critical/Important issue, but the subsequent callback-flow review found one Important defect before feature work resumed.
+
+### Important — Save Manager dropped completion when the backend was already unavailable
+
+Root cause:
+`TrainerSaveManagerModel.request()` returned directly from its `session.isRunning` guard without invoking `onComplete(false)`. Rename begins with an optimistic display name and clears that state only from the completion callback. If editing began while the backend was alive and the worker exited before click-away committed the rename, the optimistic name could remain indefinitely. The same incomplete callback contract could also strand a sequential batch-delete chain.
+
+Fix:
+- unavailable-backend requests still surface `后端未运行。`;
+- the guard now also invokes `onComplete(false)`;
+- no new state owner or retry path was introduced;
+- the portable Core Save model contract is now part of `Tools/run_linux_checks.sh`;
+- the macOS rename integration test includes the backend-stopped completion scenario.
+
+RED evidence:
+- the new portable contract failed because the guard contained no `onComplete?(false)`.
+
+GREEN evidence before PR CI:
+- `tests/test_core_save_swift_model_round20.py`: PASS;
+- `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
+
+Final merge evidence is pending fresh PR CI.
 
 No new architecture conflict was found:
 - Core/Host remains game-agnostic;
@@ -82,6 +103,6 @@ Neither has a demonstrated current corruption, privilege-boundary or replay fail
 
 ## Gate result
 
-The pre-feature deep audit plus the requested post-merge Linux review are complete.
+The review gate is temporarily reopened for the Save Manager completion fix above.
 
-The audit freeze can end. The next product gate returns to **Hades II Save Editor design**. No binary save mutation is approved by this review; the existing stopped/live policy, codec ownership, pre-edit snapshot/recovery and first editable schema still require design approval before implementation.
+New product feature work remains frozen until that fix is merged with fresh Linux, module-matrix and macOS Build 2 verification. After the corrected main is reviewed again, the next product gate can return to **Hades II Save Editor design**. No binary save mutation is approved by this review.
