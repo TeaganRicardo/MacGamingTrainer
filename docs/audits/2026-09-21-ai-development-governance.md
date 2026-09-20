@@ -142,6 +142,57 @@ Current Hades log evidence:
 
 ## Test-debt audit
 
+Dominant classification of all 85 pre-governance `tests/test_*.py` entrypoints follows. Mixed tests can enforce secondary concerns, but each file is placed once so the suite has an explicit semantic map.
+
+### A. Executable business/state behavior — 29
+
+`test_backend_core_round12.py`, `test_boundary_performance_ledger_v0180.py`, `test_catalog_naming.py`, `test_core_save_manifest.py`, `test_core_save_protocol.py`, `test_core_save_resolution.py`, `test_core_save_restore.py`, `test_core_save_running_transition.py`, `test_core_save_service.py`, `test_core_save_snapshots.py`, `test_corrupt_file_quarantine_v0180.py`, `test_diagnostics_read_only_v0190.py`, `test_hades2_adapter_round12.py`, `test_hades2_save_provider_round21.py`, `test_hades2_services_round16.py`, `test_localization_cache_recovery_v0180.py`, `test_next_room_reward_restart_semantics.py`, `test_persistence_integrity_v0180.py`, `test_preference_commit_efficiency_dev8.py`, `test_preferences_schema_v0180.py`, `test_process_time_warp_controller.py`, `test_process_time_warp_hades_integration.py`, `test_profile_envelope_contract_v0180.py`, `test_profile_shortcut_schema_v0180.py`, `test_protocol_fixtures_v0180.py`, `test_runtime_boundary_efficiency_dev8.py`, `test_schema_versioning_v0180.py`, `test_shortcut_chord_semantics.py`, `test_v01711_catalog_localization_ui.py`.
+
+These execute production Python or compiled Swift behavior/state logic. Some also contain source guards, but their primary value survives implementation rearrangement.
+
+### B. Lifecycle scenario/state-transition behavior — 8
+
+`test_backend_reply_callback_round20.py`, `test_backend_session_recovery_dev8.py`, `test_connect_phase_profile.py`, `test_global_host_cleanup_dev8.py`, `test_hades2_mutation_scheduler_round17.py`, `test_host_connection_policy_dev8.py`, `test_passive_ready_transition.py`, `test_runtime_reliability_round17.py`.
+
+The strongest family-wide guards are the pure/compiled Host policy and backend-session recovery harnesses. `test_passive_ready_transition.py` still mixes source wiring checks with scenario intent and is an upgrade candidate.
+
+### C. Cross-module architecture contracts — 9
+
+`test_core_save_hades_decoupling_round20.py`, `test_cross_game_isolation.py`, `test_global_decoupling_round15.py`, `test_module_contract_round13.py`, `test_reference_fixture_host_contract.py`, `test_shared_backend_session_round20.py`, `test_swift_file_boundaries_round14_1.py`, `test_toggle_unification_v0178.py`, `test_ui_component_boundary_v0175.py`.
+
+The reference fixture/module matrix is the highest-value executable proof; token/file-location guards should remain secondary.
+
+### D. Build/package/CI contracts — 7
+
+`test_build_contract_round14.py`, `test_packaged_module_round14.py`, `test_process_time_warp_preparation_contract.py`, `test_save_descriptor_round20.py`, `test_swift_integrity_v0172.py`, `test_swift_symbol_integrity_v0173.py`, `test_test_suite_discovery.py`.
+
+This governance branch strengthens `test_test_suite_discovery.py` so Linux is exhaustive-by-default rather than a curated positive list.
+
+### E. Source-level semantic/static invariants — 7
+
+`test_background_boundary_policy_v0180.py`, `test_hades2_session_hook_ownership.py`, `test_hades2_timeout_policy_v0177.py`, `test_hades2_transport_outcome_unknown_taint.py`, `test_process_time_warp_native_contract.py`, `test_reward_naming_audit.py`, `test_swift_declaration_uniqueness_v0176.py`.
+
+These intentionally guard semantic structure that is difficult to exercise without the real game/toolchain. The transport taint test already uses AST-level inspection where appropriate. The new `test_runtime_revision_gate.py` also belongs here after governance changes, but is not counted in the 85-file baseline.
+
+### F. Brittle string/regex/source-shape contracts — 13
+
+`test_core_save_header_rename_round23.py`, `test_core_save_modal_style_round22.py`, `test_core_save_swift_model_round20.py`, `test_core_save_ui_round20.py`, `test_core_save_ui_style_round21.py`, `test_exit_semantics.py`, `test_god_mode_hostile_effects.py`, `test_hades2_visual_baseline_v0174.py`, `test_hotkey_feedback_contract.py`, `test_mapped_slider_contract.py`, `test_native_sell_traits_contract.py`, `test_native_special_choice_contract.py`, `test_post_v01_feature_contracts.py`.
+
+Do not delete them mechanically: several protect real engine-API or UI-boundary requirements. When those areas are next changed, prefer compiled/type/behavior verification and retain only source checks that protect an otherwise unobservable contract.
+
+### G. Historical regression fossils — 8
+
+`test_round12_static.py`, `test_round17_1_swift_scope.py`, `test_round17_static.py`, `test_swift_round12.py`, `test_target_exit_refresh_contract.py`, `test_user_reported_fixes_dev7.py`, `test_v01710_regressions.py`, `test_v0179_regressions.py`.
+
+These remain green guards, but their release/round naming and bundled historical assertions are poor templates for future tests. `test_target_exit_refresh_contract.py` is the clearest consolidation candidate because the stronger Host policy/session tests now express the transition behavior. Consolidation should happen only in a change that proves equal-or-stronger coverage.
+
+### H. Platform-only tests — 4
+
+`test_core_save_batch_delete_round20.py`, `test_core_save_rename_completion_round24.py`, `test_hades2_run_log_watcher.py`, `test_trainer_log_sink_shared_append.py`.
+
+These compile/use AppKit or Darwin behavior and are intentionally excluded from Linux. They remain mandatory in Build 2 macOS.
+
+
 ### Keep as primary semantic guards
 
 Lifecycle/session:
