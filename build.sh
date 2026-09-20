@@ -172,6 +172,7 @@ for arch in "${ARCHITECTURES[@]}"; do
     helper="$GENERATED_DIR/libMGTTimeWarp.$arch.dylib"
     "$CLANG" \
         -dynamiclib \
+        -isysroot "$SDK" \
         -arch "$arch" \
         -mmacosx-version-min="$MIN_MACOS" \
         -std=c11 \
