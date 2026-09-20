@@ -9,7 +9,7 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 - Default branch: `main`.
 - Current merged audit baseline: `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
 - Verified product-code SHA before squash merge: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
-- New product features remain frozen until the requested post-merge exact-main Linux code review is clean.
+- The pre-feature audit freeze is cleared: the requested post-merge exact-main Linux code review is clean.
 - Hades II resident runtime: revision 42.
 - Hades II module protocol: 5.
 - Target game baseline: Hades II 1.139672 / Steam build 24556151.
@@ -34,20 +34,37 @@ Confirmed Important fixes in PR #40:
 
 Runtime source changed for item 5, so resident revision was bumped 41 -> 42. Desired-state schema was bumped 3 -> 4.
 
-## Current verification gate
+## Verification gate
 
-PR #40 audit implementation is verified and merged.
+PR #40 deep audit is verified and merged.
 
 Final tested product-code SHA:
 `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`
 
-Fresh evidence:
+Merged baseline:
+`f1eacae8d8c52605e5d87317a59ddd208aad662a`
+
+Deep-audit evidence:
 - Linux contracts `35526120496`: PASS.
 - Module build matrix `35526120549`: Hades II + reference fixture + package isolation PASS.
 - Build 2 macOS `35526120497`: full contract suite, Hades II build, package verification and RC artifact PASS.
-- independent container `Tools/run_linux_checks.sh`: `linux_checks_ok`.
+- independent container Linux contracts: `linux_checks_ok`.
 
-The temporary audit-source workflow was removed before the final tested code SHA. PR #40 merged that verified tree as `f1eacae8d8c52605e5d87317a59ddd208aad662a` on 2026-09-20T17:34:29Z. Final whole-diff review found and closed the last staged-restore fail-safe issue in `d3e43850...`. No Critical or Important audit finding remains open. The active gate is now the separate post-merge Linux code review.
+The requested post-merge Linux code review is also complete. Exact reviewed main source was `c2fe74c2dc6fd42bea48f40878e3c2ba760eb10b`, materialized by workflow run `35526388178` with commit marker and verified source SHA256.
+
+Post-merge review evidence:
+- exact-main `Tools/run_linux_checks.sh`: PASS;
+- all 85 `tests/test_*.py` attempted: 81 PASS on Linux, 4 platform-only AppKit/Darwin failures;
+- those same four platform-only tests: PASS in Build 2 macOS `35526120497`;
+- Backend compileall: PASS;
+- all Swift source files frontend-parse: PASS;
+- Python duplicate-definition scan: PASS;
+- conflict-marker / risky execution primitive / ownership / polling scans: no Critical/Important finding.
+
+Detailed record:
+`docs/audits/2026-09-21-post-merge-linux-review.md`.
+
+No Critical or Important audit/review finding remains open.
 
 ## Repository / architecture audit result
 
@@ -65,7 +82,7 @@ The temporary audit-source workflow was removed before the final tested code SHA
 - Some Core file-renames do not parent-directory fsync after `os.replace`; this is an extreme power-loss durability ceiling, not a demonstrated logical corruption/replay bug.
 - Hades local Profile storage does not currently apply the same explicit subdirectory symlink guard as Core Save storage. It runs with the same user authority and no privilege boundary; retain as future local-filesystem hardening unless a concrete failure requires change.
 
-## Next product gate after audit merge
+## Current product gate
 
 **Hades II save-editor design — no binary save mutation is approved yet.**
 
@@ -77,7 +94,7 @@ Boundary remains:
 
 The previously researched Hades II codec references remain candidates only; no third-party codec/dependency is integrated.
 
-After PR #40 merges, first run the requested fresh exact-main Linux code review from a CI source snapshot. Only after that review is clean should save-editor design/implementation resume.
+The requested fresh exact-main Linux code review is clean. Save-editor design may resume. Implementation still requires an approved design; no binary save mutation is approved by the audit/review itself.
 
 ## Permanent constraints
 
