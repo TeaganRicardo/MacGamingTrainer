@@ -6,7 +6,7 @@ command validation and delegates to game-local services.
 import math
 import subprocess
 
-from . import preparation, save_service
+from . import preparation
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
 from .schema import TOGGLES, MULTIPLIERS, STAT_RULES
@@ -19,14 +19,7 @@ class Hades2CommandRouter:
     def dispatch(self, command, params, request_id):
         adapter = self.adapter
         rid = request_id
-        if command=='scan':
-            result=adapter.scan()
-            pending=save_service.staged_restore()
-            if pending is not None and not result.get('pid'):
-                info=save_service.apply_staged_restore()
-                result=dict(result,operation=info,backups=save_service.list_save_backups(),pendingRestore=None)
-            elif pending is not None:
-                result=dict(result,pendingRestore=pending)
+        if command=='scan':result=adapter.scan()
         elif command=='connect':result=adapter.connect()
         elif command=='disconnect':result=adapter.disconnect()
         elif command=='reset_desired':result=adapter.reset_desired()
@@ -105,52 +98,6 @@ class Hades2CommandRouter:
             subprocess.run(['/usr/bin/open','-R',result['diagnosticBundle']],check=True,timeout=10)
         elif command=='launch':
             subprocess.run(['open',STEAM_SPEC.launch_url],check=True,timeout=10);result=adapter.scan()
-        elif command=='list_backups':
-            result={'backups':save_service.list_save_backups(),'pendingRestore':save_service.staged_restore()}
-        elif command=='rename_backup':
-            backup_id=params.get('backupId');name=params.get('name')
-            if not isinstance(backup_id,str) or not backup_id:raise ValueError('请选择存档备份。')
-            info=save_service.rename_save_backup(backup_id,name)
-            result=dict(operation=info,backups=save_service.list_save_backups())
-        elif command=='delete_backup':
-            backup_id=params.get('backupId')
-            if not isinstance(backup_id,str) or not backup_id:raise ValueError('请选择存档备份。')
-            pending=save_service.staged_restore()
-            if pending is not None and pending.get('backupId')==backup_id:raise ValueError('该备份正在等待恢复；请先取消暂存恢复。')
-            info=save_service.delete_save_backup(backup_id)
-            result=dict(operation=info,backups=save_service.list_save_backups(),pendingRestore=pending)
-        elif command=='open_backup_folder':
-            backup_id=params.get('backupId')
-            if backup_id is not None and (not isinstance(backup_id,str) or not backup_id):raise ValueError('备份 ID 无效。')
-            folder=save_service.save_backup_folder(backup_id)
-            subprocess.run(['/usr/bin/open','-R',folder] if backup_id is not None else ['/usr/bin/open',folder],check=True,timeout=10)
-            result={'folder':folder,'backups':save_service.list_save_backups()}
-        elif command=='restore_backup':
-            backup_id=params.get('backupId')
-            if not isinstance(backup_id,str) or not backup_id:raise ValueError('请选择存档备份。')
-            backup_current=params.get('backupCurrent',True)
-            if type(backup_current) is not bool:raise ValueError('恢复备份选项无效。')
-            run_count=adapter.state.get('runCount') if isinstance(getattr(adapter,'state',None),dict) else None
-            game_running=adapter.transport.alive()
-            if not game_running:
-                try: game_running=bool(adapter.scan().get('pid'))
-                except Exception: game_running=False
-            if game_running:
-                info=save_service.stage_restore(backup_id,run_count=run_count,backup_current=backup_current)
-                result=dict(operation=info,backups=save_service.list_save_backups(),pendingRestore=save_service.staged_restore())
-            else:
-                info=save_service.restore_saves(backup_id,run_count=run_count,backup_current=backup_current)
-                save_service.cancel_staged_restore()
-                result=dict(operation=info,backups=save_service.list_save_backups(),pendingRestore=None)
-        elif command=='cancel_staged_restore':
-            result=dict(operation=save_service.cancel_staged_restore(),backups=save_service.list_save_backups(),pendingRestore=None)
-        elif command=='backup':
-            run_count=params.get('runCount', adapter.state.get('runCount') if isinstance(getattr(adapter,'state',None),dict) else None)
-            if run_count is not None and (type(run_count) is not int or run_count<0 or run_count>99999999):raise ValueError('Run Count 无效。')
-            info=save_service.backup_saves(run_count=run_count,allow_running=True)
-            result=dict(operation=info,backups=save_service.list_save_backups())
-            if isinstance(getattr(adapter,'state',None),dict):
-                for key,value in adapter.state.items():result.setdefault(key,value)
         elif command in ('prepare','restore'):
             if adapter.transport.alive():raise ValueError('请断开连接并退出游戏后操作。')
             info={'prepare':preparation.prepare,'restore':preparation.restore}[command]()
