@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
 contract = (ROOT / 'Sources/Core/Host/TrainerGameModule.swift').read_text()
+api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 watcher_path = ROOT / 'Sources/Hades2/Services/Hades2RunLogWatcher.swift'
 assert watcher_path.exists(), 'Hades2 run-log watcher is missing'
 watcher = watcher_path.read_text()
@@ -150,6 +151,15 @@ event_end = model.index('\n    private func consumeRunLogReadySignalIfPossible()
 event_block = model[event_start:event_end]
 for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [:]', 'capabilities = capabilities.mapValues'):
     assert token in event_block, token
+
+# The game log already tells us that App.Reset destroyed the Lua generation.
+# Propagate that fact to the backend without crossing LLDB, so runtimeReady can
+# bootstrap immediately instead of discovering the missing resident module by
+# executing one doomed status request first.
+assert 'runtimeReset = "runtime_reset"' in api
+assert 'case runtimeReset' in api
+assert 'send(.runtimeReset' in event_block
+assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
 
 backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
 assert 'if !status.busy' in backend_start
