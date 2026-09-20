@@ -19,9 +19,13 @@ assert mapping.is_file()
 assert component.is_file()
 component_text = component.read_text()
 assert "struct TrainerMappedSlider: View" in component_text
-assert "Slider(value: positionBinding, in: 0...1)" in component_text
-assert "mapping.detents" in component_text
+assert "Slider(value: positionBinding, in: 0...1, onEditingChanged:" in component_text
+assert ".controlSize(.regular)" in component_text
+assert "mapping.marks" in component_text
+assert "@State private var livePosition" in component_text
+assert "@State private var isEditing" in component_text
 assert "TrainerMappedSlider(" in view
+assert ".frame(width: 200)" in view
 assert "text: $gameSpeedInput" in view
 assert "ForEach([0.25, 0.5, 1.0, 1.5, 2.0, 3.0]" not in view
 assert "gameSpeedInput" in snapshots
@@ -37,19 +41,20 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
-let mapping = TrainerSliderMapping.centeredLogarithmic(
-    range: 0.1...5.0,
-    pivot: 1.0,
+let mapping = TrainerSliderMapping.anchoredLogarithmic(
+    values: [0.1, 0.5, 1.0, 2.0, 5.0],
     step: 0.1,
-    detents: [0.5, 1.0, 1.5, 2.0, 3.0, 5.0],
-    snapDistance: 0.025
+    detents: [0.5, 1.0, 2.0],
+    snapDistance: 0.0125
 )
 
-if !approx(mapping.position(for: 0.1), 0) ||
-   !approx(mapping.position(for: 1.0), 0.5) ||
-   !approx(mapping.position(for: 5.0), 1.0) {
-    fail("anchors")
+let expectedAnchors: [(Double, Double)] = [
+    (0.1, 0.0), (0.5, 0.25), (1.0, 0.5), (2.0, 0.75), (5.0, 1.0)
+]
+for (value, position) in expectedAnchors {
+    if !approx(mapping.position(for: value), position) { fail("anchor \(value)") }
 }
+if mapping.marks != [0.1, 0.5, 1.0, 2.0, 5.0] { fail("visible marks") }
 if !approx(mapping.position(for: 20.0), 1.0) { fail("visual clamp") }
 
 for value in [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0, 4.4, 5.0] {
@@ -59,9 +64,12 @@ for value in [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0, 4.4, 5.0] {
 }
 
 let two = mapping.position(for: 2.0)
-if !approx(mapping.value(at: two + 0.015), 2.0) { fail("detent snap") }
-if approx(mapping.value(at: two + 0.04), 2.0) { fail("snap threshold") }
-if !approx(mapping.value(at: mapping.position(for: 2.36)), 2.4) { fail("step") }
+if !approx(mapping.snappedPosition(two + 0.010), two) { fail("detent snap") }
+if approx(mapping.snappedPosition(two + 0.020), two) { fail("reduced snap threshold") }
+let a = mapping.rawValue(at: 0.61)
+let b = mapping.rawValue(at: 0.611)
+if approx(a, b, 0.000001) { fail("continuous curve") }
+if !approx(mapping.value(at: mapping.position(for: 2.36)), 2.4) { fail("effect step") }
 
 print("mapped_slider_math_ok")
 """
