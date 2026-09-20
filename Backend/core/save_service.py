@@ -84,16 +84,10 @@ class CoreSaveService:
         )
 
     def _staged_path(self):
-        return self.store.root / 'staged-restore.json'
+        return self.store.ensure_storage_root() / 'staged-restore.json'
 
     def _ensure_data_root(self):
-        root = self.store.root
-        if root.is_symlink():
-            raise RuntimeError('Save management data path cannot be a symbolic link.')
-        root.mkdir(parents=True, exist_ok=True)
-        if root.is_symlink() or not root.is_dir():
-            raise RuntimeError('Save management data path is unsafe.')
-        return root
+        return self.store.ensure_storage_root()
 
     def _write_staged(self, payload):
         path = self._staged_path()

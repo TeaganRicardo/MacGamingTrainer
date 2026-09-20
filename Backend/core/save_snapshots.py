@@ -77,14 +77,30 @@ def _local_timestamp():
 class SaveSnapshotStore:
     def __init__(self, game_id, data_root):
         self.game_id = game_id
-        self.root = Path(data_root) / game_id / 'saves'
+        self.data_root = Path(data_root)
+        self.game_root = self.data_root / game_id
+        self.root = self.game_root / 'saves'
         self.snapshots = self.root / 'snapshots'
 
+    def ensure_storage_root(self):
+        expected_parent = self.data_root.resolve(strict=False)
+        if self.game_root.is_symlink() or self.root.is_symlink():
+            raise SaveSnapshotError('Save management storage path cannot be a symbolic link.')
+        if self.game_root.resolve(strict=False).parent != expected_parent:
+            raise SaveSnapshotError('Save management storage escaped its data root.')
+        self.root.mkdir(parents=True, exist_ok=True)
+        if self.game_root.is_symlink() or self.root.is_symlink() or not self.root.is_dir():
+            raise SaveSnapshotError('Save management storage path is unsafe.')
+        if self.game_root.resolve(strict=False).parent != self.data_root.resolve(strict=False):
+            raise SaveSnapshotError('Save management storage escaped its data root.')
+        return self.root
+
     def _ensure_parent(self):
-        if self.root.is_symlink() or self.snapshots.is_symlink():
+        self.ensure_storage_root()
+        if self.snapshots.is_symlink():
             raise SaveSnapshotError('Snapshot storage path cannot be a symbolic link.')
         self.snapshots.mkdir(parents=True, exist_ok=True)
-        if self.root.is_symlink() or self.snapshots.is_symlink() or not self.snapshots.is_dir():
+        if self.snapshots.is_symlink() or not self.snapshots.is_dir():
             raise SaveSnapshotError('Snapshot storage path is unsafe.')
 
     def _new_id(self):
