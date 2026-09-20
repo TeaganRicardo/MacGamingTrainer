@@ -4,6 +4,8 @@ Updated: 2026-09-21
 
 This is the canonical development handoff. Historical plans, closed PRs and old branches are evidence only; current code, this file and roadmap issue #8 are execution authority.
 
+Future development agents should enter through `AGENTS.md`; stable cross-feature ownership, lifecycle, replay and Save safety rules are centralized in `ENGINEERING_INVARIANTS.md`. Those files do not replace this status/roadmap authority.
+
 ## Current baseline
 
 - Default branch: `main`.
