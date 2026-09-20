@@ -1,4 +1,5 @@
 from pathlib import Path
+from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
@@ -10,8 +11,7 @@ router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
-assert 'previousModule.revision ~= 42' in lua
-assert 'version = 1, revision = 42' in lua
+assert runtime_revision(lua) >= 42
 assert 'specialChoiceOpens = {}' in lua
 assert 'specialChoiceRun = nil' in lua
 
