@@ -76,7 +76,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
 
     var body: some Scene {
         Window("Mac Gaming Trainer", id: "main") {
-            TrainerHostView<ActiveGameModule>(model: model)
+            TrainerHostView<ActiveGameModule>(model: model, session: backendSession)
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
                 .preferredColorScheme(.dark)
