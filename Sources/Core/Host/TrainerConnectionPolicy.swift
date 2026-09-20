@@ -12,6 +12,7 @@ struct TrainerConnectionPolicy {
     private(set) var backendRestartRequested = false
     private(set) var automaticConnectionSuppressed = false
     private(set) var backgroundConnectionAllowed = false
+    private(set) var targetExitRefreshRequested = false
 
     mutating func targetStateChanged(running: Bool) {
         guard targetRunning != running else { return }
@@ -19,10 +20,12 @@ struct TrainerConnectionPolicy {
         if running {
             // A real target-process lifetime resets an explicit detach from the
             // previous run and supplies one background recovery/connect chance.
+            targetExitRefreshRequested = false
             automaticConnectionSuppressed = false
             backendRestartRequested = true
             connectRequested = true
         } else {
+            targetExitRefreshRequested = true
             backendRestartRequested = false
             connectRequested = false
             automaticConnectionSuppressed = false
@@ -32,6 +35,7 @@ struct TrainerConnectionPolicy {
 
     mutating func targetLaunched() {
         targetRunning = true
+        targetExitRefreshRequested = false
         automaticConnectionSuppressed = false
         backgroundConnectionAllowed = true
         backendRestartRequested = true
@@ -76,10 +80,35 @@ struct TrainerConnectionPolicy {
     }
 
     mutating func connectionChanged(connected: Bool) {
-        guard connected else { return }
+        guard connected else {
+            if !targetRunning { targetExitRefreshRequested = false }
+            return
+        }
         connectRequested = false
         automaticConnectionSuppressed = false
         backgroundConnectionAllowed = false
+    }
+
+    /// A target exit can arrive while a module request is still in flight.
+    /// Preserve one refresh until the shared backend is idle so stale connected
+    /// state cannot survive a non-runtime reply that completes after the exit.
+    mutating func consumeTargetExitRefreshIfEligible(
+        backendAvailable: Bool,
+        busy: Bool,
+        connected: Bool
+    ) -> Bool {
+        if targetRunning {
+            targetExitRefreshRequested = false
+            return false
+        }
+        guard targetExitRefreshRequested else { return false }
+        guard connected else {
+            targetExitRefreshRequested = false
+            return false
+        }
+        guard backendAvailable, !busy else { return false }
+        targetExitRefreshRequested = false
+        return true
     }
 
     /// Consumes one pending backend-restart intent only when the target is still
