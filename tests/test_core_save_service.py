@@ -119,6 +119,40 @@ assert (saves / 'Profile1.sav').read_bytes() == b'provider-target'
 # preserveCurrent on staged apply creates a normal inventory snapshot.
 assert len(provider_service.list_state()['snapshots']) == 3
 
+# Provider naming is evaluated inside the successful hot-snapshot attempt.
+# If the save changes after the first description, the retry must describe the
+# bytes that are actually committed rather than keeping stale naming metadata.
+class NamingRaceProvider:
+    def __init__(self):
+        self.resolve_calls = 0
+    def resolve(self, roots, declared):
+        self.resolve_calls += 1
+        if self.resolve_calls == 2:
+            (saves / 'Profile1.sav').write_bytes(b'name-v2')
+        return [(row.root_id, row.relative_path) for row in declared]
+    def describe_snapshot(self, files, created_at):
+        row = next(row for row in files if row.relative_path == 'Profile1.sav')
+        value = row.source_path.read_bytes().decode('utf-8')
+        return {'defaultName': value, 'nameDetails': [value]}
+
+naming_provider = NamingRaceProvider()
+naming_spec = SaveManagementSpec(
+    roots=(SaveRootSpec('main', str(saves), ('*.sav',)),),
+    provider='games.example.naming_provider:Provider', hot_backup=True,
+    restore_policy='hotPreferred', staged_restore=True,
+)
+(saves / 'Profile1.sav').write_bytes(b'name-v1')
+running = True
+naming_service = CoreSaveService(
+    'naming-race', naming_spec, data, is_running,
+    provider_loader=lambda target: naming_provider,
+)
+named = naming_service.backup()
+assert named['name'] == 'name-v2', named
+assert named['nameDetails'] == ['name-v2'], named
+assert (Path(named['path']) / 'files/main/Profile1.sav').read_bytes() == b'name-v2'
+running = False
+
 # If staging is disabled, a running stoppedOnly restore reports that exact capability failure.
 no_stage_spec = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('*.sav',)),), provider=None,
