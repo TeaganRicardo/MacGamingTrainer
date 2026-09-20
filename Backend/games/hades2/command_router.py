@@ -20,7 +20,10 @@ class Hades2CommandRouter:
         adapter = self.adapter
         rid = request_id
         if command=='scan':result=adapter.scan()
-        elif command=='connect':result=adapter.connect()
+        elif command=='connect':
+            probe_runtime=params.get('probeRuntime',True)
+            if type(probe_runtime) is not bool:raise ValueError('probeRuntime 必须为布尔值。')
+            result=adapter.connect(probe_runtime=probe_runtime)
         elif command=='disconnect':result=adapter.disconnect()
         elif command=='runtime_reset':result=adapter.runtime_reset()
         elif command=='reset_desired':result=adapter.reset_desired()

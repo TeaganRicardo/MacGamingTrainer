@@ -212,7 +212,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func toggleConnectionFromHost() { toggleConnection() }
+    func toggleConnectionFromHost() { toggleConnection(probeRuntime: true) }
+
+    func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
+        toggleConnection(probeRuntime: !targetJustLaunched)
+    }
 
     func refreshFromHost() {
         send(connected ? .status : .scan, title: "刷新状态")
@@ -250,8 +254,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 send(.runtimeReset, title: "记录运行时重置", announceSuccess: false)
             }
         case .runtimeReady:
-            guard connected else { return }
             pendingRunReadySignal = true
+            guard connected else { return }
             consumeRunLogReadySignalIfPossible()
         }
     }
@@ -271,11 +275,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func toggleConnection() {
+        toggleConnection(probeRuntime: true)
+    }
+
+    private func toggleConnection(probeRuntime: Bool) {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
         } else {
+            if probeRuntime {
+                pendingRunReadySignal = false
+            }
             runLogWatcher.start()
-            send(.connect, title: "连接游戏") { [weak self] _ in
+            send(.connect(probeRuntime: probeRuntime), title: "连接游戏") { [weak self] _ in
                 guard let self else { return }
                 self.runLogWatcher.start()
                 self.consumeRunLogReadySignalIfPossible()
