@@ -25,11 +25,12 @@ class SaveRollbackError(SaveRestoreError):
 
 
 class SaveRestoreTransaction:
-    def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None):
+    def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None, target_running_probe=None):
         self.store = store
         self.resolver = resolver
         self.busy_probe = busy_probe
         self.snapshot_describer = snapshot_describer
+        self.target_running_probe = target_running_probe
         self.roots = {root.id: Path(root.path).expanduser() for root in spec.roots}
 
     @staticmethod
@@ -51,7 +52,12 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save transaction storage path is unsafe.')
         return parent
 
+    def _ensure_cold_target_still_stopped(self, target_running):
+        if not target_running and self.target_running_probe is not None and self.target_running_probe():
+            raise SaveBusyError('Game started while preparing restore.')
+
     def _capture_rollback(self, target_running):
+        self._ensure_cold_target_still_stopped(target_running)
         current = list(self.resolver())
         if target_running and self.busy_probe is not None and self.busy_probe(tuple(current)):
             raise SaveBusyError('Save files are currently busy.')
@@ -77,6 +83,7 @@ class SaveRestoreTransaction:
             for row in after:
                 if _sha256(row.source_path) != hashes[self._key(row)]:
                     self._raise_race(target_running, 'Save changed while preparing restore.')
+            self._ensure_cold_target_still_stopped(target_running)
             return rollback, rollback_rows, hashes
         except Exception:
             shutil.rmtree(rollback, ignore_errors=True)
@@ -178,6 +185,7 @@ class SaveRestoreTransaction:
 
             if not self._verify_state(baseline_hashes):
                 self._raise_race(target_running, 'Save changed before restore could begin.')
+            self._ensure_cold_target_still_stopped(target_running)
 
             mutation_started = True
             self._install_entries(target_entries)
