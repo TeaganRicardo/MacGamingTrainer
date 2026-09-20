@@ -9,7 +9,7 @@ import uuid
 
 from .save_resolution import load_save_provider, resolve_save_files
 from .save_restore import SaveBusyError, SaveRestoreTransaction, SaveRollbackError
-from .save_snapshots import SaveSnapshotStore
+from .save_snapshots import SaveSnapshotStore, SaveSnapshotError
 
 
 class SaveManagementUnsupportedError(RuntimeError):
@@ -98,6 +98,28 @@ class CoreSaveService:
 
     def _ensure_data_root(self):
         return self.store.ensure_storage_root()
+
+    def _recovery_paths(self):
+        root = self.store.ensure_storage_root()
+        transactions = root / 'transactions'
+        if not transactions.exists() and not transactions.is_symlink():
+            return []
+        if transactions.is_symlink() or not transactions.is_dir():
+            raise SaveSnapshotError('Save transaction storage path is unsafe.')
+        root_resolved = root.resolve(strict=False)
+        transactions_resolved = transactions.resolve(strict=False)
+        if transactions_resolved.parent != root_resolved:
+            raise SaveSnapshotError('Save transaction storage escaped its data root.')
+
+        paths = []
+        for candidate in sorted(transactions.glob('.rollback-*')):
+            if candidate.is_symlink() or not candidate.is_dir():
+                continue
+            resolved = candidate.resolve(strict=False)
+            if resolved.parent != transactions_resolved:
+                continue
+            paths.append(str(resolved))
+        return paths
 
     def _write_staged(self, payload):
         path = self._staged_path()
@@ -195,7 +217,11 @@ class CoreSaveService:
 
     def list_state(self):
         self._require_supported()
-        return {'snapshots': self.store.list_snapshots(), 'pendingRestore': self.pending_restore()}
+        return {
+            'snapshots': self.store.list_snapshots(),
+            'pendingRestore': self.pending_restore(),
+            'recoveryPaths': self._recovery_paths(),
+        }
 
     def backup(self, display_name=None):
         self._require_supported()

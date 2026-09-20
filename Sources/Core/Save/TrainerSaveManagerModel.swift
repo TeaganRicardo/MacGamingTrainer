@@ -5,6 +5,7 @@ import Foundation
 final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var snapshots: [TrainerSaveSnapshot] = []
     @Published private(set) var pendingRestore: TrainerPendingRestore?
+    @Published private(set) var recoveryPaths: [String] = []
     @Published private(set) var busy = false
     @Published private(set) var error = ""
     @Published private(set) var notice = ""
@@ -46,6 +47,15 @@ final class TrainerSaveManagerModel: ObservableObject {
         let ordered = ids.filter { !$0.isEmpty }.sorted()
         guard !ordered.isEmpty else { return }
         deleteNext(ordered, deleted: 0)
+    }
+
+    func revealRecoveryCopies() {
+        let urls = recoveryPaths
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     func reveal(id: String? = nil) {
@@ -173,6 +183,9 @@ final class TrainerSaveManagerModel: ObservableObject {
         if let rows = result["snapshots"] as? [[String: Any]] {
             snapshots = rows.compactMap(TrainerSaveSnapshot.init(row:))
         }
+        recoveryPaths = (result["recoveryPaths"] as? [String] ?? [])
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         if let pending = result["pendingRestore"] as? [String: Any] {
             pendingRestore = TrainerPendingRestore(row: pending)
         } else {

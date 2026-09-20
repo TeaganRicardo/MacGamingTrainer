@@ -42,6 +42,26 @@ struct TrainerSaveManagerView: View {
                 }
             }
 
+            if !model.recoveryPaths.isEmpty {
+                TrainerInlineNotice(color: theme.warning) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("检测到上次恢复中断后保留的恢复副本。请先检查这些文件，再决定是否继续恢复。")
+                                .font(.caption)
+                                .foregroundStyle(theme.warning)
+                            Text(model.recoveryPaths.joined(separator: "\n"))
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        Spacer()
+                        Button("显示") { model.revealRecoveryCopies() }
+                            .disabled(model.busy)
+                    }
+                }
+            }
+
             if !model.error.isEmpty {
                 TrainerMessageBanner(text: model.error, icon: "exclamationmark.triangle", color: theme.warning)
             } else if !model.notice.isEmpty {
