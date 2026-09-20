@@ -265,7 +265,7 @@ class SaveSnapshotStore:
         return manifest
 
     def load_verified_snapshot(self, snapshot_id):
-        root = self._path_for_id(snapshot_id)
+        root = self._path_for_id(snapshot_id).resolve()
         return {'root': root, 'manifest': self._read_manifest(root)}
 
     def _row(self, root, manifest, valid, error=''):
