@@ -94,7 +94,7 @@ struct TrainerMappedSlider: View {
         .onAppear {
             displayPosition = mapping.position(for: value)
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { _, newValue in
             if let local = lastLocalValue, abs(local - newValue) < 0.000001 {
                 lastLocalValue = nil
                 return
