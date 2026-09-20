@@ -14,7 +14,7 @@ view = (ROOT/'Sources/Hades2/Hades2View.swift').read_text()
 card = (ROOT/'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 stats = (ROOT/'Sources/Core/UI/Components/TrainerStatControls.swift').read_text()
 toggle = (ROOT/'Sources/Core/UI/Primitives/TrainerToggleControl.swift').read_text()
-host = (ROOT/'Sources/Hades2/Views/Hades2HostActions.swift').read_text()
+host = (ROOT/'Sources/Core/Host/TrainerHost.swift').read_text()
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
 lua = (ROOT/'Backend/games/hades2/runtime/hades.lua').read_text()
 
@@ -37,16 +37,17 @@ assert '.contentShape(Rectangle())' in view
 assert '.controlSize(.regular)' in toggle
 assert '.tint(tint ?? theme.accent)' in toggle
 
-# Save manager is no longer disabled/re-enabled by every transient backend request.
-save_line = host[host.index('Label("存档管理"'):host.index('Button { model.openLog()', host.index('Label("存档管理"'))]
+# Save manager is not disabled/re-enabled by every transient game request.
+save_start = host.index('Label("存档管理"')
+save_line = host[save_start:host.index('}', save_start) + 1]
 assert 'model.busy' not in save_line
-assert 'model.exiting' in save_line
+assert '!model.backendAvailable' in save_line
 
 # Never poll live Lua automatically: every status call crosses the debugger
 # boundary and can stop the game for hundreds of milliseconds.
 for token in ('featureStateTimer', 'updateFeatureStatePolling()', 'withTimeInterval: 4.0', 'self.send(.status, title: "同步功能状态", announceSuccess: false)'):
     assert token not in model, token
-assert 'saveManagerBusy' in model
+assert 'saveManagerBusy' not in model
 
 # Next-room UI and Lua both use current reward IDs, not early-access RoomReward* IDs.
 for token in ('RoomMoneyDrop','MetaCurrencyDrop','MetaCardPointsCommonDrop','MemPointsCommonDrop','MaxHealthDrop','MaxManaDrop','StackUpgrade','WeaponUpgrade','SpellDrop'):
