@@ -118,6 +118,7 @@ assert reset_adapter.preference_dirty is False
 # an avoidable failed resident-dispatch boundary.
 proactive_transport=ResetTransport(fail_once=False)
 proactive_adapter=Hades2Adapter(transport=proactive_transport)
+proactive_adapter.state.update(connected=True,pid=4242,status='ready',scene='run')
 proactive_adapter._runtime_bootstrapped=True
 proactive_adapter._catalog_initialized=True
 proactive_adapter.preferences=proactive_adapter._default_preferences()
