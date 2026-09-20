@@ -137,6 +137,21 @@ except SaveSnapshotError:
 else:
     raise AssertionError('snapshot store followed a symlinked snapshots directory')
 
+# The game-specific data directory is part of the trusted internal storage
+# boundary too. A symlink one level above saves/ must not redirect snapshots
+# outside the configured MacGamingTrainer data root.
+ancestor_data = base / 'ancestor-data'; ancestor_data.mkdir()
+ancestor_external = base / 'ancestor-external'; ancestor_external.mkdir()
+(ancestor_data / 'example').symlink_to(ancestor_external, target_is_directory=True)
+ancestor_store = SaveSnapshotStore('example', ancestor_data)
+try:
+    ancestor_store.create_snapshot(rows, hot=False)
+except SaveSnapshotError:
+    pass
+else:
+    raise AssertionError('snapshot store followed a symlinked game data directory')
+assert not (ancestor_external / 'saves').exists()
+
 (source / 'Profile1.sav').write_bytes(b'first-version')
 (source / 'Profile2.sav').unlink()
 resolve_calls = 0
