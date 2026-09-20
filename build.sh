@@ -12,7 +12,9 @@ done
 
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 SWIFTC="$(xcrun --find swiftc)"
+CLANG="$(xcrun --find clang 2>/dev/null || true)"
 PYTHON="$(xcrun --find python3 2>/dev/null || true)"
+[[ -n "$CLANG" ]] || { echo "Xcode developer tools must provide clang." >&2; exit 1; }
 [[ -n "$PYTHON" ]] || { echo "Xcode developer tools must provide python3." >&2; exit 1; }
 [[ -x "$MODULE_VALIDATOR" && -x "$BINDING_GENERATOR" ]] || { echo "Missing game module build tools under Tools/." >&2; exit 1; }
 
@@ -154,6 +156,43 @@ cp -R "$ROOT/Backend/core" "$BACKEND/core"
 mkdir -p "$BACKEND/games"
 cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
 cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
+
+TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
+TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"
+TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"
+TIME_WARP_NATIVE_DIR="$BACKEND/core/native"
+TIME_WARP_DYLIB="$TIME_WARP_NATIVE_DIR/libMGTTimeWarp.dylib"
+[[ -f "$TIME_WARP_SOURCE" && -f "$TIME_WARP_FISHHOOK" ]] || {
+    echo "Missing Process Time Warp native sources." >&2
+    exit 1
+}
+mkdir -p "$TIME_WARP_NATIVE_DIR"
+TIME_WARP_ARCH_BINARIES=()
+for arch in "${ARCHITECTURES[@]}"; do
+    helper="$GENERATED_DIR/libMGTTimeWarp.$arch.dylib"
+    "$CLANG" \
+        -dynamiclib \
+        -arch "$arch" \
+        -mmacosx-version-min="$MIN_MACOS" \
+        -std=c11 \
+        -Os \
+        -fvisibility=hidden \
+        -I"$TIME_WARP_ROOT/vendor/fishhook" \
+        "$TIME_WARP_SOURCE" "$TIME_WARP_FISHHOOK" \
+        -framework QuartzCore \
+        -o "$helper"
+    TIME_WARP_ARCH_BINARIES+=("$helper")
+done
+if [[ ${#TIME_WARP_ARCH_BINARIES[@]} -eq 1 ]]; then
+    cp "${TIME_WARP_ARCH_BINARIES[0]}" "$TIME_WARP_DYLIB"
+else
+    TIME_WARP_LIPO="$(xcrun --find lipo 2>/dev/null || true)"
+    [[ -n "$TIME_WARP_LIPO" ]] || { echo "Universal Time Warp helper requested but lipo is unavailable." >&2; exit 1; }
+    "$TIME_WARP_LIPO" -create "${TIME_WARP_ARCH_BINARIES[@]}" -output "$TIME_WARP_DYLIB"
+fi
+codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
+codesign --verify --strict "$TIME_WARP_DYLIB"
+
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
 
