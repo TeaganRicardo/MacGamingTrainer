@@ -1,4 +1,7 @@
-import SwiftUI\nimport AppKit\n\nstruct Hades2ProfileManagerView: View {
+import SwiftUI
+import AppKit
+
+struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Binding var isPresented: Bool
     @State private var profileName = ""
