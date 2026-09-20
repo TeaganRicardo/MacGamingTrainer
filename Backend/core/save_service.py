@@ -23,9 +23,8 @@ class CoreSaveService:
     def __init__(self, game_id, spec, data_root, target_running_probe, provider_loader=None):
         self.game_id = game_id
         self.spec = spec
-        self.data_root = Path(data_root)
         self.target_running_probe = target_running_probe
-        self.store = SaveSnapshotStore(game_id, self.data_root)
+        self.store = SaveSnapshotStore(game_id, Path(data_root))
         self.provider = None
         if spec is not None and spec.provider is not None:
             loader = provider_loader or load_save_provider
