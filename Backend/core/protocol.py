@@ -13,6 +13,7 @@ APP_BACKEND_VERSION = '0.1'
 
 from core.adapter import GameAdapter
 from core.save_service import CoreSaveService
+from core.save_restore import SaveBusyError
 
 
 _CORE_SAVE_PREFIX = 'core.save.'
@@ -22,15 +23,20 @@ def _target_process_running(process_name):
     if not process_name:
         return False
     try:
-        return subprocess.run(
+        result = subprocess.run(
             ['/usr/bin/pgrep', '-x', process_name],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=2,
             check=False,
-        ).returncode == 0
-    except (OSError, subprocess.TimeoutExpired):
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。') from error
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
         return False
+    raise SaveBusyError('无法确认目标游戏是否正在运行，请稍后重试。')
 
 
 class JsonlRequestRouter:

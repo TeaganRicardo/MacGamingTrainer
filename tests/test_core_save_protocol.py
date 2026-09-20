@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+import core.protocol as protocol_module
 from core.protocol import JsonlRequestRouter
 from core.save_restore import SaveRollbackError
 
@@ -131,5 +132,32 @@ finally:
 assert empty_backup['ok'] is False
 assert empty_backup['error']['code'] == 'save_not_found'
 assert 'save' in empty_backup['error']['message'].lower()
+
+# Process-query failure is not evidence that the game stopped. Core Save must
+# fail closed before a hotPreferred restore can mutate real save bytes.
+(saves / 'Profile1.sav').write_bytes(b'probe-target')
+probe_seed = JsonlRequestRouter(adapter, save_data_root=base/'probe-data', target_running_probe=lambda: False)
+probe_backup = probe_seed.handle({'id':'probe-backup','command':'core.save.backup','params':{}})
+assert probe_backup['ok'] is True
+probe_snapshot_id = probe_backup['result']['operation']['id']
+(saves / 'Profile1.sav').write_bytes(b'probe-current')
+probe_router = JsonlRequestRouter(adapter, save_data_root=base/'probe-data')
+real_run = protocol_module.subprocess.run
+class FailedProcessQuery:
+    returncode = 2
+try:
+    protocol_module.subprocess.run = lambda *args, **kwargs: FailedProcessQuery()
+    logging.disable(logging.CRITICAL)
+    probe_restore = probe_router.handle({
+        'id':'probe-restore',
+        'command':'core.save.restore',
+        'params':{'snapshotId':probe_snapshot_id,'preserveCurrent':False},
+    })
+finally:
+    logging.disable(logging.NOTSET)
+    protocol_module.subprocess.run = real_run
+assert probe_restore['ok'] is False
+assert probe_restore['error']['code'] == 'save_busy'
+assert (saves / 'Profile1.sav').read_bytes() == b'probe-current'
 
 print('core_save_protocol_ok')
