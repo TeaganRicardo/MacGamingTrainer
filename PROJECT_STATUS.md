@@ -7,7 +7,7 @@ This is the canonical development handoff. Historical implementation plans, clos
 ## Current baseline
 
 - Default branch: `main`.
-- Verified main head: `7471edf9dfaa20a56936de0497883c296b7afac3` (`fix: resolve partial shortcut Profile override collisions`).
+- Verified code baseline: `7471edf9dfaa20a56936de0497883c296b7afac3` (`fix: resolve partial shortcut Profile override collisions`). Subsequent documentation-only commits do not change that code evidence.
 - Hades II resident runtime: revision 41.
 - Hades II module protocol: 5.
 - Target game baseline used by current runtime contracts: Hades II 1.139672 / Steam build 24556151.
