@@ -28,7 +28,7 @@ required = (
 'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
     'TrainerSelectableListRow', 'TrainerPillBadge', 'TrainerEmptyState',
-    'TrainerSheetScaffold', 'TrainerSectionHeader',
+    'TrainerSheetScaffold', 'TrainerSectionHeader', 'TrainerMappedSlider',
 )
 for name in required:
     assert f'struct {name}' in core_ui, name

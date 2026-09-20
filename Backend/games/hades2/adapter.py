@@ -2,6 +2,7 @@
 from pathlib import Path
 import json, subprocess, time, logging, math
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
+from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 from . import preparation
 from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
 from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, disconnected_capabilities
@@ -71,6 +72,9 @@ class Hades2Adapter(GameAdapter):
             from .transport import Hades2LuaTransport
             transport = Hades2LuaTransport()
         self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
+        helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
+        self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(self.transport),helper_path,[GAME_SPEC.executable_name])
+        self._time_warp_speed=1.0;self._time_warp_error=''
         self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
@@ -118,7 +122,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':self._replay_preferences(force_full=True)
+        if self.transport.alive():self._replay_preferences(force_full=True)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
 
@@ -159,6 +163,36 @@ class Hades2Adapter(GameAdapter):
             if isinstance(item,dict) and isinstance(item.get('id'),str):
                 item['locked']=item['id'] in elements
                 if item['locked']:item['count']=elements[item['id']]
+        self._project_time_warp()
+
+    def _project_time_warp(self):
+        active=self.state.get('activeFeatures')
+        active=dict(active) if isinstance(active,dict) else {}
+        active['gameSpeed']=abs(self._time_warp_speed-1.0)>1e-6
+        self.state['activeFeatures']=active
+        support=self.state.get('featureSupport')
+        support=dict(support) if isinstance(support,dict) else {}
+        support['gameSpeed']=True
+        self.state['featureSupport']=support
+        errors=self.state.get('featureErrors')
+        errors=dict(errors) if isinstance(errors,dict) else {}
+        if self._time_warp_error:errors['gameSpeed']=self._time_warp_error
+        else:errors.pop('gameSpeed',None)
+        self.state['featureErrors']=errors
+        diagnostics=self.state.get('runtimeDiagnostics')
+        if isinstance(diagnostics,dict):
+            diagnostics=dict(diagnostics)
+            diagnostics['gameSpeedMethod']='processTimeWarp'
+            diagnostics['gameSpeedAppliedValue']=self._time_warp_speed
+            self.state['runtimeDiagnostics']=diagnostics
+
+    def _apply_game_speed(self,value):
+        try:
+            actual=self.time_warp.reset() if abs(float(value)-1.0)<1e-9 else self.time_warp.set_speed(float(value))
+        except AdapterError as error:
+            self._time_warp_error=str(error);self._project_time_warp();raise
+        self._time_warp_speed=float(actual);self._time_warp_error='';self._project_time_warp()
+        return self._time_warp_speed
 
     def _reset_preferences(self):
         preferences=self._default_preferences()
@@ -187,6 +221,7 @@ class Hades2Adapter(GameAdapter):
         for key in TOGGLES:
             if key in desired:self.preferences[key]=bool(desired[key])
         for key in MULTIPLIERS:
+            if key=='gameSpeed':continue
             value=decoded.get(key)
             if type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value):self.preferences[key]=float(value)
         rarity=decoded.get('boonRarity')
@@ -218,11 +253,24 @@ class Hades2Adapter(GameAdapter):
         preferences=dict(self.preferences);preferences[feature]=value
         self.preference_store.save(preferences)
         self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=True
+        self.preference_initialized=True
+        was_dirty=self.preference_dirty
         self._overlay_preferences()
-        # Editing desired state is intentionally available even while detached,
-        # on the main menu, or during a Lua boundary timeout. Apply immediately
-        # only when the current scene advertises feature mutation.
+        if feature=='gameSpeed':
+            self.preference_dirty=True
+            if self.transport.alive() and self._runtime_bootstrapped:
+                try:
+                    self._apply_game_speed(value)
+                    self.preference_dirty=was_dirty
+                    self.state.pop('preferenceApplyError',None)
+                except TransportError as error:
+                    logging.warning('Desired gameSpeed stored pending reconnect: %s',error)
+                    self.state['preferenceApplyError']=str(error)
+                    self._overlay_preferences()
+            return dict(self.state)
+        self.preference_dirty=True
+        # Lua-owned desired state remains editable while detached and replays
+        # when a compatible scene becomes available.
         if self.transport.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
@@ -254,13 +302,18 @@ class Hades2Adapter(GameAdapter):
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False):
-        if not self.transport.alive() or self.state.get('status')!='ready':return dict(self.state)
+        if not self.transport.alive():return dict(self.state)
+        if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',1.0))
+        if self.state.get('status')!='ready':
+            self._overlay_preferences()
+            return dict(self.state)
         desired=self.state.get('desiredFeatures') if isinstance(self.state.get('desiredFeatures'),dict) else {}
         pending=[]
         for key in TOGGLES:
             if force_full or bool(desired.get(key,self.state.get(key,False)))!=bool(self.preferences.get(key,False)):
                 pending.append(('set_feature',{'feature':key,'value':self.preferences[key]}))
         for key in MULTIPLIERS:
+            if key=='gameSpeed':continue
             current=self.state.get(key);target=self.preferences[key]
             if force_full or type(current) not in (int,float) or abs(float(current)-float(target))>1e-6:pending.append(('set_feature',{'feature':key,'value':target}))
         rarity=self.preferences.get('boonRarity',{})
@@ -331,6 +384,7 @@ class Hades2Adapter(GameAdapter):
         if pid!=previous_pid:
             self._runtime_bootstrapped=False
             self._catalog_initialized=False
+            self._time_warp_speed=1.0;self._time_warp_error='';self._project_time_warp()
         if not pid:self.state['status']='not_running'
         elif not self.state['connected']:self.state['status']='disconnected'
         if not self.state['connected']:
@@ -421,6 +475,12 @@ class Hades2Adapter(GameAdapter):
                 return dict(self.state)
             self.transport.attach(self.state['pid']);self.state['connected']=True
         if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
+        teardown_speed_error=None
+        if teardown:
+            try:self._apply_game_speed(1.0)
+            except TransportError as error:
+                teardown_speed_error=error
+                logging.warning('Time Warp teardown failed; continuing Lua cleanup: %s',error)
         try:
             runtime_params=dict(params or {})
             if 'includeCatalogs' not in runtime_params:
@@ -494,11 +554,12 @@ class Hades2Adapter(GameAdapter):
                 self.preferences['nextRoomReward']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
-            if not read_only and command=='status' and self.state.get('status')=='ready' and self.preference_dirty and not replay:
+            if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 self._capture_runtime_preferences(self.state);self._save_preferences()
             self._overlay_preferences()
+            if teardown_speed_error is not None:raise teardown_speed_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
                          command,reward_context,self.transport.last_duration,self.state.get('scene'),
