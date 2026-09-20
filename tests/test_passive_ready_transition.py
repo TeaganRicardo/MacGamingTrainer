@@ -92,6 +92,22 @@ for token in (
 ):
     assert token in foreground, token
 
+# Automatic connection carries the true-launch reason through the generic Host
+# contract. Game modules that do not care keep the default toggle behavior;
+# Hades uses the launch reason only to defer its first expensive runtime probe.
+assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in contract
+assert 'connectAutomaticallyFromHost(targetJustLaunched:' in host
+automatic_start = host.index('    private func reconcileAutomaticConnection()')
+automatic_block = host[automatic_start:]
+assert 'let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed' in automatic_block
+assert automatic_block.index('let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed') < automatic_block.index('consumeAutomaticConnectIfEligible')
+assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)' in automatic_block
+
+assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
+assert 'toggleConnection(probeRuntime: !targetJustLaunched)' in model
+assert 'case connect(probeRuntime: Bool)' in api
+assert '["probeRuntime": probeRuntime]' in api
+
 # No generic process/Lua polling loop is introduced by the foreground design.
 assert 'Timer.' not in host and 'scheduledTimer' not in host
 assert 'asyncAfter' not in foreground
@@ -160,6 +176,12 @@ assert 'runtimeReset = "runtime_reset"' in api
 assert 'case runtimeReset' in api
 assert 'send(.runtimeReset' in event_block
 assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
+
+# If runtimeReady wins the race against background attach completion, retain the
+# signal while disconnected; the post-connect completion consumes it exactly
+# once instead of leaving the deferred connection stuck in waiting.
+ready_block = event_block[event_block.index('case .runtimeReady'):]
+assert ready_block.index('pendingRunReadySignal = true') < ready_block.index('guard connected else { return }')
 
 backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
 assert 'if !status.busy' in backend_start
