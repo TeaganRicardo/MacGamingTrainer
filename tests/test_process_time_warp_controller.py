@@ -143,6 +143,15 @@ class TaintedTransport:
     def resume(self, deadline):
         raise AssertionError("tainted transport must never resume")
 
+class TargetlessTransport:
+    pid = 201
+    target = None
+    def alive(self):
+        return True
+
+targetless_driver = LLDBProcessTimeWarpDriver(TargetlessTransport(), lldb_module=object())
+assert targetless_driver.helper_present() is False
+
 tainted_driver = LLDBProcessTimeWarpDriver(TaintedTransport(), lldb_module=FakeLLDB)
 try:
     with tainted_driver.session():

@@ -179,6 +179,8 @@ class LLDBProcessTimeWarpDriver:
         return None
 
     def helper_present(self):
+        if getattr(self.transport, "target", None) is None:
+            return False
         return self._export_address("MGTTimeWarpABI", required=False) is not None
 
     def load_helper(self, path):
