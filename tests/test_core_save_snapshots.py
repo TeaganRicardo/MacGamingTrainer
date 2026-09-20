@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.save_resolution import ResolvedSaveFile
-from core.save_snapshots import SaveSnapshotError, SaveSnapshotStore
+from core.save_snapshots import SaveSnapshotBusyError, SaveSnapshotError, SaveSnapshotStore
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-snapshots-'))
@@ -116,8 +116,8 @@ def cold_racing_resolver():
     return rows() + [ResolvedSaveFile('main', 'Profile2.sav', source / 'Profile2.sav')]
 try:
     store.create_snapshot(cold_racing_resolver, hot=False)
-except SaveSnapshotError:
-    pass
+except SaveSnapshotBusyError as error:
+    assert error.code == 'save_busy'
 else:
     raise AssertionError('cold snapshot committed while save set changed')
 assert not store.list_snapshots()
