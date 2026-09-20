@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TrainerSaveManagerView: View {
@@ -18,6 +19,8 @@ struct TrainerSaveManagerView: View {
         TrainerSheetScaffold(title: "存档管理", icon: "externaldrive.fill", width: 780) {
             if model.busy { ProgressView() }
             Button { model.reveal() } label: { Label("打开存档目录", systemImage: "folder") }
+                .disabled(model.busy)
+            Button { model.backup() } label: { Label("创建备份", systemImage: "plus") }
                 .disabled(model.busy)
             Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                 .disabled(model.busy)
@@ -43,7 +46,9 @@ struct TrainerSaveManagerView: View {
             }
 
             TrainerSection(title: "备份历史", icon: "clock.arrow.circlepath") {
-                saveActions
+                if !selectedIDs.isEmpty {
+                    selectionActions
+                }
 
                 ScrollView {
                     if model.snapshots.isEmpty {
@@ -73,6 +78,7 @@ struct TrainerSaveManagerView: View {
             }
         }
         .interactiveDismissDisabled(model.busy)
+        .onTapGesture { finishRenameFromPointer() }
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -108,28 +114,19 @@ struct TrainerSaveManagerView: View {
         }
     }
 
-    private var saveActions: some View {
+    private var selectionActions: some View {
         HStack(spacing: 10) {
-            Button { model.backup() } label: {
-                Label("创建备份", systemImage: "plus")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.busy)
-
+            Text("已选 \(selectedIDs.count) 项")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
-
-            if !selectedIDs.isEmpty {
-                Text("已选 \(selectedIDs.count) 项")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button(role: .destructive) {
-                    deleteIDs = selectedIDs
-                    confirmDelete = true
-                } label: {
-                    Label("删除所选", systemImage: "trash")
-                }
-                .disabled(model.busy)
+            Button(role: .destructive) {
+                deleteIDs = selectedIDs
+                confirmDelete = true
+            } label: {
+                Label("删除所选", systemImage: "trash")
             }
+            .disabled(model.busy)
         }
         .trainerPanel(padding: 14)
     }
@@ -203,6 +200,11 @@ struct TrainerSaveManagerView: View {
 
                 TrainerOverflowMenu(enabled: !model.busy) {
                     Button {
+                        beginRename(snapshot)
+                    } label: {
+                        Label("重命名", systemImage: "pencil")
+                    }
+                    Button {
                         model.reveal(id: snapshot.id)
                     } label: {
                         Label("在 Finder 中显示", systemImage: "folder")
@@ -234,6 +236,12 @@ struct TrainerSaveManagerView: View {
         } else {
             selectedIDs.insert(id)
         }
+    }
+
+    private func finishRenameFromPointer() {
+        guard editingID != nil else { return }
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        commitRename()
     }
 
     private func beginRename(_ snapshot: TrainerSaveSnapshot) {
