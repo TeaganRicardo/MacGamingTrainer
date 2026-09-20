@@ -116,6 +116,37 @@ if Array(events.suffix(2)) != [.runtimeReset, .runtimeReady] {
     fatalError("log truncation lost reset lifecycle events: \(events)")
 }
 
+// Deferring the first Lua probe is safe only when the lifecycle watcher can
+// observe this launch. A Hades support directory that does not exist yet must
+// report unavailable; once the directory exists, the watcher must be able to
+// observe a log file created after start() and recover reset/ready from it.
+let lateDirectory = directory.appendingPathComponent("late-support", isDirectory: true)
+try? fileManager.removeItem(at: lateDirectory)
+var lateEvents: [Hades2RunLogEvent] = []
+let lateWatcher = Hades2RunLogWatcher(directoryURL: lateDirectory) { event in
+    lateEvents.append(event)
+}
+if lateWatcher.canObserveLifecycle {
+    fatalError("missing support directory was incorrectly reported watchable")
+}
+try fileManager.createDirectory(at: lateDirectory, withIntermediateDirectories: true)
+if !lateWatcher.canObserveLifecycle {
+    fatalError("existing support directory was not reported watchable")
+}
+lateWatcher.start()
+pump(0.2)
+let lateLogURL = lateDirectory.appendingPathComponent("Hades II.log")
+try Data((
+    "2026-09-20 [MainThread] App.cpp INFO| App.Reset Start\n" +
+    "2026-09-20 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.10 seconds)\n"
+).utf8).write(to: lateLogURL)
+let lateDeadline = Date().addingTimeInterval(2)
+while lateEvents.count < 2 && Date() < lateDeadline { pump(0.01) }
+lateWatcher.stop()
+if lateEvents != [.runtimeReset, .runtimeReady] {
+    fatalError("late-created log lost lifecycle events: \(lateEvents)")
+}
+
 print("hades2_run_log_watcher_ok")
 """
 

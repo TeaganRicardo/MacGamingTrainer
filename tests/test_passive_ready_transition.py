@@ -104,7 +104,8 @@ assert automatic_block.index('let targetJustLaunched = connectionPolicy.backgrou
 assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)' in automatic_block
 
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
-assert 'toggleConnection(probeRuntime: !targetJustLaunched)' in model
+assert 'let canDeferRuntimeProbe = targetJustLaunched && runLogWatcher.canObserveLifecycle' in model
+assert 'toggleConnection(probeRuntime: !canDeferRuntimeProbe)' in model
 assert 'case connect(probeRuntime: Bool)' in api
 assert '["probeRuntime": probeRuntime]' in api
 

@@ -215,7 +215,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func toggleConnectionFromHost() { toggleConnection(probeRuntime: true) }
 
     func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
-        toggleConnection(probeRuntime: !targetJustLaunched)
+        let canDeferRuntimeProbe = targetJustLaunched && runLogWatcher.canObserveLifecycle
+        toggleConnection(probeRuntime: !canDeferRuntimeProbe)
     }
 
     func refreshFromHost() {
