@@ -22,19 +22,20 @@ jobs:
 
       - name: Package exact source snapshot
         run: |
+          archive="${RUNNER_TEMP}/mgt-audit-source.tar.gz"
           tar \
             --exclude=.git \
             --exclude=dist \
             --exclude=.superpowers \
-            -czf mgt-audit-source.tar.gz .
-          sha256sum mgt-audit-source.tar.gz > mgt-audit-source.tar.gz.sha256
+            -czf "$archive" .
+          sha256sum "$archive" > "${RUNNER_TEMP}/mgt-audit-source.tar.gz.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
           name: mgt-audit-source
           path: |
-            mgt-audit-source.tar.gz
-            mgt-audit-source.tar.gz.sha256
+            ${{ runner.temp }}/mgt-audit-source.tar.gz
+            ${{ runner.temp }}/mgt-audit-source.tar.gz.sha256
           if-no-files-found: error
           retention-days: 2
 
