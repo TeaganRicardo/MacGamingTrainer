@@ -1,33 +1,26 @@
-# Deferred work after the 0.1 baseline
+# Historical deferred-refactor notes after the 0.1 baseline
 
-The corrective refactor and reliability work that produced the 0.1 baseline are complete. Do not resume broad structural refactoring unless a concrete requirement demonstrates a missing host capability.
+This file is retained as architecture history. It is not a current execution queue.
 
-Current execution status and the Build 2 stabilization gate live in `PROJECT_STATUS.md` and `NEXT_PHASE_TODO.md`.
+Current execution authority is:
+- `PROJECT_STATUS.md`;
+- roadmap issue #8;
+- current code and tests.
 
-## 0.1.x — Transport and persistence hardening
+Several items that were deferred when this note was written have since been completed:
 
-Already established:
-- strict versioned desired-state/Profile envelopes;
-- corrupt-file quarantine and safe defaults;
-- atomic durable writes with surfaced failures;
-- typed Hades Swift payload boundary;
-- host protocol fixtures;
-- outcome-unknown protection for non-idempotent mutations.
+- LLDB attach latency profiling was completed and issue #4 was closed with a measured baseline.
+- the permanent non-production `reference_fixture` now exists and continuously proves the second-game module boundary in tests and CI.
+- strict Profile/persistence envelopes, corrupt-file quarantine, atomic durable writes, typed Hades payload boundaries and protocol fixtures remain established.
+- Process Time Warp, shared Host UI/input infrastructure, lifecycle hardening and the first Core Save Management hardening pass are integrated.
 
-Still deferred:
-- make diagnostics genuinely read-only at the Lua/runtime level rather than only suppressing host-side adoption/replay/persistence;
-- measure and then optimize LLDB attach latency (#4);
-- improve explicit process/debugger ownership recovery for externally-held debugger sessions.
+## Potential future cleanup
 
-## Second-game integration proof
+These are candidate cleanups only when a concrete requirement or reproduced defect justifies them:
 
-Add a deliberately small permanent reference module only when needed to prove framework boundaries. It should exercise state, mutation, action, reconnect, error handling and shared Host/UI without modifying Core/App/build.
-
-## Hades-local cleanup
-
-Only after reliability and measured performance are stable:
-- reduce `Hades2Model.swift` by real responsibility boundaries;
-- split large Hades content sections where useful;
+- make diagnostics read-only at the Lua/runtime level if current diagnostics can be shown to mutate runtime state;
+- improve explicit debugger ownership recovery if externally-held debugger sessions produce a reproducible failure that current recovery cannot handle;
+- reduce `Hades2Model.swift` or other large Hades-local files only along demonstrated responsibility boundaries;
 - modularize `runtime/hades.lua` only after a multi-file loader is proven against the real game.
 
 ## Framework rule
