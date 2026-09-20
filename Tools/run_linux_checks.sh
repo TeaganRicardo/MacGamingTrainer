@@ -17,6 +17,10 @@ tests=(
   tests/test_hotkey_feedback_contract.py
   tests/test_god_mode_hostile_effects.py
   tests/test_localization_cache_recovery_v0180.py
+  tests/test_reference_fixture_host_contract.py
+  tests/test_module_contract_round13.py
+  tests/test_packaged_module_round14.py
+  tests/test_cross_game_isolation.py
   tests/test_native_sell_traits_contract.py
   tests/test_native_special_choice_contract.py
   tests/test_passive_ready_transition.py
@@ -31,6 +35,7 @@ tests=(
   tests/test_runtime_boundary_efficiency_dev8.py
   tests/test_shortcut_chord_semantics.py
   tests/test_test_suite_discovery.py
+  tests/test_ui_component_boundary_v0175.py
   tests/test_schema_versioning_v0180.py
 )
 

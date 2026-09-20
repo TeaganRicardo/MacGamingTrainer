@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - feature/post-v0.1-improvements
   pull_request:
 
 permissions:

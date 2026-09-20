@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "reference_fixture",
+  "displayName": "Reference Fixture",
+  "protocolVersion": 1,
+  "backend": {
+    "adapter": "games.reference_fixture.adapter:ReferenceFixtureAdapter"
+  },
+  "frontend": {
+    "sourceDirectory": "Sources/ReferenceFixture",
+    "moduleType": "ReferenceFixtureGameModule",
+    "architectures": [],
+    "minimumMacOS": "14.0"
+  },
+  "buildRequirements": {
+    "lldbPython": false,
+    "debuggerEntitlement": false
+  },
+  "app": {
+    "bundleIdentifier": "com.gao.macgamingtrainer.reference-fixture",
+    "displayName": "Mac Gaming Trainer - Reference Fixture"
+  },
+  "targetApplication": {
+    "processName": "Reference Fixture Target",
+    "bundleIdentifier": "com.example.macgamingtrainer.reference-target"
+  }
+}
