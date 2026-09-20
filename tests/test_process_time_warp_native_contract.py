@@ -37,7 +37,9 @@ for token in (
     '-framework QuartzCore',
     'libMGTTimeWarp.dylib',
     'codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"',
+    'LICENSE.fishhook',
 ):
+
     assert token in BUILD, token
 
 print('process_time_warp_native_contract_ok')
