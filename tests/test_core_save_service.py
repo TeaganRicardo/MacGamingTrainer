@@ -223,6 +223,25 @@ else:
 assert not (stage_guard_external / 'saves/staged-restore.json').exists()
 running = False
 
+# Cancellation is destructive too: it must validate the internal storage root
+# before unlinking a staged marker through a symlinked game-data parent.
+cancel_guard_data = base / 'cancel-guard-data'; cancel_guard_data.mkdir()
+cancel_guard_external = base / 'cancel-guard-external'
+(cancel_guard_external / 'saves').mkdir(parents=True)
+cancel_guard_marker = cancel_guard_external / 'saves/staged-restore.json'
+cancel_guard_marker.write_text('external-marker', encoding='utf-8')
+(cancel_guard_data / 'cancel-guard').symlink_to(cancel_guard_external, target_is_directory=True)
+cancel_guard = CoreSaveService(
+    'cancel-guard', stage_guard_spec, cancel_guard_data, is_running
+)
+try:
+    cancel_guard.cancel_staged()
+except SaveSnapshotError:
+    pass
+else:
+    raise AssertionError('cancel staged followed a symlinked game data directory')
+assert cancel_guard_marker.read_text(encoding='utf-8') == 'external-marker'
+
 # Empty real-save set fails instead of creating an empty snapshot.
 running = False
 for path in saves.glob('*.sav'):
