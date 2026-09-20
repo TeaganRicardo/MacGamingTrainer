@@ -30,6 +30,32 @@ struct TrainerSelectionControl: View {
     }
 }
 
+struct TrainerOverflowMenu<Content: View>: View {
+    let enabled: Bool
+    let content: Content
+
+    init(enabled: Bool = true, @ViewBuilder content: () -> Content) {
+        self.enabled = enabled
+        self.content = content()
+    }
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuIndicator(.hidden)
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(!enabled)
+        .help("更多")
+    }
+}
+
 struct TrainerEmptyState: View {
     @Environment(\.trainerTheme) private var theme
     let text: String
