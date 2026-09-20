@@ -54,6 +54,24 @@ class CoreSaveService:
             raise RuntimeError('Save Provider restore_busy must return bool.')
         return value
 
+    def _snapshot_naming(self, files, created_at):
+        if self.provider is None:
+            return None, []
+        describe = getattr(self.provider, 'describe_snapshot', None)
+        if describe is None:
+            return None, []
+        if not callable(describe):
+            raise RuntimeError('Save Provider describe_snapshot must be callable.')
+        value = describe(tuple(files), created_at)
+        if value is None:
+            return None, []
+        if not isinstance(value, dict):
+            raise RuntimeError('Save Provider describe_snapshot must return an object.')
+        default_name = value.get('defaultName')
+        if default_name is not None and not isinstance(default_name, str):
+            raise RuntimeError('Save Provider defaultName must be a string or null.')
+        return default_name, value.get('nameDetails', [])
+
     def _running(self):
         return bool(self.target_running_probe())
 
@@ -142,7 +160,7 @@ class CoreSaveService:
         payload = {
             'snapshotId': snapshot_id,
             'preserveCurrent': preserve_current,
-            'stagedAt': datetime.datetime.now().astimezone().isoformat(),
+            'stagedAt': datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
         }
         self._write_staged(payload)
         return {'staged': True, **payload}
@@ -156,7 +174,16 @@ class CoreSaveService:
         running = self._running()
         if running and not self.spec.hot_backup:
             raise SaveBusyError('Game is running and live backup is disabled.')
-        return self.store.create_snapshot(self._resolve, hot=running, display_name=display_name)
+        created_at = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        files = self._resolve()
+        provider_name, name_details = self._snapshot_naming(files, created_at)
+        return self.store.create_snapshot(
+            self._resolve,
+            hot=running,
+            display_name=display_name if display_name is not None else provider_name,
+            name_details=name_details,
+            created_at=created_at,
+        )
 
     def rename(self, snapshot_id, display_name):
         self._require_supported()
