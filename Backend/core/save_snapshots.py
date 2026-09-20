@@ -120,7 +120,7 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
-    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None):
+    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None, describe=None):
         if not callable(resolver):
             raise ValueError('Snapshot creation requires a resolver callback.')
         if type(hot) is not bool:
@@ -130,12 +130,24 @@ class SaveSnapshotStore:
         created_at = created_at or _local_timestamp()
         if not isinstance(created_at, str) or not created_at or '+' in created_at or created_at.endswith('Z'):
             raise ValueError('Snapshot createdAt must be a local timestamp without timezone.')
-        name = _validate_display_name(display_name) if display_name is not None else created_at.replace('T', ' ').replace(':', '-')
-        details = _validate_name_details(name_details)
+        explicit_name = _validate_display_name(display_name) if display_name is not None else None
+        explicit_details = _validate_name_details(name_details) if name_details is not None else None
         attempts = 4 if hot else 1
 
         for attempt in range(attempts):
             current = self._normalize_sources(resolver())
+            described_name, described_details = (None, [])
+            if describe is not None:
+                if not callable(describe):
+                    raise ValueError('Snapshot describe callback must be callable.')
+                description = describe(tuple(current), created_at)
+                if not isinstance(description, (tuple, list)) or len(description) != 2:
+                    raise ValueError('Snapshot describe callback must return (name, details).')
+                described_name, described_details = description
+            name = explicit_name
+            if name is None:
+                name = _validate_display_name(described_name) if described_name is not None else created_at.replace('T', ' ').replace(':', '-')
+            details = explicit_details if explicit_details is not None else _validate_name_details(described_details)
             stage = Path(tempfile.mkdtemp(prefix='.snapshot-', dir=str(self.snapshots)))
             try:
                 manifest_files = []
