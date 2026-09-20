@@ -138,6 +138,8 @@ class LLDBProcessTimeWarpDriver:
 
     @contextmanager
     def session(self):
+        if getattr(self.transport, 'tainted', False):
+            raise ProcessTimeWarpError('restart_required', '调试连接状态不明；请先重启后端或重新连接游戏。')
         lldb = self._lldb()
         process = self.transport.process
         if process is None:
