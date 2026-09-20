@@ -59,6 +59,11 @@ struct Hades2ShortcutStore {
 
         // A Profile is an explicit user layout. Keep every imported assignment
         // fixed; only actions absent from the Profile are allowed to reflow.
+        for action in ShortcutAction.uiOrder where patch[action] == nil {
+            if let existing = overrides[action], patchTokens.contains(Self.token(existing)) {
+                overrides[action] = nil
+            }
+        }
         for (action, proposed) in patch {
             overrides[action] = proposed
         }
