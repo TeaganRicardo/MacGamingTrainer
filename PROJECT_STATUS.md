@@ -7,9 +7,9 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 ## Current baseline
 
 - Default branch: `main`.
-- Current merged audit baseline: `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
-- Verified product-code SHA before squash merge: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
-- Product feature work is temporarily frozen again: the extended post-merge review found one Save Manager completion defect and its fix is awaiting final CI.
+- Current corrected baseline: `ee258442f89a1e3ad4cb04f02bbfc7146488e148` (PR #42), on top of audit merge `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
+- Verified pre-squash audit product-code SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
+- The pre-feature audit/review freeze is cleared after the corrected-main exact-source Linux re-review.
 - Hades II resident runtime: revision 42.
 - Hades II module protocol: 5.
 - Target game baseline: Hades II 1.139672 / Steam build 24556151.
@@ -64,7 +64,22 @@ Post-merge review evidence:
 Detailed record:
 `docs/audits/2026-09-21-post-merge-linux-review.md`.
 
-One post-merge Important finding is in repair: Save Manager must complete failed requests even when the backend is already unavailable, so optimistic rename/batch-delete state cannot be stranded.
+The post-merge review found one additional Important defect and PR #42 fixed it: Save Manager now completes unavailable-backend requests with failure, so optimistic rename state and sequential batch-delete flows cannot be stranded.
+
+PR #42 verification:
+- Linux contracts `35527279524`: PASS;
+- module matrix `35527279475`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35527279464`: full suite/build/package/artifact PASS, including the backend-stopped rename regression.
+
+Corrected-main re-review of `ee258442...`:
+- snapshot/Linux workflow `35527702078`: PASS;
+- exact source artifact commit marker matched `ee258442...`;
+- container Linux contracts: PASS;
+- 81/81 Linux-portable tests: PASS;
+- 47/47 Swift source files frontend-parse: PASS;
+- compileall, duplicate-definition, conflict-marker, risky-execution, session-ownership, Core/Hades boundary and no-polling scans: PASS.
+
+No Critical or Important audit/review finding remains open.
 
 ## Repository / architecture audit result
 
@@ -94,7 +109,7 @@ Boundary remains:
 
 The previously researched Hades II codec references remain candidates only; no third-party codec/dependency is integrated.
 
-The post-merge review gate is reopened until the Save Manager completion fix is merged and re-reviewed. Save-editor design/implementation remains frozen; no binary save mutation is approved.
+The corrected-main post-merge review is clean. Save-editor design may resume. Implementation still requires an approved design; no binary save mutation is approved by the audit/review itself.
 
 ## Permanent constraints
 
