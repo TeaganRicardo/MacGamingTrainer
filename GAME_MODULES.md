@@ -27,6 +27,21 @@ build.sh
 
 The current host protocol is 5. Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
+## Mechanical cross-game proof
+
+A permanent non-production fixture lives under `ContractFixtures/reference_module`. It stays outside `Backend/games` and `Sources/<Game>`, so runtime discovery never exposes it as a user-facing trainer.
+
+Tests and CI temporarily install the fixture into the normal module paths and exercise the same manifest validator, generated Swift binding, Backend/Core protocol and `build.sh <game-id>` path used by a real game. The proof requires:
+
+- shared source graph = `Sources/App.swift + Sources/Core/** + selected frontend`;
+- no Hades/reference-fixture branch in Core, App or build source selection;
+- packaged output contains exactly the selected game module;
+- a module without `saveManagement` generates `supportsSaveManagement: false` and receives `save_unsupported` for `core.save.*`;
+- both Hades II and the fixture consume the shared Host/UI boundary;
+- macOS semantic typecheck/build/codesign succeeds for both modules.
+
+The fixture is architecture evidence, not a semantic template. A real game still owns its commands, transport, persistence rules and game-specific UI.
+
 ## Minimal backend adapter
 
 ```python
@@ -71,14 +86,14 @@ struct ExampleModule: TrainerGameModule {
         headerTitle: "EXAMPLE"
     )
 
-    static func makeModel() -> ExampleModel { ExampleModel() }
+    static func makeModel(session: TrainerBackendSession) -> ExampleModel { ExampleModel() }
     static func makeContent(model: ExampleModel) -> some View { ExampleContent(model: model) }
     static func makeSidebarActions(model: ExampleModel) -> some View { EmptyView() }
     static func makeHeaderActions(model: ExampleModel) -> some View { EmptyView() }
 }
 ```
 
-The descriptor containing id/protocol versions is generated from the manifest. Presentation remains in Swift and does not travel through the Python runtime manifest.
+The Host owns the shared `TrainerBackendSession` and injects it through `makeModel(session:)`. A module may ignore the session when it has no backend-driven model state. The descriptor containing id/protocol/save-capability metadata is generated from the manifest. Presentation remains in Swift and does not travel through the Python runtime manifest.
 
 ## Shared UI rule
 
