@@ -6,6 +6,8 @@ HADES = ROOT / 'Sources/Hades2'
 CORE = ROOT / 'Sources/Core/UI'
 view_files = list((HADES / 'Views').rglob('*.swift')) + [HADES / 'Hades2View.swift']
 hades_views = '\n'.join(p.read_text() for p in view_files)
+save_views = '\n'.join(p.read_text() for p in (ROOT / 'Sources/Core/Save').rglob('*.swift'))
+product_views = hades_views + '\n' + save_views
 core_ui = '\n'.join(p.read_text() for p in CORE.rglob('*.swift'))
 
 # Hades may define pages/screens, state snapshots and business mapping, but no
@@ -27,12 +29,14 @@ required = (
     'TrainerInlineStatEditor', 'TrainerResourceEditor', 'TrainerGroupedOptionPicker',
 'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
-    'TrainerSelectableListRow', 'TrainerPillBadge', 'TrainerEmptyState',
+    'TrainerPillBadge', 'TrainerEmptyState',
     'TrainerSheetScaffold', 'TrainerSectionHeader',
 )
 for name in required:
     assert f'struct {name}' in core_ui, name
-    assert name in hades_views, name
+    assert name in product_views, name
+
+assert 'struct TrainerSelectableListRow' not in core_ui
 
 # Core visual implementation cannot import game semantics.
 for token in ('Hades2','godMode','boonRarity','rerollsLocked','statAvailable','dormantFeatures','WeaponCast','CurrentRun'):
