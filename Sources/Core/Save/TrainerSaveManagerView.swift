@@ -16,7 +16,7 @@ struct TrainerSaveManagerView: View {
 
     var body: some View {
         TrainerSheetScaffold(title: "存档管理", icon: "externaldrive.fill", width: 780) {
-            if model.busy { ProgressView().controlSize(.small) }
+            if model.busy { ProgressView() }
             Button { model.reveal() } label: { Label("打开存档目录", systemImage: "folder") }
                 .disabled(model.busy)
             Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
@@ -31,7 +31,6 @@ struct TrainerSaveManagerView: View {
                             .foregroundStyle(theme.deferred)
                         Spacer()
                         Button("取消") { model.cancelStaged() }
-                            .controlSize(.small)
                             .disabled(model.busy)
                     }
                 }
@@ -200,10 +199,9 @@ struct TrainerSaveManagerView: View {
                     restoreCandidate = snapshot
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
                 .disabled(model.busy || !snapshot.valid)
 
-                Menu {
+                TrainerOverflowMenu(enabled: !model.busy) {
                     Button {
                         model.reveal(id: snapshot.id)
                     } label: {
@@ -216,12 +214,7 @@ struct TrainerSaveManagerView: View {
                     } label: {
                         Label("删除", systemImage: "trash")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .disabled(model.busy)
             }
         }
     }
