@@ -65,6 +65,8 @@ class Hades2Adapter(GameAdapter):
                 module_protocol_version=MODULE_MANIFEST.module_protocol_version,
                 module_dir=Path(__file__).resolve().parent,
                 public_metadata=MODULE_MANIFEST.public_metadata(),
+                process_name=MODULE_MANIFEST.process_name,
+                save_management=MODULE_MANIFEST.save_management,
             )
         super().__init__(context)
         if transport is None:
