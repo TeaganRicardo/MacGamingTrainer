@@ -3,6 +3,7 @@ import Foundation
 enum Hades2Command: String {
     case scan, status, connect, disconnect, launch
     case disableAll = "disable_all"
+    case runtimeReset = "runtime_reset"
     case resetDesired = "reset_desired"
     case setDesired = "set_desired"
     case setVital = "set_vital"
@@ -33,7 +34,7 @@ enum Hades2Command: String {
 /// Typed Hades module-protocol-v5 request boundary. Command spelling and JSON parameter
 /// keys live here rather than being duplicated through the store and views.
 enum Hades2Request {
-    case scan, status, connect, disconnect, launch, disableAll, resetDesired
+    case scan, status, connect, disconnect, launch, disableAll, runtimeReset, resetDesired
     case setDesired(feature: String, value: Any)
     case setVital(vital: String, field: String, value: Double)
     case setCounter(counter: String, value: Double)
@@ -65,6 +66,7 @@ enum Hades2Request {
         case .disconnect: return .disconnect
         case .launch: return .launch
         case .disableAll: return .disableAll
+        case .runtimeReset: return .runtimeReset
         case .resetDesired: return .resetDesired
         case .setDesired: return .setDesired
         case .setVital: return .setVital

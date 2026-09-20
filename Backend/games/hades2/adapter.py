@@ -458,6 +458,13 @@ class Hades2Adapter(GameAdapter):
         self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
         self._overlay_preferences()
 
+    def runtime_reset(self):
+        if not self.transport.alive() or not self.state.get('connected'):
+            return dict(self.state)
+        self._invalidate_runtime_generation()
+        logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
+        return dict(self.state)
+
     def execute(self,command,params,replay=False,read_only=False,batch=None):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
