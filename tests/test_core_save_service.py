@@ -76,6 +76,30 @@ assert applied['applied'] is True
 assert (saves / 'Profile1.sav').read_bytes() == b'stopped-target'
 assert reloaded.pending_restore() is None
 
+# A successful staged restore must not remain pending just because cleanup of
+# its consumed marker fails. Otherwise the next target-stop event can reapply
+# a restore that already committed.
+(saves / 'Profile1.sav').write_bytes(b'cleanup-target')
+cleanup_service = CoreSaveService('cleanup-failure', no_hot_spec, data, is_running)
+cleanup_target = cleanup_service.backup()
+(saves / 'Profile1.sav').write_bytes(b'cleanup-current')
+running = True
+cleanup_service.restore(cleanup_target['id'], preserve_current=False)
+running = False
+real_unlink = Path.unlink
+def fail_staged_marker_cleanup(path, *args, **kwargs):
+    if 'staged-restore' in path.name:
+        raise PermissionError('simulated staged marker cleanup failure')
+    return real_unlink(path, *args, **kwargs)
+Path.unlink = fail_staged_marker_cleanup
+try:
+    cleanup_applied = cleanup_service.apply_staged()
+finally:
+    Path.unlink = real_unlink
+assert cleanup_applied['applied'] is True
+assert (saves / 'Profile1.sav').read_bytes() == b'cleanup-target'
+assert cleanup_service.pending_restore() is None
+
 # hotPreferred busy provider falls back to staged restore without mutation.
 class Provider:
     busy = False
