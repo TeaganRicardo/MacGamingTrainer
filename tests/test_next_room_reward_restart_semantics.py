@@ -64,6 +64,10 @@ adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
 assert "preferences['nextRoomRewardToken']=" in adapter
+load_profile = adapter[adapter.index('    def load_profile'):adapter.index('    def _overlay_preferences')]
+assert "if preferences.get('nextRoomReward') is not None:" in load_profile
+assert "preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())" in load_profile
+assert "preferences.get('nextRoomRewardToken') is None" not in load_profile
 assert "'token':self.preferences.get('nextRoomRewardToken')" in adapter
 assert 'next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)' in adapter
 assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)') < adapter.index(
