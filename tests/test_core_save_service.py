@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
-from core.save_restore import SaveBusyError
+from core.save_restore import SaveBusyError, SaveRollbackError
 import core.save_service as save_service_module
 from core.save_service import CoreSaveService, SaveManagementUnsupportedError, SaveStagedUnavailableError
 from core.save_snapshots import SaveSnapshotError
@@ -131,8 +131,42 @@ try:
         raise AssertionError('interrupted staged apply unexpectedly succeeded')
 finally:
     save_service_module.SaveRestoreTransaction.restore = real_restore
-assert interrupt_service.pending_restore()['snapshotId'] == interrupt_target['id']
+interrupt_pending = interrupt_service.pending_restore()
+assert interrupt_pending['snapshotId'] == interrupt_target['id']
+assert interrupt_pending['indeterminate'] is True
+assert interrupt_service.apply_staged()['indeterminate'] is True
 assert interrupt_service.cancel_staged()['cancelled'] is True
+
+# A transaction that explicitly reports rollback_failed has already told Core
+# that real-save state cannot be proven. The claimed staged marker must stay in
+# the indeterminate namespace instead of becoming an ordinary auto-retry.
+(saves / 'Profile1.sav').write_bytes(b'rollback-failed-target')
+rollback_failed_service = CoreSaveService('rollback-failed-stage', no_hot_spec, data, is_running)
+rollback_failed_target = rollback_failed_service.backup()
+(saves / 'Profile1.sav').write_bytes(b'rollback-failed-current')
+running = True
+rollback_failed_service.restore(rollback_failed_target['id'], preserve_current=False)
+running = False
+rollback_recovery = base / 'rollback-failed-recovery'
+rollback_recovery.mkdir()
+real_restore = save_service_module.SaveRestoreTransaction.restore
+def fail_staged_rollback(self, *args, **kwargs):
+    raise SaveRollbackError('simulated rollback failure', rollback_recovery)
+save_service_module.SaveRestoreTransaction.restore = fail_staged_rollback
+try:
+    try:
+        rollback_failed_service.apply_staged()
+    except SaveRollbackError as error:
+        assert error.recovery_path == str(rollback_recovery)
+    else:
+        raise AssertionError('rollback_failed staged restore unexpectedly succeeded')
+finally:
+    save_service_module.SaveRestoreTransaction.restore = real_restore
+rollback_failed_pending = rollback_failed_service.pending_restore()
+assert rollback_failed_pending['snapshotId'] == rollback_failed_target['id']
+assert rollback_failed_pending['indeterminate'] is True
+assert rollback_failed_service.apply_staged()['indeterminate'] is True
+assert rollback_failed_service.cancel_staged()['cancelled'] is True
 
 # A hard process loss can leave only the claimed marker. Its outcome is
 # indeterminate: it must be surfaced, never auto-replayed, must block staging a
