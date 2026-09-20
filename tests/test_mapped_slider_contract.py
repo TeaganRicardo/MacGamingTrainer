@@ -27,17 +27,18 @@ assert ".interactiveSpring(" in component_text
 assert ".accessibilityRepresentation" in component_text
 assert "@Environment(\\.trainerTheme)" in component_text
 assert ".fill(theme.accent)" in component_text
-assert "onPreviewValue" in component_text
+changed_block = component_text[component_text.index(".onChanged"):component_text.index(".onEnded")]
+ended_block = component_text[component_text.index(".onEnded"):component_text.index(".accessibilityRepresentation")]
+assert "commit(" not in changed_block
+assert "value =" not in changed_block
+assert "commit(" in ended_block
 assert "TrainerMappedSlider(" in view
 assert ".frame(width: 200)" in view
-assert "text: gameSpeedInputBinding" in view
-assert "model.feature(\"gameSpeed\", value: newValue)" in view
+assert "text: $gameSpeedInput" in view
 assert "gameSpeedSliderValue" in view
-assert "gameSpeedInput: gameSpeedInput" not in view
+assert "gameSpeedInput: gameSpeedInput" in view
 assert "ForEach([0.25, 0.5, 1.0, 1.5, 2.0, 3.0]" not in view
-assert "gameSpeedInput" not in snapshots
-setter = model[model.index("private func setGameSpeedValue"):model.index("private func amountValue")]
-assert "gameSpeed = value" not in setter
+assert "gameSpeedInput" in snapshots
 assert 'coalesceKey: "feature.gameSpeed"' in model
 assert "gameSpeedInputRange = 0.0...10.0" in model
 
