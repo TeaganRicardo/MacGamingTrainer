@@ -37,7 +37,7 @@ for token in ('dormant','activationPending','waiting','mismatch'):
 assert 'enum Hades2Request' in hades_api
 assert 'var params: [String: Any]' in hades_api
 assert 'model.send' not in hades_view
-for command in ('"set_stat"','"set_resource"','"set_desired"','"restore_backup"'):
+for command in ('"set_stat"','"set_resource"','"set_desired"'):
     assert command not in hades_model, command
 # Raw payload field decoding is isolated in the typed state boundary.
 assert 'struct Hades2StatePatch' in hades_state
@@ -52,15 +52,17 @@ from dataclasses import fields
 sys.path.insert(0, str(root/'Backend'))
 from core.module_manifest import GameModuleManifest
 assert {field.name for field in fields(GameModuleManifest)} == {
-    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path'
+    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path','save_management'
 }
 for token in ('FrontendBuildSpec','architectures','bundle_identifier','entitlements','module_type'):
     assert token in tool_support, token
 
 # Hades backend adapter is lifecycle/replay, not profiles+saves+diagnostics+all
-# command validation in one class.
-for file in ('command_router.py','preferences.py','profile_service.py','save_service.py','localization.py','catalog.py','diagnostics.py'):
+# command validation in one class. Save management is a Core service now.
+for file in ('command_router.py','preferences.py','profile_service.py','localization.py','catalog.py','diagnostics.py'):
     assert (root/'Backend/games/hades2'/file).is_file(), file
+assert not (root/'Backend/games/hades2/save_service.py').exists()
+assert (root/'Backend/core/save_service.py').is_file()
 assert 'Hades2CommandRouter' in adapter
 
 print('global_decoupling_round15_ok')
