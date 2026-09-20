@@ -19,7 +19,8 @@ def generate(manifest, output: Path):
         f'        targetProcessName: {swift_string(manifest.runtime.process_name)},\n'
         f'        targetBundleIdentifier: {swift_string(manifest.runtime.bundle_identifier)},\n'
         f'        expectedHostProtocolVersion: {HOST_PROTOCOL_VERSION},\n'
-        f'        expectedModuleProtocolVersion: {manifest.module_protocol_version}\n'
+        f'        expectedModuleProtocolVersion: {manifest.module_protocol_version},\n'
+        f'        supportsSaveManagement: {str(manifest.runtime.save_management is not None).lower()}\n'
         '    )\n'
         '}\n'
         f'typealias ActiveGameModule = {module_type}\n',
