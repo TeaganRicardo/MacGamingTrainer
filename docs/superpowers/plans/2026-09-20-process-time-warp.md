@@ -107,10 +107,13 @@ Automated and exact-target evidence on feature branch:
 - Full Linux checks passed at `32eaf82d6b212d9e93bc389d255edd6ebcd75c56`; the subsequent preparation-only refactor was covered by the complete macOS suite.
 - Full macOS checks passed at `df9ef2ce91932c6f169e0f395fca27d316c7bf35`.
 - Real Hades II save-tree SHA-256 aggregate was identical before and after the macOS suite: `1f550671aadbdd907c20e1e89480d3266fe37d3c471f12234fdd21ac112e2a33`.
-- Full product build previously passed with the same production Time Warp/Slider implementation; final RC build is still required after this documentation checkpoint.
+- Final RC build/package passed at `555e7284222058e2c4038a5818fa997bfbbbf984`.
+- Packaged app: `/Users/gao/Downloads/Mac Gaming Trainer r41.app`.
+- Packaged ZIP: `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r41.zip`, SHA-256 `f0781e0390f6da0fd362d39da8b7a370bd92c0a2dfdeb576d07da3522e37a450`, 2,002,519 bytes.
+- Exact-target resident-helper reuse was verified on Hades II PID 4465: a fresh controller observed the existing helper at 1.0x, set/read 1.5x, reset/read 1.0x, then detached cleanly.
 
 Still manual/experiential:
 - Crossroads and run simulation visibly track 0.5x/2x and 0x freeze.
 - Native Hades slow/time-stop composes correctly.
 - Audio pitch/timbre/timing remains perceptually unchanged.
-- Same-PID reconnect/helper reuse should be exercised through the packaged UI/backend, not only controller tests.
+- Packaged UI/backend reconnect remains a manual acceptance item; low-level same-PID resident-helper reuse is already verified on the exact target.
