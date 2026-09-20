@@ -81,6 +81,7 @@ class CoreSaveService:
             self.spec,
             self._resolve,
             busy_probe=self._provider_busy if self.provider is not None else None,
+            snapshot_describer=self._snapshot_naming if self.provider is not None else None,
         )
 
     def _staged_path(self):
@@ -174,15 +175,11 @@ class CoreSaveService:
         running = self._running()
         if running and not self.spec.hot_backup:
             raise SaveBusyError('Game is running and live backup is disabled.')
-        created_at = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-        files = self._resolve()
-        provider_name, name_details = self._snapshot_naming(files, created_at)
         return self.store.create_snapshot(
             self._resolve,
             hot=running,
-            display_name=display_name if display_name is not None else provider_name,
-            name_details=name_details,
-            created_at=created_at,
+            display_name=display_name,
+            describe=self._snapshot_naming if self.provider is not None else None,
         )
 
     def rename(self, snapshot_id, display_name):
