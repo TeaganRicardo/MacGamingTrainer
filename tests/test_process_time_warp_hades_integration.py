@@ -16,8 +16,10 @@ prep.GAME = base / "Hades II.app"
 prep.SAVES = base / "Saves"
 prep.official_display_names = lambda ids, language="zh-CN": {}
 
-assert Hades2PreferenceStore.normalize({"gameSpeed": 20.0})["gameSpeed"] == 20.0
-assert Hades2PreferenceStore.normalize({"gameSpeed": 20.1})["gameSpeed"] == 1.0
+assert Hades2PreferenceStore.normalize({"gameSpeed": 0.0})["gameSpeed"] == 0.0
+assert Hades2PreferenceStore.normalize({"gameSpeed": 10.0})["gameSpeed"] == 10.0
+assert Hades2PreferenceStore.normalize({"gameSpeed": -0.1})["gameSpeed"] == 1.0
+assert Hades2PreferenceStore.normalize({"gameSpeed": 10.1})["gameSpeed"] == 1.0
 
 
 class FakeTransport:
@@ -80,10 +82,10 @@ adapter.preference_dirty = False
 adapter._runtime_bootstrapped = True
 adapter.state.update(connected=True, status="waiting", scene="loading", capabilities={"setFeature": False})
 
-state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 20.0}, "speed-20")
-assert state["gameSpeed"] == 20.0
+state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze")
+assert state["gameSpeed"] == 0.0
 assert state["activeFeatures"]["gameSpeed"] is True
-assert adapter.time_warp.speed == 20.0
+assert adapter.time_warp.speed == 0.0
 assert transport.sources == [], "process Time Warp unexpectedly crossed the Lua boundary"
 
 try:
