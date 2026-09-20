@@ -70,16 +70,22 @@ for invalid in (True, float("nan"), -0.01, 10.01):
         raise AssertionError(f"invalid speed accepted: {invalid!r}")
 assert driver.sessions == 0
 
-assert controller.set_speed(0.0) == 0.0\nassert driver.loads == 1\nassert driver.installs == [(b"Hades II", 0.0)]\nassert driver.sets == []\n\nassert controller.set_speed(2.0) == 2.0
+assert controller.set_speed(0.0) == 0.0
 assert driver.loads == 1
 assert driver.installs == [(b"Hades II", 0.0)]
 assert driver.sets == []
+assert driver.sessions == 1
+
+assert controller.set_speed(2.0) == 2.0
+assert driver.loads == 1
+assert driver.installs == [(b"Hades II", 0.0)]
+assert driver.sets == [2.0]
 assert driver.sessions == 2
 
 assert controller.set_speed(0.5) == 0.5
 assert driver.loads == 1
-assert driver.installs == [(b"Hades II", 2.0)]
-assert driver.sets == [0.5]
+assert driver.installs == [(b"Hades II", 0.0)]
+assert driver.sets == [2.0, 0.5]
 
 driver.pid = 101
 driver.present = False
