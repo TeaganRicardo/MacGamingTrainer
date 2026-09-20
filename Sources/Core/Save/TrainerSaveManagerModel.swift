@@ -99,13 +99,12 @@ final class TrainerSaveManagerModel: ObservableObject {
             "core.save.delete",
             params: ["snapshotId": first],
             operation: "删除存档",
-            successNotice: nil
-        ) { [weak self] reply in
-            guard let self else { return }
-            if reply.success {
+            successNotice: nil,
+            onComplete: { [weak self] success in
+                guard let self, success else { return }
                 self.deleteNext(Array(ids.dropFirst()), deleted: deleted + 1)
             }
-        }
+        )
     }
 
     private func request(
@@ -113,7 +112,8 @@ final class TrainerSaveManagerModel: ObservableObject {
         params: [String: Any] = [:],
         operation: String,
         successNotice: String?,
-        onReply: ((BackendReply) -> Void)? = nil
+        onReply: ((BackendReply) -> Void)? = nil,
+        onComplete: ((Bool) -> Void)? = nil
     ) {
         guard session.isRunning else {
             error = "后端未运行。"
@@ -144,6 +144,7 @@ final class TrainerSaveManagerModel: ObservableObject {
                 if !success, !receivedReply, self.error.isEmpty {
                     self.error = "存档操作未完成。"
                 }
+                onComplete?(success)
             }
         )
     }
