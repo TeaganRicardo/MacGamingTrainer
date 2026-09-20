@@ -301,16 +301,41 @@ class SaveSnapshotStore:
         return {'root': root, 'manifest': self._read_manifest(root)}
 
     def _row(self, root, manifest, valid, error=''):
+        name = root.name
+        created_at = ''
+        file_count = 0
+        name_details = []
+        hot = False
+
+        if isinstance(manifest, dict):
+            candidate_name = manifest.get('displayName')
+            try:
+                name = _validate_display_name(candidate_name)
+            except ValueError:
+                pass
+
+            candidate_created_at = manifest.get('createdAt')
+            if isinstance(candidate_created_at, str):
+                created_at = candidate_created_at
+
+            files = manifest.get('files')
+            if isinstance(files, list):
+                file_count = len(files)
+
+            candidate_hot = manifest.get('hot')
+            if type(candidate_hot) is bool:
+                hot = candidate_hot
+
+            if valid:
+                name_details = _validate_name_details(manifest.get('nameDetails', []))
+
         return {
             'id': root.name,
-            'name': manifest.get('displayName', root.name) if isinstance(manifest, dict) else root.name,
-            'createdAt': manifest.get('createdAt', '') if isinstance(manifest, dict) else '',
-            'fileCount': len(manifest.get('files', [])) if isinstance(manifest, dict) and isinstance(manifest.get('files'), list) else 0,
-            'nameDetails': (
-                _validate_name_details(manifest.get('nameDetails', []))
-                if valid and isinstance(manifest, dict) else []
-            ),
-            'hot': bool(manifest.get('hot', False)) if isinstance(manifest, dict) else False,
+            'name': name,
+            'createdAt': created_at,
+            'fileCount': file_count,
+            'nameDetails': name_details,
+            'hot': hot,
             'path': str(root.resolve()),
             'valid': valid,
             'error': error,
