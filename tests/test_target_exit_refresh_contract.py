@@ -12,5 +12,6 @@ block = host[start:]
 assert 'connectionPolicy.consumeTargetExitRefreshIfEligible(' in block
 assert 'model.refreshFromHost()' in block
 assert block.index('consumeTargetExitRefreshIfEligible') < block.index('backgroundConnectionAllowed')
+assert 'if !running, model.backendAvailable && !model.busy' not in host
 
 print('target_exit_refresh_contract_ok')
