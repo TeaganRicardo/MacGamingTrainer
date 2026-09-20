@@ -8,7 +8,7 @@ import time
 import uuid
 
 from .save_resolution import load_save_provider, resolve_save_files
-from .save_restore import SaveBusyError, SaveRestoreTransaction
+from .save_restore import SaveBusyError, SaveRestoreTransaction, SaveRollbackError
 from .save_snapshots import SaveSnapshotStore
 
 
@@ -281,11 +281,21 @@ class CoreSaveService:
                 preserve_current=pending['preserveCurrent'],
                 target_running=False,
             )
-        except BaseException:
-            # SIGTERM is surfaced as KeyboardInterrupt by the backend process.
-            # SaveRestoreTransaction rolls real saves back before re-raising;
-            # restore the claimed instruction as well so a graceful backend
-            # shutdown cannot silently discard a still-pending staged restore.
+        except SaveRollbackError:
+            # Rollback has explicitly failed, so the real-save outcome is not
+            # proven. Keep the applying claim visible as indeterminate; turning
+            # it back into an ordinary pending marker could auto-replay it.
+            logging.error('Staged restore rollback failed; preserving indeterminate claim: %s', claimed)
+            raise
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                # SIGTERM is surfaced as KeyboardInterrupt by the backend
+                # process. A control-flow interruption can itself occur during
+                # rollback, so fail closed instead of assuming rollback finished.
+                logging.error('Staged restore interrupted; preserving indeterminate claim: %s', claimed)
+                raise
+            # Ordinary exceptions from a transaction whose outcome is known may
+            # restore the instruction to pending for a later explicit/automatic retry.
             try:
                 os.replace(claimed, path)
             except OSError:
