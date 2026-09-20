@@ -52,10 +52,8 @@ def _validate_file(root_id, root, relative):
 
 def resolve_save_files(
     spec: SaveManagementSpec,
-    module_dir: Path,
     provider_loader: Optional[Callable[[str], object]] = None,
 ) -> List[ResolvedSaveFile]:
-    del module_dir  # Reserved for future provider context; Core owns all path validation.
     roots: Dict[str, Path] = {}
     declared: List[ResolvedSaveFile] = []
 
