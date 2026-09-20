@@ -177,8 +177,11 @@ def prepare():
     for root, record in _records():
         if current == record.get('prepared_sha256'):
             _verify_backup(root, record)
-            if not _entitlements(exe).get('com.apple.security.get-task-allow'):
+            prepared_entitlements = _entitlements(exe)
+            if not prepared_entitlements.get('com.apple.security.get-task-allow'):
                 raise RuntimeError('已准备文件缺少调试权限。')
+            if not prepared_entitlements.get('com.apple.security.cs.disable-library-validation'):
+                raise RuntimeError('已准备文件缺少动态库加载权限。')
             return {'prepared': True, 'already_prepared': True, 'backup': str(root), 'manifest': record}
     if _entitlements(exe).get('com.apple.security.get-task-allow') or current != ORIGINAL_SHA256:
         raise RuntimeError('当前可执行文件不是已验证的原版；拒绝将已修改文件备份为原版。')
@@ -200,6 +203,7 @@ def prepare():
     (root / 'original-signature.txt').write_bytes(details.stdout + details.stderr)
     _write_json(root / 'manifest.json', record)
     permissions['com.apple.security.get-task-allow'] = True
+    permissions['com.apple.security.cs.disable-library-validation'] = True
     entitlement_path = root / 'debug-entitlements.plist'
     entitlement_path.write_bytes(plistlib.dumps(permissions))
     staged = root / (GAME_SPEC.executable_name + '.debug')
