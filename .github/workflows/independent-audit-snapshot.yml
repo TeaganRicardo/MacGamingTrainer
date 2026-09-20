@@ -1,0 +1,51 @@
+name: Independent audit source snapshot
+
+on:
+  push:
+    branches:
+      - audit/full-independent-review-20260921
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1345b39c555df97dfea55074c7ae7d0ab71ad78f
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify exact main commit
+        run: |
+          test "$(git rev-parse HEAD)" = "1345b39c555df97dfea55074c7ae7d0ab71ad78f"
+          printf '%s\n' "$(git rev-parse HEAD)" > "${RUNNER_TEMP}/mgt-independent-audit.commit"
+
+      - name: Package exact main source
+        run: |
+          archive="${RUNNER_TEMP}/mgt-independent-audit-source.tar.gz"
+          tar \
+            --exclude=.git \
+            --exclude=dist \
+            --exclude=.superpowers \
+            -czf "$archive" .
+          sha256sum "$archive" > "${RUNNER_TEMP}/mgt-independent-audit-source.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mgt-independent-audit-source
+          path: |
+            ${{ runner.temp }}/mgt-independent-audit-source.tar.gz
+            ${{ runner.temp }}/mgt-independent-audit-source.tar.gz.sha256
+            ${{ runner.temp }}/mgt-independent-audit.commit
+          if-no-files-found: error
+          retention-days: 2
+
+      - name: Run supported Linux contract suite
+        run: bash Tools/run_linux_checks.sh
