@@ -253,7 +253,9 @@ class Hades2LuaTransport:
                 self.tainted=True
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试：'+str(result.GetError()))
             text=self.process.ReadCStringFromMemory(out,cap,err)
-            if err.Fail():raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
+            if err.Fail():
+                self.tainted=True
+                raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
             if result.GetValueAsSigned()!=0:raise TransportError('lua_error',text or 'Lua 执行失败')
             return text
         finally:
