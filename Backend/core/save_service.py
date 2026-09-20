@@ -86,6 +86,7 @@ class CoreSaveService:
             self._resolve,
             busy_probe=self._provider_busy if self.provider is not None else None,
             snapshot_describer=self._snapshot_naming if self.provider is not None else None,
+            target_running_probe=self._running,
         )
 
     def _staged_path(self):
@@ -244,7 +245,8 @@ class CoreSaveService:
                 target_running=running,
             )
         except SaveBusyError as error:
-            if running:
+            running_now = running or self._running()
+            if running_now:
                 if self.spec.staged_restore:
                     return self._stage(snapshot_id, preserve_current)
                 raise SaveStagedUnavailableError('Save files are busy and staged restore is unavailable.') from error
