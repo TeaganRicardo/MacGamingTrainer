@@ -19,6 +19,7 @@ struct BackendReply {
     let state: [String: Any]?
     let errorCode: String?
     let errorMessage: String?
+    let recoveryPath: String?
 }
 
 /// Game-agnostic request lifecycle around BackendProcess. It owns JSONL request
@@ -243,7 +244,8 @@ final class BackendClient {
             result: message["result"] as? [String: Any],
             state: message["state"] as? [String: Any],
             errorCode: detail?["code"] as? String,
-            errorMessage: detail?["message"] as? String
+            errorMessage: detail?["message"] as? String,
+            recoveryPath: detail?["recoveryPath"] as? String
         )
 
         cancelCurrentTimeout()

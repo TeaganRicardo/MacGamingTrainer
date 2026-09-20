@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.protocol import JsonlRequestRouter
+from core.save_restore import SaveRollbackError
 
 
 class FakeAdapter(GameAdapter):
@@ -59,6 +60,32 @@ assert adapter.calls == []
 
 folder = router.handle({'id':'f1','command':'core.save.open_folder','params':{'snapshotId':snapshot_id}})
 assert folder['ok'] is True and Path(folder['result']['folder']).name == snapshot_id
+assert adapter.calls == []
+
+# Catastrophic rollback failure must expose the preserved recovery copy path
+# through the Core JSONL error envelope so Host can tell the user where the
+# last recoverable bytes live.
+recovery_path = base / 'data/fake/saves/transactions/.rollback-preserved'
+real_restore = router.save_service.restore
+def fail_with_preserved_rollback(snapshot_id, preserve_current=True):
+    raise SaveRollbackError('restore and rollback failed', recovery_path)
+router.save_service.restore = fail_with_preserved_rollback
+logging.disable(logging.CRITICAL)
+try:
+    rollback_failed = router.handle({
+        'id':'rr1',
+        'command':'core.save.restore',
+        'params':{'snapshotId':snapshot_id,'preserveCurrent':True},
+    })
+finally:
+    logging.disable(logging.NOTSET)
+    router.save_service.restore = real_restore
+assert rollback_failed['ok'] is False
+assert rollback_failed['error'] == {
+    'code':'rollback_failed',
+    'message':'restore and rollback failed',
+    'recoveryPath':str(recovery_path),
+}
 assert adapter.calls == []
 
 # Ordinary game command routing is unchanged.
