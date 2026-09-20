@@ -33,6 +33,7 @@ final class BackendClient {
         let coalesceKey: String?
         let announceSuccess: Bool
         let timeout: TimeInterval
+        let reply: ((BackendReply) -> Void)?
         let completion: ((Bool) -> Void)?
     }
 
@@ -108,6 +109,7 @@ final class BackendClient {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         guard process.isRunning && !terminalFailureReported else {
@@ -123,6 +125,7 @@ final class BackendClient {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
+            reply: reply,
             completion: completion
         )
 
@@ -247,6 +250,7 @@ final class BackendClient {
         current = nil
         deliveringReply = true
         onReply?(reply)
+        request.reply?(reply)
         request.completion?(success)
         deliveringReply = false
         flushNext()
