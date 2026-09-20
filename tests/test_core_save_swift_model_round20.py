@@ -3,12 +3,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 types = ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"
 model = ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"
+client = ROOT / "Sources/Core/Runtime/BackendClient.swift"
 
 assert types.is_file(), "generic save types missing"
 assert model.is_file(), "generic save manager model missing"
+assert client.is_file(), "generic backend client missing"
 
 types_text = types.read_text(encoding="utf-8")
 model_text = model.read_text(encoding="utf-8")
+client_text = client.read_text(encoding="utf-8")
 combined = types_text + "\n" + model_text
 
 for token in (
@@ -43,5 +46,12 @@ assert 'nameDetails' in types_text
 assert 'hot' in types_text
 assert 'valid' in types_text
 assert 'reply:' in model_text, "Core payload must use request-specific reply callback"
+
+# rollback_failed is the one Core error that carries a user-actionable path.
+assert "let recoveryPath: String?" in client_text
+assert 'recoveryPath: detail?["recoveryPath"] as? String' in client_text
+assert 'reply.errorCode == "rollback_failed"' in model_text
+assert "reply.recoveryPath" in model_text
+assert "恢复副本保留在：" in model_text
 
 print("core_save_swift_model_round20_ok")
