@@ -121,7 +121,7 @@ class Hades2Adapter(GameAdapter):
     def load_profile(self,name):
         profile=self.profile_service.load(name)
         preferences=self._normalize_preferences(profile['desired'])
-        if preferences.get('nextRoomReward') is not None and preferences.get('nextRoomRewardToken') is None:
+        if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         self.preference_store.save(preferences)
         self.preferences=preferences
