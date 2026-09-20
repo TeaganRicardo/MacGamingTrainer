@@ -87,11 +87,11 @@ assert adapter.time_warp.speed == 20.0
 assert transport.sources == [], "process Time Warp unexpectedly crossed the Lua boundary"
 
 try:
-    adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 20.1}, "speed-invalid")
+    adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 10.1}, "speed-invalid")
 except ValueError:
     pass
 else:
-    raise AssertionError("gameSpeed > 20 was accepted")
+    raise AssertionError("gameSpeed > 10 was accepted")
 
 state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 1.0}, "speed-reset")
 assert state["gameSpeed"] == 1.0
