@@ -28,34 +28,6 @@ struct TrainerInlineNotice<Content: View>: View {
     }
 }
 
-struct TrainerSelectableListRow<Content: View>: View {
-    @Environment(\.trainerTheme) private var theme
-    let selected: Bool
-    let enabled: Bool
-    let action: () -> Void
-    let content: Content
-
-    init(selected: Bool, enabled: Bool = true, action: @escaping () -> Void, @ViewBuilder content: () -> Content) {
-        self.selected = selected
-        self.enabled = enabled
-        self.action = action
-        self.content = content()
-    }
-
-    var body: some View {
-        Button(action: action) {
-            content
-                .padding(14)
-                .background(
-                    selected ? theme.accent.opacity(0.14) : theme.subtleFill,
-                    in: RoundedRectangle(cornerRadius: theme.controlCornerRadius)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-}
-
 struct TrainerListCard<Content: View>: View {
     @Environment(\.trainerTheme) private var theme
     let content: Content
