@@ -17,7 +17,7 @@ for token in (
     "@FocusState",
     ".onTapGesture(count: 2)",
     'TrainerPillBadge(text: "热备份"',
-    "Menu {",
+    "TrainerOverflowMenu",
     'Label("在 Finder 中显示"',
     'Label("删除"',
     'Button("恢复")',
