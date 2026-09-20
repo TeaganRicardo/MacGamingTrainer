@@ -36,6 +36,7 @@ struct Hades2ViewConfigSnapshot: Equatable {
     let damageMultiplier: Double
     let moneyMultiplier: Double
     let resourceMultiplier: Double
+    let gameSpeed: Double
 }
 
 struct Hades2ViewInputSnapshot: Equatable {
@@ -52,6 +53,7 @@ struct Hades2ViewInputSnapshot: Equatable {
     let multiplier: String
     let moneyFactor: String
     let materialFactor: String
+    let gameSpeedInput: String
 }
 
 struct Hades2ViewLockedStatInputSnapshot: Equatable {
