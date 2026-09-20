@@ -9,6 +9,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let max: Double
         let integer: Bool
     }
+    static let gameSpeedInputRange = 0.0...10.0
     private static let statRules: [String: StatRule] = [
         "grasp": .init(min: 0, max: 999, integer: true),
         "dodge": .init(min: 0, max: 100, integer: false),
@@ -552,11 +553,35 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case "moneyMultiplierEnabled": if let value = value as? Bool { moneyMultiplierEnabled = value }
         case "resourceMultiplierEnabled": if let value = value as? Bool { resourceMultiplierEnabled = value }
         case "gameSpeed":
-            if let value = value as? Double { gameSpeed = value }
-            else if let value = value as? Int { gameSpeed = Double(value) }
+            let speed: Double?
+            if let value = value as? Double { speed = value }
+            else if let value = value as? Int { speed = Double(value) }
+            else { speed = nil }
+            guard let speed else { return }
+            setGameSpeedValue(speed, completion: completion)
+            return
         default: break
         }
         send(.setDesired(feature: key, value: value), title: "更新功能", completion: completion)
+    }
+
+    func setGameSpeed(_ text: String) {
+        guard let value = Double(text), value.isFinite else { return }
+        setGameSpeedValue(value)
+    }
+
+    private func setGameSpeedValue(_ rawValue: Double, completion: ((Bool) -> Void)? = nil) {
+        guard canEditDesired else { return }
+        let value = (rawValue * 10).rounded() / 10
+        guard Self.gameSpeedInputRange.contains(value), abs(gameSpeed - value) >= 0.0001 else { return }
+        gameSpeed = value
+        send(
+            .setDesired(feature: "gameSpeed", value: value),
+            title: "更新游戏速度",
+            coalesceKey: "feature.gameSpeed",
+            announceSuccess: false,
+            completion: completion
+        )
     }
 
     private func amountValue(_ text: String) -> Int? {

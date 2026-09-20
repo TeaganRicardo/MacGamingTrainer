@@ -6,15 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 40 then
+if previousModule and previousModule.revision ~= 41 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 40, damageMultiplier = 2, damageEnabled = false,
-    gameSpeed = 1, gameSpeedActive = false, gameSpeedCallStyle = nil,
-    gameSpeedMethod = nil, gameSpeedAppliedValue = nil,
+    version = 1, revision = 41, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -846,107 +844,6 @@ if __MacGamingTrainerV1 == nil then
     runtime.factor = factor
   end
 
-  local function gameplayBaseMultiplier()
-    if type(GetGameplayElapsedTimeMultiplier) ~= "function" then return 1 end
-    local ok, value = pcall(GetGameplayElapsedTimeMultiplier)
-    return ok and finite(value) and value > 0 and value or 1
-  end
-  local function playerBaseMultiplier()
-    if type(GetPlayerGameplayElapsedTimeMultiplier) ~= "function" then return 1 end
-    local ok, value = pcall(GetPlayerGameplayElapsedTimeMultiplier)
-    return ok and finite(value) and value > 0 and value or 1
-  end
-  local function setSpeedProperty(args)
-    if type(SetThingProperty) ~= "function" then error("SetThingProperty unavailable") end
-    SetThingProperty(args)
-  end
-  local function applySpeedRatio(ratio)
-    if not finite(ratio) or ratio <= 0 or math.abs(ratio - 1) < 0.000001 then return end
-    setSpeedProperty({
-      Property = "ElapsedTimeMultiplier", Value = ratio, ValueChangeType = "Multiply", DataValue = false,
-      DestinationNames = { "EnemyTeam", "RoomWeapon", "Summons" },
-    })
-    if ready() then
-      setSpeedProperty({
-        Property = "ElapsedTimeMultiplier", Value = ratio, ValueChangeType = "Multiply", DataValue = false,
-        DestinationId = CurrentRun.Hero.ObjectId,
-      })
-      M.gameSpeedHero = CurrentRun.Hero
-    end
-  end
-  local function ensureSpeedOnCurrentHero(factor)
-    if not finite(factor) or factor <= 0 or math.abs(factor - 1) < 0.000001 then
-      M.gameSpeedHero = ready() and CurrentRun.Hero or nil
-      return
-    end
-    if ready() and M.gameSpeedHero ~= CurrentRun.Hero then
-      -- Enemy/room units spawned after a transition inherit the effective
-      -- global _elapsedTimeMultiplier. The Hero does not reliably inherit it,
-      -- so apply the trainer factor exactly once for each Hero identity.
-      setSpeedProperty({
-        Property = "ElapsedTimeMultiplier", Value = factor, ValueChangeType = "Multiply", DataValue = false,
-        DestinationId = CurrentRun.Hero.ObjectId,
-      })
-      M.gameSpeedHero = CurrentRun.Hero
-    end
-  end
-  local function refreshSpeedGlobal()
-    local base = gameplayBaseMultiplier()
-    local factor = finite(M.gameSpeedAppliedValue) and M.gameSpeedAppliedValue or 1
-    local effective = base * factor
-    _elapsedTimeMultiplier = effective
-    setSpeedProperty({
-      Property = "ElapsedTimeMultiplier", Value = effective, ValueChangeType = "Absolute",
-      DataValue = false, AllProjectiles = true,
-    })
-    ensureSpeedOnCurrentHero(factor)
-    M.gameSpeedBaseValue = base
-    M.gameSpeedEffectiveValue = effective
-    return base, effective
-  end
-  local function installGameSpeedHook()
-    requireFunctions("game speed", { "GameplaySetElapsedTimeMultiplier", "GetGameplayElapsedTimeMultiplier", "SetThingProperty" })
-    if owns("GameplaySetElapsedTimeMultiplier") then return end
-    installHook("GameplaySetElapsedTimeMultiplier", function(original, args, ...)
-      local result = original(args, ...)
-      if M.gameSpeedActive and finite(M.gameSpeedAppliedValue) and M.gameSpeedAppliedValue ~= 1 then
-        -- The game's native function intentionally aggregates only slowdowns
-        -- (minimum value <= 1). Reapply our independent factor after it has
-        -- updated the native slowdown layer and projectile absolute value.
-        refreshSpeedGlobal()
-      end
-      return result
-    end, "session")
-  end
-  local function callGameSpeed(value)
-    if not finite(value) or value < 0.1 or value > 5 then error("Game speed must be 0.1..5") end
-    requireFunctions("game speed", { "GameplaySetElapsedTimeMultiplier", "GetGameplayElapsedTimeMultiplier", "SetThingProperty" })
-    local previous = finite(M.gameSpeedAppliedValue) and M.gameSpeedAppliedValue or 1
-    installGameSpeedHook()
-    if math.abs(value - previous) >= 0.000001 then applySpeedRatio(value / previous) end
-    M.gameSpeedAppliedValue = value
-    M.gameSpeedMethod = "directElapsedFactor"
-    M.gameSpeedActive = value ~= 1
-    refreshSpeedGlobal()
-  end
-  local function installGameSpeed()
-    if M.gameSpeed == 1 then return end
-    callGameSpeed(M.gameSpeed)
-  end
-  local function releaseGameSpeed()
-    local previous = finite(M.gameSpeedAppliedValue) and M.gameSpeedAppliedValue or 1
-    if previous ~= 1 and type(SetThingProperty) == "function" then
-      pcall(applySpeedRatio, 1 / previous)
-    end
-    M.gameSpeedAppliedValue = 1
-    M.gameSpeedActive = false
-    M.gameSpeedMethod = nil
-    M.gameSpeedHero = nil
-    if type(SetThingProperty) == "function" then pcall(refreshSpeedGlobal) end
-    releaseHook("GameplaySetElapsedTimeMultiplier")
-    M.gameSpeedAppliedValue = nil
-    M.gameSpeedHero = nil
-  end
   local trainerChargeSpeedName = "MacGamingTrainerChargeSpeed"
   local function releaseChargeSpeedLock()
     local applied = M.statRuntime.chargeSpeed
@@ -1159,7 +1056,7 @@ if __MacGamingTrainerV1 == nil then
     if M.guardWrapper and UpdateTimers == M.guardWrapper then UpdateTimers = M.originalUpdateTimers end
     M.guardWrapper, M.originalUpdateTimers = nil, nil
   end
-  local function deactivateRuntime(preserveGameSpeed)
+  local function deactivateRuntime()
     releaseGodMode()
     releaseHealth()
     releaseMana()
@@ -1174,7 +1071,6 @@ if __MacGamingTrainerV1 == nil then
     releaseEconomyRuntime()
     releaseRerollsRuntime()
     releaseStatsRuntime()
-    if not preserveGameSpeed then releaseGameSpeed() end
   end
   local function clearDesired()
     for key in pairs(M.desiredFeatures) do M.desiredFeatures[key] = false end
@@ -1183,7 +1079,6 @@ if __MacGamingTrainerV1 == nil then
     M.elementLocks = {}
     M.rerollsLock = nil
     M.statTargets = {}
-    M.gameSpeed = 1
     M.nextRoomReward = nil
   end
   local function disable()
@@ -1194,7 +1089,7 @@ if __MacGamingTrainerV1 == nil then
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
     return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
-      or next(M.statTargets) ~= nil or M.gameSpeed ~= 1 or M.nextRoomReward ~= nil
+      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil
   end
   local function anyRuntimeActive()
     return M.godMode or M.infiniteHealth or M.infiniteMana or M.damageEnabled
@@ -1203,19 +1098,14 @@ if __MacGamingTrainerV1 == nil then
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
-      or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil or M.gameSpeedActive
+      or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
   end
   local reconcileDesired
   local forceCastAvailable, refillHex, currentSpellRuntime
   local function synchronize()
     local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
     if M.session ~= SessionState or M.run ~= CurrentRun or M.hero ~= hero then
-      -- Runtime hooks tied to the old Hero are rebuilt, but game speed is a
-      -- process/global layer and must not be reversed against the newly-created
-      -- Hero/room. Keep that layer resident and bind the factor to the new Hero
-      -- once reconciliation sees it.
-      deactivateRuntime(true)
-      if M.hero ~= hero then M.gameSpeedHero = nil end
+      deactivateRuntime()
       M.session, M.run, M.hero = SessionState, CurrentRun, hero
       M.featureErrors = {}
     end
@@ -1227,16 +1117,6 @@ if __MacGamingTrainerV1 == nil then
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
     if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then releaseInstantCastCooldown() end
     if M.hexAlwaysReady and not owns("SpellFire") then releaseHex() end
-    if M.gameSpeedActive and not owns("GameplaySetElapsedTimeMultiplier") then
-      -- App.Reset changes SessionState. Rebind the session-scoped hook without
-      -- undoing the already-applied process/global factor against a fresh Hero.
-      -- refreshSpeedGlobal() reapplies the effective global value and, when
-      -- synchronize() cleared gameSpeedHero above, applies the factor exactly
-      -- once to the new Hero identity.
-      releaseHook("GameplaySetElapsedTimeMultiplier")
-      installGameSpeedHook()
-      refreshSpeedGlobal()
-    end
     if M.infiniteAmmo and (not owns("HasHeroTraitValue") or not owns("UpdateWeaponAmmo")) then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
         and type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then releaseMiniGames() end
@@ -1337,18 +1217,10 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   local function enforceLocks()
-    -- Save-backed inventory locks and process-global speed are meaningful in
-    -- the Crossroads too; keep those invariants before applying Hero-only
-    -- combat locks.
+    -- Save-backed inventory locks are meaningful in the Crossroads too; keep
+    -- those invariants before applying Hero-only combat locks.
     if type(GameState) == "table" and type(GameState.Resources) == "table" then
       for id in pairs(M.resourceLocks) do enforceResource(id) end
-    end
-    if M.gameSpeed ~= 1 and M.gameSpeedActive and M.gameSpeedMethod == "directElapsedFactor" then
-      local ok, message = pcall(refreshSpeedGlobal)
-      if not ok then
-        M.gameSpeedActive = false
-        M.featureErrors.gameSpeed = tostring(message)
-      end
     end
     if not ready() then return end
     if M.godMode then restoreGodModeHitCount(CurrentRun.Hero) end
@@ -1883,7 +1755,7 @@ if __MacGamingTrainerV1 == nil then
       boonRarity = { target = M.boonRarityTarget, multiplier = M.boonRarityMultiplier * 100,
         forceLegendary = M.boonForceLegendary, forceDuo = M.boonForceDuo },
       nextRoomReward = M.nextRoomReward,
-      damageMultiplier = M.damageMultiplier, gameSpeed = M.gameSpeed,
+      damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
       resourceMultiplier = M.resourceMultiplier, resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
       health = number(hero.Health), maxHealth = number(hero.MaxHealth), healthLocked = M.vitalLocks.health ~= nil,
@@ -1900,11 +1772,6 @@ if __MacGamingTrainerV1 == nil then
       runtimeDiagnostics = {
         revision = M.revision, heroObjectId = hero.ObjectId, runCount = runCount,
         guardInstalled = not not (M.guardWrapper and UpdateTimers == M.guardWrapper),
-        gameSpeedMethod = M.gameSpeedMethod, gameSpeedTarget = M.gameSpeed,
-        gameSpeedAppliedValue = M.gameSpeedAppliedValue, gameSpeedBaseValue = M.gameSpeedBaseValue,
-        gameSpeedEffectiveValue = finite(_elapsedTimeMultiplier) and _elapsedTimeMultiplier or M.gameSpeedEffectiveValue,
-        gameSpeedHeroBound = not not (ready() and M.gameSpeedHero == hero),
-        playerBaseMultiplier = playerBaseMultiplier(),
         castHook = owns("SetEffectProperty") and owns("SetWeaponProperty"), castRuntime = castDiagnostics(),
         hexRuntime = M.hexRuntime,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
@@ -2567,7 +2434,7 @@ if __MacGamingTrainerV1 == nil then
   end
   featureOrder = {
     "godMode", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
-    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled", "gameSpeed",
+    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
   }
   featureRegistry = {
     godMode = {
@@ -2620,11 +2487,6 @@ if __MacGamingTrainerV1 == nil then
       install = installBoonRarity, release = releaseBoonRarity, available = function() return true end,
       support = function() return type(GetRarityChances) == "function" and type(SetTraitsOnLoot) == "function" and type(GetEligibleUpgrades) == "function" end,
       active = function() return M.boonRarityEnabled and owns("GetRarityChances") and owns("SetTraitsOnLoot") end,
-    },
-    gameSpeed = {
-      install = installGameSpeed, release = releaseGameSpeed, desired = function() return M.gameSpeed ~= 1 end, available = function() return true end,
-      support = function() return type(GameplaySetElapsedTimeMultiplier) == "function" and type(GetGameplayElapsedTimeMultiplier) == "function" and type(SetThingProperty) == "function" end,
-      active = function(hero) return M.gameSpeedActive and owns("GameplaySetElapsedTimeMultiplier") and finite(_elapsedTimeMultiplier) and math.abs(_elapsedTimeMultiplier - gameplayBaseMultiplier() * M.gameSpeed) < 0.001 and (not ready() or M.gameSpeedHero == hero) end,
     },
   }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
@@ -3029,20 +2891,6 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_feature" then
       local feature, value = params.feature, params.value
-      if feature == "gameSpeed" then
-        if not finite(value) or value < 0.1 or value > 5 then error("Game speed must be 0.1..5") end
-        local previous = M.gameSpeed
-        M.gameSpeed = value
-        M.featureErrors.gameSpeed = nil
-        local ok, message = pcall(function() reconcileDesired(true, "gameSpeed") end)
-        if not ok then
-          M.gameSpeed = previous
-          pcall(function() reconcileDesired(false, "gameSpeed") end)
-          error("Feature unavailable: " .. tostring(message))
-        end
-        if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
-        return state(params.includeCatalogs)
-      end
       if feature == "damageMultiplier" or feature == "moneyMultiplier" or feature == "resourceMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
         M[feature] = value

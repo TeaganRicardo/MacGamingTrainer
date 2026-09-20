@@ -8,7 +8,7 @@ private typealias ViewState<Value> = SwiftUI.State<Value>
 struct Hades2TrainerView: View {
     private enum EditField: Hashable {
         case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge
-        case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier
+        case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier, gameSpeed
         case grasp, dodge, crit, chargeSpeed, moveSpeed, sprintSpeed, dashSpeed, attackSpeed, manaRegen, enemyDamage, enemyHealth
         case element(String)
     }
@@ -36,6 +36,8 @@ struct Hades2TrainerView: View {
     @ViewState<Bool> private var diagnosticSheet = false
     @ViewState<String> private var moneyFactor = "2"
     @ViewState<String> private var materialFactor = "2"
+    @ViewState<String> private var gameSpeedInput = "1.0"
+    @ViewState<String?> private var gameSpeedPreview = nil
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
@@ -194,19 +196,75 @@ struct Hades2TrainerView: View {
         }
     }
 
+    private var gameSpeedMapping: TrainerSliderMapping {
+        .anchoredLogarithmic(
+            values: [0.1, 0.5, 1.0, 2.0, 5.0],
+            step: 0.1,
+            detents: [0.5, 1.0, 2.0],
+            magnetDistance: 0.10,
+            settleDistance: 0.04
+        )
+    }
+
+    private var gameSpeedInputBinding: Binding<String> {
+        Binding(
+            get: { gameSpeedPreview ?? gameSpeedInput },
+            set: {
+                gameSpeedPreview = nil
+                gameSpeedInput = $0
+            }
+        )
+    }
+
+    private var gameSpeedSliderValue: Binding<Double> {
+        Binding(
+            get: { Double(gameSpeedInput) ?? model.gameSpeed },
+            set: {
+                gameSpeedPreview = nil
+                gameSpeedInput = speedNumber($0)
+            }
+        )
+    }
+
+    private func speedNumber(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
+    private func normalizeGameSpeedInput() {
+        guard let raw = Double(gameSpeedInput), raw.isFinite else {
+            gameSpeedInput = speedNumber(model.gameSpeed)
+            return
+        }
+        let value = (raw * 10).rounded() / 10
+        guard Hades2TrainerModel.gameSpeedInputRange.contains(value) else {
+            gameSpeedInput = speedNumber(model.gameSpeed)
+            return
+        }
+        gameSpeedInput = speedNumber(value)
+    }
+
     @ViewBuilder
     private var gameSpeedPanel: some View {
         if model.featureSupport["gameSpeed"] == true {
-            HStack {
+            HStack(spacing: 10) {
                 Text("游戏速度").font(.headline)
-                Text("当前 \(model.gameSpeed, specifier: "%.2g")×").foregroundStyle(.secondary)
-                Spacer()
-                ForEach([0.25, 0.5, 1.0, 1.5, 2.0, 3.0], id: \.self) { speed in
-                    Button(speed == 1 ? "恢复 1×" : speedLabel(speed)) {
-                        model.feature("gameSpeed", value: speed)
-                    }
-                    .disabled(!model.canEditDesired)
-                }
+                Spacer(minLength: 12)
+                TrainerNumberField(
+                    text: gameSpeedInputBinding,
+                    placeholder: "1.0",
+                    width: 62,
+                    enabled: model.canEditDesired
+                )
+                .focused($focusedField, equals: .gameSpeed)
+                .onSubmit { normalizeGameSpeedInput() }
+                Text("×").foregroundStyle(.secondary)
+                TrainerMappedSlider(
+                    value: gameSpeedSliderValue,
+                    mapping: gameSpeedMapping,
+                    enabled: model.canEditDesired,
+                    onPreviewValue: { gameSpeedPreview = speedNumber($0) }
+                )
+                .frame(width: 200)
             }
             .trainerPanel()
         }
@@ -256,7 +314,8 @@ struct Hades2TrainerView: View {
             elements: model.elements,
             damageMultiplier: model.damageMultiplier,
             moneyMultiplier: model.moneyMultiplier,
-            resourceMultiplier: model.resourceMultiplier
+            resourceMultiplier: model.resourceMultiplier,
+            gameSpeed: model.gameSpeed
         )
     }
 
@@ -274,7 +333,8 @@ struct Hades2TrainerView: View {
             rerollAmount: rerollAmount,
             multiplier: multiplier,
             moneyFactor: moneyFactor,
-            materialFactor: materialFactor
+            materialFactor: materialFactor,
+            gameSpeedInput: gameSpeedInput
         )
     }
 
@@ -434,6 +494,9 @@ struct Hades2TrainerView: View {
         multiplier = compactNumber(snapshot.damageMultiplier)
         moneyFactor = compactNumber(snapshot.moneyMultiplier)
         materialFactor = compactNumber(snapshot.resourceMultiplier)
+        if focusedField != .gameSpeed, gameSpeedPreview == nil {
+            gameSpeedInput = speedNumber(snapshot.gameSpeed)
+        }
     }
 
     private func syncElementInputs(_ values: [ElementCount]) {
@@ -465,6 +528,7 @@ struct Hades2TrainerView: View {
         if oldValue.multiplier != newValue.multiplier { model.setMultiplier("damageMultiplier", text: newValue.multiplier) }
         if oldValue.moneyFactor != newValue.moneyFactor { model.setMultiplier("moneyMultiplier", text: newValue.moneyFactor) }
         if oldValue.materialFactor != newValue.materialFactor { model.setMultiplier("resourceMultiplier", text: newValue.materialFactor) }
+        if oldValue.gameSpeedInput != newValue.gameSpeedInput { model.setGameSpeed(newValue.gameSpeedInput) }
     }
 
     private func applyLockedStatChanges(from oldValue: Hades2ViewLockedStatInputSnapshot, to newValue: Hades2ViewLockedStatInputSnapshot) {
@@ -525,6 +589,8 @@ struct Hades2TrainerView: View {
         manaMaximum = ""
         armorCurrent = ""
         spellCharge = ""
+        gameSpeedPreview = nil
+        gameSpeedInput = "1.0"
         graspLimit = ""
         dodgeChance = ""
         critChance = ""

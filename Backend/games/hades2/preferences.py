@@ -138,7 +138,7 @@ class Hades2PreferenceStore:
         for key in MULTIPLIERS:
             value=raw.get(key)
             if type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value):
-                if (key=='gameSpeed' and 0.1<=value<=5) or (key!='gameSpeed' and 1<=value<=100):result[key]=float(value)
+                if (key=='gameSpeed' and 0<=value<=10) or (key!='gameSpeed' and 1<=value<=100):result[key]=float(value)
         rarity=raw.get('boonRarity')
         if isinstance(rarity,dict):
             target=rarity.get('target');mult=rarity.get('multiplier')
