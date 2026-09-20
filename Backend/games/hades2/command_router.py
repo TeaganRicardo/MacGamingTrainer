@@ -37,7 +37,7 @@ class Hades2CommandRouter:
                 if feature in MULTIPLIERS:
                     if type(value) not in (int,float) or isinstance(value,bool) or not math.isfinite(value):raise ValueError('倍率必须为有限数值。')
                     if feature=='gameSpeed':
-                        if not 0.1<=value<=20:raise ValueError('游戏速度范围为 0.1–20。')
+                        if not 0<=value<=10:raise ValueError('游戏速度范围为 0–10。')
                     elif not 1<=value<=100:raise ValueError('倍率范围为 1–100。')
                 elif not isinstance(value,bool):raise ValueError('开关值必须为布尔值。')
             if command=='set_vital':
