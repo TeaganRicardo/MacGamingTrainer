@@ -109,6 +109,29 @@ assert listed['valid'] is False
 assert listed['name'] == created['id'], listed
 store.delete_snapshot(created['id'])
 
+# A parseable-but-malformed manifest must still produce a UI-decodable invalid
+# row. Untrusted metadata cannot replace the string/bool fields Swift relies on.
+created = store.create_snapshot(rows, hot=False, display_name='Safe before corruption')
+snapshot = Path(created['path'])
+manifest_path = snapshot / 'manifest.json'
+malformed = json.loads(manifest_path.read_text(encoding='utf-8'))
+malformed['displayName'] = {'unexpected': 'object'}
+malformed['createdAt'] = ['not', 'a', 'timestamp']
+malformed['hot'] = 'yes'
+malformed['nameDetails'] = {'unexpected': 'object'}
+manifest_path.write_text(json.dumps(malformed), encoding='utf-8')
+rows_after_corruption = store.list_snapshots()
+assert len(rows_after_corruption) == 1
+listed = rows_after_corruption[0]
+assert listed['id'] == created['id']
+assert listed['valid'] is False
+assert listed['name'] == created['id']
+assert listed['createdAt'] == ''
+assert listed['hot'] is False
+assert listed['nameDetails'] == []
+assert isinstance(listed['error'], str) and listed['error']
+store.delete_snapshot(created['id'])
+
 (source / 'Profile2.sav').write_bytes(b'second')
 cold_calls = 0
 def cold_racing_resolver():
