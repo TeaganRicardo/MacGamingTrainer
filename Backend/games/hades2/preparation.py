@@ -237,48 +237,6 @@ def restore():
     raise RuntimeError('没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。')
 
 
-# Compatibility facades retained for callers from pre-v0.16 releases. New code
-# imports save_service/localization directly.
-def backup_saves(*args, **kwargs):
-    from .save_service import backup_saves as implementation
-    return implementation(*args, **kwargs)
-
-def list_save_backups(*args, **kwargs):
-    from .save_service import list_save_backups as implementation
-    return implementation(*args, **kwargs)
-
-def rename_save_backup(*args, **kwargs):
-    from .save_service import rename_save_backup as implementation
-    return implementation(*args, **kwargs)
-
-def delete_save_backup(*args, **kwargs):
-    from .save_service import delete_save_backup as implementation
-    return implementation(*args, **kwargs)
-
-def save_backup_folder(*args, **kwargs):
-    from .save_service import save_backup_folder as implementation
-    return implementation(*args, **kwargs)
-
-def staged_restore(*args, **kwargs):
-    from .save_service import staged_restore as implementation
-    return implementation(*args, **kwargs)
-
-def stage_restore(*args, **kwargs):
-    from .save_service import stage_restore as implementation
-    return implementation(*args, **kwargs)
-
-def cancel_staged_restore(*args, **kwargs):
-    from .save_service import cancel_staged_restore as implementation
-    return implementation(*args, **kwargs)
-
-def apply_staged_restore(*args, **kwargs):
-    from .save_service import apply_staged_restore as implementation
-    return implementation(*args, **kwargs)
-
-def restore_saves(*args, **kwargs):
-    from .save_service import restore_saves as implementation
-    return implementation(*args, **kwargs)
-
 from .localization import _OFFICIAL_TEXT_CACHE
 
 def official_display_names(*args, **kwargs):
@@ -289,7 +247,7 @@ def official_display_names(*args, **kwargs):
 if __name__ == '__main__':
     import sys
     try:
-        commands = {'prepare': prepare, 'restore': restore, 'backup_saves': backup_saves, 'compatibility': compatibility, 'list_save_backups': list_save_backups}
+        commands = {'prepare': prepare, 'restore': restore, 'compatibility': compatibility}
         result = commands[sys.argv[1] if len(sys.argv) > 1 else 'prepare']()
         print(json.dumps(result, ensure_ascii=False))
     except Exception as error:
