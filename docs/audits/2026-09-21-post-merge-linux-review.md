@@ -4,9 +4,16 @@ Updated: 2026-09-21
 
 ## Reviewed baseline
 
-- Exact main source reviewed: `c2fe74c2dc6fd42bea48f40878e3c2ba760eb10b`.
-- Product merge beneath that docs-only head: `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
-- Verified pre-squash product-code SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
+Two exact-main passes were performed.
+
+Initial post-audit baseline:
+- product merge: `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40);
+- reviewed docs-only main head: `c2fe74c2dc6fd42bea48f40878e3c2ba760eb10b`;
+- verified pre-squash audit SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
+
+Corrected final baseline after the review finding was fixed:
+- merged main: `ee258442f89a1e3ad4cb04f02bbfc7146488e148` (PR #42);
+- no runtime/Lua source changed in PR #42, so resident revision remains 42.
 
 The source was not reconstructed from selective GitHub reads. A temporary workflow on the historical audit branch checked out the exact main SHA, packaged it, emitted a commit marker and SHA256, and ran the repository Linux contract suite.
 
@@ -86,7 +93,13 @@ GREEN evidence before PR CI:
 - `tests/test_core_save_swift_model_round20.py`: PASS;
 - `Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`.
 
-Final merge evidence is pending fresh PR CI.
+Final fix/merge evidence:
+- PR #42 tested head: `b0b1a1d9a7d27af22aca7e2a185c84bf372bb2a3`;
+- Linux contracts `35527279524`: PASS, including the newly permanent `test_core_save_swift_model_round20.py`;
+- module matrix `35527279475`: Hades II PASS; reference fixture PASS; package isolation PASS;
+- Build 2 macOS `35527279464`: full contract suite PASS, build/package/artifact PASS;
+- macOS log explicitly ran `test_core_save_rename_completion_round24.py` -> `core_save_rename_completion_round24_ok`;
+- PR #42 squash-merged as `ee258442f89a1e3ad4cb04f02bbfc7146488e148`.
 
 No new architecture conflict was found:
 - Core/Host remains game-agnostic;
@@ -101,8 +114,34 @@ Existing Minor hardening notes remain unchanged:
 
 Neither has a demonstrated current corruption, privilege-boundary or replay failure, so no speculative code was added during this review.
 
+## Final exact-main re-review
+
+The corrected merged main `ee258442f89a1e3ad4cb04f02bbfc7146488e148` was materialized independently after PR #42.
+
+Source evidence:
+- temporary review workflow run `35527702078`: PASS;
+- artifact `mgt-post-fix-main` / artifact id `10609363650`;
+- artifact commit marker: `ee258442f89a1e3ad4cb04f02bbfc7146488e148`;
+- source tar SHA256: `f621f60f6636c7f24478180c7a532ee5c95dd802ec2704f4afee3dd76fa8b200`;
+- the temporary branch was verified to differ from reviewed main only by its excluded snapshot workflow.
+
+Fresh container verification from that exact archive:
+- `bash Tools/run_linux_checks.sh`: PASS / `linux_checks_ok`;
+- `python3 -m compileall -q Backend Tools tests`: PASS;
+- all 81 Linux-portable `tests/test_*.py`: PASS;
+- the remaining four AppKit/Darwin-only tests were already PASS in PR #42 Build 2 macOS;
+- 47/47 live Swift source files: frontend parse PASS;
+- Python duplicate-definition scan: PASS;
+- conflict-marker and live TODO/FIXME/HACK/XXX scans: PASS;
+- risky execution primitive scan: PASS;
+- exactly one `TrainerBackendSession()` constructor remains;
+- Core/Hades boundary token scan: PASS;
+- periodic Hades live-Lua polling scan: PASS.
+
+No Critical or Important finding remains open after the corrected-main re-review.
+
 ## Gate result
 
-The review gate is temporarily reopened for the Save Manager completion fix above.
+The pre-feature deep audit, post-merge Linux review, review fix and corrected-main re-review are complete.
 
-New product feature work remains frozen until that fix is merged with fresh Linux, module-matrix and macOS Build 2 verification. After the corrected main is reviewed again, the next product gate can return to **Hades II Save Editor design**. No binary save mutation is approved by this review.
+The audit freeze can end. The next product gate returns to **Hades II Save Editor design**. No binary save mutation is approved by this review; codec ownership, stopped/live policy, pre-edit snapshot/recovery and the first editable schema still require an approved design before implementation.
