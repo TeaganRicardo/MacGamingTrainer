@@ -20,26 +20,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Compile and validate backend
-        run: |
-          python3 -m compileall -q Backend
-          python3 Tools/validate_game_module.py hades2
-
-      - name: Run exhaustive Python contract suite on Ubuntu
-        shell: bash
-        run: |
-          set -euo pipefail
-          count=0
-          for test_file in tests/test_*.py; do
-            echo "==> $test_file"
-            python3 "$test_file"
-            count=$((count + 1))
-          done
-          echo "audit_linux_test_count=$count"
-
       - name: Package exact source snapshot
         run: |
-          tar             --exclude=.git             --exclude=dist             --exclude=.superpowers             -czf mgt-audit-source.tar.gz .
+          tar \
+            --exclude=.git \
+            --exclude=dist \
+            --exclude=.superpowers \
+            -czf mgt-audit-source.tar.gz .
           sha256sum mgt-audit-source.tar.gz > mgt-audit-source.tar.gz.sha256
 
       - uses: actions/upload-artifact@v4
@@ -50,3 +37,6 @@ jobs:
             mgt-audit-source.tar.gz.sha256
           if-no-files-found: error
           retention-days: 2
+
+      - name: Run supported Linux contract suite
+        run: bash Tools/run_linux_checks.sh
