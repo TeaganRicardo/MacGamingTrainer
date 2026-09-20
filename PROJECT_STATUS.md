@@ -126,7 +126,6 @@ Remote branches eligible for deletion once a supported delete-ref interface is a
 - `fix/batch-b-runtime-semantics-r40`
 - `fix/defer-launch-runtime-probe`
 - `fix/deferred-log-availability-guard`
-- `fix/process-time-warp-host` if present only as superseded history
 - `fix/profile-shortcut-partial-conflict`
 - `fix/profile-shortcut-partial-conflict-v2`
 - `fix/proactive-runtime-reset-bootstrap`
@@ -134,6 +133,7 @@ Remote branches eligible for deletion once a supported delete-ref interface is a
 - `fix/special-choice-refresh-r38`
 - `maintenance/current-status-20260920`
 - `maintenance/repo-hygiene-20260920`
+- `maintenance/status-after-lifecycle-fixes`
 - `refactor/save-management`
 - `spike/generic-process-time-warp`
 - `spike/generic-process-timewarp`
