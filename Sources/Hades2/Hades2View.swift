@@ -37,6 +37,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var moneyFactor = "2"
     @ViewState<String> private var materialFactor = "2"
     @ViewState<String> private var gameSpeedInput = "1.0"
+    @ViewState<String?> private var gameSpeedPreview = nil
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
@@ -200,15 +201,28 @@ struct Hades2TrainerView: View {
             values: [0.1, 0.5, 1.0, 2.0, 5.0],
             step: 0.1,
             detents: [0.5, 1.0, 2.0],
-            magnetDistance: 0.075,
-            settleDistance: 0.035
+            magnetDistance: 0.10,
+            settleDistance: 0.04
+        )
+    }
+
+    private var gameSpeedInputBinding: Binding<String> {
+        Binding(
+            get: { gameSpeedPreview ?? gameSpeedInput },
+            set: {
+                gameSpeedPreview = nil
+                gameSpeedInput = $0
+            }
         )
     }
 
     private var gameSpeedSliderValue: Binding<Double> {
         Binding(
             get: { Double(gameSpeedInput) ?? model.gameSpeed },
-            set: { gameSpeedInput = speedNumber($0) }
+            set: {
+                gameSpeedPreview = nil
+                gameSpeedInput = speedNumber($0)
+            }
         )
     }
 
@@ -236,7 +250,7 @@ struct Hades2TrainerView: View {
                 Text("游戏速度").font(.headline)
                 Spacer(minLength: 12)
                 TrainerNumberField(
-                    text: $gameSpeedInput,
+                    text: gameSpeedInputBinding,
                     placeholder: "1.0",
                     width: 62,
                     enabled: model.canEditDesired
@@ -247,7 +261,8 @@ struct Hades2TrainerView: View {
                 TrainerMappedSlider(
                     value: gameSpeedSliderValue,
                     mapping: gameSpeedMapping,
-                    enabled: model.canEditDesired
+                    enabled: model.canEditDesired,
+                    onPreviewValue: { gameSpeedPreview = speedNumber($0) }
                 )
                 .frame(width: 200)
             }
@@ -480,7 +495,7 @@ struct Hades2TrainerView: View {
         multiplier = compactNumber(snapshot.damageMultiplier)
         moneyFactor = compactNumber(snapshot.moneyMultiplier)
         materialFactor = compactNumber(snapshot.resourceMultiplier)
-        if focusedField != .gameSpeed {
+        if focusedField != .gameSpeed, gameSpeedPreview == nil {
             gameSpeedInput = speedNumber(snapshot.gameSpeed)
         }
     }
@@ -575,6 +590,7 @@ struct Hades2TrainerView: View {
         manaMaximum = ""
         armorCurrent = ""
         spellCharge = ""
+        gameSpeedPreview = nil
         gameSpeedInput = "1.0"
         graspLimit = ""
         dodgeChance = ""
