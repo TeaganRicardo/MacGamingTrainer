@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct TrainerSaveManagerView: View {
@@ -9,7 +8,7 @@ struct TrainerSaveManagerView: View {
     @State private var selectedIDs: Set<String> = []
     @State private var editingID: String?
     @State private var renameText = ""
-    @FocusState private var renameFocused: Bool
+    @State private var pendingRenameNames: [String: String] = [:]
     @State private var restoreCandidate: TrainerSaveSnapshot?
     @State private var preserveCurrent = true
     @State private var deleteIDs: Set<String> = []
@@ -20,10 +19,14 @@ struct TrainerSaveManagerView: View {
             if model.busy { ProgressView() }
             Button { model.reveal() } label: { Label("打开存档目录", systemImage: "folder") }
                 .disabled(model.busy)
-            Button { model.backup() } label: { Label("创建备份", systemImage: "plus") }
-                .disabled(model.busy)
             Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                 .disabled(model.busy)
+            TrainerPrimaryActionButton(
+                title: "创建备份",
+                systemImage: "plus",
+                enabled: !model.busy,
+                action: model.backup
+            )
         } content: {
             if let pending = model.pendingRestore {
                 TrainerInlineNotice(color: theme.deferred) {
@@ -72,13 +75,15 @@ struct TrainerSaveManagerView: View {
         } footer: {
             HStack {
                 Spacer()
-                Button("完成") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(model.busy)
+                TrainerPrimaryActionButton(
+                    title: "完成",
+                    enabled: !model.busy,
+                    action: dismiss.callAsFunction
+                )
+                .keyboardShortcut(.defaultAction)
             }
         }
         .interactiveDismissDisabled(model.busy)
-        .onTapGesture { finishRenameFromPointer() }
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -102,12 +107,10 @@ struct TrainerSaveManagerView: View {
         } message: {
             Text(deleteIDs.count > 1 ? "将永久删除所选的 \(deleteIDs.count) 个备份。此操作不会修改当前游戏存档。" : "将永久删除该备份。此操作不会修改当前游戏存档。")
         }
-        .onChange(of: renameFocused) { wasFocused, isFocused in
-            if wasFocused && !isFocused { commitRename() }
-        }
         .onChange(of: model.snapshots.map(\.id), initial: true) { _, ids in
             let current = Set(ids)
             selectedIDs.formIntersection(current)
+            pendingRenameNames = pendingRenameNames.filter { current.contains($0.key) }
             if let editingID, !current.contains(editingID) {
                 cancelRename()
             }
@@ -146,14 +149,14 @@ struct TrainerSaveManagerView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         if editingID == snapshot.id {
-                            TextField("存档名称", text: $renameText)
-                                .textFieldStyle(.plain)
-                                .font(.headline.weight(.semibold))
-                                .focused($renameFocused)
-                                .onSubmit { commitRename() }
-                                .onExitCommand { cancelRename() }
+                            TrainerInlineNameEditor(
+                                text: $renameText,
+                                placeholder: "存档名称",
+                                onCommit: commitRename,
+                                onCancel: cancelRename
+                            )
                         } else {
-                            Text(snapshot.name)
+                            Text(displayName(for: snapshot))
                                 .font(.headline.weight(.semibold))
                                 .lineLimit(1)
                                 .onTapGesture(count: 2) { beginRename(snapshot) }
@@ -238,32 +241,32 @@ struct TrainerSaveManagerView: View {
         }
     }
 
-    private func finishRenameFromPointer() {
-        guard editingID != nil else { return }
-        NSApp.keyWindow?.makeFirstResponder(nil)
-        commitRename()
+    private func displayName(for snapshot: TrainerSaveSnapshot) -> String {
+        pendingRenameNames[snapshot.id] ?? snapshot.name
     }
 
     private func beginRename(_ snapshot: TrainerSaveSnapshot) {
         editingID = snapshot.id
-        renameText = snapshot.name
-        DispatchQueue.main.async { renameFocused = true }
+        renameText = displayName(for: snapshot)
     }
 
     private func commitRename() {
         guard let id = editingID else { return }
         let clean = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = model.snapshots.first(where: { $0.id == id })
         editingID = nil
-        renameFocused = false
-        guard !clean.isEmpty,
-              clean != model.snapshots.first(where: { $0.id == id })?.name else { return }
-        model.rename(id: id, name: clean)
+        renameText = ""
+        guard !clean.isEmpty, clean != current?.name else { return }
+
+        pendingRenameNames[id] = clean
+        model.rename(id: id, name: clean) { _ in
+            pendingRenameNames.removeValue(forKey: id)
+        }
     }
 
     private func cancelRename() {
         editingID = nil
         renameText = ""
-        renameFocused = false
     }
 }
 
@@ -303,8 +306,7 @@ private struct TrainerSaveRestoreConfirmationView: View {
             HStack {
                 Spacer()
                 Button("取消", action: onCancel)
-                Button("恢复", action: onRestore)
-                    .buttonStyle(.borderedProminent)
+                TrainerPrimaryActionButton(title: "恢复", action: onRestore)
             }
         }
     }
