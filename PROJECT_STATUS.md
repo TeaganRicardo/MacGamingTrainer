@@ -9,7 +9,7 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 - Default branch: `main`.
 - Current corrected baseline: `ee258442f89a1e3ad4cb04f02bbfc7146488e148` (PR #42), on top of audit merge `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
 - Verified pre-squash audit product-code SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
-- The pre-feature audit/review freeze is cleared after the corrected-main exact-source Linux re-review.
+- Product feature work remains frozen while full repository audit round 2 closes one additional Save failure-recovery defect.
 - Hades II resident runtime: revision 42.
 - Hades II module protocol: 5.
 - Target game baseline: Hades II 1.139672 / Steam build 24556151.
@@ -79,7 +79,7 @@ Corrected-main re-review of `ee258442...`:
 - 47/47 Swift source files frontend-parse: PASS;
 - compileall, duplicate-definition, conflict-marker, risky-execution, session-ownership, Core/Hades boundary and no-polling scans: PASS.
 
-No Critical or Important audit/review finding remains open.
+Full repository audit round 2 found one additional Important Save recovery-discoverability defect. PR #41 repair is fully verified and awaiting merge.
 
 ## Repository / architecture audit result
 
@@ -109,7 +109,7 @@ Boundary remains:
 
 The previously researched Hades II codec references remain candidates only; no third-party codec/dependency is integrated.
 
-The corrected-main post-merge review is clean. Save-editor design may resume. Implementation still requires an approved design; no binary save mutation is approved by the audit/review itself.
+Save-editor design/implementation remains frozen until PR #41 is verified and merged and the round-2 audit gate is closed. No binary save mutation is approved.
 
 ## Permanent constraints
 
@@ -126,3 +126,29 @@ The corrected-main post-merge review is clean. Save-editor design may resume. Im
 - Runtime source changes require a resident revision bump.
 - Each tester handoff is one exact HEAD + one prebuilt signed App/ZIP + SHA256 when manual QA is required.
 - Fix demonstrated/root-caused failures with RED -> GREEN coverage.
+
+
+## Full repository audit round 2
+
+Detailed report:
+`docs/audits/2026-09-21-full-repository-audit-round2.md`
+
+New Important finding:
+- if backend termination interrupts rollback itself, Core preserves the trainer-owned `.rollback-*` bytes but a restarted Save Manager previously had no persistent way to discover them;
+- PR #41 exposes only contained non-symlink rollback directories as generic Core recovery evidence and shows them in the shared Save Manager;
+- no automatic restore/delete behavior is introduced.
+
+First repair CI:
+- Linux `35528506356`: PASS;
+- module matrix `35528506352`: PASS;
+- Build 2 macOS `35528506442`: PASS.
+
+Final tested product/test head:
+`d4b1bbb1d5215b59e95ebae46cf021def16657c8`
+
+Final merge-candidate CI after temporary workflow cleanup:
+- Linux `35528849520`: PASS;
+- module matrix `35528849519`: PASS;
+- Build 2 macOS `35528849516`: PASS, including exhaustive AppKit/Darwin tests, build, package verification and RC artifact.
+
+PR #41 is ready to merge. Save Editor remains frozen until merged-main CI is rechecked and the roadmap is advanced.
