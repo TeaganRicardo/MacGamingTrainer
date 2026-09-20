@@ -24,7 +24,8 @@ assert 'mach_absolute_time' in source
 assert 'mach_continuous_time' in source
 assert 'clock_gettime' in source
 assert 'CACurrentMediaTime' in source
-assert '0.1' in source and '20.0' in source
+assert '#define MGT_MIN_SPEED 0.0' in source
+assert '#define MGT_MAX_SPEED 10.0' in source
 assert 'anchor_real_ticks' in source and 'anchor_offset_ticks' in source
 assert 'speed - 1.0' in source
 assert 'basename' in source or 'image_basename' in source
