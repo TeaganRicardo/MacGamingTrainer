@@ -59,4 +59,11 @@ assert 'reply.errorCode == "rollback_failed"' in model_text
 assert "reply.recoveryPath" in model_text
 assert "恢复副本保留在：" in model_text
 
+# Completion is a total contract: Save Manager callers use it to clear
+# optimistic rename state and to terminate sequential batch deletes. A backend
+# that is already unavailable must still complete the request with failure.
+request_block = model_text[model_text.index("    private func request("):model_text.index("    private func consume(")]
+guard_block = request_block[request_block.index("guard session.isRunning else"):request_block.index("        busy = true")]
+assert "onComplete?(false)" in guard_block
+
 print("core_save_swift_model_round20_ok")
