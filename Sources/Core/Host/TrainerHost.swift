@@ -142,12 +142,13 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             model.restartBackendFromHost()
             return
         }
+        let targetJustLaunched = connectionPolicy.backgroundConnectionAllowed
         guard connectionPolicy.consumeAutomaticConnectIfEligible(
             backendAvailable: model.backendAvailable,
             busy: model.busy,
             connected: model.connected,
             actionsEnabled: model.hostActionsEnabled
         ) else { return }
-        model.toggleConnectionFromHost()
+        model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)
     }
 }
