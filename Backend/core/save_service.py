@@ -231,10 +231,25 @@ class CoreSaveService:
             return {'applied': False}
         if self._running():
             raise SaveBusyError('Game is still running.')
-        result = self._transaction().restore(
-            pending['snapshotId'],
-            preserve_current=pending['preserveCurrent'],
-            target_running=False,
-        )
-        self._staged_path().unlink(missing_ok=True)
+
+        path = self._staged_path()
+        claimed = path.with_name('.staged-restore-applying-{}.json'.format(uuid.uuid4().hex))
+        os.replace(path, claimed)
+        try:
+            result = self._transaction().restore(
+                pending['snapshotId'],
+                preserve_current=pending['preserveCurrent'],
+                target_running=False,
+            )
+        except Exception:
+            try:
+                os.replace(claimed, path)
+            except OSError:
+                logging.exception('Failed to restore staged marker after restore failure: %s', claimed)
+            raise
+
+        try:
+            claimed.unlink(missing_ok=True)
+        except OSError:
+            logging.warning('Applied staged restore marker cleanup deferred: %s', claimed)
         return {'applied': True, 'snapshotId': pending['snapshotId'], 'restore': result}
