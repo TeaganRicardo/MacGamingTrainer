@@ -25,11 +25,12 @@ class SaveRollbackError(SaveRestoreError):
 
 
 class SaveRestoreTransaction:
-    def __init__(self, store, spec, resolver, busy_probe=None):
+    def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None):
         self.store = store
         self.spec = spec
         self.resolver = resolver
         self.busy_probe = busy_probe
+        self.snapshot_describer = snapshot_describer
         self.roots = {root.id: Path(root.path).expanduser() for root in spec.roots}
 
     @staticmethod
@@ -171,6 +172,7 @@ class SaveRestoreTransaction:
                 previous = self.store.create_snapshot(
                     lambda: list(rollback_rows),
                     hot=target_running,
+                    describe=self.snapshot_describer,
                 )
                 previous_snapshot_id = previous['id']
 
