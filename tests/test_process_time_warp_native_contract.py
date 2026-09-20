@@ -35,6 +35,7 @@ for token in (
     'TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"',
     'TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"',
     '-dynamiclib',
+    '-isysroot "$SDK"',
     '-framework QuartzCore',
     'libMGTTimeWarp.dylib',
     'codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"',
