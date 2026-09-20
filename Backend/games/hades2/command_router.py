@@ -22,6 +22,7 @@ class Hades2CommandRouter:
         if command=='scan':result=adapter.scan()
         elif command=='connect':result=adapter.connect()
         elif command=='disconnect':result=adapter.disconnect()
+        elif command=='runtime_reset':result=adapter.runtime_reset()
         elif command=='reset_desired':result=adapter.reset_desired()
         elif command in ('status','disable_all','set_desired','set_vital','set_counter','lock_vital','set_stat','set_element','lock_element','set_resource','lock_resource','set_rerolls','lock_rerolls','spawn_reward','open_sell_traits','open_special_choice'):
             if command=='set_desired':

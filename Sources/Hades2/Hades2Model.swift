@@ -246,6 +246,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             activationGraceWorkItems.values.forEach { $0.cancel() }
             activationGraceWorkItems = [:]
             activationGraceFeatures = []
+            if event == .runtimeReset {
+                send(.runtimeReset, title: "记录运行时重置", announceSuccess: false)
+            }
         case .runtimeReady:
             guard connected else { return }
             pendingRunReadySignal = true
