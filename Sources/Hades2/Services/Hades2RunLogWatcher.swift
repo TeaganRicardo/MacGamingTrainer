@@ -30,6 +30,10 @@ final class Hades2RunLogWatcher {
         self.onEvent = onEvent
     }
 
+    var canObserveLifecycle: Bool {
+        FileManager.default.fileExists(atPath: directoryURL.path)
+    }
+
     func start() {
         queue.async { [weak self] in self?.startLocked() }
     }
