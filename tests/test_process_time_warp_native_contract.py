@@ -30,8 +30,9 @@ assert 'speed - 1.0' in source
 assert 'basename' in source or 'image_basename' in source
 
 for token in (
-    'Native/ProcessTimeWarp/ProcessTimeWarp.c',
-    'Native/ProcessTimeWarp/vendor/fishhook/fishhook.c',
+    'TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"',
+    'TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"',
+    'TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"',
     '-dynamiclib',
     '-framework QuartzCore',
     'libMGTTimeWarp.dylib',
