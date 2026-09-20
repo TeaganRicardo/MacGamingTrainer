@@ -9,6 +9,7 @@ struct GameModuleDescriptor: Identifiable, Hashable {
     let targetBundleIdentifier: String
     let expectedHostProtocolVersion: Int
     let expectedModuleProtocolVersion: Int
+    let supportsSaveManagement: Bool = false
 }
 
 struct TrainerGamePresentation: Hashable {
