@@ -13,11 +13,12 @@ Provide one macOS process-level Time Warp capability that game modules can reuse
 - Audio clocks are not modified.
 - Changing speed is continuous: no virtual-time jump at the moment the factor changes.
 - Reapplying a value never multiplies the previous factor.
+- Setting 0.0 freezes the selected game clock domain without stopping the process or debugger control path.
 - Setting 1.0 removes only the trainer factor.
 - The helper may remain resident at 1.0; runtime unloading is deliberately out of scope.
 - A backend reconnect to the same PID must discover/reuse the existing helper instead of injecting a second copy.
 - A new PID gets a fresh helper instance.
-- Supported numeric factor for the process capability is 0.1x-20.0x. The UI slider may expose a narrower visual range.
+- Supported numeric factor for the process capability is 0.0x-10.0x. 0.0x freezes the selected game clock domain. The UI slider exposes 0.1x-5.0x while direct numeric input retains the full process range.
 
 ## Architecture
 
