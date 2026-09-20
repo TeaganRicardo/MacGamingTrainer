@@ -26,11 +26,12 @@ def rows():
 
 
 store = SaveSnapshotStore('example', base / 'data')
-created = store.create_snapshot(rows, hot=False, display_name='Before boss')
+created = store.create_snapshot(rows, hot=False, display_name='Before boss', name_details=['Run 12', 'Crossroads'])
 assert created['valid'] is True
 assert created['name'] == 'Before boss'
 assert created['fileCount'] == 2
 assert created['hot'] is False
+assert created['nameDetails'] == ['Run 12', 'Crossroads']
 snapshot = Path(created['path'])
 assert snapshot.parent == base / 'data' / 'example' / 'saves' / 'snapshots'
 assert (snapshot / 'files/main/Profile1.sav').read_bytes() == b'profile-one'
@@ -42,6 +43,8 @@ assert manifest['schemaVersion'] == 1
 assert manifest['snapshotId'] == created['id']
 assert manifest['gameId'] == 'example'
 assert manifest['displayName'] == 'Before boss'
+assert manifest['nameDetails'] == ['Run 12', 'Crossroads']
+assert '+' not in manifest['createdAt'] and not manifest['createdAt'].endswith('Z')
 assert manifest['hot'] is False
 assert [(item['rootId'], item['relativePath'], item['size']) for item in manifest['files']] == [
     ('main', 'Profile1.sav', len(b'profile-one')),
@@ -153,3 +156,17 @@ assert len(store.list_snapshots()) == 1
 assert not list((base / 'data/example/saves/snapshots').glob('.snapshot-*'))
 
 print('core_save_snapshots_ok')
+
+
+for bad_details in (
+    [''] ,
+    ['a', 'b', 'c', 'd', 'e'],
+    ['ok', 'bad\nline'],
+    'not-a-list',
+):
+    try:
+        store.create_snapshot(rows, hot=False, name_details=bad_details)
+    except (ValueError, SaveSnapshotError):
+        pass
+    else:
+        raise AssertionError('unsafe snapshot nameDetails accepted: {!r}'.format(bad_details))
