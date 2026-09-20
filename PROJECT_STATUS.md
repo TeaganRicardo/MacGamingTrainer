@@ -79,7 +79,7 @@ Corrected-main re-review of `ee258442...`:
 - 47/47 Swift source files frontend-parse: PASS;
 - compileall, duplicate-definition, conflict-marker, risky-execution, session-ownership, Core/Hades boundary and no-polling scans: PASS.
 
-Full repository audit round 2 found one additional Important Save recovery-discoverability defect. It is repaired on PR #41 and awaiting final merge-candidate verification.
+Full repository audit round 2 found one additional Important Save recovery-discoverability defect. PR #41 repair is fully verified and awaiting merge.
 
 ## Repository / architecture audit result
 
@@ -143,4 +143,12 @@ First repair CI:
 - module matrix `35528506352`: PASS;
 - Build 2 macOS `35528506442`: PASS.
 
-Final merge-candidate verification remains required after audit workflow cleanup and documentation synchronization.
+Final tested product/test head:
+`d4b1bbb1d5215b59e95ebae46cf021def16657c8`
+
+Final merge-candidate CI after temporary workflow cleanup:
+- Linux `35528849520`: PASS;
+- module matrix `35528849519`: PASS;
+- Build 2 macOS `35528849516`: PASS, including exhaustive AppKit/Darwin tests, build, package verification and RC artifact.
+
+PR #41 is ready to merge. Save Editor remains frozen until merged-main CI is rechecked and the roadmap is advanced.
