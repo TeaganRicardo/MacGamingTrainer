@@ -84,7 +84,7 @@ class CoreSaveService:
         )
 
     def _staged_path(self):
-        return self.store.root / 'staged-restore.json'
+        return self.store.ensure_storage_root() / 'staged-restore.json'
 
     def _ensure_data_root(self):
         return self.store.ensure_storage_root()
