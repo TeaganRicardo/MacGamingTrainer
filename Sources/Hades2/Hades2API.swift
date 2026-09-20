@@ -26,13 +26,6 @@ enum Hades2Command: String {
     case deleteProfile = "delete_profile"
     case diagnostics
     case exportDiagnostics = "export_diagnostics"
-    case backup
-    case listBackups = "list_backups"
-    case renameBackup = "rename_backup"
-    case openBackupFolder = "open_backup_folder"
-    case restoreBackup = "restore_backup"
-    case deleteBackup = "delete_backup"
-    case cancelStagedRestore = "cancel_staged_restore"
     case prepare
     case restore
 }
@@ -62,13 +55,6 @@ enum Hades2Request {
     case loadProfile(String)
     case deleteProfile(String)
     case diagnostics, exportDiagnostics
-    case backup(runCount: Int?)
-    case listBackups
-    case renameBackup(id: String, name: String)
-    case openBackupFolder(String?)
-    case restoreBackup(String, backupCurrent: Bool)
-    case deleteBackup(String)
-    case cancelStagedRestore
     case prepare, restore
 
     var command: Hades2Command {
@@ -102,13 +88,6 @@ enum Hades2Request {
         case .deleteProfile: return .deleteProfile
         case .diagnostics: return .diagnostics
         case .exportDiagnostics: return .exportDiagnostics
-        case .backup: return .backup
-        case .listBackups: return .listBackups
-        case .renameBackup: return .renameBackup
-        case .openBackupFolder: return .openBackupFolder
-        case .restoreBackup: return .restoreBackup
-        case .deleteBackup: return .deleteBackup
-        case .cancelStagedRestore: return .cancelStagedRestore
         case .prepare: return .prepare
         case .restore: return .restore
         }
@@ -138,8 +117,6 @@ enum Hades2Request {
             return 10.0
         case .prepare, .restore:
             return 30.0
-        case .backup, .restoreBackup, .deleteBackup, .renameBackup, .openBackupFolder:
-            return 15.0
         case .diagnostics, .exportDiagnostics:
             return 15.0
         default:
@@ -187,16 +164,6 @@ enum Hades2Request {
             return ["name": name, "shortcuts": shortcuts]
         case .loadProfile(let name), .deleteProfile(let name):
             return ["name": name]
-        case .backup(let runCount):
-            return runCount.map { ["runCount": $0] } ?? [:]
-        case .renameBackup(let id, let name):
-            return ["backupId": id, "name": name]
-        case .openBackupFolder(let id):
-            return id.map { ["backupId": $0] } ?? [:]
-        case .restoreBackup(let id, let backupCurrent):
-            return ["backupId": id, "backupCurrent": backupCurrent]
-        case .deleteBackup(let id):
-            return ["backupId": id]
         default:
             return [:]
         }
