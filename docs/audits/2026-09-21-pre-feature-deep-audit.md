@@ -12,14 +12,14 @@ New product work remained frozen throughout this audit. Changes are limited to d
 
 ## Executive result
 
-Segments A-F are complete. Segment G final merge verification is pending the latest full CI run.
+Segments A-G are complete. The final tested product-code SHA is `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
 
 Confirmed Important defects fixed in this audit:
 
 1. target-process exit while a Host request was busy could lose the only exit refresh and leave stale connected UI state;
 2. a Lua boundary whose result became unknowable during host-side result read did not taint the transport, allowing later queued Lua mutations to continue;
 3. Core Save restore used a stale stopped/running decision, so the game could launch between the initial probe and real-save mutation;
-4. staged restore / normal restore did not treat SIGTERM -> KeyboardInterrupt and hard process loss conservatively enough across every mutation path;
+4. staged restore / normal restore did not treat SIGTERM -> KeyboardInterrupt, rollback failure and hard process loss conservatively enough across every mutation path;
 5. one-shot next-room reward persistence could resurrect and replay an already-consumed reward after backend restart;
 6. runtime teardown could be blocked by a durable-state write error even though resident hooks still needed best-effort cleanup.
 
@@ -172,7 +172,22 @@ Evidence:
 - fixes: `0278a73c...`, `a9be00d6...`;
 - focused container tests: PASS.
 
-### D3. containment / integrity
+### D3. failed staged claims could be downgraded to retryable pending state
+
+Final whole-diff review found one additional fail-safe gap: `apply_staged()` restored every failed `.staged-restore-applying-*` claim back to ordinary pending state. That was unsafe when `SaveRollbackError` explicitly proved rollback failed, or when a control-flow interruption could itself have interrupted rollback.
+
+Fix:
+- `SaveRollbackError` keeps the applying marker and preserved rollback evidence;
+- raw control-flow interruptions such as `KeyboardInterrupt` keep the applying marker;
+- only ordinary exceptions with a known transaction outcome may restore the marker to retryable pending state;
+- the next process therefore surfaces these cases as `indeterminate` and never auto-replays them.
+
+Evidence:
+- RED/GREEN coverage in `test_core_save_service.py`;
+- fix `d3e43850...`;
+- focused Core Save container tests: PASS.
+
+### D4. containment / integrity
 
 Snapshot, staged metadata, rollback transaction and game-save destination containment remain fail-closed against the tested symlink/path escapes. Snapshot manifests and file hashes are reverified.
 
@@ -234,27 +249,27 @@ No new Critical/Important issue was found in Segment F.
 
 ## Segment G — final verification
 
-Status: pending latest CI.
+Status: complete.
 
-Current PR branch is based directly on the latest main observed during final review:
-- main / merge base: `6e1069dd9ff69283f132b5edfacf07d638db3160`;
-- branch was `ahead` and `behind=0`; no upstream conflict was present.
+Final tested product-code SHA:
+`d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`
 
-Latest successful evidence before the final schema-assertion cleanup:
-- Linux contracts on `b5f63ca...`: PASS (`35525691455`);
-- module matrix on `b5f63ca...`: PASS (`35525691471`);
-- macOS Build 2 reached `test_user_reported_fixes_dev7.py` and failed only on a stale `DESIRED_STATE_SCHEMA_VERSION == 3` assertion after all earlier tests passed.
+Fresh final-head evidence:
+- Linux contracts `35526120496`: PASS.
+- Module build matrix `35526120549`: Hades II PASS; reference fixture PASS; package isolation PASS.
+- Build 2 macOS `35526120497`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; RC artifact creation/upload PASS.
+- independently materialized container snapshot with the final product/test overlays: `Tools/run_linux_checks.sh` -> `linux_checks_ok`.
+- portable Core Save backend/static contracts: PASS. AppKit-dependent Swift behavior was intentionally left to Build 2 macOS, where it passed.
 
-That assertion is corrected in `304d8597...`. Final PASS claims must use fresh CI for that SHA or a later final SHA.
+Final repository review:
+- branch was re-compared with current main `6e1069dd9ff69283f132b5edfacf07d638db3160`;
+- status: ahead, behind=0; merge base equals current main;
+- no upstream conflict was present;
+- Python compile/conflict-marker scan passed;
+- all changed production files were re-reviewed for owner/state/failure-path symmetry;
+- the temporary audit-source workflow was removed before the final tested product-code SHA and is not part of the merge candidate;
+- no Critical or Important audit finding remains open.
 
-### Merge hygiene still required
+The remaining notes are Minor hardening ceilings documented above; they do not block the baseline.
 
-Before merge:
-1. obtain fresh Linux + module-matrix + macOS Build 2 success on final code;
-2. update this report and `PROJECT_STATUS.md` with final evidence;
-3. remove the temporary `.github/workflows/audit-source-snapshot.yml` so it does not enter main;
-4. re-run final CI after that removal;
-5. re-compare with main and perform final diff review;
-6. merge only with all Critical/Important findings closed.
-
-After merge, create a fresh exact-main source snapshot and perform the separate Linux code review requested by the user.
+PR #40 merged the verified product tree into main as `f1eacae8d8c52605e5d87317a59ddd208aad662a` on 2026-09-20T17:34:29Z. The next gate is a fresh exact-main Linux code review from that merged baseline before save-editor feature work resumes.
