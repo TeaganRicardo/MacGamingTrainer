@@ -215,7 +215,6 @@ struct Hades2TrainerView: View {
     private var presentedContent: some View {
         rootContent
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
-            .sheet(isPresented: $model.saveManagerPresented) { Hades2SaveManagerView(model: model) }
             .sheet(isPresented: $profileManager) { Hades2ProfileManagerView(model: model, isPresented: $profileManager) }
             .sheet(isPresented: $diagnosticSheet) { Hades2DiagnosticsView(model: model, isPresented: $diagnosticSheet) }
     }
@@ -808,11 +807,6 @@ struct Hades2TrainerView: View {
         }
     }
 
-    private func openSaveManager() {
-        model.saveManagerPresented = true
-        model.refreshBackups()
-    }
-
     private var management: some View {
         TrainerSection(title: "游戏管理", icon: "gearshape.2.fill") {
             VStack(alignment: .leading, spacing: 12) {
@@ -822,7 +816,6 @@ struct Hades2TrainerView: View {
                         .disabled(!model.connected || model.busy || model.exiting)
                 }
                 HStack(spacing: 12) {
-                    Button { openSaveManager() } label: { Label("存档管理", systemImage: "externaldrive.fill") }
                     Button { profileManager = true; model.listProfiles() } label: { Label("自定义配置", systemImage: "slider.horizontal.3") }
                     Button { diagnosticSheet = true; model.runDiagnostics() } label: { Label("运行自检", systemImage: "stethoscope") }
                     Spacer()
