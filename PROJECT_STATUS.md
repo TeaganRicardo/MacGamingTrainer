@@ -9,7 +9,7 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 - Default branch: `main`.
 - Current fully audited baseline: `c2c4f39ffe5c943c76f2190c458d4ece384f6513` (PR #41), on top of corrected baseline `ee258442f89a1e3ad4cb04f02bbfc7146488e148` (PR #42) and deep-audit merge `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
 - Verified pre-squash audit product-code SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
-- Full repository audit round 2 is closed; the audit freeze is cleared.
+- Full repository audit round 2 is closed, but the user has requested another complete independent audit pass before any new feature work. The audit freeze is active again.
 - Hades II resident runtime: revision 42.
 - Hades II module protocol: 5.
 - Target game baseline: Hades II 1.139672 / Steam build 24556151.
@@ -99,17 +99,30 @@ Full repository audit round 2 found one additional Important Save recovery-disco
 
 ## Current product gate
 
-**Hades II save-editor design — no binary save mutation is approved yet.**
+**Full repository audit continuation — new feature work frozen.**
 
-Boundary remains:
-- Core owns generic snapshot/restore/rollback/staged-restore infrastructure.
-- Hades II owns save codec/schema, field validation, edit semantics and game-specific editor UI.
-- no Hades save-field semantics enter Core/Host;
-- automated editor tests use temporary fixtures only, never the user's real Hades II save tree.
+User directive:
+- the next development thread must perform another complete independent audit before any new product feature work resumes;
+- prior round-2 audit results are evidence/reference only and must not be used to skip any audit domain;
+- Hades II Save Editor design/implementation is frozen during this pass;
+- no binary save mutation is approved.
 
-The previously researched Hades II codec references remain candidates only; no third-party codec/dependency is integrated.
+Authoritative next-thread handoff:
+`docs/audits/2026-09-21-full-audit-continuation-handoff.md`
 
-The round-2 audit gate is closed. Hades II Save Editor design may resume. Implementation still requires an approved design; no binary save mutation is approved by the audit itself.
+The required scope is:
+1. repository/evidence integrity and every remote branch;
+2. Framework boundary ownership;
+3. lifecycle/transport/concurrency;
+4. Save/persistence/failure recovery;
+5. Hades II runtime/command semantics;
+6. UI/hotkey/observable state;
+7. final exhaustive Linux/module/macOS verification on the final changed SHA.
+
+Current product-code baseline remains:
+`c2c4f39ffe5c943c76f2190c458d4ece384f6513` (PR #41)
+
+Current main may contain documentation-only commits after that product baseline.
 
 ## Permanent constraints
 
