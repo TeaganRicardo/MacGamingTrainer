@@ -40,7 +40,7 @@
         ]
       }
     ],
-    "provider": null,
+    "provider": "games.hades2.save_provider:Hades2SaveProvider",
     "hotBackup": true,
     "restorePolicy": "hotPreferred",
     "stagedRestore": true
