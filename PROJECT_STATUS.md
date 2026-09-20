@@ -2,155 +2,118 @@
 
 Updated: 2026-09-20
 
-This is the canonical development handoff. Historical implementation plans, closed PRs and old branches are evidence only; current code, this file, open issues and roadmap issue #8 are execution authority.
+This is the canonical development handoff. Historical implementation plans, closed PRs and old branches are evidence only; current code, this file and roadmap issue #8 are execution authority.
 
 ## Current baseline
 
 - Default branch: `main`.
-- Verified code baseline: `4eab391e00421b9ec4dfca68030ae48ce04fc8b0` (`fix: preserve shared trainer log appends`). Documentation-only commits after this SHA do not change the code evidence.
+- Verified code baseline: `9b15d8393918ceab8de89688d1d08dcaef89dfa1` (`fix: keep corrupt save snapshots visible`). Documentation-only commits after this SHA do not change the code evidence.
 - Hades II resident runtime: revision 41.
 - Hades II module protocol: 5.
 - Target game baseline used by current runtime contracts: Hades II 1.139672 / Steam build 24556151.
 - Process Time Warp + mapped speed slider are shared Host/Core infrastructure.
-- Core Save Management is integrated and optional per game module.
-- Phase 1 cross-game isolation is integrated through the permanent non-production `reference_fixture`.
-- Generic hotkey feedback sounds are integrated: enabled / deferred / disabled.
-- Shortcut partial-Profile/local-override collision is fixed.
-- Batch D lifecycle code changes are integrated; only target-Mac performance acceptance remains open.
+- Core Save Management is integrated, cross-game optional, and has completed its first hardening pass.
+- Phase 1 cross-game isolation remains proven by the permanent non-production `reference_fixture`.
+- Lifecycle acceptance issues #1 and #11 are closed. The final acceptance-only rerun was explicitly waived by the user; this is a waiver, not an invented manual pass.
 
 ## Exact merged-main verification
 
-For `4eab391e00421b9ec4dfca68030ae48ce04fc8b0`:
+For `9b15d8393918ceab8de89688d1d08dcaef89dfa1`:
 
-- Linux contracts run `35511272539`: PASS.
-- Module build matrix run `35511272494`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
-- Build 2 macOS run `35511272525`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
+- Linux contracts run `35515313374`: PASS.
+- Module build matrix run `35515313389`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
+- Build 2 macOS run `35515313401`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
 
-Current RC:
-- GitHub artifact id: `10606170480`.
-- Artifact: `MacGamingTrainer-0.1-build2-rc`.
-- Deliverable: `MacGamingTrainer-0.1-build2-rc.zip`.
-- Deliverable SHA256: `35bc13e1021c9b16f877b112f2e59dfe8f7e85b530b7f191a69dc432b9063aae`.
-
-Hosted Actions step-0 admission is healthy; issue #16 remains closed.
+No Hades runtime source changed in the save-hardening series; resident revision remains 41.
 
 ## Completed recent work
 
+Lifecycle / Host:
 - PR #21: generic Process Time Warp + mapped speed slider.
-- PR #22: repository handoff/history cleanup.
-- PR #23: current-architecture cross-game isolation proof; issue #9 closed; old PR #10 superseded.
+- PR #23: cross-game isolation proof; issue #9 closed.
 - PR #24: partial shortcut Profile conflict fix; issue #17 closed.
-- PR #25: canonical status refresh.
-- PR #26: same-PID runtime-reset signal invalidates backend generation bookkeeping before ready refresh, removing the normal doomed first resident status.
-- PR #27: true-launch automatic connection can attach without an immediate pre-ready Lua/world probe; foreground/manual connect still probes immediately.
-- PR #28: deferred launch probing is used only when the Hades lifecycle directory is observable; first-ever/no-directory launches fall back to the prior bounded immediate probe.
-- PR #30: shared `trainer.log` GUI writes now use kernel-level `O_APPEND`, preventing the Swift GUI writer from overwriting Python backend profiling records after concurrent appends.
+- PR #26: normal signaled same-PID reset no longer pays a doomed first resident status.
+- PR #27: true-launch auto-connect can attach before the first Lua/world probe.
+- PR #28: deferred launch probing is used only when lifecycle observation is available.
+- PR #30: shared `trainer.log` GUI writes use `O_APPEND`, preventing backend profile records from being overwritten.
 
-No PR #26–#30 change touched `hades.lua`; resident revision remains 41.
+Core Save Management hardening:
+- PR #32: `rollback_failed` now carries the preserved recovery-copy path through JSONL -> BackendReply -> Save Manager error UI.
+- PR #33: Trainer-owned save-data storage is contained under the configured data root. Snapshot, staged metadata, staged cancellation and rollback transaction paths share one symlink/containment guard.
+- PR #34: an empty resolved real-save set now reports `save_not_found` instead of `snapshot_invalid`.
+- PR #35: corrupt/invalid snapshots emit safe inventory metadata and remain visible/revealable/deletable instead of disappearing from Swift decoding.
 
-## Active work, in order
+## Current gate
 
-1. **Manual lifecycle performance acceptance — issues #1 and #11**
-   - use the exact post-PR-30 RC above;
-   - rerun true-launch background auto-connect so `LLDBAttachProfile` / `ConnectProfile` are captured in the now append-safe shared log;
-   - perform one more genuine main-menu -> same-save re-entry without exiting Hades;
-   - confirm desired state automatically becomes active again and no second debugger attachment / `attach_denied` occurs;
-   - record subjective stall severity for the remaining bootstrap + replay pair.
-   - Do not merge bootstrap + replay further unless the new sample still shows a severe visible stall.
+**Hades II save-editor design — no binary mutation is approved yet.**
 
-2. **Save-management hardening / Hades II save-editor expansion**
-   - begin after #11 acceptance;
-   - build on the proven optional Core capability;
-   - keep save schema, parsing, validation and editing semantics inside the Hades II module.
+Architecture boundary:
+- Core continues to own generic snapshot/restore/rollback/staged-restore infrastructure.
+- Hades II module owns Hades save schema, decode/encode, field validation, edit semantics and game-specific editor UI.
+- No Hades save-field semantics move into Core/Host.
+- Initial editor implementation must use temporary fixtures and must never mutate the user's real Hades II save tree in automated tests.
 
-3. **Pre-Hades-I architecture gate**
-   - recheck Host/Core boundaries after lifecycle/save-editor work.
+Codec research completed so far:
+- TheNormalnij/Hades-SavesExtractor (MIT) supports Hades II extract/import and exposes the format as SGB1 header + LZ4-compressed luabins payload + Adler-32 rewrite.
+- Its Hades II PATH11 version is `0x12`, matching the repository's current version-18 header assumptions.
+- MarcosGalan/HadesSaveEditor (MIT) has a Python version-18 schema using `construct`, `lz4` and `luabins_py`, and demonstrates round-trip mutation of the decompressed Lua state.
+- These are references/candidate reuse points only. No third-party codec/dependency choice has been approved or integrated.
 
-4. **Hades I vertical slice**
-   - begin only after the architecture gate.
+The next design must explicitly decide:
+1. codec ownership/reuse strategy;
+2. stopped-only vs live editing policy for the first vertical slice;
+3. pre-edit snapshot and failure rollback contract;
+4. which fields are in the first editable schema;
+5. read -> validate -> mutate -> encode -> checksum -> verify -> atomic replace flow;
+6. UI placement inside the Hades II module while reusing shared Core/Host visual components.
 
-## Lifecycle evidence and expected behavior
+## Planned sequence
 
-The code records separate phases:
+1. Approve the Hades II save-editor design.
+2. Write an implementation plan from that design.
+3. Implement the smallest safe vertical slice with RED -> GREEN fixtures.
+4. Re-run cross-game isolation and exact merged-main macOS/package gates.
+5. Pre-Hades-I architecture gate.
+6. Hades I vertical slice.
 
-- `LLDBAttachProfile`: createTarget / attachProcess / identity / symbols / resume.
-- `ConnectProfile`: scan / attachTotal / firstStatusTotal / firstLuaBoundary / JSON decode / localization.
-- `LuaBoundary`: command / duration / outcome / transport crossing / replay flag.
-
-Old target-Mac evidence showed the actual bottleneck was primarily Lua/world readiness rather than debugger attach. A representative same-PID reset paid about 1.344 s for the doomed resident status, 1.799 s for re-bootstrap status and 0.699 s for replay. The old log also contained many ~3.22–3.25 s pre-ready waiting status boundaries.
+## Lifecycle evidence retained for history
 
 The 2026-09-20 QA sample after PRs #26–#28 contains one genuine same-PID re-entry:
 - run-log runtime reset bookkeeping crossed zero Lua boundaries;
 - bootstrap/status took 0.868 s;
 - one batched durable replay took 0.886 s;
-- enabled persistent features became active again after replay;
+- enabled persistent features became active again;
 - the old failed-resident-status boundary was absent.
 
-The later apparent disconnect in that sample was not a failed same-PID recovery: Hades II.log shows `MainMenuScreen::ExitGame()` followed by `App Shutdown` at 20:31:40–20:31:41. The Host then correctly applied a staged save restore after target termination.
-
-That QA sample could not reliably measure true-launch attach phases because the GUI and backend shared-log writers corrupted the first-launch profiling window. PR #30 fixes the logging substrate with `O_APPEND`; the post-PR-30 RC must therefore be used for the remaining true-launch measurement.
-
-Current intended flow:
-
-- True launch, lifecycle observable:
-  `scan -> LLDB attach -> waiting/loading (zero Lua boundary) -> runtimeReady -> bootstrap/status -> optional batched replay`.
-- True launch, lifecycle directory unavailable:
-  bounded fallback to the previous immediate connect/status path.
-- Same-PID runtime reset, normal signaled path:
-  `runtimeReset bookkeeping (zero Lua boundary) -> runtimeReady -> bootstrap/status -> optional batched replay`.
-- Missing lifecycle signal:
-  existing status-side missing-generation fallback remains.
-
-No periodic LLDB/Lua polling is present.
+A later apparent disconnect was an actual game exit: Hades II.log recorded `MainMenuScreen::ExitGame()` followed by `App Shutdown`.
 
 ## GitHub state
 
 Open:
-- issue #1 — lifecycle/manual-acceptance umbrella.
-- issue #11 — exact RC manual performance acceptance.
 - issue #8 — current roadmap.
 
 Closed:
-- issue #9 — cross-game isolation proof complete.
+- issue #1 — lifecycle/manual-acceptance umbrella.
+- issue #9 — cross-game isolation proof.
+- issue #11 — lifecycle performance acceptance (final acceptance-only rerun waived).
 - issue #16 — hosted Actions admission recovered.
-- issue #17 — partial shortcut Profile collision fixed.
-- PR #10 — superseded by merged PR #23.
-- PR #19 — superseded by merged PR #21.
-- PR #21 through #28 — merged as applicable.
+- issue #17 — partial shortcut Profile collision.
+- PR #21 through #35 — merged as applicable; superseded historical PRs remain evidence only.
 
 ## Branch hygiene
 
-No historical feature branch is an execution base. New work must branch from current `main`.
+No historical feature branch is an execution base. New implementation work must branch from current `main`.
 
-Remote branches eligible for deletion once a supported delete-ref interface is available include:
-
-- `architecture/reference-module-proof`
-- `architecture/reference-module-proof-v2`
-- `audit/preacceptance-hardening`
-- `ci/lidkeep-rc1-build`
-- `feature/game-speed-r41-integration`
-- `feature/generic-speed-control-ui`
-- `feature/mapped-speed-slider`
-- `feature/post-v0.1-improvements`
-- `feature/process-time-warp-host`
-- `fix/batch-a-native-modals`
-- `fix/batch-b-runtime-semantics-r40`
-- `fix/defer-launch-runtime-probe`
-- `fix/deferred-log-availability-guard`
+Remote branches eligible for deletion once a supported delete-ref interface is available include all merged/superseded branches already recorded previously, plus:
 - `fix/append-only-shared-trainer-log`
-- `fix/profile-shortcut-partial-conflict`
-- `fix/profile-shortcut-partial-conflict-v2`
-- `fix/proactive-runtime-reset-bootstrap`
-- `fix/special-choice-native-r39`
-- `fix/special-choice-refresh-r38`
-- `maintenance/current-status-20260920`
-- `maintenance/repo-hygiene-20260920`
-- `maintenance/status-after-lifecycle-fixes`
-- `refactor/save-management`
-- `spike/generic-process-time-warp`
-- `spike/generic-process-timewarp`
+- `fix/save-rollback-recovery-path`
+- `fix/save-storage-root-containment`
+- `fix/save-empty-error-code`
+- `fix/invalid-snapshot-row-sanitization`
+- `maintenance/status-after-log-qa`
+- `maintenance/status-after-save-hardening`
 
-The current GitHub connector exposes ref updates but no ref deletion mutation. Do not work around this with container network access or RDC.
+The current GitHub connector exposes ref movement but no branch-delete mutation. Do not work around this with container network access or RDC.
 
 ## Permanent constraints
 
