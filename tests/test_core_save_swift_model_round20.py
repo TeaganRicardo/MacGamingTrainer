@@ -20,11 +20,13 @@ for token in (
     "final class TrainerSaveManagerModel",
     "@Published private(set) var snapshots",
     "@Published private(set) var pendingRestore",
+    "@Published private(set) var recoveryPaths",
     "func refresh()",
     "func backup(",
     "func rename(",
     "func delete(ids:",
     "func reveal(",
+    "func revealRecoveryCopies()",
     "func restore(",
     "func cancelStaged()",
     "func applyStagedIfPossible()",
@@ -51,6 +53,11 @@ assert 'func applyStagedIfPossible()' in model_text
 apply_block = model_text[model_text.index('    func applyStagedIfPossible()'):model_text.index('    private func deleteNext', model_text.index('    func applyStagedIfPossible()'))]
 assert 'successNotice: nil' in apply_block
 assert 'reply:' in model_text, "Core payload must use request-specific reply callback"
+
+# Recovery copies that outlive a killed rollback must be observable after the
+# backend restarts, not only through the in-flight rollback_failed envelope.
+assert 'result["recoveryPaths"] as? [String]' in model_text
+assert 'NSWorkspace.shared.activateFileViewerSelecting' in model_text
 
 # rollback_failed is the one Core error that carries a user-actionable path.
 assert "let recoveryPath: String?" in client_text
