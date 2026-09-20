@@ -199,7 +199,7 @@ for bad in (
     ('set_boon_rarity', {'target':'Epic','multiplier':100,'forceLegendary':False,'forceDuo':False}),
     ('set_next_room_reward', {'reward':'WeaponUpgrade'}),
     ('set_stat', {'stat':'enemyHealth','locked':True,'value':9}),
-    ('set_desired', {'feature':'gameSpeed','value':9}),
+    ('set_desired', {'feature':'gameSpeed','value':20.1}),
     ('set_element', {'element':'Void','amount':1}),
 ):
     try:

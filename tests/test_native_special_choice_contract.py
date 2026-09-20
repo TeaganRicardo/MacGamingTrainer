@@ -10,8 +10,8 @@ router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
-assert 'previousModule.revision ~= 40' in lua
-assert 'version = 1, revision = 40' in lua
+assert 'previousModule.revision ~= 41' in lua
+assert 'version = 1, revision = 41' in lua
 assert 'specialChoiceOpens = {}' in lua
 assert 'specialChoiceRun = nil' in lua
 

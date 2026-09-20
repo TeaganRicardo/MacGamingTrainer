@@ -169,19 +169,64 @@ def _atomic_install(source, destination, expected_current):
             staged.unlink(missing_ok=True)
 
 
+def _prepared_hashes(record):
+    return {value for key in ('prepared_sha256', 'previous_prepared_sha256') if isinstance((value := record.get(key)), str) and value}
+
+
+def _stage_prepared(root, record, original, previous_prepared_sha256=None):
+    permissions = _entitlements(original)
+    (root / 'original-entitlements.plist').write_bytes(plistlib.dumps(permissions))
+    permissions['com.apple.security.get-task-allow'] = True
+    permissions['com.apple.security.cs.disable-library-validation'] = True
+    entitlement_path = root / 'debug-entitlements.plist'
+    entitlement_path.write_bytes(plistlib.dumps(permissions))
+
+    staged = root / (GAME_SPEC.executable_name + '.debug')
+    shutil.copy2(original, staged)
+    run('/usr/bin/codesign', '--force', '--sign', '-', '--identifier',
+        GAME_SPEC.bundle_identifier, '--options', 'runtime',
+        '--entitlements', str(entitlement_path), str(staged))
+    run('/usr/bin/codesign', '--verify', '--strict', str(staged))
+    prepared_entitlements = _entitlements(staged)
+    if (_uuid(staged) != UUID or not prepared_entitlements.get('com.apple.security.get-task-allow')
+            or not prepared_entitlements.get('com.apple.security.cs.disable-library-validation')):
+        raise RuntimeError('调试签名校验失败；未修改游戏。')
+    record.update(status='staged', prepared_sha256=sha(staged))
+    if previous_prepared_sha256: record['previous_prepared_sha256'] = previous_prepared_sha256
+    else: record.pop('previous_prepared_sha256', None)
+    _write_json(root / 'manifest.json', record)
+    return staged
+
+
 def prepare():
     _require_stopped()
     identity = compatibility()
     exe = GAME_SPEC.executable_path
     current = sha(exe)
+
     for root, record in _records():
-        if current == record.get('prepared_sha256'):
-            _verify_backup(root, record)
-            if not _entitlements(exe).get('com.apple.security.get-task-allow'):
-                raise RuntimeError('已准备文件缺少调试权限。')
+        if current not in _prepared_hashes(record):
+            continue
+        original = _verify_backup(root, record)
+        prepared_entitlements = _entitlements(exe)
+        if not prepared_entitlements.get('com.apple.security.get-task-allow'):
+            raise RuntimeError('已准备文件缺少调试权限。')
+        if prepared_entitlements.get('com.apple.security.cs.disable-library-validation'):
+            if record.pop('previous_prepared_sha256', None) is not None or record.get('status') != 'prepared':
+                record['status'] = 'prepared'
+                _write_json(root / 'manifest.json', record)
             return {'prepared': True, 'already_prepared': True, 'backup': str(root), 'manifest': record}
+
+        staged = _stage_prepared(root, record, original, previous_prepared_sha256=current)
+        _atomic_install(staged, exe, current)
+        record.pop('previous_prepared_sha256', None)
+        record['status'] = 'prepared'
+        _write_json(root / 'manifest.json', record)
+        return {'prepared': True, 'already_prepared': False, 'upgraded': True, 'backup': str(root), 'manifest': record}
+
     if _entitlements(exe).get('com.apple.security.get-task-allow') or current != ORIGINAL_SHA256:
         raise RuntimeError('当前可执行文件不是已验证的原版；拒绝将已修改文件备份为原版。')
+
     root = _backup_dir('signature')
     original = root / GAME_SPEC.executable_name
     shutil.copy2(exe, original)
@@ -194,30 +239,15 @@ def prepare():
         'stderr': baseline.stderr.decode('utf-8', errors='replace'),
         'scope': 'Exact locally verified original SHA-256 and UUID only',
     }
-    permissions = _entitlements(exe)
-    (root / 'original-entitlements.plist').write_bytes(plistlib.dumps(permissions))
     details = _command('/usr/bin/codesign', '-dvvv', str(exe))
     (root / 'original-signature.txt').write_bytes(details.stdout + details.stderr)
     _write_json(root / 'manifest.json', record)
-    permissions['com.apple.security.get-task-allow'] = True
-    entitlement_path = root / 'debug-entitlements.plist'
-    entitlement_path.write_bytes(plistlib.dumps(permissions))
-    staged = root / (GAME_SPEC.executable_name + '.debug')
-    shutil.copy2(original, staged)
-    run('/usr/bin/codesign', '--force', '--sign', '-', '--identifier',
-        GAME_SPEC.bundle_identifier, '--options', 'runtime',
-        '--entitlements', str(entitlement_path), str(staged))
-    run('/usr/bin/codesign', '--verify', '--strict', str(staged))
-    if _uuid(staged) != UUID or not _entitlements(staged).get('com.apple.security.get-task-allow'):
-        raise RuntimeError('调试签名校验失败；未修改游戏。')
-    # Record the prepared hash before installation so a crash remains recoverable.
-    record.update(status='staged', prepared_sha256=sha(staged))
-    _write_json(root / 'manifest.json', record)
+
+    staged = _stage_prepared(root, record, original)
     _atomic_install(staged, exe, current)
     record['status'] = 'prepared'
     _write_json(root / 'manifest.json', record)
     return {'prepared': True, 'already_prepared': False, 'backup': str(root), 'manifest': record}
-
 
 def restore():
     _require_stopped()
@@ -227,10 +257,11 @@ def restore():
     if current == ORIGINAL_SHA256:
         return {'restored': True, 'already_restored': True}
     for root, record in _records():
-        if current != record.get('prepared_sha256'):
+        if current not in _prepared_hashes(record):
             continue
         original = _verify_backup(root, record)
         _atomic_install(original, exe, current)
+        record.pop('previous_prepared_sha256', None)
         record['status'] = 'restored'
         _write_json(root / 'manifest.json', record)
         return {'restored': True, 'already_restored': False, 'backup': str(root)}
