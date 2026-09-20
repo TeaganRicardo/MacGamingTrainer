@@ -129,6 +129,35 @@ assert (save_root / 'Profile1.sav').read_bytes() == b'rollback-profile'
 assert (save_root / 'restored-only.sav').read_bytes() == b'rollback-restored-only'
 assert (save_root / 'obsolete.sav').read_bytes() == b'rollback-obsolete'
 
+# SIGTERM is translated to KeyboardInterrupt by the backend server. Once restore
+# mutation has started, that control-flow exception must still roll back the
+# real save set before the worker is allowed to exit.
+(save_root / 'Profile1.sav').write_bytes(b'interrupt-profile')
+(save_root / 'restored-only.sav').write_bytes(b'interrupt-restored-only')
+(save_root / 'obsolete.sav').write_bytes(b'interrupt-obsolete')
+replace_calls = 0
+def interrupt_second_target_replace(source, destination):
+    global replace_calls
+    destination = Path(destination)
+    if save_root in destination.parents:
+        replace_calls += 1
+        if replace_calls == 2:
+            raise KeyboardInterrupt()
+    return real_replace(source, destination)
+restore_module.os.replace = interrupt_second_target_replace
+try:
+    try:
+        transaction.restore(target['id'], preserve_current=False, target_running=False)
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError('interrupted restore unexpectedly succeeded')
+finally:
+    restore_module.os.replace = real_replace
+assert (save_root / 'Profile1.sav').read_bytes() == b'interrupt-profile'
+assert (save_root / 'restored-only.sav').read_bytes() == b'interrupt-restored-only'
+assert (save_root / 'obsolete.sav').read_bytes() == b'interrupt-obsolete'
+
 (save_root / 'Profile1.sav').write_bytes(b'preserve-me')
 (save_root / 'restored-only.sav').write_bytes(b'preserve-me-too')
 (save_root / 'obsolete.sav').write_bytes(b'preserve-obsolete')

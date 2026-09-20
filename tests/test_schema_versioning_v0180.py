@@ -98,8 +98,11 @@ try:
     class FutureSchemaTransport:
         pid = 9001
         last_duration = 0.01
+        def __init__(self):
+            self.execute_calls = 0
         def alive(self): return True
         def execute(self, source):
+            self.execute_calls += 1
             return json.dumps({
                 'status':'ready','scene':'run','capabilities':{},
                 'desiredFeatures':{'godMode':True},
@@ -108,12 +111,27 @@ try:
         def detach(self): pass
         def close(self): pass
 
-    adapter = Hades2Adapter(transport=FutureSchemaTransport())
+    future_transport = FutureSchemaTransport()
+    adapter = Hades2Adapter(transport=future_transport)
     assert adapter.preference_write_blocked is True
     assert adapter.preference_dirty is False
     state = adapter.execute('status', {})
     assert state['status'] == 'ready'
     assert adapter.preference_initialized is False
+    assert adapter_desired.read_bytes() == adapter_desired_bytes
+
+    # Forward-schema write protection must not block best-effort runtime
+    # teardown. disable_all still reports unsupported_schema because durable
+    # desired intent cannot be rewritten, but it must cross the live boundary
+    # once so resident hooks/features are actually disabled.
+    calls_before_teardown = future_transport.execute_calls
+    try:
+        adapter.execute('disable_all', {})
+    except UnsupportedSchemaVersionError as error:
+        assert error.code == 'unsupported_schema'
+    else:
+        raise AssertionError('future desired-state teardown hid its durable-state error')
+    assert future_transport.execute_calls == calls_before_teardown + 1
     assert adapter_desired.read_bytes() == adapter_desired_bytes
 
     # Invalid version metadata is corrupt rather than "newer" and is moved out

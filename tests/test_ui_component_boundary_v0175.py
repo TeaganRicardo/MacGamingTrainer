@@ -38,6 +38,11 @@ assert 'struct TrainerSelectableListRow' not in core_ui
 for token in ('Hades2','godMode','boonRarity','rerollsLocked','statAvailable','dormantFeatures','WeaponCast','CurrentRun'):
     assert token not in core_ui, token
 
+management_view = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
+assert 'TextField("100", text: $boonRarityFactor)' not in hades_views
+assert '.buttonStyle(.borderedProminent)' not in management_view
+assert 'TrainerPrimaryActionButton(' in management_view
+
 print('ui_component_boundary_v0175_ok')
 
 host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()

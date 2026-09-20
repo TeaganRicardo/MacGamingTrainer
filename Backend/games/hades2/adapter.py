@@ -8,7 +8,8 @@ from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
 from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, disconnected_capabilities
 from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
-from .preferences import Hades2PreferenceStore
+from .preferences import Hades2PreferenceStore, next_room_reward_consumed
+from .persistence import PersistenceError
 from .profile_service import Hades2ProfileService
 from .command_router import Hades2CommandRouter
 TransportError = AdapterError
@@ -120,6 +121,8 @@ class Hades2Adapter(GameAdapter):
     def load_profile(self,name):
         profile=self.profile_service.load(name)
         preferences=self._normalize_preferences(profile['desired'])
+        if preferences.get('nextRoomReward') is not None:
+            preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
@@ -244,7 +247,11 @@ class Hades2Adapter(GameAdapter):
         self.preferences['rerollsLock']=decoded.get('rerolls') if decoded.get('rerollsLocked') else None
         self.preferences['elementLocks']={str(item['id']):item.get('count',0) for item in decoded.get('elements',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
         reward=decoded.get('nextRoomReward')
-        if reward is None or isinstance(reward,str):self.preferences['nextRoomReward']=reward
+        if reward is None or isinstance(reward,str):
+            self.preferences['nextRoomReward']=reward
+            diagnostics=decoded.get('runtimeDiagnostics')
+            token=diagnostics.get('nextRoomRewardToken') if isinstance(diagnostics,dict) else None
+            self.preferences['nextRoomRewardToken']=token if reward is not None and isinstance(token,str) and token else None
 
     def _adopt_lua_preferences(self,decoded):
         self._capture_runtime_preferences(decoded)
@@ -297,10 +304,11 @@ class Hades2Adapter(GameAdapter):
     def set_next_room_reward_desired(self,reward):
         if reward is not None and (not isinstance(reward,str) or len(reward)>128):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
+        preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_next_room_reward',{'reward':reward});self.preference_dirty=False;return result
+            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=False;return result
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False):
@@ -349,7 +357,8 @@ class Hades2Adapter(GameAdapter):
         for element in current_elements-set(wanted_elements):pending.append(('lock_element',{'element':element,'locked':False}))
         for element,amount in wanted_elements.items():pending.append(('set_element',{'element':element,'amount':int(amount)}));pending.append(('lock_element',{'element':element,'locked':True}))
         reward=self.preferences.get('nextRoomReward')
-        if force_full or self.state.get('nextRoomReward')!=reward:pending.append(('set_next_room_reward',{'reward':reward}))
+        if force_full or self.state.get('nextRoomReward')!=reward:
+            pending.append(('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')}))
         if pending:self.execute('replay_preferences',{},replay=True,batch=pending)
         self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
         self._capture_runtime_preferences(self.state);self._save_preferences();self._overlay_preferences()
@@ -479,15 +488,22 @@ class Hades2Adapter(GameAdapter):
         if read_only and command!='status':raise ValueError('read_only 仅允许 status。')
         teardown=not read_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
-        # Lua boundary.  Even if runtime teardown later fails, a future trainer
-        # session must not replay features that the user explicitly closed.
-        if teardown:self._reset_preferences()
+        # Lua boundary. If that write is explicitly blocked/failed, still make a
+        # best-effort runtime teardown; report the persistence error afterwards
+        # without pretending the durable state was reset.
+        teardown_persistence_error=None
+        if teardown:
+            try:self._reset_preferences()
+            except PersistenceError as error:
+                teardown_persistence_error=error
+                logging.warning('Durable teardown reset failed; continuing runtime cleanup: %s',error)
         if command in ('disable_all','cleanup') and not self.transport.alive():
             # Explicit teardown must never be faked. Reattach to the same live
             # process so app exit / “全部关闭” can really clear resident hooks.
             self.scan()
             if not self.state.get('pid'):
                 clear_active(self.state);self.state.update(connected=False,status='not_running')
+                if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
             self.transport.attach(self.state['pid']);self.state['connected']=True
         if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
@@ -563,19 +579,24 @@ class Hades2Adapter(GameAdapter):
             decoded['capabilities']=capabilities
             self.state.update(decoded,connected=True,pid=self.transport.pid)
             self.state.pop('error',None)
-            # nextRoomReward is a one-shot runtime request. Once Lua consumes it,
-            # a later clean status omits the field; clear the persisted desired
-            # value too so it is not visually resurrected or replayed on reconnect.
-            if not read_only and command=='status' and not self.preference_dirty and self.preferences.get('nextRoomReward') is not None and decoded.get('nextRoomReward') is None:
+            # nextRoomReward is a one-shot runtime request. A clean status in
+            # the same backend confirms consumption once the armed runtime value
+            # disappears. Across a backend restart, require Lua's persisted
+            # consumed-token receipt so a command that never reached Lua remains
+            # replayable while an already-consumed one-shot cannot resurrect.
+            if not read_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
                 self.preferences['nextRoomReward']=None
+                self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
             if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                self._capture_runtime_preferences(self.state);self._save_preferences()
+                if teardown_persistence_error is None:
+                    self._capture_runtime_preferences(self.state);self._save_preferences()
             self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
+            if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
                          command,reward_context,self.transport.last_duration,self.state.get('scene'),

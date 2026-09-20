@@ -70,9 +70,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             if !running, Module.descriptor.supportsSaveManagement, model.backendAvailable {
                 saveManager.applyStagedIfPossible()
             }
-            if !running, model.backendAvailable && !model.busy {
-                model.refreshFromHost()
-            }
             reconcileAutomaticConnection()
         }
         .onChange(of: targetMonitor.launchGeneration) { _, _ in
@@ -129,6 +126,15 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     /// that backend reports available. There is no polling/retry timer: target
     /// launch/activation and backend lifecycle transitions are the only triggers.
     private func reconcileAutomaticConnection() {
+        if connectionPolicy.consumeTargetExitRefreshIfEligible(
+            backendAvailable: model.backendAvailable,
+            busy: model.busy,
+            connected: model.connected
+        ) {
+            model.refreshFromHost()
+            return
+        }
+
         // A true target-process launch grants one background connect chance
         // that survives transient Host/backend busy states until consumed.
         // Target activation never grants this, so active gameplay cannot gain

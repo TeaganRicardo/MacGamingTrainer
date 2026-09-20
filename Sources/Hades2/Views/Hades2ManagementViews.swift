@@ -32,9 +32,11 @@ struct Hades2ProfileManagerView: View {
                     }
                 }
                 HStack {
-                    Button("载入") { model.loadProfile(selectedProfile) }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.busy || selectedProfile.isEmpty)
+                    TrainerPrimaryActionButton(
+                        title: "载入",
+                        enabled: !model.busy && !selectedProfile.isEmpty,
+                        action: { model.loadProfile(selectedProfile) }
+                    )
                     Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: { Label("删除", systemImage: "trash") }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()

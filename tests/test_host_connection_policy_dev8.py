@@ -149,6 +149,35 @@ if policy.automaticConnectionSuppressed {
     fail("manual reconnect did not clear suppression")
 }
 
+// Target termination while a game request is still busy must preserve one
+// deferred refresh. Otherwise a non-runtime reply such as list_profiles can
+// finish successfully after the game exits and leave connected=true stale.
+var exitWhileBusyPolicy = TrainerConnectionPolicy()
+exitWhileBusyPolicy.targetStateChanged(running: true)
+exitWhileBusyPolicy.connectionChanged(connected: true)
+exitWhileBusyPolicy.targetStateChanged(running: false)
+if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: true,
+    connected: true
+) {
+    fail("target-exit refresh ran while backend was busy")
+}
+if !exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: true
+) {
+    fail("target-exit refresh intent was lost after busy cleared")
+}
+if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: true
+) {
+    fail("target-exit refresh was not one-shot")
+}
+
 // A real target restart resets the previous lifetime's detach/recovery state.
 policy.userWillToggleConnection(currentlyConnected: true)
 policy.targetStateChanged(running: false)

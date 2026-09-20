@@ -6,20 +6,21 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 41 then
+if previousModule and previousModule.revision ~= 42 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 41, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 42, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
     resourceMultiplier = 2, resourceMultiplierEnabled = false,
     -- true means force one currently eligible special boon into the native pool.
     boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
-    nextRoomReward = nil, nextRoomRewardOriginRoom = nil, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
+    nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
+    nextRoomRewardOriginRoom = nil, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     desiredFeatures = {
       godMode = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
       instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
@@ -1080,6 +1081,7 @@ if __MacGamingTrainerV1 == nil then
     M.rerollsLock = nil
     M.statTargets = {}
     M.nextRoomReward = nil
+    M.nextRoomRewardToken = nil
   end
   local function disable()
     clearDesired()
@@ -1779,6 +1781,8 @@ if __MacGamingTrainerV1 == nil then
         gardenHooks = { plant = owns("GardenPlantSeed"), harvest = owns("UseGardenPlot") },
         nextRoomRewardHook = owns("ChooseRoomReward") and owns("StartRoom"),
         nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors,
+        nextRoomRewardToken = M.nextRoomRewardToken,
+        lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken,
       },
     }
   end
@@ -2284,7 +2288,9 @@ if __MacGamingTrainerV1 == nil then
         if M.nextRoomReward ~= nil then
           local origin = M.nextRoomRewardOriginRoom
           if origin == nil or currentRoom ~= origin then
+            M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken
             M.nextRoomReward = nil
+            M.nextRoomRewardToken = nil
             releaseNextRoomReward()
           end
         end
@@ -2857,18 +2863,21 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_next_room_reward" then
-      local reward = params.reward
+      local reward, token = params.reward, params.token
       if reward ~= nil and type(reward) ~= "string" then error("Next room reward must be a string or nil") end
       if reward == "" then reward = nil end
       if reward ~= nil then
+        if type(token) ~= "string" or #token == 0 or #token > 128 then error("Next room reward token is invalid") end
         local validDirect = reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
           or reward == "MemPointsCommonDrop" or reward == "MaxHealthDrop" or reward == "MaxManaDrop"
           or reward == "StackUpgrade" or reward == "WeaponUpgrade" or reward == "HermesUpgrade"
         local validLoot = type(LootData) == "table" and type(LootData[reward]) == "table"
         if not validDirect and not validLoot then error("Unsupported next room reward") end
         M.nextRoomReward = reward
+        M.nextRoomRewardToken = token
       else
         M.nextRoomReward = nil
+        M.nextRoomRewardToken = nil
       end
       M.featureErrors.nextRoomReward = nil
       reconcileDesired(true, "nextRoomReward")

@@ -717,8 +717,7 @@ struct Hades2TrainerView: View {
                 }.labelsHidden().frame(width: 150).disabled(!model.canEditDesired)
                 Spacer()
                 Text("稀有度概率倍率").foregroundStyle(.secondary)
-                TextField("100", text: $boonRarityFactor).textFieldStyle(.roundedBorder).frame(width: 72).multilineTextAlignment(.center)
-                    .disabled(!model.canEditDesired)
+                TrainerNumberField(text: $boonRarityFactor, placeholder: "100", width: 72, enabled: model.canEditDesired)
                 Text("%").foregroundStyle(.secondary)
             }
             Divider()
