@@ -12,8 +12,8 @@
 
 #define MGT_EXPORT __attribute__((visibility("default")))
 #define MGT_TIME_WARP_ABI 1u
-#define MGT_MIN_SPEED 0.1
-#define MGT_MAX_SPEED 20.0
+#define MGT_MIN_SPEED 0.0
+#define MGT_MAX_SPEED 10.0
 #define MGT_IMAGE_FILTER_CAPACITY 1024u
 
 enum {
