@@ -117,3 +117,5 @@ Still manual/experiential:
 - Native Hades slow/time-stop composes correctly.
 - Audio pitch/timbre/timing remains perceptually unchanged.
 - Packaged UI/backend reconnect remains a manual acceptance item; low-level same-PID resident-helper reuse is already verified on the exact target.
+- Slider refinement RC r42 built at `a4696d5e0aa47ed44f2904a42b93ca40273c07c9`: 200pt native regular-size slider, visual anchors 0.1/0.5/1/2/5 at 0/25/50/75/100%, reduced detent snap radius for 0.5/1/2, continuous local thumb position with 0.1x effect quantization.
+- r42 ZIP: `/Users/gao/Downloads/MacGamingTrainer-0.1-build2-rc-r42.zip`, SHA-256 `b3d37ef5cc47d3fd6af2b0fd218d6f76bebc082a2e03b8231ebc20c3ca8598b0`, 2,005,300 bytes.
