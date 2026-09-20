@@ -20,6 +20,10 @@ class SaveSnapshotError(RuntimeError):
     code = 'snapshot_invalid'
 
 
+class SaveSnapshotBusyError(SaveSnapshotError):
+    code = 'save_busy'
+
+
 class _SaveSnapshotRace(SaveSnapshotError):
     pass
 
@@ -161,7 +165,7 @@ class SaveSnapshotStore:
             except _SaveSnapshotRace as error:
                 if not hot or attempt + 1 >= attempts:
                     message = 'Save changed during snapshot creation.' if not hot else 'Save did not become stable during hot backup.'
-                    raise SaveSnapshotError(message) from error
+                    raise SaveSnapshotBusyError(message) from error
                 time.sleep(0.08 * (attempt + 1))
             finally:
                 if stage is not None:
