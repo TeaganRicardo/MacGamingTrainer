@@ -26,7 +26,7 @@ spec = SaveManagementSpec(
     restore_policy='hotPreferred',
     staged_restore=True,
 )
-rows = resolve_save_files(spec, base)
+rows = resolve_save_files(spec)
 assert [(row.root_id, row.relative_path) for row in rows] == [
     ('main', 'Profile1.sav'),
     ('main', 'Profile2.sav'),
@@ -41,7 +41,7 @@ nested = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('profiles/*.sav',)),),
     provider=None, hot_backup=False, restore_policy='stoppedOnly', staged_restore=False,
 )
-assert [(row.root_id, row.relative_path) for row in resolve_save_files(nested, base)] == [('main', 'profiles/slot.sav')]
+assert [(row.root_id, row.relative_path) for row in resolve_save_files(nested)] == [('main', 'profiles/slot.sav')]
 
 real = base / 'real'; real.mkdir(); (real / 'Profile1.sav').write_bytes(b'x')
 root_link = base / 'root-link'; root_link.symlink_to(real, target_is_directory=True)
@@ -50,7 +50,7 @@ unsafe_root = SaveManagementSpec(
     hot_backup=False, restore_policy='stoppedOnly', staged_restore=False,
 )
 try:
-    resolve_save_files(unsafe_root, base)
+    resolve_save_files(unsafe_root)
 except SaveResolutionError:
     pass
 else:
@@ -62,7 +62,7 @@ unsafe_file = SaveManagementSpec(
     hot_backup=False, restore_policy='stoppedOnly', staged_restore=False,
 )
 try:
-    resolve_save_files(unsafe_file, base)
+    resolve_save_files(unsafe_file)
 except SaveResolutionError:
     pass
 else:
@@ -80,7 +80,7 @@ provider_spec = SaveManagementSpec(
     provider='games.example.save_provider:Provider', hot_backup=True,
     restore_policy='hotPreferred', staged_restore=True,
 )
-provider_rows = resolve_save_files(provider_spec, base, provider_loader=lambda target: Provider())
+provider_rows = resolve_save_files(provider_spec, provider_loader=lambda target: Provider())
 assert [(row.root_id, row.relative_path) for row in provider_rows] == [
     ('main', 'Profile1.sav'), ('main', 'dynamic.bin')
 ]
@@ -91,7 +91,7 @@ class EscapeProvider:
 
 (base / 'outside.sav').write_bytes(b'outside')
 try:
-    resolve_save_files(provider_spec, base, provider_loader=lambda target: EscapeProvider())
+    resolve_save_files(provider_spec, provider_loader=lambda target: EscapeProvider())
 except SaveResolutionError:
     pass
 else:
