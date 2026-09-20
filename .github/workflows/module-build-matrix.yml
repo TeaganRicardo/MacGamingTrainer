@@ -3,7 +3,7 @@ name: Module build matrix
 on:
   push:
     branches:
-      - 'architecture/**'
+      - main
   pull_request:
 
 permissions:
