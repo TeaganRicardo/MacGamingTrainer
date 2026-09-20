@@ -1,6 +1,6 @@
 # v0.17.11 architecture assessment
 
-> Historical architecture note. This document records the reasoning that led to the current 0.1 framework boundary; it is not the current product/version status. See `PROJECT_STATUS.md`, `VERSIONING.md` and `NEXT_PHASE_TODO.md` for current facts.
+> Historical architecture note. This document records the reasoning that led to the current 0.1 framework boundary; it is not an execution queue or the current product/version status. See `PROJECT_STATUS.md`, `VERSIONING.md`, and roadmap issue #8 for current facts.
 
 ## Current verdict
 
