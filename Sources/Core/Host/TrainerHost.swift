@@ -67,6 +67,9 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onChange(of: targetMonitor.isRunning) { _, running in
             connectionPolicy.targetStateChanged(running: running)
+            if !running, Module.descriptor.supportsSaveManagement, model.backendAvailable {
+                saveManager.applyStagedIfPossible()
+            }
             if !running, model.backendAvailable && !model.busy {
                 model.refreshFromHost()
             }
@@ -87,8 +90,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             connectionPolicy.targetActivated()
         }
         .onChange(of: model.backendAvailable) { _, available in
-            if available { connectionPolicy.backendBecameAvailable() }
-            else { connectionPolicy.backendBecameUnavailable() }
+            if available {
+                connectionPolicy.backendBecameAvailable()
+                if Module.descriptor.supportsSaveManagement, !targetMonitor.isRunning {
+                    saveManager.applyStagedIfPossible()
+                }
+            } else {
+                connectionPolicy.backendBecameUnavailable()
+            }
             reconcileAutomaticConnection()
         }
         .onChange(of: model.busy) { _, _ in
