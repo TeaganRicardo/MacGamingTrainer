@@ -61,7 +61,7 @@ protocol TrainerGameModule {
 
     static var descriptor: GameModuleDescriptor { get }
     static var presentation: TrainerGamePresentation { get }
-    static func makeModel() -> Model
+    static func makeModel(session: TrainerBackendSession) -> Model
     static func makeContent(model: Model) -> ContentView
     static func makeSidebarActions(model: Model) -> SidebarActions
     static func makeHeaderActions(model: Model) -> HeaderActions
