@@ -9,6 +9,7 @@ tests=(
   tests/test_boundary_performance_ledger_v0180.py
   tests/test_catalog_naming.py
   tests/test_connect_phase_profile.py
+  tests/test_core_save_swift_model_round20.py
   tests/test_corrupt_file_quarantine_v0180.py
   tests/test_exit_semantics.py
   tests/test_hades2_adapter_round12.py
