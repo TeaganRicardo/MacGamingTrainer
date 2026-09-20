@@ -74,14 +74,16 @@ Changing Core Theme/primitives/chrome therefore propagates without a game opting
 
 ## What should not move into Core again
 
-Do not reintroduce generic APIs shaped like:
+Do not reintroduce shared business-state APIs shaped like:
 
-- feature desired/dormant state machines
-- stat supported/available/locked rows
-- resource amount/lock editors
-- boon/reward catalog concepts
+- feature desired/dormant state machines;
+- game stat support/availability state models;
+- resource persistence/lock rules;
+- boon/reward catalog concepts.
 
-unless a second real game independently demonstrates the same domain model. Shared appearance is not evidence of shared business semantics.
+Presentation-only composites in `Sources/Core/UI` are allowed when they consume neutral visual inputs and callbacks. For example, a shared metric/resource row may render booleans, bindings, labels and lock controls, while the game module remains the owner of what "supported", "available", "locked", or a resource actually means.
+
+A second game is not required to adopt Hades-shaped state models merely because it can reuse the same visual components. Shared appearance is not evidence of shared business semantics.
 
 ## Remaining boundary to watch
 
