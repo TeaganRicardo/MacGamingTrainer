@@ -24,6 +24,10 @@ class SaveSnapshotBusyError(SaveSnapshotError):
     code = 'save_busy'
 
 
+class SaveNotFoundError(SaveSnapshotError):
+    code = 'save_not_found'
+
+
 class _SaveSnapshotRace(SaveSnapshotError):
     pass
 
@@ -133,7 +137,7 @@ class SaveSnapshotStore:
             key = (row.root_id, relative)
             unique[key] = ResolvedSaveFile(row.root_id, relative, row.source_path)
         if not unique:
-            raise SaveSnapshotError('No real save files were found.')
+            raise SaveNotFoundError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
     def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None, describe=None):

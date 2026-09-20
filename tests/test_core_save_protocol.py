@@ -120,4 +120,16 @@ deleted = router.handle({'id':'d1','command':'core.save.delete','params':{'snaps
 assert deleted['ok'] is True and deleted['result']['operation']['deleted'] is True
 assert [call[0] for call in adapter.calls] == ['poke']
 
+# No resolved game-save files is a different user condition from a corrupt
+# snapshot and must have its own stable Core error code.
+(saves / 'Profile1.sav').unlink()
+logging.disable(logging.CRITICAL)
+try:
+    empty_backup = router.handle({'id':'empty1','command':'core.save.backup','params':{}})
+finally:
+    logging.disable(logging.NOTSET)
+assert empty_backup['ok'] is False
+assert empty_backup['error']['code'] == 'save_not_found'
+assert 'save' in empty_backup['error']['message'].lower()
+
 print('core_save_protocol_ok')
