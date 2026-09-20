@@ -9,7 +9,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let max: Double
         let integer: Bool
     }
-    static let gameSpeedInputRange = 0.1...20.0
+    static let gameSpeedInputRange = 0.0...10.0
     private static let statRules: [String: StatRule] = [
         "grasp": .init(min: 0, max: 999, integer: true),
         "dodge": .init(min: 0, max: 100, integer: false),
