@@ -113,6 +113,7 @@ status_components = read('Sources/Core/UI/StatusComponents.swift')
 sheet = read('Sources/Core/UI/Components/TrainerSheetScaffold.swift')
 hades_view = read('Sources/Hades2/Hades2View.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
+save_view = read('Sources/Core/Save/TrainerSaveManagerView.swift')
 for token in ('contentMinWidth', 'contentMinHeight', 'pageMaxWidth', 'pagePadding', 'pageSpacing', 'panelPadding', 'rowHorizontalPadding', 'rowMinimumHeight', 'sheetPadding', 'sheetSpacing', 'emptyStatePadding'):
     assert token in theme, token
 assert 'TrainerConnectionStatusCard(' in host
@@ -122,8 +123,10 @@ assert 'TrainerRow(opacity:' in read('Sources/Core/UI/Components/TrainerFeatureC
 assert 'TrainerRow(opacity:' in read('Sources/Core/UI/Components/TrainerStatControls.swift')
 assert 'TrainerSectionHeader(' in hades_view
 assert 'struct TrainerSheetScaffold' in sheet
-assert management.count('TrainerSheetScaffold(') == 4
-assert management.count('TrainerEmptyState(') == 2
+assert management.count('TrainerSheetScaffold(') == 3
+assert management.count('TrainerEmptyState(') == 1
+assert 'TrainerSheetScaffold(' in save_view
+assert 'TrainerEmptyState(' in save_view
 assert '.padding(28)' not in management
 assert '.frame(minWidth: 760, minHeight: 740)' not in hades_view
 assert 'contentMinWidth' in host and 'contentMinHeight' in host
