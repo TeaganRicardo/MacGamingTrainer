@@ -200,7 +200,8 @@ struct Hades2TrainerView: View {
             values: [0.1, 0.5, 1.0, 2.0, 5.0],
             step: 0.1,
             detents: [0.5, 1.0, 2.0],
-            magnetDistance: 0.065
+            magnetDistance: 0.075,
+            settleDistance: 0.035
         )
     }
 
