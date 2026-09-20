@@ -7,7 +7,7 @@ This is the canonical development handoff. Historical implementation plans, clos
 ## Current baseline
 
 - Default branch: `main`.
-- Verified code baseline: `b65126df625d8b431cf3671351c67142ee8f897b` (`fix: guard deferred probe on lifecycle watcher availability`). Documentation-only commits after this SHA do not change the code evidence.
+- Verified code baseline: `4eab391e00421b9ec4dfca68030ae48ce04fc8b0` (`fix: preserve shared trainer log appends`). Documentation-only commits after this SHA do not change the code evidence.
 - Hades II resident runtime: revision 41.
 - Hades II module protocol: 5.
 - Target game baseline used by current runtime contracts: Hades II 1.139672 / Steam build 24556151.
@@ -20,17 +20,17 @@ This is the canonical development handoff. Historical implementation plans, clos
 
 ## Exact merged-main verification
 
-For `b65126df625d8b431cf3671351c67142ee8f897b`:
+For `4eab391e00421b9ec4dfca68030ae48ce04fc8b0`:
 
-- Linux contracts run `35509175512`: PASS.
-- Module build matrix run `35509175516`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
-- Build 2 macOS run `35509175497`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
+- Linux contracts run `35511272539`: PASS.
+- Module build matrix run `35511272494`: Hades II PASS; reference fixture PASS; one-module package isolation PASS.
+- Build 2 macOS run `35511272525`: full macOS contract suite PASS; Hades II build PASS; package verification PASS; artifact creation/upload PASS.
 
 Current RC:
-- GitHub artifact id: `10604489234`.
+- GitHub artifact id: `10606170480`.
 - Artifact: `MacGamingTrainer-0.1-build2-rc`.
 - Deliverable: `MacGamingTrainer-0.1-build2-rc.zip`.
-- Deliverable SHA256: `28905697a52fe8798605ebbb7ad22fc992c8c8fbcd53fb850ebea391eb41992b`.
+- Deliverable SHA256: `35bc13e1021c9b16f877b112f2e59dfe8f7e85b530b7f191a69dc432b9063aae`.
 
 Hosted Actions step-0 admission is healthy; issue #16 remains closed.
 
@@ -44,19 +44,19 @@ Hosted Actions step-0 admission is healthy; issue #16 remains closed.
 - PR #26: same-PID runtime-reset signal invalidates backend generation bookkeeping before ready refresh, removing the normal doomed first resident status.
 - PR #27: true-launch automatic connection can attach without an immediate pre-ready Lua/world probe; foreground/manual connect still probes immediately.
 - PR #28: deferred launch probing is used only when the Hades lifecycle directory is observable; first-ever/no-directory launches fall back to the prior bounded immediate probe.
+- PR #30: shared `trainer.log` GUI writes now use kernel-level `O_APPEND`, preventing the Swift GUI writer from overwriting Python backend profiling records after concurrent appends.
 
-No PR #26–#28 change touched `hades.lua`; resident revision remains 41.
+No PR #26–#30 change touched `hades.lua`; resident revision remains 41.
 
 ## Active work, in order
 
 1. **Manual lifecycle performance acceptance — issues #1 and #11**
-   - use the exact RC above;
-   - verify true-launch background auto-connect without a visible pre-ready multi-second stall;
-   - return to main menu and re-enter the same save twice with at least one persistent feature enabled;
-   - confirm desired state automatically becomes active again;
-   - confirm no second debugger attachment / `attach_denied`;
-   - inspect `trainer.log` for the reduced boundary sequence.
-   - Do not further merge bootstrap + replay unless the new sample still shows a severe visible stall.
+   - use the exact post-PR-30 RC above;
+   - rerun true-launch background auto-connect so `LLDBAttachProfile` / `ConnectProfile` are captured in the now append-safe shared log;
+   - perform one more genuine main-menu -> same-save re-entry without exiting Hades;
+   - confirm desired state automatically becomes active again and no second debugger attachment / `attach_denied` occurs;
+   - record subjective stall severity for the remaining bootstrap + replay pair.
+   - Do not merge bootstrap + replay further unless the new sample still shows a severe visible stall.
 
 2. **Save-management hardening / Hades II save-editor expansion**
    - begin after #11 acceptance;
@@ -78,6 +78,17 @@ The code records separate phases:
 - `LuaBoundary`: command / duration / outcome / transport crossing / replay flag.
 
 Old target-Mac evidence showed the actual bottleneck was primarily Lua/world readiness rather than debugger attach. A representative same-PID reset paid about 1.344 s for the doomed resident status, 1.799 s for re-bootstrap status and 0.699 s for replay. The old log also contained many ~3.22–3.25 s pre-ready waiting status boundaries.
+
+The 2026-09-20 QA sample after PRs #26–#28 contains one genuine same-PID re-entry:
+- run-log runtime reset bookkeeping crossed zero Lua boundaries;
+- bootstrap/status took 0.868 s;
+- one batched durable replay took 0.886 s;
+- enabled persistent features became active again after replay;
+- the old failed-resident-status boundary was absent.
+
+The later apparent disconnect in that sample was not a failed same-PID recovery: Hades II.log shows `MainMenuScreen::ExitGame()` followed by `App Shutdown` at 20:31:40–20:31:41. The Host then correctly applied a staged save restore after target termination.
+
+That QA sample could not reliably measure true-launch attach phases because the GUI and backend shared-log writers corrupted the first-launch profiling window. PR #30 fixes the logging substrate with `O_APPEND`; the post-PR-30 RC must therefore be used for the remaining true-launch measurement.
 
 Current intended flow:
 
@@ -126,6 +137,7 @@ Remote branches eligible for deletion once a supported delete-ref interface is a
 - `fix/batch-b-runtime-semantics-r40`
 - `fix/defer-launch-runtime-probe`
 - `fix/deferred-log-availability-guard`
+- `fix/append-only-shared-trainer-log`
 - `fix/profile-shortcut-partial-conflict`
 - `fix/profile-shortcut-partial-conflict-v2`
 - `fix/proactive-runtime-reset-bootstrap`
