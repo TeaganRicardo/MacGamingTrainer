@@ -24,7 +24,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     ]
     @Published var connected = false
     @Published private(set) var backendStatus = TrainerBackendStatus()
-    private let backendSession = TrainerBackendSession()
+    private let backendSession: TrainerBackendSession
     private let logSink = TrainerLogSink()
     private lazy var api = Hades2API(session: backendSession)
     var backendAvailable: Bool { backendStatus.backendAvailable }
@@ -211,7 +211,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init() {
+    init(session: TrainerBackendSession) {
+        backendSession = session
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.runLogWatcher.start()
