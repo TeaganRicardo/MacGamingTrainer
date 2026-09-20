@@ -5,7 +5,7 @@ struct TrainerMappedSlider: View {
     let mapping: TrainerSliderMapping
     var enabled = true
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.trainerTheme) private var theme
     @State private var displayPosition: Double?
     @State private var dragOffset: CGFloat?
     @State private var isDragging = false
@@ -27,7 +27,7 @@ struct TrainerMappedSlider: View {
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
                 Capsule()
-                    .fill(Color.accentColor)
+                    .fill(theme.accent)
                     .frame(width: max(thumbX - thumbRadius, 0), height: 3)
                     .position(
                         x: thumbRadius + max(thumbX - thumbRadius, 0) / 2,
@@ -45,13 +45,8 @@ struct TrainerMappedSlider: View {
                 }
 
                 Circle()
-                    .fill(colorScheme == .light ? Color.white : Color(white: 0.8))
-                    .overlay(
-                        Circle().stroke(
-                            Color.black.opacity(colorScheme == .light ? 0.14 : 0.34),
-                            lineWidth: 0.5
-                        )
-                    )
+                    .fill(theme.accent)
+                    .overlay(Circle().stroke(Color.white.opacity(0.22), lineWidth: 0.5))
                     .shadow(color: Color.black.opacity(0.28), radius: 1.5, x: 0, y: 1)
                     .frame(width: thumbDiameter, height: thumbDiameter)
                     .position(x: thumbX, y: proxy.size.height / 2)
@@ -69,17 +64,18 @@ struct TrainerMappedSlider: View {
                         }
                         let adjustedX = gesture.location.x - (dragOffset ?? 0)
                         let rawPosition = min(max(Double((adjustedX - thumbRadius) / trackWidth), 0), 1)
-                        let visualPosition = mapping.magnetizedPosition(rawPosition)
-                        displayPosition = visualPosition
-                        commit(mapping.value(at: visualPosition))
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            displayPosition = mapping.magnetizedPosition(rawPosition)
+                        }
                     }
                     .onEnded { gesture in
                         guard enabled else { return }
                         let adjustedX = gesture.location.x - (dragOffset ?? 0)
                         let rawPosition = min(max(Double((adjustedX - thumbRadius) / trackWidth), 0), 1)
-                        let settled = mapping.settledPosition(rawPosition)
-                        let finalValue = mapping.value(at: settled)
-                        let finalPosition = settled == rawPosition ? mapping.position(for: finalValue) : settled
+                        let finalPosition = mapping.settledPosition(rawPosition)
+                        let finalValue = mapping.value(at: finalPosition)
                         commit(finalValue)
                         withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.78, blendDuration: 0.04)) {
                             displayPosition = finalPosition
