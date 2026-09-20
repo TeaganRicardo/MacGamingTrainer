@@ -19,11 +19,12 @@ assert mapping.is_file()
 assert component.is_file()
 component_text = component.read_text()
 assert "struct TrainerMappedSlider: View" in component_text
-assert "Slider(value: positionBinding, in: 0...1, onEditingChanged:" in component_text
-assert ".controlSize(.regular)" in component_text
+assert "DragGesture(minimumDistance: 0)" in component_text
+assert "@State private var displayPosition" in component_text
+assert "@State private var dragOffset" in component_text
 assert "mapping.marks" in component_text
-assert "@State private var livePosition" in component_text
-assert "@State private var isEditing" in component_text
+assert ".interactiveSpring(" in component_text
+assert ".accessibilityRepresentation" in component_text
 assert "TrainerMappedSlider(" in view
 assert ".frame(width: 200)" in view
 assert "text: $gameSpeedInput" in view
@@ -45,7 +46,7 @@ let mapping = TrainerSliderMapping.anchoredLogarithmic(
     values: [0.1, 0.5, 1.0, 2.0, 5.0],
     step: 0.1,
     detents: [0.5, 1.0, 2.0],
-    snapDistance: 0.0125
+    magnetDistance: 0.065
 )
 
 let expectedAnchors: [(Double, Double)] = [
@@ -63,9 +64,29 @@ for value in [0.1, 0.2, 0.5, 0.8, 1.0, 1.5, 2.0, 3.0, 4.4, 5.0] {
     }
 }
 
-let two = mapping.position(for: 2.0)
-if !approx(mapping.snappedPosition(two + 0.010), two) { fail("detent snap") }
-if approx(mapping.snappedPosition(two + 0.020), two) { fail("reduced snap threshold") }
+let one = mapping.position(for: 1.0)
+let inside = one + 0.050
+let outside = one + 0.070
+let magnetized = mapping.magnetizedPosition(inside)
+if !(magnetized > one && magnetized < inside) { fail("magnetic pull") }
+if !approx(mapping.magnetizedPosition(outside), outside) { fail("magnet range") }
+if !approx(mapping.settledPosition(inside), one) { fail("release snap") }
+if !approx(mapping.settledPosition(outside), outside) { fail("release outside range") }
+
+var previous = mapping.magnetizedPosition(one - 0.065)
+for i in 1...130 {
+    let p = one - 0.065 + Double(i) * 0.001
+    let current = mapping.magnetizedPosition(p)
+    if current + 0.0000001 < previous { fail("magnetic curve monotonic") }
+    previous = current
+}
+if abs(mapping.magnetizedPosition(one - 0.0001) - mapping.magnetizedPosition(one + 0.0001)) > 0.00001 {
+    fail("magnetic center continuity")
+}
+if abs(mapping.magnetizedPosition(one + 0.0649) - (one + 0.0649)) > 0.0001 {
+    fail("magnetic edge continuity")
+}
+
 let a = mapping.rawValue(at: 0.61)
 let b = mapping.rawValue(at: 0.611)
 if approx(a, b, 0.000001) { fail("continuous curve") }
