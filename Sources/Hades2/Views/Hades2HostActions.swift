@@ -6,11 +6,6 @@ struct Hades2SidebarActions: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Button { model.shortcutSettingsPresented = true } label: { Label("快捷键设置", systemImage: "keyboard") }
-            Button {
-                model.saveManagerPresented = true
-                model.refreshBackups()
-            } label: { Label("存档管理", systemImage: "externaldrive") }
-            .disabled(!model.backendAvailable || model.exiting)
             Button { model.openLog() } label: { Label("查看运行日志", systemImage: "doc.text") }
         }
     }

@@ -75,6 +75,7 @@ final class TrainerBackendSession {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         client.send(
@@ -84,6 +85,7 @@ final class TrainerBackendSession {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout,
+            reply: reply,
             completion: completion
         )
     }
@@ -174,11 +176,12 @@ final class TrainerBackendSession {
                     $0.protocolCompatible = true
                     $0.busy = false
                 }
+                let coreOwned = reply.command.hasPrefix("core.")
                 if reply.success {
-                    if let result = reply.result { configuration.applyPayload(result) }
+                    if !coreOwned, let result = reply.result { configuration.applyPayload(result) }
                     if reply.announceSuccess { self.updateStatus { $0.notice = "\(reply.operation)完成" } }
                 } else {
-                    if let state = reply.state { configuration.applyPayload(state) }
+                    if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
                     let message = reply.errorMessage ?? "操作失败，请查看日志。"
                     self.updateStatus { $0.error = message }
                     configuration.log("\(reply.operation)失败 [\(reply.errorCode ?? "unknown")]：\(message)")

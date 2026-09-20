@@ -65,15 +65,18 @@ private struct WindowCloseBridge: NSViewRepresentable {
 
 @main struct TrainerApplication: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    private let backendSession: TrainerBackendSession
     @StateObject private var model: ActiveGameModule.Model
 
     init() {
-        _model = StateObject(wrappedValue: ActiveGameModule.makeModel())
+        let backendSession = TrainerBackendSession()
+        self.backendSession = backendSession
+        _model = StateObject(wrappedValue: ActiveGameModule.makeModel(session: backendSession))
     }
 
     var body: some Scene {
         Window("Mac Gaming Trainer", id: "main") {
-            TrainerHostView<ActiveGameModule>(model: model)
+            TrainerHostView<ActiveGameModule>(model: model, session: backendSession)
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
                 .preferredColorScheme(.dark)

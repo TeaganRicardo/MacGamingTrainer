@@ -43,5 +43,6 @@ struct TrainerSheetScaffold<HeaderActions: View, Content: View, Footer: View>: V
         }
         .padding(theme.sheetPadding)
         .frame(width: width)
+        .background(theme.background.ignoresSafeArea())
     }
 }

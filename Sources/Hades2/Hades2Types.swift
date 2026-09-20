@@ -81,18 +81,6 @@ struct ElementCount: Identifiable, Equatable {
     let locked: Bool
 }
 
-struct SaveBackup: Identifiable {
-    let id: String
-    let name: String
-    let createdAt: String
-    let fileCount: Int
-    let runCount: Int?
-    let hotBackup: Bool
-    let path: String
-    let valid: Bool
-    let error: String
-}
-
 struct TrainerProfile: Identifiable {
     var id: String { name }
     let name: String
