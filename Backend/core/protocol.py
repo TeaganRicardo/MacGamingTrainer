@@ -167,6 +167,9 @@ class JsonlRequestRouter:
             state = getattr(self.adapter, 'state', None)
             code = getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
             reply = self.error_reply(request_id, code, str(error), state)
+            recovery_path = getattr(error, 'recovery_path', None)
+            if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
+                reply['error']['recoveryPath'] = recovery_path
         self.cache[request_id] = (fingerprint, reply)
         while len(self.cache) > 256:
             self.cache.popitem(last=False)
