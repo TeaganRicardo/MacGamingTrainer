@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_restore import SaveBusyError, SaveRollbackError
 import core.save_service as save_service_module
+import core.save_restore as save_restore_module
 from core.save_service import CoreSaveService, SaveManagementUnsupportedError, SaveStagedUnavailableError
 from core.save_snapshots import SaveSnapshotError
 
@@ -50,6 +51,50 @@ unsafe_recovery = recovery_root / '.rollback-unsafe'
 unsafe_recovery.symlink_to(external_recovery, target_is_directory=True)
 recovery_state = CoreSaveService('example', spec, data, is_running).list_state()
 assert recovery_state['recoveryPaths'] == [str(recovery_a.resolve()), str(recovery_b.resolve())]
+
+# Reproduce the actual forced-death path: one target file is replaced, the next
+# write fails, then rollback itself is interrupted. The next service instance
+# must surface the preserved pre-restore bytes instead of leaving them hidden.
+interrupted_saves = base / 'interrupted-rollback-saves'; interrupted_saves.mkdir()
+interrupted_spec = SaveManagementSpec(
+    roots=(SaveRootSpec('main', str(interrupted_saves), ('*.sav',)),), provider=None,
+    hot_backup=False, restore_policy='stoppedOnly', staged_restore=True,
+)
+interrupted_service = CoreSaveService('interrupted-rollback', interrupted_spec, data, lambda: False)
+(interrupted_saves / 'Profile1.sav').write_bytes(b'target-one')
+(interrupted_saves / 'Profile2.sav').write_bytes(b'target-two')
+interrupted_target = interrupted_service.backup()
+(interrupted_saves / 'Profile1.sav').write_bytes(b'current-one')
+(interrupted_saves / 'Profile2.sav').write_bytes(b'current-two')
+real_replace = save_restore_module.os.replace
+save_replace_count = 0
+def interrupt_rollback_replace(source, destination):
+    global save_replace_count
+    destination = Path(destination)
+    if interrupted_saves in destination.parents:
+        save_replace_count += 1
+        if save_replace_count == 2:
+            raise OSError('simulated target install failure')
+        if save_replace_count == 3:
+            raise KeyboardInterrupt()
+    return real_replace(source, destination)
+save_restore_module.os.replace = interrupt_rollback_replace
+try:
+    try:
+        interrupted_service.restore(interrupted_target['id'], preserve_current=False)
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError('rollback interruption unexpectedly succeeded')
+finally:
+    save_restore_module.os.replace = real_replace
+interrupted_state = CoreSaveService('interrupted-rollback', interrupted_spec, data, lambda: False).list_state()
+assert len(interrupted_state['recoveryPaths']) == 1
+interrupted_recovery = Path(interrupted_state['recoveryPaths'][0])
+assert (interrupted_recovery / 'files/main/Profile1.sav').read_bytes() == b'current-one'
+assert (interrupted_recovery / 'files/main/Profile2.sav').read_bytes() == b'current-two'
+assert (interrupted_saves / 'Profile1.sav').read_bytes() == b'target-one'
+assert (interrupted_saves / 'Profile2.sav').read_bytes() == b'current-two'
 
 # Cold target snapshot, then running hot backup.
 (saves / 'Profile1.sav').write_bytes(b'target')
