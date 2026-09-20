@@ -93,7 +93,7 @@ struct Main {
         if !applied.isEmpty { fail("Core payload leaked into game applyPayload") }
 
         var gameDone = false
-        session.send("status", operation: "status") { ok in gameDone = ok }
+        session.send("status", operation: "status", completion: { ok in gameDone = ok })
         if !waitUntil(1.0, { gameDone && applied.count == 1 }) { fail("game payload was not applied") }
         if applied[0]["connected"] as? Bool != true { fail("wrong game payload") }
 
@@ -113,6 +113,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reply-round20-") as td:
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
     subprocess.run([
         SWIFTC,
+        "-parse-as-library",
         str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
         str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT / "Sources/Core/Runtime/TrainerBackendSession.swift"),
