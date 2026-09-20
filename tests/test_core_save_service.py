@@ -36,6 +36,21 @@ except SaveManagementUnsupportedError as error:
 else:
     raise AssertionError('unsupported save management was accepted')
 
+# Preserved rollback directories are the last recovery evidence if the backend
+# dies while rollback itself is in progress. They must remain discoverable on
+# the next service instance, while symlinked lookalikes stay excluded.
+recovery_root = service.store.ensure_storage_root() / 'transactions'
+recovery_root.mkdir(parents=True, exist_ok=True)
+recovery_a = recovery_root / '.rollback-visible-a'; recovery_a.mkdir()
+(recovery_a / 'files').mkdir()
+recovery_b = recovery_root / '.rollback-visible-b'; recovery_b.mkdir()
+(recovery_b / 'files').mkdir()
+external_recovery = base / 'external-recovery'; external_recovery.mkdir()
+unsafe_recovery = recovery_root / '.rollback-unsafe'
+unsafe_recovery.symlink_to(external_recovery, target_is_directory=True)
+recovery_state = CoreSaveService('example', spec, data, is_running).list_state()
+assert recovery_state['recoveryPaths'] == [str(recovery_a.resolve()), str(recovery_b.resolve())]
+
 # Cold target snapshot, then running hot backup.
 (saves / 'Profile1.sav').write_bytes(b'target')
 target = service.backup(display_name='Target')
