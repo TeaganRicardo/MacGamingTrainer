@@ -56,45 +56,50 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
-let args = CommandLine.arguments
-let process = BackendProcess(
-    executableURL: URL(fileURLWithPath: args[1]),
-    argumentsPrefix: ["-u"],
-    forceKillDelay: 0.10
-)
-let session = TrainerBackendSession(client: BackendClient(process: process))
-let descriptor = GameModuleDescriptor(
-    backendGameID: "test",
-    expectedHostProtocolVersion: 5,
-    expectedModuleProtocolVersion: 5
-)
-try session.start(
-    descriptor: descriptor,
-    backendScriptURL: URL(fileURLWithPath: args[2]),
-    applyPayload: { _ in },
-    resetGameState: {},
-    log: { _ in },
-    onStatusChange: { _ in }
-)
-let model = TrainerSaveManagerModel(session: session)
-model.refresh()
-guard waitUntil(1.0, { model.snapshots.first?.name == "old" && !model.busy }) else {
-    fail("initial snapshot did not load")
-}
+@main
+struct Runner {
+    static func main() throws {
+        let args = CommandLine.arguments
+        let process = BackendProcess(
+            executableURL: URL(fileURLWithPath: args[1]),
+            argumentsPrefix: ["-u"],
+            forceKillDelay: 0.10
+        )
+        let session = TrainerBackendSession(client: BackendClient(process: process))
+        let descriptor = GameModuleDescriptor(
+            backendGameID: "test",
+            expectedHostProtocolVersion: 5,
+            expectedModuleProtocolVersion: 5
+        )
+        try session.start(
+            descriptor: descriptor,
+            backendScriptURL: URL(fileURLWithPath: args[2]),
+            applyPayload: { _ in },
+            resetGameState: {},
+            log: { _ in },
+            onStatusChange: { _ in }
+        )
+        let model = TrainerSaveManagerModel(session: session)
+        model.refresh()
+        guard waitUntil(1.0, { model.snapshots.first?.name == "old" && !model.busy }) else {
+            fail("initial snapshot did not load")
+        }
 
-var callbackName: String?
-model.rename(id: "snap", name: "new") { _ in
-    callbackName = model.snapshots.first?.name
+        var callbackName: String?
+        model.rename(id: "snap", name: "new") { _ in
+            callbackName = model.snapshots.first?.name
+        }
+        guard waitUntil(1.0, { callbackName != nil && !model.busy }) else {
+            fail("rename completion did not run")
+        }
+        if callbackName != "new" {
+            fail("rename completion ran before updated snapshot was visible: \(callbackName ?? "nil")")
+        }
+        session.stop()
+        _ = waitUntil(1.0) { !session.isStarted }
+        print("core_save_rename_completion_round24_ok")
+    }
 }
-guard waitUntil(1.0, { callbackName != nil && !model.busy }) else {
-    fail("rename completion did not run")
-}
-if callbackName != "new" {
-    fail("rename completion ran before updated snapshot was visible: \(callbackName ?? "nil")")
-}
-session.stop()
-_ = waitUntil(1.0) { !session.isStarted }
-print("core_save_rename_completion_round24_ok")
 '''
 
 with tempfile.TemporaryDirectory(prefix="mgt-save-rename-completion-") as td:
