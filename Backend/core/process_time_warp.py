@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from pathlib import Path
+import importlib
 import math
 import subprocess
 import sys
@@ -127,14 +128,14 @@ class LLDBProcessTimeWarpDriver:
         if self._lldb_module is not None:
             return self._lldb_module
         try:
-            import lldb
+            module = importlib.import_module("lldb")
         except ImportError:
             path = subprocess.check_output(["xcrun", "lldb", "-P"], text=True).strip()
             if path and path not in sys.path:
                 sys.path.insert(0, path)
-            import lldb
-        self._lldb_module = lldb
-        return lldb
+            module = importlib.import_module("lldb")
+        self._lldb_module = module
+        return module
 
     @contextmanager
     def session(self):
