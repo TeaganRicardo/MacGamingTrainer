@@ -38,10 +38,8 @@ assert '.controlSize(.regular)' in toggle
 assert '.tint(tint ?? theme.accent)' in toggle
 
 # Save manager is not disabled/re-enabled by every transient game request.
-save_start = host.index('Label("存档管理"')
-save_line = host[save_start:host.index('}', save_start) + 1]
-assert 'model.busy' not in save_line
-assert '!model.backendAvailable' in save_line
+assert '.disabled(!model.backendAvailable)' in host
+assert '.disabled(!model.backendAvailable || model.busy)' not in host
 
 # Never poll live Lua automatically: every status call crosses the debugger
 # boundary and can stop the game for hundreds of milliseconds.
