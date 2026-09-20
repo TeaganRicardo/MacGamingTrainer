@@ -23,7 +23,7 @@ from dataclasses import fields
 sys.path.insert(0, str(root/'Backend'))
 from core.module_manifest import GameModuleManifest
 assert {field.name for field in fields(GameModuleManifest)} == {
-    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path'
+    'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path','save_management'
 }
 for token in ('FrontendBuildSpec','AppBuildSpec','BuildRequirements','architectures','bundle_identifier','entitlements'):
     assert token in tool_support, token
@@ -44,5 +44,11 @@ normalized = json.loads(subprocess.check_output(
 assert normalized['frontend']['architectures'] == ['arm64']
 assert normalized['app']['bundleIdentifier'] == 'com.gao.macgamingtrainer'
 assert normalized['backend']['adapter'] == 'games.hades2.adapter:Hades2Adapter'
+assert normalized['saveManagement'] == {
+    'supported': True,
+    'hotBackup': True,
+    'restorePolicy': 'hotPreferred',
+    'stagedRestore': True,
+}
 assert 'ui' not in normalized
 print('build_contract_round14_ok')
