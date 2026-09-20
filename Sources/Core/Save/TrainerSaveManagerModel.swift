@@ -27,14 +27,18 @@ final class TrainerSaveManagerModel: ObservableObject {
         request("core.save.backup", params: params, operation: "创建存档备份", successNotice: "已创建存档备份")
     }
 
-    func rename(id: String, name: String) {
+    func rename(id: String, name: String, completion: ((Bool) -> Void)? = nil) {
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !id.isEmpty, !clean.isEmpty else { return }
+        guard !id.isEmpty, !clean.isEmpty else {
+            completion?(false)
+            return
+        }
         request(
             "core.save.rename",
             params: ["snapshotId": id, "name": clean],
             operation: "重命名存档",
-            successNotice: "已重命名存档"
+            successNotice: "已重命名存档",
+            onComplete: completion
         )
     }
 
