@@ -74,8 +74,6 @@ assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.pr
     "if not read_only and command=='status' and self.preference_dirty and not replay:"
 )
 
-assert 'previousModule.revision ~= 42' in lua
-assert 'version = 1, revision = 42' in lua
 assert 'nextRoomRewardToken = nil' in lua
 assert 'lastConsumedNextRoomRewardToken = nil' in lua
 assert 'M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken' in lua

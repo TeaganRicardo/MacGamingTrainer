@@ -1,49 +1,39 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
 python3 -m compileall -q Backend
 python3 Tools/validate_game_module.py hades2
 
-tests=(
-  tests/test_backend_core_round12.py
-  tests/test_boundary_performance_ledger_v0180.py
-  tests/test_catalog_naming.py
-  tests/test_connect_phase_profile.py
-  tests/test_core_save_service.py
-  tests/test_core_save_swift_model_round20.py
-  tests/test_corrupt_file_quarantine_v0180.py
-  tests/test_exit_semantics.py
-  tests/test_hades2_adapter_round12.py
-  tests/test_hades2_timeout_policy_v0177.py
-  tests/test_hades2_session_hook_ownership.py
-  tests/test_hotkey_feedback_contract.py
-  tests/test_god_mode_hostile_effects.py
-  tests/test_localization_cache_recovery_v0180.py
-  tests/test_reference_fixture_host_contract.py
-  tests/test_module_contract_round13.py
-  tests/test_packaged_module_round14.py
-  tests/test_cross_game_isolation.py
-  tests/test_native_sell_traits_contract.py
-  tests/test_native_special_choice_contract.py
-  tests/test_passive_ready_transition.py
-  tests/test_persistence_integrity_v0180.py
-  tests/test_post_v01_feature_contracts.py
-  tests/test_preference_commit_efficiency_dev8.py
-  tests/test_preferences_schema_v0180.py
-  tests/test_profile_envelope_contract_v0180.py
-  tests/test_profile_shortcut_schema_v0180.py
-  tests/test_protocol_fixtures_v0180.py
-  tests/test_reward_naming_audit.py
-  tests/test_runtime_boundary_efficiency_dev8.py
-  tests/test_shortcut_chord_semantics.py
-  tests/test_test_suite_discovery.py
-  tests/test_ui_component_boundary_v0175.py
-  tests/test_schema_versioning_v0180.py
+# These entrypoints compile or import AppKit/Darwin-only Swift. Every other
+# test_*.py is Linux-portable by default and therefore enters this gate
+# automatically when added to the repository.
+macos_only_tests=(
+  test_core_save_batch_delete_round20.py
+  test_core_save_rename_completion_round24.py
+  test_hades2_run_log_watcher.py
+  test_trainer_log_sink_shared_append.py
 )
 
-for test_file in "${tests[@]}"; do
+is_macos_only() {
+  local name="$1"
+  local candidate
+  for candidate in "${macos_only_tests[@]}"; do
+    if [[ "$candidate" == "$name" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+for test_file in "$ROOT"/tests/test_*.py; do
+  name="$(basename "$test_file")"
+  if is_macos_only "$name"; then
+    echo "==> SKIP macOS-only $test_file"
+    continue
+  fi
   echo "==> $test_file"
   python3 "$test_file"
 done
-
-echo "linux_checks_ok"

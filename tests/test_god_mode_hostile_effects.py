@@ -3,8 +3,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 
-# Runtime changes in this slice must advance the resident revision.
-assert 'version = 1, revision = 42' in lua
 assert 'godModeHitBaseline' in lua
 assert 'godModeHitBaselineKnown' in lua
 

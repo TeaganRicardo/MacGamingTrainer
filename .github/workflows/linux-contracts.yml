@@ -15,8 +15,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Enforce Hades II runtime revision bump
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 Tools/check_runtime_revision_bump.py "$BASE_SHA" "$HEAD_SHA"
       - name: Run Linux contract checks
         run: bash Tools/run_linux_checks.sh
