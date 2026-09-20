@@ -17,6 +17,8 @@ class GameAdapterContext:
     module_protocol_version: int
     module_dir: Path
     public_metadata: Mapping[str, Any]
+    process_name: str = ''
+    save_management: Any = None
 
 
 class GameAdapter(ABC):
