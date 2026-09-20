@@ -14,8 +14,8 @@ struct TrainerSliderMapping {
         values: [Double],
         step: Double,
         detents: [Double] = [],
-        magnetDistance: Double = 0.075,
-        settleDistance: Double = 0.035
+        magnetDistance: Double = 0.10,
+        settleDistance: Double = 0.04
     ) -> TrainerSliderMapping {
         precondition(values.count >= 2)
         precondition(values.allSatisfy { $0.isFinite && $0 > 0 })
@@ -62,7 +62,7 @@ struct TrainerSliderMapping {
         let distance = abs(delta)
         guard distance < magnetDistance else { return position }
         let t = distance / magnetDistance
-        let release = t * t * (3 - 2 * t)
+        let release = t * t * (2 - t)
         return detent + delta * release
     }
 
