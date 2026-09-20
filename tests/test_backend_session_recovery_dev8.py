@@ -101,11 +101,11 @@ func waitForRecovery(after stateIndex: Int, notice: String) {
 do {
     let startIndex = states.count
     var crashCompletion: Bool? = nil
-    session.send("crash", operation: "crash", timeout: 1.0) { crashCompletion = $0 }
+    session.send("crash", operation: "crash", timeout: 1.0, completion: { crashCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "后端已自动恢复")
     if crashCompletion != false { fail("crash request completion must fail") }
     var ping: Bool? = nil
-    session.send("ping-after-crash", operation: "ping", timeout: 1.0) { ping = $0 }
+    session.send("ping-after-crash", operation: "ping", timeout: 1.0, completion: { ping = $0 })
     if !waitUntil(1.0, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
 }
 
@@ -113,11 +113,11 @@ do {
 do {
     let startIndex = states.count
     var hangCompletion: Bool? = nil
-    session.send("hang", operation: "hang", timeout: 0.15) { hangCompletion = $0 }
+    session.send("hang", operation: "hang", timeout: 0.15, completion: { hangCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "后端已自动恢复")
     if hangCompletion != false { fail("timeout request completion must fail") }
     var ping: Bool? = nil
-    session.send("ping-after-timeout", operation: "ping", timeout: 1.0) { ping = $0 }
+    session.send("ping-after-timeout", operation: "ping", timeout: 1.0, completion: { ping = $0 })
     if !waitUntil(1.0, { ping != nil }) || ping != true { fail("timeout recovery backend cannot accept request") }
 }
 
@@ -127,7 +127,7 @@ do {
     session.restart()
     waitForRecovery(after: startIndex, notice: "后端已重启")
     var ping: Bool? = nil
-    session.send("ping-after-manual", operation: "ping", timeout: 1.0) { ping = $0 }
+    session.send("ping-after-manual", operation: "ping", timeout: 1.0, completion: { ping = $0 })
     if !waitUntil(1.0, { ping != nil }) || ping != true { fail("manual restart backend cannot accept request") }
 }
 
