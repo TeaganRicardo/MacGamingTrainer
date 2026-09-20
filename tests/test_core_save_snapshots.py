@@ -26,7 +26,7 @@ def rows():
 
 
 store = SaveSnapshotStore('example', base / 'data')
-created = store.create_snapshot(rows(), hot=False, display_name='Before boss')
+created = store.create_snapshot(rows, hot=False, display_name='Before boss')
 assert created['valid'] is True
 assert created['name'] == 'Before boss'
 assert created['fileCount'] == 2
@@ -84,7 +84,7 @@ for invalid in ('../snap-x', '/tmp/snap-x', 'snapshot-x', 'snap-../../x'):
     else:
         raise AssertionError('unsafe snapshot id accepted: ' + invalid)
 
-created = store.create_snapshot(rows(), hot=False)
+created = store.create_snapshot(rows, hot=False)
 snapshot = Path(created['path'])
 target = snapshot / 'files/main/Profile1.sav'
 target.unlink()
@@ -92,7 +92,7 @@ target.symlink_to(source / 'Profile1.sav')
 assert store.list_snapshots()[0]['valid'] is False
 store.delete_snapshot(created['id'])
 
-created = store.create_snapshot(rows(), hot=False, display_name='Internal name')
+created = store.create_snapshot(rows, hot=False, display_name='Internal name')
 snapshot = Path(created['path'])
 manifest_path = snapshot / 'manifest.json'
 external_manifest = base / 'external-manifest.json'
@@ -106,9 +106,37 @@ assert listed['valid'] is False
 assert listed['name'] == created['id'], listed
 store.delete_snapshot(created['id'])
 
-(source / 'Profile1.sav').write_bytes(b'first-version')
-resolve_calls = 0
+(source / 'Profile2.sav').write_bytes(b'second')
+cold_calls = 0
+def cold_racing_resolver():
+    global cold_calls
+    cold_calls += 1
+    if cold_calls == 1:
+        return rows()
+    return rows() + [ResolvedSaveFile('main', 'Profile2.sav', source / 'Profile2.sav')]
+try:
+    store.create_snapshot(cold_racing_resolver, hot=False)
+except SaveSnapshotError:
+    pass
+else:
+    raise AssertionError('cold snapshot committed while save set changed')
+assert not store.list_snapshots()
 
+symlink_base = base / 'symlink-data'
+external_snapshots = base / 'external-snapshots'; external_snapshots.mkdir()
+link_parent = symlink_base / 'example/saves'; link_parent.mkdir(parents=True)
+(link_parent / 'snapshots').symlink_to(external_snapshots, target_is_directory=True)
+symlink_store = SaveSnapshotStore('example', symlink_base)
+try:
+    symlink_store.create_snapshot(rows, hot=False)
+except SaveSnapshotError:
+    pass
+else:
+    raise AssertionError('snapshot store followed a symlinked snapshots directory')
+
+(source / 'Profile1.sav').write_bytes(b'first-version')
+(source / 'Profile2.sav').unlink()
+resolve_calls = 0
 
 def racing_resolver():
     global resolve_calls
@@ -117,8 +145,7 @@ def racing_resolver():
         (source / 'Profile1.sav').write_bytes(b'stable-second-version')
     return rows()
 
-
-hot = store.create_snapshot(racing_resolver(), hot=True, resolver=racing_resolver)
+hot = store.create_snapshot(racing_resolver, hot=True)
 assert hot['hot'] is True
 assert (Path(hot['path']) / 'files/main/Profile1.sav').read_bytes() == b'stable-second-version'
 assert resolve_calls >= 4
