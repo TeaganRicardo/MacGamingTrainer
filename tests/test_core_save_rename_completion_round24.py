@@ -97,6 +97,24 @@ struct Runner {
         }
         session.stop()
         _ = waitUntil(1.0) { !session.isStarted }
+
+        // Editing may begin while the backend is alive and commit after the
+        // worker exits. The completion must still fire with failure so the
+        // View can discard its optimistic pendingRenameNames entry.
+        var stoppedCompletion: Bool?
+        model.rename(id: "snap", name: "offline") { success in
+            stoppedCompletion = success
+        }
+        guard waitUntil(0.2, { stoppedCompletion != nil }) else {
+            fail("rename completion was lost when backend was already stopped")
+        }
+        if stoppedCompletion != false {
+            fail("stopped-backend rename did not fail its completion")
+        }
+        if model.error != "后端未运行。" {
+            fail("stopped-backend rename did not surface the expected model error")
+        }
+
         print("core_save_rename_completion_round24_ok")
     }
 }
