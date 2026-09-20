@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Shared append-only trainer log writer. Keeping one FileHandle on a serial
@@ -53,8 +54,15 @@ final class TrainerLogSink {
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }
-        let newHandle = try FileHandle(forWritingTo: url)
-        _ = try newHandle.seekToEnd()
+        let fd = open(url.path, O_WRONLY | O_APPEND)
+        guard fd >= 0 else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errno),
+                userInfo: [NSLocalizedDescriptionKey: "无法以追加模式打开日志。"]
+            )
+        }
+        let newHandle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         handle = newHandle
         return newHandle
     }
