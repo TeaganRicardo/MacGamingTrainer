@@ -66,6 +66,7 @@ stopped_target = stopped_only.backup()
 running = True
 staged = stopped_only.restore(stopped_target['id'], preserve_current=False)
 assert staged['staged'] is True
+assert '+' not in staged['stagedAt'] and not staged['stagedAt'].endswith('Z')
 assert (saves / 'Profile1.sav').read_bytes() == b'stopped-current'
 reloaded = CoreSaveService('stopped', no_hot_spec, data, is_running)
 assert reloaded.pending_restore()['snapshotId'] == stopped_target['id']
@@ -78,10 +79,16 @@ assert reloaded.pending_restore() is None
 # hotPreferred busy provider falls back to staged restore without mutation.
 class Provider:
     busy = False
+    describe_calls = 0
     def resolve(self, roots, declared):
         return [(row.root_id, row.relative_path) for row in declared]
     def restore_busy(self, files):
         return self.busy
+    def describe_snapshot(self, files, created_at):
+        self.describe_calls += 1
+        assert '+' not in created_at and not created_at.endswith('Z')
+        assert any(row.relative_path == 'Profile1.sav' for row in files)
+        return {'defaultName': 'Run 42 · Crossroads', 'nameDetails': ['Run 42', 'Crossroads']}
 provider = Provider()
 provider_spec = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('*.sav',)),),
@@ -92,6 +99,13 @@ running = False
 provider_service = CoreSaveService('provider', provider_spec, data, is_running, provider_loader=lambda target: provider)
 (saves / 'Profile1.sav').write_bytes(b'provider-target')
 provider_target = provider_service.backup()
+assert provider_target['name'] == 'Run 42 · Crossroads'
+assert provider_target['nameDetails'] == ['Run 42', 'Crossroads']
+assert provider.describe_calls == 1
+explicit_provider_target = provider_service.backup(display_name='My manual name')
+assert explicit_provider_target['name'] == 'My manual name'
+assert explicit_provider_target['nameDetails'] == ['Run 42', 'Crossroads']
+assert provider.describe_calls == 2
 (saves / 'Profile1.sav').write_bytes(b'provider-current')
 provider.busy = True
 running = True
@@ -103,7 +117,7 @@ running = False
 provider_service.apply_staged()
 assert (saves / 'Profile1.sav').read_bytes() == b'provider-target'
 # preserveCurrent on staged apply creates a normal inventory snapshot.
-assert len(provider_service.list_state()['snapshots']) == 2
+assert len(provider_service.list_state()['snapshots']) == 3
 
 # If staging is disabled, a running stoppedOnly restore reports that exact capability failure.
 no_stage_spec = SaveManagementSpec(
