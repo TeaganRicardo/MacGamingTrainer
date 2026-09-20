@@ -32,9 +32,9 @@ Exact product source was materialized through GitHub Actions, with an exact comm
 
 Every remote branch visible to the repository was classified.
 
-#### Active audit work
+#### Historical round-2 audit branch
 
-- `audit/full-review-20260921` — current repair/audit branch only.
+- `audit/full-review-20260921` — PR #41 repair/audit branch; squash-merged as `c2c4f39ffe5c943c76f2190c458d4ece384f6513`.
 
 #### Fully contained by main / strictly behind
 
@@ -362,15 +362,17 @@ One new Important product defect was found and repaired: persistent discovery of
 
 No other Critical/Important product defect or real unmerged historical branch implementation was found.
 
-The repair is **ready to merge**:
-- temporary audit workflow is removed;
-- final Linux/module/macOS gates pass on `d4b1bbb...`;
-- branch was synchronized with current main through a real two-parent merge and had `behind=0` before final documentation closeout;
-- PROJECT_STATUS on the repair branch reflects the round-2 gate;
-- roadmap issue #8 has been frozen on the round-2 audit repair instead of incorrectly allowing Save Editor work.
+Round-2 audit repair is **complete and merged**.
 
-Remaining closeout:
-1. merge PR #41;
-2. verify merged-main push CI;
-3. update PROJECT_STATUS and roadmap issue #8 to the merged SHA;
-4. only then reopen the Hades II Save Editor design gate.
+Merge:
+- PR #41 squash-merged as `c2c4f39ffe5c943c76f2190c458d4ece384f6513`.
+- PR final tree SHA and merged-main tree SHA are identical: `c96a8f9e72bb987307f70a7791562545335ad561`.
+
+Merged-main push verification:
+- Linux contracts `35529062370`: PASS;
+- module matrix `35529062382`: PASS;
+- Build 2 macOS `35529062368`: PASS; full test suite, Hades II build, package verification and RC artifact all succeeded.
+
+No Critical or Important finding remains open from this round.
+
+PROJECT_STATUS and roadmap issue #8 are advanced after this verification. The audit freeze can end; the next product gate returns to Hades II Save Editor design.
