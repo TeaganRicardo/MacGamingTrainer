@@ -15,8 +15,8 @@ class ProcessTimeWarpError(AdapterError):
 
 class ProcessTimeWarpController:
     ABI_VERSION = 1
-    MIN_SPEED = 0.1
-    MAX_SPEED = 20.0
+    MIN_SPEED = 0.0
+    MAX_SPEED = 10.0
 
     def __init__(self, driver, helper_path, image_names):
         self.driver = driver
