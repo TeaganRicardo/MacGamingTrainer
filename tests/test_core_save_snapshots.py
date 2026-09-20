@@ -33,7 +33,7 @@ assert created['fileCount'] == 2
 assert created['hot'] is False
 assert created['nameDetails'] == ['Run 12', 'Crossroads']
 snapshot = Path(created['path'])
-assert snapshot.parent == base / 'data' / 'example' / 'saves' / 'snapshots'
+assert snapshot.parent.resolve() == (base / 'data' / 'example' / 'saves' / 'snapshots').resolve()
 assert (snapshot / 'files/main/Profile1.sav').read_bytes() == b'profile-one'
 assert (snapshot / 'files/main/activeProfile').read_bytes() == b'Profile1'
 assert not (snapshot / 'files/main/settings.json').exists()
