@@ -25,7 +25,7 @@ struct TrainerSaveManagerView: View {
                 title: "创建备份",
                 systemImage: "plus",
                 enabled: !model.busy,
-                action: model.backup
+                action: { model.backup() }
             )
         } content: {
             if let pending = model.pendingRestore {
