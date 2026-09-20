@@ -54,6 +54,26 @@ def _validate_display_name(value):
     return value
 
 
+def _validate_name_details(value):
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or len(value) > 4:
+        raise ValueError('Snapshot nameDetails must contain at most four strings.')
+    details = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or len(item.strip()) > 64:
+            raise ValueError('Snapshot nameDetails entries must contain 1-64 visible characters.')
+        clean = item.strip()
+        if any(ord(ch) < 32 for ch in clean):
+            raise ValueError('Snapshot nameDetails contain unsafe characters.')
+        details.append(clean)
+    return details
+
+
+def _local_timestamp():
+    return datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class SaveSnapshotStore:
     def __init__(self, game_id, data_root):
         self.game_id = game_id
@@ -100,14 +120,18 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
-    def create_snapshot(self, resolver, hot=False, display_name=None):
+    def create_snapshot(self, resolver, hot=False, display_name=None, name_details=None, created_at=None):
         if not callable(resolver):
             raise ValueError('Snapshot creation requires a resolver callback.')
         if type(hot) is not bool:
             raise ValueError('Snapshot hot flag must be boolean.')
         self._ensure_parent()
         snapshot_id = self._new_id()
-        name = _validate_display_name(display_name) if display_name is not None else datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H-%M-%S')
+        created_at = created_at or _local_timestamp()
+        if not isinstance(created_at, str) or not created_at or '+' in created_at or created_at.endswith('Z'):
+            raise ValueError('Snapshot createdAt must be a local timestamp without timezone.')
+        name = _validate_display_name(display_name) if display_name is not None else created_at.replace('T', ' ').replace(':', '-')
+        details = _validate_name_details(name_details)
         attempts = 4 if hot else 1
 
         for attempt in range(attempts):
@@ -141,13 +165,13 @@ class SaveSnapshotStore:
                     if _sha256(row.source_path) != copied_hashes[(row.root_id, row.relative_path)]:
                         raise _SaveSnapshotRace('Save changed while verifying snapshot.')
 
-                now = datetime.datetime.now().astimezone().isoformat()
                 manifest = {
                     'schemaVersion': _SCHEMA_VERSION,
                     'snapshotId': snapshot_id,
                     'gameId': self.game_id,
-                    'createdAt': now,
+                    'createdAt': created_at,
                     'displayName': name,
+                    'nameDetails': details,
                     'hot': hot,
                     'files': manifest_files,
                 }
@@ -190,6 +214,7 @@ class SaveSnapshotStore:
         if not isinstance(manifest.get('createdAt'), str) or not manifest['createdAt']:
             raise SaveSnapshotError('Snapshot createdAt is invalid.')
         _validate_display_name(manifest.get('displayName'))
+        manifest['nameDetails'] = _validate_name_details(manifest.get('nameDetails', []))
         if type(manifest.get('hot')) is not bool:
             raise SaveSnapshotError('Snapshot hot flag is invalid.')
         files = manifest.get('files')
@@ -249,6 +274,10 @@ class SaveSnapshotStore:
             'name': manifest.get('displayName', root.name) if isinstance(manifest, dict) else root.name,
             'createdAt': manifest.get('createdAt', '') if isinstance(manifest, dict) else '',
             'fileCount': len(manifest.get('files', [])) if isinstance(manifest, dict) and isinstance(manifest.get('files'), list) else 0,
+            'nameDetails': (
+                _validate_name_details(manifest.get('nameDetails', []))
+                if valid and isinstance(manifest, dict) else []
+            ),
             'hot': bool(manifest.get('hot', False)) if isinstance(manifest, dict) else False,
             'path': str(root.resolve()),
             'valid': valid,
