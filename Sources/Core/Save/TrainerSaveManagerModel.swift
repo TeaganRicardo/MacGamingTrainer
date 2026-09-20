@@ -82,7 +82,6 @@ final class TrainerSaveManagerModel: ObservableObject {
     }
 
     func applyStagedIfPossible() {
-        guard pendingRestore != nil, !busy else { return }
         request(
             "core.save.apply_staged",
             operation: "应用等待恢复",
