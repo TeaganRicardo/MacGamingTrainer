@@ -254,11 +254,14 @@ class Hades2Adapter(GameAdapter):
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True
+        was_dirty=self.preference_dirty
         self._overlay_preferences()
         if feature=='gameSpeed':
+            self.preference_dirty=True
             if self.transport.alive() and self._runtime_bootstrapped:
                 try:
                     self._apply_game_speed(value)
+                    self.preference_dirty=was_dirty
                     self.state.pop('preferenceApplyError',None)
                 except TransportError as error:
                     logging.warning('Desired gameSpeed stored pending reconnect: %s',error)
