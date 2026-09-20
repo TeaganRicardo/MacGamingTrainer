@@ -78,6 +78,35 @@ assert applied['applied'] is True
 assert (saves / 'Profile1.sav').read_bytes() == b'stopped-target'
 assert reloaded.pending_restore() is None
 
+# A restore that begins while the target is stopped must fail closed if the
+# target launches before real-save mutation. hotPreferred may stage that restore,
+# but it must not silently continue as a cold transaction using stale process state.
+class LaunchDuringRestoreProbe:
+    def __init__(self):
+        self.armed = False
+        self.calls = 0
+    def __call__(self):
+        if not self.armed:
+            return False
+        self.calls += 1
+        return self.calls >= 2
+
+launch_probe = LaunchDuringRestoreProbe()
+launch_saves = base / 'launch-race-saves'; launch_saves.mkdir()
+launch_spec = SaveManagementSpec(
+    roots=(SaveRootSpec('main', str(launch_saves), ('*.sav',)),), provider=None,
+    hot_backup=True, restore_policy='hotPreferred', staged_restore=True,
+)
+launch_service = CoreSaveService('launch-race', launch_spec, data, launch_probe)
+(launch_saves / 'Profile1.sav').write_bytes(b'launch-target')
+launch_target = launch_service.backup()
+(launch_saves / 'Profile1.sav').write_bytes(b'launch-current')
+launch_probe.armed = True
+launch_result = launch_service.restore(launch_target['id'], preserve_current=False)
+assert launch_result['staged'] is True
+assert (launch_saves / 'Profile1.sav').read_bytes() == b'launch-current'
+assert launch_service.pending_restore()['snapshotId'] == launch_target['id']
+
 # Backend SIGTERM becomes KeyboardInterrupt. If staged apply is interrupted after
 # claiming its marker, the transaction layer rolls back real saves and the
 # staged instruction must be restored instead of disappearing into a hidden
