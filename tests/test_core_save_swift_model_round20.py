@@ -45,6 +45,11 @@ assert "SaveBackup" not in combined
 assert 'nameDetails' in types_text
 assert 'hot' in types_text
 assert 'valid' in types_text
+assert 'let indeterminate: Bool' in types_text
+assert 'self.indeterminate = row["indeterminate"] as? Bool ?? false' in types_text
+assert 'func applyStagedIfPossible()' in model_text
+apply_block = model_text[model_text.index('    func applyStagedIfPossible()'):model_text.index('    private func deleteNext', model_text.index('    func applyStagedIfPossible()'))]
+assert 'successNotice: nil' in apply_block
 assert 'reply:' in model_text, "Core payload must use request-specific reply callback"
 
 # rollback_failed is the one Core error that carries a user-actionable path.

@@ -30,6 +30,7 @@ struct TrainerPendingRestore: Equatable {
     let snapshotID: String
     let preserveCurrent: Bool
     let stagedAt: String
+    let indeterminate: Bool
 
     init?(row: [String: Any]) {
         guard let snapshotID = row["snapshotId"] as? String,
@@ -37,5 +38,6 @@ struct TrainerPendingRestore: Equatable {
         self.snapshotID = snapshotID
         self.preserveCurrent = preserveCurrent
         self.stagedAt = row["stagedAt"] as? String ?? ""
+        self.indeterminate = row["indeterminate"] as? Bool ?? false
     }
 }

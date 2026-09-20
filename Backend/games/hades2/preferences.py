@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import math
@@ -21,7 +22,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 
 _ELEMENT_IDS = frozenset(('Fire','Water','Earth','Air','Aether'))
 _MAX_AMOUNT = 999999
-DESIRED_STATE_SCHEMA_VERSION = 3
+DESIRED_STATE_SCHEMA_VERSION = 4
 
 
 def _finite_number(value):
@@ -89,6 +90,35 @@ def _desired_schema_version(raw):
     return value
 
 
+def _legacy_next_room_reward_token(reward):
+    digest=hashlib.sha256(reward.encode('utf-8')).hexdigest()[:24]
+    return 'legacy-'+digest
+
+
+def migrate_legacy_next_room_reward(raw):
+    if not isinstance(raw,dict):return raw
+    result=dict(raw)
+    reward=result.get('nextRoomReward')
+    if reward is None or (isinstance(reward,str) and len(reward)<=128):
+        reward=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
+    else:
+        reward=None
+    result['nextRoomReward']=reward
+    result['nextRoomRewardToken']=_legacy_next_room_reward_token(reward) if isinstance(reward,str) and reward else None
+    return result
+
+
+def next_room_reward_consumed(preferences, decoded, preference_dirty):
+    if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
+    reward=preferences.get('nextRoomReward')
+    if reward is None or decoded.get('nextRoomReward') is not None:return False
+    if not preference_dirty:return True
+    token=preferences.get('nextRoomRewardToken')
+    diagnostics=decoded.get('runtimeDiagnostics')
+    consumed=diagnostics.get('lastConsumedNextRoomRewardToken') if isinstance(diagnostics,dict) else None
+    return isinstance(token,str) and bool(token) and consumed==token
+
+
 def migrate_legacy_boon_semantics(raw, schema_version):
     """Canonicalize pre-v3 boon controls to explicit force semantics.
 
@@ -125,7 +155,7 @@ class Hades2PreferenceStore:
         values.update(damageMultiplier=2.0,moneyMultiplier=2.0,resourceMultiplier=2.0,gameSpeed=1.0)
         values.update(
             boonRarity={'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,
         )
         return values
 
@@ -155,6 +185,9 @@ class Hades2PreferenceStore:
         reward=raw.get('nextRoomReward')
         if reward is None or (isinstance(reward,str) and len(reward)<=128):
             result['nextRoomReward']=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
+        token=raw.get('nextRoomRewardToken')
+        if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=128:
+            result['nextRoomRewardToken']=token
         return result
 
     def load(self):
@@ -210,8 +243,10 @@ class Hades2PreferenceStore:
                 schema_version,DESIRED_STATE_SCHEMA_VERSION,
             )
             return self.defaults(),False
-        if schema_version<DESIRED_STATE_SCHEMA_VERSION:
+        if schema_version<3:
             raw=migrate_legacy_boon_semantics(raw,schema_version)
+        if schema_version<4:
+            raw=migrate_legacy_next_room_reward(raw)
         return self.normalize(raw),True
 
     def save(self, preferences):

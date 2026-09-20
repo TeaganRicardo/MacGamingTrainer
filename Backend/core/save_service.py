@@ -8,7 +8,7 @@ import time
 import uuid
 
 from .save_resolution import load_save_provider, resolve_save_files
-from .save_restore import SaveBusyError, SaveRestoreTransaction
+from .save_restore import SaveBusyError, SaveRestoreTransaction, SaveRollbackError
 from .save_snapshots import SaveSnapshotStore
 
 
@@ -18,6 +18,10 @@ class SaveManagementUnsupportedError(RuntimeError):
 
 class SaveStagedUnavailableError(RuntimeError):
     code = 'staged_unavailable'
+
+
+class SaveStagedIndeterminateError(RuntimeError):
+    code = 'staged_indeterminate'
 
 
 class CoreSaveService:
@@ -82,10 +86,15 @@ class CoreSaveService:
             self._resolve,
             busy_probe=self._provider_busy if self.provider is not None else None,
             snapshot_describer=self._snapshot_naming if self.provider is not None else None,
+            target_running_probe=self._running,
         )
 
     def _staged_path(self):
         return self.store.ensure_storage_root() / 'staged-restore.json'
+
+    def _staged_applying_paths(self):
+        root = self.store.ensure_storage_root()
+        return sorted(root.glob('.staged-restore-applying-*.json'))
 
     def _ensure_data_root(self):
         return self.store.ensure_storage_root()
@@ -116,32 +125,52 @@ class CoreSaveService:
         except OSError:
             return None
 
+    def _read_staged_marker(self, path):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('Staged restore marker is unsafe.')
+        payload = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(payload, dict):
+            raise ValueError('Staged restore marker must be an object.')
+        snapshot_id = payload.get('snapshotId')
+        preserve_current = payload.get('preserveCurrent')
+        staged_at = payload.get('stagedAt')
+        if not isinstance(snapshot_id, str) or not snapshot_id:
+            raise ValueError('Staged restore snapshot ID is invalid.')
+        if type(preserve_current) is not bool:
+            raise ValueError('Staged restore preserveCurrent is invalid.')
+        if not isinstance(staged_at, str) or not staged_at or len(staged_at) > 128:
+            raise ValueError('Staged restore timestamp is invalid.')
+        self.store.load_verified_snapshot(snapshot_id)
+        return {
+            'snapshotId': snapshot_id,
+            'preserveCurrent': preserve_current,
+            'stagedAt': staged_at,
+        }
+
     def pending_restore(self):
         self._require_supported()
+        applying = self._staged_applying_paths()
+        if applying:
+            # An applying marker survived a process loss. The save mutation may
+            # have not started, partially completed, rolled back, or committed;
+            # never infer an outcome or replay it automatically.
+            try:
+                pending = self._read_staged_marker(applying[0])
+            except Exception as error:
+                raise SaveStagedIndeterminateError(
+                    'A previous staged restore was interrupted and its state cannot be verified.'
+                ) from error
+            pending['indeterminate'] = True
+            pending['indeterminateCount'] = len(applying)
+            return pending
+
         path = self._staged_path()
         if not path.exists() and not path.is_symlink():
             return None
         try:
-            if path.is_symlink() or not path.is_file():
-                raise ValueError('Staged restore marker is unsafe.')
-            payload = json.loads(path.read_text(encoding='utf-8'))
-            if not isinstance(payload, dict):
-                raise ValueError('Staged restore marker must be an object.')
-            snapshot_id = payload.get('snapshotId')
-            preserve_current = payload.get('preserveCurrent')
-            staged_at = payload.get('stagedAt')
-            if not isinstance(snapshot_id, str) or not snapshot_id:
-                raise ValueError('Staged restore snapshot ID is invalid.')
-            if type(preserve_current) is not bool:
-                raise ValueError('Staged restore preserveCurrent is invalid.')
-            if not isinstance(staged_at, str) or not staged_at or len(staged_at) > 128:
-                raise ValueError('Staged restore timestamp is invalid.')
-            self.store.load_verified_snapshot(snapshot_id)
-            return {
-                'snapshotId': snapshot_id,
-                'preserveCurrent': preserve_current,
-                'stagedAt': staged_at,
-            }
+            pending = self._read_staged_marker(path)
+            pending['indeterminate'] = False
+            return pending
         except Exception as error:
             quarantined = self._quarantine_staged(path)
             if quarantined is None and (path.exists() or path.is_symlink()):
@@ -151,6 +180,10 @@ class CoreSaveService:
     def _stage(self, snapshot_id, preserve_current):
         if not self.spec.staged_restore:
             raise SaveStagedUnavailableError('This game cannot stage restore until exit.')
+        if self._staged_applying_paths():
+            raise SaveStagedIndeterminateError(
+                'A previous staged restore was interrupted; inspect the save state and clear it before staging another restore.'
+            )
         self.store.load_verified_snapshot(snapshot_id)
         payload = {
             'snapshotId': snapshot_id,
@@ -183,6 +216,8 @@ class CoreSaveService:
     def delete(self, snapshot_id):
         self._require_supported()
         pending = self.pending_restore()
+        if pending is not None and pending.get('indeterminate'):
+            raise ValueError('Backups cannot be deleted while a staged restore outcome is unconfirmed.')
         if pending is not None and pending['snapshotId'] == snapshot_id:
             raise ValueError('Pending restore snapshot cannot be deleted.')
         return self.store.delete_snapshot(snapshot_id)
@@ -210,7 +245,8 @@ class CoreSaveService:
                 target_running=running,
             )
         except SaveBusyError as error:
-            if running:
+            running_now = running or self._running()
+            if running_now:
                 if self.spec.staged_restore:
                     return self._stage(snapshot_id, preserve_current)
                 raise SaveStagedUnavailableError('Save files are busy and staged restore is unavailable.') from error
@@ -218,17 +254,21 @@ class CoreSaveService:
 
     def cancel_staged(self):
         self._require_supported()
-        path = self._staged_path()
-        existed = path.exists() or path.is_symlink()
-        if existed:
-            path.unlink()
-        return {'cancelled': existed}
+        paths = [self._staged_path(), *self._staged_applying_paths()]
+        cancelled = False
+        for path in paths:
+            if path.exists() or path.is_symlink():
+                path.unlink()
+                cancelled = True
+        return {'cancelled': cancelled}
 
     def apply_staged(self):
         self._require_supported()
         pending = self.pending_restore()
         if pending is None:
             return {'applied': False}
+        if pending.get('indeterminate'):
+            return {'applied': False, 'indeterminate': True}
         if self._running():
             raise SaveBusyError('Game is still running.')
 
@@ -241,15 +281,38 @@ class CoreSaveService:
                 preserve_current=pending['preserveCurrent'],
                 target_running=False,
             )
-        except Exception:
+        except SaveRollbackError:
+            # Rollback has explicitly failed, so the real-save outcome is not
+            # proven. Keep the applying claim visible as indeterminate; turning
+            # it back into an ordinary pending marker could auto-replay it.
+            logging.error('Staged restore rollback failed; preserving indeterminate claim: %s', claimed)
+            raise
+        except BaseException as error:
+            if not isinstance(error, Exception):
+                # SIGTERM is surfaced as KeyboardInterrupt by the backend
+                # process. A control-flow interruption can itself occur during
+                # rollback, so fail closed instead of assuming rollback finished.
+                logging.error('Staged restore interrupted; preserving indeterminate claim: %s', claimed)
+                raise
+            # Ordinary exceptions from a transaction whose outcome is known may
+            # restore the instruction to pending for a later explicit/automatic retry.
             try:
                 os.replace(claimed, path)
             except OSError:
                 logging.exception('Failed to restore staged marker after restore failure: %s', claimed)
             raise
 
+        applied = claimed.with_name(claimed.name.replace('.staged-restore-applying-', '.staged-restore-applied-', 1))
         try:
-            claimed.unlink(missing_ok=True)
+            os.replace(claimed, applied)
         except OSError:
-            logging.warning('Applied staged restore marker cleanup deferred: %s', claimed)
+            # The restore committed but acknowledgement was not made durable.
+            # Leave the applying marker in place so the next process fails
+            # closed instead of guessing that replay is safe.
+            logging.exception('Failed to acknowledge committed staged restore: %s', claimed)
+            return {'applied': True, 'snapshotId': pending['snapshotId'], 'restore': result}
+        try:
+            applied.unlink(missing_ok=True)
+        except OSError:
+            logging.warning('Applied staged restore marker cleanup deferred: %s', applied)
         return {'applied': True, 'snapshotId': pending['snapshotId'], 'restore': result}

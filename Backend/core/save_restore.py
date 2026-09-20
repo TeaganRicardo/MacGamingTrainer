@@ -25,11 +25,12 @@ class SaveRollbackError(SaveRestoreError):
 
 
 class SaveRestoreTransaction:
-    def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None):
+    def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None, target_running_probe=None):
         self.store = store
         self.resolver = resolver
         self.busy_probe = busy_probe
         self.snapshot_describer = snapshot_describer
+        self.target_running_probe = target_running_probe
         self.roots = {root.id: Path(root.path).expanduser() for root in spec.roots}
 
     @staticmethod
@@ -51,7 +52,12 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save transaction storage path is unsafe.')
         return parent
 
+    def _ensure_cold_target_still_stopped(self, target_running):
+        if not target_running and self.target_running_probe is not None and self.target_running_probe():
+            raise SaveBusyError('Game started while preparing restore.')
+
     def _capture_rollback(self, target_running):
+        self._ensure_cold_target_still_stopped(target_running)
         current = list(self.resolver())
         if target_running and self.busy_probe is not None and self.busy_probe(tuple(current)):
             raise SaveBusyError('Save files are currently busy.')
@@ -77,6 +83,7 @@ class SaveRestoreTransaction:
             for row in after:
                 if _sha256(row.source_path) != hashes[self._key(row)]:
                     self._raise_race(target_running, 'Save changed while preparing restore.')
+            self._ensure_cold_target_still_stopped(target_running)
             return rollback, rollback_rows, hashes
         except Exception:
             shutil.rmtree(rollback, ignore_errors=True)
@@ -178,6 +185,7 @@ class SaveRestoreTransaction:
 
             if not self._verify_state(baseline_hashes):
                 self._raise_race(target_running, 'Save changed before restore could begin.')
+            self._ensure_cold_target_still_stopped(target_running)
 
             mutation_started = True
             self._install_entries(target_entries)
@@ -197,22 +205,34 @@ class SaveRestoreTransaction:
                 'fileCount': len(target_entries),
                 'hot': target_running,
             }
-        except Exception as error:
+        except BaseException as error:
             if not mutation_started:
+                if not isinstance(error, Exception):
+                    raise
                 if isinstance(error, (SaveBusyError, SaveSnapshotError, SaveRestoreError, ValueError)):
                     raise
                 raise SaveRestoreError('Restore failed before mutation.') from error
+
+            # The backend translates SIGTERM into KeyboardInterrupt. Once real
+            # save mutation has started, every exit path must attempt rollback
+            # before the worker is allowed to terminate. Keep the recovery copy
+            # until rollback has both completed and verified.
+            cleanup_rollback = False
             try:
                 self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes))
                 self._delete_keys(set(target_hashes) - set(baseline_hashes))
                 if not self._verify_state(baseline_hashes):
                     raise SaveRestoreError('Rollback verification failed.')
-            except Exception:
-                cleanup_rollback = False
+            except BaseException as rollback_error:
+                if not isinstance(rollback_error, Exception):
+                    raise
                 raise SaveRollbackError(
                     'Restore failed and rollback could not be completed; recovery copy was preserved.',
                     rollback_root,
                 ) from error
+            cleanup_rollback = True
+            if not isinstance(error, Exception):
+                raise
             raise SaveRestoreError('Restore failed; previous saves were rolled back.') from error
         finally:
             if cleanup_rollback:

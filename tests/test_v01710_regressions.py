@@ -22,7 +22,10 @@ assert 'Timer.scheduledTimer' not in save_model
 # across every offered door, and is consumed only when the player enters a room.
 assert 'requireFunctions("next room reward", { "ChooseRoomReward", "StartRoom" })' in lua
 assert 'type(args.Door) ~= "table"' in lua
-assert 'M.nextRoomReward = nil\n            releaseNextRoomReward()' in lua
+consume_block = lua[lua.index('if not owns("StartRoom")'):lua.index('local patchRoom', lua.index('if not owns("StartRoom")'))]
+assert consume_block.index('M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken') < consume_block.index('M.nextRoomReward = nil')
+assert consume_block.index('M.nextRoomReward = nil') < consume_block.index('M.nextRoomRewardToken = nil')
+assert consume_block.index('M.nextRoomRewardToken = nil') < consume_block.index('releaseNextRoomReward()')
 choose_block = lua[lua.index('installHook("ChooseRoomReward"'):lua.index('if not owns("StartRoom")')]
 assert 'M.nextRoomReward = nil' not in choose_block
 assert 'patchOfferedNextRoomDoors()' in lua

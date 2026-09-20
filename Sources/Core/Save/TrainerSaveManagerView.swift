@@ -29,14 +29,14 @@ struct TrainerSaveManagerView: View {
             )
         } content: {
             if let pending = model.pendingRestore {
-                TrainerInlineNotice(color: theme.deferred) {
+                TrainerInlineNotice(color: pending.indeterminate ? theme.warning : theme.deferred) {
                     HStack(spacing: 10) {
                         Image(systemName: "clock.arrow.circlepath")
                         Text(pendingRestoreText(pending))
                             .font(.caption)
-                            .foregroundStyle(theme.deferred)
+                            .foregroundStyle(pending.indeterminate ? theme.warning : theme.deferred)
                         Spacer()
-                        Button("取消") { model.cancelStaged() }
+                        Button(pending.indeterminate ? "清除状态" : "取消") { model.cancelStaged() }
                             .disabled(model.busy)
                     }
                 }
@@ -229,6 +229,9 @@ struct TrainerSaveManagerView: View {
     }
 
     private func pendingRestoreText(_ pending: TrainerPendingRestore) -> String {
+        if pending.indeterminate {
+            return "上次等待恢复在执行中被中断，结果无法确认。请检查游戏存档后清除此状态，必要时再手动恢复备份。"
+        }
         let name = model.snapshots.first(where: { $0.id == pending.snapshotID })?.name ?? pending.snapshotID
         return "“\(name)”等待游戏退出后恢复。"
     }
