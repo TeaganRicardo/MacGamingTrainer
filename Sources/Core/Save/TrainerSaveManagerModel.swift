@@ -125,6 +125,7 @@ final class TrainerSaveManagerModel: ObservableObject {
     ) {
         guard session.isRunning else {
             error = "后端未运行。"
+            onComplete?(false)
             return
         }
         busy = true
