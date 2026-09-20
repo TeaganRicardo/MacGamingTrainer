@@ -7,10 +7,10 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 ## Current baseline
 
 - Default branch: `main`.
-- Latest main observed by the pre-feature audit: `6e1069dd9ff69283f132b5edfacf07d638db3160`.
-- Active audit candidate: PR #40, `audit/pre-feature-deep-review-20260920`.
-- New product features remain frozen until PR #40 closes its final verification gate.
-- Hades II resident runtime in the audit candidate: revision 42.
+- Current merged audit baseline: `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
+- Verified product-code SHA before squash merge: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
+- New product features remain frozen until the requested post-merge exact-main Linux code review is clean.
+- Hades II resident runtime: revision 42.
 - Hades II module protocol: 5.
 - Target game baseline: Hades II 1.139672 / Steam build 24556151.
 - Process Time Warp + mapped speed slider remain shared Host/Core infrastructure.
@@ -19,7 +19,7 @@ This is the canonical development handoff. Historical plans, closed PRs and old 
 
 ## Pre-feature deep audit
 
-Segments A-F are complete. Detailed evidence is in:
+Segments A-G are complete. Detailed evidence is in:
 `docs/audits/2026-09-21-pre-feature-deep-audit.md`.
 
 Confirmed Important fixes in PR #40:
@@ -27,7 +27,7 @@ Confirmed Important fixes in PR #40:
 1. Host preserves one deferred target-exit refresh when the game exits while a backend request is busy, preventing stale connected UI state.
 2. Any Lua `outcome_unknown` result-read failure taints the LLDB transport; later Lua mutations require restart instead of continuing on an uncertain session.
 3. Core Save cold restore rechecks target-process state before real-save mutation and stages instead of writing through a stale stopped decision if the game launches.
-4. Save restore / staged restore fail closed across SIGTERM -> `KeyboardInterrupt` and hard-loss indeterminate states; no interrupted staged restore is guessed/replayed automatically.
+4. Save restore / staged restore fail closed across SIGTERM -> `KeyboardInterrupt`, explicit rollback failure and hard-loss indeterminate states; an uncertain `.applying-*` claim is never downgraded to ordinary auto-retry.
 5. One-shot next-room reward intent is versioned with a durable token and resident consumption receipt so an already-consumed reward cannot resurrect after backend restart.
 6. A durable desired-state write error no longer prevents best-effort resident runtime teardown; the persistence error is still surfaced.
 7. Remaining bespoke Hades number/primary-action styling was replaced with existing shared UI components; no new shared abstraction was introduced.
@@ -36,22 +36,18 @@ Runtime source changed for item 5, so resident revision was bumped 41 -> 42. Des
 
 ## Current verification gate
 
-Final PR #40 verification is still pending at the time of this status update.
+PR #40 audit implementation is verified and merged.
 
-The audit branch was re-compared with main and was `ahead`, `behind=0`, with merge base equal to current main `6e1069dd...`; no upstream product-code conflict was present.
+Final tested product-code SHA:
+`d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`
 
-Evidence already obtained during the final cycle:
-- Linux contracts on `b5f63ca...`: PASS.
-- Module build matrix on `b5f63ca...`: PASS.
-- macOS Build 2 on `b5f63ca...` progressed through the full suite until a stale test-only schema assertion; the production-path tests before it passed.
-- the stale schema assertion was corrected in `304d8597...`.
+Fresh evidence:
+- Linux contracts `35526120496`: PASS.
+- Module build matrix `35526120549`: Hades II + reference fixture + package isolation PASS.
+- Build 2 macOS `35526120497`: full contract suite, Hades II build, package verification and RC artifact PASS.
+- independent container `Tools/run_linux_checks.sh`: `linux_checks_ok`.
 
-Before merge:
-1. remove the temporary audit-source workflow from the branch;
-2. obtain fresh Linux, module-matrix and macOS Build 2 PASS on the final non-temporary tree;
-3. update the audit report with exact final evidence;
-4. perform final whole-diff review;
-5. merge PR #40 only if no Critical/Important finding remains.
+The temporary audit-source workflow was removed before the final tested code SHA. PR #40 merged that verified tree as `f1eacae8d8c52605e5d87317a59ddd208aad662a` on 2026-09-20T17:34:29Z. Final whole-diff review found and closed the last staged-restore fail-safe issue in `d3e43850...`. No Critical or Important audit finding remains open. The active gate is now the separate post-merge Linux code review.
 
 ## Repository / architecture audit result
 
