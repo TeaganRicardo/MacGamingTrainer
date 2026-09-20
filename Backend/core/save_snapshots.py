@@ -57,7 +57,11 @@ class SaveSnapshotStore:
         self.snapshots = self.root / 'snapshots'
 
     def _ensure_parent(self):
+        if self.root.is_symlink() or self.snapshots.is_symlink():
+            raise SaveSnapshotError('Snapshot storage path cannot be a symbolic link.')
         self.snapshots.mkdir(parents=True, exist_ok=True)
+        if self.root.is_symlink() or self.snapshots.is_symlink() or not self.snapshots.is_dir():
+            raise SaveSnapshotError('Snapshot storage path is unsafe.')
 
     def _new_id(self):
         stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -92,19 +96,18 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('No real save files were found.')
         return [unique[key] for key in sorted(unique)]
 
-    def create_snapshot(self, files, hot=False, display_name=None, resolver=None):
+    def create_snapshot(self, resolver, hot=False, display_name=None):
+        if not callable(resolver):
+            raise ValueError('Snapshot creation requires a resolver callback.')
         if type(hot) is not bool:
             raise ValueError('Snapshot hot flag must be boolean.')
-        if hot and not callable(resolver):
-            raise ValueError('Hot snapshot requires a resolver for stability verification.')
         self._ensure_parent()
         snapshot_id = self._new_id()
         name = _validate_display_name(display_name) if display_name is not None else datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H-%M-%S')
-        current = self._normalize_sources(files)
         attempts = 4 if hot else 1
-        last_race = None
 
         for attempt in range(attempts):
+            current = self._normalize_sources(resolver())
             stage = Path(tempfile.mkdtemp(prefix='.snapshot-', dir=str(self.snapshots)))
             try:
                 manifest_files = []
@@ -115,9 +118,7 @@ class SaveSnapshotStore:
                     destination = stage / 'files' / row.root_id / _safe_relative(row.relative_path)
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(row.source_path, destination)
-                    if _sha256(destination) != before:
-                        raise _SaveSnapshotRace('Save changed while copying.')
-                    if hot and _sha256(row.source_path) != before:
+                    if _sha256(destination) != before or _sha256(row.source_path) != before:
                         raise _SaveSnapshotRace('Save changed while copying.')
                     copied_hashes[key] = before
                     manifest_files.append({
@@ -127,15 +128,14 @@ class SaveSnapshotStore:
                         'size': destination.stat().st_size,
                     })
 
-                if hot:
-                    after = self._normalize_sources(resolver())
-                    if [(row.root_id, row.relative_path) for row in after] != [
-                        (row.root_id, row.relative_path) for row in current
-                    ]:
-                        raise _SaveSnapshotRace('Save file set changed while snapshotting.')
-                    for row in after:
-                        if _sha256(row.source_path) != copied_hashes[(row.root_id, row.relative_path)]:
-                            raise _SaveSnapshotRace('Save changed while verifying snapshot.')
+                after = self._normalize_sources(resolver())
+                if [(row.root_id, row.relative_path) for row in after] != [
+                    (row.root_id, row.relative_path) for row in current
+                ]:
+                    raise _SaveSnapshotRace('Save file set changed while snapshotting.')
+                for row in after:
+                    if _sha256(row.source_path) != copied_hashes[(row.root_id, row.relative_path)]:
+                        raise _SaveSnapshotRace('Save changed while verifying snapshot.')
 
                 now = datetime.datetime.now().astimezone().isoformat()
                 manifest = {
@@ -159,16 +159,15 @@ class SaveSnapshotStore:
                 stage = None
                 return self._row(final, manifest, valid=True)
             except _SaveSnapshotRace as error:
-                last_race = error
-                if attempt + 1 >= attempts:
-                    raise SaveSnapshotError('Save did not become stable during hot backup.') from error
+                if not hot or attempt + 1 >= attempts:
+                    message = 'Save changed during snapshot creation.' if not hot else 'Save did not become stable during hot backup.'
+                    raise SaveSnapshotError(message) from error
                 time.sleep(0.08 * (attempt + 1))
-                current = self._normalize_sources(resolver())
             finally:
                 if stage is not None:
                     shutil.rmtree(stage, ignore_errors=True)
 
-        raise last_race or SaveSnapshotError('Snapshot creation failed.')
+        raise SaveSnapshotError('Snapshot creation failed.')
 
     def _read_manifest(self, root):
         manifest_path = root / 'manifest.json'
