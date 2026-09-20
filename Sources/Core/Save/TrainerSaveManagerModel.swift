@@ -89,8 +89,12 @@ final class TrainerSaveManagerModel: ObservableObject {
         request(
             "core.save.apply_staged",
             operation: "应用等待恢复",
-            successNotice: "已应用等待恢复"
-        )
+            successNotice: nil
+        ) { [weak self] reply in
+            guard let operation = reply.result?["operation"] as? [String: Any],
+                  operation["applied"] as? Bool == true else { return }
+            self?.notice = "已应用等待恢复"
+        }
     }
 
     private func deleteNext(_ ids: [String], deleted: Int) {

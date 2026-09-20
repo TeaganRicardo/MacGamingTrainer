@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 import tempfile
 
@@ -7,6 +8,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_restore import SaveBusyError
+import core.save_service as save_service_module
 from core.save_service import CoreSaveService, SaveManagementUnsupportedError, SaveStagedUnavailableError
 from core.save_snapshots import SaveSnapshotError
 
@@ -76,6 +78,73 @@ assert applied['applied'] is True
 assert (saves / 'Profile1.sav').read_bytes() == b'stopped-target'
 assert reloaded.pending_restore() is None
 
+# Backend SIGTERM becomes KeyboardInterrupt. If staged apply is interrupted after
+# claiming its marker, the transaction layer rolls back real saves and the
+# staged instruction must be restored instead of disappearing into a hidden
+# applying marker.
+(saves / 'Profile1.sav').write_bytes(b'interrupt-stage-target')
+interrupt_service = CoreSaveService('interrupt-stage', no_hot_spec, data, is_running)
+interrupt_target = interrupt_service.backup()
+(saves / 'Profile1.sav').write_bytes(b'interrupt-stage-current')
+running = True
+interrupt_service.restore(interrupt_target['id'], preserve_current=False)
+running = False
+real_restore = save_service_module.SaveRestoreTransaction.restore
+def interrupt_staged_restore(self, *args, **kwargs):
+    raise KeyboardInterrupt()
+save_service_module.SaveRestoreTransaction.restore = interrupt_staged_restore
+try:
+    try:
+        interrupt_service.apply_staged()
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError('interrupted staged apply unexpectedly succeeded')
+finally:
+    save_service_module.SaveRestoreTransaction.restore = real_restore
+assert interrupt_service.pending_restore()['snapshotId'] == interrupt_target['id']
+assert interrupt_service.cancel_staged()['cancelled'] is True
+
+# A hard process loss can leave only the claimed marker. Its outcome is
+# indeterminate: it must be surfaced, never auto-replayed, must block staging a
+# second restore, and explicit cancellation must clear the unresolved claim.
+(saves / 'Profile1.sav').write_bytes(b'indeterminate-target')
+indeterminate_service = CoreSaveService('indeterminate-stage', no_hot_spec, data, is_running)
+indeterminate_target = indeterminate_service.backup()
+indeterminate_recovery = indeterminate_service.backup(display_name='Recovery option')
+(saves / 'Profile1.sav').write_bytes(b'indeterminate-current')
+running = True
+indeterminate_service.restore(indeterminate_target['id'], preserve_current=False)
+indeterminate_path = indeterminate_service._staged_path()
+indeterminate_claim = indeterminate_path.with_name('.staged-restore-applying-hard-crash.json')
+os.replace(indeterminate_path, indeterminate_claim)
+running = False
+indeterminate_pending = indeterminate_service.pending_restore()
+assert indeterminate_pending['snapshotId'] == indeterminate_target['id']
+assert indeterminate_pending['indeterminate'] is True
+indeterminate_apply = indeterminate_service.apply_staged()
+assert indeterminate_apply['applied'] is False
+assert indeterminate_apply['indeterminate'] is True
+assert (saves / 'Profile1.sav').read_bytes() == b'indeterminate-current'
+try:
+    indeterminate_service.delete(indeterminate_recovery['id'])
+except ValueError:
+    pass
+else:
+    raise AssertionError('backup deletion remained enabled during indeterminate restore recovery')
+# Staging a new restore while the prior outcome is unresolved is unsafe.
+running = True
+try:
+    indeterminate_service.restore(indeterminate_target['id'], preserve_current=False)
+except Exception as error:
+    assert getattr(error, 'code', None) == 'staged_indeterminate'
+else:
+    raise AssertionError('new staged restore replaced an indeterminate prior restore')
+running = False
+assert indeterminate_service.cancel_staged()['cancelled'] is True
+assert not indeterminate_claim.exists()
+assert indeterminate_service.pending_restore() is None
+
 # A successful staged restore must not remain pending just because cleanup of
 # its consumed marker fails. Otherwise the next target-stop event can reapply
 # a restore that already committed.
@@ -99,6 +168,9 @@ finally:
 assert cleanup_applied['applied'] is True
 assert (saves / 'Profile1.sav').read_bytes() == b'cleanup-target'
 assert cleanup_service.pending_restore() is None
+cleanup_dir = cleanup_service._staged_path().parent
+assert not list(cleanup_dir.glob('.staged-restore-applying-*.json'))
+assert len(list(cleanup_dir.glob('.staged-restore-applied-*.json'))) == 1
 
 # hotPreferred busy provider falls back to staged restore without mutation.
 class Provider:

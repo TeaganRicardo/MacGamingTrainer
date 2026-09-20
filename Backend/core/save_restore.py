@@ -197,22 +197,34 @@ class SaveRestoreTransaction:
                 'fileCount': len(target_entries),
                 'hot': target_running,
             }
-        except Exception as error:
+        except BaseException as error:
             if not mutation_started:
+                if not isinstance(error, Exception):
+                    raise
                 if isinstance(error, (SaveBusyError, SaveSnapshotError, SaveRestoreError, ValueError)):
                     raise
                 raise SaveRestoreError('Restore failed before mutation.') from error
+
+            # The backend translates SIGTERM into KeyboardInterrupt. Once real
+            # save mutation has started, every exit path must attempt rollback
+            # before the worker is allowed to terminate. Keep the recovery copy
+            # until rollback has both completed and verified.
+            cleanup_rollback = False
             try:
                 self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes))
                 self._delete_keys(set(target_hashes) - set(baseline_hashes))
                 if not self._verify_state(baseline_hashes):
                     raise SaveRestoreError('Rollback verification failed.')
-            except Exception:
-                cleanup_rollback = False
+            except BaseException as rollback_error:
+                if not isinstance(rollback_error, Exception):
+                    raise
                 raise SaveRollbackError(
                     'Restore failed and rollback could not be completed; recovery copy was preserved.',
                     rollback_root,
                 ) from error
+            cleanup_rollback = True
+            if not isinstance(error, Exception):
+                raise
             raise SaveRestoreError('Restore failed; previous saves were rolled back.') from error
         finally:
             if cleanup_rollback:

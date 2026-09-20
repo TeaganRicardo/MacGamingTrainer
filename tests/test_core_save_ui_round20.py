@@ -36,6 +36,9 @@ assert "Inspector" not in view
 assert "Hades" not in view
 assert "Timer.scheduledTimer" not in view
 assert "@FocusState" not in view
+assert 'pending.indeterminate' in view
+assert '结果无法确认' in view
+assert 'pending.indeterminate ? "清除状态" : "取消"' in view
 
 for token in (
     "@StateObject private var saveManager: TrainerSaveManagerModel",
