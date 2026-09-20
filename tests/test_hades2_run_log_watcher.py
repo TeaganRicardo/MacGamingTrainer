@@ -136,11 +136,10 @@ if !lateWatcher.canObserveLifecycle {
 lateWatcher.start()
 pump(0.2)
 let lateLogURL = lateDirectory.appendingPathComponent("Hades II.log")
-try Data(
+try Data((
     "2026-09-20 [MainThread] App.cpp INFO| App.Reset Start\n" +
     "2026-09-20 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.10 seconds)\n"
-    .utf8
-).write(to: lateLogURL)
+).utf8).write(to: lateLogURL)
 let lateDeadline = Date().addingTimeInterval(2)
 while lateEvents.count < 2 && Date() < lateDeadline { pump(0.01) }
 lateWatcher.stop()
