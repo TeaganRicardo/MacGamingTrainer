@@ -1,5 +1,35 @@
 import SwiftUI
 
+struct TrainerSelectionControl: View {
+    @Environment(\\.trainerTheme) private var theme
+    let selected: Bool
+    let enabled: Bool
+    let helpText: String
+    let action: () -> Void
+
+    init(selected: Bool, enabled: Bool = true, helpText: String = "", action: @escaping () -> Void) {
+        self.selected = selected
+        self.enabled = enabled
+        self.helpText = helpText
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: selected ? "checkmark.square.fill" : "square")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(selected ? theme.accent : .secondary)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(helpText)
+        .accessibilityLabel(selected ? "取消选择" : "选择")
+        .accessibilityValue(selected ? "已选择" : "未选择")
+    }
+}
+
 struct TrainerEmptyState: View {
     @Environment(\.trainerTheme) private var theme
     let text: String
