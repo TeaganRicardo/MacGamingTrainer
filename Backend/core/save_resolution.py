@@ -17,7 +17,7 @@ class ResolvedSaveFile:
     source_path: Path
 
 
-def _load_provider(target):
+def load_save_provider(target):
     module_name, class_name = target.split(':', 1)
     module = import_module(module_name)
     provider_type = getattr(module, class_name, None)
@@ -77,7 +77,7 @@ def resolve_save_files(
     if spec.provider is None:
         rows = ((row.root_id, row.relative_path) for row in declared)
     else:
-        loader = provider_loader or _load_provider
+        loader = provider_loader or load_save_provider
         provider = loader(spec.provider)
         resolve = getattr(provider, 'resolve', None)
         if not callable(resolve):
