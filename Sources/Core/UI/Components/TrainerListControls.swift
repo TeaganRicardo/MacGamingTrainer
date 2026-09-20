@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct TrainerSelectionControl: View {
-    @Environment(\\.trainerTheme) private var theme
+    @Environment(\.trainerTheme) private var theme
     let selected: Bool
     let enabled: Bool
     let helpText: String
