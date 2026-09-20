@@ -112,33 +112,45 @@ Current Hades log evidence:
 
 ### Systemic
 
-1. **Linux CI discovery drift.** At `1345b39c...`, the Linux positive list runs 34 of 85 entrypoints. Four are genuinely macOS-only, leaving 47 Linux-portable tests outside the lane. This includes backend session recovery, Core Save transaction suites, LLDB outcome-unknown taint and Process Time Warp behavior.
-2. **Runtime revision discipline was prose plus duplicated literals.** Tests that say “revision is 42” do not express “a runtime diff requires an increased revision.”
-3. **Future-agent entry cost is unnecessarily high.** Correct facts exist, but stable rules are distributed between status, module documentation and historical audits.
-4. **Repository policy allows CI bypass.** `main` is unprotected and the repository has no rulesets.
+| Debt | Concrete evidence / root cause | Blast radius | Current protection | Missing protection | Action / timing |
+| --- | --- | --- | --- | --- | --- |
+| Linux CI discovery drift | At `1345b39c...`, `Tools/run_linux_checks.sh` positively listed 34/85 entrypoints. Four are genuinely macOS-only, leaving 47 Linux-portable tests outside the lane. The root cause is duplicated test-registration ownership: file discovery in macOS vs a manual Linux list. | Any new/changed portable regression could miss the fastest required lane, including lifecycle, Save and outcome-unknown tests. | Build 2 macOS discovers all `test_*.py`; `test_test_suite_discovery.py` protected only that macOS property. | Linux exhaustive-by-default discovery. | **Fix now — implemented.** One explicit four-file platform denylist replaces the positive list; the discovery test enforces it. |
+| Runtime revision discipline encoded as current spelling | Five tests asserted literal resident revision `42`. They prove the current source text, not “runtime source diff implies revision increase.” | A future `hades.lua` edit could keep 42 and still satisfy unrelated runtime assertions, producing stale resident code in a live process. | Human rule in status/audits; duplicated literal guards. | Diff-aware relation between base/head source and revision. | **Fix now — implemented.** Linux CI compares base/head and requires a monotonic, internally consistent resident revision whenever `hades.lua` differs. |
+| Future-agent context/source-of-truth fan-out | Correct ownership/replay rules were distributed among `PROJECT_STATUS.md`, `GAME_MODULES.md`, audits and historical PRs. Root cause is that expensive incident knowledge accumulated as history instead of a small stable engineering contract. | Lower-context agents can edit the wrong layer, replay one-shots, or resurrect superseded designs. | Canonical status + roadmap exist; several behavior tests embody individual rules. | Minimal read path and stable cross-feature invariant index. | **Fix now — implemented.** Thin `AGENTS.md` entrypoint + `ENGINEERING_INVARIANTS.md`; status/roadmap authority remains unchanged. |
+| Required CI is advisory only | `main` reports `protected=false`; repository rulesets list is empty. | A direct push or merged PR can bypass Linux/module/macOS evidence and exact-head discipline. | Workflows trigger on `main` and PRs, but GitHub does not require their success. | Repository ruleset/branch protection. | **Do after PR #44 proves check names.** User-controlled setting; this audit does not mutate repository settings. |
+| Regression-fossil accumulation | Eight dominant G-class files and several F-class files retain round/version naming and implementation-shape assertions. Root cause is one-off regression additions without later semantic consolidation. | Future agents copy weak test patterns and must load obsolete round context. | Stronger lifecycle/module/Save harnesses now cover several families. | Opportunistic consolidation when touching the same invariant. | **Do not cleanup wholesale now.** Remove only with demonstrated equal-or-stronger semantic coverage. |
 
 ### Local
 
-- `Hades2View.swift` is large but primarily one Hades presentation/editor composition boundary.
-- `Hades2Model.swift` is large because lifecycle, sparse projection, command intent and termination cleanup genuinely coordinate there; watcher/scheduler/shortcut persistence are already extracted.
-- `Hades2Adapter` is high cognitive load because it is the persistence/runtime synchronization boundary; router, transport, preferences/Profile, catalog and diagnostics already have separate owners.
-- Core Save files are complex but split along coherent transaction responsibilities: resolution, immutable snapshots, destructive restore/rollback, and orchestration/staging/recovery discovery.
+| Debt | Evidence / root cause | Blast radius | Current protection | Missing protection | Action / timing |
+| --- | --- | --- | --- | --- | --- |
+| Hades Model/View/adapter cognitive load | `Hades2Model.swift`, `Hades2View.swift` and `adapter.py` coordinate many operations; much complexity comes from real desired/runtime/lifecycle synchronization rather than accidental file size. | Slower agent comprehension and higher local edit risk. | Watcher, mutation scheduler, shortcut store, router, transport, persistence/Profile and catalogs are already separately owned. | No missing correctness invariant demonstrated. | **Do not mechanically split.** Extract only a responsibility with an already-independent interface/owner. |
+| Core Save sudden-power-loss durability ceiling | Some directory metadata changes do not fsync every parent directory after `os.replace`. | Extreme power-loss window, not a demonstrated normal-process replay/corruption path. | Same-directory atomic replacement, file fsync, hashes, rollback/recovery evidence. | Full directory-fsync discipline. | **Defer.** Promote only with a concrete durability requirement/failure model. |
+| Hades Profile subdirectory symlink hardening | Profile storage does not mirror every Core Save subdirectory-symlink containment guard. | Same-user local filesystem manipulation; no privilege boundary or demonstrated data-loss path. | filename/schema validation and same-user data root. | explicit contained-directory symlink discipline. | **Defer as Minor** unless a reachable failure is demonstrated. |
 
-### Historical
+### Historical — solved, keep the invariant
 
-- historical divergent branches are predominantly squash-merged/absorbed/superseded evidence;
-- no unique unmerged MacGamingTrainer product behavior was found;
-- `ci/lidkeep-rc1-build` is unrelated repository contamination and must never merge;
-- legacy round/release documents are evidence, not execution queues.
+| Historical family | Root cause that allowed it | Durable guardrail now |
+| --- | --- | --- |
+| `World::Stop()` treated as main-menu evidence | no explicit lifecycle evidence hierarchy; generic engine event was allowed to acquire game semantic meaning | real log-watcher evidence + lifecycle matrix; `World::Stop()` explicitly rejected |
+| same-PID reset paid doomed probe / lost ready opportunity | PID lifetime and resident Lua generation were not distinct state variables; transient busy could discard event intent | runtime-generation invalidation + retained ready/exit intent + lifecycle scenario tests |
+| Swift/Python trainer.log overwrite | “append” was treated as a seek position rather than a multi-writer file invariant | Darwin `O_APPEND` behavior test |
+| staged restore repeated after successful commit/cleanup failure | destructive instruction had no durable consumed/applying claim | applying/applied state machine; unknown outcome is indeterminate |
+| Save cold-restore TOCTOU | process stopped was treated as a durable decision instead of stale evidence | immediate pre-mutation recheck and fail-closed process query |
+| rollback/recovery evidence lost from UI after backend death | recovery ownership ended with the failed producer process/reply | persistent contained `.rollback-*` discovery + shared Save Manager exposure |
+| partial Profile shortcut collision | imported explicit state and omitted local explicit overrides had no deterministic merge ownership | compiled Swift shortcut reflow/collision behavior test |
+| next-room reward resurrection | one-shot durable intent had no identity/consumption receipt across backend generations | schema-4 token + resident consumed-token receipt |
 
-### Speculative — do not change now
+### Speculative — no current evidence, do not move now
 
-- split `runtime/hades.lua` before a multi-file loader is proven in the real game;
-- broad Hades View/Model “clean architecture” rewrite based on file size;
-- move Hades desired/dormant/resource semantics into Core;
-- merge runtime bootstrap + preference replay without a new measured regression;
-- add fsync/symlink hardening beyond demonstrated requirements merely for theoretical completeness;
-- migrate the suite to pytest/new infrastructure solely to modernize style.
+| Proposal | Why it is speculative / risky now |
+| --- | --- |
+| Split `runtime/hades.lua` by size | multi-file loader/lifetime semantics are not proven in real Hades II; any runtime source change also requires revision bump and game acceptance |
+| Broad MVVM/“clean architecture” rewrite of Hades View/Model | current complexity largely represents real state-transition coupling; pass-through layers would increase agent navigation cost |
+| Move Hades desired/dormant/resource semantics into Core | violates proven module ownership and the reference-fixture contract without a second real game requiring the abstraction |
+| Merge bootstrap + durable replay into fewer Lua boundaries | issue #4 measured the cost, but batching changes per-feature error isolation and outcome semantics; no current severe regression justifies it |
+| Migrate to pytest/new test framework | no test-framework limitation is causing the current bug families; discovery drift can be fixed without dependency migration |
+| Restore code from divergent historical branches | squash/superseded branches are historical evidence; current main contains the stronger behavior and no unique missing product implementation was found |
 
 ## Test-debt audit
 
