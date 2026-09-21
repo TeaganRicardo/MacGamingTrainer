@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 45 then
+if previousModule and previousModule.revision ~= 46 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 45, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 46, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -329,6 +329,9 @@ if __MacGamingTrainerV1 == nil then
   }
   local nativeSpecialChoiceSources = {}
   for sourceId in pairs(nativeSpecialChoiceDefinitions) do nativeSpecialChoiceSources[sourceId] = true end
+  local nativeChoiceOnlyTraits = {
+    EchoLastRunBoon = true,
+  }
 
   local specialTraitSources, specialTraitSourceOrder = {}, {}
   for _, source in ipairs(specialSourceDefinitions) do
@@ -1574,7 +1577,7 @@ if __MacGamingTrainerV1 == nil then
       local bucket = buckets[source.id]
       for index, traitName in ipairs(bucket and bucket.traits or {}) do
         local id = "trait:" .. traitName
-        if not allowed[id] then
+        if not allowed[id] and not nativeChoiceOnlyTraits[traitName] then
           local item = {
             id = id, name = traitName, category = "特殊祝福", group = "special", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
@@ -3338,7 +3341,11 @@ if __MacGamingTrainerV1 == nil then
             end
           else
             requireFunctions("special blessing", { "AddTraitToHero" })
-            AddTraitToHero({ TraitName = entry.trait })
+            AddTraitToHero({ TraitName = entry.trait, FromLoot = true })
+            if entry.sourceId == "Arachne" then
+              requireFunctions("Arachne costume spawning", { "SetupCostume" })
+              SetupCostume()
+            end
           end
           return nil
         end
