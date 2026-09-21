@@ -2,175 +2,70 @@
 
 Updated: 2026-09-21
 
-This is the canonical development handoff. Historical plans, closed PRs and old branches are evidence only; current code, this file and roadmap issue #8 are execution authority.
+This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; planned work lives in roadmap issue #8; historical audit evidence lives under `docs/audits/`.
 
-Future development agents should enter through `AGENTS.md`; stable cross-feature ownership, lifecycle, replay and Save safety rules are centralized in `ENGINEERING_INVARIANTS.md`. Those files do not replace this status/roadmap authority.
+Start every development thread at `AGENTS.md`.
 
-## Current baseline
+## Current state
 
 - Default branch: `main`.
-- Current fully audited baseline: `c2c4f39ffe5c943c76f2190c458d4ece384f6513` (PR #41), on top of corrected baseline `ee258442f89a1e3ad4cb04f02bbfc7146488e148` (PR #42) and deep-audit merge `f1eacae8d8c52605e5d87317a59ddd208aad662a` (PR #40).
-- Verified pre-squash audit product-code SHA: `d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`.
-- Full repository audit round 2 is closed, but the user has requested another complete independent audit pass before any new feature work. The audit freeze is active again.
-- Hades II resident runtime: revision 42.
-- Hades II module protocol: 5.
-- Target game baseline: Hades II 1.139672 / Steam build 24556151.
-- Process Time Warp + mapped speed slider remain shared Host/Core infrastructure.
-- Core Save Management remains cross-game optional; Hades save semantics remain module-owned.
-- Permanent `reference_fixture` continues to prove second-module isolation.
+- The mandatory audit freeze is **closed**. Normal bug-fix and user-selected feature work may resume.
+- PR #43 (independent full-audit continuation) is superseded and closed; it is not an execution requirement.
+- Governance PR #44 is merged. It added exhaustive Linux-portable test discovery, diff-based Hades resident-runtime revision enforcement, the low-context agent entrypoint and stable engineering-invariant authority.
+- Lifecycle PR #45 is merged. Target-process presence and connection-lifetime validity are now distinct: exit/new-lifetime invalidation survives busy work and rapid replacement launches instead of leaving stale `connected=true`.
+- Hades II resident runtime revision: 42.
+- Hades II desired-state schema: 4.
+- Host protocol: 5. Hades II module protocol: 5.
+- Target reference: Hades II 1.139672 / Steam build 24556151.
+- Core Save Management remains optional cross-game infrastructure; Hades save codec/schema/edit semantics remain Hades-owned.
+- The permanent `reference_fixture` remains the executable proof that a second module does not require Hades-shaped Core APIs.
 
-## Pre-feature deep audit
+## Verification baseline
 
-Segments A-G are complete. Detailed evidence is in:
-`docs/audits/2026-09-21-pre-feature-deep-audit.md`.
+The latest behavior-changing lifecycle head before squash merge was:
 
-Confirmed Important fixes in PR #40:
+`0418cb3666518d47bed5f507fc8a9ff6cf72c5dd`
 
-1. Host preserves one deferred target-exit refresh when the game exits while a backend request is busy, preventing stale connected UI state.
-2. Any Lua `outcome_unknown` result-read failure taints the LLDB transport; later Lua mutations require restart instead of continuing on an uncertain session.
-3. Core Save cold restore rechecks target-process state before real-save mutation and stages instead of writing through a stale stopped decision if the game launches.
-4. Save restore / staged restore fail closed across SIGTERM -> `KeyboardInterrupt`, explicit rollback failure and hard-loss indeterminate states; an uncertain `.applying-*` claim is never downgraded to ordinary auto-retry.
-5. One-shot next-room reward intent is versioned with a durable token and resident consumption receipt so an already-consumed reward cannot resurrect after backend restart.
-6. A durable desired-state write error no longer prevents best-effort resident runtime teardown; the persistence error is still surfaced.
-7. Remaining bespoke Hades number/primary-action styling was replaced with existing shared UI components; no new shared abstraction was introduced.
+Fresh exact-head CI on that tree:
 
-Runtime source changed for item 5, so resident revision was bumped 41 -> 42. Desired-state schema was bumped 3 -> 4.
+- Linux contracts `35552079532`: PASS;
+- module build matrix `35552079488`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35552080294`: full macOS contracts/build/package PASS.
 
-## Verification gate
+PR #45 was squash-merged as `646a707163f6d7b8cd7a31fe759c8e3bd126da0b` on top of governance merge `62d77423abc6a68aae8b7733a11abf0749c2e8c4`.
 
-PR #40 deep audit is verified and merged.
+Documentation-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
-Final tested product-code SHA:
-`d3e4385054aaeddcad4c9ef10cdc1dbaea9dd8a4`
+## Current development gate
 
-Merged baseline:
-`f1eacae8d8c52605e5d87317a59ddd208aad662a`
+There is no mandatory repository-wide audit before ordinary work.
 
-Deep-audit evidence:
-- Linux contracts `35526120496`: PASS.
-- Module build matrix `35526120549`: Hades II + reference fixture + package isolation PASS.
-- Build 2 macOS `35526120497`: full contract suite, Hades II build, package verification and RC artifact PASS.
-- independent container Linux contracts: `linux_checks_ok`.
+For the next task:
 
-The requested post-merge Linux code review is also complete. Exact reviewed main source was `c2fe74c2dc6fd42bea48f40878e3c2ba760eb10b`, materialized by workflow run `35526388178` with commit marker and verified source SHA256.
+1. confirm current `main` HEAD;
+2. create a focused branch;
+3. read the subsystem code and nearest behavior tests;
+4. preserve the ownership/replay/safety contracts in `ENGINEERING_INVARIANTS.md`;
+5. use RED -> GREEN for demonstrated correctness defects;
+6. run the applicable Linux/module/macOS gates on the final changed SHA.
 
-Post-merge review evidence:
-- exact-main `Tools/run_linux_checks.sh`: PASS;
-- all 85 `tests/test_*.py` attempted: 81 PASS on Linux, 4 platform-only AppKit/Darwin failures;
-- those same four platform-only tests: PASS in Build 2 macOS `35526120497`;
-- Backend compileall: PASS;
-- all Swift source files frontend-parse: PASS;
-- Python duplicate-definition scan: PASS;
-- conflict-marker / risky execution primitive / ownership / polling scans: no Critical/Important finding.
+Hades II Save Editor is not implicitly authorized by lifting the audit freeze. If selected as a product task, its binary mutation design still requires a separate explicit design/safety approval.
 
-Detailed record:
-`docs/audits/2026-09-21-post-merge-linux-review.md`.
+## Known non-blocking risks
 
-The post-merge review found one additional Important defect and PR #42 fixed it: Save Manager now completes unavailable-backend requests with failure, so optimistic rename state and sequential batch-delete flows cannot be stranded.
+- Repository `main` currently has no enforced branch protection/ruleset. CI exists but can still be bypassed by repository settings; enabling required checks remains recommended.
+- Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
+- Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
 
-PR #42 verification:
-- Linux contracts `35527279524`: PASS;
-- module matrix `35527279475`: Hades II + reference fixture + package isolation PASS;
-- Build 2 macOS `35527279464`: full suite/build/package/artifact PASS, including the backend-stopped rename regression.
+These are not feature freezes. Promote them only when new evidence or requirements justify work.
 
-Corrected-main re-review of `ee258442...`:
-- snapshot/Linux workflow `35527702078`: PASS;
-- exact source artifact commit marker matched `ee258442...`;
-- container Linux contracts: PASS;
-- 81/81 Linux-portable tests: PASS;
-- 47/47 Swift source files frontend-parse: PASS;
-- compileall, duplicate-definition, conflict-marker, risky-execution, session-ownership, Core/Hades boundary and no-polling scans: PASS.
+## Historical evidence
 
-Full repository audit round 2 found one additional Important Save recovery-discoverability defect. PR #41 repaired and merged it; merged-main verification is complete.
+Historical material is evidence only and must not be used as current instructions:
 
-## Repository / architecture audit result
+- `docs/audits/2026-09-21-ai-development-governance.md` — system map, debt/test audit and governance rationale;
+- `docs/audits/2026-09-21-full-repository-audit-round2.md` — earlier full repository audit;
+- `docs/audits/2026-09-21-pre-feature-deep-audit.md` — earlier deep-audit bug lineage;
+- `docs/audits/2026-09-21-post-merge-linux-review.md` — earlier exact-source review evidence.
 
-- No unique unmerged MacGamingTrainer product behavior was found in historical feature/fix branches.
-- Historical divergent SHAs are predominantly squash-merged/superseded evidence, not missing code.
-- `ci/lidkeep-rc1-build` is unrelated repository contamination and must never merge into main.
-- The current connector does not expose safe branch deletion; do not work around this using container GitHub access or RDC.
-- Core/Host remains free of Hades business semantics.
-- App/Host/Hades share one `TrainerBackendSession`; no duplicate backend-session owner was found.
-- Shared UI/Input owns generic visual/registration behavior; Hades owns game actions/state meaning.
-- Native modal commands remain one-shot and are not durable preference replay entries.
-
-## Minor non-blocking hardening notes
-
-- Some Core file-renames do not parent-directory fsync after `os.replace`; this is an extreme power-loss durability ceiling, not a demonstrated logical corruption/replay bug.
-- Hades local Profile storage does not currently apply the same explicit subdirectory symlink guard as Core Save storage. It runs with the same user authority and no privilege boundary; retain as future local-filesystem hardening unless a concrete failure requires change.
-
-## Current product gate
-
-**Full repository audit continuation — new feature work frozen.**
-
-User directive:
-- the next development thread must perform another complete independent audit before any new product feature work resumes;
-- prior round-2 audit results are evidence/reference only and must not be used to skip any audit domain;
-- Hades II Save Editor design/implementation is frozen during this pass;
-- no binary save mutation is approved.
-
-Authoritative next-thread handoff:
-`docs/audits/2026-09-21-full-audit-continuation-handoff.md`
-
-The required scope is:
-1. repository/evidence integrity and every remote branch;
-2. Framework boundary ownership;
-3. lifecycle/transport/concurrency;
-4. Save/persistence/failure recovery;
-5. Hades II runtime/command semantics;
-6. UI/hotkey/observable state;
-7. final exhaustive Linux/module/macOS verification on the final changed SHA.
-
-Current product-code baseline remains:
-`c2c4f39ffe5c943c76f2190c458d4ece384f6513` (PR #41)
-
-Current main may contain documentation-only commits after that product baseline.
-
-## Permanent constraints
-
-- GitHub connector is the authoritative remote-repository interface.
-- Container is for materialized local editing/diffing/non-macOS tests; do not depend on direct container access to github.com.
-- RDC is macOS-only validation and never repository/file transport.
-- Tests must never mutate real user/game data.
-- No periodic LLDB/Lua polling.
-- No second debugger attachment for same-PID recovery.
-- No replay of outcome-unknown non-idempotent/native-modal operations.
-- No Hades-specific business semantics in Core/Host.
-- Native modal commands are one-shot and never preference-replayed.
-- Save restore must never destroy the last recoverable copy.
-- Runtime source changes require a resident revision bump.
-- Each tester handoff is one exact HEAD + one prebuilt signed App/ZIP + SHA256 when manual QA is required.
-- Fix demonstrated/root-caused failures with RED -> GREEN coverage.
-
-
-## Full repository audit round 2
-
-Detailed report:
-`docs/audits/2026-09-21-full-repository-audit-round2.md`
-
-New Important finding:
-- if backend termination interrupts rollback itself, Core preserves the trainer-owned `.rollback-*` bytes but a restarted Save Manager previously had no persistent way to discover them;
-- PR #41 exposes only contained non-symlink rollback directories as generic Core recovery evidence and shows them in the shared Save Manager;
-- no automatic restore/delete behavior is introduced.
-
-First repair CI:
-- Linux `35528506356`: PASS;
-- module matrix `35528506352`: PASS;
-- Build 2 macOS `35528506442`: PASS.
-
-Final tested product/test head:
-`d4b1bbb1d5215b59e95ebae46cf021def16657c8`
-
-Final merge-candidate CI after temporary workflow cleanup:
-- Linux `35528849520`: PASS;
-- module matrix `35528849519`: PASS;
-- Build 2 macOS `35528849516`: PASS, including exhaustive AppKit/Darwin tests, build, package verification and RC artifact.
-
-PR #41 squash-merged as `c2c4f39ffe5c943c76f2190c458d4ece384f6513`.
-
-Merged-main verification:
-- Linux `35529062370`: PASS;
-- module matrix `35529062382`: PASS;
-- Build 2 macOS `35529062368`: PASS, including exhaustive tests, build, package verification and RC artifact.
-
-The PR final tree and merged-main tree are identical. No Critical or Important round-2 finding remains open.
+Do not reopen those audit scopes without a new user request or new code evidence.
