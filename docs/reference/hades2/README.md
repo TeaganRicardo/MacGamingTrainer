@@ -93,6 +93,32 @@ Manual review against the installed Hades II 1.139672 LootData sources closes th
 - `StackUpgrade` and `WeaponUpgrade` retain `DebugOnly = true` in their definitions even though `RewardStoreData` / `StoreData` use them in normal gameplay. This is another case where generated `state=debug_only` is source shape, not Trainer legality.
 - Names such as `ArtemisUpgrade`, `AthenaUpgrade`, `DionysusUpgrade`, and `HadesUpgrade` occur in NPC flavor/codex data but are not `LootData` entities in this build; their native encounters are owned by the separate special-choice/trait paths and are not missing loot rows.
 
+## Trait catalog boundary and completeness check
+
+The generated trait inventory is intentionally much broader than the Trainer's trait-facing catalog. Hades II 1.139672 exposes 968 extracted `TraitData` rows, but most are owned by another native reward system rather than being independent Trainer targets.
+
+The product-facing trait boundary for this build is:
+
+- 83 concrete special-NPC traits from ten native sources: Artemis (9), Athena (8), Dionysus (8), Hades (8), Arachne (8), Narcissus (9), Echo (8), Medea (8), Circe (9), and Icarus (8);
+- 13 Charon-Well traits already tracked as dedicated store traits;
+- total independent trait targets recorded in `catalog_legality.csv`: **96**.
+
+The 83 special-NPC IDs are all unique across those ten sources, all have official zh-CN display names, and none of those official Chinese names collide in the supported build. For Arachne, Narcissus, Echo, Medea, Circe, and Icarus, the `UnitSetData.*.Traits` set was also compared with the corresponding `PresetEventArgs.*Choices.UpgradeOptions` pool. Each source has exact set equality; some source arrays use different ordering, which is presentation data rather than an item-completeness difference.
+
+Do not expand this 96-target ledger to all 968 TraitData rows. Ordinary Olympian/Hermes boons are owned by their LootData choice flow; Chaos, Selene, Hammer, and other contextual traits are likewise owned by their native loot/choice systems. Their presence in `generated/traits.csv` or `trait_references.csv` does not make them independent Trainer trait targets.
+
+### Exact special-trait application semantics
+
+A direct special-trait target must preserve Hades II's normal acquisition seam. Native `HandleUpgradeChoiceSelection` applies selected traits with `AddTraitToHero(..., FromLoot = true)`. The `FromLoot` flag is semantically required: `AddTraitToHero` only runs `HealOnAcquire` and `AcquireFunctionName` while that flag is set.
+
+Manual inheritance-aware review found 28 of the 83 current special-NPC traits with effective acquire functions. Examples include Athena's last-stand effects, Dionysus max-health/bank effects, all nine Narcissus rewards through `NarcissusA`, six Echo rewards, five Circe rewards, and three Icarus rewards. An exact Trainer apply that omits `FromLoot` can therefore add the trait object while silently skipping the effect that acquiring that trait is supposed to cause.
+
+After the resident fix, non-Well special-NPC traits use the native `FromLoot` acquisition semantics. The 75 targets for which that generic apply seam is sufficient are classified `direct`.
+
+Arachne's eight costume traits additionally require `SetupCostume()` after acquisition to refresh the hero costume texture, matching the native `ArachneArmorApply` post-choice behavior. They are therefore classified `special`.
+
+The six fixed-choice sources remain available through the native three-choice interaction as well. Explicit exact-trait application intentionally bypasses source eligibility requirements, but it must not omit the selected trait's acquisition mechanics.
+
 ## Consumable census completeness check
 
 Manual review against the installed Hades II 1.139672 `ConsumableData.lua` closed the remaining consumable-census gap:
