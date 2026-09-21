@@ -9,6 +9,19 @@ Current snapshot:
 
 The snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
 
+## Private raw-source evidence bundle
+
+The project owner also keeps a private, version-frozen raw-source evidence bundle for this supported build in Google Drive:
+
+- folder: `MacGamingTrainer/ReferenceEvidence/Hades2/1.139672-24556151/`;
+- Drive folder: https://drive.google.com/drive/folders/1lughi1ucofi9EwqqJmD0GUPuCA0lu3Ld
+- captured against repository baseline: `c19cc6678fe1946e3853ebdf342ec29d30329c43`;
+- archive SHA-256: `9149fc79e5898964ac429ae5c1380e27e54fef52c58119fa108e5283ea7874c6`.
+
+It contains the full installed `Content/Scripts` tree, non-localization Game SJSON sources, English and Simplified Chinese text trees, Steam/app version metadata, per-file SHA-256 hashes, and a compressed bundle. It is private evidence, not a production dependency or replacement for the curated files in this directory.
+
+For later catalog/census work on build 1.139672 / 24556151, use this GitHub snapshot first and fetch the specific raw source from the private Drive bundle when source-level confirmation is needed. Use the target Mac again only when the evidence bundle lacks the required material or when the supported game build changes.
+
 Snapshot contents include:
 - full inventories for consumables, loot, traits, resources, stores, rooms, encounters, units, weapons, projectiles, progression, requirements, and UI data;
 - `trait_references.csv`, `store_references.csv`, and `static_room_links.csv` static-reference indexes;
