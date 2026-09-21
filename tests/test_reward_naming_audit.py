@@ -7,9 +7,11 @@ catalog = (ROOT / 'Backend/games/hades2/catalog.py').read_text()
 
 # Raw resident fallbacks must use current Hades II Chinese terminology even
 # before the Python localization layer annotates their provenance.
-for old in ('骨头', '大量骨头', '灰烬', '大量灰烬', '心智', '大量心智', '月神巫咒'):
+for old in ('骨头', '大量骨头', '灰烬', '大量灰烬', '心智', '大量心智', '月神巫咒',
+            '代达罗斯之锤', '德墨忒尔', '阿佛洛狄忒'):
     assert old not in lua
-for expected in ('骨骸', '大量骨骸', '尘灰', '大量尘灰', '魂魄', '大量魂魄', '月之礼赠'):
+for expected in ('骨骸', '大量骨骸', '尘灰', '大量尘灰', '魂魄', '大量魂魄', '月之礼赠',
+                 '狄德勒斯之锤', '得墨忒尔', '阿弗洛狄忒'):
     assert expected in lua
 
 # Known no-direct-DisplayName rewards are resolved through live official keys
