@@ -1,7 +1,6 @@
 {
   "fixtureSchemaVersion": 1,
   "hostProtocolVersion": 5,
-  "backendVersion": "0.1",
   "game": {
     "id": "fixture",
     "displayName": "Fixture Game",
@@ -19,7 +18,7 @@
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
         "result": {
-          "backendVersion": "0.1",
+          "backendVersion": "__PRODUCT_VERSION__",
           "hostProtocolVersion": 5,
           "game": {"id": "fixture", "displayName": "Fixture Game", "protocolVersion": 7}
         }
