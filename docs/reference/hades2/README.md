@@ -57,7 +57,7 @@ Several snapshot files are static extraction indexes, not claims about complete 
 
 The `state` column in generated inventory tables is an **extractor state**, not a legality, runtime-validity, or gameplay-source classification. Do not use values such as `defined`, `debug_only`, or `stub` as a Trainer-facing decision.
 
-In particular, the current extractor does not fully model function-valued `NamedRequirementsData` entries. Some valid requirements therefore appear as `state=stub` / `field_count=0` in `generated/requirements.csv`. Until that extractor is upgraded and the snapshot is regenerated, treat those fields only as parser output and inspect the source requirement before drawing semantic conclusions.
+The historical snapshot extractor also under-counted anonymous array members inside `NamedRequirementsData`. That specific defect has now been corrected in `generated/requirements.csv`; all installed named requirements are represented as defined tables with source-derived top-level member counts.
 
 
 ### Manual review of generated `state` values
@@ -70,17 +70,30 @@ A second-pass review against the installed Hades II 1.139672 scripts confirmed t
 | Deliberately minimal or empty definition | `WeaponStaffBall2` ("Only used for misnamed objective"), `ArtemisHuntersMark` | A real named table entry can intentionally carry no local fields. Source usage must decide its significance. |
 | Container/list mistaken for an entity | `RewardStoreData.RunProgress`, `RewardStoreData.SubRoomRewards`, `RewardStoreData.Secrets`, `WeaponSets.HeroPrimaryWeapons` | These are lists/pools or lookup structures. Their keys are not standalone game objects. |
 | Scalar/config field mistaken for an entity | `SurfaceShopData.DelayMin`, `SurfaceShopData.DelayMax`, `ScreenData.*.AllowAdvancedTooltip` | Configuration properties, not selectable entities. |
-| Array-valued semantic data not expanded by the extractor | `NamedRequirementsData.BlindBoxLootRequirements` and many other named requirements | Often fully populated and gameplay-valid in Lua despite appearing as `field_count=0`. |
+| Anonymous-array semantic tables under-counted by the legacy extractor | `NamedRequirementsData.BlindBoxLootRequirements` and other list-only named requirements | Historical snapshot defect now corrected in `generated/requirements.csv`; anonymous condition entries count as real top-level members. |
 | Namespace helper data | `LootSetData.Apollo.Using`, `EncounterData_Nemesis.SetupEvents` | Presentation/event helper data that shares a parent table with actual entities but is not itself an entity of that type. |
 
-Current snapshot counts illustrate why `stub` cannot be used as a legality signal: `requirements.csv` has 151 stub rows, `ui.csv` 480, `projectiles.csv` 290, `other_data.csv` 1079, and `progression.csv` 76. Manual sampling of each group found the structural patterns above rather than a corresponding population of invalid game objects.
+Current snapshot counts still illustrate why `stub` cannot be used as a legality signal: `ui.csv` has 480 stub rows, `projectiles.csv` 290, `other_data.csv` 1079, `stores.csv` 17, and the corrected `progression.csv` 12. `requirements.csv` now has zero stub rows after the NamedRequirementsData extraction correction. Manual review of each group found structural/parser shapes rather than a corresponding population of invalid game objects.
 
 For future census work:
 
 1. use `catalog_legality.csv` for Trainer exposure decisions where it applies;
 2. use the generated inventories only to establish that an identifier/table relationship exists;
-3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
+3. inspect the owning Lua definition when a generated row is `stub`, especially for UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
+
+## Requirement census completeness check
+
+Manual review against the installed Hades II 1.139672 `RequirementsData.lua` corrects the previous interpretation of `NamedRequirementsData`.
+
+- `generated/requirements.csv` contains 179 rows / 179 unique IDs, all from `NamedRequirementsData`.
+- All 179 installed values are real Lua requirement tables. None is an empty table and none is a function-valued top-level requirement.
+- 151 requirements are **list-only** tables: their top-level content consists entirely of anonymous condition entries such as `{ Path = ..., Comparison = ... }`.
+- 28 requirements are **mixed** tables: they contain anonymous condition entries plus named top-level combinators such as `NamedRequirements`, `NamedRequirementsFalse`, or `OrRequirements`.
+- The historical extractor counted only named top-level fields. That made all 151 list-only requirements appear as `state=stub, field_count=0`, even though they were populated and gameplay-valid.
+- The corrected snapshot marks all 179 requirements `defined` and records `field_count` as the true number of top-level table members, counting both anonymous conditions and named combinators. Counts range from 1 to 25.
+
+This is reference-shape information only. Requirement contents encode eligibility and sequencing rules for many separate systems; they do not form an additional Trainer legality axis and should not be rewritten into direct/special/exclude classifications.
 
 ## Progression census completeness check
 
