@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 44 then
+if previousModule and previousModule.revision ~= 45 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 44, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 45, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -189,9 +189,9 @@ if __MacGamingTrainerV1 == nil then
     { id = "ZeusUpgrade", name = "宙斯", order = 10 },
     { id = "HeraUpgrade", name = "赫拉", order = 20 },
     { id = "PoseidonUpgrade", name = "波塞冬", order = 30 },
-    { id = "DemeterUpgrade", name = "德墨忒尔", order = 40 },
+    { id = "DemeterUpgrade", name = "得墨忒尔", order = 40 },
     { id = "ApolloUpgrade", name = "阿波罗", order = 50 },
-    { id = "AphroditeUpgrade", name = "阿佛洛狄忒", order = 60 },
+    { id = "AphroditeUpgrade", name = "阿弗洛狄忒", order = 60 },
     { id = "HephaestusUpgrade", name = "赫菲斯托斯", order = 70 },
     { id = "HestiaUpgrade", name = "赫斯提亚", order = 80 },
     { id = "AresUpgrade", name = "阿瑞斯", order = 90 },
@@ -252,7 +252,7 @@ if __MacGamingTrainerV1 == nil then
     { id = "trait:TemporaryImprovedExTrait", trait = "TemporaryImprovedExTrait", name = "女巫的印记", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 300, storeTrait = true },
     { id = "trait:TemporaryImprovedSecondaryTrait", trait = "TemporaryImprovedSecondaryTrait", name = "奇美拉肉干", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 310, storeTrait = true },
     { id = "trait:TemporaryMoveSpeedTrait", trait = "TemporaryMoveSpeedTrait", name = "燃烧的灵液", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 320, storeTrait = true },
-    { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
+    { id = "WeaponUpgrade", name = "狄德勒斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
     { id = "StackUpgrade", name = "力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 10 },
     { id = "StackUpgradeBig", name = "超级力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
     { id = "StackUpgradeTriple", name = "究极力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
@@ -1471,7 +1471,7 @@ if __MacGamingTrainerV1 == nil then
     local officialSourceOrder = officialSpecialSourceOrder()
     local familyTitles = {
       money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
-      healing = "恢复", armor = "护甲", hammer = "代达罗斯之锤", pom = "力量石榴",
+      healing = "恢复", armor = "护甲", hammer = "狄德勒斯之锤", pom = "力量石榴",
       utility = "其他局内奖励", meta = "局外资源奖励",
       metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励", shop = "商店商品", well = "卡戎之井",
     }

@@ -81,6 +81,18 @@ For future census work:
 3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
 
+## Loot census completeness check
+
+Manual review against the installed Hades II 1.139672 LootData sources closes the semantic loot census at 16 concrete targets.
+
+- `generated/loot.csv` has 38 rows but only 19 unique IDs. Each source entry is represented once through its `LootSetData.*` definition and once through the runtime `LootData` view populated by `OverwriteTableKeys(LootData, LootSetData.*)`. Treat those pairs as one runtime loot object, not two rewards.
+- Three unique IDs are not standalone Trainer targets: `BaseLoot` and `BaseSoundPackage` are inheritance templates, while `LootSetData.Apollo.Using` is a namespace helper (`Animation = "ApolloAoEStrikeRapid"`) that the generic extractor mistakes for a loot entry.
+- The remaining 16 IDs are concrete loot targets and now have 16/16 rows in `catalog_legality.csv`.
+- Ten are regular Olympian `GodLoot` objects: Zeus, Hera, Poseidon, Demeter, Apollo, Aphrodite, Hephaestus, Hestia, Ares, and Hermes. The native room-reward path starts from the abstract `Boon` selector, then `SetupRoomReward` / `ChooseLoot` resolves it to one of these concrete `LootData` objects. `Boon` therefore remains an alias, while the ten concrete god loot IDs are `direct`.
+- The other six concrete loot targets are `SpellDrop`, `StackUpgrade`, `StackUpgradeBig`, `StackUpgradeTriple`, `TrialUpgrade`, and `WeaponUpgrade`.
+- `StackUpgrade` and `WeaponUpgrade` retain `DebugOnly = true` in their definitions even though `RewardStoreData` / `StoreData` use them in normal gameplay. This is another case where generated `state=debug_only` is source shape, not Trainer legality.
+- Names such as `ArtemisUpgrade`, `AthenaUpgrade`, `DionysusUpgrade`, and `HadesUpgrade` occur in NPC flavor/codex data but are not `LootData` entities in this build; their native encounters are owned by the separate special-choice/trait paths and are not missing loot rows.
+
 ## Consumable census completeness check
 
 Manual review against the installed Hades II 1.139672 `ConsumableData.lua` closed the remaining consumable-census gap:

@@ -1,5 +1,8 @@
 id,kind,sources,official_name_zh_cn,classification,reason,game_version,steam_build
 AirBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+AphroditeUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),阿弗洛狄忒,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
+ApolloUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),阿波罗,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
+AresUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),阿瑞斯,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 ArmorBigBoost,consumable,StoreData+DebugSpawnConsumables,埃癸斯饰符,direct,,1.139672,24556151
 ArmorBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,护盾饰符,direct,,1.139672,24556151
 ArmorBoostStore,consumable,StoreData,碎裂之盾,direct,,1.139672,24556151
@@ -11,6 +14,7 @@ CardUpgradePointsDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.1396
 ChaosWeaponUpgrade,consumable,StoreData,命运铁砧,direct,Concrete ConsumableData; direct spawning is sufficient because native use invokes ChaosHammerUpgrade.,1.139672,24556151
 CharonPointsDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 DamageSelfDrop,consumable,StoreData,迈达斯的代价,direct,,1.139672,24556151
+DemeterUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),得墨忒尔,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 Devotion,alias,RewardStoreData,,alias,Room-event selector/alias rather than a concrete standalone reward target.,1.139672,24556151
 DreamPointsDrop,consumable,DebugSpawnConsumables+RewardLogic(DreamRun)+DreamRunLogic,,direct,,1.139672,24556151
 EarthBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
@@ -31,7 +35,10 @@ HealDropMajor,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.13
 HealDropMinor,consumable,DebugSpawnConsumables+EnemyAILogic(Artemis)+FamiliarData+HarvestData+TraitData_Icarus+TraitData_Medea+TraitData_Poseidon,,direct,,1.139672,24556151
 HealDropRange,consumable,StoreData,生命的精华,direct,,1.139672,24556151
 HealDropSuperMinor,consumable,DebugSpawnConsumables,,exclude,"Functional 1-HP healing variant; current build only references it from ConsumableData and test/debug content, with no normal gameplay instantiation found.",1.139672,24556151
+HephaestusUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫菲斯托斯,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
+HeraUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫拉,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 HermesUpgrade,loot,RewardStoreData,赫尔墨斯的祝福,direct,,1.139672,24556151
+HestiaUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫斯提亚,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,direct,,1.139672,24556151
 LastStandShopItem,consumable,StoreData,冥河之吻,direct,,1.139672,24556151
 LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,direct,,1.139672,24556151
@@ -74,6 +81,7 @@ OreFSilverDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.1
 PlantFMolyDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
 PlantFNightshadeDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
 PlantGLotusDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PoseidonUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),波塞冬,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 PowerDrinkDrop,consumable,TraitProducedComment+TraitData_Dionysus,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 RandomLoot,consumable,StoreData,,special,Abstract store wrapper that must resolve to an eligible Olympian boon before spawning.,1.139672,24556151
 RandomStoreItem,consumable,StoreData,命运的作弄,direct,Concrete Well consumable; direct spawning is sufficient because native use handles AwardRandomStoreItem.,1.139672,24556151
@@ -112,3 +120,4 @@ WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1
 WeaponPointsRareDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 WeaponUpgrade,loot,RewardStoreData,狄德勒斯之锤,direct,,1.139672,24556151
 WeaponUpgradeDrop,consumable,StoreData,狄德勒斯之锤,special,Store wrapper; use the native CreateWeaponLoot semantics rather than generic consumable spawning.,1.139672,24556151
+ZeusUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),宙斯,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
