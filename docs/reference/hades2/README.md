@@ -96,6 +96,20 @@ Other valid resources commonly use Harvest/Garden `AddResources` or `ResourceNam
 
 Do not interpret the absence of a `*Drop` wrapper as a missing resource.
 
+
+### Resource census completeness check
+
+Manual review against the installed 1.139672 `ResourceData.lua` closed the remaining resource-census ambiguity:
+
+- `ResourceData` contains 103 extracted rows: five `Base*` templates plus 98 concrete resources.
+- `ScreenData.InventoryScreen.ItemCategories` contains 97 of those 98 concrete resource IDs.
+- `ResourceDisplayOrderData` contains the same 97 IDs.
+- the only concrete `ResourceData` entry intentionally absent from both lists is `Money`, which the game and Trainer handle separately as the run currency;
+- there are no additional concrete `ResourceData` IDs hidden outside both the inventory categories and the display-order list;
+- the 98 concrete resources have unique official zh-CN display names in this build.
+
+This means the resource census itself is complete for the supported build. Apparent omissions found by searching only `*Drop` definitions are pickup-wrapper differences, not missing `ResourceData` entries. Special resources such as `DreamPoints`, `FamiliarPoints`, `HadesSpearPoints`, `DeathAreaPoints`, `MixerMythic`, and `MysteryResource` are explicitly present in the game's own inventory/display data rather than being accidental internal-only rows.
+
 ## Source evidence rules
 
 `RoomDataTest.lua`, `DebugSpawnConsumables`, and TestAllThings are useful existence/debug evidence, but they are not authoritative evidence that normal gameplay does or does not instantiate an object.
