@@ -109,6 +109,9 @@ assert 'AddTraitToHero({ TraitName = entry.trait, FromLoot = true })' in spawn, 
 assert 'entry.sourceId == "Arachne"' in spawn and 'SetupCostume()' in spawn, (
     "exact Arachne costume spawning must refresh the native costume presentation"
 )
+assert 'EchoLastRunBoon = true' in lua and 'nativeChoiceOnlyTraits[traitName]' in lua, (
+    "Echo Last Run must stay on the native Echo choice flow because its acquire function waits on a boon menu"
+)
 
 # Catalog advertises the capability instead of making Swift infer it from localized names.
 assert 'nativeChoice = nativeSpecialChoiceSources[source.id] == true' in lua
