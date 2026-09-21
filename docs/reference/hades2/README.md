@@ -115,11 +115,13 @@ A direct special-trait target must preserve Hades II's normal acquisition seam. 
 
 Manual inheritance-aware review found 28 of the 83 current special-NPC traits with effective acquire functions. Examples include Athena's last-stand effects, Dionysus max-health/bank effects, all nine Narcissus rewards through `NarcissusA`, six Echo rewards, five Circe rewards, and three Icarus rewards. An exact Trainer apply that omits `FromLoot` can therefore add the trait object while silently skipping the effect that acquiring that trait is supposed to cause.
 
-After the resident fix, non-Well special-NPC traits use the native `FromLoot` acquisition semantics. The 75 targets for which that generic apply seam is sufficient are classified `direct`.
+After the resident fix, non-Well special-NPC traits use the native `FromLoot` acquisition semantics. The 74 targets for which that generic apply seam is sufficient are classified `direct`.
 
 Arachne's eight costume traits additionally require `SetupCostume()` after acquisition to refresh the hero costume texture, matching the native `ArachneArmorApply` post-choice behavior. They are therefore classified `special`.
 
-The six fixed-choice sources remain available through the native three-choice interaction as well. Explicit exact-trait application intentionally bypasses source eligibility requirements, but it must not omit the selected trait's acquisition mechanics.
+`EchoLastRunBoon` is also `special`, but for a different reason. Its acquire function first waits on the active boon-menu signal and then opens Echo's previous-run boon selection. A raw exact-trait injection has no such outer boon-menu context and can leave that acquire thread waiting indefinitely. The exact trait is therefore not advertised as a direct catalog item; it remains reachable through Echo's audited native three-choice flow.
+
+The six fixed-choice sources remain available through the native three-choice interaction as well. Explicit exact-trait application intentionally bypasses source eligibility requirements for direct targets, but it must not omit the selected trait's acquisition mechanics.
 
 ## Consumable census completeness check
 
