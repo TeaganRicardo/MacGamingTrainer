@@ -106,6 +106,9 @@ assert 'entry.kind == "trait"' in spawn
 assert 'AddTraitToHero({ TraitName = entry.trait, FromLoot = true })' in spawn, (
     "exact special-trait spawning must preserve native acquire functions"
 )
+assert 'entry.sourceId == "Arachne"' in spawn and 'SetupCostume()' in spawn, (
+    "exact Arachne costume spawning must refresh the native costume presentation"
+)
 
 # Catalog advertises the capability instead of making Swift infer it from localized names.
 assert 'nativeChoice = nativeSpecialChoiceSources[source.id] == true' in lua
