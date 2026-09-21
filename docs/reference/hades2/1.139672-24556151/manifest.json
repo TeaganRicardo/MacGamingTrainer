@@ -25,6 +25,6 @@
     "aliases.csv": 2,
     "trait_references.csv": 620,
     "static_room_links.csv": 522,
-    "native_interactions.csv": 10
+    "native_interactions.csv": 20
   }
 }
