@@ -36,6 +36,7 @@ LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,direct,,1.
 LastStandShopItem,consumable,StoreData,冥河之吻,direct,,1.139672,24556151
 LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,direct,,1.139672,24556151
 LimitedSwapTraitDrop,consumable,StoreData,牺牲圣诗,direct,,1.139672,24556151
+LobAmmoPack,consumable,WeaponData_Lob+WeaponLogic,,exclude,Weapon-owned ammo pickup with volley/magnetism/session state; valid gameplay object but not a standalone Trainer reward target.,1.139672,24556151
 ManaDropMinor,consumable,TraitProducedComment,,exclude,Defined base mana consumable; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
 ManaDropMinorHound,consumable,TraitProducedComment+FamiliarData,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 ManaDropMinorPoseidon,consumable,TraitProducedComment,,exclude,Defined Poseidon mana variant; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
@@ -64,6 +65,7 @@ MixerFBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerGBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerHBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerIBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerMythicDrop,consumable,RoomDataQ(CheckTyphonReward),熵,direct,,1.139672,24556151
 MixerNBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerOBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerPBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
@@ -83,6 +85,7 @@ RoomMoneyTinyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,direct
 RoomMoneyTripleDrop,consumable,RewardStoreData+DebugSpawnConsumables,巨量资金,direct,,1.139672,24556151
 RoomRewardConsolationPrize,consumable,DebugSpawnConsumables+EventLogic+RewardLogic+ShrineLogic,红洋葱,direct,,1.139672,24556151
 RoomRewardHealDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,新鲜食粮,direct,,1.139672,24556151
+SeedMysteryDrop,consumable,TraitData_Narcissus,神秘种子,direct,,1.139672,24556151
 SeedMysteryRange,consumable,StoreData,盖亚的礼赠,direct,,1.139672,24556151
 ShopHermesUpgrade,consumable,StoreData,,special,Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning.,1.139672,24556151
 SpellDrop,loot,RewardStoreData+StoreData,月之礼赠,special,"Concrete Selene reward, but Trainer use must preserve the native SpawnRoomReward spell/hex choice flow.",1.139672,24556151
