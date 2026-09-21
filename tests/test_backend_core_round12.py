@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import logging
+import plistlib
 import sys
 import tempfile
 
@@ -41,8 +42,9 @@ class FakeAdapter(GameAdapter):
         self.closed = True
 
 
+product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShortVersionString']
 assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
-assert APP_BACKEND_VERSION == '0.1'
+assert APP_BACKEND_VERSION == product_version
 assert any(row['id'] == 'hades2' and row['protocolVersion'] == 5 for row in available_games())
 
 context = GameAdapterContext(
@@ -54,7 +56,7 @@ router = JsonlRequestRouter(adapter)
 hello = router.handle({'id':'hello','command':'hello','params':{}})
 assert hello['ok'] and hello['protocolVersion'] == 5
 assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
-assert hello['result']['backendVersion'] == '0.1'
+assert hello['result']['backendVersion'] == product_version
 reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
 assert reply['ok'] and reply['result']['command'] == 'poke'
 assert router.handle({'id':'a','command':'poke','params':{'x':1}}) == reply
@@ -96,7 +98,12 @@ backend = project/'Backend'; games = backend/'games'; module_dir = games/'other'
 module_dir.mkdir(parents=True)
 (games/'__init__.py').write_text('')
 (module_dir/'__init__.py').write_text('')
-(module_dir/'adapter.py').write_text('''\nfrom core.adapter import GameAdapter\nclass OtherAdapter(GameAdapter):\n    def dispatch(self, command, params, request_id): return {"command": command}\n    def close(self): pass\n''')
+(module_dir/'adapter.py').write_text('''
+from core.adapter import GameAdapter
+class OtherAdapter(GameAdapter):
+    def dispatch(self, command, params, request_id): return {"command": command}
+    def close(self): pass
+''')
 (module_dir/'module.json').write_text(json.dumps({
     'id':'other','displayName':'Other Game','protocolVersion':11,
     'backend':{'adapter':'games.other.adapter:OtherAdapter'},
@@ -142,7 +149,8 @@ try:
 except ManifestError: pass
 else: raise AssertionError('runtime manifest accepted adapter outside its game package')
 
-core_text = '\n'.join(path.read_text() for path in (root/'Backend/core').glob('*.py'))
+core_text = '
+'.join(path.read_text() for path in (root/'Backend/core').glob('*.py'))
 for token in ('Hades II','WeaponCast','CurrentRun','TraitData','1145350','import lldb','SteamSpec'):
     assert token not in core_text, token
 print('backend_core_round12_ok')
