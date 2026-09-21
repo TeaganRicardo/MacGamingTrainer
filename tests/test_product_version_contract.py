@@ -33,6 +33,8 @@ assert 'Game module contract — 0.1 baseline' not in modules
 assert "Print :CFBundleShortVersionString' Info.plist" in workflow
 assert "Print :CFBundleVersion' Info.plist" in workflow
 assert 'test "$source_version" = "$source_build"' in workflow
+assert "github.event.pull_request.head.sha" in workflow
+assert 'source_sha=' in workflow
 assert 'MacGamingTrainer-0.1-build2' not in workflow
 assert 'test "$version" = "0.1"' not in workflow
 assert 'test "$build" = "2"' not in workflow
