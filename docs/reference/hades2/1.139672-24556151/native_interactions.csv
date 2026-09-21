@@ -1,11 +1,21 @@
 id,kind,owner,native_handler,note,game_version,steam_build
-ChaosWeaponUpgrade,shop_consumable,ConsumableData.lua,ChaosHammerUpgrade,Native Anvil of Fates consumable.,1.139672,24556151
-BlindBoxLoot,shop_consumable,ConsumableData.lua,UnwrapRandomLoot,Mystery boon; opens native boon flow.,1.139672,24556151
-WeaponUpgradeDrop,shop_wrapper,StoreLogic.lua,CreateWeaponLoot,Shop wrapper for Daedalus Hammer loot.,1.139672,24556151
-ShopHermesUpgrade,shop_wrapper,StoreLogic.lua,CreateHermesLoot,Shop wrapper for Hermes boon loot.,1.139672,24556151
-RandomLoot,shop_wrapper,StoreLogic.lua,GiveLoot,Resolved to an eligible Olympian before spawning.,1.139672,24556151
-BoostedRandomLoot,shop_wrapper,StoreLogic.lua,GiveLoot,Random Olympian boon with rarity override; not generic ConsumableData semantics.,1.139672,24556151
-RandomStoreItem,well_consumable,ConsumableData.lua,AwardRandomStoreItem,Awards one eligible Well item/trait.,1.139672,24556151
-Devotion,room_event_alias,RewardStoreData,Room/event logic,Abstract Trial-of-the-Gods style selector; not directly spawnable.,1.139672,24556151
-TrialUpgrade,chaos_loot,LootData_Chaos.lua,UseLoot,Concrete Chaos boon source.,1.139672,24556151
-SpellDrop,selene_loot,LootData_Selene.lua,OpenSpellScreen,Concrete Selene gift/hex choice source.,1.139672,24556151
+ChaosWeaponUpgrade,shop_consumable,ConsumableData.lua,ChaosHammerUpgrade,Concrete Anvil of Fates consumable; its own use function preserves the native effect.,1.139672,24556151
+BlindBoxLoot,shop_consumable,ConsumableData.lua+InteractLogic.lua+StoreLogic.lua,ReplaceWithRandomLoot -> UnwrapRandomLoot,Concrete mystery-boon consumable; generic consumable use dispatches the native unwrap flow.,1.139672,24556151
+WeaponUpgradeDrop,shop_wrapper,ConsumableData.lua+StoreLogic.lua,CreateWeaponLoot,Shop wrapper that is materialized as native Daedalus Hammer loot rather than as a generic consumable.,1.139672,24556151
+ShopHermesUpgrade,shop_wrapper,ConsumableData.lua+StoreLogic.lua,CreateHermesLoot,Shop wrapper that is materialized as native Hermes loot and marked BoughtFromShop.,1.139672,24556151
+RandomLoot,shop_wrapper,ConsumableData.lua+StoreLogic.lua,FillInShopOptions -> GiveLoot,StoreLogic resolves an eligible Olympian before spawning the boon.,1.139672,24556151
+BoostedRandomLoot,shop_wrapper,ConsumableData.lua+StoreLogic.lua,FillInShopOptions -> GiveLoot,StoreLogic resolves an eligible Olympian and preserves the boosted rarity override.,1.139672,24556151
+RandomStoreItem,well_consumable,ConsumableData.lua+StoreLogic.lua,AwardRandomStoreItem,Concrete Well consumable whose use function selects an eligible Well trait or consumable.,1.139672,24556151
+Devotion,room_event_alias,LootData.lua+RewardLogic.lua,RewardLogic Devotion branch,Abstract Trial-of-the-Gods room/event selector rather than a concrete standalone reward.,1.139672,24556151
+TrialUpgrade,chaos_loot,LootData_Chaos.lua+InteractLogic.lua,UseLoot,Concrete Chaos loot source using the normal loot-choice flow.,1.139672,24556151
+SpellDrop,selene_loot,LootData_Selene.lua+SpellLogic.lua,OpenSpellScreen,Concrete Selene gift whose useful semantics are the native hex/spell choice flow.,1.139672,24556151
+Artemis,special_choice_source,NPCData_Artemis.lua+InteractLogic.lua,UseLoot,Field Artemis exposes nine traits through the native loot-choice flow.,1.139672,24556151
+Athena,special_choice_source,NPCData_Athena.lua+EncounterLogic.lua,AthenaUse -> UseLoot,Athena exposes eight traits; AthenaUse wraps UseLoot and then performs the physical NPC exit presentation.,1.139672,24556151
+Dionysus,special_choice_source,NPCData_Dionysus.lua+InteractLogic.lua,UseLoot,Dionysus exposes eight traits through the native loot-choice flow.,1.139672,24556151
+Hades,special_choice_source,NPCData_Hades.lua+InteractLogic.lua,UseLoot,Hades exposes eight traits through the native loot-choice flow.,1.139672,24556151
+Arachne,special_choice_source,NPCData_Arachne.lua+EventLogic.lua,ArachneCostumeChoice,Arachne selects three eligible costumes and applies the costume refresh after acquisition.,1.139672,24556151
+Narcissus,special_choice_source,NPCData_Narcissus.lua+EventLogic.lua,NarcissusBenefitChoice,Narcissus selects three eligible benefits from nine source traits.,1.139672,24556151
+Echo,special_choice_source,NPCData_Echo.lua+EventLogic.lua,EchoChoice,Echo selects three eligible benefits from eight source traits; EchoLastRunBoon depends on this native menu context.,1.139672,24556151
+Medea,special_choice_source,NPCData_Medea.lua+EventLogic.lua,MedeaCurseChoice,Medea selects three eligible curses from eight source traits.,1.139672,24556151
+Circe,special_choice_source,NPCData_Circe.lua+EventLogic.lua,CirceBlessingChoice,Circe selects three eligible blessings from nine source traits and preprocesses DoubleFamiliarTrait context.,1.139672,24556151
+Icarus,special_choice_source,NPCData_Icarus.lua+EventLogic.lua,IcarusBenefitChoice,Icarus selects three eligible benefits from eight source traits.,1.139672,24556151
