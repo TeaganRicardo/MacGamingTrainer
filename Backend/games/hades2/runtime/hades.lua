@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 42 then
+if previousModule and previousModule.revision ~= 43 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 42, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 43, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -216,15 +216,48 @@ if __MacGamingTrainerV1 == nil then
     { id = "RoomRewardHealDrop", name = "新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 10 },
     { id = "HealBigDrop", name = "超大份新鲜食粮", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 20 },
     { id = "HealDropMajor", name = "大型生命恢复", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 30 },
+    { id = "HealDrop", name = "治疗", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 32 },
+    { id = "HealDropMinor", name = "少量治疗", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 34 },
     { id = "RoomRewardConsolationPrize", name = "红洋葱", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "healing", familyOrder = 27, itemOrder = 40 },
     { id = "ArmorBoost", name = "护盾饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 10 },
     { id = "ArmorBigBoost", name = "埃癸斯饰符", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "armor", familyOrder = 28, itemOrder = 20 },
+    { id = "ChaosWeaponUpgrade", name = "命运铁砧", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 10 },
+    { id = "BlindBoxLoot", name = "神秘祝福", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 20 },
+    { id = "RandomLoot", name = "随机奥林匹斯祝福", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 30, spawnMode = "random_loot" },
+    { id = "BoostedRandomLoot", name = "强化随机祝福", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 40, spawnMode = "boosted_random_loot" },
+    { id = "WeaponUpgradeDrop", name = "狄德勒斯之锤", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 50, spawnMode = "weapon_loot" },
+    { id = "ShopHermesUpgrade", name = "赫尔墨斯的祝福", category = "商店商品", kind = "consumable", group = "pickup", family = "shop", familyOrder = 80, itemOrder = 60, spawnMode = "hermes_loot" },
+    { id = "ArmorBoostStore", name = "碎裂之盾", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 10 },
+    { id = "DamageSelfDrop", name = "迈达斯的代价", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 20 },
+    { id = "EmptyMaxHealthShopItem", name = "半人马之魂", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 30 },
+    { id = "HealDropRange", name = "生命的精华", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 40 },
+    { id = "LastStandShopItem", name = "冥河之吻", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 50 },
+    { id = "LimitedManaRegenDrop", name = "薄雾面纱", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 60 },
+    { id = "LimitedSwapTraitDrop", name = "牺牲圣诗", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 70 },
+    { id = "MemPointsCommonRange", name = "摇曳的微光", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 80 },
+    { id = "MetaCardPointsCommonRange", name = "积灰的袋子", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 90 },
+    { id = "MetaCurrencyRange", name = "出土的遗骸", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 100 },
+    { id = "RandomStoreItem", name = "命运的作弄", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 110 },
+    { id = "SeedMysteryRange", name = "盖亚的礼赠", category = "卡戎之井", kind = "consumable", group = "pickup", family = "well", familyOrder = 85, itemOrder = 120 },
+    { id = "trait:ExtendedShopTrait", trait = "ExtendedShopTrait", name = "古老的封印", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 200, storeTrait = true },
+    { id = "trait:FirstHitHealTrait", trait = "FirstHitHealTrait", name = "厄洛斯之息", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 210, storeTrait = true },
+    { id = "trait:TemporaryBoonRarityTrait", trait = "TemporaryBoonRarityTrait", name = "阿里阿德涅的纱线", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 220, storeTrait = true },
+    { id = "trait:TemporaryDiscountTrait", trait = "TemporaryDiscountTrait", name = "渡船优惠券", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 230, storeTrait = true },
+    { id = "trait:TemporaryDoorHealTrait", trait = "TemporaryDoorHealTrait", name = "九头蛇轻饮", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 240, storeTrait = true },
+    { id = "trait:TemporaryEmptySlotDamageTrait", trait = "TemporaryEmptySlotDamageTrait", name = "达那伊德斯的匕首", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 250, storeTrait = true },
+    { id = "trait:TemporaryForcedSecretDoorTrait", trait = "TemporaryForcedSecretDoorTrait", name = "伊克西翁之耀", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 260, storeTrait = true },
+    { id = "trait:TemporaryHealExpirationTrait", trait = "TemporaryHealExpirationTrait", name = "善意之瓶", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 270, storeTrait = true },
+    { id = "trait:TemporaryImprovedCastTrait", trait = "TemporaryImprovedCastTrait", name = "阿特拉斯的穗带", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 280, storeTrait = true },
+    { id = "trait:TemporaryImprovedDefenseTrait", trait = "TemporaryImprovedDefenseTrait", name = "蟒蛇的鳞片", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 290, storeTrait = true },
+    { id = "trait:TemporaryImprovedExTrait", trait = "TemporaryImprovedExTrait", name = "女巫的印记", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 300, storeTrait = true },
+    { id = "trait:TemporaryImprovedSecondaryTrait", trait = "TemporaryImprovedSecondaryTrait", name = "奇美拉肉干", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 310, storeTrait = true },
+    { id = "trait:TemporaryMoveSpeedTrait", trait = "TemporaryMoveSpeedTrait", name = "燃烧的灵液", category = "卡戎之井", kind = "trait", group = "pickup", family = "well", familyOrder = 85, itemOrder = 320, storeTrait = true },
     { id = "WeaponUpgrade", name = "代达罗斯之锤", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "hammer", familyOrder = 30, itemOrder = 10 },
     { id = "StackUpgrade", name = "力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 10 },
     { id = "StackUpgradeBig", name = "超级力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 20 },
     { id = "StackUpgradeTriple", name = "究极力量石榴", category = "资源与常规掉落", kind = "loot", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 30 },
     { id = "StoreRewardRandomStack", name = "随机祝福强化", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 40 },
-    { id = "RerollDrop", name = "重掷次数", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 10 },
+    { id = "RerollDrop", name = "重塑命运", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 10 },
     { id = "LastStandDrop", name = "冥河之吻", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 20 },
     { id = "MinorTalentDrop", name = "黯淡繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 30, sourceId = "Selene", sourceName = "塞勒涅" },
@@ -1438,19 +1471,22 @@ if __MacGamingTrainerV1 == nil then
       money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
       healing = "恢复", armor = "护甲", hammer = "代达罗斯之锤", pom = "力量石榴",
       utility = "其他局内奖励", meta = "局外资源奖励",
-      metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励",
+      metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励", shop = "商店商品", well = "卡戎之井",
     }
     local knownBoonIds = {}
     for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end
     local function addDefinition(entry)
       if allowed[entry.id] then return end
+      local traitId = entry.trait
+      if traitId == nil and entry.kind == "trait" then traitId = string.match(entry.id, "^trait:(.+)$") end
       local exists = (entry.kind == "loot" and type(LootData) == "table" and type(LootData[entry.id]) == "table")
         or (entry.kind == "consumable" and type(ConsumableData) == "table" and type(ConsumableData[entry.id]) == "table")
+        or (entry.kind == "trait" and type(TraitData) == "table" and type(TraitData[traitId]) == "table")
       if exists then
         local section = entry.group == "pickup" and 10 or 30
         allowed[entry.id] = {
           id = entry.id, name = entry.name, category = entry.category, group = entry.group or "pickup", kind = entry.kind,
-          family = entry.family, sortSection = section,
+          family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode, sortSection = section,
           sortGroup = entry.group == "special" and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
           sortOrder = entry.itemOrder or 0, sourceId = entry.sourceId, sourceName = entry.sourceName,
           sectionTitle = entry.group == "special" and entry.sourceName or familyTitles[entry.family],
@@ -3206,10 +3242,102 @@ if __MacGamingTrainerV1 == nil then
       if not entry then error("Unknown or unsupported reward") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot spawn a reward during a transition") end
       return action(command, params, function()
+        if entry.spawnMode == "weapon_loot" then
+          requireFunctions("shop hammer spawning", { "CreateWeaponLoot" })
+          local loot = CreateWeaponLoot({
+            SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+            DoesNotBlockExit = true, SuppressSpawnSounds = true,
+          })
+          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Daedalus Hammer shop spawn did not return an object ID") end
+          return loot.ObjectId
+        end
+        if entry.spawnMode == "hermes_loot" then
+          requireFunctions("shop Hermes spawning", { "CreateHermesLoot" })
+          local loot = CreateHermesLoot({
+            SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+            DoesNotBlockExit = true, SuppressSpawnSounds = true, BoughtFromShop = true,
+          })
+          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Hermes shop spawn did not return an object ID") end
+          loot.CanReceiveGift = false
+          return loot.ObjectId
+        end
+        if entry.spawnMode == "random_loot" or entry.spawnMode == "boosted_random_loot" then
+          requireFunctions("random shop boon spawning", { "GetEligibleInteractedGod", "GiveLoot" })
+          local forceLootName = GetEligibleInteractedGod()
+          if type(forceLootName) ~= "string" or forceLootName == "" then error("No eligible Olympian boon is available") end
+          local lootArgs = {
+            ForceLootName = forceLootName, SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+            BoughtFromShop = true, DoesNotBlockExit = true, AutoLoadPackages = true,
+          }
+          if entry.spawnMode == "boosted_random_loot" then
+            lootArgs.AddBoostedAnimation = true
+            lootArgs.BoonRaritiesOverride = { Legendary = 0.1, Epic = 0.25, Rare = 0.90 }
+          end
+          local loot = GiveLoot(lootArgs)
+          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Random shop boon spawn did not return an object ID") end
+          loot.CanReceiveGift = false
+          if lootArgs.BoonRaritiesOverride ~= nil then loot.BoonRaritiesOverride = lootArgs.BoonRaritiesOverride end
+          return loot.ObjectId
+        end
         if entry.kind == "trait" then
-          requireFunctions("special blessing", { "AddTraitToHero" })
-          if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Special blessing is unavailable") end
-          AddTraitToHero({ TraitName = entry.trait })
+          if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
+          if entry.storeTrait then
+            requireFunctions("store trait spawning", { "GetProcessedTraitData", "AddTraitToHero" })
+            local traitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = entry.trait })
+            if type(traitData) ~= "table" then error("Store trait processing failed") end
+            if type(RecalculateStoreTraitDurations) == "function" then RecalculateStoreTraitDurations(traitData) end
+            local extension = nil
+            if type(HeroHasTrait) == "function" and HeroHasTrait("ExtendedShopTrait") then
+              requireFunctions("extended store trait eligibility", { "GetHeroTrait", "IsTraitActive" })
+              extension = GetHeroTrait("ExtendedShopTrait")
+              if type(extension) == "table"
+                  and type(extension.ValidPermanentItemsLookup) == "table"
+                  and extension.ValidPermanentItemsLookup[entry.trait]
+                  and IsTraitActive(extension) then
+                traitData.MakePermanent = true
+              end
+            end
+            if traitData.MakePermanent and type(extension) == "table" and finite(extension.BossExtension) then
+              requireFunctions("extended store trait", { "UseHeroTraitsWithValue" })
+              traitData.UsesAsEncounters = false
+              traitData.UsesAsRooms = false
+              traitData.UsesAsBosses = true
+              traitData.RemainingUses = extension.BossExtension
+              traitData.StatLines = { "ExtendedStoreUsesRemainingDisplay1" }
+              if traitData.CustomStatLinesWithShrineUpgrade ~= nil then
+                requireFunctions("extended store trait shrine display", { "GetNumShrineUpgrades" })
+                if GetNumShrineUpgrades(traitData.CustomStatLinesWithShrineUpgrade.ShrineUpgradeName) > 0 then
+                  traitData.CustomStatLinesWithShrineUpgrade.StatLines[1] = "ExtendedStoreUsesRemainingDisplay1"
+                end
+              end
+              UseHeroTraitsWithValue("BossExtension", true)
+            end
+            if traitData.IncreaseUsesOnStack and type(HeroHasTrait) == "function" and HeroHasTrait(entry.trait) then
+              requireFunctions("store trait stacking", { "GetHeroTrait", "UpdateTraitNumber" })
+              local currentTrait = GetHeroTrait(entry.trait)
+              if type(currentTrait) ~= "table" then error("Existing store trait is unavailable") end
+              currentTrait.RemainingUses = number(currentTrait.RemainingUses) + number(traitData.RemainingUses)
+              UpdateTraitNumber(currentTrait)
+            else
+              AddTraitToHero({ TraitData = traitData, SkipQuestStatusCheck = true, SkipAddToHUD = true })
+            end
+            if traitData.StoreCostMultiplier
+                and type(CurrentRun.CurrentRoom) == "table"
+                and type(CurrentRun.CurrentRoom.Store) == "table"
+                and type(CurrentRun.CurrentRoom.Store.StoreOptions) == "table" then
+              requireFunctions("store cost refresh", { "ShallowCopyTable" })
+              for _, currentUpgradeData in pairs(CurrentRun.CurrentRoom.Store.StoreOptions) do
+                if type(currentUpgradeData) == "table" then
+                  currentUpgradeData.Processed = nil
+                  currentUpgradeData.DataOverrides = ShallowCopyTable(currentUpgradeData)
+                  currentUpgradeData.DataOverrides.ResourceCosts = nil
+                end
+              end
+            end
+          else
+            requireFunctions("special blessing", { "AddTraitToHero" })
+            AddTraitToHero({ TraitName = entry.trait })
+          end
           return nil
         end
         if entry.kind == "consumable" then

@@ -15,7 +15,7 @@ for expected in ('骨骸', '大量骨骸', '尘灰', '大量尘灰', '魂魄', '
 # Known no-direct-DisplayName rewards are resolved through live official keys
 # or explicitly marked trainer-side compositions; they are never misreported
 # as an exact official localization for their internal reward id.
-for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon', 'SpellDrop_Store'):
+for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon', 'SpellDrop_Store', 'ReRollAlt'):
     assert linked in catalog
 assert "'official_linked_zh'" in catalog
 assert "'provisional_zh'" in catalog
@@ -42,7 +42,7 @@ audited_debug_spawn_consumables = (
     'MaxManaDrop', 'MaxManaDropSmall', 'MaxManaDropBig',
     'TalentDrop', 'MinorTalentDrop', 'TalentBigDrop',
     # Healing / partial rewards
-    'RoomRewardHealDrop', 'HealBigDrop', 'HealDropMajor', 'RoomRewardConsolationPrize',
+    'RoomRewardHealDrop', 'HealBigDrop', 'HealDropMajor', 'HealDrop', 'HealDropMinor', 'RoomRewardConsolationPrize',
     'StoreRewardRandomStack', 'RerollDrop', 'LastStandDrop', 'ArmorBoost', 'ArmorBigBoost',
     'FireBoost', 'AirBoost', 'EarthBoost', 'WaterBoost', 'ElementalBoost',
     # Meta, basic / harvest / boss / advanced
@@ -54,13 +54,14 @@ audited_debug_spawn_consumables = (
     'WeaponPointsRareDrop', 'CardUpgradePointsDrop', 'FamiliarPointsDrop', 'CharonPointsDrop',
     'GemPointsDrop', 'GemPointsBigDrop', 'DreamPointsDrop',
 )
-assert len(audited_debug_spawn_consumables) == 60
+assert len(audited_debug_spawn_consumables) == 62
 for identifier in audited_debug_spawn_consumables:
     assert identifier in reward_rows, identifier
 
-# RoomDataTest lists these separately as no-interact internals; trait-produced
-# drops are commented out there. Neither group belongs in the picker.
-for identifier in ('HealDrop', 'HealDropMinor', 'HealDropSuperMinor',
+# HealDrop and HealDropMinor have verified normal gameplay callers. The 1-HP
+# super-minor variant remains test/debug-only; trait-produced transient drops
+# stay excluded as standalone Trainer targets.
+for identifier in ('HealDropSuperMinor',
                    'MedeaMoneyTinyDrop', 'PowerDrinkDrop', 'BloodDrop',
                    'ManaDropMinorPoseidon', 'ManaDropMinor', 'ManaDropZeus', 'ManaDropMinorHound'):
     assert identifier not in reward_rows, identifier
