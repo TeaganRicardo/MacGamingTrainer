@@ -1,10 +1,11 @@
 from pathlib import Path
+from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 
 # Runtime changes in this slice must advance the resident revision.
-assert 'version = 1, revision = 42' in lua
+assert runtime_revision(lua) >= 42
 assert 'godModeHitBaseline' in lua
 assert 'godModeHitBaselineKnown' in lua
 
