@@ -1,0 +1,11 @@
+id,kind,owner,native_handler,note,game_version,steam_build
+ChaosWeaponUpgrade,shop_consumable,ConsumableData.lua,ChaosHammerUpgrade,Native Anvil of Fates consumable.,1.139672,24556151
+BlindBoxLoot,shop_consumable,ConsumableData.lua,UnwrapRandomLoot,Mystery boon; opens native boon flow.,1.139672,24556151
+WeaponUpgradeDrop,shop_wrapper,StoreLogic.lua,CreateWeaponLoot,Shop wrapper for Daedalus Hammer loot.,1.139672,24556151
+ShopHermesUpgrade,shop_wrapper,StoreLogic.lua,CreateHermesLoot,Shop wrapper for Hermes boon loot.,1.139672,24556151
+RandomLoot,shop_wrapper,StoreLogic.lua,GiveLoot,Resolved to an eligible Olympian before spawning.,1.139672,24556151
+BoostedRandomLoot,shop_wrapper,StoreLogic.lua,GiveLoot,Random Olympian boon with rarity override; not generic ConsumableData semantics.,1.139672,24556151
+RandomStoreItem,well_consumable,ConsumableData.lua,AwardRandomStoreItem,Awards one eligible Well item/trait.,1.139672,24556151
+Devotion,room_event_alias,RewardStoreData,Room/event logic,Abstract Trial-of-the-Gods style selector; not directly spawnable.,1.139672,24556151
+TrialUpgrade,chaos_loot,LootData_Chaos.lua,UseLoot,Concrete Chaos boon source.,1.139672,24556151
+SpellDrop,selene_loot,LootData_Selene.lua,OpenSpellScreen,Concrete Selene gift/hex choice source.,1.139672,24556151

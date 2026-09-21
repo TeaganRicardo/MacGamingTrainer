@@ -1,0 +1,12 @@
+id,kind,owner,note,game_version,steam_build
+CurrentRun.NumRerolls,state,RunLogic/DeathLoopLogic,Current reroll currency; UI count alone does not grant reroll capability.,1.139672,24556151
+PanelRerollMetaUpgrade,trait_gate,TraitData_MetaUpgrade.lua,Required for boon/store panel rerolls.,1.139672,24556151
+DoorRerollMetaUpgrade,trait_gate,TraitData_MetaUpgrade.lua,Grants AllowDoorReroll for door rerolls.,1.139672,24556151
+RerollTradeOffMetaUpgrade,trait_gate,TraitData_MetaUpgrade.lua,Alternate meta-upgrade path contributing reroll count/capability.,1.139672,24556151
+source.BlockReroll,choice_gate,UpgradeChoiceLogic.lua/EventLogic.lua,When true the upgrade-choice reroll control is blocked even when rerolls exist.,1.139672,24556151
+room.NoReroll,room_gate,RewardLogic.lua/RoomData*.lua,Blocks room/door rerolls for specific rooms.,1.139672,24556151
+door.AllowReroll,door_gate,RoomLogic.lua/ObstacleData*.lua,Door must allow reroll; room and trait gates also apply.,1.139672,24556151
+AttemptPanelReroll,handler,InteractLogic.lua,Spends CurrentRun.NumRerolls then calls the panel reroll function.,1.139672,24556151
+RerollBoonLoot,handler,UpgradeChoiceLogic.lua,Native boon-choice reroll implementation.,1.139672,24556151
+AttemptRerollDoor,handler,InteractLogic.lua,Native room-door reroll implementation.,1.139672,24556151
+RerollStore,handler,StoreLogic.lua,Native store reroll implementation.,1.139672,24556151

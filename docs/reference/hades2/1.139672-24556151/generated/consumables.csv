@@ -1,0 +1,98 @@
+id,table,source_namespace,source_file,state,field_count,inherit_from,display_key,display_name_zh_cn,use_function,game_version,steam_build
+AirBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,FireBoost,,,,1.139672,24556151
+ArmorBigBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,ArmorBoost,ArmorBigBoost_Store,埃癸斯饰符,,1.139672,24556151
+ArmorBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,21,BaseConsumable,ArmorBoost_Store,护盾饰符,,1.139672,24556151
+ArmorBoostStore,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,ArmorBoost;BaseWellShopConsumable,ArmorBoostStore,碎裂之盾,,1.139672,24556151
+BaseConsumable,ConsumableData,ConsumableData,ConsumableData.lua,debug_only,4,,,,,1.139672,24556151
+BaseMetaRoomReward,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,,,,,1.139672,24556151
+BaseResource,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,BaseConsumable,,,,1.139672,24556151
+BaseSuperResource,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,BaseResource,,,,1.139672,24556151
+BaseWellShopConsumable,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,BaseConsumable,,,,1.139672,24556151
+BlindBoxLoot,ConsumableData,ConsumableData,ConsumableData.lua,defined,12,BaseConsumable,BlindBoxLoot,神秘祝福,,1.139672,24556151
+BloodDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,11,BaseConsumable,BloodDrop,血浆,BloodDropUse,1.139672,24556151
+BoostedRandomLoot,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,BaseConsumable,,,,1.139672,24556151
+CardUpgradePointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,BaseSuperResource,,,,1.139672,24556151
+ChaosWeaponUpgrade,ConsumableData,ConsumableData,ConsumableData.lua,defined,15,BaseConsumable,ChaosWeaponUpgrade,命运铁砧,ChaosHammerUpgrade,1.139672,24556151
+CharonPointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,BaseSuperResource,,,,1.139672,24556151
+DamageSelfDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,12,BaseWellShopConsumable,DamageSelfDrop,迈达斯的代价,,1.139672,24556151
+DreamPointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,BaseSuperResource,,,,1.139672,24556151
+EarthBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,FireBoost,,,,1.139672,24556151
+ElementalBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,FireBoost,,,,1.139672,24556151
+EmptyMaxHealthDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,17,BaseConsumable,EmptyMaxHealthDrop,半人马之魂,,1.139672,24556151
+EmptyMaxHealthShopItem,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseWellShopConsumable,EmptyMaxHealthShopItem,半人马之魂,,1.139672,24556151
+EmptyMaxHealthSmallDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,EmptyMaxHealthDrop,,,,1.139672,24556151
+FamiliarPointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+FireBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,13,BaseConsumable,,,,1.139672,24556151
+GemPointsBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,BaseSuperResource,,,,1.139672,24556151
+GemPointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+GiftDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,21,BaseResource;BaseMetaRoomReward,GiftDrop,蜜露,UseStoreRewardRandomStack,1.139672,24556151
+HealBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,RoomRewardHealDrop,RoomRewardBigHealDrop_Store,超大份新鲜食粮,,1.139672,24556151
+HealDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,BaseConsumable,HealDrop,{!Icons.HealthRestore} 治疗,UseConsumableItem,1.139672,24556151
+HealDropMajor,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,HealDrop,,,,1.139672,24556151
+HealDropMinor,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,HealDrop,HealDropMinor,{!Icons.HealDrop},,1.139672,24556151
+HealDropRange,ConsumableData,ConsumableData,ConsumableData.lua,defined,11,BaseWellShopConsumable,HealDropRange,生命的精华,,1.139672,24556151
+HealDropSuperMinor,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,HealDrop,,,,1.139672,24556151
+LastStandDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,23,BaseConsumable,LastStandDrop,冥河之吻,,1.139672,24556151
+LastStandShopItem,ConsumableData,ConsumableData,ConsumableData.lua,defined,13,BaseWellShopConsumable,LastStandShopItem,冥河之吻,,1.139672,24556151
+LimitedManaRegenDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseWellShopConsumable,LimitedManaRegenDrop,薄雾面纱,AddLimitedManaRegen,1.139672,24556151
+LimitedSwapTraitDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseWellShopConsumable,LimitedSwapTraitDrop,牺牲圣诗,AddLimitedSwapTrait,1.139672,24556151
+LobAmmoPack,ConsumableData,ConsumableData,ConsumableData.lua,defined,15,BaseConsumable,,,UseConsumableItem,1.139672,24556151
+ManaDropMinor,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseConsumable,ManaDropMinor,{!Icons.ManaItemIcon} 灵魂球,,1.139672,24556151
+ManaDropMinorHound,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,ManaDropMinor,,,ManaDropUsePresentation,1.139672,24556151
+ManaDropMinorPoseidon,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,ManaDropMinor,,,ManaDropUsePresentation,1.139672,24556151
+ManaDropZeus,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,ManaDropMinor,ManaDropZeus,以太之源,ZeusManaPickup,1.139672,24556151
+MaxHealthDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,23,BaseConsumable,MaxHealthDrop,半人马之心,,1.139672,24556151
+MaxHealthDropBig,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,MaxHealthDrop,MaxHealthDropBig,超级半人马之心,,1.139672,24556151
+MaxHealthDropSmall,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,MaxHealthDrop,MaxHealthDropSmall,半人马之心,,1.139672,24556151
+MaxManaDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,23,BaseConsumable,MaxManaDrop,{!Icons.MaxManaDrop} 灵魂之水,,1.139672,24556151
+MaxManaDropBig,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,MaxManaDrop,MaxManaDropBig,超级灵魂之水,,1.139672,24556151
+MaxManaDropSmall,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,MaxManaDrop,MaxManaDropSmall,{!Icons.MaxManaDrop} 灵魂之水,,1.139672,24556151
+MedeaMoneyTinyDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,RoomMoneyTinyDrop,,,,1.139672,24556151
+MemPointsCommonBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,MemPointsCommonDrop,MemPointsCommonBigDrop,{!Icons.MemPointsCommon_NoTooltip} 魂魄,,1.139672,24556151
+MemPointsCommonDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,18,BaseResource;BaseMetaRoomReward,MemPointsCommonDrop,{!Icons.MemPointsCommon_NoTooltip} 魂魄,,1.139672,24556151
+MemPointsCommonRange,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,BaseWellShopConsumable,MemPointsCommonRange,摇曳的微光,,1.139672,24556151
+MetaCardPointsCommonBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,MetaCardPointsCommonDrop,MetaCardPointsCommonBigDrop,{!Icons.MetaCardPointsCommonIcon} 尘灰,,1.139672,24556151
+MetaCardPointsCommonDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,19,BaseResource;BaseMetaRoomReward,MetaCardPointsCommonDrop,{!Icons.MetaCardPointsCommonIcon} 尘灰,,1.139672,24556151
+MetaCardPointsCommonRange,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseWellShopConsumable,MetaCardPointsCommonRange,积灰的袋子,,1.139672,24556151
+MetaCurrencyBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,MetaCurrencyDrop,MetaCurrencyBigDrop,{!Icons.MetaCurrency} 骨骸,,1.139672,24556151
+MetaCurrencyDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,20,BaseResource;BaseMetaRoomReward,MetaCurrencyDrop,{!Icons.MetaCurrency} 骨骸,,1.139672,24556151
+MetaCurrencyRange,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseWellShopConsumable,MetaCurrencyRange,出土的遗骸,,1.139672,24556151
+MetaFabricDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseResource,,,,1.139672,24556151
+MinorTalentDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,TalentDrop,MinorTalentDrop,黯淡繁星之路,,1.139672,24556151
+Mixer5CommonDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+Mixer6CommonDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,BaseSuperResource,,,,1.139672,24556151
+MixerFBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerGBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseSuperResource,,,UseScyllaPearl,1.139672,24556151
+MixerHBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerIBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerMythicDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseSuperResource,,,,1.139672,24556151
+MixerNBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerOBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerPBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+MixerQBossDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseSuperResource,,,,1.139672,24556151
+OreFSilverDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseResource,,,,1.139672,24556151
+PlantFMolyDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseResource,,,,1.139672,24556151
+PlantFNightshadeDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,BaseResource,,,,1.139672,24556151
+PlantGLotusDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseResource,,,,1.139672,24556151
+PowerDrinkDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,11,BaseConsumable,,,DrinkPickup,1.139672,24556151
+RandomLoot,ConsumableData,ConsumableData,ConsumableData.lua,defined,5,BaseConsumable,,,GiveLoot,1.139672,24556151
+RandomStoreItem,ConsumableData,ConsumableData,ConsumableData.lua,defined,9,BaseWellShopConsumable,RandomStoreItem,命运的作弄,AwardRandomStoreItem,1.139672,24556151
+RerollDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,10,BaseConsumable,,,,1.139672,24556151
+RoomMoneyBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,RoomMoneyDrop,RoomMoneyBigDrop,大量资金,,1.139672,24556151
+RoomMoneyDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,18,BaseConsumable,RoomMoneyDrop,金币,,1.139672,24556151
+RoomMoneySmallDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,RoomMoneyDrop,RoomMoneySmallDrop,少量资金,,1.139672,24556151
+RoomMoneyTinyDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,8,RoomMoneyDrop,RoomMoneyTinyDrop,金币,,1.139672,24556151
+RoomMoneyTripleDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,RoomMoneyDrop,RoomMoneyTripleDrop,巨量资金,,1.139672,24556151
+RoomRewardConsolationPrize,ConsumableData,ConsumableData,ConsumableData.lua,defined,20,BaseConsumable,RoomRewardConsolationPrize,红洋葱,,1.139672,24556151
+RoomRewardHealDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,22,BaseConsumable,RoomRewardHealDrop_Store,新鲜食粮,UseConsumableItem,1.139672,24556151
+SeedMysteryDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,3,BaseResource,,,,1.139672,24556151
+SeedMysteryRange,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,BaseWellShopConsumable,SeedMysteryRange,盖亚的礼赠,,1.139672,24556151
+ShopHermesUpgrade,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,BaseConsumable,HermesUpgrade_Store,赫尔墨斯的祝福,CreateHermesLoot,1.139672,24556151
+StoreRewardRandomStack,ConsumableData,ConsumableData,ConsumableData.lua,defined,12,BaseConsumable,,,UseStoreRewardRandomStack,1.139672,24556151
+TalentBigDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,TalentDrop,TalentBigDrop,闪耀繁星之路,,1.139672,24556151
+TalentDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,26,BaseConsumable;Tier1Consumable,TalentDrop,繁星之路,OpenTalentScreen,1.139672,24556151
+Tier1Consumable,ConsumableData,ConsumableData,ConsumableData.lua,defined,1,,,,,1.139672,24556151
+TrashPointsDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,10,BaseResource,,,UseTrashPoint,1.139672,24556151
+WaterBoost,ConsumableData,ConsumableData,ConsumableData.lua,defined,4,FireBoost,,,,1.139672,24556151
+WeaponPointsRareDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,6,BaseSuperResource,,,,1.139672,24556151
+WeaponUpgradeDrop,ConsumableData,ConsumableData,ConsumableData.lua,defined,7,BaseConsumable,WeaponUpgradeDrop_Store,狄德勒斯之锤,CreateWeaponLoot,1.139672,24556151

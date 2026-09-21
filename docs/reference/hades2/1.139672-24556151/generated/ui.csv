@@ -1,0 +1,898 @@
+id,table,source_namespace,source_file,state,field_count,inherit_from,display_key,display_name_zh_cn,use_function,game_version,steam_build
+AetherBoonAlt,IconData,IconData,UIData.lua,defined,1,,AetherBoonAlt,{!Icons.CurseAether}以太,,1.139672,24556151
+AetherNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AirBoonAlt,IconData,IconData,UIData.lua,defined,1,,AirBoonAlt,{!Icons.CurseAir}风,,1.139672,24556151
+AirNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Alert,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AllElementsBoonHack,IconData,IconData,UIData.lua,defined,1,,AllElementsBoonHack,{!Icons.EarthNoTooltip}{!Icons.WaterNoTooltip}{!Icons.AirNoTooltip}{!Icons.FireNoTooltip}元素,,1.139672,24556151
+ArmorTotal,IconData,IconData,UIData.lua,defined,1,,ArmorTotal,{!Icons.ArmorTotal} 护甲,,1.139672,24556151
+ArmorTotal_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AttackWarning,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AwardRank1,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AwardRank2,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AwardRank3,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+AwardRank4,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeEphyraIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeErebusIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeFieldsIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeMysteryIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeOceanusIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeOlympusIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeSummitIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeTartarusIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BiomeThessalyIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BlankIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BloodDropIcon,IconData,IconData,UIData.lua,defined,1,,BloodDropIcon,{!Icons.BloodDropNoTooltip} 血浆,,1.139672,24556151
+BloodDropNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BloodDropWithCountIcon,IconData,IconData,UIData.lua,defined,1,,BloodDropWithCountIcon,{!Icons.BloodDropNoTooltip} 血浆,,1.139672,24556151
+BountyEyeIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BountySkull,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BountySkullEmpty,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BountyTarget,IconData,IconData,UIData.lua,defined,1,,BountyTarget,击杀 {!Icons.BountyTarget} 以获得 {!Icons.Currency}！,,1.139672,24556151
+BuffExtraChance,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffExtraChanceAlt,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffFutureBoonRarity,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffHealing,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffMegaPom,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffSlottedBoonRarity,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+BuffWeapon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Bullet,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CardUpgradePointsIcon,IconData,IconData,UIData.lua,defined,1,,CardUpgradePointsIcon,{!Icons.CardUpgradePoints} 月尘,,1.139672,24556151
+CardUpgradePointsIconAlt,IconData,IconData,UIData.lua,defined,1,,CardUpgradePointsIconAlt,{!Icons.CardUpgradePoints} 月尘,,1.139672,24556151
+CatHarvest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Champion,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ChaosIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CheckboxEmpty,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CheckboxFilled,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Clock,IconData,IconData,UIData.lua,defined,1,,Clock,{!Icons.Clock} 倒计时,,1.139672,24556151
+CodexEntryCompleteIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CodexEntryIncompleteIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CosmeticsPointsIcon,IconData,IconData,UIData.lua,defined,1,,CosmeticsPointsIcon,{!Icons.CosmeticsPoints} 声望,,1.139672,24556151
+Currency,IconData,IconData,UIData.lua,defined,1,,Currency,{!Icons.Currency_NoTooltip} 金币,,1.139672,24556151
+Currency_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+CurseAether,IconData,IconData,UIData.lua,defined,1,,CurseAether,{!Icons.CurseAether}以太,,1.139672,24556151
+CurseAir,IconData,IconData,UIData.lua,defined,1,,CurseAir,{!Icons.CurseAir}风,,1.139672,24556151
+CurseEarth,IconData,IconData,UIData.lua,defined,1,,CurseEarth,{!Icons.CurseEarth}土,,1.139672,24556151
+CurseFire,IconData,IconData,UIData.lua,defined,1,,CurseFire,{!Icons.CurseFire}火,,1.139672,24556151
+CurseWater,IconData,IconData,UIData.lua,defined,1,,CurseWater,{!Icons.CurseWater}水,,1.139672,24556151
+Dash,IconData,IconData,UIData.lua,defined,1,,Dash,冲刺,,1.139672,24556151
+DeathIcon,IconData,IconData,UIData.lua,defined,1,,DeathIcon,{!Icons.DeathIcon} 黑夜之拥,,1.139672,24556151
+DefaultPurchasedCheckmark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+DivLong,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+DownArrow,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+DreamIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+DreamPointsIcon,IconData,IconData,UIData.lua,defined,1,,DreamPointsIcon,{!Icons.DreamPoints} 闪亮星星,,1.139672,24556151
+EarthBoonAlt,IconData,IconData,UIData.lua,defined,1,,EarthBoonAlt,{!Icons.CurseEarth}土,,1.139672,24556151
+EarthNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+EasyModeIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Elite,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+EnemyHealth,IconData,IconData,UIData.lua,defined,1,,EnemyHealth,{!Icons.EnemyHealth} 生命值,,1.139672,24556151
+ExorcismLeft,IconData,IconData,UIData.lua,defined,1,,ExorcismLeft,招募（左）,,1.139672,24556151
+ExorcismRight,IconData,IconData,UIData.lua,defined,1,,ExorcismRight,招募（右）,,1.139672,24556151
+ExtendedShopAfter,IconData,IconData,UIData.lua,defined,1,,ExtendedShopAfter,{!Icons.ExtendedShop_NoTooltip} 延时,,1.139672,24556151
+ExtendedShopBefore,IconData,IconData,UIData.lua,defined,1,,ExtendedShopBefore,{!Icons.ExtendedShop_NoTooltip} 延时,,1.139672,24556151
+ExtendedShop_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ExtraChance,IconData,IconData,UIData.lua,defined,1,,ExtraChance,{!Icons.ExtraChance} 死里逃生,,1.139672,24556151
+ExtraChanceAlt,IconData,IconData,UIData.lua,defined,1,,ExtraChanceAlt,死里逃生,,1.139672,24556151
+ExtraChanceCat,IconData,IconData,UIData.lua,defined,1,,ExtraChanceCat,死里逃生,,1.139672,24556151
+ExtraChanceMisc,IconData,IconData,UIData.lua,defined,1,,ExtraChanceMisc,{!Icons.ExtraChanceNoTooltip} 死里逃生,,1.139672,24556151
+ExtraChanceNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ExtraChanceRegen,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+FamiliarPointsIcon,IconData,IconData,UIData.lua,defined,1,,FamiliarPointsIcon,{!Icons.FamiliarPointsIcon_NoTooltip} 女巫之宝,,1.139672,24556151
+FamiliarPointsIconAlt,IconData,IconData,UIData.lua,defined,1,,FamiliarPointsIconAlt,{!Icons.FamiliarPointsIcon_NoTooltip} 女巫之宝,,1.139672,24556151
+FamiliarPointsIcon_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+FatedChoice,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+FavorPoint,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+FireBoonAlt,IconData,IconData,UIData.lua,defined,1,,FireBoonAlt,{!Icons.CurseFire}火,,1.139672,24556151
+FireNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+FrogHarvest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Fuel,IconData,IconData,UIData.lua,defined,1,,Fuel,萌芽,,1.139672,24556151
+Fuel_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+GemPointsIcon,IconData,IconData,UIData.lua,defined,1,,GemPointsIcon,{!Icons.GemPoints} 宝石,,1.139672,24556151
+GiftPointsEpicIcon,IconData,IconData,UIData.lua,defined,1,,GiftPointsEpicIcon,{!Icons.GiftPointsEpic} 双份鱼饵,,1.139672,24556151
+GiftPointsIcon,IconData,IconData,UIData.lua,defined,1,,GiftPointsIcon,{!Icons.GiftPoints} 蜜露,,1.139672,24556151
+GiftPointsIconAlt,IconData,IconData,UIData.lua,defined,1,,GiftPointsIconAlt,{!Icons.GiftPoints} 蜜露,,1.139672,24556151
+GiftPointsRareIcon,IconData,IconData,UIData.lua,defined,1,,GiftPointsRareIcon,{!Icons.GiftPointsRare} 浴盐,,1.139672,24556151
+Hammer,IconData,IconData,UIData.lua,defined,1,,Hammer,{!Icons.Hammer} 狄德勒斯之锤,,1.139672,24556151
+HammerPlural,IconData,IconData,UIData.lua,defined,1,,HammerPlural,{!Icons.Hammer} 狄德勒斯之锤,,1.139672,24556151
+HealDrop,IconData,IconData,UIData.lua,defined,1,,HealDrop,{!Icons.HealthRestore} 治疗,,1.139672,24556151
+HealingItem,IconData,IconData,UIData.lua,defined,1,,HealingItem,{!Icons.HealingItem} 零食,,1.139672,24556151
+HealingItemIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Health,IconData,IconData,UIData.lua,defined,1,,Health,{!Icons.Health} 生命值,,1.139672,24556151
+HealthAlly,IconData,IconData,UIData.lua,defined,1,,HealthAlly,{!Icons.Health} 生命值,,1.139672,24556151
+HealthDown,IconData,IconData,UIData.lua,defined,1,,HealthDown,{!Icons.HealthUp} 生命值上限,,1.139672,24556151
+HealthHome,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+HealthLock,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+HealthRestore,IconData,IconData,UIData.lua,defined,1,,HealthRestore,{!Icons.HealthRestore} 治疗,,1.139672,24556151
+HealthRestoreAlt,IconData,IconData,UIData.lua,defined,1,,HealthRestoreAlt,{!Icons.HealthRestore} 治疗,,1.139672,24556151
+HealthRestoreHome,IconData,IconData,UIData.lua,defined,1,,HealthRestoreHome,{!Icons.Health} 生命值,,1.139672,24556151
+HealthUp,IconData,IconData,UIData.lua,defined,1,,HealthUp,{!Icons.HealthUp} 生命值上限,,1.139672,24556151
+HealthUpAlt,IconData,IconData,UIData.lua,defined,1,,HealthUpAlt,{!Icons.HealthUpAlt} 生命值上限,,1.139672,24556151
+HealthUpTotal,IconData,IconData,UIData.lua,defined,1,,HealthUpTotal,{!Icons.HealthUp} 生命值上限,,1.139672,24556151
+Health_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+HoundHarvest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+HypnosPointsIcon,IconData,IconData,UIData.lua,defined,1,,HypnosPointsIcon,{!Icons.HypnosPoints} 梦雾,,1.139672,24556151
+IcarusPointsIcon,IconData,IconData,UIData.lua,defined,1,,IcarusPointsIcon,{!Icons.IcarusPoints} 灵质秘药,,1.139672,24556151
+IcarusPointsIconAlt,IconData,IconData,UIData.lua,defined,1,,IcarusPointsIconAlt,{!Icons.IcarusPoints} 灵质秘药,,1.139672,24556151
+Infinite,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryCategoryFish,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryCategoryForgetMeNots,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryCategoryGifts,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryCategoryReagents,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryCategoryResources,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+InventoryIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LastStandGiftItem,IconData,IconData,UIData.lua,defined,1,,LastStandGiftItem,{!Icons.LastStand_NoTooltip} 冥河之吻,,1.139672,24556151
+LastStandMoros,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LastStand_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LegendaryAwardRank1,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LegendaryAwardRank2,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LegendaryAwardRank3,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LegendaryAwardRank4,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LegendaryAwardRank5,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LimitedTimeOffer,IconData,IconData,UIData.lua,defined,1,,LimitedTimeOffer,{!Icons.LimitedTimeOfferBanner} 数量有限，售完即止！,,1.139672,24556151
+LimitedTimeOfferBanner,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LobAmmo,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+LobAmmoInfo,IconData,IconData,UIData.lua,defined,1,,LobAmmoInfo,{!Icons.LobAmmo_NoTooltip} 弹药,,1.139672,24556151
+LobAmmo_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Locked,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Mana,IconData,IconData,UIData.lua,defined,1,,Mana,{!Icons.Mana} 魔力值,,1.139672,24556151
+ManaCrystal,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ManaDown,IconData,IconData,UIData.lua,defined,1,,ManaDown,{!Icons.ManaUp} 魔力值上限,,1.139672,24556151
+ManaItem,IconData,IconData,UIData.lua,defined,1,,ManaItem,{!Icons.ManaItemIcon} 灵魂球,,1.139672,24556151
+ManaItemIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ManaItem_Hound,IconData,IconData,UIData.lua,defined,1,,ManaItem_Hound,{!Icons.ManaItemIcon} 灵魂球,,1.139672,24556151
+ManaLock,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ManaUp,IconData,IconData,UIData.lua,defined,1,,ManaUp,{!Icons.ManaUp} 魔力值上限,,1.139672,24556151
+ManaUp_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Mana_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MaxMana,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MaxManaDrop,IconData,IconData,UIData.lua,defined,1,,MaxManaDrop,{!Icons.MaxManaDrop} 灵魂之水,,1.139672,24556151
+MaxManaDrop_Flipped,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MemPointsCommonIcon,IconData,IconData,UIData.lua,defined,1,,MemPointsCommonIcon,{!Icons.MemPointsCommon_NoTooltip} 魂魄,,1.139672,24556151
+MemPointsCommonIconAlt,IconData,IconData,UIData.lua,defined,1,,MemPointsCommonIconAlt,{!Icons.MemPointsCommon_NoTooltip} 魂魄,,1.139672,24556151
+MemPointsCommon_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaCardPoints,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaCardPointsCommonIcon,IconData,IconData,UIData.lua,defined,1,,MetaCardPointsCommonIcon,{!Icons.MetaCardPointsCommonIcon} 尘灰,,1.139672,24556151
+MetaCardPointsCommonIconAlt,IconData,IconData,UIData.lua,defined,1,,MetaCardPointsCommonIconAlt,{!Icons.MetaCardPointsCommonIcon} 尘灰,,1.139672,24556151
+MetaCurrencyIcon,IconData,IconData,UIData.lua,defined,1,,MetaCurrencyIcon,{!Icons.MetaCurrency} 骨骸,,1.139672,24556151
+MetaCurrencyIconAlt,IconData,IconData,UIData.lua,defined,1,,MetaCurrencyIconAlt,{!Icons.MetaCurrency} 骨骸,,1.139672,24556151
+MetaFabricIcon,IconData,IconData,UIData.lua,defined,1,,MetaFabricIcon,{!Icons.MetaFabric_NoTooltip} 命运丝线,,1.139672,24556151
+MetaFabricIconAlt,IconData,IconData,UIData.lua,defined,1,,MetaFabricIconAlt,{!Icons.MetaFabric_NoTooltip} 命运丝线,,1.139672,24556151
+MetaFabric_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaRank1_Icon,IconData,IconData,UIData.lua,defined,1,,MetaRank1_Icon,{!Icons.MetaRank1_NoTooltip} 阿卡那牌,,1.139672,24556151
+MetaRank1_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaRank2_Icon,IconData,IconData,UIData.lua,defined,1,,MetaRank2_Icon,{!Icons.MetaRank2_NoTooltip} 阿卡那牌,,1.139672,24556151
+MetaRank2_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaRank3_Icon,IconData,IconData,UIData.lua,defined,1,,MetaRank3_Icon,{!Icons.MetaRank3_NoTooltip} 阿卡那牌,,1.139672,24556151
+MetaRank3_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaRank4_Icon,IconData,IconData,UIData.lua,defined,1,,MetaRank4_Icon,{!Icons.MetaRank4_NoTooltip} 阿卡那牌,,1.139672,24556151
+MetaRank4_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MetaReward,IconData,IconData,UIData.lua,defined,1,,MetaReward,次要收获,,1.139672,24556151
+MiniBoss,IconData,IconData,UIData.lua,defined,1,,MiniBoss,哨卫,,1.139672,24556151
+MirrorInactive,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+MirrorPurchasedCheckmark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Mixer5CommonIcon,IconData,IconData,UIData.lua,defined,1,,Mixer5CommonIcon,{!Icons.Mixer5Common} 星尘,,1.139672,24556151
+Mixer5CommonIconAlt,IconData,IconData,UIData.lua,defined,1,,Mixer5CommonIconAlt,{!Icons.Mixer5Common} 星尘,,1.139672,24556151
+MixerGBossIcon,IconData,IconData,UIData.lua,defined,1,,MixerGBossIcon,{!Icons.MixerGBoss} 珍珠,,1.139672,24556151
+MixerHBossIcon,IconData,IconData,UIData.lua,defined,1,,MixerHBossIcon,{!Icons.MixerHBoss} 泪珠,,1.139672,24556151
+MixerShadowIconAlt,IconData,IconData,UIData.lua,defined,1,,MixerShadowIconAlt,{!Icons.MixerShadow} 暗影,,1.139672,24556151
+MoneyDrop,IconData,IconData,UIData.lua,defined,1,,MoneyDrop,{!Icons.MoneyDrop} 金币,,1.139672,24556151
+MoneyDrop_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Moon_Crescent,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Moon_Full,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Moon_Half,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Music,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+NeededResource,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+NoCanDo,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ObjectiveSeparator,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ObjectiveSeparatorDark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+OlympianSpell,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Omega,IconData,IconData,UIData.lua,defined,1,,Omega,{!Icons.Omega} 招式,,1.139672,24556151
+Omega_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Onion,IconData,IconData,UIData.lua,defined,1,,Onion,{!Icons.Onion} 红洋葱,,1.139672,24556151
+OreFSilverIcon,IconData,IconData,UIData.lua,defined,1,,OreFSilverIcon,{!Icons.OreFSilver_NoTooltip} 银矿,,1.139672,24556151
+OreFSilverIconAlt,IconData,IconData,UIData.lua,defined,1,,OreFSilverIconAlt,{!Icons.OreFSilver_NoTooltip} 银矿,,1.139672,24556151
+OreFSilver_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PactPurchasedCheckmark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Pause,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Percent,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PercentDark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerfectDashIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkArmor,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkBlink,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkDamage,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkFog,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkFrenzy,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkHex,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkHitShields,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkHoming,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkManaDrain,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkMassive,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkMetallic,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkMiasma,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkMolten,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkOrbit,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkRadial,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkRifts,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkRooting,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkStasisDeath,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkUnflinching,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PerkVacuum,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PlantFMolyIcon,IconData,IconData,UIData.lua,defined,1,,PlantFMolyIcon,{!Icons.PlantFMoly_NoTooltip} 摩吕草,,1.139672,24556151
+PlantFMolyIconAlt,IconData,IconData,UIData.lua,defined,1,,PlantFMolyIconAlt,{!Icons.PlantFMoly_NoTooltip} 摩吕草,,1.139672,24556151
+PlantFMoly_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PlantFNightshadeIcon,IconData,IconData,UIData.lua,defined,1,,PlantFNightshadeIcon,{!Icons.PlantFNightshade} 颠茄,,1.139672,24556151
+PlantFNightshadeIconAlt,IconData,IconData,UIData.lua,defined,1,,PlantFNightshadeIconAlt,{!Icons.PlantFNightshade} 颠茄,,1.139672,24556151
+PlantFNightshadeSeedIcon,IconData,IconData,UIData.lua,defined,1,,PlantFNightshadeSeedIcon,{!Icons.PlantFNightshadeSeed} 颠茄种子,,1.139672,24556151
+PlantGCattailIcon,IconData,IconData,UIData.lua,defined,1,,PlantGCattailIcon,{!Icons.PlantGCattailIcon} 香蒲,,1.139672,24556151
+PlantGLotusIcon,IconData,IconData,UIData.lua,defined,1,,PlantGLotusIcon,{!Icons.PlantGLotus_NoTooltip} 莲花,,1.139672,24556151
+PlantGLotusIconAlt,IconData,IconData,UIData.lua,defined,1,,PlantGLotusIconAlt,{!Icons.PlantGLotus_NoTooltip} 莲花,,1.139672,24556151
+PlantGLotus_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PlantIPoppyIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PlantNGarlicIcon,IconData,IconData,UIData.lua,defined,1,,PlantNGarlicIcon,{!Icons.PlantNGarlicIcon} 大蒜,,1.139672,24556151
+PlantNGarlicSeedIcon,IconData,IconData,UIData.lua,defined,1,,PlantNGarlicSeedIcon,{!Icons.PlantNGarlicSeedIcon} 蒜瓣,,1.139672,24556151
+PlantOMandrakeIcon,IconData,IconData,UIData.lua,defined,1,,PlantOMandrakeIcon,{!Icons.PlantOMandrakeIcon} 曼德拉草,,1.139672,24556151
+PlantOMandrakeSeedIcon,IconData,IconData,UIData.lua,defined,1,,PlantOMandrakeSeedIcon,{!Icons.PlantOMandrakeSeedIcon} 曼德拉草种子,,1.139672,24556151
+PlantPOliveIcon,IconData,IconData,UIData.lua,defined,1,,PlantPOliveIcon,{!Icons.PlantPOliveIcon} 橄榄,,1.139672,24556151
+PlantPOliveSeedIcon,IconData,IconData,UIData.lua,defined,1,,PlantPOliveSeedIcon,{!Icons.PlantPOliveSeedIcon} 橄榄枝,,1.139672,24556151
+PlantQSnakereedIcon,IconData,IconData,UIData.lua,defined,1,,PlantQSnakereedIcon,{!Icons.PlantQSnakereedIcon} 蛇苇,,1.139672,24556151
+PlantQSnakereedSeedIcon,IconData,IconData,UIData.lua,defined,1,,PlantQSnakereedSeedIcon,{!Icons.PlantQSnakereedSeedIcon} 浮游植物,,1.139672,24556151
+PoisonIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PolecatHarvest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Pom,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PomLevel,IconData,IconData,UIData.lua,defined,1,,PomLevel,{!Icons.PomLevel_NoTooltip}等级,,1.139672,24556151
+PomLevel_NoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+PurchasedCheckmark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Quest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+QuestProgressComplete,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+QuestProgressIncomplete,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RandomHammer,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RandomLoot,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RandomLootGiftItem,IconData,IconData,UIData.lua,defined,1,,RandomLootGiftItem,{!Icons.RandomLoot} 神秘祝福,,1.139672,24556151
+RandomPom,IconData,IconData,UIData.lua,defined,1,,RandomPom,{!Icons.RandomPom} 石榴片,,1.139672,24556151
+RavenHarvest,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ReRoll,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ReRollAlt,IconData,IconData,UIData.lua,defined,1,,ReRollAlt,{!Icons.ReRoll} 重塑命运,,1.139672,24556151
+ReRollPanelAlt,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Refresh,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RefreshBoss,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RelationshipHeartIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RewardBoon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RewardLoot,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RewardStackUpgrade,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RightArrow,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RunClearDotsLeft,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RunClearDotsRight,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+RunReward,IconData,IconData,UIData.lua,defined,1,,RunReward,主要收获,,1.139672,24556151
+SaveSymbol,IconData,IconData,UIData.lua,defined,2,,,,,1.139672,24556151
+SeedMysteryIcon,IconData,IconData,UIData.lua,defined,1,,SeedMysteryIcon,{!Icons.SeedMystery} 神秘种子,,1.139672,24556151
+SeedMysteryIconAlt,IconData,IconData,UIData.lua,defined,1,,SeedMysteryIconAlt,{!Icons.SeedMystery} 神秘种子,,1.139672,24556151
+ShieldHealth,IconData,IconData,UIData.lua,defined,1,,ShieldHealth,{!Icons.ShieldHealth} 护罩,,1.139672,24556151
+Shielded,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ShrinePoint,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ShrinePointNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Slash,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+SlashDark,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+SpecialOffer,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+StarEmpty,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+StarFull,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+Startled,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+StoreItemPin,IconData,IconData,UIData.lua,defined,1,,StoreItemPin,{!Icons.StoreItemPinNoTooltip} 勿忘我,,1.139672,24556151
+StoreItemPinCompleteNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+StoreItemPinNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+SuperGiftPointsIcon,IconData,IconData,UIData.lua,defined,1,,SuperGiftPointsIcon,{!Icons.SuperGiftPoints} 仙酒,,1.139672,24556151
+SuperGiftPointsIconAlt,IconData,IconData,UIData.lua,defined,1,,SuperGiftPointsIconAlt,{!Icons.SuperGiftPoints} 仙酒,,1.139672,24556151
+SurfaceFearIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+SurfaceIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+TalentDrop,IconData,IconData,UIData.lua,defined,1,,TalentDrop,繁星之路,,1.139672,24556151
+TalentDrop_Flipped,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ToolBookIcon,IconData,IconData,UIData.lua,defined,1,,ToolBookIcon,{!Icons.ToolBookIconNoTooltip} {$Keywords.ExorcismPointPlural},,1.139672,24556151
+ToolBookIconNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ToolGatherIcon,IconData,IconData,UIData.lua,defined,1,,ToolGatherIcon,{!Icons.ToolGatherIconNoTooltip} {$Keywords.HarvestPointPlural},,1.139672,24556151
+ToolGatherIconNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ToolPickIcon,IconData,IconData,UIData.lua,defined,1,,ToolPickIcon,{!Icons.ToolPickIconNoTooltip} {$Keywords.PickaxePointPlural},,1.139672,24556151
+ToolPickIconNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ToolRodIcon,IconData,IconData,UIData.lua,defined,1,,ToolRodIcon,{!Icons.ToolRodIconNoTooltip} {$Keywords.FishingPointPlural},,1.139672,24556151
+ToolRodIconNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+ToolShovelIcon,IconData,IconData,UIData.lua,defined,1,,ToolShovelIcon,{!Icons.ToolShovelIconNoTooltip} {$Keywords.DiggingPointPlural},,1.139672,24556151
+ToolShovelIconNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+TraitExchange,IconData,IconData,UIData.lua,defined,1,,TraitExchange,{!Icons.TraitExchange} 牺牲,,1.139672,24556151
+TrashPointsIcon,IconData,IconData,UIData.lua,defined,1,,TrashPointsIcon,{!Icons.TrashPoints} 垃圾,,1.139672,24556151
+UnderworldFearIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+UnderworldIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+UpArrow,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+VulnerabilityIcon,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+WaterBoonAlt,IconData,IconData,UIData.lua,defined,1,,WaterBoonAlt,{!Icons.CurseWater}水,,1.139672,24556151
+WaterNoTooltip,IconData,IconData,UIData.lua,defined,1,,,,,1.139672,24556151
+WeaponPointsRareIcon,IconData,IconData,UIData.lua,defined,1,,WeaponPointsRareIcon, {!Icons.WeaponPointsRare} 梦魇,,1.139672,24556151
+ActiveCategoryIndex,ScreenData,ScreenData.GameStats;ScreenData.RunHistory,GameStatsData.lua;RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ActiveColumnColor,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+ActiveFlash,ScreenData,ScreenData.BountyBoard,BountyData.lua,defined,4,,,,,1.139672,24556151
+ActiveFormat,ScreenData,ScreenData.BountyBoard,BountyData.lua,defined,10,,,,,1.139672,24556151
+ActiveTraitBottomOffset,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ActiveTraitComponents,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ActiveTraitGroup,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ActiveTraitOrder,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ActiveTraitStartY,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ActiveVariableColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+AllowAdvancedTooltip,ScreenData,ScreenData.RunClear;ScreenData.SellTraits;ScreenData.SpellScreen;ScreenData.SurfaceShop;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WellShop,RunClearData.lua;SellTraitData.lua;SpellScreenData.lua;StoreData.lua;SurfaceShopData.lua;TradeData.lua;TraitTrayData.lua;UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+AmmoBottomOffset,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+AmmoX,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+AngleHeroTowardTarget,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop,CosmeticsData.lua;FamiliarCostumeData.lua,stub,0,,,,,1.139672,24556151
+BackingOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BannerIconOffsetX,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+BannerIconOffsetY,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+BaseIconOffsetX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+BaseIconScale,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+BelowShrinePointsText,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BlessingOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+BlockExitsReady,ScreenData,ScreenData.SpellScreen;ScreenData.TalentScreen;ScreenData.UpgradeChoice,SpellScreenData.lua;TalentScreenData.lua;UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+BlockPause,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.KeepsakeRack;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunClear;ScreenData.RunHistory;ScreenData.SellTraits;ScreenData.Shrine;ScreenData.SpellScreen;ScreenData.SurfaceShop;ScreenData.TalentScreen;ScreenData.TradeScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WellShop,BountyData.lua;CodexData.lua;CosmeticsData.lua;DebugData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;KeepsakeData.lua;MailboxData.lua;MarketData.lua;MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunClearData.lua;RunHistoryData.lua;SellTraitData.lua;ShrineData.lua;SpellScreenData.lua;StoreData.lua;SurfaceShopData.lua;TalentScreenData.lua;TradeData.lua;UpgradeChoiceData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+BonePositions,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+BonusIconOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+BonusIconOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+BountyActiveColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyBossIconScale,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyEncounterDoorFlipMap,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,8,,,,,1.139672,24556151
+BountyIconShiftX,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+BountyInactiveColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyItemsPerRow,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyOrder,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyRowSpacingX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyRowSpacingY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyRowStartX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyRowStartY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyShrinePointsFormat,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,5,,,,,1.139672,24556151
+BountyShrinePointsOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyShrinePointsOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyTargetIcons,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,8,,,,,1.139672,24556151
+BountyTargetOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyTargetOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyWeaponIconScale,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyWeaponIcons,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,6,,,,,1.139672,24556151
+BountyWeaponOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BountyWeaponOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+BulletPointFormat,ScreenData,ScreenData.BoonInfo;ScreenData.QuestLog,BoonInfoData.lua;QuestData.lua,defined,10,,,,,1.139672,24556151
+ButtonGroupName,ScreenData,ScreenData.CosmeticsShop,CosmeticsData.lua,stub,0,,,,,1.139672,24556151
+ButtonName,ScreenData,ScreenData.BountyBoard;ScreenData.RunHistory,BountyData.lua;RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ButtonOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ButtonScaleX,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ButtonScaleY,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ButtonSlotData,ScreenData,ScreenData.WeaponUpgradeScreen,WeaponUpgradeData.lua,defined,4,,,,,1.139672,24556151
+ButtonSpacingY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ButtonStartX,ScreenData,ScreenData.BoonInfo;ScreenData.DebugConversations,BoonInfoData.lua;DebugData.lua,stub,0,,,,,1.139672,24556151
+ButtonStartY,ScreenData,ScreenData.BoonInfo;ScreenData.DebugConversations,BoonInfoData.lua;DebugData.lua,stub,0,,,,,1.139672,24556151
+ButtonYSpacer,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+ButtonsPerRow,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+CameraOffetX,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+CameraOffetY,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+CardAutoEquipTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,defined,11,,,,,1.139672,24556151
+CardFlavorTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,11,,,,,1.139672,24556151
+CardMemCostOffsetX,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+CardMemCostOffsetY,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+CashedOutFormat,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,6,,,,,1.139672,24556151
+CategoryCenterX,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+CategoryIconOffsetX,ScreenData,ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.InventoryScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.TraitTrayScreen;ScreenData.WeaponShop,CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;TraitTrayData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CategoryIconOffsetY,ScreenData,ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.InventoryScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.TraitTrayScreen;ScreenData.WeaponShop,CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;TraitTrayData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CategoryIconScale,ScreenData,ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.WeaponShop,CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CategoryScale,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+CategorySpacingX,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.TraitTrayScreen;ScreenData.WeaponShop,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;TraitTrayData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CategoryStartBottomOffset,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+CategoryStartX,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.WeaponShop,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CategoryStartY,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.WeaponShop,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ChangeMadeCloseVoiceLines,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,2,,,,,1.139672,24556151
+ChapterSpacingX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+ChapterX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+ChapterY,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+CharonPointsRequirements,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,defined,1,,,,,1.139672,24556151
+ChoiceIds,ScreenData,ScreenData.Dialog,NarrativeData.lua,stub,0,,,,,1.139672,24556151
+CloseAnimation,ScreenData,ScreenData.InventoryScreen;ScreenData.MarketScreen;ScreenData.Shrine;ScreenData.WeaponShop,MarketData.lua;ResourceData.lua;ShrineData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+CloseAnimationName,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+CloseDestroyWait,ScreenData,ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory,CodexData.lua;CosmeticsData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+CloseSound,ScreenData,ScreenData.BelowLimitLayout;ScreenData.BountyBoard;ScreenData.CardUpgradeInfoLayout;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.ElementalPromptLayout;ScreenData.GraspLimitLayout;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MarketSellAllLayout;ScreenData.MusicPlayer;ScreenData.NoUpgradeInfoLayout;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.StoryResetPromptLayout;ScreenData.SurfaceShop;ScreenData.TraitTrayScreen;ScreenData.WeaponUpgradeScreen,BountyData.lua;CodexData.lua;CosmeticsData.lua;DebugData.lua;ElementalPromptScreenData.lua;MailboxData.lua;MarketData.lua;MarketPromptScreenData.lua;MetaUpgradeCardPromptScreenData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;ShrineData.lua;StoryResetData.lua;SurfaceShopData.lua;TraitTrayData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+ColumnOffset,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+Columns,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ColumnsPerRow,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+CombatUIShowGroups,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+CompleteRequirementsOffsetX,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+CompleteRequirementsOffsetY,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+CompletedFormat,ScreenData,ScreenData.BountyBoard,BountyData.lua,defined,9,,,,,1.139672,24556151
+CompletionRequirementFormat,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,9,,,,,1.139672,24556151
+ComponentData,ScreenData,ScreenData.BelowLimitLayout;ScreenData.BoonInfo;ScreenData.BountyBoard;ScreenData.CardUpgradeInfoLayout;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.Dialog;ScreenData.ElementalPromptLayout;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.GraspLimitLayout;ScreenData.HUD;ScreenData.InventoryScreen;ScreenData.KeepsakeRack;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MarketSellAllLayout;ScreenData.MetaUpgradeCardPromptLayout;ScreenData.MusicPlayer;ScreenData.NoUpgradeInfoLayout;ScreenData.QuestLog;ScreenData.RunClear;ScreenData.RunHistory;ScreenData.SellTraits;ScreenData.Shrine;ScreenData.SpellScreen;ScreenData.StoryResetPromptLayout;ScreenData.SurfaceShop;ScreenData.TalentScreen;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen;ScreenData.WellShop,BoonInfoData.lua;BountyData.lua;CodexData.lua;CosmeticsData.lua;DebugData.lua;ElementalPromptScreenData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;HUDData.lua;KeepsakeData.lua;MailboxData.lua;MarketData.lua;MarketPromptScreenData.lua;MetaUpgradeCardPromptScreenData.lua;MusicPlayerData.lua;NarrativeData.lua;QuestData.lua;ResourceData.lua;RunClearData.lua;RunHistoryData.lua;SellTraitData.lua;ShrineData.lua;SpellScreenData.lua;StoreData.lua;StoryResetData.lua;SurfaceShopData.lua;TalentScreenData.lua;TradeData.lua;TraitTrayData.lua;UpgradeChoiceData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,defined,215,,,,,1.139672,24556151
+Components,ScreenData,ScreenData.BelowLimitLayout;ScreenData.BoonInfo;ScreenData.BountyBoard;ScreenData.CardUpgradeInfoLayout;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.ElementalPromptLayout;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.GraspLimitLayout;ScreenData.HUD;ScreenData.InventoryScreen;ScreenData.KeepsakeRack;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MarketSellAllLayout;ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardPromptLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.MusicPlayer;ScreenData.NoUpgradeInfoLayout;ScreenData.QuestLog;ScreenData.RunClear;ScreenData.RunHistory;ScreenData.SellTraits;ScreenData.Shrine;ScreenData.SpellScreen;ScreenData.StoryResetPromptLayout;ScreenData.SurfaceShop;ScreenData.TalentScreen;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen;ScreenData.WellShop,BoonInfoData.lua;BountyData.lua;CodexData.lua;CosmeticsData.lua;DebugData.lua;ElementalPromptScreenData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;HUDData.lua;KeepsakeData.lua;MailboxData.lua;MarketData.lua;MarketPromptScreenData.lua;MetaUpgradeCardPromptScreenData.lua;MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunClearData.lua;RunHistoryData.lua;SellTraitData.lua;ShrineData.lua;SpellScreenData.lua;StoreData.lua;StoryResetData.lua;SurfaceShopData.lua;TalentScreenData.lua;TradeData.lua;TraitTrayData.lua;UpgradeChoiceData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+CooldownTimerFrames,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+CosmeticsOpenVoiceLines,ScreenData,ScreenData.CosmeticsShop,CosmeticsData.lua,defined,2,,,,,1.139672,24556151
+CostDisplay,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.InventoryScreen;ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.MusicPlayer;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;MusicPlayerData.lua;ResourceData.lua;WeaponShopData.lua,defined,16,,,,,1.139672,24556151
+CostStartX,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+CostStartY,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+CostText,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,5,,,,,1.139672,24556151
+CostTextArgs,ScreenData,ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua,defined,8,,,,,1.139672,24556151
+CostTextOffsetX,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+CostTextOffsetY,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+CostUnaffordableColor,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+CountRequirementAcquiredFormat,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,defined,8,,,,,1.139672,24556151
+CountRequirementUnacquiredFormat,ScreenData,ScreenData.BoonInfo;ScreenData.InventoryScreen,BoonInfoData.lua;ResourceData.lua,defined,9,,,,,1.139672,24556151
+CurrentFlipSides,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+DamageAmountFormat,ScreenData,ScreenData.RunClear,RunClearData.lua,defined,8,,,,,1.139672,24556151
+DamageDealtAmountOffsetX,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+DamageDealtRightOffset,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+DamageDealtSpacingY,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+DamageDealtStartY,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+DamageSourceFormat,ScreenData,ScreenData.RunClear,RunClearData.lua,defined,11,,,,,1.139672,24556151
+DamageSourceMap,ScreenData,ScreenData.RunClear,RunClearData.lua,defined,198,,,,,1.139672,24556151
+DamageSourceTextOverrides,ScreenData,ScreenData.RunClear,RunClearData.lua,defined,38,,,,,1.139672,24556151
+DamageTakenStartY,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+DecriptionBoxOffsetY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+DefaultArtScale,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+DefaultCardCostTitleArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,12,,,,,1.139672,24556151
+DefaultCardTitleTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,9,,,,,1.139672,24556151
+DefaultChapter,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+DefaultEntry,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+DefaultGroup,ScreenData,ScreenData.Dialog;ScreenData.WeaponUpgradeScreen,NarrativeData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+DefaultPinSpacing,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+DefaultPins,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+DefaultStartX,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.TalentScreen,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+DefaultStartY,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.TalentScreen,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+DefaultTalentScale,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+DefaultTalentXSpacer,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.TalentScreen,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+DefaultTalentYSpacer,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.TalentScreen,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+DescriptionText,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,15,,,,,1.139672,24556151
+DisabledShrineIconColor,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+DisplayOrder,ScreenData,ScreenData.WeaponUpgradeScreen,WeaponUpgradeData.lua,defined,6,,,,,1.139672,24556151
+ElementIcon,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,4,,,,,1.139672,24556151
+EndMouseoverCostXOffset,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+EntryCompleteSkipNewLines,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+EntryTextFormat,ScreenData,ScreenData.Codex,CodexData.lua,defined,11,,,,,1.139672,24556151
+EquippedIcon,ScreenData,ScreenData.WeaponUpgradeScreen,WeaponUpgradeData.lua,defined,7,,,,,1.139672,24556151
+ExactShrinePointsText,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ExcessShrinePointsText,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ExchangeFlashColor,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeFlashMaxFraction,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeFlashMinFraction,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeFlashSpeed,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeIconOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeIconOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeIconScale,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+ExchangeSymbol,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,6,,,,,1.139672,24556151
+FadeInDuration,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+FadeOutDuration,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+FadeOutTime,ScreenData,ScreenData.DebugEnemySpawn;ScreenData.FamiliarShop;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.WeaponShop,DebugData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;QuestData.lua;ResourceData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+FamiliarIconOffsetY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+FamiliarIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+FilledRankPips,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+FlavorText,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,10,,,,,1.139672,24556151
+Frame,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,3,,,,,1.139672,24556151
+Frames,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+FreeFormSelectOffsetX,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.InventoryScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+FreeFormSelectOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+FreeUnlocks,ScreenData,ScreenData.WeaponUpgradeScreen,WeaponUpgradeData.lua,defined,6,,,,,1.139672,24556151
+FreezePlayerArgs,ScreenData,ScreenData.Dialog;ScreenData.SellTraits;ScreenData.SpellScreen;ScreenData.SurfaceShop;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WellShop,NarrativeData.lua;SellTraitData.lua;SpellScreenData.lua;StoreData.lua;SurfaceShopData.lua;TradeData.lua;TraitTrayData.lua;UpgradeChoiceData.lua,defined,2,,,,,1.139672,24556151
+GameStateRequirements,ScreenData,ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+GamepadNavigation,ScreenData,ScreenData.BoonInfo;ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.InventoryScreen;ScreenData.KeepsakeRack;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.SellTraits;ScreenData.Shrine;ScreenData.SurfaceShop;ScreenData.TalentScreen;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen;ScreenData.WellShop,BoonInfoData.lua;BountyData.lua;CodexData.lua;CosmeticsData.lua;DebugData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;KeepsakeData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunHistoryData.lua;SellTraitData.lua;ShrineData.lua;StoreData.lua;SurfaceShopData.lua;TalentScreenData.lua;TradeData.lua;TraitTrayData.lua;UpgradeChoiceData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,defined,9,,,,,1.139672,24556151
+GenericHeaderIcon,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+GenericHeaderIconScale,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+GiftTrackMysteryHeartSpacingX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+GiftTrackSpacingX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+GiftTrackX,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+GiftTrackY,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+GodIconScale,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+GridSpacingX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+GridSpacingY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+GridStartX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+GridStartY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+GridWidth,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+GroupOrder,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+HeaderFormat,ScreenData,ScreenData.GameStats,GameStatsData.lua,defined,5,,,,,1.139672,24556151
+HeaderY,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+HiddenCardTitleTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,9,,,,,1.139672,24556151
+Highlight,ScreenData,ScreenData.UpgradeChoice;ScreenData.WeaponUpgradeScreen,UpgradeChoiceData.lua;WeaponUpgradeData.lua,defined,2,,,,,1.139672,24556151
+HighlightX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+HoverIconScale,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+Icon,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,3,,,,,1.139672,24556151
+IconActiveColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+IconBackingOffsetX,ScreenData,ScreenData.SurfaceShop,SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+IconBackingOffsetY,ScreenData,ScreenData.SurfaceShop,SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+IconBackingScale,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+IconInactiveColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+IconMap,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,defined,5,,,,,1.139672,24556151
+IconMouseOverScale,ScreenData,ScreenData.InventoryScreen;ScreenData.Shrine,ResourceData.lua;ShrineData.lua,stub,0,,,,,1.139672,24556151
+IconOffsetX,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.Shrine;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;ShrineData.lua;UpgradeChoiceData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+IconOffsetY,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.Shrine;ScreenData.UpgradeChoice;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;ShrineData.lua;UpgradeChoiceData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+IconScale,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MusicPlayer;ScreenData.Shrine;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MusicPlayerData.lua;ShrineData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+IconScaleTraits,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+Icons,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+IgnoreOtherScreenInput,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+InAnimations,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+InactiveVariableColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+IncompleteFormat,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,8,,,,,1.139672,24556151
+InfoMessageId,ScreenData,ScreenData.BountyBoard;ScreenData.Shrine;ScreenData.StoryResetPromptLayout,BountyData.lua;ShrineData.lua;StoryResetData.lua,stub,0,,,,,1.139672,24556151
+InspectBackgroundAlpha,ScreenData,ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+InspectCardScale,ScreenData,ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+InspectLocationX,ScreenData,ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+InspectLocationY,ScreenData,ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+InvestedColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ItemAmountFormat,ScreenData,ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua,defined,10,,,,,1.139672,24556151
+ItemAnimation,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,stub,0,,,,,1.139672,24556151
+ItemAvailableAffordableNameFormat,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.MusicPlayer;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;MusicPlayerData.lua;WeaponShopData.lua,defined,9,,,,,1.139672,24556151
+ItemAvailableAnimation,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MusicPlayer;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MusicPlayerData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ItemAvailableHighlightAnimation,ScreenData,ScreenData.FamiliarShop;ScreenData.WeaponShop,FamiliarShopData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ItemAvailableMouseOffAnimation,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop,CosmeticsData.lua;FamiliarCostumeData.lua,stub,0,,,,,1.139672,24556151
+ItemAvailableMouseOverAnimation,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.MusicPlayer,CosmeticsData.lua;FamiliarCostumeData.lua;MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+ItemAvailableNameFormat,ScreenData,ScreenData.FamiliarShop,FamiliarShopData.lua,defined,8,,,,,1.139672,24556151
+ItemAvailableUnaffordableNameFormat,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.MusicPlayer;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;MusicPlayerData.lua;WeaponShopData.lua,defined,9,,,,,1.139672,24556151
+ItemBuyAmountFormat,ScreenData,ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua,defined,13,,,,,1.139672,24556151
+ItemCategories,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.RunHistory;ScreenData.TraitTrayScreen;ScreenData.WeaponShop,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;MailboxData.lua;MarketData.lua;ResourceData.lua;RunHistoryData.lua;TraitTrayData.lua;WeaponShopData.lua,defined,5,,,,,1.139672,24556151
+ItemDeliveryTimeFormat,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,defined,12,,,,,1.139672,24556151
+ItemKeys,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+ItemMouseOffAnimation,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,stub,0,,,,,1.139672,24556151
+ItemMouseOverAnimation,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,stub,0,,,,,1.139672,24556151
+ItemNameFormat,ScreenData,ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua,defined,11,,,,,1.139672,24556151
+ItemNameText,ScreenData,ScreenData.WeaponUpgradeScreen,WeaponUpgradeData.lua,defined,1,,,,,1.139672,24556151
+ItemNowPlayingAnimation,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+ItemNowPlayingMouseOverAnimation,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+ItemOrder,ScreenData,ScreenData.FamiliarShop;ScreenData.KeepsakeRack,FamiliarShopData.lua;KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+ItemPurchasedAnimation,ScreenData,ScreenData.FamiliarShop;ScreenData.WeaponShop,FamiliarShopData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ItemPurchasedHighlightAnimation,ScreenData,ScreenData.FamiliarShop;ScreenData.WeaponShop,FamiliarShopData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ItemPurchasedNameFormat,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MusicPlayer;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MusicPlayerData.lua;WeaponShopData.lua,defined,9,,,,,1.139672,24556151
+ItemSellAmountFormat,ScreenData,ScreenData.MarketScreen,MarketData.lua,defined,13,,,,,1.139672,24556151
+ItemSpacingX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ItemSpacingY,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen,BountyData.lua;CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;ShrineData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+ItemStartX,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen,BountyData.lua;CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;ShrineData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+ItemStartY,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.WeaponShop;ScreenData.WeaponUpgradeScreen,BountyData.lua;CodexData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;ShrineData.lua;WeaponShopData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+ItemStateFormat,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop,CosmeticsData.lua;FamiliarCostumeData.lua,defined,7,,,,,1.139672,24556151
+ItemTextBoxOffsetX,ScreenData,ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua,stub,0,,,,,1.139672,24556151
+ItemsPerPage,ScreenData,ScreenData.BountyBoard;ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.WeaponShop,BountyData.lua;CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ItemsPerRow,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+JustCashedOutFormat,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,2,,,,,1.139672,24556151
+KeepsakeIconOffsetY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+KeepsakeIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+KitCameraOffsetX,ScreenData,ScreenData.WeaponShop,WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+LastStandBottomOffset,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+LastStandScale,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+LastStandSpacingX,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+LastStandTextFormat,ScreenData,ScreenData.HUD,HUDData.lua,defined,7,,,,,1.139672,24556151
+LastStandX,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptions,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsBackgroundOpacity,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsMouseOverScale,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsNewIconOffsetX,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsNewIconOffsetY,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsNumColumns,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsScale,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsScaleDuration,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsSpacingX,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsSpacingY,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsStartX,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetArtOptionsStartY,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetSpacingX,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetSpacingY,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+LayoutSetTemplate,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,defined,8,,,,,1.139672,24556151
+LeakedIds,ScreenData,ScreenData.Dialog,NarrativeData.lua,stub,0,,,,,1.139672,24556151
+LimitedOfferBannerIcon,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+LineHeight,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+LineHistoryScrollSpeed,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+LineHistoryScrollTick,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+LineHistoryScrollbarSliderBottomY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+LineHistoryScrollbarSliderTopY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+LineHistorySpacingY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+ListColumnsPerScreen,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListMaxY,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListRequirementAcquiredFormat,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,defined,9,,,,,1.139672,24556151
+ListRequirementHeaderFormat,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,defined,6,,,,,1.139672,24556151
+ListRequirementHeaderSpacingY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+ListRequirementSpacingY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+ListRequirementUnacquiredFormat,ScreenData,ScreenData.BoonInfo;ScreenData.InventoryScreen,BoonInfoData.lua;ResourceData.lua,defined,9,,,,,1.139672,24556151
+ListSpacingX,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListSpacingY,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListSpacingYBucket,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListStartX,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+ListStartY,ScreenData,ScreenData.DebugConversations,DebugData.lua,stub,0,,,,,1.139672,24556151
+LockedCardCostTitleArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,12,,,,,1.139672,24556151
+LockedCardResourceTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,8,,,,,1.139672,24556151
+LockedCardTitleTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,9,,,,,1.139672,24556151
+MarkerIconGraphic,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+MarkerIconOffsetX,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+MarkerIconScale,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+MaxAutoPins,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+MaxBountiesAvailable,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+MaxChoices,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+MaxDamageDealtItems,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+MaxDamageTakenItems,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+MaxEntriesPerColumn,ScreenData,ScreenData.BountyBoard,BountyData.lua,stub,0,,,,,1.139672,24556151
+MaxNonPriorityOffers,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,stub,0,,,,,1.139672,24556151
+MaxPins,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+MaxShrinePointsText,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+MaxVisibleChapters,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+MaxVisibleEntries,ScreenData,ScreenData.Codex,CodexData.lua,stub,0,,,,,1.139672,24556151
+MaxVisibleRunDataEntries,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MessagePriorities,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+MetaUpgradeCostIncreaseTextArgs,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,defined,7,,,,,1.139672,24556151
+MetaUpgradeIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MetaUpgradePinFormat,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,defined,2,,,,,1.139672,24556151
+MetaUpgradeSpacingX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MetaUpgradeSpacingY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MetaUpgradeStartY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MetaUpgradesPerColumn,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MoneySpentPerCharonPoint,ScreenData,ScreenData.MailboxScreen,MailboxData.lua,stub,0,,,,,1.139672,24556151
+MouseOverScaleDuration,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.QuestLog;ScreenData.RunHistory,BountyData.lua;CodexData.lua;QuestData.lua;RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MouseOverScaleTarget,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.QuestLog;ScreenData.RunHistory,BountyData.lua;CodexData.lua;QuestData.lua;RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+MouseOverSound,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+MouseoverArtScale,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+MouseoverCostYOffset,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+MouseoverMemScale,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+Name,ScreenData,ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.Dialog,DebugData.lua;NarrativeData.lua,stub,0,,,,,1.139672,24556151
+NeededResourceBannerIcon,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+NewIconOffsetX,ScreenData,ScreenData.BountyBoard;ScreenData.MarketScreen;ScreenData.QuestLog;ScreenData.WeaponShop,BountyData.lua;MarketData.lua;QuestData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+NewIconOffsetY,ScreenData,ScreenData.BountyBoard;ScreenData.MarketScreen;ScreenData.WeaponShop,BountyData.lua;MarketData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+NewItemStarOffsetX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+NewItemStarOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+NewItemStarScale,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+NewTabIconOffsetX,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+NewTabIconOffsetY,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+NextRankBackingOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+NextRankBackingOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+NextRankBackingWideOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+NextRankBackingWideOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+NextRankFormat,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,8,,,,,1.139672,24556151
+NextRankMaxColor,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+NoRequirementsFormat,ScreenData,ScreenData.BoonInfo;ScreenData.InventoryScreen,BoonInfoData.lua;ResourceData.lua,defined,7,,,,,1.139672,24556151
+NoRequirementsOffsetX,ScreenData,ScreenData.BoonInfo;ScreenData.InventoryScreen,BoonInfoData.lua;ResourceData.lua,stub,0,,,,,1.139672,24556151
+NoResourceIconAlpha,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+NumItems,ScreenData,ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen,MailboxData.lua;MarketData.lua;ResourceData.lua,stub,0,,,,,1.139672,24556151
+NumPerPage,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+NumRequirementsColumns,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+NumSales,ScreenData,ScreenData.MarketScreen,MarketData.lua,stub,0,,,,,1.139672,24556151
+ObjectiveSpacingY,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ObjectiveStartX,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+ObjectiveStartY,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+OnCloseFinishedFunctionArgs,ScreenData,ScreenData.RunClear,RunClearData.lua,defined,2,,,,,1.139672,24556151
+OnCloseFinishedFunctionName,ScreenData,ScreenData.RunClear,RunClearData.lua,stub,0,,,,,1.139672,24556151
+OnPurchasedFadeOutTime,ScreenData,ScreenData.FamiliarShop,FamiliarShopData.lua,stub,0,,,,,1.139672,24556151
+OpenEndVoiceLines,ScreenData,ScreenData.FamiliarCostumeShop;ScreenData.MusicPlayer,FamiliarCostumeData.lua;MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+OpenSound,ScreenData,ScreenData.BelowLimitLayout;ScreenData.CardUpgradeInfoLayout;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.DebugConversations;ScreenData.DebugEnemySpawn;ScreenData.ElementalPromptLayout;ScreenData.FamiliarShop;ScreenData.GraspLimitLayout;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MarketSellAllLayout;ScreenData.MetaUpgradeCardPromptLayout;ScreenData.MusicPlayer;ScreenData.NoUpgradeInfoLayout;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.StoryResetPromptLayout;ScreenData.SurfaceShop;ScreenData.TalentScreen;ScreenData.TradeScreen;ScreenData.TraitTrayScreen;ScreenData.WeaponUpgradeScreen,CodexData.lua;CosmeticsData.lua;DebugData.lua;ElementalPromptScreenData.lua;FamiliarShopData.lua;MailboxData.lua;MarketData.lua;MarketPromptScreenData.lua;MetaUpgradeCardPromptScreenData.lua;MusicPlayerData.lua;QuestData.lua;RunHistoryData.lua;ShrineData.lua;StoryResetData.lua;SurfaceShopData.lua;TalentScreenData.lua;TradeData.lua;TraitTrayData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+OpenVoiceLines,ScreenData,ScreenData.Shrine;ScreenData.TalentScreen,ShrineData.lua;TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+Ordering,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+OutAnimations,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+PactActiveAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PactActiveBadgeAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PactActiveWideAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PactInactiveAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PactInactiveBadgeAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PactInactiveWideAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PageHighlightColor,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PageIds,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PageSpacingX,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PageSpacingY,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PageStartX,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+Pages,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PagesPerRow,ScreenData,ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+PausePlayIconScale,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+PinButtons,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinCollapseSpeed,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+PinHeight,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+PinIconOffsetX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinIconOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinIconScale,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinNameAffordableFormat,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,defined,9,,,,,1.139672,24556151
+PinNameUnaffordableFormat,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,defined,9,,,,,1.139672,24556151
+PinOffsetX,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;TraitTrayData.lua;UpgradeChoiceData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+PinOffsetY,ScreenData,ScreenData.MusicPlayer;ScreenData.TraitTrayScreen;ScreenData.UpgradeChoice;ScreenData.WeaponShop,MusicPlayerData.lua;TraitTrayData.lua;UpgradeChoiceData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+PinPriorities,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+PinResourcesOffsetX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinResourcesOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinScale,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+PinSpacingY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinStartX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinStartY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinTraitIconScale,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PinnedMetaUpgradeLevelData,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,defined,3,,,,,1.139672,24556151
+Pins,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+PinsPerPage,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+PlayIconGraphic,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+PlayIconOffsetX,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+PlayIconScale,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+PlayedPortraitEnterSounds,ScreenData,ScreenData.Dialog,NarrativeData.lua,stub,0,,,,,1.139672,24556151
+PointsAddedThisTime,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PoseidonDuoIconOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+PoseidonDuoIconOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+PossibleAutoPins,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+PrimaryFrames,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ProgressPageOffset,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+PurchaseButton,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,2,,,,,1.139672,24556151
+PurchaseSound,ScreenData,ScreenData.WellShop,StoreData.lua,stub,0,,,,,1.139672,24556151
+QuestIconOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+QuestIconOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+RankAnimations,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+RankOffsetY,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+RankPipEmpty,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipFullFx,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipScale,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipSpacingX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipSpacingY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipStartOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankPipStartOffsetY,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+RankScale,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+RarityBackingAnimations,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,5,,,,,1.139672,24556151
+RarityText,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,8,,,,,1.139672,24556151
+ReadyToCashOutFlash,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,4,,,,,1.139672,24556151
+ReadyToCashOutFormat,ScreenData,ScreenData.QuestLog,QuestData.lua,defined,8,,,,,1.139672,24556151
+RecordStatFormat,ScreenData,ScreenData.GameStats,GameStatsData.lua,defined,5,,,,,1.139672,24556151
+RefundPresentationName,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ReloadTimerFrames,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+RequirementColumnSpacing,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementCompleteColor,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementEntriesMaxColumns,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementEntriesPerColumn,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementIncompleteColor,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementRowSpacing,ScreenData,ScreenData.QuestLog,QuestData.lua,stub,0,,,,,1.139672,24556151
+RequirementsStartY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+ResourceCountFormat,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,defined,9,,,,,1.139672,24556151
+ResourceSpendTextInitialOffsetY,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+ResourceSpendTextOffsetY,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.MusicPlayer,CosmeticsData.lua;FamiliarCostumeData.lua;MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+ResourceSpendTextSpacingY,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+RewardAvailableColor,ScreenData,ScreenData.BountyBoard;ScreenData.QuestLog,BountyData.lua;QuestData.lua,stub,0,,,,,1.139672,24556151
+RewardCashedOutColor,ScreenData,ScreenData.BountyBoard;ScreenData.QuestLog,BountyData.lua;QuestData.lua,stub,0,,,,,1.139672,24556151
+RowMax,ScreenData,ScreenData.KeepsakeRack,KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+RowSpacingTraits,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+RowStartY,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+RunDataIconX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+RunDataSpacingY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+RunDataStartY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+RunDataTitleFormat,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,defined,9,,,,,1.139672,24556151
+RunDataTitleX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+RunDataValueFormat,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,defined,11,,,,,1.139672,24556151
+RunDataValueX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+RunNameClearedFormat,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,defined,12,,,,,1.139672,24556151
+RunNameUnclearedFormat,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,defined,12,,,,,1.139672,24556151
+ScaledStartY,ScreenData,ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout,MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua,stub,0,,,,,1.139672,24556151
+ScrollOffset,ScreenData,ScreenData.BountyBoard;ScreenData.Codex;ScreenData.CosmeticsShop;ScreenData.FamiliarShop;ScreenData.GameStats;ScreenData.InventoryScreen;ScreenData.MailboxScreen;ScreenData.MarketScreen;ScreenData.MusicPlayer;ScreenData.QuestLog;ScreenData.RunHistory;ScreenData.Shrine;ScreenData.WeaponShop,BountyData.lua;CodexData.lua;CosmeticsData.lua;FamiliarShopData.lua;GameStatsData.lua;MailboxData.lua;MarketData.lua;MusicPlayerData.lua;QuestData.lua;ResourceData.lua;RunHistoryData.lua;ShrineData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+ScrollbarSliderBottomY,ScreenData,ScreenData.CosmeticsShop;ScreenData.MusicPlayer;ScreenData.QuestLog,CosmeticsData.lua;MusicPlayerData.lua;QuestData.lua,stub,0,,,,,1.139672,24556151
+ScrollbarSliderTopY,ScreenData,ScreenData.CosmeticsShop;ScreenData.MusicPlayer;ScreenData.QuestLog,CosmeticsData.lua;MusicPlayerData.lua;QuestData.lua,stub,0,,,,,1.139672,24556151
+SeedPinIconOffsetX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+SeedPinIconOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+SeedPinIconScale,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+SelectedFormat,ScreenData,ScreenData.Codex,CodexData.lua,defined,2,,,,,1.139672,24556151
+SelectionHighlightAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+SelectionHighlightGlintAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+SelectionHighlightWideAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+SelectionHighlightWideGlintAnimation,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+SellAmountFormat,ScreenData,ScreenData.SellTraits,SellTraitData.lua,defined,6,,,,,1.139672,24556151
+ShopItemSpacerX,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+ShopItemSpacerY,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+ShopItemStartX,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+ShopItemStartY,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,stub,0,,,,,1.139672,24556151
+ShortNameActiveFormat,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,7,,,,,1.139672,24556151
+ShortNameFormat,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,7,,,,,1.139672,24556151
+ShortNameSelectedFormat,ScreenData,ScreenData.Shrine,ShrineData.lua,defined,7,,,,,1.139672,24556151
+ShrineBackingScale,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineIconScale,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineRunDoorArrowId,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ShrineSpacingX,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineSpacingY,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineStartBottomOffset,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineStartX,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradeBackingScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradeIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradeSpacingX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradeSpacingY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradeStartX,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradesMaxRows,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrineUpgradesPerRow,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+ShrinesPerColumn,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+ShrinesPerRow,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+SkipQuestStatusCheck,ScreenData,ScreenData.DebugConversations;ScreenData.InventoryScreen,DebugData.lua;ResourceData.lua,stub,0,,,,,1.139672,24556151
+SlottedTraitComponents,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+SlottedTraitOrder,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+Songs,ScreenData,ScreenData.MusicPlayer,MusicPlayerData.lua,stub,0,,,,,1.139672,24556151
+SortInReverse,ScreenData,ScreenData.GameStats,GameStatsData.lua,defined,2,,,,,1.139672,24556151
+SortKeys,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+SpacerX,ScreenData,ScreenData.Codex;ScreenData.KeepsakeRack,CodexData.lua;KeepsakeData.lua,stub,0,,,,,1.139672,24556151
+SpacerY,ScreenData,ScreenData.KeepsakeRack;ScreenData.SpellScreen,KeepsakeData.lua;SpellScreenData.lua,stub,0,,,,,1.139672,24556151
+SpacingX,ScreenData,ScreenData.DebugConversations;ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+SpacingY,ScreenData,ScreenData.DebugConversations;ScreenData.DebugEnemySpawn,DebugData.lua,stub,0,,,,,1.139672,24556151
+SpellDuoIconOffsetX,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+SpellDuoIconOffsetY,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,stub,0,,,,,1.139672,24556151
+SpendPresentationName,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+StartMouseoverCostXOffset,ScreenData,ScreenData.MetaUpgradeCardLayout,MetaUpgradeCardScreenData.lua,stub,0,,,,,1.139672,24556151
+StartX,ScreenData,ScreenData.KeepsakeRack;ScreenData.SpellScreen,KeepsakeData.lua;SpellScreenData.lua,stub,0,,,,,1.139672,24556151
+StartY,ScreenData,ScreenData.KeepsakeRack;ScreenData.SpellScreen,KeepsakeData.lua;SpellScreenData.lua,stub,0,,,,,1.139672,24556151
+StartingIndex,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+StatFormat,ScreenData,ScreenData.GameStats,GameStatsData.lua,defined,5,,,,,1.139672,24556151
+StatLineLeft,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,11,,,,,1.139672,24556151
+StatLineRight,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,11,,,,,1.139672,24556151
+SurfaceShrinePointThresholds,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+TabIconMouseOverShiftDistance,ScreenData,ScreenData.Codex;ScreenData.GameStats,CodexData.lua;GameStatsData.lua,stub,0,,,,,1.139672,24556151
+TabIconMouseOverShiftSpeed,ScreenData,ScreenData.Codex;ScreenData.GameStats,CodexData.lua;GameStatsData.lua,stub,0,,,,,1.139672,24556151
+TabLabelFormat,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,defined,10,,,,,1.139672,24556151
+TabStarOffsetX,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+TabStarOffsetY,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+TabStarScale,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+Tabs,ScreenData,ScreenData.Codex;ScreenData.GameStats,CodexData.lua;GameStatsData.lua,stub,0,,,,,1.139672,24556151
+TalentInactive,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+TalentNextAvailable,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+TalentPriorSelected,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+TextBoxOffsetY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TitleText,ScreenData,ScreenData.UpgradeChoice,UpgradeChoiceData.lua,defined,8,,,,,1.139672,24556151
+ToggleOffSound,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ToggleOnSound,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+TooltipBottomOffset,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TooltipOffsetX,ScreenData,ScreenData.BoonInfo;ScreenData.MarketScreen;ScreenData.UpgradeChoice;ScreenData.WeaponUpgradeScreen,BoonInfoData.lua;MarketData.lua;UpgradeChoiceData.lua;WeaponUpgradeData.lua,stub,0,,,,,1.139672,24556151
+TooltipOffsetXStart,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+TooltipOffsetY,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TooltipOffsetYStart,ScreenData,ScreenData.TalentScreen,TalentScreenData.lua,stub,0,,,,,1.139672,24556151
+TooltipX,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.KeepsakeRack;ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.MusicPlayer;ScreenData.Shrine;ScreenData.TraitTrayScreen;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;KeepsakeData.lua;MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;MusicPlayerData.lua;ShrineData.lua;TraitTrayData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+TooltipY,ScreenData,ScreenData.CosmeticsShop;ScreenData.FamiliarCostumeShop;ScreenData.FamiliarShop;ScreenData.KeepsakeRack;ScreenData.MetaUpgradeCardLayout;ScreenData.MetaUpgradeCardUpgradeLayout;ScreenData.MusicPlayer;ScreenData.Shrine;ScreenData.WeaponShop,CosmeticsData.lua;FamiliarCostumeData.lua;FamiliarShopData.lua;KeepsakeData.lua;MetaUpgradeCardScreenData.lua;MetaUpgradeCardUpgradeScreenData.lua;MusicPlayerData.lua;ShrineData.lua;WeaponShopData.lua,stub,0,,,,,1.139672,24556151
+TotalPinSpace,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitComponentDictionary,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitContainers,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TraitDictionary,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TraitFilters,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+TraitIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+TraitInfoCardOffsetY,ScreenData,ScreenData.HUD,HUDData.lua,stub,0,,,,,1.139672,24556151
+TraitMaxColumns,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+TraitRequirements,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TraitRequirementsDictionary,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TraitSortOrder,ScreenData,ScreenData.BoonInfo,BoonInfoData.lua,stub,0,,,,,1.139672,24556151
+TraitSpacingX,ScreenData,ScreenData.RunHistory;ScreenData.TraitTrayScreen,RunHistoryData.lua;TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitSpacingY,ScreenData,ScreenData.RunHistory;ScreenData.TraitTrayScreen,RunHistoryData.lua;TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitStartBottomOffset,ScreenData,ScreenData.TraitTrayScreen,TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitStartX,ScreenData,ScreenData.RunHistory;ScreenData.TraitTrayScreen,RunHistoryData.lua;TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TraitStartY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+TraitTrayArgs,ScreenData,ScreenData.SellTraits;ScreenData.SurfaceShop;ScreenData.WellShop,SellTraitData.lua;StoreData.lua;SurfaceShopData.lua,defined,1,,,,,1.139672,24556151
+TraitsPerColumn,ScreenData,ScreenData.RunHistory;ScreenData.TraitTrayScreen,RunHistoryData.lua;TraitTrayData.lua,stub,0,,,,,1.139672,24556151
+TransitionAnimationMap,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,defined,3,,,,,1.139672,24556151
+TransitionFromBlankAnimations,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+TransitionToBlankAnimations,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+UnderworldShrinePointThresholds,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+UnlockRequirementsOffsetY,ScreenData,ScreenData.BountyBoard,BountyData.lua,stub,0,,,,,1.139672,24556151
+UnlockVoiceLines,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+UnmetRequirementsItemNameFormat,ScreenData,ScreenData.MarketScreen,MarketData.lua,defined,12,,,,,1.139672,24556151
+UnreadUnselectedFormat,ScreenData,ScreenData.Codex,CodexData.lua,defined,2,,,,,1.139672,24556151
+UnselectedFormat,ScreenData,ScreenData.Codex,CodexData.lua,defined,2,,,,,1.139672,24556151
+UpdateFunctionName,ScreenData,ScreenData.InventoryScreen,ResourceData.lua,stub,0,,,,,1.139672,24556151
+UsingMouseOverSound,ScreenData,ScreenData.BountyBoard,BountyData.lua,stub,0,,,,,1.139672,24556151
+WeaponAnimationOverrides,ScreenData,ScreenData.BountyBoard,BountyData.lua,defined,9,,,,,1.139672,24556151
+WeaponBaseAspectMapping,ScreenData,ScreenData.GameStats,GameStatsData.lua,defined,6,,,,,1.139672,24556151
+WeaponColumnHeaders,ScreenData,ScreenData.GameStats,GameStatsData.lua,stub,0,,,,,1.139672,24556151
+WeaponIconOffsetY,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+WeaponIconScale,ScreenData,ScreenData.RunHistory,RunHistoryData.lua,stub,0,,,,,1.139672,24556151
+WideIconGroupShiftX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+WideItemOffsetX,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ZeroShrinePointsText,ScreenData,ScreenData.Shrine,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ActionBarBottomOffset,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ActionBarY,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+AutoAlignContextualButtonGlyphWidth,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+AutoAlignContextualButtonMinWidth,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+AutoAlignContextualButtonSpacing,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+BlockTimerFlags,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+BoonMenuId,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+Color,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+Constants,UIData,UIData,UIData.lua,defined,2,,,,,1.139672,24556151
+ContextualButtonBottomOffset,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonFormatLeft,UIData,UIData,UIData.lua,defined,9,,,,,1.139672,24556151
+ContextualButtonFormatRight,UIData,UIData,UIData.lua,defined,9,,,,,1.139672,24556151
+ContextualButtonSpacing,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonXLeft,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonXMiddleLeft,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonXMiddleRight,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonXRight,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+ContextualButtonY,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+CurrentRunDepth,UIData,UIData,UIData.lua,defined,3,,CurrentRunDepth,地点 {$CurrentRun.RunDepthCache},,1.139672,24556151
+DataProperties,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,defined,7,,,,,1.139672,24556151
+DisplayInfoBanner,UIData,UIData,UIData.lua,defined,2,,,,,1.139672,24556151
+DoorTextCumulativeDelay,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+FadeOpacity,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+FadeTarget,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+Font,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+FontSize,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+InterstitialSkipPrompt,UIData,UIData,UIData.lua,defined,3,,,,,1.139672,24556151
+Justification,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+OffsetX,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+OffsetY,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+PinIconListOffsetY,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+SpellMenuId,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+TalentMenuId,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
+TextSymbolScale,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+UsePrompt,UIData,UIData,UIData.lua,defined,5,,,,,1.139672,24556151
+Width,UIData,UIData.ShrineBountyAvailableTextArgs,ShrineData.lua,stub,0,,,,,1.139672,24556151
+ZeroMouseFlags,UIData,UIData,UIData.lua,stub,0,,,,,1.139672,24556151
