@@ -61,11 +61,12 @@ These are not feature freezes. Promote them only when new evidence or requiremen
 
 ## Historical evidence
 
-Historical material is evidence only and must not be used as current instructions:
+Historical material is evidence only and must not be used as current instructions.
 
-- `docs/audits/2026-09-21-ai-development-governance.md` — system map, debt/test audit and governance rationale;
-- `docs/audits/2026-09-21-full-repository-audit-round2.md` — earlier full repository audit;
-- `docs/audits/2026-09-21-pre-feature-deep-audit.md` — earlier deep-audit bug lineage;
-- `docs/audits/2026-09-21-post-merge-linux-review.md` — earlier exact-source review evidence.
+The retained repository-level synthesis is:
 
-Do not reopen those audit scopes without a new user request or new code evidence.
+- `docs/audits/2026-09-21-ai-development-governance.md` — system map, debt/test audit and governance rationale.
+
+Older round/version diffs, validation transcripts, completed implementation plans/specs and superseded audit reports were removed from the current tree because Git history and closed PRs already preserve them. Recover them from Git only when investigating a specific historical cause.
+
+Do not reopen historical audit scopes without a new user request or new code evidence.
