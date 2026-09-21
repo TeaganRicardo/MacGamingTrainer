@@ -43,7 +43,7 @@ EchoDeathDefianceRefill,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.Ech
 EchoDoubleLevelBoon,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,石榴石榴石榴,direct,,1.139672,24556151
 EchoDoubleShop,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,金币金币金币,direct,,1.139672,24556151
 EchoLastReward,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,奖励奖励奖励,direct,,1.139672,24556151
-EchoLastRunBoon,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,祝福祝福祝福,direct,,1.139672,24556151
+EchoLastRunBoon,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,祝福祝福祝福,special,"AcquireFunction waits on the active boon-menu signal and opens the previous-run boon choice; keep this target on the native Echo choice flow instead of raw trait injection.",1.139672,24556151
 EchoRepeatKeepsakeBoon,trait,UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices,信物信物信物,direct,,1.139672,24556151
 ElementalBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 EmptyMaxHealthDrop,consumable,DebugSpawnConsumables+NPCData(Nemesis),半人马之魂,direct,,1.139672,24556151
