@@ -11,8 +11,9 @@ The snapshot records identifiers and relationships from the game's data tables r
 
 Snapshot contents include:
 - full inventories for consumables, loot, traits, resources, stores, rooms, encounters, units, weapons, projectiles, progression, requirements, and UI data;
-- `trait_sources.csv` and `room_links.csv` relationship indexes;
-- curated `catalog_legality.csv`, `well_shop.csv`, `reroll_ledger.csv`, and `special_interactions.csv` research ledgers;
+- `trait_references.csv` and `static_room_links.csv` static-reference indexes;
+- `aliases.csv` for reference-only selector/alias identifiers;
+- curated `catalog_legality.csv`, `well_shop.csv`, `reroll_ledger.csv`, and `native_interactions.csv` research ledgers;
 - `manifest.json` with source build and row counts.
 
 ## Usage
@@ -30,7 +31,21 @@ The historical filename `catalog_legality.csv` is retained for continuity, but i
 
 Whether the current build normally instantiates a particular pickup is evidence only. It does not create another classification axis.
 
-`special_interactions.csv` records native handlers and interaction relationships. Presence in that file does not by itself mean `classification=special`. For example, `ChaosWeaponUpgrade`, `BlindBoxLoot`, and `RandomStoreItem` are concrete consumables whose own use logic preserves their native behavior, so they remain `direct`; `RandomLoot`, `BoostedRandomLoot`, `WeaponUpgradeDrop`, `ShopHermesUpgrade`, and `SpellDrop` require dedicated spawning/choice semantics and are `special`.
+`native_interactions.csv` records native handlers and interaction relationships. Presence in that file does not by itself mean `classification=special`. For example, `ChaosWeaponUpgrade`, `BlindBoxLoot`, and `RandomStoreItem` are concrete consumables whose own use logic preserves their native behavior, so they remain `direct`; `RandomLoot`, `BoostedRandomLoot`, `WeaponUpgradeDrop`, `ShopHermesUpgrade`, and `SpellDrop` require dedicated spawning/choice semantics and are `special`.
+
+
+## Reference-label semantics
+
+Several snapshot files are static extraction indexes, not claims about complete runtime ownership or acquisition semantics:
+
+- `generated/trait_references.csv` records static references from the tables scanned by the snapshot extractor. It must not be read as a complete list of all ways a Trait can be acquired.
+- `generated/static_room_links.csv` records statically visible Room → unit/encounter/reward references. Runtime-generated or indirect relationships may not appear.
+- `generated/aliases.csv` contains reference-only selector/alias identifiers. The old `aliases_and_stubs.csv` name was misleading because the current file contains aliases, not definition stubs.
+- `native_interactions.csv` records native handlers/flows and is independent from the `direct/special/exclude/alias` Trainer classification.
+
+The `state` column in generated inventory tables is an **extractor state**, not a legality, runtime-validity, or gameplay-source classification. Do not use values such as `defined`, `debug_only`, or `stub` as a Trainer-facing decision.
+
+In particular, the current extractor does not fully model function-valued `NamedRequirementsData` entries. Some valid requirements therefore appear as `state=stub` / `field_count=0` in `generated/requirements.csv`. Until that extractor is upgraded and the snapshot is regenerated, treat those fields only as parser output and inspect the source requirement before drawing semantic conclusions.
 
 ## Resource census versus pickup wrappers
 
