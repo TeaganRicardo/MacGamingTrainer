@@ -82,6 +82,28 @@ For future census work:
 3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
 
+## Progression census completeness check
+
+`generated/progression.csv` is a cross-namespace inventory, not a single progression-object type. The current snapshot contains 867 rows / 832 unique IDs across World upgrades, bounties, quests, objectives, objective sets, achievements, badges, Arcana/meta upgrades, fishing/harvest/garden configuration, spells, and costume data.
+
+A manual source audit found and corrected a legacy snapshot-extraction defect in `ObjectiveData`. Most objective definitions in `ObjectiveData.lua` are compact single-line Lua tables such as `GiftPrompt = { Description = ... }`; the original snapshot had reduced 64 of the 65 objective rows to `state=stub, field_count=0`. All 65 installed objective IDs are real table definitions. Their `state` is now `defined`, and `field_count` has been recomputed from the actual top-level fields; this also corrects `NemesisKills` from three to four fields.
+
+After that correction the progression inventory is:
+
+- 818 `defined`;
+- 37 `debug_only`;
+- 12 `stub`.
+
+The remaining 12 `stub` rows are structural configuration keys rather than omitted progression entities:
+
+- `FishingData`: `SpawnChance`, `SpawnLimitPerBiome`, `ToolName`, `RoomChanceName`, `HarvestPointName`, `DefaultGameStateRequirements`, and `FidgetInterval`;
+- `GardenData`: `JustPlantedAnimation` and `PlotOrder`;
+- `HarvestData`: `DefaultSpawnChances`, `DefaultGameStateRequirements`, and `WeightedOptions`.
+
+The 35 repeated IDs are also intentional cross-namespace reuse rather than duplicate entities. Thirty-three names occur once as an `ObjectiveData` objective descriptor and once as an `ObjectiveSetData` objective-set definition; `BaseMetaUpgrade` is separately defined in `MetaUpgradeCardData` and `MetaUpgradeData`; and `DefaultGameStateRequirements` is a configuration key in both the fishing and harvesting views. Consumers must therefore identify progression rows by at least `(table, id)`, not by `id` alone.
+
+The historical extractor that produced this static snapshot is not part of the repository, and production code/tests intentionally do not depend on `docs/reference/**`. This correction is therefore recorded in the versioned snapshot and audit notes rather than introducing a new runtime/test dependency solely to regenerate documentation data.
+
 ## Native interaction census completeness check
 
 The native-interaction ledger has been manually checked against the installed 1.139672 scripts and now records two distinct but related sets:
