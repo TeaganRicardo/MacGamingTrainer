@@ -39,7 +39,9 @@ Build 2 artifact `10635953571` has digest `sha256:e25f3ad720cf679b06644c78e68857
 
 PR #61 was squash-merged as `fb56a660cfb354ecff93d36d69e5c7134d093e80`.
 
-Real Hades II acceptance for resident revision 46 is still pending. The CI and package evidence above prove contracts/build/package, not final in-game behavior.
+Real Hades II acceptance for resident revision 46 is complete against exact Build 2 artifact `10635953571` (source `8bf914badf023ebe5be42b2284790a5c9d9242d6`, artifact digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`). Real-game evidence confirms revision 46 attach/status, representative exact special-trait acquisition across Artemis/Dionysus/Hades, Arachne `SetupCostume()` refresh semantics, Echo's native previous-run boon path, Circe `DoubleFamiliarTrait` through both direct acquisition and native choice, representative Charon-Well consumable/trait behavior, and same-PID runtime reset/re-entry recovery.
+
+`DoubleFamiliarTrait` remains correctly classified `direct`: its effect is applied to the active Familiar itself rather than surfacing as a separate standalone trait icon. Charon-Well entries remain correctly projected through the `pickup` catalog under section `卡戎之井`. The lifecycle round trip showed runtime-generation invalidation followed by successful `runtime_reset`, `status`, and automatic `replay_preferences`; retained desired features returned active without stale UI state or manual retoggling. Revision 46 therefore has both automated CI/package evidence and final real-game acceptance.
 
 Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
