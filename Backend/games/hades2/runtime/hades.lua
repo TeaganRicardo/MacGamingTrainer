@@ -3339,6 +3339,10 @@ if __MacGamingTrainerV1 == nil then
           else
             requireFunctions("special blessing", { "AddTraitToHero" })
             AddTraitToHero({ TraitName = entry.trait, FromLoot = true })
+            if entry.sourceId == "Arachne" then
+              requireFunctions("Arachne costume spawning", { "SetupCostume" })
+              SetupCostume()
+            end
           end
           return nil
         end
