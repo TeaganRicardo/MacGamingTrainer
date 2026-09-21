@@ -104,6 +104,27 @@ High-value requirement facts verified from the target build include:
 `BountyData.ShrineBountyNameSwapMap` is a compatibility map, not another bounty table. It maps 42 legacy IDs such as `BountyStaffHeat1FBoss` to current `BountyShrine*` IDs. Those legacy identifiers are recorded in `generated/aliases.csv` with a `target_id`; they must not be counted as additional bounties.
 
 
+
+## Store and consumable census semantics
+
+`generated/stores.csv` is also a mixed table inventory rather than a list of purchasable items:
+
+- the 13 `RewardStoreData` rows are reward pools/configuration from `LootData.lua`, not shop items; `Secrets`, for example, is the Chaos reward pool containing `TrialUpgrade`;
+- `StoreData` has six actual offer pools (`RoomShop`, `SurfaceShop`, `WorldShop`, `I_WorldShop`, `Q_WorldShop`, and `ZagPedestalOptions`) plus `ZagreusContractRequirement`, which is a requirement helper stored in the same table;
+- `ZagPedestalOptions` is the free reward pool used after a successful Zagreus contract rather than an ordinary paid shop;
+- the four `SurfaceShopData` rows are delay/discount configuration values. Their `stub` state is another scalar-table extraction artifact;
+- the 129 `WeaponShopItemData` rows decompose into 6 base weapons, 8 tool/tool-upgrade stages, 18 non-default aspect unlocks, 96 aspect level-up stages, and the single `BaseWeaponUpgrade` helper. They belong to the Nocturnal Arms/tool upgrade system, not Charon shop inventory.
+
+`well_shop.csv` records the 25 current Well of Charon entries represented by `RoomShop`'s item/trait lists and sort order. Consumable wrappers such as `LimitedManaRegenDrop` and `LimitedSwapTraitDrop` are concrete Well purchases whose native use functions create/update their associated runtime traits.
+
+The 1.139672 snapshot contains 97 `ConsumableData` identifiers including bases. `catalog_legality.csv` now gives every one of those 97 identifiers an explicit Trainer disposition. Notable previously uncovered entries are:
+
+- `MixerMythicDrop` → `direct`: a real `MixerMythic` (“熵”) reward used by `RoomDataQ.CheckTyphonReward`;
+- `SeedMysteryDrop` → `direct`: a real `SeedMystery` (“神秘种子”) pickup used by Narcissus reward logic;
+- `LobAmmoPack` → `exclude`: a context-owned Argent Skull ammunition pickup created and reclaimed by `WeaponLobAmmoDrop`;
+- `BaseConsumable`, `BaseMetaRoomReward`, `BaseResource`, `BaseSuperResource`, `BaseWellShopConsumable`, and `Tier1Consumable` → `exclude`: inheritance/rarity templates rather than standalone items.
+
+
 ## Resource census versus pickup wrappers
 
 `ResourceData` is the authoritative census for game resources. A `*Drop` entry is only a concrete world-pickup wrapper for a resource and is not required for the resource itself to exist.
