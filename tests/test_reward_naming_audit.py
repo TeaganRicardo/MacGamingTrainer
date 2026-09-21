@@ -78,6 +78,12 @@ assert reward_rows['EmptyMaxHealthSmallDrop'].get('family') == 'centaurSoul'
 for identifier in ('MaxHealthDropSmall', 'MaxHealthDrop', 'MaxHealthDropBig'):
     assert reward_rows[identifier].get('family') == 'centaurHeart'
 
+assert reward_rows['SeedMysteryDrop'].get('family') == 'metaHarvest'
+assert reward_rows['SeedMysteryDrop'].get('category') == '局外资源奖励'
+assert reward_rows['MixerMythicDrop'].get('family') == 'metaBoss'
+assert reward_rows['MixerMythicDrop'].get('category') == '局外资源奖励'
+assert 'LobAmmoPack' not in reward_rows
+
 assert reward_rows['ElementalBoost'].get('family') == 'element'
 assert reward_rows['ElementalBoost'].get('category') == '元素奖励'
 assert reward_rows['MinorTalentDrop'].get('name') == '黯淡繁星之路'
