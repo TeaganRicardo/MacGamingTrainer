@@ -12,7 +12,7 @@ Use this order when facts conflict:
 4. `GAME_MODULES.md` when a task crosses the Core/game-module boundary;
 5. roadmap issue #8 for planned work only.
 
-`docs/audits/**`, `docs/legacy-version-history/**`, closed PRs, old branches and prior ChatGPT conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
+`docs/audits/**`, closed PRs, Git history, old branches and prior ChatGPT conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
 
 ## Minimal reading path
 
