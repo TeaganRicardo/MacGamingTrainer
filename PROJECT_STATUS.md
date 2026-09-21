@@ -15,7 +15,8 @@ Start every development thread at `AGENTS.md`.
 - Lifecycle PR #45 is merged. Target-process presence and connection-lifetime validity are now distinct: exit/new-lifetime invalidation survives busy work and rapid replacement launches instead of leaving stale `connected=true`.
 - PR #57 is merged. The Hades II consumable census now closes at 91/91 concrete `ConsumableData` targets classified: `SeedMysteryDrop` and `MixerMythicDrop` were recovered as direct pickups, while weapon-owned `LobAmmoPack` is explicitly excluded.
 - PR #59 is merged. The Hades II loot census now closes at 16/16 concrete `LootData` targets classified, and resident fallback Chinese now matches the supported build for Demeter, Aphrodite and the Daedalus Hammer.
-- Hades II resident runtime revision: 45.
+- PR #61 is merged. The Hades II trait-facing census now records 83 special-NPC traits plus 13 Charon-Well traits (96 total); exact special-trait application preserves native `FromLoot` acquire semantics, Arachne costume refreshes use `SetupCostume()`, and `EchoLastRunBoon` remains native-choice-only because its acquire function depends on an active boon-menu context.
+- Hades II resident runtime revision: 46.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
 - Target reference: Hades II 1.139672 / Steam build 24556151.
@@ -24,21 +25,21 @@ Start every development thread at `AGENTS.md`.
 
 ## Verification baseline
 
-The latest behavior-changing Hades loot-census head before squash merge was:
+The latest behavior-changing Hades trait-census head before squash merge was:
 
-`f71638702e02ae679dd9a15e63639170e7c847cc`
+`8bf914badf023ebe5be42b2284790a5c9d9242d6`
 
 Fresh exact-head CI on that tree:
 
-- Linux contracts `35590215813`: PASS;
-- module build matrix `35590215855`: Hades II + reference fixture + package isolation PASS;
-- Build 2 macOS `35590215815`: full macOS contracts/build/package PASS.
+- Linux contracts `35594293605`: PASS;
+- module build matrix `35594293508`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35594293527`: full macOS contracts/build/package PASS.
 
-Build 2 artifact `10634645638` has digest `sha256:56951d7b9bd049fb2584c1bce8f5e020b0643f6ad11d1f1c2fa75e44ec5991e7`. Static package inspection confirmed resident revision 45 and the corrected `得墨忒尔` / `阿弗洛狄忒` / `狄德勒斯之锤` fallbacks.
+Build 2 artifact `10635953571` has digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`.
 
-PR #59 was squash-merged as `2ad26f30af72117067561ad6d6aed28ac1cd384f`.
+PR #61 was squash-merged as `fb56a660cfb354ecff93d36d69e5c7134d093e80`.
 
-Real Hades II acceptance for resident revision 45 is still pending. The CI and package evidence above prove contracts/build/package, not final in-game behavior.
+Real Hades II acceptance for resident revision 46 is still pending. The CI and package evidence above prove contracts/build/package, not final in-game behavior.
 
 Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
