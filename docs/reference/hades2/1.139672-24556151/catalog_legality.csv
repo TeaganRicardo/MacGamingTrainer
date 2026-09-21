@@ -3,6 +3,11 @@ AirBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.1
 ArmorBigBoost,consumable,StoreData+DebugSpawnConsumables,埃癸斯饰符,direct,,1.139672,24556151
 ArmorBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,护盾饰符,direct,,1.139672,24556151
 ArmorBoostStore,consumable,StoreData,碎裂之盾,direct,,1.139672,24556151
+BaseConsumable,consumable,ConsumableData(DebugOnly),,exclude,Debug-only base inheritance template; not a standalone item.,1.139672,24556151
+BaseMetaRoomReward,consumable,ConsumableData,,exclude,Inheritance/conversion template for meta room-reward pickups; not a standalone item.,1.139672,24556151
+BaseResource,consumable,ConsumableData,,exclude,Base resource-pickup inheritance template; not a standalone item.,1.139672,24556151
+BaseSuperResource,consumable,ConsumableData,,exclude,Super-resource inheritance template; not a standalone item.,1.139672,24556151
+BaseWellShopConsumable,consumable,ConsumableData,,exclude,Well-consumable inheritance template; not a standalone item.,1.139672,24556151
 BlindBoxLoot,consumable,StoreData,神秘祝福,direct,Concrete ConsumableData; direct spawning is sufficient because native use handles ReplaceWithRandomLoot/UnwrapRandomLoot.,1.139672,24556151
 BloodDrop,consumable,TraitProducedComment+PowersLogic(CreateBloodDrop)+TraitData_Ares,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 Boon,alias,RewardStoreData,奥林匹斯的祝福,alias,Abstract reward selector represented by concrete Olympian loot entries.,1.139672,24556151
@@ -36,6 +41,7 @@ LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,direct,,1.
 LastStandShopItem,consumable,StoreData,冥河之吻,direct,,1.139672,24556151
 LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,direct,,1.139672,24556151
 LimitedSwapTraitDrop,consumable,StoreData,牺牲圣诗,direct,,1.139672,24556151
+LobAmmoPack,consumable,WeaponLogic(WeaponLobAmmoDrop)+ConsumableData,,exclude,Context-owned Argent Skull ammo pickup; spawned and recollected by weapon mechanics rather than exposed as an independent reward.,1.139672,24556151
 ManaDropMinor,consumable,TraitProducedComment,,exclude,Defined base mana consumable; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
 ManaDropMinorHound,consumable,TraitProducedComment+FamiliarData,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 ManaDropMinorPoseidon,consumable,TraitProducedComment,,exclude,Defined Poseidon mana variant; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
@@ -64,6 +70,7 @@ MixerFBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerGBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerHBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerIBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerMythicDrop,consumable,RoomDataQ(CheckTyphonReward),熵,direct,,1.139672,24556151
 MixerNBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerOBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
 MixerPBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
@@ -83,6 +90,7 @@ RoomMoneyTinyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,direct
 RoomMoneyTripleDrop,consumable,RewardStoreData+DebugSpawnConsumables,巨量资金,direct,,1.139672,24556151
 RoomRewardConsolationPrize,consumable,DebugSpawnConsumables+EventLogic+RewardLogic+ShrineLogic,红洋葱,direct,,1.139672,24556151
 RoomRewardHealDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,新鲜食粮,direct,,1.139672,24556151
+SeedMysteryDrop,consumable,TraitData_Narcissus,神秘种子,direct,,1.139672,24556151
 SeedMysteryRange,consumable,StoreData,盖亚的礼赠,direct,,1.139672,24556151
 ShopHermesUpgrade,consumable,StoreData,,special,Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning.,1.139672,24556151
 SpellDrop,loot,RewardStoreData+StoreData,月之礼赠,special,"Concrete Selene reward, but Trainer use must preserve the native SpawnRoomReward spell/hex choice flow.",1.139672,24556151
@@ -103,6 +111,7 @@ TemporaryImprovedDefenseTrait,trait,StoreData,蟒蛇的鳞片,special,Native Wel
 TemporaryImprovedExTrait,trait,StoreData,女巫的印记,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
 TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
 TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+Tier1Consumable,consumable,ConsumableData,,exclude,Rarity/inheritance template used by tiered consumables such as TalentDrop; not a standalone item.,1.139672,24556151
 TrashPointsDrop,consumable,DebugSpawnConsumables+NPCData_Eris,,direct,,1.139672,24556151
 TrialUpgrade,loot,RewardStoreData,,direct,,1.139672,24556151
 WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
