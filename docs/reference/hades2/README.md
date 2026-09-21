@@ -95,7 +95,9 @@ Manual review against the installed Hades II 1.139672 LootData sources closes th
 
 ## Trait catalog boundary and completeness check
 
-The generated trait inventory is intentionally much broader than the Trainer's trait-facing catalog. Hades II 1.139672 exposes 968 extracted `TraitData` rows, but most are owned by another native reward system rather than being independent Trainer targets.
+The generated trait inventory is intentionally much broader than the Trainer's trait-facing catalog. Hades II 1.139672 produces 968 extracted trait rows but only **670 unique IDs**. 298 IDs are represented twice through the source `TraitSetData` view and the merged runtime `TraitData` view, so those pairs are not duplicate game traits.
+
+At the unique-ID level the extractor reports 626 `defined`, 43 `debug_only`, and one `stub`. The sole stub ID is `VanillaState`, an inheritance-only biome-state entry (`VanillaState -> BiomeState`) represented through both table views; it is not a blessing or an independent Trainer target. The `debug_only` set is likewise dominated by base/type markers such as `BaseTrait`, elemental markers, `CostumeTrait`, `ShopTrait`, weapon-hammer base traits, Chaos base traits, and other ownership scaffolding. These extractor states do not define the product catalog.
 
 The product-facing trait boundary for this build is:
 
