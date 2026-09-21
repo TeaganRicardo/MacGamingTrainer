@@ -103,7 +103,9 @@ assert 'CurrentRun.LootChoiceHistory = nil' in block
 
 spawn = lua[lua.index('if command == "spawn_reward" then'):]
 assert 'entry.kind == "trait"' in spawn
-assert 'AddTraitToHero' in spawn
+assert 'AddTraitToHero({ TraitName = entry.trait, FromLoot = true })' in spawn, (
+    "exact special-trait spawning must preserve native acquire functions"
+)
 
 # Catalog advertises the capability instead of making Swift infer it from localized names.
 assert 'nativeChoice = nativeSpecialChoiceSources[source.id] == true' in lua
