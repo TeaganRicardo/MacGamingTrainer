@@ -1,322 +1,224 @@
 # AI-assisted development governance audit
 
-Date: 2026-09-21
+Date: 2026-09-21  
+Status: closed historical synthesis
 
-This is an audit/evidence record, not an execution queue. Current product status remains `PROJECT_STATUS.md`; stable engineering rules are in `ENGINEERING_INVARIANTS.md`; roadmap issue #8 remains roadmap authority.
+This document records why the 2026-09-21 governance changes were made and what evidence supported them. It is **not** a current handoff, roadmap, architecture authority, or execution queue.
 
-## Baseline and evidence
+Use current sources in this order:
 
-The audit first observed `main` at `1f8d89f7fc0cf13e716ff97b94b1d81381d8d933`. While it was in progress, PR #41 and documentation follow-ups advanced `main`, so the governance work was discarded and replayed from the new baseline instead of merging a stale branch.
+1. GitHub `main`, production code and executable tests;
+2. `PROJECT_STATUS.md` for current operational state;
+3. `ENGINEERING_INVARIANTS.md` for stable ownership/lifecycle/replay/Save rules;
+4. `GAME_MODULES.md` for the Core/game-module contract;
+5. roadmap issue #8 for planned sequencing.
 
-Current audit baseline: `1345b39c555df97dfea55074c7ae7d0ab71ad78f`.
+Read this audit only when investigating why a current rule exists, reviewing historical technical debt, or challenging a governance decision.
 
-A direct comparison from PR #41 merge `c2c4f39ffe5c943c76f2190c458d4ece384f6513` to `1345b39c...` changes only `PROJECT_STATUS.md` and audit documentation. The product/test/workflow tree is the PR #41 product tree.
+## 1. Evidence chain
 
-Fresh exact-head baseline workflow: run `35529711449`.
+The audit began while `main` was moving. Instead of treating stale workspace results as current proof, the work was repeatedly rebound to exact GitHub SHAs.
 
-It explicitly checked out `1345b39c...`, packaged the pristine source before executing tests, then passed:
-
-- `Tools/run_linux_checks.sh`;
-- all 81 Linux-portable `tests/test_*.py`;
-- `python3 -m compileall -q Backend Tools tests`.
-
-The four excluded platform-only entrypoints are:
-
-- `test_core_save_batch_delete_round20.py`;
-- `test_core_save_rename_completion_round24.py`;
-- `test_hades2_run_log_watcher.py`;
-- `test_trainer_log_sink_shared_append.py`.
-
-PR #41's merged product tree has macOS Build 2 evidence in run `35529062368`, but that ancestor result is not described as an exact-`1345b39c...` macOS run. The final governance branch requires its own CI.
-
-## System map
-
-```text
-App
-  -> one TrainerBackendSession
-  -> TrainerHostView
-       -> TrainerTargetProcessMonitor
-       -> TrainerConnectionPolicy
-       -> optional Core Save manager
-       -> selected TrainerGameModule
-            -> typed game model/API
-            -> game adapter/router
-            -> game transport + persistence
-            -> resident runtime where applicable
-```
-
-Authoritative ownership:
-
-- Host/Core owns process observation, automatic/manual connection policy, the single backend worker/session, generic request ordering/timeouts, shared UI/Input, generic Process Time Warp mechanics and optional generic Save transactions.
-- Hades II owns command meaning, typed state projection, LLDB/Lua transport, lifecycle-log interpretation, desired/Profile semantics, catalogs/resources/rewards and game-specific UI.
-- Core Save owns snapshots, restore, rollback and staging. Hades owns save resolution/provider semantics and any Hades codec/schema/editor semantics.
-- Build-only module metadata belongs to `Tools/**`; runtime module discovery belongs to Backend Core.
-
-State authority:
-
-- durable desired state: Hades preference/Profile layer;
-- observable runtime state: resident Lua + Process Time Warp, decoded through Hades state patches;
-- dormant state: desired but not currently active in the observed scene/runtime;
-- Host lifecycle intent: Host policy/session only;
-- Save transaction/recovery evidence: Core Save durable storage/claims, not UI optimism or a single process reply.
-
-Desired, active and dormant are deliberately different facts. Sparse state patches must also preserve absent versus explicit-null semantics.
-
-## Lifecycle and replay model
-
-- Initial discovery of an already-running process is not a true-launch background-attach grant.
-- A real target launch grants one bounded event-driven background recovery/connect opportunity.
-- Target activation records an opportunity but does not itself justify debugger attachment.
-- Target exit while the backend is busy preserves one deferred refresh until the backend becomes idle.
-- Backend timeout/terminal transport uncertainty kills trust in that backend instance. The timed-out/in-flight request is never replayed automatically.
-- Hades same-PID runtime reset is a Lua-generation transition, not a new process lifetime. It reuses the same debugger attachment, invalidates runtime-generation bookkeeping and later bootstraps/replays safe durable state.
-- No periodic LLDB/Lua polling and no second debugger attachment are allowed for same-PID recovery.
-- Native modal and direct one-shot actions never enter preference replay.
-- Next-room reward is a durable one-shot only because it carries a stable token plus a resident consumption receipt.
-
-Current Hades log evidence:
-
-- main menu: `Loading package: MainMenu.pkg`;
-- runtime reset: `App.Reset Start` / `Lua interface destroyed`;
-- ready after reset: `Finished loadScreen onExit`.
-
-`World::Stop()` is explicitly not a main-menu signal.
-
-## Bug-family -> invariant -> enforcement
-
-| Historical family | Invariant / authoritative owner | Current enforcement | Remaining governance action |
+| Phase | Exact source | Fresh evidence | Result |
 | --- | --- | --- | --- |
-| lifecycle event misinterpreted | game lifecycle meaning must come from Hades evidence; watcher owns decoding | real watcher test + lifecycle contracts | preserve evidence requirement in stable invariant doc |
-| PID treated as runtime generation | process lifetime and resident Lua generation differ | reset/watcher/adapter scenario tests | no PID-only recovery shortcuts |
-| lifecycle event lost while busy | bounded event intent survives transient busy until consumed | `test_host_connection_policy_dev8.py` | keep behavior test primary |
-| deferred action without observability | deferral is legal only when its completion signal can be observed | watcher availability + connect phase tests | no polling workaround |
-| outcome-unknown replay | unknown execution terminates session trust | backend recovery harness + LLDB taint test | operation classification in stable matrix |
-| durable intent mixed with one-shot | only replay-safe durable intent enters persistence replay | adapter replay + native-modal contracts | real-game acceptance remains final for native UI |
-| consumed one-shot resurrected | durable one-shot needs identity and consumption receipt | next-room token regression | runtime revision + real-game gate |
-| persistence failure blocks cleanup | durable reset and resident teardown are separate failure domains | exit/adapter contracts | no hidden success on persistence error |
-| shared log writers overwrite | multi-writer append needs kernel append semantics | macOS `O_APPEND` behavior test | platform-only by nature |
-| destructive staged restore replays | claim destructive intent before mutation; uncertain claim is indeterminate | Core Save service tests | never downgrade applying state into automatic retry |
-| stale stopped decision / TOCTOU | process state is rechecked immediately before cold mutation | Save restore/service tests | unknown process state fails closed |
-| rollback loses last recovery | recovery copy remains until rollback is complete and verified | Save restore/protocol tests | no cleanup for appearance |
-| backend dies while rollback bytes survive | durable recovery evidence must be rediscoverable after producer death | PR #41 `recoveryPaths` behavior + Save Manager projection | expose evidence only; never auto-restore/delete |
-| storage containment drift | Trainer-owned destructive paths remain inside configured root | snapshot/service symlink/path tests | Profile subdir symlink hardening remains Minor without new evidence |
-| partial Profile merge collision | explicit imported assignments can displace/reflow omitted derived state deterministically | real Swift shortcut behavior test | no open gap |
-| early terminal callback missing | async completion must be total on all terminal paths | rename behavior + portable contract | broaden only if another defect appears |
-| shared ownership drifts | Core owns reusable interaction; game owns semantics | reference fixture/module matrix + boundary tests | avoid speculative Core abstraction |
-| regression fossils protect spelling | prefer state/type/behavior contracts over old source shape | mixed existing suite | consolidate opportunistically, not wholesale |
-| Linux curated list drifts | portable tests enter Linux CI by default | audit found only 34/85 listed, leaving 47 portable tests outside the lane | implemented exhaustive discovery |
-| runtime source changes without revision bump | resident source change and identity bump are one atomic contract | prior exact literals only proved current spelling | implemented diff-based CI gate |
-| verification claim drifts from Git | “passed/fixed” names exact tested SHA | audit discipline | repository required checks recommended |
+| Rebased audit baseline | `1345b39c555df97dfea55074c7ae7d0ab71ad78f` | workflow `35529711449` | permanent Linux gate + all 81 then-portable tests + compileall PASS |
+| Governance enforcement | `fed1093236db9ef0ab7840fc2e807ec47764989c` | Linux `35530429607`; module matrix `35530429595`; macOS `35530429621` | PR #44 exact-head gates PASS |
+| Lifecycle adversarial fix | `0418cb3666518d47bed5f507fc8a9ff6cf72c5dd` | Linux `35552079532`; module matrix `35552079488`; macOS `35552080294` | PR #45 exact-head gates PASS |
+| Active-context reset | `e7efd576379e44d2f104e2a1bc24eed490ca2703` | Linux `35552275804`; module matrix `35552275711`; macOS `35552275716` | PR #46 exact-head gates PASS |
+| Historical-tree prune | `d071ddf9fb69c5c5d8bc09af17f43f8fe333587f` | Linux `35554188167`; module matrix `35554188185`; macOS `35554188120` | PR #47 exact-head gates PASS |
+| Post-merge closure main before this doc-only refresh | `d64403f903fe386d246b5c1cbe57af39d496281e` | Linux `35554328783`; module matrix `35554328792`; macOS `35554328728` | merged-main gates PASS |
 
-## Technical-debt map
+A passing ancestor commit was never treated as proof for a newer tree. That exact-head discipline is itself one of the governance outcomes.
 
-### Systemic
+## 2. What the audit established
 
-| Debt | Concrete evidence / root cause | Blast radius | Current protection | Missing protection | Action / timing |
-| --- | --- | --- | --- | --- | --- |
-| Linux CI discovery drift | At `1345b39c...`, `Tools/run_linux_checks.sh` positively listed 34/85 entrypoints. Four are genuinely macOS-only, leaving 47 Linux-portable tests outside the lane. The root cause is duplicated test-registration ownership: file discovery in macOS vs a manual Linux list. | Any new/changed portable regression could miss the fastest required lane, including lifecycle, Save and outcome-unknown tests. | Build 2 macOS discovers all `test_*.py`; `test_test_suite_discovery.py` protected only that macOS property. | Linux exhaustive-by-default discovery. | **Fix now — implemented.** One explicit four-file platform denylist replaces the positive list; the discovery test enforces it. |
-| Runtime revision discipline encoded as current spelling | Five tests asserted literal resident revision `42`. They prove the current source text, not “runtime source diff implies revision increase.” | A future `hades.lua` edit could keep 42 and still satisfy unrelated runtime assertions, producing stale resident code in a live process. | Human rule in status/audits; duplicated literal guards. | Diff-aware relation between base/head source and revision. | **Fix now — implemented.** Linux CI compares base/head and requires a monotonic, internally consistent resident revision whenever `hades.lua` differs. |
-| Future-agent context/source-of-truth fan-out | Correct ownership/replay rules were distributed among `PROJECT_STATUS.md`, `GAME_MODULES.md`, audits and historical PRs. Root cause is that expensive incident knowledge accumulated as history instead of a small stable engineering contract. | Lower-context agents can edit the wrong layer, replay one-shots, or resurrect superseded designs. | Canonical status + roadmap exist; several behavior tests embody individual rules. | Minimal read path and stable cross-feature invariant index. | **Fix now — implemented.** Thin `AGENTS.md` entrypoint + `ENGINEERING_INVARIANTS.md`; status/roadmap authority remains unchanged. |
-| Required CI is advisory only | `main` reports `protected=false`; repository rulesets list is empty. | A direct push or merged PR can bypass Linux/module/macOS evidence and exact-head discipline. | Workflows trigger on `main` and PRs, but GitHub does not require their success. | Repository ruleset/branch protection. | **Do after PR #44 proves check names.** User-controlled setting; this audit does not mutate repository settings. |
-| Regression-fossil accumulation | Eight dominant G-class files and several F-class files retain round/version naming and implementation-shape assertions. Root cause is one-off regression additions without later semantic consolidation. | Future agents copy weak test patterns and must load obsolete round context. | Stronger lifecycle/module/Save harnesses now cover several families. | Opportunistic consolidation when touching the same invariant. | **Do not cleanup wholesale now.** Remove only with demonstrated equal-or-stronger semantic coverage. |
+The durable architecture is now expressed in `ENGINEERING_INVARIANTS.md`; this section records the conclusions, not a duplicate specification.
 
-### Local
+### Ownership
 
-| Debt | Evidence / root cause | Blast radius | Current protection | Missing protection | Action / timing |
-| --- | --- | --- | --- | --- | --- |
-| Hades Model/View/adapter cognitive load | `Hades2Model.swift`, `Hades2View.swift` and `adapter.py` coordinate many operations; much complexity comes from real desired/runtime/lifecycle synchronization rather than accidental file size. | Slower agent comprehension and higher local edit risk. | Watcher, mutation scheduler, shortcut store, router, transport, persistence/Profile and catalogs are already separately owned. | No missing correctness invariant demonstrated. | **Do not mechanically split.** Extract only a responsibility with an already-independent interface/owner. |
-| Core Save sudden-power-loss durability ceiling | Some directory metadata changes do not fsync every parent directory after `os.replace`. | Extreme power-loss window, not a demonstrated normal-process replay/corruption path. | Same-directory atomic replacement, file fsync, hashes, rollback/recovery evidence. | Full directory-fsync discipline. | **Defer.** Promote only with a concrete durability requirement/failure model. |
-| Hades Profile subdirectory symlink hardening | Profile storage does not mirror every Core Save subdirectory-symlink containment guard. | Same-user local filesystem manipulation; no privilege boundary or demonstrated data-loss path. | filename/schema validation and same-user data root. | explicit contained-directory symlink discipline. | **Defer as Minor** unless a reachable failure is demonstrated. |
+- Core/Host owns process observation, connection policy, the single shared `TrainerBackendSession`, generic request/timeout behavior, shared UI/Input, Process Time Warp mechanics, and optional generic Save infrastructure.
+- A game module owns game command semantics, typed game state, transport/debugger policy, game persistence/Profile meaning, game-specific lifecycle evidence, save codec/schema/edit semantics, and game-specific UI.
+- Hades II is the reference implementation, not the shape Core must force on future games.
+- `reference_fixture` remains the executable proof that a second module can use Core without Hades-specific semantics.
 
-### Historical — solved, keep the invariant
+### State and failure semantics
 
-| Historical family | Root cause that allowed it | Durable guardrail now |
+The audit found that several historical failures came from collapsing distinct state classes:
+
+- process presence vs process lifetime validity;
+- process lifetime vs same-PID resident Lua generation;
+- durable desired state vs observable runtime state vs dormant state;
+- replay-safe durable intent vs one-shot/non-idempotent intent;
+- known failure vs `outcome_unknown`;
+- user-visible Save operation state vs durable filesystem recovery evidence.
+
+The stable definitions and transition rules now live in `ENGINEERING_INVARIANTS.md`.
+
+### Save safety
+
+Core Save is generic transaction infrastructure; Hades save meaning stays Hades-owned.
+
+The important safety result is fail-closed transaction ownership:
+
+- target-process uncertainty blocks destructive restore;
+- rollback is captured and verified before mutation;
+- stopped-state evidence is rechecked before cold mutation;
+- the final recoverable copy is not destroyed for cosmetic cleanup;
+- indeterminate staged/applying state is not automatically replayed;
+- recovery bytes remain rediscoverable after the producer/backend dies;
+- automated tests never use the real user/game save tree.
+
+## 3. Historical bug family -> missing invariant -> enforcement
+
+| Failure family | Why the bug could enter | Durable enforcement after governance |
 | --- | --- | --- |
-| `World::Stop()` treated as main-menu evidence | no explicit lifecycle evidence hierarchy; generic engine event was allowed to acquire game semantic meaning | real log-watcher evidence + lifecycle matrix; `World::Stop()` explicitly rejected |
-| same-PID reset paid doomed probe / lost ready opportunity | PID lifetime and resident Lua generation were not distinct state variables; transient busy could discard event intent | runtime-generation invalidation + retained ready/exit intent + lifecycle scenario tests |
-| Swift/Python trainer.log overwrite | “append” was treated as a seek position rather than a multi-writer file invariant | Darwin `O_APPEND` behavior test |
-| staged restore repeated after successful commit/cleanup failure | destructive instruction had no durable consumed/applying claim | applying/applied state machine; unknown outcome is indeterminate |
-| Save cold-restore TOCTOU | process stopped was treated as a durable decision instead of stale evidence | immediate pre-mutation recheck and fail-closed process query |
-| rollback/recovery evidence lost from UI after backend death | recovery ownership ended with the failed producer process/reply | persistent contained `.rollback-*` discovery + shared Save Manager exposure |
-| partial Profile shortcut collision | imported explicit state and omitted local explicit overrides had no deterministic merge ownership | compiled Swift shortcut reflow/collision behavior test |
-| next-room reward resurrection | one-shot durable intent had no identity/consumption receipt across backend generations | schema-4 token + resident consumed-token receipt |
+| Generic engine event treated as Hades lifecycle meaning | no explicit evidence hierarchy for game lifecycle events | real Hades log evidence + watcher/lifecycle tests; `World::Stop()` is explicitly not a main-menu signal |
+| Same PID treated as same runtime generation | process lifetime and resident Lua lifetime were conflated | same-PID generation invalidation, retained ready signal, one debugger attachment, no periodic Lua polling |
+| Busy transition dropped lifecycle intent | event intent was represented as an immediate action rather than durable bounded state | Host policy behavior scenarios retain target-exit/ready intent until eligible |
+| Replacement launch restored trust in stale connection | process presence was allowed to erase old-lifetime connection invalidation | PR #45: definitive launch/exit marks old connection observation stale; busy may delay but not cancel revalidation |
+| Timed-out/non-idempotent request replay | execution outcome uncertainty was not a first-class terminal state | backend/session recovery tests + Hades transport taint; unknown in-flight mutation is never auto-replayed |
+| Durable preference mixed with one-shot intent | persistence layer had no explicit replay classification | preference replay excludes native modal/direct one-shot actions |
+| Consumed next-room one-shot resurrected after restart | durable one-shot lacked identity + consumption receipt | schema-4 token + resident consumed-token receipt |
+| Persistence failure prevented runtime cleanup | durable write and resident teardown were treated as one failure domain | best-effort runtime teardown proceeds while persistence failure remains visible |
+| Shared trainer log writers overwrote each other | “append” was modeled as seek position rather than kernel multi-writer semantics | Darwin `O_APPEND` behavior contract |
+| Staged restore repeated after successful destructive commit | no durable claim distinguished pending from applying/committed work | atomic applying/applied markers; uncertain applying state is indeterminate |
+| Save restore TOCTOU | “target stopped” was treated as a durable decision rather than stale evidence | process state rechecked immediately before destructive mutation |
+| Rollback/recovery disappeared after backend death | recovery ownership ended with the producing request/process | contained rollback discovery + Save Manager recovery projection |
+| Partial Profile shortcut override collision | explicit imported state and omitted local explicit state had no deterministic merge rule | compiled Swift shortcut collision/reflow behavior test |
+| Linux test-registration drift | portable tests had two owners: filesystem discovery on macOS and a manual Linux allow-list | exhaustive Linux `test_*.py` discovery with only explicit platform-only exclusions |
+| Runtime source changed without identity bump | tests protected the current revision literal, not the base/head relationship | diff-based `Tools/check_runtime_revision.py` gate |
+| AI source-of-truth drift | current state, stable rules, historical audits and old branches all looked like executable authority | thin `AGENTS.md`, short `PROJECT_STATUS.md`, stable `ENGINEERING_INVARIANTS.md`, historical tree/branch pruning |
 
-### Speculative — no current evidence, do not move now
+## 4. Adversarial correction to the initial audit
 
-| Proposal | Why it is speculative / risky now |
-| --- | --- |
-| Split `runtime/hades.lua` by size | multi-file loader/lifetime semantics are not proven in real Hades II; any runtime source change also requires revision bump and game acceptance |
-| Broad MVVM/“clean architecture” rewrite of Hades View/Model | current complexity largely represents real state-transition coupling; pass-through layers would increase agent navigation cost |
-| Move Hades desired/dormant/resource semantics into Core | violates proven module ownership and the reference-fixture contract without a second real game requiring the abstraction |
-| Merge bootstrap + durable replay into fewer Lua boundaries | issue #4 measured the cost, but batching changes per-feature error isolation and outcome semantics; no current severe regression justifies it |
-| Migrate to pytest/new test framework | no test-framework limitation is causing the current bug families; discovery drift can be fixed without dependency migration |
-| Restore code from divergent historical branches | squash/superseded branches are historical evidence; current main contains the stronger behavior and no unique missing product implementation was found |
+The first governance pass overstated one lifecycle conclusion.
 
-## Test-debt audit
+It originally treated “target exit while busy preserves one refresh” as sufficient protection for the entire stale-connection family. A later adversarial review composed transitions that the original test did not:
 
-Dominant classification of all 85 pre-governance `tests/test_*.py` entrypoints follows. Mixed tests can enforce secondary concerns, but each file is placed once so the suite has an explicit semantic map.
+1. old target is connected;
+2. a request is busy;
+3. old target exits;
+4. replacement target launches before the request settles;
+5. presence becomes running again;
+6. old `connected=true` can survive and suppress reconnect.
 
-### A. Executable business/state behavior — 29
+A second case existed when aggregate process presence missed the intermediate stopped snapshot and only a definitive launch notification proved a new target lifetime.
 
-`test_backend_core_round12.py`, `test_boundary_performance_ledger_v0180.py`, `test_catalog_naming.py`, `test_core_save_manifest.py`, `test_core_save_protocol.py`, `test_core_save_resolution.py`, `test_core_save_restore.py`, `test_core_save_running_transition.py`, `test_core_save_service.py`, `test_core_save_snapshots.py`, `test_corrupt_file_quarantine_v0180.py`, `test_diagnostics_read_only_v0190.py`, `test_hades2_adapter_round12.py`, `test_hades2_save_provider_round21.py`, `test_hades2_services_round16.py`, `test_localization_cache_recovery_v0180.py`, `test_next_room_reward_restart_semantics.py`, `test_persistence_integrity_v0180.py`, `test_preference_commit_efficiency_dev8.py`, `test_preferences_schema_v0180.py`, `test_process_time_warp_controller.py`, `test_process_time_warp_hades_integration.py`, `test_profile_envelope_contract_v0180.py`, `test_profile_shortcut_schema_v0180.py`, `test_protocol_fixtures_v0180.py`, `test_runtime_boundary_efficiency_dev8.py`, `test_schema_versioning_v0180.py`, `test_shortcut_chord_semantics.py`, `test_v01711_catalog_localization_ui.py`.
+RED evidence:
 
-These execute production Python or compiled Swift behavior/state logic. Some also contain source guards, but their primary value survives implementation rearrangement.
+- `cab0a8e439d04f12f523742ba2b9e4ed40b08358` / Linux `35531543074`: `replacement launch erased stale-connection refresh intent`;
+- `31630d8fea67378d417f840f1a74dd1f4174c4f7` / Linux `35531727425`: `definitive launch did not invalidate the prior connected lifetime`.
 
-### B. Lifecycle scenario/state-transition behavior — 8
+PR #45 moved the invariant into `TrainerConnectionPolicy`: process presence and connection-lifetime validity are now separate facts. This correction is important because it demonstrates a general audit lesson:
 
-`test_backend_reply_callback_round20.py`, `test_backend_session_recovery_dev8.py`, `test_connect_phase_profile.py`, `test_global_host_cleanup_dev8.py`, `test_hades2_mutation_scheduler_round17.py`, `test_host_connection_policy_dev8.py`, `test_passive_ready_transition.py`, `test_runtime_reliability_round17.py`.
+> a locally fixed historical bug is not a system invariant until composed transitions are executable.
 
-The strongest family-wide guards are the pure/compiled Host policy and backend-session recovery harnesses. `test_passive_ready_transition.py` still mixes source wiring checks with scenario intent and is an upgrade candidate.
+## 5. Test-system assessment at governance closure
 
-### C. Cross-module architecture contracts — 9
+At closure the repository had 86 `tests/test_*.py` entrypoints.
 
-`test_core_save_hades_decoupling_round20.py`, `test_cross_game_isolation.py`, `test_global_decoupling_round15.py`, `test_module_contract_round13.py`, `test_reference_fixture_host_contract.py`, `test_shared_backend_session_round20.py`, `test_swift_file_boundaries_round14_1.py`, `test_toggle_unification_v0178.py`, `test_ui_component_boundary_v0175.py`.
+The pre-governance 85-file suite was classified by dominant semantic strength as:
 
-The reference fixture/module matrix is the highest-value executable proof; token/file-location guards should remain secondary.
+| Class | Meaning | Count |
+| --- | --- | ---: |
+| A | executable business/state behavior | 29 |
+| B | lifecycle/state-transition scenarios | 8 |
+| C | cross-module architecture contracts | 9 |
+| D | build/package/CI contracts | 7 |
+| E | source-level semantic/static invariants | 7 |
+| F | brittle string/regex/source-shape contracts | 13 |
+| G | historical regression fossils | 8 |
+| H | platform-only tests | 4 |
 
-### D. Build/package/CI contracts — 7
+PR #44 added `test_runtime_revision_gate.py`, bringing the current total to 86.
 
-`test_build_contract_round14.py`, `test_packaged_module_round14.py`, `test_process_time_warp_preparation_contract.py`, `test_save_descriptor_round20.py`, `test_swift_integrity_v0172.py`, `test_swift_symbol_integrity_v0173.py`, `test_test_suite_discovery.py`.
+### Strong family-wide guards
 
-This governance branch strengthens `test_test_suite_discovery.py` so Linux is exhaustive-by-default rather than a curated positive list.
-
-### E. Source-level semantic/static invariants — 7
-
-`test_background_boundary_policy_v0180.py`, `test_hades2_session_hook_ownership.py`, `test_hades2_timeout_policy_v0177.py`, `test_hades2_transport_outcome_unknown_taint.py`, `test_process_time_warp_native_contract.py`, `test_reward_naming_audit.py`, `test_swift_declaration_uniqueness_v0176.py`.
-
-These intentionally guard semantic structure that is difficult to exercise without the real game/toolchain. The transport taint test already uses AST-level inspection where appropriate. The new `test_runtime_revision_gate.py` also belongs here after governance changes, but is not counted in the 85-file baseline.
-
-### F. Brittle string/regex/source-shape contracts — 13
-
-`test_core_save_header_rename_round23.py`, `test_core_save_modal_style_round22.py`, `test_core_save_swift_model_round20.py`, `test_core_save_ui_round20.py`, `test_core_save_ui_style_round21.py`, `test_exit_semantics.py`, `test_god_mode_hostile_effects.py`, `test_hades2_visual_baseline_v0174.py`, `test_hotkey_feedback_contract.py`, `test_mapped_slider_contract.py`, `test_native_sell_traits_contract.py`, `test_native_special_choice_contract.py`, `test_post_v01_feature_contracts.py`.
-
-Do not delete them mechanically: several protect real engine-API or UI-boundary requirements. When those areas are next changed, prefer compiled/type/behavior verification and retain only source checks that protect an otherwise unobservable contract.
-
-### G. Historical regression fossils — 8
-
-`test_round12_static.py`, `test_round17_1_swift_scope.py`, `test_round17_static.py`, `test_swift_round12.py`, `test_target_exit_refresh_contract.py`, `test_user_reported_fixes_dev7.py`, `test_v01710_regressions.py`, `test_v0179_regressions.py`.
-
-These remain green guards, but their release/round naming and bundled historical assertions are poor templates for future tests. `test_target_exit_refresh_contract.py` is the clearest consolidation candidate because the stronger Host policy/session tests now express the transition behavior. Consolidation should happen only in a change that proves equal-or-stronger coverage.
-
-### H. Platform-only tests — 4
-
-`test_core_save_batch_delete_round20.py`, `test_core_save_rename_completion_round24.py`, `test_hades2_run_log_watcher.py`, `test_trainer_log_sink_shared_append.py`.
-
-These compile/use AppKit or Darwin behavior and are intentionally excluded from Linux. They remain mandatory in Build 2 macOS.
-
-
-### Keep as primary semantic guards
-
-Lifecycle/session:
+The highest-value contracts are behavior/state oriented:
 
 - `test_host_connection_policy_dev8.py`;
 - `test_backend_session_recovery_dev8.py`;
-- `test_connect_phase_profile.py`;
-- `test_runtime_reliability_round17.py`;
-- `test_hades2_mutation_scheduler_round17.py`.
-
-Save behavior:
-
-- `test_core_save_resolution.py`;
-- `test_core_save_snapshots.py`;
-- `test_core_save_restore.py`;
-- `test_core_save_service.py`;
-- `test_core_save_protocol.py`.
-
-Hades replay/persistence:
-
-- `test_hades2_adapter_round12.py`;
+- `test_hades2_run_log_watcher.py`;
 - `test_hades2_transport_outcome_unknown_taint.py`;
-- `test_next_room_reward_restart_semantics.py`;
-- schema/Profile/corruption suites.
+- Core Save resolution/snapshot/restore/service/protocol suites;
+- `test_shortcut_chord_semantics.py`;
+- `test_cross_game_isolation.py` + module matrix/reference fixture;
+- `test_runtime_revision_gate.py`;
+- exhaustive Linux-portable discovery in `Tools/run_linux_checks.sh`.
 
-Architecture/build:
+### Remaining test debt
 
-- `test_cross_game_isolation.py`;
-- `test_module_contract_round13.py`;
-- `test_packaged_module_round14.py`;
-- reference fixture + module build matrix.
+Some source-shape and round/version-named regressions remain. They are intentionally not bulk-deleted or renamed because several still protect unique wiring/engine/API constraints.
 
-### Upgrade semantic level when next touched
+When one of those areas is next modified:
 
-- `test_passive_ready_transition.py`: retain lifecycle intent, but move sequencing assertions into executable state/harness tests when an isolatable interface exists.
-- `test_exit_semantics.py`: persistence-vs-runtime teardown ordering deserves a fake adapter/transport behavior harness rather than only source slices.
-- `test_native_sell_traits_contract.py` / `test_native_special_choice_contract.py`: static engine-API guards are useful; real Hades acceptance remains final proof.
-- `test_core_save_swift_model_round20.py`: retain portable source guard until a practical portable Swift/AppKit behavior harness exists.
-- visual/source contracts: prefer compile/type/snapshot behavior if a stable mechanism later exists; do not add a framework only for modernization.
+- prefer compile/type/behavior/state verification;
+- keep source-text checks only where the real game/toolchain makes a semantic test impractical;
+- remove a historical guard only when equal-or-stronger coverage is demonstrated in the same change;
+- do not copy `roundXX`, `v0xxx`, or `devX` naming into new tests.
 
-### Consolidate opportunistically
+This is maintenance debt, not a current feature freeze.
 
-No-polling, target-exit wiring and Core/Hades decoupling are asserted in several round-specific files. Use the stronger lifecycle/reference-fixture tests as primary contracts and remove duplicates only when a stronger test demonstrably covers the same boundary in the same change.
+## 6. Systemic debt disposition
 
-### Delete now
+### Closed by PR #44–#47
 
-None. Redundancy exists, but there is no deletion with unambiguous equal-or-stronger coverage that justifies a cleanup-only change.
+- Linux portable-test discovery drift;
+- resident-runtime revision bump enforcement;
+- future-agent source-of-truth fan-out;
+- stale connection invalidation across busy rapid relaunch;
+- mandatory full-audit freeze / obsolete audit handoff;
+- active-tree noise from completed plans/specs, version diffs, validation transcripts and redundant audit reports.
 
-### Legacy — do not copy as new-test templates
+### Remaining non-blocking risks
 
-- `test_round12_static.py`;
-- `test_round17_static.py`;
-- `test_round17_1_swift_scope.py`;
-- `test_user_reported_fixes_dev7.py`;
-- `test_v01710_regressions.py`;
-- `test_target_exit_refresh_contract.py`.
+These were evidence-backed at closure but did not justify expanding governance scope:
 
-New tests should be named after the invariant/behavior, not a release round.
+1. **Repository protection is still external to code.** At the last audit check `main` reported `protected=false` and repository rulesets were empty. CI exists, but repository settings can still permit bypass. Check current GitHub settings rather than assuming this remains true.
+2. **Source-shape regression debt.** Some tests still guard implementation form because the equivalent real-game or AppKit behavior is expensive to exercise.
+3. **Core Save sudden-power-loss ceiling.** Not every directory metadata transition fsyncs its parent directory after atomic replace. Existing rollback/hash/recovery behavior covers normal process failures; no current evidence justified broader durability work.
+4. **Profile-directory symlink hardening.** Hades Profile storage does not mirror every Core Save containment guard. It runs under the same user authority and had no demonstrated corruption/exploit path.
+5. **Build environment reproducibility.** macOS workflows use `macos-latest` and the selected Xcode/toolchain rather than a hermetic compiler image. Exact workflow/SHA evidence is strong, but future runner-image changes may affect reproducibility.
 
-## Context-budget plan
+None of these is a reason to reopen a repository-wide audit automatically.
 
-Default startup for a normal future task:
+## 7. Deliberate non-actions
 
-1. `PROJECT_STATUS.md`;
-2. `ENGINEERING_INVARIANTS.md`;
-3. the production files and nearest behavior tests for the requested subsystem.
+The audit explicitly rejected several attractive but weakly justified refactors:
 
-Add `GAME_MODULES.md` only when the task crosses module/Core/build boundaries.
+- do not split `runtime/hades.lua` merely because it is large; first prove multi-file loading/lifetime behavior in real Hades II;
+- do not perform a broad MVVM/“clean architecture” rewrite of `Hades2Model.swift` or `Hades2View.swift` based on line count;
+- do not fragment `Hades2Adapter` just to reduce file size; it is the synchronization boundary among durable preference state, transport observation and resident runtime state;
+- do not move Hades desired/dormant/resource semantics into Core without a second real game proving the abstraction;
+- do not migrate the suite to pytest/new infrastructure for style alone;
+- do not restore code from divergent historical branches without proving a unique behavior missing from current `main`.
 
-Task-specific additions:
+These are not permanent bans. Revisit only with current code evidence and a concrete ownership or correctness benefit.
 
-- Host/recovery: `TrainerHost.swift`, `TrainerConnectionPolicy.swift`, `TrainerBackendSession.swift`, `BackendClient.swift`, lifecycle harnesses.
-- Hades runtime: relevant `Hades2Model.swift` lifecycle slice, `adapter.py`, `transport.py`, the specific `hades.lua` command/hook section and runtime tests.
-- Save: `save_service.py`, `save_restore.py`, `save_snapshots.py`, `save_resolution.py` and behavior tests; Hades provider only when game-specific resolution is involved.
-- UI: relevant Core primitive first, then Hades composition.
-- persistence/Profile: `preferences.py`, `profile_service.py`, shortcut store as relevant.
+## 8. Governance assets that survived the audit
 
-Historical PRs, old branches and old audit plans are escalation material for “why does this invariant exist?”, not default context.
+The lasting output is deliberately small:
 
-## Repository governance
+- `AGENTS.md` — low-context entrypoint and source-of-truth order;
+- `PROJECT_STATUS.md` — current operational state only;
+- `ENGINEERING_INVARIANTS.md` — stable engineering contract;
+- `GAME_MODULES.md` — Core/game-module contract;
+- roadmap issue #8 — planning/sequencing only;
+- executable CI/tests — machine enforcement;
+- this file — historical rationale only.
 
-Observed at `1345b39c...`:
+PR #47 removed older round/version diffs, validation transcripts, completed plans/specs and redundant audits from the active tree. Git history and closed PRs remain the place to recover that evidence when needed.
 
-- `main` branch protection: off;
-- repository rulesets: none;
-- permanent workflows: Linux contracts, module build matrix and Build 2 macOS.
+## 9. Audit closure
 
-Recommended user-controlled ruleset after this governance PR is proven:
+The governance phase is closed.
 
-- require a pull request before merge;
-- require branch to be up to date;
-- require `Linux contracts / backend-contracts`;
-- require both module-build-matrix results;
-- require `Build 2 macOS / build`;
-- block force pushes and branch deletion;
-- administrator emergency bypass only;
-- do not require signed commits unless the project deliberately adopts signing.
+The repository should not require another broad audit before ordinary development. A future audit is justified only by new evidence such as:
 
-This audit does not change repository settings or delete historical branches.
+- repeated failures crossing the same ownership boundary;
+- a new game module exposing an invalid Core assumption;
+- a lifecycle/replay/data-loss defect not covered by current contracts;
+- CI or repository settings no longer enforcing the intended gates;
+- a major architecture change that invalidates the existing invariant model.
 
-## High-cognitive-load files
-
-- `runtime/hades.lua`: one resident lifetime currently owns state, hook ownership/release, reconciliation, catalogs/projection and dispatch. Do not split by size; require a proven loader and real-game validation first.
-- `Hades2View.swift`: extract only independently owned presentation/subflows, not arbitrary line-count slices.
-- `Hades2Model.swift`: complexity is mostly state-transition coupling; do not replace it with pass-through stores.
-- `adapter.py`: synchronization boundary among durable preference state, transport observation and resident replay; mechanical method relocation would obscure ordering.
-- Core Save: current file boundaries already match transaction responsibilities.
-
-## Implemented governance changes
-
-1. **Exhaustive Linux-portable discovery.** New `test_*.py` files run on Linux by default. Only the four explicit AppKit/Darwin entrypoints are skipped. `test_test_suite_discovery.py` enforces this.
-2. **Diff-based resident runtime revision gate.** `Tools/check_runtime_revision.py` compares PR/push base and head. A `hades.lua` diff requires an increased and internally consistent resident revision. Existing runtime tests consume a semantic revision extractor instead of copying the current `42` literal.
-3. **Low-context agent entry.** `AGENTS.md` is a thin reading/ownership index. `ENGINEERING_INVARIANTS.md` centralizes stable ownership, lifecycle, replay, Save and verification rules. `PROJECT_STATUS.md` links them without duplicating status authority.
-
-No product behavior, Hades runtime source or save format is changed by this governance pass.
+For ordinary work, start at `AGENTS.md` and use the current code/tests rather than this historical report.
