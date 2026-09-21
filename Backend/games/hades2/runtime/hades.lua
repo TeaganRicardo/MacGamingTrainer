@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 45 then
+if previousModule and previousModule.revision ~= 46 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 45, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 46, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3338,7 +3338,7 @@ if __MacGamingTrainerV1 == nil then
             end
           else
             requireFunctions("special blessing", { "AddTraitToHero" })
-            AddTraitToHero({ TraitName = entry.trait })
+            AddTraitToHero({ TraitName = entry.trait, FromLoot = true })
           end
           return nil
         end
