@@ -13,7 +13,8 @@ Start every development thread at `AGENTS.md`.
 - PR #43 (independent full-audit continuation) is superseded and closed; it is not an execution requirement.
 - Governance PR #44 is merged. It added exhaustive Linux-portable test discovery, diff-based Hades resident-runtime revision enforcement, the low-context agent entrypoint and stable engineering-invariant authority.
 - Lifecycle PR #45 is merged. Target-process presence and connection-lifetime validity are now distinct: exit/new-lifetime invalidation survives busy work and rapid replacement launches instead of leaving stale `connected=true`.
-- Hades II resident runtime revision: 43.
+- PR #57 is merged. The Hades II consumable census now closes at 91/91 concrete `ConsumableData` targets classified: `SeedMysteryDrop` and `MixerMythicDrop` were recovered as direct pickups, while weapon-owned `LobAmmoPack` is explicitly excluded.
+- Hades II resident runtime revision: 44.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
 - Target reference: Hades II 1.139672 / Steam build 24556151.
@@ -22,19 +23,21 @@ Start every development thread at `AGENTS.md`.
 
 ## Verification baseline
 
-The latest behavior-changing Hades catalog head before squash merge was:
+The latest behavior-changing Hades consumable-census head before squash merge was:
 
-`67897737a6a6e6473c24fd0eeb4f63bf24fb376b`
+`28d4b779f6d95f7a1f15e7e00530b221844902c2`
 
 Fresh exact-head CI on that tree:
 
-- Linux contracts `35572760090`: PASS;
-- module build matrix `35572760130`: Hades II + reference fixture + package isolation PASS;
-- Build 2 macOS `35572760116`: full macOS contracts/build/package PASS.
+- Linux contracts `35588010831`: PASS;
+- module build matrix `35588010870`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35588010825`: full macOS contracts/build/package PASS.
 
-PR #50 was squash-merged as `4c0bb14ec0619d0a430a78e63dd858e2d02ab889`.
+Build 2 artifact `10633691034` has digest `sha256:6c32a24402a4d55d10a71be73c20d2afa11fb283f8acde7c2434a26f5573a900`. Static package inspection confirmed resident revision 44 and the recovered `SeedMysteryDrop` / `MixerMythicDrop` reward rows.
 
-Real Hades II acceptance for resident revision 43 catalog additions is still pending. The CI evidence above proves contracts/build/package, not final in-game behavior.
+PR #57 was squash-merged as `31c1f1ecc956d5fe94a274cb99045cc4948ca766`.
+
+Real Hades II acceptance for resident revision 44 is still pending. The CI and package evidence above prove contracts/build/package, not final in-game behavior.
 
 Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
