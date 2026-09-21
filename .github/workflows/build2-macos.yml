@@ -43,7 +43,8 @@ jobs:
           [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$source_version" = "$source_build"
           echo "version=$source_version" >> "$GITHUB_OUTPUT"
-          echo "sha_short=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
+          source_sha="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
       - name: Run full macOS contract suite
         if: steps.scope.outputs.docs_only != 'true'
