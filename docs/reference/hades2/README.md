@@ -53,7 +53,7 @@ Several snapshot files are static extraction indexes, not claims about complete 
 - `generated/store_references.csv` expands the active nested item memberships of `RewardStoreData` and `StoreData`. It is a static membership index, not a legality decision or a claim that every listed item is currently eligible to appear.
 - `generated/static_room_links.csv` records statically visible Room → unit/encounter/reward references. Runtime-generated or indirect relationships may not appear.
 - `generated/aliases.csv` contains reference-only selector/alias identifiers. The old `aliases_and_stubs.csv` name was misleading because the current file contains aliases, not definition stubs.
-- `native_interactions.csv` records native handlers/flows and is independent from the `direct/special/exclude/alias` Trainer classification.
+- `native_interactions.csv` records native handlers/flows and is independent from the `direct/special/exclude/alias` Trainer classification. It contains both concrete reward/wrapper rows and source-level special-choice rows; source IDs such as `Artemis` or `Arachne` are interaction sources, not additional catalog-legality targets.
 
 The `state` column in generated inventory tables is an **extractor state**, not a legality, runtime-validity, or gameplay-source classification. Do not use values such as `defined`, `debug_only`, or `stub` as a Trainer-facing decision.
 
@@ -81,6 +81,17 @@ For future census work:
 2. use the generated inventories only to establish that an identifier/table relationship exists;
 3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
+
+## Native interaction census completeness check
+
+The native-interaction ledger has been manually checked against the installed 1.139672 scripts and now records two distinct but related sets:
+
+- ten concrete reward/wrapper/event interactions already used by the reward catalog: `ChaosWeaponUpgrade`, `BlindBoxLoot`, `WeaponUpgradeDrop`, `ShopHermesUpgrade`, `RandomLoot`, `BoostedRandomLoot`, `RandomStoreItem`, `Devotion`, `TrialUpgrade`, and `SpellDrop`;
+- ten special-NPC choice sources used by the Trainer's native special-choice entry: Artemis, Athena, Dionysus, Hades, Arachne, Narcissus, Echo, Medea, Circe, and Icarus.
+
+The first set preserves the distinction between concrete self-contained consumables and wrappers that require native shop/loot resolution. The second set records source-level ownership rather than adding another Trainer legality classification.
+
+The source review also confirmed that Athena's distinct `AthenaUse` entry is a thin wrapper around `UseLoot` followed by the physical NPC exit presentation; it does not introduce a separate boon-selection state contract. The fixed-choice NPC handlers remain the source of their eligibility/priority behavior, including Arachne's costume refresh, Echo's menu-dependent previous-run boon, and Circe's familiar preprocessing.
 
 ## Store and reward-pool census completeness check
 
