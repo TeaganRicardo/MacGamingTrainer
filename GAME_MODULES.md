@@ -1,4 +1,4 @@
-# Game module contract — 0.1 baseline
+# Game module contract
 
 A normal new game should add only:
 
@@ -26,6 +26,14 @@ build.sh
 ```
 
 The current host protocol is 5. Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
+
+## Version ownership
+
+The app has one product SemVer, owned by the root `Info.plist`. Game modules do not repeat that version in `module.json` while they are built and distributed as part of the same app.
+
+`protocolVersion` is a module-local compatibility revision between that module's frontend/backend surfaces. It is not product SemVer and does not need to match the Host protocol version or another module's protocol version.
+
+Do not introduce module SemVer until modules can actually be installed or updated independently. If that seam is introduced later, module SemVer must be paired with an explicit supported Host compatibility range.
 
 ## Mechanical cross-game proof
 
