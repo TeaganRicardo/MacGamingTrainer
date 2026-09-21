@@ -36,6 +36,8 @@ _LINKED_OFFICIAL_NAME_IDS = {
     'CharonPointsDrop': 'CharonPoints',
     'GemPointsDrop': 'GemPoints',
     'DreamPointsDrop': 'DreamPoints',
+    'SeedMysteryDrop': 'SeedMystery',
+    'MixerMythicDrop': 'MixerMythic',
     'WeaponUpgradeDrop': 'WeaponUpgrade',
     'ShopHermesUpgrade': 'HermesUpgrade_Store',
     'RerollDrop': 'ReRollAlt',
@@ -68,7 +70,6 @@ _PROVISIONAL_NAMES = {
     'StoreRewardRandomStack': ('随机祝福强化', 'Random Boon Upgrade'),
     'HealDropMajor': ('大型生命恢复', 'Major Healing'),
     'HealDropMinor': ('少量治疗', 'Minor Healing'),
-    'RoomRewardConsolationPrize': ('红洋葱', 'Red Onion'),
     'RandomLoot': ('随机奥林匹斯祝福', 'Random Olympian Boon'),
     'BoostedRandomLoot': ('强化随机祝福', 'Boosted Random Boon'),
 }

@@ -15,7 +15,8 @@ for expected in ('骨骸', '大量骨骸', '尘灰', '大量尘灰', '魂魄', '
 # Known no-direct-DisplayName rewards are resolved through live official keys
 # or explicitly marked trainer-side compositions; they are never misreported
 # as an exact official localization for their internal reward id.
-for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon', 'SpellDrop_Store', 'ReRollAlt'):
+for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon',
+               'SeedMystery', 'MixerMythic', 'SpellDrop_Store', 'ReRollAlt'):
     assert linked in catalog
 assert "'official_linked_zh'" in catalog
 assert "'provisional_zh'" in catalog
@@ -77,6 +78,12 @@ assert reward_rows['EmptyMaxHealthDrop'].get('family') == 'centaurSoul'
 assert reward_rows['EmptyMaxHealthSmallDrop'].get('family') == 'centaurSoul'
 for identifier in ('MaxHealthDropSmall', 'MaxHealthDrop', 'MaxHealthDropBig'):
     assert reward_rows[identifier].get('family') == 'centaurHeart'
+
+assert reward_rows['SeedMysteryDrop'].get('family') == 'metaHarvest'
+assert reward_rows['SeedMysteryDrop'].get('category') == '局外资源奖励'
+assert reward_rows['MixerMythicDrop'].get('family') == 'metaBoss'
+assert reward_rows['MixerMythicDrop'].get('category') == '局外资源奖励'
+assert 'LobAmmoPack' not in reward_rows
 
 assert reward_rows['ElementalBoost'].get('family') == 'element'
 assert reward_rows['ElementalBoost'].get('category') == '元素奖励'

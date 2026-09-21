@@ -81,6 +81,19 @@ For future census work:
 3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
 
+## Consumable census completeness check
+
+Manual review against the installed Hades II 1.139672 `ConsumableData.lua` closed the remaining consumable-census gap:
+
+- `generated/consumables.csv` contains 97 rows.
+- Six rows are structural/template definitions rather than standalone Trainer targets: `BaseConsumable`, `BaseMetaRoomReward`, `BaseResource`, `BaseSuperResource`, `BaseWellShopConsumable`, and `Tier1Consumable`.
+- The remaining 91 concrete consumables now have 91/91 entries in `catalog_legality.csv`.
+- `SeedMysteryDrop` is a valid direct pickup. Narcissus reward data emits it as a concrete one-seed `SeedMystery` reward.
+- `MixerMythicDrop` is a valid direct pickup. `RoomDataQ` emits it from `CheckTyphonReward` as the concrete `MixerMythic` / Entropy reward.
+- `LobAmmoPack` is a valid gameplay object but remains `exclude`: `WeaponLogic.WeaponLobAmmoDrop` owns its projectile-volley, magnetism, cooldown, and session-state lifecycle, so exposing it as an independent generic reward would detach it from the owning weapon mechanic.
+
+The two recovered direct pickups use the same generic consumable seam as other resource drops. Their player-facing names are linked to the corresponding official resources: `SeedMysteryDrop -> SeedMystery` (神秘种子) and `MixerMythicDrop -> MixerMythic` (熵).
+
 ## Resource census versus pickup wrappers
 
 `ResourceData` is the authoritative census for game resources. A `*Drop` entry is only a concrete world-pickup wrapper for a resource and is not required for the resource itself to exist.
