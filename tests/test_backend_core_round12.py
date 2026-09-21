@@ -98,12 +98,7 @@ backend = project/'Backend'; games = backend/'games'; module_dir = games/'other'
 module_dir.mkdir(parents=True)
 (games/'__init__.py').write_text('')
 (module_dir/'__init__.py').write_text('')
-(module_dir/'adapter.py').write_text('''
-from core.adapter import GameAdapter
-class OtherAdapter(GameAdapter):
-    def dispatch(self, command, params, request_id): return {"command": command}
-    def close(self): pass
-''')
+(module_dir/'adapter.py').write_text('''\nfrom core.adapter import GameAdapter\nclass OtherAdapter(GameAdapter):\n    def dispatch(self, command, params, request_id): return {"command": command}\n    def close(self): pass\n''')
 (module_dir/'module.json').write_text(json.dumps({
     'id':'other','displayName':'Other Game','protocolVersion':11,
     'backend':{'adapter':'games.other.adapter:OtherAdapter'},
