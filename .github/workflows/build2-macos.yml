@@ -72,7 +72,8 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           mkdir -p artifacts
-          ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app"             "artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-${{ steps.version.outputs.sha_short }}-rc.zip"
+          artifact="artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-${{ steps.version.outputs.sha_short }}-rc.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "$artifact"
 
       - uses: actions/upload-artifact@v4
         if: steps.scope.outputs.docs_only != 'true'
