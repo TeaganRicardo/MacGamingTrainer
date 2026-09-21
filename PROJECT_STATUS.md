@@ -39,7 +39,9 @@ Build 2 artifact `10635953571` has digest `sha256:e25f3ad720cf679b06644c78e68857
 
 PR #61 was squash-merged as `fb56a660cfb354ecff93d36d69e5c7134d093e80`.
 
-Real Hades II acceptance for resident revision 46 is still pending. The CI and package evidence above prove contracts/build/package, not final in-game behavior.
+Real Hades II acceptance for resident revision 46 is partially complete against exact Build 2 artifact `10635953571` (source `8bf914badf023ebe5be42b2284790a5c9d9242d6`, artifact digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`). Real-game evidence confirms revision 46 attach/status, representative exact special-trait acquisition across Artemis/Dionysus/Hades, Arachne `SetupCostume()` refresh semantics, and native special-choice flows including Echo's previous-run boon path. The installed source confirms that forcing multiple Arachne costume traits can leave the first active Costume value as the displayed texture; this is native `SetupCostume()` behavior rather than a revision-46 failure.
+
+Two acceptance items remain open before treating revision 46 as fully closed: `DoubleFamiliarTrait` exact acquisition completed without a runtime error but its familiar effect was not quantitatively verified, so its existing `direct` ledger classification remains unchanged pending a focused familiar-stat/stack before/after check; and the same-PID main-menu -> run lifecycle round trip was not rerun on this exact artifact. Charon-Well entries are present in the resident catalog under the `pickup` group with the `卡戎之井` section title; they do not have a separate top-level panel.
 
 Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
