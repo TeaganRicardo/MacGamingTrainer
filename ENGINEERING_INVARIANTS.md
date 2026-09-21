@@ -64,7 +64,7 @@ Sparse payloads must preserve **absent vs explicit null** semantics. `Hades2Fiel
 | Trainer opens while target already runs | Host takes a presence snapshot | foreground/manual connection opportunity | treating discovery as a true launch/background-attach grant |
 | Real target launch | Host records a new target lifetime | one bounded background recovery/connect opportunity | polling or repeated attach attempts |
 | Target activation | Host records an opportunity | consume later when Trainer is foreground | immediate debugger attach merely because the game activated |
-| Target exit while request is busy | Host preserves one target-exit refresh until backend idle | refresh observed game state once | dropping the event and leaving stale `connected=true` |
+| Target exit / definitive replacement launch while request is busy | Host marks the prior connection observation stale and preserves one refresh until backend idle | refresh stale observed state before reconnect; the invalidation survives replacement process presence | clearing invalidation merely because a new target is running, or leaving stale `connected=true` |
 | Backend unexpected exit | `TrainerBackendSession` clears observable game state and performs bounded worker recovery | Host may reconnect after worker recovery if target remains relevant | module-owned second backend session or request replay |
 | Backend request timeout / terminal transport error | `BackendClient` terminates that backend instance | restart worker, then re-observe/reconcile | replaying the timed-out/in-flight request |
 | Hades same-PID Lua reset | Hades log watcher invalidates runtime generation bookkeeping | bootstrap/status and durable replay in the existing debugger attachment | second debugger attachment, PID-only lifetime assumptions, periodic Lua polling |
@@ -79,6 +79,8 @@ Hades lifecycle signals must be backed by observed game evidence. Current log se
 - ready after a pending reset: `Finished loadScreen onExit`.
 
 Do not substitute generic-looking engine messages without target-log evidence. `World::Stop()` is explicitly not a main-menu signal.
+
+Target-process **presence** and target-process **lifetime validity** are also distinct. An observed exit invalidates the current connection until that stale observation is refreshed. A definitive launch notification is itself new-lifetime evidence and must perform the same invalidation when a rapid replacement hides the intermediate stopped snapshot. Busy work may delay that refresh; later process presence must not cancel it.
 
 ## 4. Mutation and replay safety
 
