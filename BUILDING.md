@@ -1,6 +1,4 @@
-# Building MacGamingTrainer 0.1
-
-Current development branch: **0.1 / Build 2**.
+# Building MacGamingTrainer
 
 The supported build path is the repository `build.sh` script:
 
@@ -20,9 +18,9 @@ xcrun lldb -P
 
 The output app is written under `dist/`; the exact path is printed by `build.sh` after a successful build.
 
-Version source of truth:
-- product version and build: `Info.plist`;
-- release/development policy: `VERSIONING.md`;
+Version ownership:
+- current product SemVer: `Info.plist`; both bundle version keys must match;
+- release policy: `VERSIONING.md`;
 - runtime/protocol/schema status: `PROJECT_STATUS.md`.
 
-Do not treat the historical v0.17.x notes under `docs/legacy-version-history/` as current build instructions.
+Development state is identified by Git SHA, not by a dev/build suffix in the product version.
