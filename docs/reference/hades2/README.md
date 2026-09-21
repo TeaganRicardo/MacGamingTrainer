@@ -31,6 +31,17 @@ The historical filename `catalog_legality.csv` is retained for continuity, but i
 
 Whether the current build normally instantiates a particular pickup is evidence only. It does not create another classification axis.
 
+
+### Direct spawn semantics
+
+The Trainer's generic `spawn_reward` seam means "create this concrete pickup/loot object now", not "replay every contextual transformation that one possible natural source would have applied".
+
+This distinction matters for consumables. Hades II calls `ApplyConsumableItemResourceMultiplier` in several room-reward, Echo, trade, store, combat-drop, and random-consumable paths, but the result depends on source context. NPC reward paths mark the item `NPCDrop=true`, which deliberately suppresses the room-style money/health/resource bonus handling, while room-reward paths can apply current reward bonuses. The same concrete consumable can therefore legitimately reach the player with different contextual processing.
+
+Because the catalog combines objects from multiple acquisition paths, there is no single natural multiplier context for a generic Trainer spawn. The direct seam therefore keeps the item's base/ramped definition and preserves the item's own `UseFunctionName`, `UseFunctionNames`, `ReplaceWithRandomLoot`, `SetupEvents`, and pickup behavior, but does not invent a room/NPC/store reward context. A future feature that explicitly simulates a room reward should use a separate native room-reward path rather than changing this generic contract.
+
+`SpellDrop` is intentionally different: its useful gameplay semantics are the native Selene choice flow itself, so it remains `special` and is spawned through `SpawnRoomReward`.
+
 `native_interactions.csv` records native handlers and interaction relationships. Presence in that file does not by itself mean `classification=special`. For example, `ChaosWeaponUpgrade`, `BlindBoxLoot`, and `RandomStoreItem` are concrete consumables whose own use logic preserves their native behavior, so they remain `direct`; `RandomLoot`, `BoostedRandomLoot`, `WeaponUpgradeDrop`, `ShopHermesUpgrade`, and `SpellDrop` require dedicated spawning/choice semantics and are `special`.
 
 
