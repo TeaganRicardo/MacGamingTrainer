@@ -1,0 +1,448 @@
+id,table,source_namespace,source_file,state,field_count,inherit_from,display_key,display_name_zh_cn,use_function,game_version,steam_build
+BaseFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,debug_only,15,,,,UseFamiliar,1.139672,24556151
+CatFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,defined,67,BaseFamiliar,CatFamiliar,图拉,,1.139672,24556151
+FrogFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,defined,73,BaseFamiliar,FrogFamiliar,弗利诺斯,,1.139672,24556151
+HoundFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,defined,66,BaseFamiliar,HoundFamiliar,赫库芭,,1.139672,24556151
+PolecatFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,defined,60,BaseFamiliar,PolecatFamiliar,加莉,,1.139672,24556151
+RavenFamiliar,FamiliarData,FamiliarData,FamiliarData.lua,defined,59,BaseFamiliar,RavenFamiliar,拉奇,,1.139672,24556151
+ErisCurseGiver,NPCVariantData,VariantSetData.NPC_Eris_01,NPCData_Eris.lua,defined,4,,,,,1.139672,24556151
+HeraclesBathHouse,NPCVariantData,VariantSetData.NPC_Heracles_01,NPCData_Heracles.lua,defined,5,,,,,1.139672,24556151
+HeraclesShopping,NPCVariantData,VariantSetData.NPC_Heracles_01,NPCData_Heracles.lua,defined,3,,,,,1.139672,24556151
+IcarusCombat,NPCVariantData,VariantSetData.NPC_Icarus_01,NPCData_Icarus.lua,defined,19,,,,,1.139672,24556151
+IcarusHome,NPCVariantData,VariantSetData.NPC_Icarus_01,NPCData_Icarus.lua,defined,7,,,,,1.139672,24556151
+NemesisCombat,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,17,,NemesisCombat,涅墨西斯,,1.139672,24556151
+NemesisCombat_G,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,3,NemesisCombat,NemesisCombat_G,涅墨西斯,,1.139672,24556151
+NemesisFieldsPreRandomEventCombat,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,,,,1.139672,24556151
+NemesisPostRandomEventCombat,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,,,,1.139672,24556151
+NemesisRandomEvent,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,NemesisRandomEvent,涅墨西斯,,1.139672,24556151
+NemesisShopping,NPCVariantData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,3,,NemesisShopping,涅墨西斯,,1.139672,24556151
+AliceTestEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,14,BaseVulnerableEnemy,,,,1.139672,24556151
+AphroditeUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+ApolloUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+AresUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+AutomatonBeamer,UnitSetData,UnitSetData.AutomatonBeamer,EnemyData_AutomatonBeamer.lua,defined,36,BasePEnemy;BaseAutomaton;BaseVulnerableEnemy,AutomatonBeamer,自动监视机,,1.139672,24556151
+AutomatonBeamer_Elite,UnitSetData,UnitSetData.AutomatonBeamer,EnemyData_AutomatonBeamer.lua,defined,8,Elite;AutomatonBeamer,AutomatonBeamer_Elite,{!Icons.BountySkull} 自动监视机,,1.139672,24556151
+AutomatonBeamer_Shadow,UnitSetData,UnitSetData.AutomatonBeamer,EnemyData_AutomatonBeamer.lua,defined,4,Shadow;AutomatonBeamer,,,,1.139672,24556151
+AutomatonEnforcer,UnitSetData,UnitSetData.AutomatonEnforcer,EnemyData_AutomatonEnforcer.lua,defined,31,BasePEnemy;BaseAutomaton;BaseVulnerableEnemy,AutomatonEnforcer,自动执行机,,1.139672,24556151
+AutomatonEnforcer_Elite,UnitSetData,UnitSetData.AutomatonEnforcer,EnemyData_AutomatonEnforcer.lua,defined,8,Elite;AutomatonEnforcer,AutomatonEnforcer_Elite,{!Icons.BountySkull} 自动执行机,,1.139672,24556151
+AutomatonEnforcer_Fiend,UnitSetData,UnitSetData.AutomatonEnforcer,EnemyData_AutomatonEnforcer.lua,defined,6,AutomatonEnforcer_Elite,,,,1.139672,24556151
+AutomatonEnforcer_Shadow,UnitSetData,UnitSetData.AutomatonEnforcer,EnemyData_AutomatonEnforcer.lua,defined,4,Shadow;AutomatonEnforcer,,,,1.139672,24556151
+BaseAlly,UnitSetData,UnitSetData.Allies,AllyData.lua,defined,23,,,,,1.139672,24556151
+BaseAutomaton,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,13,,,,,1.139672,24556151
+BaseBossEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,13,,,,,1.139672,24556151
+BaseChronosForces,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,7,,,,,1.139672,24556151
+BaseFEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+BaseGEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+BaseHEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+BaseIEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+BaseNEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+BaseOEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,2,,,,,1.139672,24556151
+BasePEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,2,,,,,1.139672,24556151
+BaseQEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,2,,,,,1.139672,24556151
+BaseSpawner,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,8,,,,,1.139672,24556151
+BaseTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,14,IsNeutral,,,,1.139672,24556151
+BaseVulnerableEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,63,,,,,1.139672,24556151
+BattleStandard,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,24,BaseTrap,,,,1.139672,24556151
+BattleStandardChronos,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,4,BattleStandard,,,,1.139672,24556151
+BeamTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,25,BaseTrap,,,,1.139672,24556151
+BlastCubeFused,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,18,BaseTrap,,,,1.139672,24556151
+BloodMine,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,20,BaseTrap,,,,1.139672,24556151
+BloodMinePreFused,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,3,BloodMine,,,,1.139672,24556151
+BloodlessBerserker,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,9,BloodlessNaked,BloodlessBerserker,碎骨者,,1.139672,24556151
+BloodlessBerserker_Elite,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,6,Elite;BloodlessBerserker,BloodlessBerserker_Elite,{!Icons.BountySkull} 碎骨者,,1.139672,24556151
+BloodlessGrenadier,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,21,BaseGEnemy;BaseVulnerableEnemy,BloodlessGrenadier,炼狱投弹者,,1.139672,24556151
+BloodlessGrenadier_Elite,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,5,Elite;BloodlessGrenadier,BloodlessGrenadier_Elite,{!Icons.BountySkull} 炼狱投弹者,,1.139672,24556151
+BloodlessNaked,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,16,BaseGEnemy;BaseVulnerableEnemy,BloodlessNaked,无血者,,1.139672,24556151
+BloodlessNaked_Elite,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,5,Elite;BloodlessNaked,BloodlessNaked_Elite,{!Icons.BountySkull} 无血者,,1.139672,24556151
+BloodlessPitcher,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,7,BloodlessGrenadier,BloodlessPitcher,掷焰者,,1.139672,24556151
+BloodlessPitcher_Elite,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,7,Elite;BloodlessPitcher,BloodlessPitcher_Elite,{!Icons.BountySkull} 掷焰者,,1.139672,24556151
+BloodlessSelfDestruct,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,9,BloodlessGrenadier,BloodlessSelfDestruct,爆舞者,,1.139672,24556151
+BloodlessSelfDestruct_Elite,UnitSetData,UnitSetData.BloodlessGrenadier,EnemyData_BloodlessGrenadier.lua,defined,7,Elite;BloodlessSelfDestruct,BloodlessSelfDestruct_Elite,{!Icons.BountySkull} 爆舞者,,1.139672,24556151
+BloodlessWaveFist,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,7,BloodlessNaked,BloodlessWaveFist,造浪者,,1.139672,24556151
+BloodlessWaveFist_Elite,UnitSetData,UnitSetData.BloodlessNaked,EnemyData_BloodlessNaked.lua,defined,6,Elite;BloodlessWaveFist,BloodlessWaveFist_Elite,{!Icons.BountySkull} 造浪者,,1.139672,24556151
+Boar,UnitSetData,UnitSetData.Boar,EnemyData_Boar.lua,defined,27,BaseBossEnemy;BaseNEnemy;BaseVulnerableEnemy,Boar,厄律曼托斯野猪,,1.139672,24556151
+Boar_Shadow,UnitSetData,UnitSetData.Boar,EnemyData_Boar.lua,defined,13,Shadow;Boar,,,,1.139672,24556151
+Boar_SuperElite,UnitSetData,UnitSetData.Boar,EnemyData_Boar.lua,defined,23,SuperElite;BaseQEnemy;BaseVulnerableEnemy,Boar_SuperElite,厄律曼托斯野猪,,1.139672,24556151
+BrambleTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,6,BaseTrap,,,,1.139672,24556151
+BrambleTrapBush,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,stub,1,BrambleTrap,,,,1.139672,24556151
+Brawler,UnitSetData,UnitSetData.Brawler,EnemyData_Brawler.lua,defined,21,BaseFEnemy;BaseVulnerableEnemy,Brawler,蹉跎者,,1.139672,24556151
+Brawler_Elite,UnitSetData,UnitSetData.Brawler,EnemyData_Brawler.lua,defined,7,Elite;Brawler,Brawler_Elite,{!Icons.BountySkull} 蹉跎者,,1.139672,24556151
+BrokenHearted,UnitSetData,UnitSetData.BrokenHearted,EnemyData_BrokenHearted.lua,defined,27,BaseHEnemy;BaseVulnerableEnemy;LowPolyEnemy,BrokenHearted,裂口心,,1.139672,24556151
+BrokenHearted_Elite,UnitSetData,UnitSetData.BrokenHearted,EnemyData_BrokenHearted.lua,defined,8,Elite;BrokenHearted,BrokenHearted_Elite,{!Icons.BountySkull} 裂口心,,1.139672,24556151
+Brute,UnitSetData,UnitSetData.Brute,EnemyData_Brute.lua,defined,33,BaseQEnemy;BaseVulnerableEnemy;LowPolyEnemy,Brute,震慑魔,,1.139672,24556151
+Brute2,UnitSetData,UnitSetData.Brute,EnemyData_Brute.lua,defined,8,Brute_Elite,,,,1.139672,24556151
+Brute_Elite,UnitSetData,UnitSetData.Brute,EnemyData_Brute.lua,defined,8,Elite;Brute,Brute_Elite,{!Icons.BountySkull} 震慑魔,,1.139672,24556151
+Brute_Miniboss,UnitSetData,UnitSetData.Brute,EnemyData_Brute.lua,defined,29,BaseBossEnemy;Brute,Brute_Miniboss,提丰之子,,1.139672,24556151
+Brute_Shadow,UnitSetData,UnitSetData.Brute,EnemyData_Brute.lua,defined,16,Shadow;Brute,Brute_Shadow,震慑魔,,1.139672,24556151
+Captain,UnitSetData,UnitSetData.Captain,EnemyData_Captain.lua,defined,31,Elite;BaseOEnemy;BaseVulnerableEnemy,Captain,阿尔戈海盗,,1.139672,24556151
+Captain_Shadow,UnitSetData,UnitSetData.Captain,EnemyData_Captain.lua,defined,7,Shadow;Captain,,,,1.139672,24556151
+Captain_SuperElite,UnitSetData,UnitSetData.Captain,EnemyData_Captain.lua,defined,14,SuperElite;BaseQEnemy;Captain,Captain_SuperElite,阿尔戈海盗,,1.139672,24556151
+Carrion,UnitSetData,UnitSetData.Carrion,EnemyData_Carrion.lua,defined,36,BaseNEnemy;BaseVulnerableEnemy,Carrion,铜喙鸟,,1.139672,24556151
+Carrion_Elite,UnitSetData,UnitSetData.Carrion,EnemyData_Carrion.lua,defined,8,Elite;Carrion,Carrion_Elite,{!Icons.BountySkull} 铜喙鸟,,1.139672,24556151
+Carrion_Passive,UnitSetData,UnitSetData.Carrion,EnemyData_Carrion.lua,defined,11,Carrion,,,,1.139672,24556151
+Charybdis,UnitSetData,UnitSetData.Charybdis,EnemyData_Charybdis.lua,defined,28,BaseBossEnemy;BaseOEnemy;BaseVulnerableEnemy,Charybdis,卡律布狄斯,,1.139672,24556151
+CharybdisTentacle,UnitSetData,UnitSetData.Charybdis,EnemyData_Charybdis.lua,defined,24,BaseBossEnemy;BaseOEnemy;BaseVulnerableEnemy,CharybdisTentacle,卡律布狄斯,,1.139672,24556151
+CharybdisTentacle2,UnitSetData,UnitSetData.Charybdis,EnemyData_Charybdis.lua,defined,40,BaseBossEnemy;BaseGEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+Charybdis_ScyllaFight,UnitSetData,UnitSetData.Charybdis,EnemyData_Charybdis.lua,defined,17,Charybdis,,,,1.139672,24556151
+Chronos,UnitSetData,UnitSetData.Chronos,EnemyData_Chronos.lua,defined,66,BaseBossEnemy;BaseIEnemy;BaseVulnerableEnemy,Chronos,克洛诺斯,,1.139672,24556151
+ChronosCover,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,15,BaseTrap,,,,1.139672,24556151
+Chronos_EMShadow,UnitSetData,UnitSetData.Chronos,EnemyData_Chronos.lua,defined,28,BaseVulnerableEnemy,,,,1.139672,24556151
+Chronos_TyphonFight,UnitSetData,UnitSetData.Chronos,EnemyData_Chronos.lua,defined,33,BaseVulnerableEnemy,Chronos_TyphonFight,克洛诺斯,,1.139672,24556151
+ClockworkHeavyMelee,UnitSetData,UnitSetData.ClockworkHeavyMelee,EnemyData_ClockworkHeavyMelee.lua,defined,24,BaseIEnemy;BaseVulnerableEnemy,ClockworkHeavyMelee,暴徒残魂,,1.139672,24556151
+ClockworkHeavyMelee_Elite,UnitSetData,UnitSetData.ClockworkHeavyMelee,EnemyData_ClockworkHeavyMelee.lua,defined,7,Elite;ClockworkHeavyMelee,ClockworkHeavyMelee_Elite,{!Icons.BountySkull} 暴徒残魂,,1.139672,24556151
+ClockworkHeavyMelee_SuperElite,UnitSetData,UnitSetData.ClockworkHeavyMelee,EnemyData_ClockworkHeavyMelee.lua,defined,3,SuperElite;ClockworkHeavyMelee_Elite,ClockworkHeavyMelee_SuperElite,{!Icons.BountySkull} 暴徒残魂,,1.139672,24556151
+CorruptedShadeLarge,UnitSetData,UnitSetData.CorruptedShadeLarge,EnemyData_CorruptedShadeLarge.lua,defined,32,BaseHEnemy;BaseVulnerableEnemy,CorruptedShadeLarge,祸劫灵,,1.139672,24556151
+CorruptedShadeLarge_Elite,UnitSetData,UnitSetData.CorruptedShadeLarge,EnemyData_CorruptedShadeLarge.lua,defined,7,Elite;CorruptedShadeLarge,CorruptedShadeLarge_Elite,{!Icons.BountySkull} 祸劫灵,,1.139672,24556151
+CorruptedShadeMedium,UnitSetData,UnitSetData.CorruptedShadeMedium,EnemyData_CorruptedShadeMedium.lua,defined,33,BaseHEnemy;BaseVulnerableEnemy;LowPolyEnemy,CorruptedShadeMedium,堕血灵,,1.139672,24556151
+CorruptedShadeMedium_Elite,UnitSetData,UnitSetData.CorruptedShadeMedium,EnemyData_CorruptedShadeMedium.lua,defined,5,Elite;CorruptedShadeMedium,CorruptedShadeMedium_Elite,{!Icons.BountySkull} 堕血灵,,1.139672,24556151
+CorruptedShadeSmall,UnitSetData,UnitSetData.CorruptedShadeSmall,EnemyData_CorruptedShadeSmall.lua,defined,31,BaseHEnemy;BaseVulnerableEnemy;LowPolyEnemy,CorruptedShadeSmall,破灭灵,,1.139672,24556151
+CorruptedShadeSmall_Elite,UnitSetData,UnitSetData.CorruptedShadeSmall,EnemyData_CorruptedShadeSmall.lua,defined,7,Elite;CorruptedShadeSmall,CorruptedShadeSmall_Elite,{!Icons.BountySkull} 破灭灵,,1.139672,24556151
+Crawler,UnitSetData,UnitSetData.Crawler,EnemyData_Crawler.lua,defined,24,BaseVulnerableEnemy,Crawler,鼠兽,,1.139672,24556151
+CrawlerMiniboss,UnitSetData,UnitSetData.Crawler,EnemyData_Crawler.lua,defined,35,BaseBossEnemy;BaseGEnemy;BaseVulnerableEnemy,CrawlerMiniboss,“糟糕”,,1.139672,24556151
+Crawler_Elite,UnitSetData,UnitSetData.Crawler,EnemyData_Crawler.lua,defined,4,Elite;Crawler,Crawler_Elite,{!Icons.BountySkull} 鼠兽,,1.139672,24556151
+Crawler_Shadow,UnitSetData,UnitSetData.Crawler,EnemyData_Crawler.lua,defined,13,Shadow;BaseGEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+DemeterUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+DespairElemental,UnitSetData,UnitSetData.DespairElemental,EnemyData_DespairElemental.lua,defined,38,BaseHEnemy;BaseVulnerableEnemy,DespairElemental,怪石,,1.139672,24556151
+DespairElemental_Elite,UnitSetData,UnitSetData.DespairElemental,EnemyData_DespairElemental.lua,defined,6,Elite;DespairElemental,DespairElemental_Elite,{!Icons.BountySkull} 怪石,,1.139672,24556151
+DestructibleMast,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,23,BaseTrap,,,,1.139672,24556151
+DestructibleTree,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,23,BaseTrap,,,,1.139672,24556151
+Dragon,UnitSetData,UnitSetData.Dragon,EnemyData_Dragon.lua,defined,33,BasePEnemy;BaseChronosForces;BaseVulnerableEnemy,Dragon,飞龙,,1.139672,24556151
+DragonBurrower,UnitSetData,UnitSetData.DragonBurrower,EnemyData_DragonBurrower.lua,defined,27,BaseQEnemy;BaseVulnerableEnemy,DragonBurrower,地龙,,1.139672,24556151
+DragonBurrower_Elite,UnitSetData,UnitSetData.DragonBurrower,EnemyData_DragonBurrower.lua,defined,7,Elite;DragonBurrower,DragonBurrower_Elite,{!Icons.BountySkull} 地龙,,1.139672,24556151
+DragonBurrower_Shadow,UnitSetData,UnitSetData.DragonBurrower,EnemyData_DragonBurrower.lua,defined,4,Shadow;DragonBurrower,DragonBurrower_Shadow,地龙,,1.139672,24556151
+Dragon_Elite,UnitSetData,UnitSetData.Dragon,EnemyData_Dragon.lua,defined,8,Elite;Dragon,Dragon_Elite,{!Icons.BountySkull} 飞龙,,1.139672,24556151
+Dragon_MiniBoss,UnitSetData,UnitSetData.Dragon,EnemyData_Dragon.lua,defined,20,Elite;Dragon,Dragon_MiniBoss,巨龙,,1.139672,24556151
+Dragon_Shadow,UnitSetData,UnitSetData.Dragon,EnemyData_Dragon.lua,defined,11,Shadow;Dragon,Dragon_Shadow,飞龙,,1.139672,24556151
+Dragon_SuperElite,UnitSetData,UnitSetData.Dragon,EnemyData_Dragon.lua,defined,16,SuperElite;BaseQEnemy;Dragon,Dragon_SuperElite,{!Icons.BountySkull} 飞龙,,1.139672,24556151
+Drunk,UnitSetData,UnitSetData.Drunk,EnemyData_Drunk.lua,defined,33,BaseOEnemy;BaseVulnerableEnemy,Drunk,滚筒兵,,1.139672,24556151
+Drunk_Elite,UnitSetData,UnitSetData.Drunk,EnemyData_Drunk.lua,defined,8,Elite;Drunk,Drunk_Elite,{!Icons.BountySkull} 滚筒兵,,1.139672,24556151
+DummyOlympusTarget,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,6,IsNeutral,,,,1.139672,24556151
+Eagle,UnitSetData,UnitSetData.Eagle,EnemyData_Eagle.lua,defined,19,BasePEnemy;BaseVulnerableEnemy,Eagle,艾托斯,,1.139672,24556151
+EarthElemental,UnitSetData,UnitSetData.EarthElemental,EnemyData_EarthElemental.lua,defined,35,BaseQEnemy;BaseVulnerableEnemy;LowPolyEnemy,EarthElemental,石颅,,1.139672,24556151
+EarthElemental_Elite,UnitSetData,UnitSetData.EarthElemental,EnemyData_EarthElemental.lua,defined,6,Elite;EarthElemental,EarthElemental_Elite,{!Icons.BountySkull} 石颅,,1.139672,24556151
+EarthElemental_Shadow,UnitSetData,UnitSetData.EarthElemental,EnemyData_EarthElemental.lua,defined,5,Shadow;EarthElemental,EarthElemental_Shadow,石颅,,1.139672,24556151
+Elite,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,7,,,,,1.139672,24556151
+Eris,UnitSetData,UnitSetData.Eris,EnemyData_Eris.lua,defined,62,BaseBossEnemy;BaseOEnemy;BaseVulnerableEnemy,Eris,厄里斯,,1.139672,24556151
+EyeBomb,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,15,,,,,1.139672,24556151
+Eyeball,UnitSetData,UnitSetData.Eyeball,EnemyData_Eyeball.lua,defined,41,BaseQEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+FireBarrel,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,22,BaseTrap,,,,1.139672,24556151
+FireBarrelShips,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,5,FireBarrel,,,,1.139672,24556151
+FishSwarmer,UnitSetData,UnitSetData.FishSwarmer,EnemyData_FishSwarmer.lua,defined,34,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy;LowPolyEnemy,FishSwarmer,刺头鱼,,1.139672,24556151
+FishSwarmerSquad,UnitSetData,UnitSetData.FishSwarmer,EnemyData_FishSwarmer.lua,defined,8,,FishSwarmerSquad,刺头鱼,,1.139672,24556151
+FishSwarmerSquad_Elite,UnitSetData,UnitSetData.FishSwarmer,EnemyData_FishSwarmer.lua,defined,3,Elite;FishSwarmerSquad,FishSwarmerSquad_Elite,{!Icons.BountySkull} 刺头鱼,,1.139672,24556151
+FishSwarmer_Elite,UnitSetData,UnitSetData.FishSwarmer,EnemyData_FishSwarmer.lua,defined,11,Elite;FishSwarmer,FishSwarmer_Elite,{!Icons.BountySkull} 刺头鱼,,1.139672,24556151
+FishmanMelee,UnitSetData,UnitSetData.FishmanMelee,EnemyData_FishmanMelee.lua,defined,21,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy,FishmanMelee,潜伏者,,1.139672,24556151
+FishmanMelee2,UnitSetData,UnitSetData.FishmanMelee,EnemyData_FishmanMelee.lua,defined,12,Elite;BaseQEnemy;FishmanMelee,,,,1.139672,24556151
+FishmanMelee_Elite,UnitSetData,UnitSetData.FishmanMelee,EnemyData_FishmanMelee.lua,defined,6,Elite;FishmanMelee,FishmanMelee_Elite,{!Icons.BountySkull} 潜伏者,,1.139672,24556151
+FishmanRanged,UnitSetData,UnitSetData.FishmanRanged,EnemyData_FishmanRanged.lua,defined,21,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy,FishmanRanged,海河马,,1.139672,24556151
+FishmanRanged_Elite,UnitSetData,UnitSetData.FishmanRanged,EnemyData_FishmanRanged.lua,defined,6,Elite;FishmanRanged,FishmanRanged_Elite,{!Icons.BountySkull} 海河马,,1.139672,24556151
+FloodTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,8,BaseTrap,,,,1.139672,24556151
+FogEmitter,UnitSetData,UnitSetData.FogEmitter,EnemyData_FogEmitter.lua,defined,25,BaseFEnemy;BaseVulnerableEnemy,FogEmitter,泼影者,,1.139672,24556151
+FogEmitter2,UnitSetData,UnitSetData.FogEmitter,EnemyData_FogEmitter.lua,defined,26,BaseHEnemy;FogEmitter,FogEmitter2,悲痛泼影者,,1.139672,24556151
+FogEmitter_Elite,UnitSetData,UnitSetData.FogEmitter,EnemyData_FogEmitter.lua,defined,9,Elite;FogEmitter,FogEmitter_Elite,{!Icons.BountySkull} 泼影者,,1.139672,24556151
+FogEmitter_Shadow,UnitSetData,UnitSetData.FogEmitter,EnemyData_FogEmitter.lua,defined,4,FogEmitter_Elite,FogEmitter_Shadow,{!Icons.BountySkull} 泼影者,,1.139672,24556151
+GasTrapPassive,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,8,BaseTrap,,,,1.139672,24556151
+GoldElemental,UnitSetData,UnitSetData.GoldElemental,EnemyData_GoldElemental.lua,defined,26,BaseIEnemy;BaseVulnerableEnemy;LowPolyEnemy,GoldElemental,财奴,,1.139672,24556151
+GoldElemental_Elite,UnitSetData,UnitSetData.GoldElemental,EnemyData_GoldElemental.lua,defined,7,Elite;GoldElemental,GoldElemental_Elite,{!Icons.BountySkull} 财奴,,1.139672,24556151
+GoldElemental_MiniBoss,UnitSetData,UnitSetData.GoldElemental,EnemyData_GoldElemental.lua,defined,15,Elite;GoldElemental,GoldElemental_MiniBoss,暴怒财奴,,1.139672,24556151
+GoldElemental_Shadow,UnitSetData,UnitSetData.GoldElemental,EnemyData_GoldElemental.lua,defined,7,Shadow;GoldElemental,GoldElemental_Shadow,财奴,,1.139672,24556151
+Guard,UnitSetData,UnitSetData.Guard,EnemyData_Guard.lua,defined,24,BaseFEnemy;BaseVulnerableEnemy,Guard,呢喃者,,1.139672,24556151
+Guard2,UnitSetData,UnitSetData.Guard,EnemyData_Guard.lua,defined,12,OceanusUnitData;BaseGEnemy;Guard,Guard2,潮湿呢喃者,,1.139672,24556151
+Guard2_Elite,UnitSetData,UnitSetData.Guard,EnemyData_Guard.lua,defined,4,Elite;Guard2,Guard2_Elite,{!Icons.BountySkull} 潮湿呢喃者,,1.139672,24556151
+Guard_Elite,UnitSetData,UnitSetData.Guard,EnemyData_Guard.lua,defined,6,Elite;Guard,Guard_Elite,{!Icons.BountySkull} 呢喃者,,1.139672,24556151
+GunBombUnit,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,20,BaseTrap,,,,1.139672,24556151
+HadesTombstone,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,14,IsNeutral;BaseVulnerableEnemy,,,,1.139672,24556151
+HarpyCutter,UnitSetData,UnitSetData.Harpy,EnemyData_Harpy.lua,defined,35,BaseOEnemy;BaseVulnerableEnemy,HarpyCutter,利爪女妖,,1.139672,24556151
+HarpyCutter_Elite,UnitSetData,UnitSetData.Harpy,EnemyData_Harpy.lua,defined,8,Elite;HarpyCutter,HarpyCutter_Elite,{!Icons.BountySkull} 利爪女妖,,1.139672,24556151
+HarpyDropper,UnitSetData,UnitSetData.Harpy,EnemyData_Harpy.lua,defined,16,BasePEnemy;BaseChronosForces;HarpyCutter,HarpyDropper,猛禽女妖,,1.139672,24556151
+HarpyDropper_Elite,UnitSetData,UnitSetData.Harpy,EnemyData_Harpy.lua,defined,9,Elite;HarpyDropper,HarpyDropper_Elite,{!Icons.BountySkull} 猛禽女妖,,1.139672,24556151
+HazardPoint,UnitSetData,UnitSetData.Enemies,EnemyData.lua,stub,1,BaseTrap,,,,1.139672,24556151
+Hecate,UnitSetData,UnitSetData.Hecate,EnemyData_Hecate.lua,defined,57,BaseBossEnemy;BaseFEnemy;BaseVulnerableEnemy,Hecate,赫卡忒,,1.139672,24556151
+HecateCopy,UnitSetData,UnitSetData.Hecate,EnemyData_Hecate.lua,defined,24,BaseVulnerableEnemy,,,,1.139672,24556151
+HecateCopyEM,UnitSetData,UnitSetData.Hecate,EnemyData_Hecate.lua,defined,7,HecateCopy,,,,1.139672,24556151
+HephaestusUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+HeraUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+Heracles,UnitSetData,UnitSetData.Heracles,EnemyData_Heracles.lua,defined,34,BaseBossEnemy;BasePEnemy;BaseVulnerableEnemy,Heracles,赫拉克勒斯,,1.139672,24556151
+HestiaUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+InfestedCerberus,UnitSetData,UnitSetData.InfestedCerberus,EnemyData_InfestedCerberus.lua,defined,41,BaseBossEnemy;BaseHEnemy;BaseVulnerableEnemy,InfestedCerberus,渊狱魔兽,,1.139672,24556151
+IsNeutral,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,18,,,,,1.139672,24556151
+Jellyfish,UnitSetData,UnitSetData.Jellyfish,EnemyData_Jellyfish.lua,defined,21,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy,Jellyfish,小地狱水母,,1.139672,24556151
+Jellyfish_Elite,UnitSetData,UnitSetData.Jellyfish,EnemyData_Jellyfish.lua,defined,4,Elite;Jellyfish,Jellyfish_Elite,{!Icons.BountySkull} 小地狱水母,,1.139672,24556151
+Jellyfish_Scylla,UnitSetData,UnitSetData.Jellyfish,EnemyData_Jellyfish.lua,defined,6,Jellyfish_Elite,,,,1.139672,24556151
+Lamia,UnitSetData,UnitSetData.Lamia,EnemyData_Lamia.lua,defined,33,BaseHEnemy;BaseVulnerableEnemy,Lamia,拉米亚,,1.139672,24556151
+Lamia_Elite,UnitSetData,UnitSetData.Lamia,EnemyData_Lamia.lua,defined,7,Elite;Lamia,Lamia_Elite,{!Icons.BountySkull} 拉米亚,,1.139672,24556151
+Lamia_Miniboss,UnitSetData,UnitSetData.Lamia,EnemyData_Lamia.lua,defined,16,Elite;Lamia,Lamia_Miniboss,拉米亚女王,,1.139672,24556151
+Lamia_SuperElite,UnitSetData,UnitSetData.Lamia,EnemyData_Lamia.lua,defined,5,SuperElite;BaseIEnemy;Lamia_Miniboss,Lamia_SuperElite,{!Icons.BountySkull} 拉米亚,,1.139672,24556151
+Lamia_Support,UnitSetData,UnitSetData.Lamia,EnemyData_Lamia.lua,defined,10,Elite;Lamia,Lamia_Support,拉米亚,,1.139672,24556151
+LavaSplash,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,11,BaseTrap,,,,1.139672,24556151
+LavaTile,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,7,BaseTrap,,,,1.139672,24556151
+LavaTileTriangle01,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,2,LavaTile,,,,1.139672,24556151
+LavaTileTriangle02,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,2,LavaTile,,,,1.139672,24556151
+LightRanged,UnitSetData,UnitSetData.LightRanged,EnemyData_LightRanged.lua,defined,24,BaseFEnemy;BaseVulnerableEnemy,LightRanged,亡者女巫,,1.139672,24556151
+LightRanged_Elite,UnitSetData,UnitSetData.LightRanged,EnemyData_LightRanged.lua,defined,3,Elite;LightRanged,LightRanged_Elite,{!Icons.BountySkull} 亡者女巫,,1.139672,24556151
+Lovesick,UnitSetData,UnitSetData.Lovesick,EnemyData_Lovesick.lua,defined,33,BaseHEnemy;BaseVulnerableEnemy,Lovesick,空心人,,1.139672,24556151
+LovesickHeart,UnitSetData,UnitSetData.Lovesick,EnemyData_Lovesick.lua,defined,21,BaseTrap,,,,1.139672,24556151
+LovesickHeart_Elite,UnitSetData,UnitSetData.Lovesick,EnemyData_Lovesick.lua,defined,5,LovesickHeart,,,,1.139672,24556151
+Lovesick_Elite,UnitSetData,UnitSetData.Lovesick,EnemyData_Lovesick.lua,defined,7,Elite;Lovesick,Lovesick_Elite,{!Icons.BountySkull} 空心人,,1.139672,24556151
+Lovesick_Shadow,UnitSetData,UnitSetData.Lovesick,EnemyData_Lovesick.lua,defined,5,Shadow;Lovesick,Lovesick_Shadow,空心人,,1.139672,24556151
+LowPolyEnemy,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,1,,,,,1.139672,24556151
+LycanSwarmer,UnitSetData,UnitSetData.LycanSwarmer,EnemyData_LycanSwarmer.lua,defined,30,BaseHEnemy;BaseVulnerableEnemy;LowPolyEnemy,LycanSwarmer,犬魔,,1.139672,24556151
+LycanSwarmer2,UnitSetData,UnitSetData.LycanSwarmer,EnemyData_LycanSwarmer.lua,defined,9,BaseQEnemy;LycanSwarmer_Elite,,,,1.139672,24556151
+LycanSwarmer_Elite,UnitSetData,UnitSetData.LycanSwarmer,EnemyData_LycanSwarmer.lua,defined,8,Elite;LycanSwarmer,LycanSwarmer_Elite,{!Icons.BountySkull} 犬魔,,1.139672,24556151
+Lycanthrope,UnitSetData,UnitSetData.Lycanthrope,EnemyData_Lycanthrope.lua,defined,32,BaseHEnemy;BaseVulnerableEnemy,Lycanthrope,兽化人,,1.139672,24556151
+Lycanthrope_Elite,UnitSetData,UnitSetData.Lycanthrope,EnemyData_Lycanthrope.lua,defined,12,Elite;Lycanthrope,Lycanthrope_Elite,{!Icons.BountySkull} 兽化人,,1.139672,24556151
+Mage,UnitSetData,UnitSetData.Mage,EnemyData_Mage.lua,defined,27,BaseFEnemy;BaseVulnerableEnemy,Mage,送葬者,,1.139672,24556151
+Mage2,UnitSetData,UnitSetData.Mage,EnemyData_Mage.lua,defined,17,BaseOEnemy;Mage,Mage2,海洋送葬者,,1.139672,24556151
+Mage2_Elite,UnitSetData,UnitSetData.Mage,EnemyData_Mage.lua,defined,8,Elite;Mage2,Mage2_Elite,{!Icons.BountySkull} 海洋送葬者,,1.139672,24556151
+Mage_Elite,UnitSetData,UnitSetData.Mage,EnemyData_Mage.lua,defined,7,Elite;Mage,Mage_Elite,{!Icons.BountySkull} 送葬者,,1.139672,24556151
+Mati,UnitSetData,UnitSetData.Mati,EnemyData_Mati.lua,defined,37,BaseQEnemy;BaseVulnerableEnemy;LowPolyEnemy,Mati,飞目,,1.139672,24556151
+Mati_Elite,UnitSetData,UnitSetData.Mati,EnemyData_Mati.lua,defined,6,Elite;Mati,Mati_Elite,{!Icons.BountySkull} 飞目,,1.139672,24556151
+Medea,UnitSetData,UnitSetData.Medea,EnemyData_Medea.lua,defined,34,BaseNEnemy;BaseVulnerableEnemy,Medea,美狄亚,,1.139672,24556151
+MiasmaGeyser,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,8,BaseTrap,,,,1.139672,24556151
+Mourner,UnitSetData,UnitSetData.Mourner,EnemyData_Mourner.lua,defined,35,BaseHEnemy;BaseVulnerableEnemy,Mourner,追悼者,,1.139672,24556151
+Mourner_Elite,UnitSetData,UnitSetData.Mourner,EnemyData_Mourner.lua,defined,9,Elite;Mourner,Mourner_Elite,{!Icons.BountySkull} 追悼者,,1.139672,24556151
+Mourner_Shadow,UnitSetData,UnitSetData.Mourner,EnemyData_Mourner.lua,defined,9,Shadow;Mourner,Mourner_Shadow,追悼者,,1.139672,24556151
+Mudman,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,30,BaseNEnemy;BaseVulnerableEnemy,Mudman,眼灵,,1.139672,24556151
+Mudman2,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,13,BaseQEnemy;Mudman_Elite,,,,1.139672,24556151
+MudmanEye,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,25,BaseNEnemy;BaseVulnerableEnemy;LowPolyEnemy,MudmanEye,眼灵,,1.139672,24556151
+MudmanEye2,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,6,BaseQEnemy;MudmanEye_Elite,,,,1.139672,24556151
+MudmanEye_Elite,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,6,Elite;MudmanEye,MudmanEye_Elite,{!Icons.BountySkull} 眼灵,,1.139672,24556151
+Mudman_Elite,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,11,Elite;Mudman,Mudman_Elite,{!Icons.BountySkull} 眼灵,,1.139672,24556151
+Mudman_Shadow,UnitSetData,UnitSetData.Mudman,EnemyData_Mudman.lua,defined,15,Shadow;Mudman,,,,1.139672,24556151
+NPC_3DGhostAlt,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,4,NPC_Neutral,,,,1.139672,24556151
+NPC_Achilles_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,12,NPC_Neutral,NPC_Achilles_01,阿喀琉斯,,1.139672,24556151
+NPC_Apollo_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,22,NPC_Neutral,NPC_Apollo_Story_01,阿波罗,,1.139672,24556151
+NPC_Arachne_01,UnitSetData,UnitSetData.NPC_Arachne,NPCData_Arachne.lua,defined,34,NPC_Neutral;NPC_Giftable,NPC_Arachne_01,阿拉克涅,,1.139672,24556151
+NPC_Arachne_Home_01,UnitSetData,UnitSetData.NPC_Arachne,NPCData_Arachne.lua,defined,4,NPC_Arachne_01,NPC_Arachne_Home_01,阿拉克涅,,1.139672,24556151
+NPC_Artemis_01,UnitSetData,UnitSetData.NPC_Artemis,NPCData_Artemis.lua,defined,39,NPC_Neutral;NPC_Giftable,NPC_Artemis_01,阿尔忒弥斯,,1.139672,24556151
+NPC_Artemis_Field_01,UnitSetData,UnitSetData.NPC_Artemis,NPCData_Artemis.lua,defined,55,NPC_Artemis_01,NPC_Artemis_Field_01,阿尔忒弥斯,UseLoot,1.139672,24556151
+NPC_Athena_01,UnitSetData,UnitSetData.NPC_Athena,NPCData_Athena.lua,defined,55,NPC_Neutral;NPC_Giftable,NPC_Athena_01,雅典娜,AthenaUse,1.139672,24556151
+NPC_Bouldy_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,13,NPC_Neutral;NPC_Giftable,NPC_Bouldy_01,怪石,,1.139672,24556151
+NPC_Cerberus_Field_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,19,NPC_Neutral,NPC_Cerberus_Field_01,刻耳柏洛斯,,1.139672,24556151
+NPC_Cerberus_Story_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,15,NPC_Neutral,,,,1.139672,24556151
+NPC_Charon_01,UnitSetData,UnitSetData.NPC_Charon,NPCData_Charon.lua,defined,25,NPC_Neutral;NPC_Giftable,NPC_Charon_01,卡戎,,1.139672,24556151
+NPC_Chronos_01,UnitSetData,UnitSetData.NPC_Chronos,NPCData_Chronos.lua,defined,24,NPC_Neutral;NPC_Giftable,NPC_Chronos_01,克洛诺斯,,1.139672,24556151
+NPC_Chronos_02,UnitSetData,UnitSetData.NPC_Chronos,NPCData_Chronos.lua,defined,19,NPC_Chronos_01,NPC_Chronos_02,克洛诺斯,,1.139672,24556151
+NPC_Chronos_Story_01,UnitSetData,UnitSetData.NPC_Chronos,NPCData_Chronos.lua,defined,7,NPC_Chronos_01,NPC_Chronos_Story_01,克洛诺斯,,1.139672,24556151
+NPC_Circe_01,UnitSetData,UnitSetData.NPC_Circe,NPCData_Circe.lua,defined,35,NPC_Neutral;NPC_Giftable,NPC_Circe_01,喀耳刻,,1.139672,24556151
+NPC_Demeter_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,26,NPC_Neutral,NPC_Demeter_Story_01,得墨忒尔,,1.139672,24556151
+NPC_Dionysus_01,UnitSetData,UnitSetData.NPC_Dionysus,NPCData_Dionysus.lua,defined,49,NPC_Neutral;NPC_Giftable,NPC_Dionysus_01,迪奥尼索司,UseLoot,1.139672,24556151
+NPC_Dora_01,UnitSetData,UnitSetData.NPC_Dora,NPCData_Dora.lua,defined,32,NPC_Neutral;NPC_Giftable,NPC_Dora_01,朵拉,,1.139672,24556151
+NPC_Echo_01,UnitSetData,UnitSetData.NPC_Echo,NPCData_Echo.lua,defined,37,NPC_Neutral;NPC_Giftable,NPC_Echo_01,回声,,1.139672,24556151
+NPC_Eris_01,UnitSetData,UnitSetData.NPC_Eris,NPCData_Eris.lua,defined,31,NPC_Neutral;NPC_Giftable,NPC_Eris_01,厄里斯,,1.139672,24556151
+NPC_Giftable,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,4,,,,,1.139672,24556151
+NPC_Hades_02,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,13,NPC_Neutral,NPC_Hades_02,哈迪斯,,1.139672,24556151
+NPC_Hades_Field_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,45,NPC_Neutral;NPC_Giftable,NPC_Hades_Field_01,哈迪斯,UseLoot,1.139672,24556151
+NPC_Hades_Story_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,10,NPC_Neutral,NPC_Hades_Story_01,哈迪斯,,1.139672,24556151
+NPC_Hecate_01,UnitSetData,UnitSetData.NPC_Hecate,NPCData_Hecate.lua,defined,28,NPC_Neutral;NPC_Giftable,NPC_Hecate_01,赫卡忒,,1.139672,24556151
+NPC_Hecate_Story_01,UnitSetData,UnitSetData.NPC_Hecate,NPCData_Hecate.lua,defined,4,NPC_Hecate_01,NPC_Hecate_Story_01,赫卡忒,,1.139672,24556151
+NPC_Hera_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,24,NPC_Neutral,NPC_Hera_Story_01,赫拉,,1.139672,24556151
+NPC_Heracles_01,UnitSetData,UnitSetData.NPC_Heracles,NPCData_Heracles.lua,defined,62,NPC_Neutral;NPC_Giftable,NPC_Heracles_01,赫拉克勒斯,,1.139672,24556151
+NPC_Hermes_01,UnitSetData,UnitSetData.NPC_Hermes,NPCData_Hermes.lua,defined,32,NPC_Neutral;NPC_Giftable,NPC_Hermes_01,赫尔墨斯,,1.139672,24556151
+NPC_HorseAndChariot_01,UnitSetData,UnitSetData.NPC_Selene,NPCData_Selene.lua,stub,1,NPC_Neutral,,,,1.139672,24556151
+NPC_Hypnos_01,UnitSetData,UnitSetData.NPC_Hypnos,NPCData_Hypnos.lua,defined,18,NPC_Neutral;NPC_Giftable,NPC_Hypnos_01,修普诺斯,,1.139672,24556151
+NPC_Hypnos_02,UnitSetData,UnitSetData.NPC_Hypnos,NPCData_Hypnos.lua,defined,17,NPC_Neutral;NPC_Giftable,NPC_Hypnos_02,修普诺斯,,1.139672,24556151
+NPC_Hypnos_03,UnitSetData,UnitSetData.NPC_Hypnos,NPCData_Hypnos.lua,defined,17,NPC_Neutral;NPC_Giftable,NPC_Hypnos_03,修普诺斯,,1.139672,24556151
+NPC_Hypnos_04,UnitSetData,UnitSetData.NPC_Hypnos,NPCData_Hypnos.lua,defined,16,NPC_Neutral;NPC_Giftable,NPC_Hypnos_04,修普诺斯,,1.139672,24556151
+NPC_Hypnos_DreamRun,UnitSetData,UnitSetData.NPC_Hypnos,NPCData_Hypnos.lua,defined,20,NPC_Neutral;NPC_Giftable,NPC_Hypnos_DreamRun,修普诺斯,,1.139672,24556151
+NPC_Icarus_01,UnitSetData,UnitSetData.NPC_Icarus,NPCData_Icarus.lua,defined,50,NPC_Neutral;NPC_Giftable,NPC_Icarus_01,伊卡洛斯,,1.139672,24556151
+NPC_LeopardGuest,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,2,NPC_Neutral,,,,1.139672,24556151
+NPC_LightRanged,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,5,NPC_Neutral,,,,1.139672,24556151
+NPC_Medea_01,UnitSetData,UnitSetData.NPC_Medea,NPCData_Medea.lua,defined,33,NPC_Neutral;NPC_Giftable,NPC_Medea_01,美狄亚,,1.139672,24556151
+NPC_Melinoe_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,14,NPC_Neutral,,,,1.139672,24556151
+NPC_Moros_01,UnitSetData,UnitSetData.NPC_Moros,NPCData_Moros.lua,defined,30,NPC_Neutral;NPC_Giftable,NPC_Moros_01,摩罗斯,,1.139672,24556151
+NPC_Narcissus_01,UnitSetData,UnitSetData.NPC_Narcissus,NPCData_Narcissus.lua,defined,29,NPC_Neutral;NPC_Giftable,NPC_Narcissus_01,纳西索斯,,1.139672,24556151
+NPC_Narcissus_Field_01,UnitSetData,UnitSetData.NPC_Narcissus,NPCData_Narcissus.lua,defined,3,NPC_Narcissus_01,NPC_Narcissus_Field_01,纳西索斯,,1.139672,24556151
+NPC_Neutral,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,4,IsNeutral,,,UseNPC,1.139672,24556151
+NPC_Nyx_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,8,NPC_Neutral;NPC_Giftable,NPC_Nyx_01,倪克斯,,1.139672,24556151
+NPC_Nyx_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,17,NPC_Neutral;NPC_Giftable,NPC_Nyx_Story_01,倪克斯,,1.139672,24556151
+NPC_Odysseus_01,UnitSetData,UnitSetData.NPC_Odysseus,NPCData_Odysseus.lua,defined,27,NPC_Neutral;NPC_Giftable,NPC_Odysseus_01,奥德修斯,,1.139672,24556151
+NPC_Persephone_01,UnitSetData,UnitSetData.NPC_Hades,NPCData_Hades.lua,defined,17,NPC_Neutral,NPC_Persephone_01,珀尔塞福涅,,1.139672,24556151
+NPC_Selene_01,UnitSetData,UnitSetData.NPC_Selene,NPCData_Selene.lua,defined,17,NPC_Neutral;NPC_Giftable,NPC_Selene_01,塞勒涅,,1.139672,24556151
+NPC_Zagreus_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,13,NPC_Neutral,NPC_Zagreus_01,扎格列欧斯,,1.139672,24556151
+NPC_Zagreus_Past_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,11,NPC_Neutral,NPC_Zagreus_Past_01,扎格列欧斯,,1.139672,24556151
+NPC_Zeus_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,8,NPC_Neutral,NPC_Zeus_01,宙斯,,1.139672,24556151
+NPC_Zeus_Story_01,UnitSetData,UnitSetData.NPCs,NPCData.lua,defined,25,NPC_Neutral,NPC_Zeus_Story_01,宙斯,,1.139672,24556151
+OceanusUnitData,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,14,,,,,1.139672,24556151
+Octofish,UnitSetData,UnitSetData.Octofish,EnemyData_Octofish.lua,defined,21,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+Octofish_Elite,UnitSetData,UnitSetData.Octofish,EnemyData_Octofish.lua,defined,4,Elite;Octofish,,,,1.139672,24556151
+Octofish_Miniboss,UnitSetData,UnitSetData.Octofish,EnemyData_Octofish.lua,defined,15,Elite;Octofish,Octofish_Miniboss,地狱水母,,1.139672,24556151
+Octofish_Shadow,UnitSetData,UnitSetData.Octofish,EnemyData_Octofish.lua,stub,1,Shadow;Octofish_Miniboss,Octofish_Shadow,地狱水母,,1.139672,24556151
+Octofish_SuperElite,UnitSetData,UnitSetData.Octofish,EnemyData_Octofish.lua,defined,5,SuperElite;BaseIEnemy;Octofish_Miniboss,Octofish_SuperElite,地狱水母,,1.139672,24556151
+OilPuddle,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,8,BaseTrap,,,,1.139672,24556151
+OilPuddle02,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,2,OilPuddle,,,,1.139672,24556151
+OilPuddle03,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,2,OilPuddle,,,,1.139672,24556151
+OilPuddle04,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,2,OilPuddle,,,,1.139672,24556151
+PassiveRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,7,IsNeutral,,,,1.139672,24556151
+Pig,UnitSetData,UnitSetData.Pig,EnemyData_Pig.lua,defined,22,IsNeutral;BaseVulnerableEnemy,,,,1.139672,24556151
+PigAngry,UnitSetData,UnitSetData.Pig,EnemyData_Pig.lua,stub,1,Pig,,,,1.139672,24556151
+PigSad,UnitSetData,UnitSetData.Pig,EnemyData_Pig.lua,stub,1,Pig,,,,1.139672,24556151
+Polyphemus,UnitSetData,UnitSetData.Polyphemus,EnemyData_Polyphemus.lua,defined,58,BaseBossEnemy;BaseNEnemy;BaseVulnerableEnemy,Polyphemus,波吕斐摩斯,,1.139672,24556151
+PolyphemusBoulders,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+PolyphemusCorpse,UnitSetData,UnitSetData.Polyphemus,EnemyData_Polyphemus.lua,defined,15,BaseVulnerableEnemy,,,,1.139672,24556151
+PoseidonUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+Prometheus,UnitSetData,UnitSetData.Prometheus,EnemyData_Prometheus.lua,defined,65,BaseBossEnemy;BasePEnemy;BaseVulnerableEnemy,Prometheus,普罗米修斯,,1.139672,24556151
+Radiator,UnitSetData,UnitSetData.Radiator,EnemyData_Radiator.lua,defined,28,BaseFEnemy;BaseVulnerableEnemy;LowPolyEnemy,Radiator,回旋者,,1.139672,24556151
+Radiator2,UnitSetData,UnitSetData.Radiator,EnemyData_Radiator.lua,defined,13,OceanusUnitData;BaseGEnemy;Radiator,Radiator2,潮湿回旋者,,1.139672,24556151
+Radiator2_Elite,UnitSetData,UnitSetData.Radiator,EnemyData_Radiator.lua,defined,4,Elite;Radiator2,Radiator2_Elite,{!Icons.BountySkull} 潮湿回旋者,,1.139672,24556151
+Radiator_Elite,UnitSetData,UnitSetData.Radiator,EnemyData_Radiator.lua,defined,6,Elite;Radiator,Radiator_Elite,{!Icons.BountySkull} 回旋者,,1.139672,24556151
+SafeZone,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,8,BaseTrap,SafeZone,防护结界,,1.139672,24556151
+SatyrCrossbow,UnitSetData,UnitSetData.SatyrCrossbow,EnemyData_SatyrCrossbow.lua,defined,23,BaseNEnemy;BaseVulnerableEnemy,SatyrCrossbow,萨提尔斗士,,1.139672,24556151
+SatyrCrossbow2,UnitSetData,UnitSetData.SatyrCrossbow,EnemyData_SatyrCrossbow.lua,defined,28,BasePEnemy;BaseChronosForces;SatyrCrossbow,SatyrCrossbow2,萨提尔劫掠者,,1.139672,24556151
+SatyrCrossbow2_Elite,UnitSetData,UnitSetData.SatyrCrossbow,EnemyData_SatyrCrossbow.lua,defined,8,Elite;SatyrCrossbow2,SatyrCrossbow2_Elite,{!Icons.BountySkull} 萨提尔劫掠者,,1.139672,24556151
+SatyrCrossbow_Shadow,UnitSetData,UnitSetData.SatyrCrossbow,EnemyData_SatyrCrossbow.lua,defined,3,Shadow;SatyrCrossbow,SatyrCrossbow_Shadow,萨提尔斗士,,1.139672,24556151
+SatyrCultist,UnitSetData,UnitSetData.SatyrCultist,EnemyData_SatyrCultist.lua,defined,23,BaseIEnemy;BaseVulnerableEnemy,SatyrCultist,萨提尔祈求者,,1.139672,24556151
+SatyrCultist_Elite,UnitSetData,UnitSetData.SatyrCultist,EnemyData_SatyrCultist.lua,defined,7,Elite;SatyrCultist,SatyrCultist_Elite,{!Icons.BountySkull} 萨提尔祈求者,,1.139672,24556151
+SatyrLancer,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,29,BaseIEnemy;BaseVulnerableEnemy,SatyrLancer,萨提尔盾兵,,1.139672,24556151
+SatyrLancer2,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,23,BasePEnemy;BaseChronosForces;SatyrLancer,SatyrLancer2,萨提尔金枪兵,,1.139672,24556151
+SatyrLancer2_Elite,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,8,Elite;SatyrLancer2,SatyrLancer2_Elite,{!Icons.BountySkull} 萨提尔金枪兵,,1.139672,24556151
+SatyrLancer_Elite,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,9,Elite;SatyrLancer,SatyrLancer_Elite,{!Icons.BountySkull} 萨提尔盾兵,,1.139672,24556151
+SatyrLancer_Prometheus,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,7,SatyrLancer2,,,,1.139672,24556151
+SatyrLancer_Shadow,UnitSetData,UnitSetData.SatyrLancer,EnemyData_SatyrLancer.lua,defined,5,Shadow;SatyrLancer,SatyrLancer_Shadow,萨提尔盾兵,,1.139672,24556151
+SatyrRatCatcher,UnitSetData,UnitSetData.SatyrRatCatcher,EnemyData_SatyrRatCatcher.lua,defined,26,BaseIEnemy;BaseVulnerableEnemy,SatyrRatCatcher,萨提尔祭鼠者,,1.139672,24556151
+SatyrRatCatcher_Elite,UnitSetData,UnitSetData.SatyrRatCatcher,EnemyData_SatyrRatCatcher.lua,defined,8,Elite;SatyrRatCatcher,SatyrRatCatcher_Elite,{!Icons.BountySkull} 萨提尔祭鼠者,,1.139672,24556151
+SatyrRatCatcher_Miniboss,UnitSetData,UnitSetData.SatyrRatCatcher,EnemyData_SatyrRatCatcher.lua,defined,16,Elite;SatyrRatCatcher,SatyrRatCatcher_Miniboss,御鼠大师,,1.139672,24556151
+SatyrRatCatcher_SuperElite,UnitSetData,UnitSetData.SatyrRatCatcher,EnemyData_SatyrRatCatcher.lua,defined,4,SuperElite;SatyrRatCatcher_Miniboss,SatyrRatCatcher_SuperElite,{!Icons.BountySkull} 萨提尔祭鼠者,,1.139672,24556151
+SatyrSapper,UnitSetData,UnitSetData.SatyrSapper,EnemyData_SatyrSapper.lua,defined,39,BasePEnemy;BaseChronosForces;BaseVulnerableEnemy,SatyrSapper,萨提尔工兵,,1.139672,24556151
+SatyrSapper_Elite,UnitSetData,UnitSetData.SatyrSapper,EnemyData_SatyrSapper.lua,defined,7,Elite;SatyrSapper,SatyrSapper_Elite,{!Icons.BountySkull} 萨提尔工兵,,1.139672,24556151
+SatyrSapper_Prometheus,UnitSetData,UnitSetData.SatyrSapper,EnemyData_SatyrSapper.lua,defined,7,SatyrSapper,,,,1.139672,24556151
+Scimiterror,UnitSetData,UnitSetData.Scimiterror,EnemyData_Scimiterror.lua,defined,34,BaseOEnemy;BaseVulnerableEnemy;LowPolyEnemy,Scimiterror,眼刃,,1.139672,24556151
+Scimiterror_Elite,UnitSetData,UnitSetData.Scimiterror,EnemyData_Scimiterror.lua,defined,7,Elite;Scimiterror,Scimiterror_Elite,{!Icons.BountySkull} 眼刃,,1.139672,24556151
+Screamer,UnitSetData,UnitSetData.Screamer,EnemyData_Screamer.lua,defined,27,BaseFEnemy;BaseVulnerableEnemy,Screamer,哀嚎者,,1.139672,24556151
+Screamer2,UnitSetData,UnitSetData.Screamer,EnemyData_Screamer.lua,defined,24,Elite;BaseHEnemy;Screamer,Screamer2,狂嚎者,,1.139672,24556151
+Screamer2_SuperElite,UnitSetData,UnitSetData.Screamer,EnemyData_Screamer.lua,defined,7,SuperElite;BaseIEnemy;Screamer2,Screamer2_SuperElite,{!Icons.BountySkull} 狂嚎者,,1.139672,24556151
+Screamer_Elite,UnitSetData,UnitSetData.Screamer,EnemyData_Screamer.lua,defined,7,Elite;Screamer,Screamer_Elite,{!Icons.BountySkull} 哀嚎者,,1.139672,24556151
+Screamer_Shadow,UnitSetData,UnitSetData.Screamer,EnemyData_Screamer.lua,defined,6,Shadow;Screamer,Screamer_Shadow,哀嚎者,,1.139672,24556151
+Scylla,UnitSetData,UnitSetData.Scylla,EnemyData_Scylla.lua,defined,58,BaseBossEnemy;BaseGEnemy;BaseVulnerableEnemy,Scylla,斯库拉,,1.139672,24556151
+SentryBot,UnitSetData,UnitSetData.SentryBot,EnemyData_SentryBot.lua,defined,34,BasePEnemy;BaseAutomaton;BaseVulnerableEnemy,SentryBot,自动搜寻机,,1.139672,24556151
+SentryBot_Elite,UnitSetData,UnitSetData.SentryBot,EnemyData_SentryBot.lua,defined,7,Elite;SentryBot,SentryBot_Elite,{!Icons.BountySkull} 自动搜寻机,,1.139672,24556151
+ShadeMerc,UnitSetData,UnitSetData.Allies,AllyData.lua,defined,10,BaseAlly;BaseTrap,ShadeMerc,孤独暗灵,,1.139672,24556151
+ShadeMercAspect,UnitSetData,UnitSetData.Allies,AllyData.lua,defined,6,ShadeMerc,,,,1.139672,24556151
+Shadow,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,3,,,,,1.139672,24556151
+Sheep,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,20,IsNeutral;BaseVulnerableEnemy,,,,1.139672,24556151
+Sheep_Explosive,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,10,Sheep,Sheep_Explosive,黑色的羊,,1.139672,24556151
+Sheep_Intro,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,4,Sheep,,,,1.139672,24556151
+Sheep_Passive,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,6,Sheep,,,,1.139672,24556151
+Sheep_Sick,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,12,Sheep,,,,1.139672,24556151
+Sheep_Zombie,UnitSetData,UnitSetData.Sheep,EnemyData_Sheep.lua,defined,11,Sheep,Sheep_Zombie,蹒跚的羊,,1.139672,24556151
+ShipsBombardment,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+ShovelPointTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,6,PassiveRoomWeapon,,,,1.139672,24556151
+SiegeVine,UnitSetData,UnitSetData.SiegeVine,EnemyData_SiegeVine.lua,defined,26,BaseFEnemy;BaseVulnerableEnemy,SiegeVine,涕泣者,,1.139672,24556151
+SiegeVine_Elite,UnitSetData,UnitSetData.SiegeVine,EnemyData_SiegeVine.lua,defined,8,Elite;SiegeVine,SiegeVine_Elite,{!Icons.BountySkull} 涕泣者,,1.139672,24556151
+Simple,UnitSetData,UnitSetData.Simple,EnemyData_Simple.lua,defined,34,BaseQEnemy;BaseVulnerableEnemy;LowPolyEnemy,Simple,眼梗,,1.139672,24556151
+Simple2,UnitSetData,UnitSetData.Simple,EnemyData_Simple.lua,defined,7,Simple_Elite,,,,1.139672,24556151
+SimpleSquad,UnitSetData,UnitSetData.Simple,EnemyData_Simple.lua,defined,6,,SimpleSquad,眼梗,,1.139672,24556151
+SimpleSquad_Elite,UnitSetData,UnitSetData.Simple,EnemyData_Simple.lua,defined,3,Elite;SimpleSquad,SimpleSquad_Elite,{!Icons.BountySkull} 眼梗,,1.139672,24556151
+Simple_Elite,UnitSetData,UnitSetData.Simple,EnemyData_Simple.lua,defined,9,Elite;Simple,Simple_Elite,{!Icons.BountySkull} 眼梗,,1.139672,24556151
+SirenDrummer,UnitSetData,UnitSetData.SirenDrummer,EnemyData_SirenDrummer.lua,defined,37,BaseBossEnemy;BaseGEnemy;BaseVulnerableEnemy,SirenDrummer,罗茜,,1.139672,24556151
+SirenKeytarist,UnitSetData,UnitSetData.SirenKeytarist,EnemyData_SirenKeytarist.lua,defined,35,BaseBossEnemy;BaseGEnemy;BaseVulnerableEnemy,SirenKeytarist,杰蒂,,1.139672,24556151
+SoulPylon,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,35,BaseTrap,,,,1.139672,24556151
+SpikeTrap,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,6,BaseTrap,,,,1.139672,24556151
+SpikeTrapClockwork,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,10,BaseTrap,,,,1.139672,24556151
+SpreadShotUnit,UnitSetData,UnitSetData.LightRanged,EnemyData_LightRanged.lua,defined,9,BaseGEnemy;LightRanged,SpreadShotUnit,巫女残魂,,1.139672,24556151
+SpreadShotUnit_Elite,UnitSetData,UnitSetData.LightRanged,EnemyData_LightRanged.lua,defined,5,Elite;SpreadShotUnit,SpreadShotUnit_Elite,{!Icons.BountySkull} 女巫残魂,,1.139672,24556151
+Stalker,UnitSetData,UnitSetData.Stalker,EnemyData_Stalker.lua,defined,30,BaseQEnemy;BaseVulnerableEnemy;LowPolyEnemy,Stalker,穴行魔,,1.139672,24556151
+Stalker_Elite,UnitSetData,UnitSetData.Stalker,EnemyData_Stalker.lua,defined,7,Elite;Stalker,Stalker_Elite,{!Icons.BountySkull} 穴行魔,,1.139672,24556151
+Stalker_Miniboss,UnitSetData,UnitSetData.Stalker,EnemyData_Stalker.lua,defined,28,BaseBossEnemy;Stalker,Stalker_Miniboss,提丰的孪生子,,1.139672,24556151
+SteamCubeFused,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,25,BaseTrap,,,,1.139672,24556151
+SteamTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,9,BaseTrap,,,,1.139672,24556151
+SteamWallTrap,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,17,BaseTrap,,,,1.139672,24556151
+Stickler,UnitSetData,UnitSetData.Stickler,EnemyData_Stickler.lua,defined,29,BaseOEnemy;BaseVulnerableEnemy,Stickler,标枪兵,,1.139672,24556151
+Stickler_Elite,UnitSetData,UnitSetData.Stickler,EnemyData_Stickler.lua,defined,7,Elite;Stickler,Stickler_Elite,{!Icons.BountySkull} 标枪兵,,1.139672,24556151
+SuperElite,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,2,,,,,1.139672,24556151
+Swab,UnitSetData,UnitSetData.Swab,EnemyData_Swab.lua,defined,35,BaseOEnemy;BaseVulnerableEnemy,Swab,巨锚兵,,1.139672,24556151
+Swab_Elite,UnitSetData,UnitSetData.Swab,EnemyData_Swab.lua,defined,8,Elite;Swab,Swab_Elite,{!Icons.BountySkull} 巨锚兵,,1.139672,24556151
+Swab_Shadow,UnitSetData,UnitSetData.Swab,EnemyData_Swab.lua,defined,4,Shadow;Swab,,,,1.139672,24556151
+Swarmer,UnitSetData,UnitSetData.Swarmer,EnemyData_Swarmer.lua,defined,24,BaseGEnemy;BaseVulnerableEnemy,Swarmer,骷髅头,,1.139672,24556151
+SwarmerClockwork,UnitSetData,UnitSetData.Swarmer,EnemyData_Swarmer.lua,defined,11,BaseIEnemy;Swarmer,SwarmerClockwork,流沙骷髅头,,1.139672,24556151
+SwarmerClockwork_Elite,UnitSetData,UnitSetData.Swarmer,EnemyData_Swarmer.lua,defined,6,Elite;SwarmerClockwork,SwarmerClockwork_Elite,{!Icons.BountySkull} 流沙骷髅头,,1.139672,24556151
+SwarmerSummon,UnitSetData,UnitSetData.Allies,AllyData.lua,defined,12,BaseAlly;BaseVulnerableEnemy,,,,1.139672,24556151
+Swarmer_Elite,UnitSetData,UnitSetData.Swarmer,EnemyData_Swarmer.lua,defined,5,Elite;Swarmer,Swarmer_Elite,{!Icons.BountySkull} 骷髅头,,1.139672,24556151
+Talos,UnitSetData,UnitSetData.Talos,EnemyData_Talos.lua,defined,31,BaseBossEnemy;BaseAutomaton;BasePEnemy;BaseVulnerableEnemy,Talos,塔罗斯,,1.139672,24556151
+Template,UnitSetData,UnitSetData.Template,EnemyData_Template.lua,defined,6,BaseVulnerableEnemy,,,,1.139672,24556151
+TestCharacter,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,11,BaseVulnerableEnemy,,,,1.139672,24556151
+TestEnemy1,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,10,BaseVulnerableEnemy,,,,1.139672,24556151
+TestEnemy2,UnitSetData,UnitSetData.Enemies,EnemyData.lua,stub,1,TestEnemy1;BaseVulnerableEnemy,,,,1.139672,24556151
+TestEnemy3,UnitSetData,UnitSetData.Enemies,EnemyData.lua,stub,1,TestEnemy1;BaseVulnerableEnemy,,,,1.139672,24556151
+ThiefMineLayer,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,18,BaseVulnerableEnemy,ThiefMineLayer,害兽残魂,,1.139672,24556151
+ThiefMineLayer_Elite,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,6,Elite;ThiefMineLayer,,,,1.139672,24556151
+ThornTree,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,21,BaseTrap,,,,1.139672,24556151
+TimeElemental,UnitSetData,UnitSetData.TimeElemental,EnemyData_TimeElemental.lua,defined,25,BaseIEnemy;BaseVulnerableEnemy,TimeElemental,沙漏,,1.139672,24556151
+TimeElemental2,UnitSetData,UnitSetData.TimeElemental,EnemyData_TimeElemental.lua,defined,10,TimeElemental,,,,1.139672,24556151
+TimeElemental2_EM,UnitSetData,UnitSetData.TimeElemental,EnemyData_TimeElemental.lua,defined,8,TimeElemental2,,,,1.139672,24556151
+TimeElemental2_Typhon,UnitSetData,UnitSetData.TimeElemental,EnemyData_TimeElemental.lua,defined,8,TimeElemental2,,,,1.139672,24556151
+TimeElemental_Elite,UnitSetData,UnitSetData.TimeElemental,EnemyData_TimeElemental.lua,defined,5,Elite;TimeElemental,TimeElemental_Elite,{!Icons.BountySkull} 沙漏,,1.139672,24556151
+TrapFissureDisabled,UnitSetData,UnitSetData.Enemies,EnemyData.lua,stub,1,BaseTrap,,,,1.139672,24556151
+TrapPadDisabled,UnitSetData,UnitSetData.Enemies,EnemyData.lua,stub,1,BaseTrap,,,,1.139672,24556151
+Treant,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,27,Elite;BaseFEnemy;BaseVulnerableEnemy,Treant,尾随者,,1.139672,24556151
+Treant2,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,23,BaseHEnemy;Treant;Elite;BaseVulnerableEnemy,Treant2,枯草尾随者,,1.139672,24556151
+Treant2_SuperElite,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,7,SuperElite;BaseIEnemy;Treant2,Treant2_SuperElite,{!Icons.BountySkull} 枯草尾随者,,1.139672,24556151
+TreantTail,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,25,BaseFEnemy;BaseVulnerableEnemy,TreantTail,尾随者,,1.139672,24556151
+TreantTail2,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,6,BaseHEnemy;TreantTail,,,,1.139672,24556151
+TreantTail2_SuperElite,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,6,BaseIEnemy;TreantTail2,,,,1.139672,24556151
+TreantTail_Shadow,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,2,Shadow;TreantTail,TreantTail_Shadow,尾随者,,1.139672,24556151
+Treant_Shadow,UnitSetData,UnitSetData.Treant,EnemyData_Treant.lua,defined,3,Treant,Treant_Shadow,尾随者,,1.139672,24556151
+Turtle,UnitSetData,UnitSetData.Turtle,EnemyData_Turtle.lua,defined,24,OceanusUnitData;BaseGEnemy;BaseVulnerableEnemy,Turtle,硬壳蟹,,1.139672,24556151
+Turtle_Elite,UnitSetData,UnitSetData.Turtle,EnemyData_Turtle.lua,defined,6,Elite;Turtle,Turtle_Elite,{!Icons.BountySkull} 硬壳蟹,,1.139672,24556151
+TyphonArm,UnitSetData,UnitSetData.TyphonArm,EnemyData_TyphonArm.lua,defined,19,BaseBossEnemy;BaseVulnerableEnemy,TyphonArm,提丰之手,,1.139672,24556151
+TyphonArm_Incursion,UnitSetData,UnitSetData.TyphonArm,EnemyData_TyphonArm.lua,defined,13,BaseQEnemy,,,,1.139672,24556151
+TyphonEgg,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,21,BaseTrap,,,,1.139672,24556151
+TyphonEggLarge,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,12,TyphonEgg,,,,1.139672,24556151
+TyphonEye,UnitSetData,UnitSetData.TyphonEye,EnemyData_TyphonEye.lua,defined,33,BaseBossEnemy;BaseQEnemy;BaseVulnerableEnemy,TyphonEye,提丰之眼,,1.139672,24556151
+TyphonHead,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,57,BaseBossEnemy;BaseQEnemy;BaseVulnerableEnemy,TyphonHead,提丰,,1.139672,24556151
+TyphonHeadAdd,UnitSetData,UnitSetData.TyphonHeadAdd,EnemyData_TyphonHeadAdd.lua,defined,28,BaseQEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+TyphonHeadEgg01,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,23,BaseQEnemy;BaseVulnerableEnemy,,,,1.139672,24556151
+TyphonHeadEgg02,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,5,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEgg03,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,5,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEgg04,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,4,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEgg05,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,5,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEggBoar,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,6,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEggCaptain,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,6,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadEggDragon,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,6,TyphonHeadEgg01,,,,1.139672,24556151
+TyphonHeadStaggeredDummy,UnitSetData,UnitSetData.TyphonHead,EnemyData_TyphonHead.lua,defined,10,BaseVulnerableEnemy,,,,1.139672,24556151
+TyphonMine,UnitSetData,UnitSetData.Traps,EnemyData_Traps.lua,defined,9,BaseTrap,,,,1.139672,24556151
+TyphonTail,UnitSetData,UnitSetData.TyphonTail,EnemyData_TyphonTail.lua,defined,30,BaseBossEnemy;BaseQEnemy;BaseVulnerableEnemy,TyphonTail,提丰之尾,,1.139672,24556151
+TyphonTailMine,UnitSetData,UnitSetData.TyphonTail,EnemyData_TyphonTail.lua,defined,18,BaseTrap,,,,1.139672,24556151
+TyphonTail_Incursion,UnitSetData,UnitSetData.TyphonTail,EnemyData_TyphonTail.lua,defined,15,BaseQEnemy,,,,1.139672,24556151
+Vampire,UnitSetData,UnitSetData.Vampire,EnemyData_Vampire.lua,defined,19,BaseHEnemy;BaseVulnerableEnemy,Vampire,魅影,,1.139672,24556151
+Vampire_Elite,UnitSetData,UnitSetData.Vampire,EnemyData_Vampire.lua,defined,10,Elite;Vampire,Vampire_Elite,{!Icons.BountySkull} 魅影,,1.139672,24556151
+Vampire_SuperElite,UnitSetData,UnitSetData.Vampire,EnemyData_Vampire.lua,defined,3,SuperElite;Vampire,Vampire_SuperElite,{!Icons.BountySkull} 魅影,,1.139672,24556151
+WaterElemental,UnitSetData,UnitSetData.WaterElemental,EnemyData_WaterElemental.lua,defined,32,BaseOEnemy;BaseVulnerableEnemy;LowPolyEnemy,WaterElemental,进水骷髅头,,1.139672,24556151
+WaterElemental_Elite,UnitSetData,UnitSetData.WaterElemental,EnemyData_WaterElemental.lua,defined,7,Elite;WaterElemental,WaterElemental_Elite,{!Icons.BountySkull} 进水骷髅头,,1.139672,24556151
+WaterUnit,UnitSetData,UnitSetData.WaterUnit,EnemyData_WaterUnit.lua,defined,38,BaseGEnemy;BaseVulnerableEnemy,WaterUnit,海蛇,,1.139672,24556151
+WaterUnitMiniboss,UnitSetData,UnitSetData.WaterUnit,EnemyData_WaterUnit.lua,defined,15,Elite;WaterUnit,WaterUnitMiniboss,巨海蛇,,1.139672,24556151
+WaterUnitMiniboss_Shadow,UnitSetData,UnitSetData.WaterUnit,EnemyData_WaterUnit.lua,defined,2,Shadow;WaterUnitMiniboss,WaterUnitMiniboss_Shadow,巨海蛇,,1.139672,24556151
+WaterUnit_Elite,UnitSetData,UnitSetData.WaterUnit,EnemyData_WaterUnit.lua,defined,7,Elite;WaterUnit,WaterUnit_Elite,{!Icons.BountySkull} 海蛇,,1.139672,24556151
+Wisp,UnitSetData,UnitSetData.Wisp,EnemyData_Wisp.lua,defined,29,BaseFEnemy;BaseVulnerableEnemy,Wisp,鬼火,,1.139672,24556151
+Wisp_Elite,UnitSetData,UnitSetData.Wisp,EnemyData_Wisp.lua,defined,6,Elite;Wisp,Wisp_Elite,{!Icons.BountySkull} 鬼火,,1.139672,24556151
+Wringer,UnitSetData,UnitSetData.Wringer,EnemyData_Wringer.lua,defined,13,BaseIEnemy;BaseVulnerableEnemy,Wringer,碾碎者,,1.139672,24556151
+Wringer_Elite,UnitSetData,UnitSetData.Wringer,EnemyData_Wringer.lua,defined,6,Elite;Wringer,Wringer_Elite,{!Icons.BountySkull} 碾碎者,,1.139672,24556151
+Zagreus,UnitSetData,UnitSetData.Zagreus,EnemyData_Zagreus.lua,defined,48,BaseBossEnemy;BaseVulnerableEnemy,Zagreus,扎格列欧斯,,1.139672,24556151
+ZeusUpgradeRoomWeapon,UnitSetData,UnitSetData.Enemies,EnemyData.lua,defined,4,PassiveRoomWeapon,,,,1.139672,24556151
+Zombie,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,30,BaseNEnemy;BaseVulnerableEnemy;LowPolyEnemy,Zombie,蹒跚者,,1.139672,24556151
+ZombieAssassin,UnitSetData,UnitSetData.Zombie,EnemyData_ZombieAssassin.lua,defined,31,BaseNEnemy;BaseVulnerableEnemy,ZombieAssassin,割喉者,,1.139672,24556151
+ZombieAssassin_Elite,UnitSetData,UnitSetData.Zombie,EnemyData_ZombieAssassin.lua,defined,9,ZombieAssassin,ZombieAssassin_Elite,{!Icons.BountySkull} 割喉者,,1.139672,24556151
+ZombieAssassin_Miniboss,UnitSetData,UnitSetData.Zombie,EnemyData_ZombieAssassin.lua,defined,24,BaseFEnemy;ZombieAssassin,ZombieAssassin_Miniboss,刺客大师,,1.139672,24556151
+ZombieAssassin_Shadow,UnitSetData,UnitSetData.Zombie,EnemyData_ZombieAssassin.lua,defined,4,BaseFEnemy;Shadow;ZombieAssassin,,,,1.139672,24556151
+ZombieCrewman,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,7,BaseOEnemy;Zombie,ZombieCrewman,海洋蹒跚者,,1.139672,24556151
+ZombieCrewman_Elite,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,7,ZombieCrewman,ZombieCrewman_Elite,{!Icons.BountySkull} 海洋蹒跚者,,1.139672,24556151
+ZombieHeavyRanged,UnitSetData,UnitSetData.ZombieHeavyRanged,EnemyData_ZombieHeavyRanged.lua,defined,31,BaseNEnemy;BaseVulnerableEnemy,ZombieHeavyRanged,投掷者,,1.139672,24556151
+ZombieHeavyRanged_EM,UnitSetData,UnitSetData.ZombieHeavyRanged,EnemyData_ZombieHeavyRanged.lua,defined,4,ZombieHeavyRanged,,,,1.139672,24556151
+ZombieHeavyRanged_Elite,UnitSetData,UnitSetData.ZombieHeavyRanged,EnemyData_ZombieHeavyRanged.lua,defined,8,Elite;ZombieHeavyRanged,ZombieHeavyRanged_Elite,{!Icons.BountySkull} 投掷者,,1.139672,24556151
+ZombieOlympus,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,12,BasePEnemy;BaseChronosForces;Zombie,ZombieOlympus,雪地蹒跚者,,1.139672,24556151
+ZombieOlympus_Elite,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,6,ZombieOlympus,ZombieOlympus_Elite,{!Icons.BountySkull} 雪地蹒跚者,,1.139672,24556151
+ZombieSpawner,UnitSetData,UnitSetData.ZombieSpawner,EnemyData_ZombieSpawner.lua,defined,33,BaseNEnemy;BaseVulnerableEnemy,ZombieSpawner,墓碑,,1.139672,24556151
+ZombieSpawner_Elite,UnitSetData,UnitSetData.ZombieSpawner,EnemyData_ZombieSpawner.lua,defined,9,Elite;ZombieSpawner,ZombieSpawner_Elite,{!Icons.BountySkull} 墓碑,,1.139672,24556151
+Zombie_Elite,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,7,Elite;Zombie,Zombie_Elite,{!Icons.BountySkull} 蹒跚者,,1.139672,24556151
+Zombie_Passive,UnitSetData,UnitSetData.Zombie,EnemyData_Zombie.lua,defined,10,Zombie,,,,1.139672,24556151
+ErisCurseGiver,VariantSetData,VariantSetData.NPC_Eris_01,NPCData_Eris.lua,defined,4,,,,,1.139672,24556151
+HeraclesBathHouse,VariantSetData,VariantSetData.NPC_Heracles_01,NPCData_Heracles.lua,defined,5,,,,,1.139672,24556151
+HeraclesShopping,VariantSetData,VariantSetData.NPC_Heracles_01,NPCData_Heracles.lua,defined,3,,,,,1.139672,24556151
+IcarusCombat,VariantSetData,VariantSetData.NPC_Icarus_01,NPCData_Icarus.lua,defined,19,,,,,1.139672,24556151
+IcarusHome,VariantSetData,VariantSetData.NPC_Icarus_01,NPCData_Icarus.lua,defined,7,,,,,1.139672,24556151
+NemesisCombat,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,17,,NemesisCombat,涅墨西斯,,1.139672,24556151
+NemesisCombat_G,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,3,NemesisCombat,NemesisCombat_G,涅墨西斯,,1.139672,24556151
+NemesisFieldsPreRandomEventCombat,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,,,,1.139672,24556151
+NemesisPostRandomEventCombat,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,,,,1.139672,24556151
+NemesisRandomEvent,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,5,,NemesisRandomEvent,涅墨西斯,,1.139672,24556151
+NemesisShopping,VariantSetData,VariantSetData.NPC_Nemesis_01,NPCData_Nemesis.lua,defined,3,,NemesisShopping,涅墨西斯,,1.139672,24556151
