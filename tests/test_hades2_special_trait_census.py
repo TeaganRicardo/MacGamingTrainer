@@ -78,9 +78,14 @@ assert set(trait_rows) == special_ids | WELL_TRAITS, (
     sorted(set(trait_rows) - (special_ids | WELL_TRAITS)),
 )
 
+SPECIAL_EXACT_TRAITS = {
+    *SPECIAL_TRAITS["Arachne"],
+    "EchoLastRunBoon",
+}
+
 for source, ids in SPECIAL_TRAITS.items():
-    expected = "special" if source == "Arachne" else "direct"
     for identifier in ids:
+        expected = "special" if identifier in SPECIAL_EXACT_TRAITS else "direct"
         assert trait_rows[identifier]["classification"] == expected, (source, identifier)
 
 for identifier in WELL_TRAITS:
