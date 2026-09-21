@@ -11,7 +11,7 @@ The snapshot records identifiers and relationships from the game's data tables r
 
 Snapshot contents include:
 - full inventories for consumables, loot, traits, resources, stores, rooms, encounters, units, weapons, projectiles, progression, requirements, and UI data;
-- `trait_references.csv` and `static_room_links.csv` static-reference indexes;
+- `trait_references.csv`, `store_references.csv`, and `static_room_links.csv` static-reference indexes;
 - `aliases.csv` for reference-only selector/alias identifiers;
 - curated `catalog_legality.csv`, `well_shop.csv`, `reroll_ledger.csv`, and `native_interactions.csv` research ledgers;
 - `manifest.json` with source build and row counts.
@@ -50,6 +50,7 @@ Because the catalog combines objects from multiple acquisition paths, there is n
 Several snapshot files are static extraction indexes, not claims about complete runtime ownership or acquisition semantics:
 
 - `generated/trait_references.csv` records static references from the tables scanned by the snapshot extractor. It must not be read as a complete list of all ways a Trait can be acquired.
+- `generated/store_references.csv` expands the active nested item memberships of `RewardStoreData` and `StoreData`. It is a static membership index, not a legality decision or a claim that every listed item is currently eligible to appear.
 - `generated/static_room_links.csv` records statically visible Room → unit/encounter/reward references. Runtime-generated or indirect relationships may not appear.
 - `generated/aliases.csv` contains reference-only selector/alias identifiers. The old `aliases_and_stubs.csv` name was misleading because the current file contains aliases, not definition stubs.
 - `native_interactions.csv` records native handlers/flows and is independent from the `direct/special/exclude/alias` Trainer classification.
@@ -80,6 +81,27 @@ For future census work:
 2. use the generated inventories only to establish that an identifier/table relationship exists;
 3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
 4. do not create an additional legality axis from extractor shape alone.
+
+## Store and reward-pool census completeness check
+
+Manual review against the installed Hades II 1.139672 store/reward sources shows that `generated/stores.csv` is a **top-level store-related table inventory**, not a list of 153 purchasable items.
+
+- 129 rows come from `WeaponShopItemData`. These are permanent weapon/aspect/tool progression definitions: 24 weapon/aspect roots, 96 rank-up rows for those 24 tracks, eight tool/tool-upgrade rows, and the `BaseWeaponUpgrade` template. They are not run-shop reward entries.
+- 13 rows come from `RewardStoreData`. They are reward-pool/container keys such as `RunProgress`, `SubRoomRewards`, and `Secrets`; their generated `state=stub` shape reflects list/container extraction rather than invalid content.
+- seven rows are `StoreData` shop/configuration objects (`RoomShop`, `SurfaceShop`, `WorldShop`, `I_WorldShop`, `Q_WorldShop`, `ZagPedestalOptions`, and `ZagreusContractRequirement`);
+- four `SurfaceShopData` rows are scalar timing/price configuration fields. Together with the 13 RewardStore containers, these account for all 17 `state=stub` rows in `generated/stores.csv`.
+
+Because top-level extraction hides the useful nested membership, `generated/store_references.csv` records the active source-to-item relationships after excluding Lua comments. It contains 175 source/item rows: 68 RewardStoreData pool memberships and 107 StoreData shop memberships.
+
+The reviewed build resolves those memberships to:
+
+- 34 unique active reward IDs across `RewardStoreData`;
+- 57 unique active shop item IDs across `StoreData`;
+- exactly 25 unique `RoomShop` entries, with set equality to `well_shop.csv`.
+
+All 34 RewardStore IDs and all 57 StoreData item IDs already exist in `catalog_legality.csv`. The 57 shop items resolve to 39 `direct` and 18 `special` Trainer targets; no new catalog omission was found in this store pass.
+
+A source-wide search found no other script appending to or overwriting `RewardStoreData` or `StoreData`; other references read these tables through reward/store selection logic. Therefore the static memberships above close the store/reward-pool census for the supported build.
 
 ## Loot census completeness check
 
