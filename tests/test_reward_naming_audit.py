@@ -15,7 +15,8 @@ for expected in ('骨骸', '大量骨骸', '尘灰', '大量尘灰', '魂魄', '
 # Known no-direct-DisplayName rewards are resolved through live official keys
 # or explicitly marked trainer-side compositions; they are never misreported
 # as an exact official localization for their internal reward id.
-for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon', 'SpellDrop_Store', 'ReRollAlt'):
+for linked in ('GiftPoints', 'MetaCurrency', 'MetaCardPointsCommon', 'MemPointsCommon',
+               'SeedMystery', 'MixerMythic', 'SpellDrop_Store', 'ReRollAlt'):
     assert linked in catalog
 assert "'official_linked_zh'" in catalog
 assert "'provisional_zh'" in catalog
