@@ -22,7 +22,7 @@
     "catalog_legality.csv": 205,
     "reroll_ledger.csv": 11,
     "well_shop.csv": 25,
-    "aliases.csv": 2,
+    "aliases.csv": 44,
     "trait_references.csv": 620,
     "static_room_links.csv": 522,
     "native_interactions.csv": 20
