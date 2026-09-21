@@ -13,7 +13,7 @@ Start every development thread at `AGENTS.md`.
 - PR #43 (independent full-audit continuation) is superseded and closed; it is not an execution requirement.
 - Governance PR #44 is merged. It added exhaustive Linux-portable test discovery, diff-based Hades resident-runtime revision enforcement, the low-context agent entrypoint and stable engineering-invariant authority.
 - Lifecycle PR #45 is merged. Target-process presence and connection-lifetime validity are now distinct: exit/new-lifetime invalidation survives busy work and rapid replacement launches instead of leaving stale `connected=true`.
-- Hades II resident runtime revision: 42.
+- Hades II resident runtime revision: 43.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
 - Target reference: Hades II 1.139672 / Steam build 24556151.
@@ -22,19 +22,21 @@ Start every development thread at `AGENTS.md`.
 
 ## Verification baseline
 
-The latest behavior-changing lifecycle head before squash merge was:
+The latest behavior-changing Hades catalog head before squash merge was:
 
-`0418cb3666518d47bed5f507fc8a9ff6cf72c5dd`
+`67897737a6a6e6473c24fd0eeb4f63bf24fb376b`
 
 Fresh exact-head CI on that tree:
 
-- Linux contracts `35552079532`: PASS;
-- module build matrix `35552079488`: Hades II + reference fixture + package isolation PASS;
-- Build 2 macOS `35552080294`: full macOS contracts/build/package PASS.
+- Linux contracts `35572760090`: PASS;
+- module build matrix `35572760130`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35572760116`: full macOS contracts/build/package PASS.
 
-PR #45 was squash-merged as `646a707163f6d7b8cd7a31fe759c8e3bd126da0b` on top of governance merge `62d77423abc6a68aae8b7733a11abf0749c2e8c4`.
+PR #50 was squash-merged as `4c0bb14ec0619d0a430a78e63dd858e2d02ab889`.
 
-Documentation-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
+Real Hades II acceptance for resident revision 43 catalog additions is still pending. The CI evidence above proves contracts/build/package, not final in-game behavior.
+
+Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
 
 ## Current development gate
 
@@ -53,7 +55,7 @@ Hades II Save Editor is not implicitly authorized by lifting the audit freeze. I
 
 ## Known non-blocking risks
 
-- Repository `main` currently has no enforced branch protection/ruleset. CI exists but can still be bypassed by repository settings; enabling required checks remains recommended.
+- Repository `main` is protected by required checks. Docs-only changes keep the same required check names but use a fast path: when every changed path is under `docs/` or ends in `.md`, the heavy Linux/module/macOS work is skipped.
 - Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
 - Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
 
