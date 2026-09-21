@@ -178,6 +178,71 @@ if exitWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
     fail("target-exit refresh was not one-shot")
 }
 
+// A target exit invalidates the observed connection even if a replacement
+// process launches before the old busy request can finish. The new lifetime
+// must not erase that invalidation: otherwise a transport-free reply can leave
+// connected=true from the dead process and block the pending reconnect.
+var exitRelaunchWhileBusyPolicy = TrainerConnectionPolicy()
+exitRelaunchWhileBusyPolicy.targetStateChanged(running: true)
+exitRelaunchWhileBusyPolicy.connectionChanged(connected: true)
+exitRelaunchWhileBusyPolicy.targetStateChanged(running: false)
+if exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: true,
+    connected: true
+) {
+    fail("target-exit refresh ran while the old request was still busy")
+}
+exitRelaunchWhileBusyPolicy.targetStateChanged(running: true)
+exitRelaunchWhileBusyPolicy.targetLaunched()
+if !exitRelaunchWhileBusyPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: true
+) {
+    fail("replacement launch erased stale-connection refresh intent")
+}
+exitRelaunchWhileBusyPolicy.connectionChanged(connected: false)
+if !exitRelaunchWhileBusyPolicy.consumeAutomaticConnectIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: false,
+    actionsEnabled: true
+) {
+    fail("stale-connection refresh consumed the replacement lifetime reconnect")
+}
+
+// NSWorkspace launch is itself definitive lifetime evidence. If presence
+// coalescing misses the intermediate running=false snapshot, a launch must still
+// invalidate connected=true from the previous process before reconnecting.
+var missedExitRelaunchPolicy = TrainerConnectionPolicy()
+missedExitRelaunchPolicy.targetStateChanged(running: true)
+missedExitRelaunchPolicy.connectionChanged(connected: true)
+missedExitRelaunchPolicy.targetLaunched()
+if missedExitRelaunchPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: true,
+    connected: true
+) {
+    fail("lifetime refresh ran while old work was still busy")
+}
+if !missedExitRelaunchPolicy.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: true
+) {
+    fail("definitive launch did not invalidate the prior connected lifetime")
+}
+missedExitRelaunchPolicy.connectionChanged(connected: false)
+if !missedExitRelaunchPolicy.consumeAutomaticConnectIfEligible(
+    backendAvailable: true,
+    busy: false,
+    connected: false,
+    actionsEnabled: true
+) {
+    fail("launch-time lifetime invalidation lost the reconnect request")
+}
+
 // A real target restart resets the previous lifetime's detach/recovery state.
 policy.userWillToggleConnection(currentlyConnected: true)
 policy.targetStateChanged(running: false)

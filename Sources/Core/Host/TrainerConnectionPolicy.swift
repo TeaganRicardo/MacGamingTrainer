@@ -20,7 +20,9 @@ struct TrainerConnectionPolicy {
         if running {
             // A real target-process lifetime resets an explicit detach from the
             // previous run and supplies one background recovery/connect chance.
-            targetExitRefreshRequested = false
+            // A prior observed exit still invalidates the old connection until
+            // that stale observation is refreshed, even if a replacement target
+            // has already launched.
             automaticConnectionSuppressed = false
             backendRestartRequested = true
             connectRequested = true
@@ -35,7 +37,10 @@ struct TrainerConnectionPolicy {
 
     mutating func targetLaunched() {
         targetRunning = true
-        targetExitRefreshRequested = false
+        // A launch is definitive target-lifetime evidence. It also covers the
+        // rapid-replacement case where aggregate process presence never exposed
+        // an intermediate running=false snapshot.
+        targetExitRefreshRequested = true
         automaticConnectionSuppressed = false
         backgroundConnectionAllowed = true
         backendRestartRequested = true
@@ -92,15 +97,13 @@ struct TrainerConnectionPolicy {
     /// A target exit can arrive while a module request is still in flight.
     /// Preserve one refresh until the shared backend is idle so stale connected
     /// state cannot survive a non-runtime reply that completes after the exit.
+    /// The invalidation survives a replacement launch: process presence does not
+    /// make the old connection observation valid again.
     mutating func consumeTargetExitRefreshIfEligible(
         backendAvailable: Bool,
         busy: Bool,
         connected: Bool
     ) -> Bool {
-        if targetRunning {
-            targetExitRefreshRequested = false
-            return false
-        }
         guard targetExitRefreshRequested else { return false }
         guard connected else {
             targetExitRefreshRequested = false
