@@ -329,6 +329,9 @@ if __MacGamingTrainerV1 == nil then
   }
   local nativeSpecialChoiceSources = {}
   for sourceId in pairs(nativeSpecialChoiceDefinitions) do nativeSpecialChoiceSources[sourceId] = true end
+  local nativeChoiceOnlyTraits = {
+    EchoLastRunBoon = true,
+  }
 
   local specialTraitSources, specialTraitSourceOrder = {}, {}
   for _, source in ipairs(specialSourceDefinitions) do
@@ -1574,7 +1577,7 @@ if __MacGamingTrainerV1 == nil then
       local bucket = buckets[source.id]
       for index, traitName in ipairs(bucket and bucket.traits or {}) do
         local id = "trait:" .. traitName
-        if not allowed[id] then
+        if not allowed[id] and not nativeChoiceOnlyTraits[traitName] then
           local item = {
             id = id, name = traitName, category = "特殊祝福", group = "special", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
