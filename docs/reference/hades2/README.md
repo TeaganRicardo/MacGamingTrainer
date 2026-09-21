@@ -65,8 +65,10 @@ Several snapshot files are static extraction indexes, not claims about complete 
 - `generated/trait_references.csv` records static references from the tables scanned by the snapshot extractor. It must not be read as a complete list of all ways a Trait can be acquired.
 - `generated/store_references.csv` expands the active nested item memberships of `RewardStoreData` and `StoreData`. It is a static membership index, not a legality decision or a claim that every listed item is currently eligible to appear.
 - `generated/static_room_links.csv` records statically visible Room → unit/encounter/reward references. Runtime-generated or indirect relationships may not appear.
-- `generated/aliases.csv` contains reference-only selector/alias identifiers. The old `aliases_and_stubs.csv` name was misleading because the current file contains aliases, not definition stubs.
+- `generated/aliases.csv` contains reference-only selector and compatibility-alias identifiers. When the game provides an explicit compatibility remap, `target_id` records the current identifier. The old `aliases_and_stubs.csv` name was misleading because the current file contains aliases, not definition stubs.
 - `native_interactions.csv` records native handlers/flows and is independent from the `direct/special/exclude/alias` Trainer classification. It contains both concrete reward/wrapper rows and source-level special-choice rows; source IDs such as `Artemis` or `Arachne` are interaction sources, not additional catalog-legality targets.
+
+`BountyData.ShrineBountyNameSwapMap` contributes 42 legacy Shrine/Testament bounty IDs to `generated/aliases.csv`, each mapped through `target_id` to its current `BountyShrine*` identifier. These compatibility IDs are reference aliases and must not be counted as additional bounties.
 
 The `state` column in generated inventory tables is an **extractor state**, not a legality, runtime-validity, or gameplay-source classification. Do not use values such as `defined`, `debug_only`, or `stub` as a Trainer-facing decision.
 
