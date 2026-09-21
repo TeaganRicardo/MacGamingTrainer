@@ -45,7 +45,64 @@ Several snapshot files are static extraction indexes, not claims about complete 
 
 The `state` column in generated inventory tables is an **extractor state**, not a legality, runtime-validity, or gameplay-source classification. Do not use values such as `defined`, `debug_only`, or `stub` as a Trainer-facing decision.
 
-In particular, the current extractor does not fully model function-valued `NamedRequirementsData` entries. Some valid requirements therefore appear as `state=stub` / `field_count=0` in `generated/requirements.csv`. Until that extractor is upgraded and the snapshot is regenerated, treat those fields only as parser output and inspect the source requirement before drawing semantic conclusions.
+In particular, the current extractor does not fully model positional-array and inline-table Lua records. This is especially visible in `NamedRequirementsData`: complete requirement arrays such as `AllWeaponsUnlocked`, `AlchemyUnlocked`, and `QuestLogUnlocked` appear as `state=stub` / `field_count=0`, while records with top-level named keys such as `DreamRunsUnlocked.OrRequirements` appear as `defined`. The target `RequirementsData.lua` contains no function-valued requirement definitions. Treat `state` and `field_count` in `generated/requirements.csv` only as parser-shape output, not as evidence that a requirement is missing or incomplete. The same caveat applies to one-line `ObjectiveData` records and scalar/config entries surfaced from Fishing/Garden/Harvest tables in `generated/progression.csv`.
+
+
+## Trait census semantics
+
+`generated/traits.csv` is a table inventory, not a unique-ID count. Runtime identifiers can legitimately appear under both `TraitData` and `TraitSetData` after the game's tables are merged. Classify traits by identifier and owning gameplay system rather than by raw CSV row count.
+
+The game's own `ValidateTraitData()` provides useful ownership evidence: non-debug traits are checked against boon-info data, weapon base/aspect mappings, `MetaUpgradeCardData`, `GiftData`, and `FamiliarData`, plus an explicit allowlist for dynamic/system-owned traits. This is broader than `generated/trait_references.csv`, whose static unit/loot/store references are not a complete acquisition graph.
+
+Manual verification against the installed 1.139672 scripts established these boundaries:
+
+- ordinary Olympian traits resolve through their corresponding loot pools, and all 37 Duo traits have normal loot references; `DummyBloodDisplayBoon` is an Ares HUD/BloodDrop counter, not a boon choice;
+- Artemis, Athena, Dionysus, Hades, Arachne, Narcissus, Echo, Medea, Circe, and Icarus expose 87 actual special-NPC choice traits in total; their base/helper traits are not choices;
+- Chaos `TrialUpgrade` owns 16 permanent blessings and 17 temporary curses with `TransformingTraits = true`; the native choice pairs a temporary curse with its future blessing, so the 33 component traits are valid definitions but not independent ordinary-boon entry points;
+- Selene owns 9 Hex traits and 93 defined Path-of-Stars talents; `SpellDrop` is the native Hex-choice entry point, and `OlympianSpellCountTalent` is a special generated Path-of-Stars talent;
+- 25 Arcana cards map one-to-one to 25 defined Arcana effect traits;
+- `KeepsakeData.ItemOrder` contains 33 equipable keepsakes; `PersistentDionysusSkipKeepsake` is an internal persistence helper for `SkipEncounterKeepsake`, not a second keepsake;
+- Familiar data owns five equip traits and ten hidden growth/effect traits;
+- the six weapons own 24 aspect traits and 92 defined Daedalus-hammer traits; dummy weapon traits and per-weapon hammer bases are helpers, not reward choices.
+
+Other valid but non-pool traits include fallback/state carriers such as `FallbackGold`, the three `RoomReward*Trait` value carriers, `StorePendingDeliveryItem`, `GodModeTrait`, `ErisCurseTrait`, `InfernalContractBoon`, `SurfacePenalty`, `UnusedWeaponBonusTrait` / `UnusedWeaponBonusTrait2`, `SuitInherentSpeedBoon`, elemental Essence traits, `MinorArmorBoon`, and biome states such as `WetState`. `VanillaState` is source-defined by inheritance even though the extractor reports it as a stub.
+
+`RestedFamiliarResourceBonus` is a stale entry in `ValidateTraitData().allowedUnreferenced` for this target build: there is no corresponding `TraitData` definition and no other script reference in 1.139672. Do not treat that allowlist string as evidence of a missing trait.
+
+## Progression and requirement census semantics
+
+`generated/progression.csv` combines fourteen different game-data tables; it is not a save-state ledger and its raw row count is not a count of player progression nodes. After separating base/helper/config records, the current snapshot contains these stable gameplay inventories:
+
+| Family | Actual entries | Notes |
+| --- | ---: | --- |
+| Achievements | 50 | plus debug base `DefaultAchievement` |
+| Badge ranks | 50 | `BaseBadge` is an inheritance helper |
+| Bounties | 82 | 48 Shrine/Testament bounties + 34 packaged/Chaos trials |
+| Fated List quests | 89 | plus 10 debug quest bases |
+| Arcana cards | 25 | plus 2 debug card bases |
+| Oaths | 17 | `BaseMetaUpgrade` is a helper |
+| Hexes | 9 | owned by `SpellData` |
+| World-upgrade shop content | 359 | 95 world upgrades/incantations + 181 cosmetics + 53 songs + 30 familiar costumes |
+
+The 76 rows marked `stub` in `generated/progression.csv` are confined to `ObjectiveData`, `FishingData`, `GardenData`, and `HarvestData`. They are parser-shape artifacts: for example, a valid one-line objective table can appear as `stub`, and scalar config fields such as spawn chances or tool names can be emitted as rows. Do not interpret them as unfinished gameplay content.
+
+`generated/requirements.csv` contains all 179 `NamedRequirementsData` identifiers, but 151 are reported as `stub` because their Lua bodies are positional arrays rather than top-level named fields. These entries are still complete runtime requirements. Inspect the source requirement or a future improved extraction before using its `state` or `field_count` semantically.
+
+High-value requirement facts verified from the target build include:
+
+- `BountyBoardUnlockAvailable` requires at least three `TrialUpgrade` uses and the surface-penalty cure transition;
+- `ScreenData.Shrine.BountyOrder` contains exactly 48 current Shrine/Testament bounties, and `AllShrineBountiesCompleted` checks that exact set;
+- `ShrineUnlocked` requires reaching Tartarus' boss route, at least one clear, and either a Chronos kill or Story Reset history;
+- `HermesUpgradeRequirements` requires `HermesFirstPickUp` and then enforces per-run/per-biome Hermes limits;
+- `SpellDropRequirements` requires both `ArtemisFirstMeeting` and `SeleneFirstPickUp`, plus one-per-run/pending-store guards; `TalentLegal` requires at least four lifetime `SpellDrop` uses;
+- `ChaosUnlocked` is tied to prior Hermes use and current-run context, while `ChaosLegacyTraitsAvailable` requires at least three Chaos uses;
+- `DreamRunsUnlocked` persists once `Dream_Intro` has ever been entered; first unlock otherwise requires `HypnosFinalDreamMeeting01` plus three runs since that event;
+- the five Familiar unlocks and their upgrade-completion requirements are explicit `GameState.FamiliarsUnlocked`, `SpecialInteractRecord`, `FamiliarPoints`, and `FamiliarUpgrades` conditions;
+- hidden-aspect reveal-in-progress requirements pair Circe/Artemis/Moros/Charon/Medea/Selene reveal dialogue with the corresponding Staff/Dagger/Torch/Axe/Lob/Suit hidden aspect;
+- `HasAllMetaCardsUnlocked` and `HasAllMetaCardsMaxed` explicitly enumerate the 25 Arcana cards; `HasAllHiddenAspectsRevealed` explicitly enumerates all six hidden aspects.
+
+`BountyData.ShrineBountyNameSwapMap` is a compatibility map, not another bounty table. It maps 42 legacy IDs such as `BountyStaffHeat1FBoss` to current `BountyShrine*` IDs. Those legacy identifiers are recorded in `generated/aliases.csv` with a `target_id`; they must not be counted as additional bounties.
+
 
 ## Resource census versus pickup wrappers
 
