@@ -125,6 +125,29 @@ The 1.139672 snapshot contains 97 `ConsumableData` identifiers including bases. 
 - `BaseConsumable`, `BaseMetaRoomReward`, `BaseResource`, `BaseSuperResource`, `BaseWellShopConsumable`, and `Tier1Consumable` → `exclude`: inheritance/rarity templates rather than standalone items.
 
 
+
+## Loot, room, and low-level table semantics
+
+`generated/loot.csv` has 38 rows but only 19 unique identifiers because the extractor records the merged entries under both `LootData` and `LootSetData`. The 19 unique IDs decompose into 16 concrete reward sources and three non-target rows:
+
+- ten concrete Olympian loot sources: Aphrodite, Apollo, Ares, Demeter, Hephaestus, Hera, Hermes, Hestia, Poseidon, and Zeus;
+- `TrialUpgrade`, `SpellDrop`, `WeaponUpgrade`, and the three Pomegranate variants (`StackUpgrade`, `StackUpgradeBig`, `StackUpgradeTriple`);
+- `BaseLoot` and `BaseSoundPackage`, which are inheritance/shared-data helpers;
+- `Using`, an extractor-emitted row from the Apollo loot namespace rather than a standalone loot target.
+
+`StackUpgrade` and `WeaponUpgrade` are reported as `debug_only` by the inventory extractor while remaining normal production rewards. This is another concrete example of why extractor `state` cannot be used as legality.
+
+Rooms and encounters show the same inheritance effect. All seven `rooms.csv` rows reported as `stub` (`B_Combat01/05/06/07/08/10/21`) are valid Anomaly rooms that inherit only `BaseAnomaly` and are explicitly listed by `RoomSets.Anomaly`. Three of the four `encounters.csv` stubs (`BossHecate02`, `BossEris02`, and `BossInfestedCerberus02`) are valid single-inheritance boss variants. The remaining `SetupEvents` row comes from a helper event list written into the top-level `EncounterData` overwrite in `EncounterData_Nemesis.lua`; it is not a standalone encounter.
+
+Low-level runtime inventories should likewise be treated as existence/ownership evidence rather than trainer-target lists:
+
+- `units.csv` contains 447 rows. Its ten `stub` rows are inheritance-only unit/trap variants; `NPCVariantData` and `VariantSetData` rows are selector/config records rather than additional concrete units.
+- `weapons.csv` contains 1,136 rows across player, enemy, trap, NPC, and helper weapons. Three rows are reported as `stub`; single-inheritance records such as `WeaponSuitDash` and `RubbleFallLarge` must not be treated as missing definitions merely because they contain no additional fields.
+- `projectiles.csv` contains 784 rows, including 290 `stub` rows. Most of those are inheritance-only variants or Lua overlay records whose remaining projectile properties are supplied by their parent/package/engine data. The large stub count is therefore a parser-shape characteristic, not evidence of hundreds of invalid projectiles.
+- `ui.csv` contains 897 rows (417 `defined`, 480 `stub`). Its rows mix complete screen/component tables with scalar layout constants, coordinates, counts, icons, and arrays. The `stub` label has no gameplay-validity meaning there.
+- `other_data.csv` is deliberately a catch-all inventory: 2,746 rows across enemy/obstacle/effect data, colors, voice-line sets, requirements, event args, encounter/weapon/room sets, GiftData, and many other tables. Its 1,079 `stub` rows largely reflect scalar/array/config shapes. Do not apply one trainer-facing legality axis to this file; use it as lookup evidence for the owning subsystem.
+
+
 ## Resource census versus pickup wrappers
 
 `ResourceData` is the authoritative census for game resources. A `*Drop` entry is only a concrete world-pickup wrapper for a resource and is not required for the resource itself to exist.
