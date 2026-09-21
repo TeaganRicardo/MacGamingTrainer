@@ -30,6 +30,10 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'OreFSilver': '银矿',
             'MixerFBoss': '余烬',
             'GemPoints': '宝石',
+            'WeaponUpgrade': '狄德勒斯之锤',
+            'HermesUpgrade_Store': '赫尔墨斯的祝福',
+            'HealDrop': '治疗',
+            'ReRollAlt': '重塑命运',
         }
     if language == 'en':
         return {
@@ -52,6 +56,10 @@ def fake_names(ids, language='zh-CN', game_path=None):
             'OreFSilver': 'Silver',
             'MixerFBoss': 'Cinder',
             'GemPoints': 'Gemstones',
+            'WeaponUpgrade': 'Daedalus Hammer',
+            'HermesUpgrade_Store': 'Boon of Hermes',
+            'HealDrop': 'Healing',
+            'ReRollAlt': 'Change of Fate',
         }
     return {}
 
@@ -91,6 +99,13 @@ try:
             {'id':'MixerFBossDrop','kind':'consumable','name':'MixerFBossDrop'},
             {'id':'GemPointsDrop','kind':'consumable','name':'GemPointsDrop'},
             {'id':'GemPointsBigDrop','kind':'consumable','name':'GemPointsBigDrop'},
+            {'id':'WeaponUpgradeDrop','kind':'consumable','name':'stale hammer wrapper'},
+            {'id':'ShopHermesUpgrade','kind':'consumable','name':'stale Hermes wrapper'},
+            {'id':'RandomLoot','kind':'consumable','name':'RandomLoot'},
+            {'id':'BoostedRandomLoot','kind':'consumable','name':'BoostedRandomLoot'},
+            {'id':'HealDrop','kind':'consumable','name':'stale healing'},
+            {'id':'HealDropMinor','kind':'consumable','name':'stale minor healing'},
+            {'id':'RerollDrop','kind':'consumable','name':'stale reroll'},
         ],
         'resources': [{'id':'UnknownResource','name':'已有中文兜底'}],
     }
@@ -119,6 +134,9 @@ for identifier,expected_zh,expected_en in [
     ('OreFSilverDrop','银矿','Silver'),
     ('MixerFBossDrop','余烬','Cinder'),
     ('GemPointsDrop','宝石','Gemstones'),
+    ('WeaponUpgradeDrop','狄德勒斯之锤','Daedalus Hammer'),
+    ('ShopHermesUpgrade','赫尔墨斯的祝福','Boon of Hermes'),
+    ('RerollDrop','重塑命运','Change of Fate'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
@@ -138,12 +156,19 @@ for identifier,expected_zh,expected_en in [
     ('ElementalBoost','元素精华','Elemental Essence'),
     ('StoreRewardRandomStack','随机祝福强化','Random Boon Upgrade'),
     ('GemPointsBigDrop','大量宝石','Large Gemstones'),
+    ('RandomLoot','随机奥林匹斯祝福','Random Olympian Boon'),
+    ('BoostedRandomLoot','强化随机祝福','Boosted Random Boon'),
+    ('HealDropMinor','少量治疗','Minor Healing'),
 ]:
     assert rows[identifier]['name'] == expected_zh
     assert rows[identifier]['englishName'] == expected_en
     assert rows[identifier]['officialName'] is False
     assert rows[identifier]['nameSource'] == 'provisional_zh'
     assert rows[identifier]['englishNameSource'] == 'provisional_en'
+assert rows['HealDrop']['name'] == '治疗'
+assert rows['HealDrop']['englishName'] == 'Healing'
+assert rows['HealDrop']['officialName'] is True
+assert rows['HealDrop']['nameSource'] == 'official_zh'
 assert rows['MaxHealthDrop']['name'] == '半人马之心'
 assert rows['MaxHealthDropSmall']['name'] == '小型半人马之心'
 assert rows['MaxHealthDropSmall']['englishName'] == 'Small Centaur Heart'
