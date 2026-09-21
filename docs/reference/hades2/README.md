@@ -47,6 +47,29 @@ The `state` column in generated inventory tables is an **extractor state**, not 
 
 In particular, the current extractor does not fully model function-valued `NamedRequirementsData` entries. Some valid requirements therefore appear as `state=stub` / `field_count=0` in `generated/requirements.csv`. Until that extractor is upgraded and the snapshot is regenerated, treat those fields only as parser output and inspect the source requirement before drawing semantic conclusions.
 
+
+### Manual review of generated `state` values
+
+A second-pass review against the installed Hades II 1.139672 scripts confirmed that `state=stub` mixes several structurally different cases. It must not be interpreted as "missing", "invalid", "unused", or "unsafe".
+
+| Shape seen in generated data | Verified examples | Interpretation |
+| --- | --- | --- |
+| Pure inheritance definition | `BossEris02 -> BossEris01`, `BossHecate02 -> BossHecate01`, `WeaponSuitDash -> WeaponSuit`, `VanillaState -> BiomeState`, Anomaly `B_Combat*` rooms | Valid runtime definitions whose local body contains little beyond `InheritFrom`. |
+| Deliberately minimal or empty definition | `WeaponStaffBall2` ("Only used for misnamed objective"), `ArtemisHuntersMark` | A real named table entry can intentionally carry no local fields. Source usage must decide its significance. |
+| Container/list mistaken for an entity | `RewardStoreData.RunProgress`, `RewardStoreData.SubRoomRewards`, `RewardStoreData.Secrets`, `WeaponSets.HeroPrimaryWeapons` | These are lists/pools or lookup structures. Their keys are not standalone game objects. |
+| Scalar/config field mistaken for an entity | `SurfaceShopData.DelayMin`, `SurfaceShopData.DelayMax`, `ScreenData.*.AllowAdvancedTooltip` | Configuration properties, not selectable entities. |
+| Array-valued semantic data not expanded by the extractor | `NamedRequirementsData.BlindBoxLootRequirements` and many other named requirements | Often fully populated and gameplay-valid in Lua despite appearing as `field_count=0`. |
+| Namespace helper data | `LootSetData.Apollo.Using`, `EncounterData_Nemesis.SetupEvents` | Presentation/event helper data that shares a parent table with actual entities but is not itself an entity of that type. |
+
+Current snapshot counts illustrate why `stub` cannot be used as a legality signal: `requirements.csv` has 151 stub rows, `ui.csv` 480, `projectiles.csv` 290, `other_data.csv` 1079, and `progression.csv` 76. Manual sampling of each group found the structural patterns above rather than a corresponding population of invalid game objects.
+
+For future census work:
+
+1. use `catalog_legality.csv` for Trainer exposure decisions where it applies;
+2. use the generated inventories only to establish that an identifier/table relationship exists;
+3. inspect the owning Lua definition when a generated row is `stub`, especially for requirements, UI, stores, sets, and helper namespaces;
+4. do not create an additional legality axis from extractor shape alone.
+
 ## Resource census versus pickup wrappers
 
 `ResourceData` is the authoritative census for game resources. A `*Drop` entry is only a concrete world-pickup wrapper for a resource and is not required for the resource itself to exist.
