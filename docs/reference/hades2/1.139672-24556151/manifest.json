@@ -1,0 +1,29 @@
+{
+  "game_version": "1.139672",
+  "bundle_build": "139672",
+  "steam_build": "24556151",
+  "outputs": {
+    "aliases_and_stubs.csv": 2,
+    "consumables.csv": 97,
+    "encounters.csv": 318,
+    "loot.csv": 38,
+    "other_data.csv": 2746,
+    "progression.csv": 867,
+    "projectiles.csv": 784,
+    "requirements.csv": 179,
+    "resources.csv": 103,
+    "room_links.csv": 522,
+    "rooms.csv": 334,
+    "stores.csv": 153,
+    "table_registry.csv": 121,
+    "trait_sources.csv": 620,
+    "traits.csv": 968,
+    "ui.csv": 897,
+    "units.csv": 447,
+    "weapons.csv": 1136,
+    "catalog_legality.csv": 110,
+    "reroll_ledger.csv": 11,
+    "special_interactions.csv": 10,
+    "well_shop.csv": 25
+  }
+}
