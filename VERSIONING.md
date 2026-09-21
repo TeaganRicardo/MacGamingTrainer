@@ -6,6 +6,19 @@ The current product version has one source of truth: `Info.plist`. `CFBundleShor
 
 Git commit SHA is the authoritative identity of a development build. Product versions identify releases; they do not identify every intermediate commit.
 
+## Development workflow
+
+Ordinary feature, fix, refactor, catalog, and documentation PRs do not edit `Info.plist` merely because they may be included in a later release. This keeps parallel branches from competing over the same version lines.
+
+When a release is deliberately prepared:
+
+1. choose PATCH, MINOR, or MAJOR from the rules below;
+2. use one focused release-preparation PR to update both bundle version keys in `Info.plist`;
+3. run the normal release/build gates on that exact SHA;
+4. after the release commit is on `main`, tag the exact released commit as `vMAJOR.MINOR.PATCH`.
+
+Do not pre-bump the next version after a release. Until another release is prepared, Git SHA identifies newer development state.
+
 ## Release increments
 
 ### PATCH — `X.Y.Z+1`
