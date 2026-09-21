@@ -2,13 +2,40 @@ from collections import OrderedDict
 from pathlib import Path
 import json
 import logging
+import plistlib
 import subprocess
 
 # Host protocol covers only the JSONL envelope and request semantics. Each game
 # module has its own independent protocol/schema version exposed alongside it.
 HOST_PROTOCOL_VERSION = 5
 PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
-APP_BACKEND_VERSION = '0.1'
+
+
+def _product_version():
+    """Read the app-level SemVer without introducing a second version source.
+
+    Source-tree execution finds the repository Info.plist. A packaged backend
+    finds Contents/Info.plist. Detached test fixtures may have neither; in that
+    case 0.0.0 is an explicit non-release sentinel, not a product version.
+    """
+    source = Path(__file__).resolve()
+    for parent_index in (2, 3):
+        candidate = source.parents[parent_index] / 'Info.plist'
+        if not candidate.is_file():
+            continue
+        try:
+            with candidate.open('rb') as stream:
+                value = plistlib.load(stream).get('CFBundleShortVersionString')
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            continue
+        if isinstance(value, str):
+            parts = value.split('.')
+            if len(parts) == 3 and all(part.isdigit() for part in parts):
+                return value
+    return '0.0.0'
+
+
+APP_BACKEND_VERSION = _product_version()
 
 
 from core.adapter import GameAdapter
