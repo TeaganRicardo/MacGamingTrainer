@@ -1,111 +1,111 @@
-id,kind,sources,official_name_zh_cn,game_legality,trainer_disposition,reason,game_version,steam_build
-AirBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-ArmorBigBoost,consumable,StoreData+DebugSpawnConsumables,埃癸斯饰符,legal,direct,,1.139672,24556151
-ArmorBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,护盾饰符,legal,direct,,1.139672,24556151
-ArmorBoostStore,consumable,StoreData,碎裂之盾,legal,direct,,1.139672,24556151
-BlindBoxLoot,consumable,StoreData,神秘祝福,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-BloodDrop,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-Boon,alias,RewardStoreData,奥林匹斯的祝福,alias,represented,Abstract reward selector represented by concrete Olympian loot entries.,1.139672,24556151
-BoostedRandomLoot,consumable,StoreData,,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-CardUpgradePointsDrop,consumable,StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-ChaosWeaponUpgrade,consumable,StoreData,命运铁砧,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-CharonPointsDrop,consumable,StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-DamageSelfDrop,consumable,StoreData,迈达斯的代价,legal,direct,,1.139672,24556151
-Devotion,alias,RewardStoreData,,alias,exclude,"Room-event selector, not a direct ConsumableData/LootData/TraitData target.",1.139672,24556151
-DreamPointsDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-EarthBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-ElementalBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-EmptyMaxHealthDrop,consumable,DebugSpawnConsumables,半人马之魂,legal,direct,,1.139672,24556151
-EmptyMaxHealthShopItem,consumable,StoreData,半人马之魂,legal,direct,,1.139672,24556151
-EmptyMaxHealthSmallDrop,consumable,RewardStoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-ExtendedShopTrait,trait,StoreData,古老的封印,legal,direct,,1.139672,24556151
-FamiliarPointsDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-FireBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-FirstHitHealTrait,trait,StoreData,厄洛斯之息,legal,direct,,1.139672,24556151
-GemPointsBigDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-GemPointsDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-GiftDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-HealBigDrop,consumable,StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-HealDrop,consumable,DebugSpawnConsumables,,invalid_direct,exclude,Official debug spawn list marks this healing object no-interact; it is not a direct picker target.,1.139672,24556151
-HealDropMajor,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-HealDropMinor,consumable,DebugSpawnConsumables,,invalid_direct,exclude,Official debug spawn list marks this healing object no-interact; it is not a direct picker target.,1.139672,24556151
-HealDropRange,consumable,StoreData,生命的精华,legal,direct,,1.139672,24556151
-HealDropSuperMinor,consumable,DebugSpawnConsumables,,invalid_direct,exclude,Official debug spawn list marks this healing object no-interact; it is not a direct picker target.,1.139672,24556151
-HermesUpgrade,loot,RewardStoreData,赫尔墨斯的祝福,legal,direct,,1.139672,24556151
-LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,legal,direct,,1.139672,24556151
-LastStandShopItem,consumable,StoreData,冥河之吻,legal,direct,,1.139672,24556151
-LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,legal,direct,,1.139672,24556151
-LimitedSwapTraitDrop,consumable,StoreData,牺牲圣诗,legal,direct,,1.139672,24556151
-ManaDropMinor,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-ManaDropMinorHound,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-ManaDropMinorPoseidon,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-ManaDropZeus,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-MaxHealthDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,半人马之心,legal,direct,,1.139672,24556151
-MaxHealthDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级半人马之心,legal,direct,,1.139672,24556151
-MaxHealthDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,半人马之心,legal,direct,,1.139672,24556151
-MaxManaDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,legal,direct,,1.139672,24556151
-MaxManaDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级灵魂之水,legal,direct,,1.139672,24556151
-MaxManaDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,legal,direct,,1.139672,24556151
-MedeaMoneyTinyDrop,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-MemPointsCommonBigDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MemPointsCommonDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MemPointsCommonRange,consumable,StoreData,摇曳的微光,legal,direct,,1.139672,24556151
-MetaCardPointsCommonBigDrop,consumable,RewardStoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MetaCardPointsCommonDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MetaCardPointsCommonRange,consumable,StoreData,积灰的袋子,legal,direct,,1.139672,24556151
-MetaCurrencyBigDrop,consumable,RewardStoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MetaCurrencyDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MetaCurrencyRange,consumable,StoreData,出土的遗骸,legal,direct,,1.139672,24556151
-MetaFabricDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MinorTalentDrop,consumable,RewardStoreData+DebugSpawnConsumables,黯淡繁星之路,legal,direct,,1.139672,24556151
-Mixer5CommonDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-Mixer6CommonDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerFBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerGBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerHBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerIBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerNBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerOBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerPBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-MixerQBossDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-OreFSilverDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-PlantFMolyDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-PlantFNightshadeDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-PlantGLotusDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-PowerDrinkDrop,consumable,TraitProducedComment,,invalid_direct,exclude,Trait-produced transient object; direct spawning bypasses its owning trait.,1.139672,24556151
-RandomLoot,consumable,StoreData,,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-RandomStoreItem,consumable,StoreData,命运的作弄,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-RerollDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-RoomMoneyBigDrop,consumable,DebugSpawnConsumables,大量资金,legal,direct,,1.139672,24556151
-RoomMoneyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,legal,direct,,1.139672,24556151
-RoomMoneySmallDrop,consumable,DebugSpawnConsumables,少量资金,legal,direct,,1.139672,24556151
-RoomMoneyTinyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,legal,direct,,1.139672,24556151
-RoomMoneyTripleDrop,consumable,RewardStoreData+DebugSpawnConsumables,巨量资金,legal,direct,,1.139672,24556151
-RoomRewardConsolationPrize,consumable,DebugSpawnConsumables,红洋葱,legal,direct,,1.139672,24556151
-RoomRewardHealDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,新鲜食粮,legal,direct,,1.139672,24556151
-SeedMysteryRange,consumable,StoreData,盖亚的礼赠,legal,direct,,1.139672,24556151
-ShopHermesUpgrade,consumable,StoreData,,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
-SpellDrop,loot,RewardStoreData+StoreData,月之礼赠,legal,direct,,1.139672,24556151
-StackUpgrade,loot,RewardStoreData+StoreData,力量石榴,legal,direct,,1.139672,24556151
-StackUpgradeBig,loot,StoreData,超级力量石榴,legal,direct,,1.139672,24556151
-StackUpgradeTriple,loot,RewardStoreData,究极力量石榴,legal,direct,,1.139672,24556151
-StoreRewardRandomStack,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-TalentBigDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,闪耀繁星之路,legal,direct,,1.139672,24556151
-TalentDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,繁星之路,legal,direct,,1.139672,24556151
-TemporaryBoonRarityTrait,trait,StoreData,阿里阿德涅的纱线,legal,direct,,1.139672,24556151
-TemporaryDiscountTrait,trait,StoreData,渡船优惠券,legal,direct,,1.139672,24556151
-TemporaryDoorHealTrait,trait,StoreData,九头蛇轻饮,legal,direct,,1.139672,24556151
-TemporaryEmptySlotDamageTrait,trait,StoreData,达那伊德斯的匕首,legal,direct,,1.139672,24556151
-TemporaryForcedSecretDoorTrait,trait,StoreData,伊克西翁之耀,legal,direct,,1.139672,24556151
-TemporaryHealExpirationTrait,trait,StoreData,善意之瓶,legal,direct,,1.139672,24556151
-TemporaryImprovedCastTrait,trait,StoreData,阿特拉斯的穗带,legal,direct,,1.139672,24556151
-TemporaryImprovedDefenseTrait,trait,StoreData,蟒蛇的鳞片,legal,direct,,1.139672,24556151
-TemporaryImprovedExTrait,trait,StoreData,女巫的印记,legal,direct,,1.139672,24556151
-TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,legal,direct,,1.139672,24556151
-TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,legal,direct,,1.139672,24556151
-TrashPointsDrop,consumable,DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-TrialUpgrade,loot,RewardStoreData,,legal,direct,,1.139672,24556151
-WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-WeaponPointsRareDrop,consumable,StoreData+DebugSpawnConsumables,,legal,direct,,1.139672,24556151
-WeaponUpgrade,loot,RewardStoreData,狄德勒斯之锤,legal,direct,,1.139672,24556151
-WeaponUpgradeDrop,consumable,StoreData,狄德勒斯之锤,legal,special,Requires native special spawning/choice semantics; generic object spawning is insufficient.,1.139672,24556151
+id,kind,sources,official_name_zh_cn,classification,reason,game_version,steam_build
+AirBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+ArmorBigBoost,consumable,StoreData+DebugSpawnConsumables,埃癸斯饰符,direct,,1.139672,24556151
+ArmorBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,护盾饰符,direct,,1.139672,24556151
+ArmorBoostStore,consumable,StoreData,碎裂之盾,direct,,1.139672,24556151
+BlindBoxLoot,consumable,StoreData,神秘祝福,direct,Concrete ConsumableData; direct spawning is sufficient because native use handles ReplaceWithRandomLoot/UnwrapRandomLoot.,1.139672,24556151
+BloodDrop,consumable,TraitProducedComment+PowersLogic(CreateBloodDrop)+TraitData_Ares,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
+Boon,alias,RewardStoreData,奥林匹斯的祝福,alias,Abstract reward selector represented by concrete Olympian loot entries.,1.139672,24556151
+BoostedRandomLoot,consumable,StoreData,,special,Store wrapper that must resolve to an eligible Olympian boon and preserve the native rarity override.,1.139672,24556151
+CardUpgradePointsDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+ChaosWeaponUpgrade,consumable,StoreData,命运铁砧,direct,Concrete ConsumableData; direct spawning is sufficient because native use invokes ChaosHammerUpgrade.,1.139672,24556151
+CharonPointsDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+DamageSelfDrop,consumable,StoreData,迈达斯的代价,direct,,1.139672,24556151
+Devotion,alias,RewardStoreData,,alias,Room-event selector/alias rather than a concrete standalone reward target.,1.139672,24556151
+DreamPointsDrop,consumable,DebugSpawnConsumables+RewardLogic(DreamRun)+DreamRunLogic,,direct,,1.139672,24556151
+EarthBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+ElementalBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+EmptyMaxHealthDrop,consumable,DebugSpawnConsumables+NPCData(Nemesis),半人马之魂,direct,,1.139672,24556151
+EmptyMaxHealthShopItem,consumable,StoreData,半人马之魂,direct,,1.139672,24556151
+EmptyMaxHealthSmallDrop,consumable,RewardStoreData+DebugSpawnConsumables+LootData(SubRoomRewards)+RoomDataN,,direct,,1.139672,24556151
+ExtendedShopTrait,trait,StoreData,古老的封印,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+FamiliarPointsDrop,consumable,DebugSpawnConsumables+LootData(MetaRewardStandAnimationOnly),,direct,Functional FamiliarPoints pickup definition; normal MetaRewardStand grants FamiliarPoints directly and only reuses FamiliarPointsDrop as its animation. No normal pickup instantiation found.,1.139672,24556151
+FireBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+FirstHitHealTrait,trait,StoreData,厄洛斯之息,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+GemPointsBigDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+GemPointsDrop,consumable,DebugSpawnConsumables+RoomLogic(UnusedWeaponBonusDropGems),,direct,,1.139672,24556151
+GiftDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+HealBigDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+HealDrop,consumable,DebugSpawnConsumables+NPCData(Nemesis),,direct,,1.139672,24556151
+HealDropMajor,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+HealDropMinor,consumable,DebugSpawnConsumables+EnemyAILogic(Artemis)+FamiliarData+HarvestData+TraitData_Icarus+TraitData_Medea+TraitData_Poseidon,,direct,,1.139672,24556151
+HealDropRange,consumable,StoreData,生命的精华,direct,,1.139672,24556151
+HealDropSuperMinor,consumable,DebugSpawnConsumables,,exclude,"Functional 1-HP healing variant; current build only references it from ConsumableData and test/debug content, with no normal gameplay instantiation found.",1.139672,24556151
+HermesUpgrade,loot,RewardStoreData,赫尔墨斯的祝福,direct,,1.139672,24556151
+LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,direct,,1.139672,24556151
+LastStandShopItem,consumable,StoreData,冥河之吻,direct,,1.139672,24556151
+LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,direct,,1.139672,24556151
+LimitedSwapTraitDrop,consumable,StoreData,牺牲圣诗,direct,,1.139672,24556151
+ManaDropMinor,consumable,TraitProducedComment,,exclude,Defined base mana consumable; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
+ManaDropMinorHound,consumable,TraitProducedComment+FamiliarData,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
+ManaDropMinorPoseidon,consumable,TraitProducedComment,,exclude,Defined Poseidon mana variant; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.,1.139672,24556151
+ManaDropZeus,consumable,TraitProducedComment+PowersLogic+TraitData_Zeus,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
+MaxHealthDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,半人马之心,direct,,1.139672,24556151
+MaxHealthDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级半人马之心,direct,,1.139672,24556151
+MaxHealthDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,半人马之心,direct,,1.139672,24556151
+MaxManaDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,direct,,1.139672,24556151
+MaxManaDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级灵魂之水,direct,,1.139672,24556151
+MaxManaDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,direct,,1.139672,24556151
+MedeaMoneyTinyDrop,consumable,TraitProducedComment+TraitData_Medea,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
+MemPointsCommonBigDrop,consumable,DebugSpawnConsumables+WeaponData(RewardNames),,direct,Functional +20 Psyche pickup definition; no normal pickup instantiation found. Tablet/exorcism rewards grant MemPointsCommon directly through HarvestData AddResources.,1.139672,24556151
+MemPointsCommonDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MemPointsCommonRange,consumable,StoreData,摇曳的微光,direct,,1.139672,24556151
+MetaCardPointsCommonBigDrop,consumable,RewardStoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+MetaCardPointsCommonDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+MetaCardPointsCommonRange,consumable,StoreData,积灰的袋子,direct,,1.139672,24556151
+MetaCurrencyBigDrop,consumable,RewardStoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+MetaCurrencyDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+MetaCurrencyRange,consumable,StoreData,出土的遗骸,direct,,1.139672,24556151
+MetaFabricDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus+TraitData_Arachne,,direct,,1.139672,24556151
+MinorTalentDrop,consumable,RewardStoreData+DebugSpawnConsumables,黯淡繁星之路,direct,,1.139672,24556151
+Mixer5CommonDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus+BountyData,,direct,,1.139672,24556151
+Mixer6CommonDrop,consumable,DebugSpawnConsumables+HarvestData(ConsumableName),,direct,,1.139672,24556151
+MixerFBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerGBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerHBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerIBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerNBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerOBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerPBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+MixerQBossDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
+OreFSilverDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PlantFMolyDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PlantFNightshadeDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PlantGLotusDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PowerDrinkDrop,consumable,TraitProducedComment+TraitData_Dionysus,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
+RandomLoot,consumable,StoreData,,special,Abstract store wrapper that must resolve to an eligible Olympian boon before spawning.,1.139672,24556151
+RandomStoreItem,consumable,StoreData,命运的作弄,direct,Concrete Well consumable; direct spawning is sufficient because native use handles AwardRandomStoreItem.,1.139672,24556151
+RerollDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,重塑命运,direct,,1.139672,24556151
+RoomMoneyBigDrop,consumable,DebugSpawnConsumables,大量资金,direct,Functional money pickup definition; no normal gameplay instantiation found in the current build.,1.139672,24556151
+RoomMoneyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,direct,,1.139672,24556151
+RoomMoneySmallDrop,consumable,DebugSpawnConsumables+TraitData_Poseidon,少量资金,direct,,1.139672,24556151
+RoomMoneyTinyDrop,consumable,RewardStoreData+DebugSpawnConsumables,金币,direct,,1.139672,24556151
+RoomMoneyTripleDrop,consumable,RewardStoreData+DebugSpawnConsumables,巨量资金,direct,,1.139672,24556151
+RoomRewardConsolationPrize,consumable,DebugSpawnConsumables+EventLogic+RewardLogic+ShrineLogic,红洋葱,direct,,1.139672,24556151
+RoomRewardHealDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,新鲜食粮,direct,,1.139672,24556151
+SeedMysteryRange,consumable,StoreData,盖亚的礼赠,direct,,1.139672,24556151
+ShopHermesUpgrade,consumable,StoreData,,special,Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning.,1.139672,24556151
+SpellDrop,loot,RewardStoreData+StoreData,月之礼赠,special,"Concrete Selene reward, but Trainer use must preserve the native SpawnRoomReward spell/hex choice flow.",1.139672,24556151
+StackUpgrade,loot,RewardStoreData+StoreData,力量石榴,direct,,1.139672,24556151
+StackUpgradeBig,loot,StoreData,超级力量石榴,direct,,1.139672,24556151
+StackUpgradeTriple,loot,RewardStoreData,究极力量石榴,direct,,1.139672,24556151
+StoreRewardRandomStack,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+TalentBigDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,闪耀繁星之路,direct,,1.139672,24556151
+TalentDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,繁星之路,direct,,1.139672,24556151
+TemporaryBoonRarityTrait,trait,StoreData,阿里阿德涅的纱线,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryDiscountTrait,trait,StoreData,渡船优惠券,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryDoorHealTrait,trait,StoreData,九头蛇轻饮,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryEmptySlotDamageTrait,trait,StoreData,达那伊德斯的匕首,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryForcedSecretDoorTrait,trait,StoreData,伊克西翁之耀,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryHealExpirationTrait,trait,StoreData,善意之瓶,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryImprovedCastTrait,trait,StoreData,阿特拉斯的穗带,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryImprovedDefenseTrait,trait,StoreData,蟒蛇的鳞片,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryImprovedExTrait,trait,StoreData,女巫的印记,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
+TrashPointsDrop,consumable,DebugSpawnConsumables+NPCData_Eris,,direct,,1.139672,24556151
+TrialUpgrade,loot,RewardStoreData,,direct,,1.139672,24556151
+WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+WeaponPointsRareDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
+WeaponUpgrade,loot,RewardStoreData,狄德勒斯之锤,direct,,1.139672,24556151
+WeaponUpgradeDrop,consumable,StoreData,狄德勒斯之锤,special,Store wrapper; use the native CreateWeaponLoot semantics rather than generic consumable spawning.,1.139672,24556151
