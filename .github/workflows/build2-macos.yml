@@ -18,14 +18,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only change
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Docs-only fast path
+        if: steps.scope.outputs.docs_only == 'true'
+        run: echo "Docs-only change; skipping macOS contracts/build/package."
 
       - name: Run full macOS contract suite
+        if: steps.scope.outputs.docs_only != 'true'
         run: bash Tools/run_macos_checks.sh
 
       - name: Build Hades II trainer
+        if: steps.scope.outputs.docs_only != 'true'
         run: ./build.sh hades2
 
       - name: Verify Build 2 package
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           app="dist/Mac Gaming Trainer.app"
           test -d "$app"
@@ -39,11 +55,13 @@ jobs:
           codesign --verify --deep --strict "$app"
 
       - name: Package release candidate
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           mkdir -p artifacts
           ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "artifacts/MacGamingTrainer-0.1-build2-rc.zip"
 
       - uses: actions/upload-artifact@v4
+        if: steps.scope.outputs.docs_only != 'true'
         with:
           name: MacGamingTrainer-0.1-build2-rc
           path: artifacts/MacGamingTrainer-0.1-build2-rc.zip
