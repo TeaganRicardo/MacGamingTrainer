@@ -1,0 +1,45 @@
+from pathlib import Path
+import plistlib
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+plist = plistlib.loads((ROOT / 'Info.plist').read_bytes())
+version = plist['CFBundleShortVersionString']
+build_version = plist['CFBundleVersion']
+
+assert re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version), version
+assert build_version == version
+
+sys.path.insert(0, str(ROOT / 'Backend'))
+from core.protocol import APP_BACKEND_VERSION
+
+assert APP_BACKEND_VERSION == version
+
+versioning = (ROOT / 'VERSIONING.md').read_text(encoding='utf-8')
+building = (ROOT / 'BUILDING.md').read_text(encoding='utf-8')
+modules = (ROOT / 'GAME_MODULES.md').read_text(encoding='utf-8')
+workflow = (ROOT / '.github/workflows/build2-macos.yml').read_text(encoding='utf-8')
+fixture = (ROOT / 'ContractFixtures/host_protocol_v5.json').read_text(encoding='utf-8')
+
+# Policy documents describe rules, not a second copy of the current release.
+for stale in ('Current product version:', 'Current development build:', 'Latest released build:'):
+    assert stale not in versioning
+assert 'Current development branch:' not in building
+assert 'Game module contract — 0.1 baseline' not in modules
+
+# CI must derive package verification/artifact identity from Info.plist rather
+# than hardcoding the current release or the retired numeric build counter.
+assert "Print :CFBundleShortVersionString' Info.plist" in workflow
+assert "Print :CFBundleVersion' Info.plist" in workflow
+assert 'test "$source_version" = "$source_build"' in workflow
+assert 'MacGamingTrainer-0.1-build2' not in workflow
+assert 'test "$version" = "0.1"' not in workflow
+assert 'test "$build" = "2"' not in workflow
+
+# Protocol fixtures describe wire shape and use a placeholder for product
+# release identity. The live backend resolves that value from Info.plist.
+assert '__PRODUCT_VERSION__' in fixture
+assert '"backendVersion": "0.1"' not in fixture
+
+print('product_version_contract_ok')
