@@ -3,11 +3,16 @@ AirBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.1
 ArmorBigBoost,consumable,StoreData+DebugSpawnConsumables,埃癸斯饰符,direct,,1.139672,24556151
 ArmorBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,护盾饰符,direct,,1.139672,24556151
 ArmorBoostStore,consumable,StoreData,碎裂之盾,direct,,1.139672,24556151
+AphroditeUpgrade,loot,LootData_Aphrodite,阿弗洛狄忒,direct,Concrete Olympian loot source.,1.139672,24556151
+ApolloUpgrade,loot,LootData_Apollo,阿波罗,direct,Concrete Olympian loot source.,1.139672,24556151
+AresUpgrade,loot,LootData_Ares,阿瑞斯,direct,Concrete Olympian loot source.,1.139672,24556151
 BaseConsumable,consumable,ConsumableData(DebugOnly),,exclude,Debug-only base inheritance template; not a standalone item.,1.139672,24556151
 BaseMetaRoomReward,consumable,ConsumableData,,exclude,Inheritance/conversion template for meta room-reward pickups; not a standalone item.,1.139672,24556151
 BaseResource,consumable,ConsumableData,,exclude,Base resource-pickup inheritance template; not a standalone item.,1.139672,24556151
 BaseSuperResource,consumable,ConsumableData,,exclude,Super-resource inheritance template; not a standalone item.,1.139672,24556151
 BaseWellShopConsumable,consumable,ConsumableData,,exclude,Well-consumable inheritance template; not a standalone item.,1.139672,24556151
+BaseLoot,loot,LootData(DebugOnly),,exclude,Base loot inheritance template; not a standalone reward source.,1.139672,24556151
+BaseSoundPackage,loot,LootData(DebugOnly),,exclude,Shared loot sound-package template; not a standalone reward source.,1.139672,24556151
 BlindBoxLoot,consumable,StoreData,神秘祝福,direct,Concrete ConsumableData; direct spawning is sufficient because native use handles ReplaceWithRandomLoot/UnwrapRandomLoot.,1.139672,24556151
 BloodDrop,consumable,TraitProducedComment+PowersLogic(CreateBloodDrop)+TraitData_Ares,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 Boon,alias,RewardStoreData,奥林匹斯的祝福,alias,Abstract reward selector represented by concrete Olympian loot entries.,1.139672,24556151
@@ -18,6 +23,7 @@ CharonPointsDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24
 DamageSelfDrop,consumable,StoreData,迈达斯的代价,direct,,1.139672,24556151
 Devotion,alias,RewardStoreData,,alias,Room-event selector/alias rather than a concrete standalone reward target.,1.139672,24556151
 DreamPointsDrop,consumable,DebugSpawnConsumables+RewardLogic(DreamRun)+DreamRunLogic,,direct,,1.139672,24556151
+DemeterUpgrade,loot,LootData_Demeter,得墨忒尔,direct,Concrete Olympian loot source.,1.139672,24556151
 EarthBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 ElementalBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 EmptyMaxHealthDrop,consumable,DebugSpawnConsumables+NPCData(Nemesis),半人马之魂,direct,,1.139672,24556151
@@ -36,7 +42,10 @@ HealDropMajor,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.13
 HealDropMinor,consumable,DebugSpawnConsumables+EnemyAILogic(Artemis)+FamiliarData+HarvestData+TraitData_Icarus+TraitData_Medea+TraitData_Poseidon,,direct,,1.139672,24556151
 HealDropRange,consumable,StoreData,生命的精华,direct,,1.139672,24556151
 HealDropSuperMinor,consumable,DebugSpawnConsumables,,exclude,"Functional 1-HP healing variant; current build only references it from ConsumableData and test/debug content, with no normal gameplay instantiation found.",1.139672,24556151
+HephaestusUpgrade,loot,LootData_Hephaestus,赫菲斯托斯,direct,Concrete Olympian loot source.,1.139672,24556151
+HeraUpgrade,loot,LootData_Hera,赫拉,direct,Concrete Olympian loot source.,1.139672,24556151
 HermesUpgrade,loot,RewardStoreData,赫尔墨斯的祝福,direct,,1.139672,24556151
+HestiaUpgrade,loot,LootData_Hestia,赫斯提亚,direct,Concrete Olympian loot source.,1.139672,24556151
 LastStandDrop,consumable,StoreData+DebugSpawnConsumables,冥河之吻,direct,,1.139672,24556151
 LastStandShopItem,consumable,StoreData,冥河之吻,direct,,1.139672,24556151
 LimitedManaRegenDrop,consumable,StoreData,薄雾面纱,direct,,1.139672,24556151
@@ -79,6 +88,7 @@ OreFSilverDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.1
 PlantFMolyDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
 PlantFNightshadeDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
 PlantGLotusDrop,consumable,DebugSpawnConsumables+TraitData_Narcissus,,direct,,1.139672,24556151
+PoseidonUpgrade,loot,LootData_Poseidon,波塞冬,direct,Concrete Olympian loot source.,1.139672,24556151
 PowerDrinkDrop,consumable,TraitProducedComment+TraitData_Dionysus,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 RandomLoot,consumable,StoreData,,special,Abstract store wrapper that must resolve to an eligible Olympian boon before spawning.,1.139672,24556151
 RandomStoreItem,consumable,StoreData,命运的作弄,direct,Concrete Well consumable; direct spawning is sufficient because native use handles AwardRandomStoreItem.,1.139672,24556151
@@ -113,8 +123,10 @@ TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,special,Native W
 TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
 Tier1Consumable,consumable,ConsumableData,,exclude,Rarity/inheritance template used by tiered consumables such as TalentDrop; not a standalone item.,1.139672,24556151
 TrashPointsDrop,consumable,DebugSpawnConsumables+NPCData_Eris,,direct,,1.139672,24556151
+Using,loot,LootData_Apollo(extractor row),,exclude,Extractor-emitted Apollo namespace field row with no standalone loot target semantics.,1.139672,24556151
 TrialUpgrade,loot,RewardStoreData,,direct,,1.139672,24556151
 WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 WeaponPointsRareDrop,consumable,StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
 WeaponUpgrade,loot,RewardStoreData,狄德勒斯之锤,direct,,1.139672,24556151
 WeaponUpgradeDrop,consumable,StoreData,狄德勒斯之锤,special,Store wrapper; use the native CreateWeaponLoot semantics rather than generic consumable spawning.,1.139672,24556151
+ZeusUpgrade,loot,LootData_Zeus,宙斯,direct,Concrete Olympian loot source.,1.139672,24556151
