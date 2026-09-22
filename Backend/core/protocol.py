@@ -170,8 +170,8 @@ class JsonlRequestRouter:
         except (TypeError, ValueError):
             return self.error_reply(request_id, 'invalid_request', '请求包含不可序列化的 JSON 值。')
         if request_id in self.cache:
-            old, reply = self.cache[request_id]
-            return reply if old == fingerprint else self.error_reply(request_id, 'duplicate_conflict', '同一请求 ID 的内容发生变化。')
+            old, reply_json = self.cache[request_id]
+            return json.loads(reply_json) if old == fingerprint else self.error_reply(request_id, 'duplicate_conflict', '同一请求 ID 的内容发生变化。')
         try:
             command = request.get('command')
             params = request.get('params', {})
@@ -203,10 +203,11 @@ class JsonlRequestRouter:
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path
-        self.cache[request_id] = (fingerprint, reply)
+        reply_json = json.dumps(reply, ensure_ascii=False, allow_nan=False)
+        self.cache[request_id] = (fingerprint, reply_json)
         while len(self.cache) > 256:
             self.cache.popitem(last=False)
-        return reply
+        return json.loads(reply_json)
 
     def close(self):
         self.adapter.close()
