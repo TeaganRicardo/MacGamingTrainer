@@ -11,7 +11,7 @@ special = lua[lua.index('if command == "open_special_choice" then'):lua.index('i
 
 # The resident ledger must compare the full semantics of each current one-shot.
 assert 'open_special_choice = { "source" }' in lua
-assert "actionSemanticKeys" in action
+assert "actionSemanticKeys" in lua
 assert "actionFingerprint" in action
 assert "MGT_OUTCOME_UNKNOWN:" in action
 
