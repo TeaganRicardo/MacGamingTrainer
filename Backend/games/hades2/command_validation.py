@@ -15,7 +15,7 @@ from .schema import (
     validate_desired_feature_value,
 )
 
-def validate_command_params(command, params, request_id):
+def validate_command_params(command, params):
     params=dict(params or {})
 
     if command=='connect':
