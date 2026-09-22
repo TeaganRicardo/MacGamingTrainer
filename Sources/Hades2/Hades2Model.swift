@@ -276,10 +276,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func toggleConnection() {
-        toggleConnection(probeRuntime: true)
-    }
-
     private func toggleConnection(probeRuntime: Bool) {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
@@ -303,7 +299,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func restoreOriginalSignature() { send(.restore, title: "恢复原始签名") }
     func disableAll() { sendBarrier(.disableAll, title: "全部关闭") }
 
-    func restartBackend() {
+    private func restartBackend() {
         guard !exiting else { return }
         invalidatePendingMutations()
         error = ""
