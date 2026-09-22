@@ -296,7 +296,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func disableAllFromHost() { disableAll() }
     func restartBackendFromHost() { restartBackend() }
 
     func launchGame() { send(.launch, title: "启动游戏") }
