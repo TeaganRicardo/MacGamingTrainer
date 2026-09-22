@@ -65,6 +65,13 @@ class PendingTransport:
                 raise TransportError('lua_error', 'simulated durable feature failure')
             self.state['desiredFeatures'][feature] = value
             self.state['activeFeatures'][feature] = value
+        if 'dispatch("set_boon_rarity"' in source:
+            self.state['boonRarity'] = {
+                'target': 'Heroic',
+                'multiplier': 250.0,
+                'forceLegendary': True,
+                'forceDuo': False,
+            }
         if 'dispatch("spawn_reward"' in source:
             self.spawn_count += 1
         return json.dumps(self.state)
@@ -160,3 +167,57 @@ assert transport_b.state['desiredFeatures']['godMode'] is True
 assert adapter_b.preference_dirty is False
 
 print('pending_preference_confirmation_feature_b_ok')
+
+
+# Boon rarity is another durable desired family. Its success must not clear an
+# older failed feature that is still waiting for reconciliation.
+base_rarity = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-rarity-'))
+preparation.DATA = base_rarity
+transport_rarity = PendingTransport()
+adapter_rarity = Hades2Adapter(transport=transport_rarity)
+adapter_rarity._runtime_bootstrapped = True
+adapter_rarity._catalog_initialized = True
+adapter_rarity._apply_game_speed = lambda value: 1.0
+adapter_rarity.state.update(
+    copy.deepcopy(transport_rarity.state),
+    connected=True,
+    pid=transport_rarity.pid,
+)
+adapter_rarity.preference_initialized = True
+adapter_rarity.preference_dirty = False
+
+adapter_rarity.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-rarity',
+)
+assert adapter_rarity.preference_dirty is True
+
+rarity_config = {
+    'target': 'Heroic',
+    'multiplier': 250,
+    'forceLegendary': True,
+    'forceDuo': False,
+}
+adapter_rarity.dispatch(
+    'set_boon_rarity_desired',
+    rarity_config,
+    'desired-rarity',
+)
+assert transport_rarity.state['boonRarity']['target'] == 'Heroic'
+assert adapter_rarity.preferences['godMode'] is True
+assert adapter_rarity.preferences['boonRarity']['target'] == 'Heroic'
+assert adapter_rarity.preference_dirty is True, (
+    'successful boon rarity B must not confirm failed feature A'
+)
+persisted_rarity = json.loads(
+    (base_rarity / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_rarity['godMode'] is True
+assert persisted_rarity['boonRarity']['target'] == 'Heroic'
+
+adapter_rarity.dispatch('status', {}, 'status-rarity')
+assert transport_rarity.state['desiredFeatures']['godMode'] is True
+assert adapter_rarity.preference_dirty is False
+
+print('pending_preference_confirmation_rarity_ok')
