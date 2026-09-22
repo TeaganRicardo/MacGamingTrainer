@@ -7,7 +7,8 @@ from .persistence import atomic_write_text, quarantine_corrupt_file, Persistence
 from .schema import (
     BOON_RARITY_TARGETS, ELEMENT_IDS, MAX_AMOUNT, MULTIPLIERS,
     NEXT_ROOM_REWARD_MAX_LENGTH, STAT_RULES, TOGGLES, VITALS,
-    default_boon_rarity, desired_feature_defaults, normalize_desired_feature_value,
+    default_boon_rarity, desired_feature_defaults, is_valid_next_room_reward,
+    normalize_desired_feature_value,
 )
 
 
@@ -101,7 +102,7 @@ def migrate_legacy_next_room_reward(raw):
     if not isinstance(raw,dict):return raw
     result=dict(raw)
     reward=result.get('nextRoomReward')
-    if reward is None or (isinstance(reward,str) and len(reward)<=NEXT_ROOM_REWARD_MAX_LENGTH):
+    if is_valid_next_room_reward(reward):
         reward=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
     else:
         reward=None
@@ -181,7 +182,7 @@ class Hades2PreferenceStore:
         value=_normalize_amount(raw.get('rerollsLock'))
         if value is not None:result['rerollsLock']=value
         reward=raw.get('nextRoomReward')
-        if reward is None or (isinstance(reward,str) and len(reward)<=NEXT_ROOM_REWARD_MAX_LENGTH):
+        if is_valid_next_room_reward(reward):
             result['nextRoomReward']=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
         token=raw.get('nextRoomRewardToken')
         if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
