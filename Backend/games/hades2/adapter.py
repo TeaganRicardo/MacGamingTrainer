@@ -123,13 +123,44 @@ class Hades2Adapter(GameAdapter):
         preferences=self._normalize_preferences(profile['desired'])
         if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
+        observed_locks=None
+        if self.transport.alive() and self.state.get('connected'):
+            self.execute('status',{},read_only=True,project_desired=False)
+            observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.transport.alive():self._replay_preferences(force_full=True)
+        if self.transport.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
+
+    def _observed_locks(self):
+        stats=self.state.get('stats') if isinstance(self.state.get('stats'),dict) else {}
+        stat_locks={
+            stat for stat,item in stats.items()
+            if isinstance(item,dict) and item.get('locked')
+        }
+        vital_locks={
+            key for key in ('health','mana','armor')
+            if self.state.get(key+'Locked')
+        }
+        resource_locks={
+            item.get('id') for item in self.state.get('resources',[])
+            if isinstance(item,dict) and isinstance(item.get('id'),str) and item.get('locked')
+        }
+        if self.state.get('moneyLocked'):resource_locks.add('Money')
+        element_locks={
+            item.get('id') for item in self.state.get('elements',[])
+            if isinstance(item,dict) and isinstance(item.get('id'),str) and item.get('locked')
+        }
+        return {
+            'stats':stat_locks,
+            'vitals':vital_locks,
+            'resources':resource_locks,
+            'rerolls':bool(self.state.get('rerollsLocked')),
+            'elements':element_locks,
+        }
 
     def _overlay_preferences(self):
         desired={key:bool(self.preferences.get(key,False)) for key in TOGGLES}
@@ -311,7 +342,7 @@ class Hades2Adapter(GameAdapter):
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=False;return result
         return dict(self.state)
 
-    def _replay_preferences(self,force_full=False):
+    def _replay_preferences(self,force_full=False,observed_locks=None):
         if not self.transport.alive():return dict(self.state)
         if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',1.0))
         if self.state.get('status')!='ready':
@@ -328,13 +359,15 @@ class Hades2Adapter(GameAdapter):
             if force_full or type(current) not in (int,float) or abs(float(current)-float(target))>1e-6:pending.append(('set_feature',{'feature':key,'value':target}))
         rarity=self.preferences.get('boonRarity',{})
         pending.append(('set_boon_rarity',dict(rarity)))
-        # First release stale locks that are not in the desired snapshot.
-        current_stats=self.state.get('stats') if isinstance(self.state.get('stats'),dict) else {}
+        # First release stale locks that are not in the desired snapshot. Profile
+        # replacement may already have projected the new desired state into self.state,
+        # so use the pre-projection observed snapshot when one was supplied.
+        current_locks=observed_locks if isinstance(observed_locks,dict) else self._observed_locks()
+        current_stats=current_locks.get('stats',set())
         wanted_stats=self.preferences.get('statLocks',{})
-        for stat,item in current_stats.items():
-            if isinstance(item,dict) and item.get('locked') and stat not in wanted_stats:pending.append(('set_stat',{'stat':stat,'locked':False}))
+        for stat in current_stats-set(wanted_stats):pending.append(('set_stat',{'stat':stat,'locked':False}))
         for stat,value in wanted_stats.items():pending.append(('set_stat',{'stat':stat,'locked':True,'value':value}))
-        current_vitals={key for key in ('health','mana','armor') if self.state.get(key+'Locked')}
+        current_vitals=current_locks.get('vitals',set())
         wanted_vitals=self.preferences.get('vitalLocks',{})
         for vital in current_vitals-set(wanted_vitals):pending.append(('lock_vital',{'vital':vital,'locked':False}))
         for vital,row in wanted_vitals.items():
@@ -344,15 +377,15 @@ class Hades2Adapter(GameAdapter):
                 if field=='max' and vital=='armor':continue
                 if type(value) in (int,float) and not isinstance(value,bool):pending.append(('set_vital',{'vital':vital,'field':field,'value':value}))
             pending.append(('lock_vital',{'vital':vital,'locked':True}))
-        current_resources={item.get('id') for item in self.state.get('resources',[]) if isinstance(item,dict) and item.get('locked')}
+        current_resources=current_locks.get('resources',set())
         wanted_resources=self.preferences.get('resourceLocks',{})
         for resource in current_resources-set(wanted_resources):pending.append(('lock_resource',{'resource':resource,'locked':False,'requestId':f'replay-{time.time_ns()}'}))
         for resource,amount in wanted_resources.items():
             pending.append(('set_resource',{'resource':resource,'amount':int(amount),'requestId':f'replay-{time.time_ns()}'}));pending.append(('lock_resource',{'resource':resource,'locked':True,'requestId':f'replay-{time.time_ns()}'}))
-        if self.state.get('rerollsLocked') and self.preferences.get('rerollsLock') is None:pending.append(('lock_rerolls',{'locked':False,'requestId':f'replay-{time.time_ns()}'}))
+        if current_locks.get('rerolls') and self.preferences.get('rerollsLock') is None:pending.append(('lock_rerolls',{'locked':False,'requestId':f'replay-{time.time_ns()}'}))
         if self.preferences.get('rerollsLock') is not None:
             amount=int(self.preferences['rerollsLock']);pending.append(('set_rerolls',{'amount':amount,'requestId':f'replay-{time.time_ns()}'}));pending.append(('lock_rerolls',{'locked':True,'requestId':f'replay-{time.time_ns()}'}))
-        current_elements={item.get('id') for item in self.state.get('elements',[]) if isinstance(item,dict) and item.get('locked')}
+        current_elements=current_locks.get('elements',set())
         wanted_elements=self.preferences.get('elementLocks',{})
         for element in current_elements-set(wanted_elements):pending.append(('lock_element',{'element':element,'locked':False}))
         for element,amount in wanted_elements.items():pending.append(('set_element',{'element':element,'amount':int(amount)}));pending.append(('lock_element',{'element':element,'locked':True}))
@@ -481,11 +514,13 @@ class Hades2Adapter(GameAdapter):
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
         return dict(self.state)
 
-    def execute(self,command,params,replay=False,read_only=False,batch=None):
+    def execute(self,command,params,replay=False,read_only=False,batch=None,project_desired=True):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
         # maintenance, so this is not yet a strict transport/Lua snapshot API.
         if read_only and command!='status':raise ValueError('read_only 仅允许 status。')
+        if not project_desired and not (read_only and command=='status'):
+            raise ValueError('仅允许只读 status 保留原始 runtime observation。')
         teardown=not read_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
         # Lua boundary. If that write is explicitly blocked/failed, still make a
@@ -594,7 +629,7 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None:
                     self._capture_runtime_preferences(self.state);self._save_preferences()
-            self._overlay_preferences()
+            if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
@@ -607,7 +642,7 @@ class Hades2Adapter(GameAdapter):
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
-            self._overlay_preferences()
+            if project_desired:self._overlay_preferences()
             raise
     def disconnect(self):
         # Manual disconnect is a debugger detach only. The trainer Lua module
