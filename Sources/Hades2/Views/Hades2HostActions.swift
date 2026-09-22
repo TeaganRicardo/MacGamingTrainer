@@ -22,3 +22,20 @@ struct Hades2HeaderActions: View {
         .disabled(model.busy || model.exiting)
     }
 }
+
+
+struct Hades2ManagementCommands: Commands {
+    @ObservedObject var model: Hades2TrainerModel
+
+    var body: some Commands {
+        CommandMenu("训练器") {
+            Button("刷新状态") { model.refreshFromHost() }
+                .disabled(model.busy)
+            Button("全部关闭") { model.disableAll() }
+                .disabled(model.busy || !model.connected)
+            Divider()
+            Button("快捷键设置") { model.shortcutSettingsPresented = true }
+            Button("查看日志") { model.openLog() }
+        }
+    }
+}

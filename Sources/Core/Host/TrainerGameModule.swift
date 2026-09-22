@@ -40,8 +40,6 @@ protocol TrainerHostModel: ObservableObject {
     func refreshFromHost()
     func hostDidBecomeActive()
     func restartBackendFromHost()
-    func disableAllFromHost()
-    func openLog()
     func prepareForTermination(completion: @escaping (Bool) -> Void)
 }
 
@@ -66,6 +64,7 @@ protocol TrainerGameModule {
     associatedtype ContentView: View
     associatedtype SidebarActions: View
     associatedtype HeaderActions: View
+    associatedtype ManagementCommands: Commands
 
     static var descriptor: GameModuleDescriptor { get }
     static var presentation: TrainerGamePresentation { get }
@@ -73,4 +72,11 @@ protocol TrainerGameModule {
     static func makeContent(model: Model) -> ContentView
     static func makeSidebarActions(model: Model) -> SidebarActions
     static func makeHeaderActions(model: Model) -> HeaderActions
+    static func makeManagementCommands(model: Model) -> ManagementCommands
+}
+
+struct TrainerEmptyCommands: Commands {
+    var body: some Commands {
+        CommandGroup(after: .appInfo) { EmptyView() }
+    }
 }

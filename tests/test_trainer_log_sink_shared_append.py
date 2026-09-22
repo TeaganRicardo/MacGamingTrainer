@@ -17,6 +17,24 @@ guard CommandLine.arguments.count == 2 else {
 }
 
 let url = URL(fileURLWithPath: CommandLine.arguments[1])
+let tempHome = url.deletingLastPathComponent().appendingPathComponent("home", isDirectory: true)
+let expectedScopedURL = tempHome
+    .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+    .appendingPathComponent("hades2", isDirectory: true)
+    .appendingPathComponent("trainer.log")
+guard TrainerLogSink.moduleLogURL(gameID: "hades2", homeDirectory: tempHome) == expectedScopedURL else {
+    fatalError("module log path is not scoped by game id")
+}
+let scopedSink = TrainerLogSink(gameID: "hades2", homeDirectory: tempHome)
+guard scopedSink.url == expectedScopedURL else {
+    fatalError("module-owned log sink resolved unexpected path: \(scopedSink.url.path)")
+}
+scopedSink.append("scoped-one")
+scopedSink.flush()
+guard (try? String(contentsOf: expectedScopedURL, encoding: .utf8))?.contains("GUI scoped-one") == true else {
+    fatalError("module-owned log sink did not write scoped log")
+}
+
 try FileManager.default.createDirectory(
     at: url.deletingLastPathComponent(),
     withIntermediateDirectories: true

@@ -12,6 +12,7 @@ assert "static func makeModel(session: TrainerBackendSession) -> Model" in modul
 assert "static func makeModel(session: TrainerBackendSession)" in hades_module
 assert "private let backendSession = TrainerBackendSession()" not in model
 assert "private let backendSession: TrainerBackendSession" in model
-assert "init(session: TrainerBackendSession)" in model
+assert "init(session: TrainerBackendSession, logSink: TrainerLogSink)" in model
+assert "TrainerLogSink(gameID: descriptor.id)" in hades_module
 
 print("shared_backend_session_round20_ok")
