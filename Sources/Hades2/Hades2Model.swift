@@ -482,7 +482,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             notice = "\(title)已打开"
         case .failed:
             notice = ""
-            error = receipt.error.map { "\(title)失败：\($0)" } ?? "\(title)失败"
+            error = "\(title)失败，请查看日志"
         case .outcomeUnknown:
             notice = ""
             error = "\(title)结果不明，请重新连接后检查游戏状态"
