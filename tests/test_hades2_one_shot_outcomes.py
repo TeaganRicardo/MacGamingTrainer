@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
-api = (ROOT / "Sources/Hades2/Hades2API.swift").read_text(encoding="utf-8")
+state = (ROOT / "Sources/Hades2/Hades2BackendState.swift").read_text(encoding="utf-8")
 model = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
 
 action = lua[lua.index("local function action("):lua.index("local function editResource")]
@@ -25,12 +25,15 @@ for block in (sell, special):
 assert "result.actionOutcome" in action
 assert "lastAction = latestActionReceipt()" in lua
 
-# Hades owns the presentation vocabulary. Core's generic successful-reply text
-# must be suppressed for modal acknowledgements.
-assert "reply: ((BackendReply) -> Void)?" in api
-assert "reply: reply" in api
-assert "announceSuccess: false" in model[model.index("func openSellTraits()"):model.index("func setMultiplier(", model.index("func openSellTraits()"))]
+# Hades owns the presentation vocabulary through its typed state boundary.
+# Core's generic successful-reply text must be suppressed for modal acknowledgements.
+assert "struct Hades2ActionReceipt" in state
+assert "let lastAction: Hades2ActionReceipt?" in state
+assert 'payload["lastAction"]' in state
+modal_model = model[model.index("func openSellTraits()"):model.index("func setMultiplier(", model.index("func openSellTraits()"))]
+assert "announceSuccess: false" in modal_model
 assert "accepted" in model and "已受理" in model
 assert "opened" in model and "已打开" in model
+assert "failed" in model and "失败" in model
 
 print("hades2_one_shot_outcomes_ok")
