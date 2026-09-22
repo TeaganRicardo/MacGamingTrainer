@@ -24,6 +24,8 @@ required_invariants = {
     "backend.recovery-no-request-replay",
     "module.cross-game-isolation",
     "hades.same-pid-runtime-generation",
+    "hades.resident-runtime-static-wiring",
+    "hades.retired-protocol-surface",
     "mutation.outcome-unknown-taints-transport",
     "save.transaction-recovery",
     "shortcut.collision-reflow",

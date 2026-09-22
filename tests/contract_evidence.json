@@ -137,6 +137,24 @@
           "reason": "Resident Lua hook ownership is only fully observable inside the Hades runtime; static source guards remain the portable pre-game gate."
         }
       ]
+    },
+    "hades.resident-runtime-static-wiring": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_hades2_runtime_static_contract.py",
+          "reason": "Exact resident Lua/game-engine wiring cannot be semantically exercised in portable CI; Lua changes require real Hades acceptance, so this focused source guard is the pre-game boundary."
+        }
+      ]
+    },
+    "hades.retired-protocol-surface": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_retired_hades_protocol_surface.py",
+          "reason": "Retired aliases are intentionally unreachable, so behavior tests cannot execute them; a focused static boundary prevents obsolete compatibility shims from re-entering the product surface."
+        }
+      ]
     }
   }
 }
