@@ -4,12 +4,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-python3 -m compileall -q Backend
-python3 Tools/validate_game_module.py hades2
+MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
+test -f "$MACOS_ONLY_LIST"
 
-for test_file in "$ROOT"/tests/test_*.py; do
+while IFS= read -r name || [[ -n "$name" ]]; do
+    [[ -n "$name" ]] || continue
+    test_file="$ROOT/tests/$name"
+    test -f "$test_file"
     echo "==> $test_file"
     python3 "$test_file"
-done
+done < "$MACOS_ONLY_LIST"
 
 echo "macos_checks_ok"
