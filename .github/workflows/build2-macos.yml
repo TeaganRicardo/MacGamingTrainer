@@ -1,5 +1,5 @@
 # The workflow name is retained as a stable project/check identifier.
-# "Build 2" is not a product-version source; product SemVer comes from Info.plist.
+# "Build 2" is not a product-version source; release metadata comes from Info.plist.
 name: Build 2 macOS
 
 on:
@@ -34,15 +34,16 @@ jobs:
         if: steps.scope.outputs.docs_only == 'true'
         run: echo "Docs-only change; skipping macOS contracts/build/package."
 
-      - name: Read product version
+      - name: Read release identity
         id: version
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           source_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
           source_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
           [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          test "$source_version" = "$source_build"
+          [[ "$source_build" =~ ^[1-9][0-9]*$ ]]
           echo "version=$source_version" >> "$GITHUB_OUTPUT"
+          echo "build=$source_build" >> "$GITHUB_OUTPUT"
           source_sha="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
           echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
@@ -58,12 +59,13 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           app="dist/Mac Gaming Trainer.app"
-          expected="${{ steps.version.outputs.version }}"
+          expected_version="${{ steps.version.outputs.version }}"
+          expected_build="${{ steps.version.outputs.build }}"
           test -d "$app"
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
           build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
-          test "$version" = "$expected"
-          test "$build" = "$expected"
+          test "$version" = "$expected_version"
+          test "$build" = "$expected_build"
           test -f "$app/Contents/Resources/Backend/games/hades2/module.json"
           count=$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')
           test "$count" = "1"
@@ -73,13 +75,13 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           mkdir -p artifacts
-          artifact="artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-${{ steps.version.outputs.sha_short }}-rc.zip"
+          artifact="artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc.zip"
           ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "$artifact"
 
       - uses: actions/upload-artifact@v4
         if: steps.scope.outputs.docs_only != 'true'
         with:
-          name: MacGamingTrainer-${{ steps.version.outputs.version }}-${{ steps.version.outputs.sha_short }}-rc
-          path: artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-${{ steps.version.outputs.sha_short }}-rc.zip
+          name: MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc
+          path: artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc.zip
           if-no-files-found: error
           retention-days: 14
