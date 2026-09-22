@@ -1,5 +1,4 @@
 from pathlib import Path
-import math
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +61,8 @@ for feature, value in (
     assert normalize_desired_feature_value(feature, value) is None
 
 assert validate_desired_feature_value("godMode", True) is True
-assert validate_desired_feature_value("damageMultiplier", 3) == 3.0
+validated_damage = validate_desired_feature_value("damageMultiplier", 3)
+assert validated_damage == 3 and type(validated_damage) is int
 assert validate_desired_feature_value("gameSpeed", 1.5) == 1.5
 
 cases = (
