@@ -608,6 +608,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setStat(_ stat: String, text: String, locked: Bool) {
         guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false, statAvailable[stat] != false else { return }
         if !locked {
+            mutationScheduler.cancel(key: "stat.\(stat)")
             send(.setStat(stat: stat, locked: false, value: nil), title: "解除属性锁定")
             return
         }
