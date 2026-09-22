@@ -5,12 +5,22 @@ import subprocess
 import sys
 from pathlib import Path
 
+EXECUTABLE_REFERENCE_PREFIXES = ("docs/reference/hades2/",)
+
+
+def is_executable_reference_data(path: str) -> bool:
+    return path.startswith(EXECUTABLE_REFERENCE_PREFIXES) and not path.endswith(".md")
+
 
 def is_docs_only(paths: list[str]) -> bool:
     normalized = [path.strip() for path in paths if path.strip()]
     if not normalized:
         return False
-    return all(path.startswith("docs/") or path.endswith(".md") for path in normalized)
+    return all(
+        (path.startswith("docs/") or path.endswith(".md"))
+        and not is_executable_reference_data(path)
+        for path in normalized
+    )
 
 
 def changed_paths(base_sha: str, head_sha: str, cwd: Path | None = None) -> list[str]:
