@@ -142,21 +142,21 @@ struct Hades2TrainerView: View {
     private var combatSection: some View {
         TrainerSection(title: "战斗辅助", icon: "shield.checkered") {
             VStack(spacing: 1) {
-                featureRow("God Mode", key: "godMode", icon: "shield.fill", enabled: model.godMode, shortcut: .godMode) { model.feature("godMode", value: !model.godMode) }
-                featureRow("无限生命", key: "infiniteHealth", icon: "heart.fill", enabled: model.infiniteHealth, shortcut: .infiniteHealth) { model.feature("infiniteHealth", value: !model.infiniteHealth) }
-                featureRow("无限魔力", key: "infiniteMana", icon: "sparkles", enabled: model.infiniteMana, shortcut: .infiniteMana) { model.feature("infiniteMana", value: !model.infiniteMana) }
-                featureRow("法阵始终可用", key: "instantCastCooldown", icon: "circle.dotted.circle", enabled: model.instantCastCooldown, shortcut: .instantCastCooldown) { model.feature("instantCastCooldown", value: !model.instantCastCooldown) }
-                featureRow("巫咒始终可用", key: "hexAlwaysReady", icon: "moon.stars.fill", enabled: model.hexAlwaysReady, shortcut: .hexAlwaysReady) { model.feature("hexAlwaysReady", value: !model.hexAlwaysReady) }
-                featureRow("无限弹药", key: "infiniteAmmo", icon: "scope", enabled: model.infiniteAmmo, shortcut: .infiniteAmmo) { model.feature("infiniteAmmo", value: !model.infiniteAmmo) }
+                featureRow("God Mode", key: .godMode, icon: "shield.fill", enabled: model.godMode, shortcut: .godMode) { model.feature(.godMode, value: !model.godMode) }
+                featureRow("无限生命", key: .infiniteHealth, icon: "heart.fill", enabled: model.infiniteHealth, shortcut: .infiniteHealth) { model.feature(.infiniteHealth, value: !model.infiniteHealth) }
+                featureRow("无限魔力", key: .infiniteMana, icon: "sparkles", enabled: model.infiniteMana, shortcut: .infiniteMana) { model.feature(.infiniteMana, value: !model.infiniteMana) }
+                featureRow("法阵始终可用", key: .instantCastCooldown, icon: "circle.dotted.circle", enabled: model.instantCastCooldown, shortcut: .instantCastCooldown) { model.feature(.instantCastCooldown, value: !model.instantCastCooldown) }
+                featureRow("巫咒始终可用", key: .hexAlwaysReady, icon: "moon.stars.fill", enabled: model.hexAlwaysReady, shortcut: .hexAlwaysReady) { model.feature(.hexAlwaysReady, value: !model.hexAlwaysReady) }
+                featureRow("无限弹药", key: .infiniteAmmo, icon: "scope", enabled: model.infiniteAmmo, shortcut: .infiniteAmmo) { model.feature(.infiniteAmmo, value: !model.infiniteAmmo) }
                 featureMultiplierRow(
                     "伤害倍率",
-                    key: "damageEnabled",
+                    key: .damageEnabled,
                     icon: "bolt.fill",
                     enabled: model.damageEnabled,
                     text: $multiplier,
                     shortcut: .damageEnabled
                 ) {
-                    model.feature("damageEnabled", value: !model.damageEnabled)
+                    model.feature(.damageEnabled, value: !model.damageEnabled)
                 }
             }
             .trainerGroupedRows()
@@ -164,8 +164,8 @@ struct Hades2TrainerView: View {
             gameSpeedPanel
 
             VStack(spacing: 1) {
-                featureRow("小游戏自动成功", key: "autoMiniGames", icon: "gamecontroller.fill", enabled: model.autoMiniGames, shortcut: .autoMiniGames) { model.feature("autoMiniGames", value: !model.autoMiniGames) }
-                featureRow("花园便捷操作", key: "gardenQoL", icon: "leaf.fill", enabled: model.gardenQoL, shortcut: .gardenQoL) { model.feature("gardenQoL", value: !model.gardenQoL) }
+                featureRow("小游戏自动成功", key: .autoMiniGames, icon: "gamecontroller.fill", enabled: model.autoMiniGames, shortcut: .autoMiniGames) { model.feature(.autoMiniGames, value: !model.autoMiniGames) }
+                featureRow("花园便捷操作", key: .gardenQoL, icon: "leaf.fill", enabled: model.gardenQoL, shortcut: .gardenQoL) { model.feature(.gardenQoL, value: !model.gardenQoL) }
             }
             .trainerGroupedRows()
         }
@@ -706,8 +706,8 @@ struct Hades2TrainerView: View {
                 TrainerToggleControl(
                     isOn: model.boonRarityEnabled,
                     enabled: model.canEditDesired,
-                    tint: model.featurePresentation("boonRarityEnabled", enabled: model.boonRarityEnabled).trainerControlState(using: theme).indicatorColor,
-                    onChange: { model.feature("boonRarityEnabled", value: $0) }
+                    tint: model.featurePresentation(.boonRarityEnabled, enabled: model.boonRarityEnabled).trainerControlState(using: theme).indicatorColor,
+                    onChange: { model.feature(.boonRarityEnabled, value: $0) }
                 )
             }
             HStack(spacing: 12) {
@@ -774,7 +774,7 @@ struct Hades2TrainerView: View {
     private var resourcePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
             multiplierRow("金币获取倍率", enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
-                text: $moneyFactor, feature: "moneyMultiplier", toggle: "moneyMultiplierEnabled", shortcut: .moneyMultiplierEnabled)
+                text: $moneyFactor, feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
             Divider()
             TrainerResourceEditor(
                 title: "材料",
@@ -797,7 +797,7 @@ struct Hades2TrainerView: View {
             )
             Divider()
             multiplierRow("材料获取倍率", enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                text: $materialFactor, feature: "resourceMultiplier", toggle: "resourceMultiplierEnabled", shortcut: .resourceMultiplierEnabled)
+                text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
         }
         .trainerPanel()
     }
@@ -860,7 +860,7 @@ struct Hades2TrainerView: View {
         )
     }
 
-    private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: String, shortcut: ShortcutAction? = nil) -> some View {
+    private func multiplierRow(_ title: String, enabled: Bool, actual: Double, text: Binding<String>, feature: String, toggle: Hades2FeatureKey, shortcut: ShortcutAction? = nil) -> some View {
         TrainerCompactMultiplierRow(
             title: title,
             icon: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill",
@@ -894,7 +894,7 @@ struct Hades2TrainerView: View {
         }
     }
 
-    private func featureRow(_ title: String, key: String, icon: String, enabled: Bool, shortcut: ShortcutAction? = nil, action: @escaping () -> Void) -> some View {
+    private func featureRow(_ title: String, key: Hades2FeatureKey, icon: String, enabled: Bool, shortcut: ShortcutAction? = nil, action: @escaping () -> Void) -> some View {
         TrainerFeatureToggleRow(
             title: title,
             icon: icon,
@@ -904,7 +904,7 @@ struct Hades2TrainerView: View {
         )
     }
 
-    private func featureMultiplierRow(_ title: String, key: String, icon: String, enabled: Bool,
+    private func featureMultiplierRow(_ title: String, key: Hades2FeatureKey, icon: String, enabled: Bool,
         text: Binding<String>, shortcut: ShortcutAction?, action: @escaping () -> Void) -> some View {
         TrainerFeatureMultiplierRow(
             title: title,

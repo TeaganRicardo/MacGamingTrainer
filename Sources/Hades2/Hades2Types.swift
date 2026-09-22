@@ -25,6 +25,12 @@ struct BoonOption: Identifiable {
     let sortOrder: Int
 }
 
+enum Hades2FeatureKey: String, CaseIterable, Hashable {
+    case godMode, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
+    case hexAlwaysReady, infiniteAmmo, autoMiniGames, gardenQoL, boonRarityEnabled
+    case moneyMultiplierEnabled, resourceMultiplierEnabled
+}
+
 enum ShortcutAction: String, CaseIterable, Identifiable {
     case godMode, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
     case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
@@ -34,6 +40,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case disableAll
 
     var id: String { rawValue }
+    var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
 
     static let uiOrder: [ShortcutAction] = [
         .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
