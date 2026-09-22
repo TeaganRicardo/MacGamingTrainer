@@ -314,7 +314,7 @@ class Hades2Adapter(GameAdapter):
         if self.transport.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
-                self.preference_dirty=False
+                self.preference_dirty=was_dirty
                 return result
             except TransportError as error:
                 logging.warning('Desired feature %s stored pending reconnect: %s',feature,error)
