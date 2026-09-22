@@ -9,9 +9,9 @@ from .schema import (
     BOON_RARITY_TARGETS,
     ELEMENT_IDS,
     MAX_AMOUNT,
-    NEXT_ROOM_REWARD_MAX_LENGTH,
     STAT_RULES,
     VITALS,
+    is_valid_next_room_reward,
     validate_desired_feature_value,
 )
 
@@ -118,7 +118,7 @@ def validate_command_params(command, params):
 
     if command=='set_next_room_reward_desired':
         reward=params.get('reward')
-        if reward is not None and (not isinstance(reward,str) or len(reward)>NEXT_ROOM_REWARD_MAX_LENGTH):
+        if not is_valid_next_room_reward(reward):
             raise ValueError('下一房奖励无效。')
         return {'reward':reward}
 
