@@ -471,7 +471,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let title: String
         switch command {
         case .openSellTraits: title = "祝福出售界面"
-        case .openSpecialChoice: title = "特殊祝福三选一"
+        case .openSpecialChoice: title = "特殊祝福选择"
         default: return
         }
 
@@ -712,7 +712,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {
             guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
-            send(.openSpecialChoice(source: option.sourceId), title: "打开特殊祝福三选一", announceSuccess: false)
+            send(.openSpecialChoice(source: option.sourceId), title: "打开特殊祝福选择", announceSuccess: false)
         } else {
             spawnBoon(option.id)
         }
