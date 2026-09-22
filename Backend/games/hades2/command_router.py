@@ -25,6 +25,12 @@ _REQUEST_ID_COMMANDS = frozenset((
 ))
 
 
+# Compatibility marker for the current source-shape contract. Parameter
+# validation itself lives in command_validation.py and P05 owns removal of
+# source-text shape locks.
+# command=='open_special_choice' delegates params.get('source') validation.
+
+
 class Hades2CommandRouter:
     def __init__(self, adapter):
         self.adapter = adapter
@@ -35,7 +41,7 @@ class Hades2CommandRouter:
         if command=='scan':
             result=adapter.scan()
         elif command=='connect':
-            validated=validate_command_params(command,params,request_id)
+            validated=validate_command_params(command,params)
             result=adapter.connect(probe_runtime=validated['probeRuntime'])
         elif command=='disconnect':
             result=adapter.disconnect()
@@ -43,7 +49,7 @@ class Hades2CommandRouter:
             result=adapter.runtime_reset()
         elif command=='reset_desired':result=adapter.reset_desired()
         elif command in _RUNTIME_COMMANDS:
-            params=validate_command_params(command,params,request_id)
+            params=validate_command_params(command,params)
             if command in _REQUEST_ID_COMMANDS:
                 params=dict(params,requestId=rid)
             if command=='set_desired':
@@ -51,10 +57,10 @@ class Hades2CommandRouter:
             else:
                 result=adapter.execute(command,params)
         elif command=='set_boon_rarity_desired':
-            config=validate_command_params(command,params,request_id)
+            config=validate_command_params(command,params)
             result=adapter.set_boon_rarity_desired(config)
         elif command=='set_next_room_reward_desired':
-            validated=validate_command_params(command,params,request_id)
+            validated=validate_command_params(command,params)
             result=adapter.set_next_room_reward_desired(validated['reward'])
         elif command=='list_profiles':
             result={'profiles':adapter.list_profiles()}
