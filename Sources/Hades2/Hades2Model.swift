@@ -24,6 +24,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         "enemyHealth": .init(min: 10, max: 1000, integer: false),
     ]
     @Published var connected = false
+    @Published private(set) var editGeneration: UInt64 = 0
     @Published private(set) var backendStatus = TrainerBackendStatus()
     private let backendSession: TrainerBackendSession
     private let logSink = TrainerLogSink()
@@ -476,6 +477,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func invalidatePendingMutations() {
         mutationScheduler.invalidateAll()
+        editGeneration &+= 1
     }
 
     private func flushPendingMutations() {
