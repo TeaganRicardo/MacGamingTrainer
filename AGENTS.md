@@ -41,6 +41,7 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - Identify authoritative state, durable desired state, observable runtime state and one-shot intent involved in the change.
 - Decide whether an operation is replay-safe before adding retry/recovery behavior.
 - For a demonstrated correctness defect: reproduce RED first, then make the smallest coherent fix at the owning boundary.
+- Treat user shorthand as intent, not canonical product terminology. For Hades-facing names, prefer official target-build zh-CN strings or catalog/reference terminology; when no official name exists, choose a neutral formal product term and use it consistently across UI, errors, tests and current docs.
 - Do not restore code merely because a historical branch is ahead/divergent; squash-merged and superseded branches are common in this repository.
 
 ## Verification routing
