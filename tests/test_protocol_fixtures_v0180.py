@@ -1,4 +1,5 @@
 from pathlib import Path
+import copy
 import json
 import logging
 import sys
@@ -14,7 +15,6 @@ fixture_path = root/'ContractFixtures/host_protocol_v5.json'
 fixture = json.loads(fixture_path.read_text(encoding='utf-8'))
 assert fixture['fixtureSchemaVersion'] == 1
 assert fixture['hostProtocolVersion'] == HOST_PROTOCOL_VERSION
-assert fixture['backendVersion'] == APP_BACKEND_VERSION
 
 game = fixture['game']
 
@@ -47,7 +47,10 @@ try:
     replies = []
     for step in fixture['steps']:
         reply = router.handle(step['request'])
-        assert reply == step['reply'], step['name']
+        expected = copy.deepcopy(step['reply'])
+        if expected.get('result', {}).get('backendVersion') == '__PRODUCT_VERSION__':
+            expected['result']['backendVersion'] = APP_BACKEND_VERSION
+        assert reply == expected, step['name']
         # Every fixture reply is strict JSON; this is the exact wire surface a
         # Swift decoder may consume without Python-specific values.
         json.dumps(reply, ensure_ascii=False, allow_nan=False)

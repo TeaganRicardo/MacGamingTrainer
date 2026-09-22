@@ -23,7 +23,7 @@ For an ordinary task, read only:
 3. `ENGINEERING_INVARIANTS.md`;
 4. the production files and nearest tests for the requested subsystem.
 
-Read `GAME_MODULES.md` only for module/Core/build-boundary work.
+Read `GAME_MODULES.md` only for module/Core/build-boundary work. Read `VERSIONING.md` for release/version changes.
 
 ## Pick the owner before editing
 
@@ -51,6 +51,13 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - `Backend/games/hades2/runtime/hades.lua` changes: resident revision must increase; automated tests are not final validation. Record real Hades II acceptance for changed runtime semantics.
 - Tests must use temporary fixtures and must never read/write the real user/game save tree.
 - Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum.
+
+## Product versioning
+
+- `Info.plist` is the only source of the current app product version.
+- `CFBundleShortVersionString` is the three-part product SemVer; `CFBundleVersion` is the monotonic positive-integer bundle build number.
+- Host/module protocol and schema/runtime revisions are independent compatibility versions, not product SemVer.
+- See `VERSIONING.md` for release increment rules.
 
 ## ChatGPT Project rule
 
