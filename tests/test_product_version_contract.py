@@ -35,8 +35,13 @@ assert 'echo "build=$source_build"' in workflow
 assert 'test "$version" = "$expected_version"' in workflow
 assert 'test "$build" = "$expected_build"' in workflow
 assert 'test "$source_version" = "$source_build"' not in workflow
-assert "github.event.pull_request.head.sha" in workflow
-assert 'source_sha=' in workflow
+# Build-source identity comes from the actual checkout, not the PR head label.
+assert 'source_sha="$(git rev-parse HEAD)"' in workflow
+assert "source_tree=\"$(git rev-parse 'HEAD^{tree}')\"" in workflow
+assert 'source_sha="${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}"' not in workflow
+assert 'Tools/write_build_provenance.py' in workflow
+assert '.provenance.json' in workflow
+assert 'sidecar="${artifact}.sha256"' in workflow
 assert '-b${{ steps.version.outputs.build }}-' in workflow
 assert 'MacGamingTrainer-0.1-build2' not in workflow
 assert 'test "$version" = "0.1"' not in workflow
