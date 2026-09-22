@@ -25,7 +25,7 @@ for token in (
 # of onChange modifiers as one expression.
 body = re.search(r'var body: some View\s*\{(?P<body>.*?)\n\s*\}', main, re.S)
 assert body, 'Hades2TrainerView body not found'
-assert 'catalogObservedContent' in body.group('body')
+assert 'editorGenerationObservedContent' in body.group('body')
 assert '.onChange(' not in body.group('body')
 
 for name in (
@@ -33,6 +33,7 @@ for name in (
     'statObservedContent',
     'gameConfigObservedContent',
     'catalogObservedContent',
+    'editorGenerationObservedContent',
 ):
     assert f'private var {name}: some View' in main, name
 
@@ -44,3 +45,6 @@ assert 'private var lockedStatObservedContent' not in main
 assert 'applyInputChanges' not in main
 assert 'applyLockedStatChanges' not in main
 assert 'intentBinding(' in main
+
+assert '.onChange(of: model.editGeneration)' in main
+assert 'rebuildEditorDraftsFromModel()' in main
