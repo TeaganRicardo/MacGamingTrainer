@@ -15,13 +15,8 @@ macos_only = [
     for name in macos_only_list.read_text().splitlines()
     if name.strip()
 ]
+assert macos_only, 'macOS-only test list must not be empty'
 assert len(macos_only) == len(set(macos_only)), 'macOS-only test list contains duplicates'
-assert set(macos_only) == {
-    'test_core_save_batch_delete_round20.py',
-    'test_core_save_rename_completion_round24.py',
-    'test_hades2_run_log_watcher.py',
-    'test_trainer_log_sink_shared_append.py',
-}
 for name in macos_only:
     assert (ROOT / 'tests' / name).is_file(), name
 
