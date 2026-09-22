@@ -3099,7 +3099,8 @@ if __MacGamingTrainerV1 == nil then
             end
             closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
             ScreenData.SellTraits = trainerScreen
-            OpenSellTraitMenu({})
+            local menuArgs = {}
+            OpenSellTraitMenu(menuArgs)
           end)
           if trainerScreen ~= nil and ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
           if ok then
