@@ -52,6 +52,22 @@ def validate_desired_feature_value(feature,value):
     return float(value)
 
 
+VITALS = ('health','mana','armor')
+ELEMENT_IDS = frozenset(('Fire','Water','Earth','Air','Aether'))
+MAX_AMOUNT = 999999
+BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
+NEXT_ROOM_REWARD_MAX_LENGTH = 128
+
+
+def default_boon_rarity():
+    return {
+        'target':'Epic',
+        'multiplier':100.0,
+        'forceLegendary':False,
+        'forceDuo':False,
+    }
+
+
 STAT_RULES = {
     'grasp': {'min':0,'max':999,'integer':True,'error':'悟性上限必须是 0–999 的整数。'},
     'dodge': {'min':0,'max':100,'error':'概率必须为 0–100。'},
