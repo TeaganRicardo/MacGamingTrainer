@@ -1,10 +1,15 @@
 # Versioning
 
-MacGamingTrainer uses one app-level Semantic Version in `MAJOR.MINOR.PATCH` form.
+MacGamingTrainer has one app-level product version in Semantic Versioning `MAJOR.MINOR.PATCH` form and one monotonically increasing macOS bundle build number.
 
-The current product version has one source of truth: `Info.plist`. `CFBundleShortVersionString` and `CFBundleVersion` must contain the same three-part version. Do not copy the current version into documentation, workflows, module manifests, protocol fixtures, or source constants.
+Current release metadata has one source of truth: `Info.plist`.
 
-Git commit SHA is the authoritative identity of a development build. Product versions identify releases; they do not identify every intermediate commit.
+- `CFBundleShortVersionString` is the product SemVer.
+- `CFBundleVersion` is the positive-integer build identity.
+
+Do not copy either current value into documentation, workflows, module manifests, protocol fixtures, or source constants. Consumers should read them from the plist when needed.
+
+Git commit SHA is the authoritative identity of development source. Product SemVer identifies a release line; the build number distinguishes distributable bundle iterations; SHA identifies the exact source.
 
 ## Development workflow
 
@@ -12,12 +17,17 @@ Ordinary feature, fix, refactor, catalog, and documentation PRs do not edit `Inf
 
 When a release is deliberately prepared:
 
-1. choose PATCH, MINOR, or MAJOR from the rules below;
-2. use one focused release-preparation PR to update both bundle version keys in `Info.plist`;
-3. run the normal release/build gates on that exact SHA;
-4. after the release commit is on `main`, tag the exact released commit as `vMAJOR.MINOR.PATCH`.
+1. choose PATCH, MINOR, or MAJOR from the rules below if the product release changes;
+2. increment `CFBundleVersion` for the new distributable build;
+3. use one focused release-preparation PR for those metadata changes;
+4. run the normal release/build gates on that exact SHA;
+5. after the release commit is on `main`, tag the exact released commit as `vMAJOR.MINOR.PATCH`.
 
-Do not pre-bump the next version after a release. Until another release is prepared, Git SHA identifies newer development state.
+If the same product SemVer needs another distributable build after an earlier build was already used or uploaded, keep `CFBundleShortVersionString` unchanged and increment only `CFBundleVersion`.
+
+Transient CI builds do not consume build numbers. Their exact source identity is the Git SHA included in the artifact name.
+
+Do not pre-bump the next product version after a release. Until another release is prepared, Git SHA identifies newer development state.
 
 ## Release increments
 
@@ -35,26 +45,29 @@ Docs-only changes and intermediate development commits do not require a version 
 
 ### MINOR — `X.Y+1.0`
 
-MINOR is for backwards-compatible capability expansion:
+MINOR is for backwards-compatible product expansion:
 
 - a meaningful new user-facing trainer feature or workflow;
 - a new supported game module;
-- a substantial new Host capability exposed to modules without invalidating existing module contracts;
+- a substantial new Host capability exposed through the product;
 - a material product expansion that deserves its own release line.
 
 Reset PATCH to zero when MINOR changes.
 
-While the product remains in the `0.x.y` pre-stable series, an intentionally incompatible experimental redesign may also advance MINOR rather than declaring `1.0.0`. Such a release must document the compatibility break explicitly.
+While the product remains in the `0.x.y` pre-stable series, an intentionally incompatible experimental redesign may also advance MINOR rather than declaring `1.0.0`. Document the compatibility break explicitly.
+
+An internal Host/module protocol change does not by itself require a product MAJOR or MINOR bump when Host and bundled modules migrate together and no external compatibility contract is broken.
 
 ### MAJOR — `X+1.0.0`
 
-`1.0.0` is the first deliberate stability milestone: the product, persisted user data, and Host/module contract are considered stable enough that incompatible changes require migration or an explicit major release.
+`1.0.0` is the first deliberate stability milestone: established user-facing behavior, persisted user data, and any externally relied-on integration surfaces are considered stable enough that incompatible changes require migration or an explicit major release.
 
 After `1.0.0`, advance MAJOR for deliberate incompatible product-contract changes such as:
 
 - dropping compatibility with persisted preferences/profiles/snapshots without an automatic migration;
-- an incompatible externally relied-on Host/module interface change;
-- removing or redefining established product behavior in a way that requires users or independently distributed modules to adapt.
+- breaking an externally relied-on automation, data, or integration interface;
+- removing or redefining established product behavior in a way that requires users to adapt;
+- breaking a future independently distributed module interface without a compatible migration path.
 
 Reset MINOR and PATCH to zero when MAJOR changes.
 
@@ -69,7 +82,7 @@ Independent compatibility revisions remain integers with narrower meanings:
 - Manifest, persistence, preference, profile, and save schema versions: migration/serialization contracts.
 - Hades II resident runtime revision: resident Lua source/runtime identity and acceptance discipline.
 
-These values advance only when their own contract changes. They do not mirror product SemVer and do not automatically force the same kind of SemVer increment.
+These values advance only when their own contract changes. They do not mirror product SemVer and do not automatically force a particular SemVer increment.
 
 If game modules later become independently installable or independently updateable, introduce module-level SemVer at that point together with an explicit supported Host compatibility range. Do not add module SemVer before that seam exists.
 
@@ -77,5 +90,5 @@ If game modules later become independently installable or independently updateab
 
 - Release tags use `vMAJOR.MINOR.PATCH`.
 - The existing historical `v0.1` tag remains historical evidence; new tags use the three-part form.
-- Release/test artifacts should include the product SemVer and a short Git SHA.
+- Release/test artifacts include product SemVer, bundle build number, and a short Git SHA.
 - Completion and QA claims continue to name the exact tested SHA and actual CI/runtime evidence.
