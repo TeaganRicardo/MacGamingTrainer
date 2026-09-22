@@ -6,6 +6,7 @@ import sys
 import time
 import zipfile
 
+from core.log_paths import trainer_log_path
 from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION
 from . import preparation, localization
 from .config import GAME_SPEC
@@ -75,7 +76,7 @@ def export_diagnostics(adapter):
         'python':sys.version,'platform':platform.platform(),'passed':result['passed'],'total':result['total'],
         'checks':result['checks'],'state':result['state'],
     }
-    log_path=preparation.DATA/'trainer.log';symbols=Path(__file__).with_name('symbols.json')
+    log_path=trainer_log_path(adapter.game_id);symbols=Path(__file__).with_name('symbols.json')
     with zipfile.ZipFile(zip_path,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('report.json',json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2,default=str)+'\n')
         if log_path.is_file():

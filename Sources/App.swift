@@ -87,12 +87,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
-            CommandMenu("训练器") {
-                Button("刷新状态") { model.refreshFromHost() }.disabled(model.busy)
-                Button("全部关闭") { model.disableAllFromHost() }.disabled(model.busy || !model.connected)
-                Divider()
-                Button("查看日志") { model.openLog() }
-            }
+            ActiveGameModule.makeManagementCommands(model: model)
         }
     }
 }

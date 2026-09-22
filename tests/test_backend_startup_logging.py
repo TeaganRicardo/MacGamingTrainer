@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import sys
 import tempfile
 
@@ -44,9 +45,13 @@ original_level = root_logger.level
 original_factory = server.create_adapter
 original_available_games = server.available_games
 original_stdin = sys.stdin
+original_home = os.environ.get("HOME")
 
 with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     temp_root = Path(td)
+    home = temp_root / "home"
+    home.mkdir()
+    os.environ["HOME"] = str(home)
     data_dir = temp_root / "data"
     data_dir.mkdir()
     desired = temp_root / "desired-state.json"
@@ -85,8 +90,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
         server.available_games = original_available_games
         sys.stdin = original_stdin
 
-    log_path = data_dir / "trainer.log"
-    assert log_path.is_file(), "server startup must create its own trainer.log even when root already has a handler"
+    log_path = home / "Library/Application Support/MacGamingTrainer/startup_fixture/trainer.log"
+    assert log_path.is_file(), "server startup must create a module-scoped trainer.log even when adapter data is legacy/global"
+    assert not (data_dir / "trainer.log").exists(), "adapter data_dir must not own the shared trainer log"
     log_text = log_path.read_text(encoding="utf-8")
     assert "startup fixture constructor warning" in log_text
     assert "Quarantined invalid desired-state profile" in log_text
@@ -131,8 +137,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
         server.available_games = original_available_games
         sys.stdin = original_stdin
 
-    clean_log = (clean_data_dir / "trainer.log").read_text(encoding="utf-8")
+    clean_log = log_path.read_text(encoding="utf-8")
     assert clean_log.count("request ping-clean ping success game=startup_fixture") == 1
+    assert not (clean_data_dir / "trainer.log").exists()
     assert json.loads(clean_stdout.getvalue().strip())["ok"] is True
     assert clean_created and clean_created[0].closed is True
     assert unrelated_handler in root_logger.handlers
@@ -147,5 +154,9 @@ for handler in list(root_logger.handlers):
             handler.close()
 root_logger.handlers[:] = original_handlers
 root_logger.setLevel(original_level)
+if original_home is None:
+    os.environ.pop("HOME", None)
+else:
+    os.environ["HOME"] = original_home
 
 print("backend_startup_logging_ok")

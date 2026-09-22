@@ -27,7 +27,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var editGeneration: UInt64 = 0
     @Published private(set) var backendStatus = TrainerBackendStatus()
     private let backendSession: TrainerBackendSession
-    private let logSink = TrainerLogSink()
+    private let logSink: TrainerLogSink
     private lazy var api = Hades2API(session: backendSession)
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var backendProtocolVersion: Int? { backendStatus.backendProtocolVersion }
@@ -203,8 +203,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init(session: TrainerBackendSession) {
+    init(session: TrainerBackendSession, logSink: TrainerLogSink) {
         backendSession = session
+        self.logSink = logSink
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.runLogWatcher.start()
@@ -276,10 +277,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func toggleConnection() {
-        toggleConnection(probeRuntime: true)
-    }
-
     private func toggleConnection(probeRuntime: Bool) {
         if connected {
             sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
@@ -296,7 +293,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func disableAllFromHost() { disableAll() }
     func restartBackendFromHost() { restartBackend() }
 
     func launchGame() { send(.launch, title: "启动游戏") }
@@ -304,7 +300,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func restoreOriginalSignature() { send(.restore, title: "恢复原始签名") }
     func disableAll() { sendBarrier(.disableAll, title: "全部关闭") }
 
-    func restartBackend() {
+    private func restartBackend() {
         guard !exiting else { return }
         invalidatePendingMutations()
         error = ""
