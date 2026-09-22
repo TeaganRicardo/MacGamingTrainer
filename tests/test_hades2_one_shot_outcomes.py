@@ -40,5 +40,7 @@ assert "特殊祝福选择" in model and "特殊祝福三选一" not in model
 assert "case .accepted:" in model and "已受理" in model
 assert "case .opened:" in model and "已打开" in model
 assert "case .failed:" in model and "失败" in model
+assert "receipt.error.map" not in model
+assert "失败，请查看日志" in model
 
 print("hades2_one_shot_outcomes_ok")
