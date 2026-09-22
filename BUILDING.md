@@ -19,7 +19,7 @@ xcrun lldb -P
 The output app is written under `dist/`; the exact path is printed by `build.sh` after a successful build.
 
 Version ownership:
-- current product SemVer: `Info.plist`; both bundle version keys must match;
+- product SemVer and monotonic bundle build number: `Info.plist`;
 - release policy: `VERSIONING.md`;
 - runtime/protocol/schema status: `PROJECT_STATUS.md`.
 
