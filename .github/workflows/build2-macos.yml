@@ -40,11 +40,16 @@ jobs:
         run: |
           source_version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
           source_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
+          source_sha="$(git rev-parse HEAD)"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
           [[ "$source_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$source_build" =~ ^[1-9][0-9]*$ ]]
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]]
           echo "version=$source_version" >> "$GITHUB_OUTPUT"
           echo "build=$source_build" >> "$GITHUB_OUTPUT"
-          source_sha="${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
           echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
       - name: Run full macOS contract suite
@@ -72,16 +77,43 @@ jobs:
           codesign --verify --deep --strict "$app"
 
       - name: Package release candidate
+        id: package
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           mkdir -p artifacts
           artifact="artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc.zip"
+          provenance="${artifact%.zip}.provenance.json"
+          sidecar="${artifact}.sha256"
           ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "$artifact"
+          python3 Tools/write_build_provenance.py \
+            --artifact "$artifact" \
+            --product-version "${{ steps.version.outputs.version }}" \
+            --bundle-build "${{ steps.version.outputs.build }}" \
+            --repo-root "$GITHUB_WORKSPACE"
+          test -f "$provenance"
+          test -f "$sidecar"
+          (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
+          python3 - "$provenance" "${{ steps.version.outputs.source_sha }}" "${{ steps.version.outputs.source_tree }}" <<'PY'
+          import json
+          import sys
+
+          manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert manifest["source"] == {
+              "commit": sys.argv[2],
+              "tree": sys.argv[3],
+          }, manifest["source"]
+          PY
+          echo "artifact_name=$(basename "$artifact")" >> "$GITHUB_OUTPUT"
+          echo "provenance_name=$(basename "$provenance")" >> "$GITHUB_OUTPUT"
+          echo "sidecar_name=$(basename "$sidecar")" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         if: steps.scope.outputs.docs_only != 'true'
         with:
           name: MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc
-          path: artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc.zip
+          path: |
+            artifacts/${{ steps.package.outputs.artifact_name }}
+            artifacts/${{ steps.package.outputs.provenance_name }}
+            artifacts/${{ steps.package.outputs.sidecar_name }}
           if-no-files-found: error
           retention-days: 14
