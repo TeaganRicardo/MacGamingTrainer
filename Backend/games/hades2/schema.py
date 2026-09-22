@@ -1,10 +1,56 @@
+import math
+
+
 TOGGLES = (
     'godMode','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown',
     'hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled',
     'moneyMultiplierEnabled','resourceMultiplierEnabled',
 )
 
-MULTIPLIERS = ('damageMultiplier','moneyMultiplier','resourceMultiplier','gameSpeed')
+MULTIPLIER_RULES = {
+    'damageMultiplier': {'default':2.0,'min':1.0,'max':100.0},
+    'moneyMultiplier': {'default':2.0,'min':1.0,'max':100.0},
+    'resourceMultiplier': {'default':2.0,'min':1.0,'max':100.0},
+    'gameSpeed': {'default':1.0,'min':0.0,'max':10.0},
+}
+MULTIPLIERS = tuple(MULTIPLIER_RULES)
+
+
+def desired_feature_defaults():
+    values={key:False for key in TOGGLES}
+    values.update({key:rule['default'] for key,rule in MULTIPLIER_RULES.items()})
+    return values
+
+
+def normalize_desired_feature_value(feature,value):
+    if feature in TOGGLES:
+        return value if type(value) is bool else None
+    rule=MULTIPLIER_RULES.get(feature)
+    if rule is None:
+        return None
+    if type(value) not in (int,float) or isinstance(value,bool) or not math.isfinite(value):
+        return None
+    if not rule['min']<=value<=rule['max']:
+        return None
+    return float(value)
+
+
+def validate_desired_feature_value(feature,value):
+    if feature not in TOGGLES and feature not in MULTIPLIER_RULES:
+        raise ValueError('未知功能。')
+    if feature in TOGGLES:
+        if type(value) is not bool:
+            raise ValueError('开关值必须为布尔值。')
+        return value
+    if type(value) not in (int,float) or isinstance(value,bool) or not math.isfinite(value):
+        raise ValueError('倍率必须为有限数值。')
+    rule=MULTIPLIER_RULES[feature]
+    if not rule['min']<=value<=rule['max']:
+        if feature=='gameSpeed':
+            raise ValueError('游戏速度范围为 0–10。')
+        raise ValueError('倍率范围为 1–100。')
+    return float(value)
+
 
 STAT_RULES = {
     'grasp': {'min':0,'max':999,'integer':True,'error':'悟性上限必须是 0–999 的整数。'},
