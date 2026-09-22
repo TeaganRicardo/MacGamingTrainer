@@ -5,7 +5,7 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 from . import preparation
 from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
-from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, default_boon_rarity, desired_feature_defaults, disconnected_capabilities
+from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, default_boon_rarity, desired_feature_defaults, disconnected_capabilities, is_valid_next_room_reward
 from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
@@ -457,6 +457,7 @@ class Hades2Adapter(GameAdapter):
 
 
     def set_next_room_reward_desired(self,reward):
+        if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
