@@ -252,6 +252,8 @@ def localize_catalog(decoded):
         identifier=item['id']
         for key in ('name','englishName','sectionTitle','englishSectionTitle'):
             if isinstance(item.get(key),str):item[key]=_clean(item[key])
+        section_title=item.get('sectionTitle')
+        item['englishSectionTitle']=_english_group_label(section_title,en)
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
         if isinstance(official_en,str) and official_en:
