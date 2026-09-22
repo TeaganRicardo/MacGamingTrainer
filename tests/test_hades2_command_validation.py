@@ -9,15 +9,15 @@ from games.hades2.command_validation import validate_command_params
 
 def expect_error(command, params, message):
     try:
-        validate_command_params(command, params, "req-bad")
+        validate_command_params(command, params)
     except ValueError as error:
         assert str(error) == message
     else:
         raise AssertionError(f"invalid command accepted: {command} {params!r}")
 
 
-assert validate_command_params("connect", {}, "req") == {"probeRuntime": True}
-assert validate_command_params("connect", {"probeRuntime": False}, "req") == {"probeRuntime": False}
+assert validate_command_params("connect", {}) == {"probeRuntime": True}
+assert validate_command_params("connect", {"probeRuntime": False}) == {"probeRuntime": False}
 expect_error("connect", {"probeRuntime": 1}, "probeRuntime 必须为布尔值。")
 
 assert validate_command_params(
@@ -144,7 +144,7 @@ expect_error(
 # Request identity is router-owned; validation only returns JSON-compatible command params.
 # Commands with no pure parameter contract pass through a defensive copy.
 original = {"ignored": "value"}
-validated = validate_command_params("status", original, "status-id")
+validated = validate_command_params("status", original)
 assert validated == original and validated is not original
 
 print("hades2_command_validation_ok")
