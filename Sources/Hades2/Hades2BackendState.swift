@@ -20,10 +20,18 @@ struct Hades2BoonRaritySnapshot {
     let forceDuo: Bool?
 }
 
+enum Hades2ActionOutcome: String {
+    case completed
+    case accepted
+    case opened
+    case failed
+    case outcomeUnknown = "outcome_unknown"
+}
+
 struct Hades2ActionReceipt: Equatable {
     let requestID: String
     let command: String
-    let outcome: String
+    let outcome: Hades2ActionOutcome
     let error: String?
 }
 
@@ -148,7 +156,8 @@ struct Hades2StatePatch {
         if let row = payload["lastAction"] as? [String: Any],
            let requestID = row["requestId"] as? String,
            let command = row["command"] as? String,
-           let outcome = row["outcome"] as? String {
+           let outcomeRaw = row["outcome"] as? String,
+           let outcome = Hades2ActionOutcome(rawValue: outcomeRaw) {
             lastAction = Hades2ActionReceipt(
                 requestID: requestID,
                 command: command,
