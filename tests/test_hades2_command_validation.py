@@ -111,7 +111,6 @@ assert validate_command_params(
         "forceLegendary": True,
         "forceDuo": False,
     },
-    "rarity-id",
 ) == {
     "target": "Epic",
     "multiplier": 250,
