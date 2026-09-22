@@ -55,16 +55,16 @@ class PendingTransport:
         self.live = False
 
     def execute(self, source):
-        if (
-            'dispatch("set_feature"' in source
-            and '["feature"]="godMode"' in source
-            and '["value"]=true' in source
-        ):
-            if self.fail_god_mode_once:
+        for feature in TOGGLES:
+            marker = '["feature"]="' + feature + '"'
+            if 'dispatch("set_feature"' not in source or marker not in source:
+                continue
+            value = '["value"]=true' in source[source.index(marker):]
+            if feature == 'godMode' and value and self.fail_god_mode_once:
                 self.fail_god_mode_once = False
                 raise TransportError('lua_error', 'simulated durable feature failure')
-            self.state['desiredFeatures']['godMode'] = True
-            self.state['activeFeatures']['godMode'] = True
+            self.state['desiredFeatures'][feature] = value
+            self.state['activeFeatures'][feature] = value
         if 'dispatch("spawn_reward"' in source:
             self.spawn_count += 1
         return json.dumps(self.state)
@@ -118,3 +118,45 @@ persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8')
 assert persisted['godMode'] is True
 
 print('pending_preference_confirmation_spawn_ok')
+
+
+# A successful durable B may confirm B, but it must not clear an older pending A.
+base_b = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-feature-b-'))
+preparation.DATA = base_b
+transport_b = PendingTransport()
+adapter_b = Hades2Adapter(transport=transport_b)
+adapter_b._runtime_bootstrapped = True
+adapter_b._catalog_initialized = True
+adapter_b._apply_game_speed = lambda value: 1.0
+adapter_b.state.update(copy.deepcopy(transport_b.state), connected=True, pid=transport_b.pid)
+adapter_b.preference_initialized = True
+adapter_b.preference_dirty = False
+
+adapter_b.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-b',
+)
+assert adapter_b.preference_dirty is True
+assert transport_b.state['desiredFeatures']['godMode'] is False
+
+adapter_b.dispatch(
+    'set_desired',
+    {'feature': 'gardenQoL', 'value': True},
+    'desired-b',
+)
+assert transport_b.state['desiredFeatures']['gardenQoL'] is True
+assert adapter_b.preferences['gardenQoL'] is True
+assert adapter_b.preferences['godMode'] is True
+assert adapter_b.preference_dirty is True, (
+    'successful feature B must not confirm failed feature A'
+)
+persisted_b = json.loads((base_b / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_b['godMode'] is True
+assert persisted_b['gardenQoL'] is True
+
+adapter_b.dispatch('status', {}, 'status-b')
+assert transport_b.state['desiredFeatures']['godMode'] is True
+assert adapter_b.preference_dirty is False
+
+print('pending_preference_confirmation_feature_b_ok')
