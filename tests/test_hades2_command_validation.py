@@ -82,26 +82,26 @@ expect_error(
 
 assert validate_command_params(
     "set_resource", {"resource": "Money", "amount": 10}, "resource-id"
-) == {"resource": "Money", "amount": 10, "requestId": "resource-id"}
+) == {"resource": "Money", "amount": 10}
 assert validate_command_params(
     "lock_resource", {"resource": "Money", "locked": False}, "lock-resource-id"
-) == {"resource": "Money", "locked": False, "requestId": "lock-resource-id"}
+) == {"resource": "Money", "locked": False}
 assert validate_command_params(
     "set_rerolls", {"amount": 7}, "reroll-id"
-) == {"amount": 7, "requestId": "reroll-id"}
+) == {"amount": 7}
 assert validate_command_params(
     "lock_rerolls", {"locked": True}, "lock-reroll-id"
-) == {"locked": True, "requestId": "lock-reroll-id"}
+) == {"locked": True}
 
 assert validate_command_params(
     "spawn_reward", {"reward": "EmptyMaxHealthDrop"}, "spawn-id"
-) == {"reward": "EmptyMaxHealthDrop", "requestId": "spawn-id"}
+) == {"reward": "EmptyMaxHealthDrop"}
 assert validate_command_params(
     "open_sell_traits", {}, "sell-id"
-) == {"requestId": "sell-id"}
+) == {}
 assert validate_command_params(
     "open_special_choice", {"source": "Zeus"}, "choice-id"
-) == {"source": "Zeus", "requestId": "choice-id"}
+) == {"source": "Zeus"}
 
 assert validate_command_params(
     "set_boon_rarity_desired",
@@ -141,6 +141,7 @@ expect_error(
     "下一房奖励无效。",
 )
 
+# Request identity is router-owned; validation only returns JSON-compatible command params.
 # Commands with no pure parameter contract pass through a defensive copy.
 original = {"ignored": "value"}
 validated = validate_command_params("status", original, "status-id")
