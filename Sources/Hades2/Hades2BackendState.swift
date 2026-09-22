@@ -40,9 +40,7 @@ struct Hades2StatePatch {
     let damageMultiplier: Double?
     let moneyLocked: Bool?
     let moneyMultiplier: Double?
-    let moneyMultiplierEnabled: Bool?
     let resourceMultiplier: Double?
-    let resourceMultiplierEnabled: Bool?
     let boonRarity: Hades2BoonRaritySnapshot?
     let nextRoomReward: Hades2FieldPatch<String>
     let rerolls: Hades2FieldPatch<Double>
@@ -91,9 +89,7 @@ struct Hades2StatePatch {
         damageMultiplier = Self.number(payload["damageMultiplier"])
         moneyLocked = payload["moneyLocked"] as? Bool
         moneyMultiplier = Self.number(payload["moneyMultiplier"])
-        moneyMultiplierEnabled = payload["moneyMultiplierEnabled"] as? Bool
         resourceMultiplier = Self.number(payload["resourceMultiplier"])
-        resourceMultiplierEnabled = payload["resourceMultiplierEnabled"] as? Bool
 
         if let row = payload["boonRarity"] as? [String: Any] {
             boonRarity = Hades2BoonRaritySnapshot(
