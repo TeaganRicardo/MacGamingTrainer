@@ -25,12 +25,6 @@ _REQUEST_ID_COMMANDS = frozenset((
 ))
 
 
-# Compatibility marker for the current source-shape contract. Parameter
-# validation itself lives in command_validation.py and P05 owns removal of
-# source-text shape locks.
-# command=='open_special_choice' delegates params.get('source') validation.
-
-
 class Hades2CommandRouter:
     def __init__(self, adapter):
         self.adapter = adapter

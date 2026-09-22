@@ -1,13 +1,17 @@
 from pathlib import Path
 from runtime_revision_support import runtime_revision
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Backend'))
+
+from games.hades2.command_router import Hades2CommandRouter
+
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 types = (ROOT / 'Sources/Hades2/Hades2Types.swift').read_text()
 state = (ROOT / 'Sources/Hades2/Hades2BackendState.swift').read_text()
 model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
-router = (ROOT / 'Backend/games/hades2/command_router.py').read_text()
 adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
@@ -19,9 +23,37 @@ for token in ('openSpecialChoice = "open_special_choice"', 'case openSpecialChoi
     assert token in api, token
 assert 'return ["source": source]' in api
 
-assert "'open_special_choice'" in router
-assert "command=='open_special_choice'" in router or "command == 'open_special_choice'" in router
-assert "params.get('source')" in router
+class NativeChoiceRouterProbe:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, command, params):
+        self.calls.append((command, params))
+        return {"command": command, "params": params}
+
+
+router_probe = NativeChoiceRouterProbe()
+command_router = Hades2CommandRouter(router_probe)
+routed = command_router.dispatch(
+    "open_special_choice",
+    {"source": "Zeus"},
+    "native-choice-request",
+)
+assert routed == {
+    "command": "open_special_choice",
+    "params": {"source": "Zeus", "requestId": "native-choice-request"},
+}
+assert router_probe.calls == [
+    ("open_special_choice", {"source": "Zeus", "requestId": "native-choice-request"})
+]
+
+try:
+    command_router.dispatch("open_special_choice", {}, "invalid-native-choice")
+except ValueError as error:
+    assert str(error) == "请选择支持原生三选一的特殊祝福来源。"
+else:
+    raise AssertionError("router bypassed native special-choice validation")
+assert len(router_probe.calls) == 1
 replay = adapter[adapter.index('def _replay_preferences'):adapter.index('def scan(', adapter.index('def _replay_preferences'))]
 assert 'open_special_choice' not in replay
 

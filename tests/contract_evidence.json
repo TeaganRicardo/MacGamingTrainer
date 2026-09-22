@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "invariants": {
+    "host.connection-lifetime": {
+      "evidence": [
+        {
+          "type": "behavior",
+          "path": "tests/test_host_connection_policy_dev8.py"
+        }
+      ]
+    },
+    "host.single-backend-session": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_host_module_session_ownership.py",
+          "reason": "Session construction is an ownership property of the static Swift composition graph; module builds prove compatibility but cannot observe duplicate hidden session construction."
+        },
+        {
+          "type": "build",
+          "path": ".github/workflows/build2-macos.yml"
+        }
+      ]
+    },
+    "backend.recovery-no-request-replay": {
+      "evidence": [
+        {
+          "type": "compiled-behavior",
+          "path": "tests/test_backend_session_recovery_dev8.py"
+        }
+      ]
+    },
+    "module.cross-game-isolation": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_cross_game_isolation.py",
+          "reason": "Absence of Hades semantics from shared Core is a static ownership boundary; successful compilation alone does not prove semantic isolation."
+        },
+        {
+          "type": "behavior",
+          "path": "tests/test_module_contract_round13.py"
+        },
+        {
+          "type": "build",
+          "path": ".github/workflows/module-build-matrix.yml"
+        }
+      ]
+    },
+    "hades.same-pid-runtime-generation": {
+      "evidence": [
+        {
+          "type": "compiled-behavior",
+          "path": "tests/test_hades2_run_log_watcher.py"
+        }
+      ]
+    },
+    "mutation.outcome-unknown-taints-transport": {
+      "evidence": [
+        {
+          "type": "behavior",
+          "path": "tests/test_hades2_transport_outcome_unknown_taint.py"
+        }
+      ]
+    },
+    "save.transaction-recovery": {
+      "evidence": [
+        {
+          "type": "behavior",
+          "path": "tests/test_core_save_restore.py"
+        },
+        {
+          "type": "behavior",
+          "path": "tests/test_core_save_service.py"
+        },
+        {
+          "type": "behavior",
+          "path": "tests/test_core_save_running_transition.py"
+        },
+        {
+          "type": "behavior",
+          "path": "tests/test_core_save_snapshots.py"
+        }
+      ]
+    },
+    "shortcut.collision-reflow": {
+      "evidence": [
+        {
+          "type": "compiled-behavior",
+          "path": "tests/test_shortcut_chord_semantics.py"
+        }
+      ]
+    },
+    "runtime.revision-diff-discipline": {
+      "evidence": [
+        {
+          "type": "diff-gate",
+          "path": "tests/test_runtime_revision_gate.py"
+        },
+        {
+          "type": "diff-gate",
+          "path": ".github/workflows/linux-contracts.yml"
+        }
+      ]
+    },
+    "swift.production-graph-compiles": {
+      "evidence": [
+        {
+          "type": "build",
+          "path": ".github/workflows/build2-macos.yml"
+        },
+        {
+          "type": "build",
+          "path": ".github/workflows/module-build-matrix.yml"
+        }
+      ]
+    },
+    "native.modal-one-shot-semantics": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_native_sell_traits_contract.py",
+          "reason": "CI cannot drive the real Hades native sell modal; this guard is retained until exact game automation can observe the engine-owned UI lifecycle."
+        },
+        {
+          "type": "source-boundary",
+          "path": "tests/test_native_special_choice_contract.py",
+          "reason": "CI cannot drive the real Hades NPC/native choice screens; the Lua source boundary protects one-shot ownership until equivalent real-game automation exists."
+        }
+      ]
+    },
+    "resident.hook-session-ownership": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_hades2_session_hook_ownership.py",
+          "reason": "Resident Lua hook ownership is only fully observable inside the Hades runtime; static source guards remain the portable pre-game gate."
+        }
+      ]
+    },
+    "hades.resident-runtime-static-wiring": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_hades2_runtime_static_contract.py",
+          "reason": "Exact resident Lua/game-engine wiring cannot be semantically exercised in portable CI; Lua changes require real Hades acceptance, so this focused source guard is the pre-game boundary."
+        }
+      ]
+    },
+    "hades.retired-protocol-surface": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_retired_hades_protocol_surface.py",
+          "reason": "Retired aliases are intentionally unreachable, so behavior tests cannot execute them; a focused static boundary prevents obsolete compatibility shims from re-entering the product surface."
+        }
+      ]
+    },
+    "ci.portable-test-discovery": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_test_suite_discovery.py",
+          "reason": "Exhaustive portable-test discovery is a CI topology property; the focused contract inspects the runner/workflow wiring so future test entrypoints cannot silently fall outside the Linux lane."
+        },
+        {
+          "type": "build",
+          "path": ".github/workflows/linux-contracts.yml"
+        }
+      ]
+    }
+  }
+}

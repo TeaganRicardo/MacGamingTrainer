@@ -102,6 +102,12 @@ assert validate_command_params(
 assert validate_command_params(
     "open_special_choice", {"source": "Zeus"}
 ) == {"source": "Zeus"}
+expect_error(
+    "open_special_choice", {}, "请选择支持原生三选一的特殊祝福来源。"
+)
+expect_error(
+    "open_special_choice", {"source": ""}, "请选择支持原生三选一的特殊祝福来源。"
+)
 
 assert validate_command_params(
     "set_boon_rarity_desired",
