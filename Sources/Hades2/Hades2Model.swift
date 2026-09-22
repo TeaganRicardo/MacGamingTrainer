@@ -27,7 +27,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var editGeneration: UInt64 = 0
     @Published private(set) var backendStatus = TrainerBackendStatus()
     private let backendSession: TrainerBackendSession
-    private let logSink = TrainerLogSink()
+    private let logSink: TrainerLogSink
     private lazy var api = Hades2API(session: backendSession)
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var backendProtocolVersion: Int? { backendStatus.backendProtocolVersion }
@@ -203,8 +203,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init(session: TrainerBackendSession) {
+    init(session: TrainerBackendSession, logSink: TrainerLogSink) {
         backendSession = session
+        self.logSink = logSink
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.runLogWatcher.start()
