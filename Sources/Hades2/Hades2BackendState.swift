@@ -20,6 +20,13 @@ struct Hades2BoonRaritySnapshot {
     let forceDuo: Bool?
 }
 
+struct Hades2ActionReceipt: Equatable {
+    let requestID: String
+    let command: String
+    let outcome: String
+    let error: String?
+}
+
 /// Typed boundary between the untyped JSON transport envelope and Hades UI
 /// state. All backend field names are centralized here instead of being spread
 /// through the ObservableObject and Views.
@@ -71,6 +78,7 @@ struct Hades2StatePatch {
     let runCount: Hades2FieldPatch<Int>
     let elements: [ElementCount]?
     let resources: [MaterialResource]?
+    let lastAction: Hades2ActionReceipt?
     let error: String?
 
     init(_ payload: [String: Any]) {
@@ -137,6 +145,19 @@ struct Hades2StatePatch {
         runCount = Self.field(payload, "runCount", Int.self)
         elements = (payload["elements"] as? [[String: Any]])?.compactMap(Self.decodeElement)
         resources = (payload["resources"] as? [[String: Any]])?.compactMap(Self.decodeResource)
+        if let row = payload["lastAction"] as? [String: Any],
+           let requestID = row["requestId"] as? String,
+           let command = row["command"] as? String,
+           let outcome = row["outcome"] as? String {
+            lastAction = Hades2ActionReceipt(
+                requestID: requestID,
+                command: command,
+                outcome: outcome,
+                error: row["error"] as? String
+            )
+        } else {
+            lastAction = nil
+        }
         error = payload["error"] as? String
     }
 
