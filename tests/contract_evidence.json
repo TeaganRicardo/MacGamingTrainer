@@ -155,6 +155,19 @@
           "reason": "Retired aliases are intentionally unreachable, so behavior tests cannot execute them; a focused static boundary prevents obsolete compatibility shims from re-entering the product surface."
         }
       ]
+    },
+    "ci.portable-test-discovery": {
+      "evidence": [
+        {
+          "type": "source-boundary",
+          "path": "tests/test_test_suite_discovery.py",
+          "reason": "Exhaustive portable-test discovery is a CI topology property; the focused contract inspects the runner/workflow wiring so future test entrypoints cannot silently fall outside the Linux lane."
+        },
+        {
+          "type": "build",
+          "path": ".github/workflows/linux-contracts.yml"
+        }
+      ]
     }
   }
 }

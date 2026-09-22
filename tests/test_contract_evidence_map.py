@@ -30,6 +30,7 @@ required_invariants = {
     "save.transaction-recovery",
     "shortcut.collision-reflow",
     "runtime.revision-diff-discipline",
+    "ci.portable-test-discovery",
 }
 
 missing = sorted(required_invariants - set(invariants))
