@@ -1,4 +1,7 @@
 from pathlib import Path
+import copy
+import json
+import re
 import sys
 import tempfile
 
@@ -199,3 +202,131 @@ else:
 assert failure_adapter.preference_dirty is True
 
 print('profile_lock_reconciliation_ok')
+
+
+# Regression for a failed live Profile replay followed by an immediate second
+# load of the same Profile. This uses production load_profile() and execute();
+# only the LLDB/Lua transport boundary is simulated.
+class RuntimeTransport:
+    pid = 123
+    last_duration = 0.001
+
+    def __init__(self):
+        self.live = True
+        self.fail_once = False
+        self.sources = []
+        self.state = {
+            'status': 'ready',
+            'scene': 'run',
+            'capabilities': {'setFeature': True},
+            'desiredFeatures': {},
+            'activeFeatures': {},
+            'featureErrors': {},
+            'stats': {'grasp': {'locked': True, 'target': 30, 'value': 30}},
+            'healthLocked': True,
+            'health': 120,
+            'maxHealth': 160,
+            'manaLocked': True,
+            'mana': 50,
+            'maxMana': 90,
+            'armorLocked': True,
+            'armor': 25,
+            'moneyLocked': True,
+            'money': 500,
+            'rerollsLocked': True,
+            'rerolls': 2,
+            'resources': [{'id': 'MetaCurrency', 'locked': True, 'count': 10}],
+            'elements': [{'id': 'Fire', 'locked': True, 'count': 2}],
+            'nextRoomReward': None,
+        }
+
+    def alive(self):
+        return self.live
+
+    def detach(self):
+        self.live = False
+
+    def close(self):
+        self.live = False
+
+    def execute(self, source):
+        self.sources.append(source)
+        if self.fail_once:
+            self.fail_once = False
+            raise TransportError(
+                'lua_error',
+                'simulated known Lua command error before lock release',
+            )
+        for command, fields in re.findall(r'dispatch\\("([^"]+)",(\\{[^}]*\\})\\)', source):
+            params = {}
+            for key, value in re.findall(
+                r'\\["([^"]+)"\\]=(true|false|nil|"[^"]*"|-?[\\d.]+)',
+                fields,
+            ):
+                params[key] = None if value == 'nil' else json.loads(value)
+            if command == 'set_stat':
+                self.state['stats'][params['stat']]['locked'] = params['locked']
+            elif command == 'lock_vital':
+                self.state[params['vital'] + 'Locked'] = params['locked']
+            elif command == 'lock_rerolls':
+                self.state['rerollsLocked'] = params['locked']
+            elif command == 'lock_resource':
+                if params['resource'] == 'Money':
+                    self.state['moneyLocked'] = params['locked']
+                else:
+                    for item in self.state['resources']:
+                        if item['id'] == params['resource']:
+                            item['locked'] = params['locked']
+            elif command == 'lock_element':
+                for item in self.state['elements']:
+                    if item['id'] == params['element']:
+                        item['locked'] = params['locked']
+        return json.dumps(self.state)
+
+
+def runtime_locks(state):
+    return [
+        state['stats']['grasp']['locked'],
+        state['healthLocked'],
+        state['manaLocked'],
+        state['armorLocked'],
+        state['moneyLocked'],
+        state['rerollsLocked'],
+        state['resources'][0]['locked'],
+        state['elements'][0]['locked'],
+    ]
+
+
+retry_base = Path(tempfile.mkdtemp(prefix='mgt-profile-reconcile-retry-'))
+preparation.DATA = retry_base
+retry_transport = RuntimeTransport()
+retry_adapter = Hades2Adapter(transport=retry_transport)
+retry_adapter._runtime_bootstrapped = True
+retry_adapter._catalog_initialized = True
+retry_adapter._apply_game_speed = lambda value: 1
+retry_adapter.state.update(copy.deepcopy(retry_transport.state), connected=True)
+retry_adapter.preference_initialized = True
+retry_adapter._capture_runtime_preferences(copy.deepcopy(retry_transport.state))
+retry_adapter.profile_service.save('retry-unlocked', retry_adapter._default_preferences())
+
+retry_transport.fail_once = True
+try:
+    retry_adapter.load_profile('retry-unlocked')
+except TransportError as error:
+    assert error.code == 'lua_error'
+else:
+    raise AssertionError('expected first Profile replay to fail')
+
+assert all(runtime_locks(retry_transport.state))
+assert retry_adapter.preference_dirty is True
+assert retry_adapter.state['status'] == 'ready'
+
+second_result = retry_adapter.load_profile('retry-unlocked')
+assert not any(runtime_locks(retry_transport.state)), (
+    'second Profile load must re-observe runtime locks and release them'
+)
+assert retry_adapter.preference_dirty is False
+assert not any(runtime_locks(second_result))
+assert not any(runtime_locks(retry_adapter.state))
+
+print('profile_lock_reconciliation_retry_ok')
