@@ -9,7 +9,7 @@ import subprocess
 from . import preparation
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
-from .schema import TOGGLES, MULTIPLIERS, STAT_RULES
+from .schema import STAT_RULES, validate_desired_feature_value
 
 
 class Hades2CommandRouter:
@@ -29,14 +29,8 @@ class Hades2CommandRouter:
         elif command=='reset_desired':result=adapter.reset_desired()
         elif command in ('status','disable_all','set_desired','set_vital','set_counter','lock_vital','set_stat','set_element','lock_element','set_resource','lock_resource','set_rerolls','lock_rerolls','spawn_reward','open_sell_traits','open_special_choice'):
             if command=='set_desired':
-                feature=params.get('feature');value=params.get('value')
-                if feature not in TOGGLES+MULTIPLIERS:raise ValueError('未知功能。')
-                if feature in MULTIPLIERS:
-                    if type(value) not in (int,float) or isinstance(value,bool) or not math.isfinite(value):raise ValueError('倍率必须为有限数值。')
-                    if feature=='gameSpeed':
-                        if not 0<=value<=10:raise ValueError('游戏速度范围为 0–10。')
-                    elif not 1<=value<=100:raise ValueError('倍率范围为 1–100。')
-                elif not isinstance(value,bool):raise ValueError('开关值必须为布尔值。')
+                feature=params.get('feature')
+                value=validate_desired_feature_value(feature,params.get('value'))
             if command=='set_vital':
                 vital=params.get('vital');field=params.get('field');value=params.get('value')
                 if vital not in ('health','mana','armor') or field not in ('current','max'):raise ValueError('局内数值字段无效。')
