@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 3,
+  "name": "release-0.1-v3",
+  "updatedAt": "2026-09-18T12:00:00+0000",
+  "desired": {
+    "godMode": true,
+    "infiniteHealth": false,
+    "infiniteMana": false,
+    "damageEnabled": true,
+    "instantCastCooldown": false,
+    "hexAlwaysReady": false,
+    "infiniteAmmo": false,
+    "autoMiniGames": false,
+    "gardenQoL": false,
+    "boonRarityEnabled": false,
+    "moneyMultiplierEnabled": true,
+    "resourceMultiplierEnabled": false,
+    "damageMultiplier": 2.0,
+    "moneyMultiplier": 3.0,
+    "resourceMultiplier": 2.0,
+    "gameSpeed": 1.0,
+    "boonRarity": {
+      "target": "Epic",
+      "multiplier": 100.0,
+      "forceLegendary": false,
+      "forceDuo": false
+    },
+    "statLocks": {},
+    "vitalLocks": {},
+    "resourceLocks": {},
+    "rerollsLock": null,
+    "elementLocks": {},
+    "nextRoomReward": "RoomMoneyDrop"
+  },
+  "shortcuts": {
+    "godMode": 1,
+    "infiniteHealth": 2,
+    "infiniteMana": 3,
+    "instantCastCooldown": 4,
+    "hexAlwaysReady": 5,
+    "infiniteAmmo": 6,
+    "damageEnabled": 7,
+    "autoMiniGames": 8,
+    "moneyMultiplierEnabled": 9,
+    "disableAll": 0
+  }
+}
