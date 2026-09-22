@@ -103,10 +103,10 @@ assert validate_command_params(
     "open_special_choice", {"source": "Zeus"}
 ) == {"source": "Zeus"}
 expect_error(
-    "open_special_choice", {}, "请选择支持原生选择界面的特殊祝福来源。"
+    "open_special_choice", {}, "请选择支持原生奖励选择界面的角色。"
 )
 expect_error(
-    "open_special_choice", {"source": ""}, "请选择支持原生选择界面的特殊祝福来源。"
+    "open_special_choice", {"source": ""}, "请选择支持原生奖励选择界面的角色。"
 )
 
 assert validate_command_params(
