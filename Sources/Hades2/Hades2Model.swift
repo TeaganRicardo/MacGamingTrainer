@@ -379,11 +379,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.activeFeatures { activeFeatures = value }
         if let value = patch.dormantFeatures { dormantFeatures = value }
         if let value = patch.featureSupport { featureSupport = value }
-        if let values = patch.featureErrors {
+        if patch.featureErrors.isPresent {
+            let values = patch.featureErrors.value ?? [:]
             let issues = values.compactMap { key, message in message.isEmpty ? nil : "\(key): \(message)" }.sorted()
             runtimeIssue = issues.isEmpty ? "" : "运行时未激活：" + issues.joined(separator: "；")
-        } else {
-            runtimeIssue = ""
         }
 
         if let desired = patch.desiredFeatures {
