@@ -32,6 +32,15 @@ class Hades2CommandRouter:
         self.adapter = adapter
 
     def dispatch(self, command, params, request_id):
+        try:
+            return self._dispatch(command, params, request_id)
+        except AdapterError as error:
+            presented=present_runtime_error(command,error)
+            if presented is error:
+                raise
+            raise presented from error
+
+    def _dispatch(self, command, params, request_id):
         adapter=self.adapter
         rid=request_id
         if command=='scan':
@@ -51,13 +60,7 @@ class Hades2CommandRouter:
             if command=='set_desired':
                 result=adapter.set_desired(params['feature'],params['value'])
             else:
-                try:
-                    result=adapter.execute(command,params)
-                except AdapterError as error:
-                    presented=present_runtime_error(command,error)
-                    if presented is error:
-                        raise
-                    raise presented from error
+                result=adapter.execute(command,params)
         elif command=='set_boon_rarity_desired':
             config=validate_command_params(command,params)
             result=adapter.set_boon_rarity_desired(config)
