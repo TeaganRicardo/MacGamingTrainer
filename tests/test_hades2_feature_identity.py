@@ -45,6 +45,21 @@ precondition(patch.desiredFeatures?.count == 2)
 precondition(patch.activeFeatures?["godMode"] == true)
 precondition(patch.activeFeatures?["gameSpeed"] == true)
 
+let featureErrorPatch = Hades2StatePatch([
+    "featureErrors": ["godMode": "runtime failed"],
+])
+precondition(featureErrorPatch.featureErrors.isPresent)
+precondition(featureErrorPatch.featureErrors.value?["godMode"] == "runtime failed")
+
+let sparsePatch = Hades2StatePatch([:])
+precondition(!sparsePatch.featureErrors.isPresent)
+
+let explicitClearPatch = Hades2StatePatch([
+    "featureErrors": [String: String](),
+])
+precondition(explicitClearPatch.featureErrors.isPresent)
+precondition(explicitClearPatch.featureErrors.value?.isEmpty == true)
+
 print("hades2_feature_identity_ok")
 '''
 
