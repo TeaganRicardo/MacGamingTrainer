@@ -49,7 +49,7 @@ def validate_desired_feature_value(feature,value):
         if feature=='gameSpeed':
             raise ValueError('游戏速度范围为 0–10。')
         raise ValueError('倍率范围为 1–100。')
-    return float(value)
+    return value
 
 
 VITALS = ('health','mana','armor')
@@ -57,6 +57,10 @@ ELEMENT_IDS = frozenset(('Fire','Water','Earth','Air','Aether'))
 MAX_AMOUNT = 999999
 BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
 NEXT_ROOM_REWARD_MAX_LENGTH = 128
+
+
+def is_valid_next_room_reward(value):
+    return value is None or (isinstance(value,str) and len(value)<=NEXT_ROOM_REWARD_MAX_LENGTH)
 
 
 def default_boon_rarity():
