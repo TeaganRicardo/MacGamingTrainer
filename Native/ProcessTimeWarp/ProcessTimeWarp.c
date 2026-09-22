@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "fishhook.h"
+#include "TimeWarpMath.h"
 
 #define MGT_EXPORT __attribute__((visibility("default")))
 #define MGT_TIME_WARP_ABI 1u
@@ -62,7 +63,7 @@ static double offset_ticks_at(uint64_t real_now) {
         double speed = atomic_load_explicit(&trainer_speed, memory_order_relaxed);
         uint64_t after = atomic_load_explicit(&sequence, memory_order_acquire);
         if (before == after) {
-            return offset + (double)(real_now - anchor) * (speed - 1.0);
+            return offset + mgt_time_warp_elapsed_ticks(real_now, anchor) * (speed - 1.0);
         }
     }
 }

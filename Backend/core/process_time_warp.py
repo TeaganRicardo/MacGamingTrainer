@@ -205,7 +205,7 @@ class LLDBProcessTimeWarpDriver:
                 return thread.GetFrameAtIndex(0)
         raise ProcessTimeWarpError("time_warp_call_failed", "暂停后找不到可执行 Time Warp 调用的线程。")
 
-    def _evaluate_int(self, expression):
+    def _evaluate_int(self, expression, *, mutation=False):
         lldb = self._lldb()
         options = lldb.SBExpressionOptions()
         options.SetLanguage(lldb.eLanguageTypeC_plus_plus)
@@ -214,6 +214,12 @@ class LLDBProcessTimeWarpDriver:
         options.SetUnwindOnError(True)
         result = self._frame().EvaluateExpression(expression, options)
         if result.GetError().Fail():
+            if mutation:
+                self.transport.tainted = True
+                raise ProcessTimeWarpError(
+                    "outcome_unknown",
+                    "Time Warp 修改结果不明，未自动重试；请重启后端或重新连接游戏：" + str(result.GetError()),
+                )
             raise ProcessTimeWarpError("time_warp_call_failed", "Time Warp helper 调用失败：" + str(result.GetError()))
         return result.GetValueAsSigned()
 
@@ -232,7 +238,7 @@ class LLDBProcessTimeWarpDriver:
 
     def set_speed(self, speed):
         address = self._export_address("MGTTimeWarpSetSpeed")
-        return self._evaluate_int(f"((int(*)(double)){address})({speed:.17g})")
+        return self._evaluate_int(f"((int(*)(double)){address})({speed:.17g})", mutation=True)
 
     def install(self, image_names, speed):
         lldb = self._lldb()
@@ -253,7 +259,8 @@ class LLDBProcessTimeWarpDriver:
             address = self._export_address("MGTTimeWarpInstall")
             return self._evaluate_int(
                 f"((int(*)(const char*,unsigned long,double)){address})"
-                f"((const char*){scratch},{len(image_names)},{speed:.17g})"
+                f"((const char*){scratch},{len(image_names)},{speed:.17g})",
+                mutation=True,
             )
         finally:
             process.DeallocateMemory(scratch)
