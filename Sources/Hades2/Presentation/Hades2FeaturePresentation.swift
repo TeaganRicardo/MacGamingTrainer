@@ -69,13 +69,13 @@ struct Hades2FeaturePresentation: Equatable {
 }
 
 extension Hades2TrainerModel {
-    func featurePresentation(_ key: String, enabled: Bool) -> Hades2FeaturePresentation {
+    func featurePresentation(_ key: Hades2FeatureKey, enabled: Bool) -> Hades2FeaturePresentation {
         Hades2FeaturePresentation(
             enabled: enabled,
             supported: supportsFeature(key),
             connected: connected,
-            active: activeFeatures[key] ?? false,
-            dormant: dormantFeatures[key] ?? false,
+            active: activeFeatures[key.rawValue] ?? false,
+            dormant: dormantFeatures[key.rawValue] ?? false,
             activationPending: isFeatureActivationPending(key),
             canActivate: canSetFeature,
             canEditDesired: canEditDesired
