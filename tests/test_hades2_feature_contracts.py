@@ -63,4 +63,4 @@ for line in (
 ):
     assert line in view
 
-print('post_v01_feature_contracts_ok')
+print('hades2_feature_contracts_ok')

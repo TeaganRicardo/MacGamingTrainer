@@ -48,7 +48,7 @@ for raw, expected in examples.items():
 
 # Exercise the installed-text parser too, not only the helper.
 localization._OFFICIAL_TEXT_CACHE.clear()
-with tempfile.TemporaryDirectory(prefix='mgt-v01711-loc-') as td:
+with tempfile.TemporaryDirectory(prefix='mgt-catalog-loc-') as td:
     root = Path(td)
     text_dir = root / 'Contents/Resources/Content/Game/Text'
     text_dir.mkdir(parents=True)
@@ -67,4 +67,4 @@ assert 'minHeight: 82' not in metric
 assert '.padding(.top, 6)' in metric and '.padding(.bottom, 8)' in metric
 assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric
 
-print('v01711_catalog_localization_ui_ok')
+print('hades2_catalog_localization_ui_ok')
