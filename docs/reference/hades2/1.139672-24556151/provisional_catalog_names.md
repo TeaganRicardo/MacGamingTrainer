@@ -1,6 +1,10 @@
 # Provisional catalog names
 
-These entries use a Trainer-authored or Trainer-composed display label because the installed Hades II localization either has no usable standalone DisplayName for the runtime reward identifier or deliberately reuses the base item's DisplayName for a distinct size variant. Name-source provenance remains explicit in the runtime catalog.
+Supported target: Hades II 1.139672 / Steam build 24556151.
+
+This file is human-readable reference rationale for the Trainer-authored or Trainer-composed display labels used with this supported build. It is documentation only. Production naming behavior is owned by `Backend/games/hades2/catalog.py` and verified through catalog behavior tests; production code and tests must not depend on this file.
+
+These entries need Trainer-side labels because the installed localization either has no usable standalone DisplayName for the runtime reward identifier or deliberately reuses the base item's DisplayName for a distinct size variant. Runtime name-source provenance remains explicit.
 
 | Runtime ID | Chinese | English | Basis |
 | --- | --- | --- | --- |
