@@ -24,6 +24,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         "enemyHealth": .init(min: 10, max: 1000, integer: false),
     ]
     @Published var connected = false
+    @Published private(set) var editGeneration: UInt64 = 0
     @Published private(set) var backendStatus = TrainerBackendStatus()
     private let backendSession: TrainerBackendSession
     private let logSink = TrainerLogSink()
@@ -379,11 +380,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.activeFeatures { activeFeatures = value }
         if let value = patch.dormantFeatures { dormantFeatures = value }
         if let value = patch.featureSupport { featureSupport = value }
-        if let values = patch.featureErrors {
+        if patch.featureErrors.isPresent {
+            let values = patch.featureErrors.value ?? [:]
             let issues = values.compactMap { key, message in message.isEmpty ? nil : "\(key): \(message)" }.sorted()
             runtimeIssue = issues.isEmpty ? "" : "运行时未激活：" + issues.joined(separator: "；")
-        } else {
-            runtimeIssue = ""
         }
 
         if let desired = patch.desiredFeatures {
@@ -477,6 +477,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func invalidatePendingMutations() {
         mutationScheduler.invalidateAll()
+        editGeneration &+= 1
     }
 
     private func flushPendingMutations() {
@@ -608,6 +609,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setStat(_ stat: String, text: String, locked: Bool) {
         guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false, statAvailable[stat] != false else { return }
         if !locked {
+            mutationScheduler.cancel(key: "stat.\(stat)")
             send(.setStat(stat: stat, locked: false, value: nil), title: "解除属性锁定")
             return
         }

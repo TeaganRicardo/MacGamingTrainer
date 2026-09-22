@@ -30,6 +30,14 @@ pump(0.15)
 if events != ["new"] { fail("same-key replacement executed stale action: \(events)") }
 
 events.removeAll()
+scheduler.schedule(key: "dodge", delay: 0.08) { events.append("dodge-stale") }
+scheduler.schedule(key: "crit", delay: 0.08) { events.append("crit-kept") }
+scheduler.cancel(key: "dodge")
+pump(0.15)
+if events != ["crit-kept"] { fail("single-key cancel removed the wrong work or left stale work: \(events)") }
+if scheduler.pendingCount != 0 { fail("single-key cancel left completed entries behind") }
+
+events.removeAll()
 scheduler.schedule(key: "mana", delay: 0.08) { events.append("stale") }
 scheduler.invalidateAll()
 pump(0.15)

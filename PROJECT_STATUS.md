@@ -2,7 +2,7 @@
 
 Updated: 2026-09-22
 
-This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work lives in roadmap issue #8; historical audit evidence lives under `docs/audits/`.
+This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work and sequencing live in planning issue #79; historical audit evidence lives under `docs/audits/`.
 
 Start every development thread at `AGENTS.md`.
 

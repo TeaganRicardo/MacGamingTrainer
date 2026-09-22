@@ -25,17 +25,30 @@ for token in (
 # of onChange modifiers as one expression.
 body = re.search(r'var body: some View\s*\{(?P<body>.*?)\n\s*\}', main, re.S)
 assert body, 'Hades2TrainerView body not found'
-assert 'catalogObservedContent' in body.group('body')
+assert 'editorGenerationObservedContent' in body.group('body')
 assert '.onChange(' not in body.group('body')
 
 for name in (
     'connectionObservedContent',
     'statObservedContent',
     'gameConfigObservedContent',
-    'inputObservedContent',
-    'lockedStatObservedContent',
     'catalogObservedContent',
+    'editorGenerationObservedContent',
 ):
     assert f'private var {name}: some View' in main, name
 
 print('round17_1_swift_scope_ok')
+
+# Runtime observation must not be routed through edit/mutation observers.
+assert 'private var inputObservedContent' not in main
+assert 'private var lockedStatObservedContent' not in main
+assert 'applyInputChanges' not in main
+assert 'applyLockedStatChanges' not in main
+assert 'intentBinding(' in main
+
+assert '.onChange(of: model.editGeneration)' in main
+assert 'rebuildEditorDraftsFromModel()' in main
+
+assert 'editedConfigDrafts' in main
+assert 'configIntentBinding(' in main
+assert 'editedConfigDrafts.removeAll()' in main

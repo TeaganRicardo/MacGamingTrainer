@@ -42,6 +42,11 @@ final class Hades2MutationScheduler {
         queue.asyncAfter(deadline: .now() + max(0, delay), execute: work)
     }
 
+    func cancel(key: String) {
+        guard let entry = entries.removeValue(forKey: key) else { return }
+        entry.workItem.cancel()
+    }
+
     /// Executes the latest pending mutation for each key immediately, preserving
     /// their submission order. Used before operations such as saving a profile,
     /// where silently discarding the user's most recent edits would be wrong.
