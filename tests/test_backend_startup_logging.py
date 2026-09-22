@@ -103,6 +103,41 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     assert root_logger.level == logging.WARNING, "worker logging must restore the embedder root level"
     assert unrelated_output.getvalue().count("startup fixture constructor warning") == 1
 
+    # A clean startup with no constructor diagnostics must still establish the
+    # worker-owned file before later INFO records are emitted.
+    clean_data_dir = temp_root / "clean-data"
+    clean_data_dir.mkdir()
+    clean_created = []
+
+    def create_clean_adapter(game_id):
+        assert game_id == "startup_fixture"
+        adapter = StartupAdapter(clean_data_dir)
+        clean_created.append(adapter)
+        return adapter
+
+    server.available_games = lambda: [{"id": "startup_fixture"}]
+    server.create_adapter = create_clean_adapter
+    sys.stdin = io.StringIO(json.dumps({
+        "id": "ping-clean",
+        "command": "ping",
+        "params": {},
+    }) + "\n")
+    clean_stdout = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(clean_stdout):
+            server.main(["--game", "startup_fixture"])
+    finally:
+        server.create_adapter = original_factory
+        server.available_games = original_available_games
+        sys.stdin = original_stdin
+
+    clean_log = (clean_data_dir / "trainer.log").read_text(encoding="utf-8")
+    assert clean_log.count("request ping-clean ping success game=startup_fixture") == 1
+    assert json.loads(clean_stdout.getvalue().strip())["ok"] is True
+    assert clean_created and clean_created[0].closed is True
+    assert unrelated_handler in root_logger.handlers
+    assert root_logger.level == logging.WARNING
+
 # Restore the process-global logger after the test even if the server owns its
 # own handler during main().
 for handler in list(root_logger.handlers):
