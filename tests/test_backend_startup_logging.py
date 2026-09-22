@@ -92,6 +92,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     assert "Quarantined invalid desired-state profile" in log_text
     assert "request ping-1 ping success game=startup_fixture" in log_text
     assert log_text.count("startup fixture constructor warning") == 1
+    assert log_text.count("request ping-1 ping success game=startup_fixture") == 1
 
     reply = json.loads(stdout.getvalue().strip())
     assert reply["ok"] is True
@@ -99,6 +100,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     assert created and created[0].closed is True
 
     assert unrelated_handler in root_logger.handlers, "worker logging must preserve unrelated handlers"
+    assert root_logger.level == logging.WARNING, "worker logging must restore the embedder root level"
     assert unrelated_output.getvalue().count("startup fixture constructor warning") == 1
 
 # Restore the process-global logger after the test even if the server owns its
