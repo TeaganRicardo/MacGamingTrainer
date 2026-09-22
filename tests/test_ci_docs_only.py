@@ -5,6 +5,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "Tools/ci_docs_only.py"
+REFERENCE_DATA = "docs/reference/hades2/1.139672-24556151/catalog_legality.csv"
 
 spec = importlib.util.spec_from_file_location("ci_docs_only", SCRIPT)
 module = importlib.util.module_from_spec(spec)
@@ -16,6 +17,10 @@ assert module.is_docs_only(["README.md", "AGENTS.md"])
 assert not module.is_docs_only([])
 assert not module.is_docs_only(["Backend/games/hades2/runtime/hades.lua"])
 assert not module.is_docs_only(["docs/a.md", ".github/workflows/build2-macos.yml"])
+
+# Hades II reference data is executable test input even though it lives under docs/.
+assert not module.is_docs_only([REFERENCE_DATA])
+assert module.is_docs_only(["docs/reference/hades2/README.md"])
 
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
