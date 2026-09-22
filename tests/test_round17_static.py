@@ -1,6 +1,4 @@
 from pathlib import Path
-import plistlib
-
 ROOT = Path(__file__).resolve().parents[1]
 client = (ROOT / 'Sources/Core/Runtime/BackendClient.swift').read_text()
 process = (ROOT / 'Sources/Core/Runtime/BackendProcess.swift').read_text()
@@ -40,10 +38,5 @@ assert 'flushPendingMutations()' in model
 reset = model[model.index('private func resetAfterBackendTermination'):model.index('private func apply(', model.index('private func resetAfterBackendTermination'))]
 for token in ['pid = nil', 'invalidatePendingMutations()']:
     assert token in reset
-
-with (ROOT / 'Info.plist').open('rb') as handle:
-    plist = plistlib.load(handle)
-assert plist['CFBundleShortVersionString'] == '0.1'
-assert plist['CFBundleVersion'] == '2'
 
 print('round17_static_ok')

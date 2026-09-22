@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import logging
+import plistlib
 import sys
 import tempfile
 
@@ -41,8 +42,9 @@ class FakeAdapter(GameAdapter):
         self.closed = True
 
 
+product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShortVersionString']
 assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
-assert APP_BACKEND_VERSION == '0.1'
+assert APP_BACKEND_VERSION == product_version
 assert any(row['id'] == 'hades2' and row['protocolVersion'] == 5 for row in available_games())
 
 context = GameAdapterContext(
@@ -54,7 +56,7 @@ router = JsonlRequestRouter(adapter)
 hello = router.handle({'id':'hello','command':'hello','params':{}})
 assert hello['ok'] and hello['protocolVersion'] == 5
 assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
-assert hello['result']['backendVersion'] == '0.1'
+assert hello['result']['backendVersion'] == product_version
 reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
 assert reply['ok'] and reply['result']['command'] == 'poke'
 assert router.handle({'id':'a','command':'poke','params':{'x':1}}) == reply
