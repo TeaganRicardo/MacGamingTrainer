@@ -27,13 +27,17 @@ assert "lastAction = latestActionReceipt()" in lua
 
 # Hades owns the presentation vocabulary through its typed state boundary.
 # Core's generic successful-reply text must be suppressed for modal acknowledgements.
+assert "enum Hades2ActionOutcome: String" in state
 assert "struct Hades2ActionReceipt" in state
+assert "let outcome: Hades2ActionOutcome" in state
 assert "let lastAction: Hades2ActionReceipt?" in state
 assert 'payload["lastAction"]' in state
 modal_model = model[model.index("func openSellTraits()"):model.index("func setMultiplier(", model.index("func openSellTraits()"))]
 assert "announceSuccess: false" in modal_model
-assert "accepted" in model and "已受理" in model
-assert "opened" in model and "已打开" in model
-assert "failed" in model and "失败" in model
+assert "Hades2Command(rawValue: receipt.command)" in model
+assert '"open_sell_traits"' not in model and '"open_special_choice"' not in model
+assert "case .accepted:" in model and "已受理" in model
+assert "case .opened:" in model and "已打开" in model
+assert "case .failed:" in model and "失败" in model
 
 print("hades2_one_shot_outcomes_ok")
