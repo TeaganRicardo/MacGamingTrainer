@@ -243,7 +243,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             scene = event == .mainMenu ? "main_menu" : "loading"
             activeFeatures = [:]
             dormantFeatures = Dictionary(uniqueKeysWithValues:
-                desiredFeatureKeys.filter { desiredFeatureEnabled($0) }.map { ($0, true) }
+                Hades2FeatureKey.allCases.filter { desiredFeatureEnabled($0) }.map { ($0.rawValue, true) }
             )
             capabilities = capabilities.mapValues { _ in false }
             capabilities["diagnostics"] = true
@@ -393,9 +393,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.damageMultiplier { damageMultiplier = value }
         if let value = patch.moneyLocked { moneyLocked = value }
         if let value = patch.moneyMultiplier { moneyMultiplier = value }
-        if let value = patch.moneyMultiplierEnabled { moneyMultiplierEnabled = value }
         if let value = patch.resourceMultiplier { resourceMultiplier = value }
-        if let value = patch.resourceMultiplierEnabled { resourceMultiplierEnabled = value }
         if let rarity = patch.boonRarity {
             if let value = rarity.target { boonRarityTarget = value }
             if let value = rarity.multiplier { boonRarityMultiplier = value }
