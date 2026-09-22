@@ -397,8 +397,10 @@ class Hades2Adapter(GameAdapter):
         if force_full or self.state.get('nextRoomReward')!=reward:
             pending.append(('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')}))
         if pending:self.execute('replay_preferences',{},replay=True,batch=pending)
+        self._capture_runtime_preferences(self.state)
+        self._save_preferences()
         self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
-        self._capture_runtime_preferences(self.state);self._save_preferences();self._overlay_preferences()
+        self._overlay_preferences()
         return dict(self.state)
 
     def scan(self):
