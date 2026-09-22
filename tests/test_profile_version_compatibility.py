@@ -122,6 +122,13 @@ except UnsupportedSchemaVersionError as error:
 else:
     raise AssertionError("future embedded desired schema was accepted")
 assert future_desired_path.read_bytes() == future_desired_bytes
+try:
+    service.save("future-desired", {"godMode": False}, {})
+except UnsupportedSchemaVersionError as error:
+    assert error.kind == "Profile desired-state"
+else:
+    raise AssertionError("future embedded desired schema was overwritten by save")
+assert future_desired_path.read_bytes() == future_desired_bytes
 assert not list((base / "profiles").glob(future_desired_path.name + ".corrupt-*"))
 
 future_path = service.path("future-profile")
