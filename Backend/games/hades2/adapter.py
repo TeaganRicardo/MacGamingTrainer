@@ -289,6 +289,97 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True;self.preference_dirty=False
         self._save_preferences()
 
+    def _capture_command_preferences(self,command,params,decoded):
+        """Capture only durable state owned by one successful runtime command."""
+        if not isinstance(decoded,dict):return False
+        params=params if isinstance(params,dict) else {}
+
+        if command=='set_stat':
+            stat=params.get('stat')
+            item=(decoded.get('stats') or {}).get(stat) if isinstance(decoded.get('stats'),dict) else None
+            if not isinstance(stat,str) or not isinstance(item,dict):return False
+            locks=dict(self.preferences.get('statLocks',{}))
+            target=item.get('target')
+            if item.get('locked') and type(target) in (int,float) and not isinstance(target,bool):
+                locks[stat]=target
+            else:
+                locks.pop(stat,None)
+            self.preferences['statLocks']=locks
+            return True
+
+        if command in ('set_vital','lock_vital'):
+            vital=params.get('vital')
+            if vital not in ('health','mana','armor'):return False
+            locks=dict(self.preferences.get('vitalLocks',{}))
+            if decoded.get(vital+'Locked'):
+                current=decoded.get(vital)
+                maximum=decoded.get('max'+vital.capitalize())
+                if type(current) not in (int,float) or isinstance(current,bool):return False
+                row={'current':current}
+                if vital!='armor':
+                    if type(maximum) not in (int,float) or isinstance(maximum,bool):return False
+                    row['max']=maximum
+                locks[vital]=row
+            else:
+                locks.pop(vital,None)
+            self.preferences['vitalLocks']=locks
+            return True
+
+        if command in ('set_resource','lock_resource'):
+            resource=params.get('resource')
+            if not isinstance(resource,str) or not resource:return False
+            locks=dict(self.preferences.get('resourceLocks',{}))
+            if resource=='Money':
+                if decoded.get('moneyLocked'):
+                    amount=decoded.get('money')
+                    if type(amount) is not int:return False
+                    locks[resource]=amount
+                else:
+                    locks.pop(resource,None)
+            else:
+                row=next((
+                    item for item in decoded.get('resources',[])
+                    if isinstance(item,dict) and item.get('id')==resource
+                ),None)
+                if not isinstance(row,dict):return False
+                amount=row.get('count')
+                if row.get('locked'):
+                    if type(amount) is not int:return False
+                    locks[resource]=amount
+                else:
+                    locks.pop(resource,None)
+            self.preferences['resourceLocks']=locks
+            return True
+
+        if command in ('set_rerolls','lock_rerolls'):
+            if decoded.get('rerollsLocked'):
+                amount=decoded.get('rerolls')
+                if type(amount) is not int:return False
+                self.preferences['rerollsLock']=amount
+            else:
+                self.preferences['rerollsLock']=None
+            return True
+
+        if command in ('set_element','lock_element'):
+            element=params.get('element')
+            if not isinstance(element,str) or not element:return False
+            row=next((
+                item for item in decoded.get('elements',[])
+                if isinstance(item,dict) and item.get('id')==element
+            ),None)
+            if not isinstance(row,dict):return False
+            locks=dict(self.preferences.get('elementLocks',{}))
+            amount=row.get('count')
+            if row.get('locked'):
+                if type(amount) is not int:return False
+                locks[element]=amount
+            else:
+                locks.pop(element,None)
+            self.preferences['elementLocks']=locks
+            return True
+
+        return False
+
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
         self.preference_store.save(preferences)
@@ -633,8 +724,8 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                if teardown_persistence_error is None and not self.preference_dirty:
-                    self._capture_runtime_preferences(self.state);self._save_preferences()
+                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
+                    self._save_preferences()
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
