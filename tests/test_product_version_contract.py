@@ -17,7 +17,6 @@ from core.protocol import APP_BACKEND_VERSION
 assert APP_BACKEND_VERSION == version
 
 versioning = (ROOT / 'VERSIONING.md').read_text(encoding='utf-8')
-building = (ROOT / 'BUILDING.md').read_text(encoding='utf-8')
 modules = (ROOT / 'GAME_MODULES.md').read_text(encoding='utf-8')
 workflow = (ROOT / '.github/workflows/build2-macos.yml').read_text(encoding='utf-8')
 fixture = (ROOT / 'ContractFixtures/host_protocol_v5.json').read_text(encoding='utf-8')
@@ -25,7 +24,6 @@ fixture = (ROOT / 'ContractFixtures/host_protocol_v5.json').read_text(encoding='
 # Policy documents describe rules, not a second copy of current release values.
 for stale in ('Current product version:', 'Current development build:', 'Latest released build:'):
     assert stale not in versioning
-assert 'Current development branch:' not in building
 assert 'Game module contract — 0.1 baseline' not in modules
 
 # CI derives both release identities from Info.plist and keeps their meanings

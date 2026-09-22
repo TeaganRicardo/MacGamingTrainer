@@ -1,68 +1,58 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-09-21
+Updated: 2026-09-22
 
-This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; planned work lives in roadmap issue #8; historical audit evidence lives under `docs/audits/`.
+This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work lives in roadmap issue #8; historical audit evidence lives under `docs/audits/`.
 
 Start every development thread at `AGENTS.md`.
 
 ## Current state
 
 - Default branch: `main`.
-- The mandatory audit freeze is **closed**. Normal bug-fix and user-selected feature work may resume.
-- PR #43 (independent full-audit continuation) is superseded and closed; it is not an execution requirement.
-- Governance PR #44 is merged. It added exhaustive Linux-portable test discovery, diff-based Hades resident-runtime revision enforcement, the low-context agent entrypoint and stable engineering-invariant authority.
-- Lifecycle PR #45 is merged. Target-process presence and connection-lifetime validity are now distinct: exit/new-lifetime invalidation survives busy work and rapid replacement launches instead of leaving stale `connected=true`.
-- PR #57 is merged. The Hades II consumable census now closes at 91/91 concrete `ConsumableData` targets classified: `SeedMysteryDrop` and `MixerMythicDrop` were recovered as direct pickups, while weapon-owned `LobAmmoPack` is explicitly excluded.
-- PR #59 is merged. The Hades II loot census now closes at 16/16 concrete `LootData` targets classified, and resident fallback Chinese now matches the supported build for Demeter, Aphrodite and the Daedalus Hammer.
-- PR #61 is merged. The Hades II trait-facing census now records 83 special-NPC traits plus 13 Charon-Well traits (96 total); exact special-trait application preserves native `FromLoot` acquire semantics, Arachne costume refreshes use `SetupCostume()`, and `EchoLastRunBoon` remains native-choice-only because its acquire function depends on an active boon-menu context.
+- The mandatory audit freeze is closed. Normal bug-fix and user-selected feature work may proceed.
 - Hades II resident runtime revision: 46.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
 - Target reference: Hades II 1.139672 / Steam build 24556151.
+- The target-build Hades II catalog/reference census lives under `docs/reference/hades2/1.139672-24556151/`; the closed consumable, loot, and trait-facing census results are retained there rather than duplicated here.
 - Core Save Management remains optional cross-game infrastructure; Hades save codec/schema/edit semantics remain Hades-owned.
-- The permanent `reference_fixture` remains the executable proof that a second module does not require Hades-shaped Core APIs.
+- `ContractFixtures/reference_module` remains the executable proof that a second module does not require Hades-shaped Core APIs.
+- Current product release metadata is owned only by `Info.plist`; do not duplicate its current values in status documentation.
 
 ## Verification baseline
 
-The latest behavior-changing Hades trait-census head before squash merge was:
+The latest behavior-changing Hades resident/census source accepted in the real game remains:
 
 `8bf914badf023ebe5be42b2284790a5c9d9242d6`
 
-Fresh exact-head CI on that tree:
+Exact-source automated evidence:
 
 - Linux contracts `35594293605`: PASS;
 - module build matrix `35594293508`: Hades II + reference fixture + package isolation PASS;
 - Build 2 macOS `35594293527`: full macOS contracts/build/package PASS.
 
-Build 2 artifact `10635953571` has digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`.
+Real Hades II acceptance for resident revision 46 is complete against artifact `10635953571`, digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`. Acceptance covered representative special-trait and Charon-Well behavior plus same-PID runtime reset/re-entry and durable preference replay.
 
-PR #61 was squash-merged as `fb56a660cfb354ecff93d36d69e5c7134d093e80`.
-
-Real Hades II acceptance for resident revision 46 is complete against exact Build 2 artifact `10635953571` (source `8bf914badf023ebe5be42b2284790a5c9d9242d6`, artifact digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`). Real-game evidence confirms revision 46 attach/status, representative exact special-trait acquisition across Artemis/Dionysus/Hades, Arachne `SetupCostume()` refresh semantics, Echo's native previous-run boon path, Circe `DoubleFamiliarTrait` through both direct acquisition and native choice, representative Charon-Well consumable/trait behavior, and same-PID runtime reset/re-entry recovery.
-
-`DoubleFamiliarTrait` remains correctly classified `direct`: its effect is applied to the active Familiar itself rather than surfacing as a separate standalone trait icon. Charon-Well entries remain correctly projected through the `pickup` catalog under section `卡戎之井`. The lifecycle round trip showed runtime-generation invalidation followed by successful `runtime_reset`, `status`, and automatic `replay_preferences`; retained desired features returned active without stale UI state or manual retoggling. Revision 46 therefore has both automated CI/package evidence and final real-game acceptance.
-
-Documentation/CI-only cleanup may advance `main` after that behavior baseline. Always query the current remote HEAD before making or verifying a new change.
+Documentation, repository-governance, and build-metadata cleanup may advance `main` after that behavior baseline without changing the resident acceptance status. Always query current remote `main` before new work.
 
 ## Current development gate
 
 There is no mandatory repository-wide audit before ordinary work.
 
-For the next task:
+For each task:
 
 1. confirm current `main` HEAD;
-2. create a focused branch;
-3. read the subsystem code and nearest behavior tests;
-4. preserve the ownership/replay/safety contracts in `ENGINEERING_INVARIANTS.md`;
+2. create one focused branch/PR;
+3. read the owning production files and nearest behavior tests;
+4. preserve the contracts in `ENGINEERING_INVARIANTS.md`;
 5. use RED -> GREEN for demonstrated correctness defects;
 6. run the applicable Linux/module/macOS gates on the final changed SHA.
 
-Hades II Save Editor is not implicitly authorized by lifting the audit freeze. If selected as a product task, its binary mutation design still requires a separate explicit design/safety approval.
+Hades II Save Editor is not implicitly authorized by lifting the audit freeze. If selected as a product task, its binary mutation design still requires separate explicit design/safety approval.
 
 ## Known non-blocking risks
 
-- Repository `main` is protected by required checks. Docs-only changes keep the same required check names but use a fast path: when every changed path is under `docs/` or ends in `.md`, the heavy Linux/module/macOS work is skipped.
+- Docs-only changes keep the normal required check names but use the repository fast path instead of running heavy Linux/module/macOS work.
 - Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
 - Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
 
@@ -74,8 +64,6 @@ Historical material is evidence only and must not be used as current instruction
 
 The retained repository-level synthesis is:
 
-- `docs/audits/2026-09-21-ai-development-governance.md` — system map, debt/test audit and governance rationale.
+- `docs/audits/2026-09-21-ai-development-governance.md` — system map, debt/test audit, and governance rationale.
 
-Older round/version diffs, validation transcripts, completed implementation plans/specs and superseded audit reports were removed from the current tree because Git history and closed PRs already preserve them. Recover them from Git only when investigating a specific historical cause.
-
-Do not reopen historical audit scopes without a new user request or new code evidence.
+Closed PRs and Git history preserve completed implementation detail. Do not add new round handoffs, audit-continuation files, or duplicate status documents for ordinary development.

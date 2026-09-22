@@ -16,16 +16,9 @@ Backend/games/<id>/
   ...game-local services/transport...
 ```
 
-It should not require edits to:
+It should not require edits to `Sources/Core/**`, `Sources/App.swift`, `Backend/core/**`, or `build.sh`.
 
-```text
-Sources/Core/**
-Sources/App.swift
-Backend/core/**
-build.sh
-```
-
-The current host protocol is 5. Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
+Hades II is the reference implementation, not a requirement that other games copy Hades-specific desired/dormant/stat/resource semantics.
 
 ## Version ownership
 
@@ -35,124 +28,41 @@ The app has one product SemVer, owned by the root `Info.plist`. Game modules do 
 
 Do not introduce module SemVer until modules can actually be installed or updated independently. If that seam is introduced later, module SemVer must be paired with an explicit supported Host compatibility range.
 
-## Mechanical cross-game proof
+## Executable cross-game reference
 
-A permanent non-production fixture lives under `ContractFixtures/reference_module`. It stays outside `Backend/games` and `Sources/<Game>`, so runtime discovery never exposes it as a user-facing trainer.
+The permanent non-production reference module lives under `ContractFixtures/reference_module/` and is the canonical example of the module interface:
 
-Tests and CI temporarily install the fixture into the normal module paths and exercise the same manifest validator, generated Swift binding, Backend/Core protocol and `build.sh <game-id>` path used by a real game. The proof requires:
+- backend adapter: `ContractFixtures/reference_module/backend/adapter.py`;
+- manifest: `ContractFixtures/reference_module/backend/module.json`;
+- Swift module/model/view composition: `ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift`.
+
+It stays outside normal runtime module paths, so discovery never exposes it as a user-facing trainer. Tests and CI temporarily install it into the normal paths and exercise the same manifest validator, generated Swift binding, Backend/Core protocol, and `build.sh <game-id>` route used by a real module.
+
+The proof requires:
 
 - shared source graph = `Sources/App.swift + Sources/Core/** + selected frontend`;
-- no Hades/reference-fixture branch in Core, App or build source selection;
+- no Hades/reference-fixture branch in Core, App, or build source selection;
 - packaged output contains exactly the selected game module;
 - a module without `saveManagement` generates `supportsSaveManagement: false` and receives `save_unsupported` for `core.save.*`;
-- both Hades II and the fixture consume the shared Host/UI boundary;
+- both Hades II and the fixture consume the shared Host/UI seam;
 - macOS semantic typecheck/build/codesign succeeds for both modules.
 
-The fixture is architecture evidence, not a semantic template. A real game still owns its commands, transport, persistence rules and game-specific UI.
+The fixture is architecture evidence, not a semantic template. A real game still owns its commands, transport, persistence rules, and game-specific UI.
 
-## Minimal backend adapter
+## Ownership rules
 
-```python
-from core.adapter import GameAdapter
+`Core/UI` owns game-agnostic visual primitives and composites. A game maps its own semantics into neutral visual inputs; Core must not learn Hades concepts such as God Mode, boon rarity, resources, or CurrentRun.
 
-class ExampleAdapter(GameAdapter):
-    def dispatch(self, command, params, request_id):
-        return {"connected": False}
+The App/Host supplies the common shell, sidebar, header, connection status, backend session, and theme. Game modules compose those shared interfaces instead of recreating Host behavior locally.
 
-    def close(self):
-        pass
-```
-
-Runtime Core reads module identity/protocol/adapter plus target-process identity from `module.json`; build/UI-only metadata stays outside the runtime contract.
-
-## Minimal Swift module
-
-```swift
-import SwiftUI
-
-final class ExampleModel: ObservableObject, TrainerHostModel {
-    @Published var backendAvailable = true
-    @Published var busy = false
-    @Published var connected = false
-    var operation = ""
-    var statusTitle = "尚未连接"
-    var connectionDetailText = ""
-    var hostActionsEnabled = true
-
-    func toggleConnectionFromHost() {}
-    func refreshFromHost() {}
-    func restartBackendFromHost() {}
-    func disableAllFromHost() {}
-    func openLog() {}
-    func prepareForTermination(completion: @escaping (Bool) -> Void) { completion(true) }
-}
-
-struct ExampleModule: TrainerGameModule {
-    static let presentation = TrainerGamePresentation(
-        sidebarIconSystemName: "gamecontroller.fill",
-        platformLabel: "",
-        headerTitle: "EXAMPLE"
-    )
-
-    static func makeModel(session: TrainerBackendSession) -> ExampleModel { ExampleModel() }
-    static func makeContent(model: ExampleModel) -> some View { ExampleContent(model: model) }
-    static func makeSidebarActions(model: ExampleModel) -> some View { EmptyView() }
-    static func makeHeaderActions(model: ExampleModel) -> some View { EmptyView() }
-}
-```
-
-The Host owns the shared `TrainerBackendSession` and injects it through `makeModel(session:)`. A module may ignore the session when it has no backend-driven model state. The descriptor containing id/protocol/save-capability metadata is generated from the manifest. Presentation remains in Swift and does not travel through the Python runtime manifest.
-
-## Shared UI rule
-
-`Core/UI` owns game-agnostic visual primitives and composites. A game maps its own semantics into neutral visual inputs; Core must not learn Hades concepts such as God Mode, boon rarity, resources or CurrentRun.
-
-The App/Host supplies the common Shell/Sidebar/Header, connection status and theme. Game modules compose those primitives rather than redrawing reusable switches, cards, fields, lock buttons or list rows locally.
-
-## Manifest responsibility split
-
-Runtime fields are consumed by Backend Core:
-
-```json
-{
-  "id": "example",
-  "displayName": "Example Game",
-  "protocolVersion": 1,
-  "backend": { "adapter": "games.example.adapter:ExampleAdapter" },
-  "targetApplication": {
-    "processName": "Example Game",
-    "bundleIdentifier": "com.example.game"
-  }
-}
-```
-
-Build-only fields are consumed by `Tools/module_support.py`:
-
-```json
-{
-  "frontend": {
-    "sourceDirectory": "Sources/Example",
-    "moduleType": "ExampleModule",
-    "architectures": ["arm64"],
-    "minimumMacOS": "14.0"
-  },
-  "app": {
-    "bundleIdentifier": "com.example.macgamingtrainer.example",
-    "displayName": "Mac Gaming Trainer - Example"
-  },
-  "buildRequirements": {
-    "lldbPython": false,
-    "debuggerEntitlement": false
-  }
-}
-```
-
-Presentation labels/icons/header text belong in Swift, not the runtime manifest.
+Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS requirements, and debugger/build requirements belong to the build tooling. Presentation labels/icons/header text remain in Swift.
 
 ## Protocol and timeout rules
 
-The generic host transports JSON-compatible dictionaries. Each game should isolate that untyped edge immediately behind a typed request encoder and state decoder. Hades II uses `Hades2Request/Hades2API` and `Hades2StatePatch`.
+The generic Host transports JSON-compatible dictionaries. Each game isolates that untyped edge immediately behind a typed request encoder and state decoder.
 
-Core enforces timeouts but does not decide their game-specific budget. A timed-out backend request is terminal for that backend instance when execution outcome may be unknown. Recovery may restart the backend, but must never automatically replay an outcome-unknown non-idempotent request.
+Core enforces request ordering and timeout mechanics but does not decide game-specific timeout budgets. A timed-out backend request is terminal for that backend instance when execution outcome may be unknown. Recovery may restart the backend, but must never automatically replay an outcome-unknown non-idempotent request.
 
 Target-process lifecycle coordination is Host-owned and event-driven. Game views must not add process polling or foreground-stealing connection helpers.
+
+Current protocol revisions are operational state and belong in `PROJECT_STATUS.md`, not in this contract.
