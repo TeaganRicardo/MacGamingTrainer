@@ -146,6 +146,22 @@ def migrate_legacy_boon_semantics(raw, schema_version):
     return result
 
 
+def normalize_persisted_desired(raw, schema_version):
+    """Migrate one persisted desired document to current canonical semantics."""
+    if type(schema_version) is not int or schema_version < 0:
+        raise ValueError('desired-state schemaVersion 无效。')
+    if schema_version > DESIRED_STATE_SCHEMA_VERSION:
+        raise UnsupportedSchemaVersionError(
+            'desired-state', schema_version, DESIRED_STATE_SCHEMA_VERSION
+        )
+    migrated=dict(raw) if isinstance(raw,dict) else raw
+    if schema_version < 3:
+        migrated=migrate_legacy_boon_semantics(migrated,schema_version)
+    if schema_version < 4:
+        migrated=migrate_legacy_next_room_reward(migrated)
+    return Hades2PreferenceStore.normalize(migrated)
+
+
 class Hades2PreferenceStore:
     def __init__(self, path):
         self.path = path
@@ -242,11 +258,7 @@ class Hades2PreferenceStore:
                 schema_version,DESIRED_STATE_SCHEMA_VERSION,
             )
             return self.defaults(),False
-        if schema_version<3:
-            raw=migrate_legacy_boon_semantics(raw,schema_version)
-        if schema_version<4:
-            raw=migrate_legacy_next_room_reward(raw)
-        return self.normalize(raw),True
+        return normalize_persisted_desired(raw,schema_version),True
 
     def save(self, preferences):
         try:

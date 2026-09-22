@@ -8,20 +8,23 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from games.hades2.persistence import UnsupportedSchemaVersionError
+from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-profile-envelope-v0180-'))
 service = Hades2ProfileService(base/'profiles')
 desired = {'godMode': False}
+normalized_desired = Hades2PreferenceStore.normalize(desired)
 
 # Current-version writes have the complete envelope and remain loadable.
 service.save('stable', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
 stable_path = service.path('stable')
 stable_doc = json.loads(stable_path.read_text(encoding='utf-8'))
-assert set(stable_doc) == {'schemaVersion','name','updatedAt','desired','shortcuts'}
+assert set(stable_doc) == {'schemaVersion','desiredSchemaVersion','name','updatedAt','desired','shortcuts'}
 assert stable_doc['schemaVersion'] == PROFILE_SCHEMA_VERSION
-assert service.load('stable')['desired'] == desired
+assert stable_doc['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
+assert service.load('stable')['desired'] == normalized_desired
 
 # Profiles are current-schema-only; an old envelope is preserved but not read.
 legacy_path = service.path('legacy')
@@ -40,7 +43,7 @@ assert legacy_path.read_bytes() == legacy_bytes
 
 # An explicit save is a replacement operation and writes the current schema.
 service.save('legacy', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
-assert service.load('legacy')['desired'] == desired
+assert service.load('legacy')['desired'] == normalized_desired
 assert json.loads(legacy_path.read_text())['schemaVersion'] == PROFILE_SCHEMA_VERSION
 
 logging.disable(logging.CRITICAL)
@@ -50,6 +53,7 @@ try:
     unknown_path = service.path('unknown-field')
     unknown_path.write_text(json.dumps({
         'schemaVersion':PROFILE_SCHEMA_VERSION,
+        'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
         'name':'unknown-field','updatedAt':'2026-09-18T00:00:00+0000',
         'desired':desired,'surprise':True,
     }), encoding='utf-8')
@@ -62,6 +66,7 @@ try:
     bad_shortcuts_path = service.path('bad-shortcuts')
     bad_shortcuts_path.write_text(json.dumps({
         'schemaVersion':PROFILE_SCHEMA_VERSION,
+        'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
         'name':'bad-shortcuts','updatedAt':'2026-09-18T00:00:00+0000',
         'desired':desired,'shortcuts':['godMode'],
     }), encoding='utf-8')
@@ -78,6 +83,7 @@ try:
     ghost_path = service.path('actual-name')
     ghost_path.write_text(json.dumps({
         'schemaVersion':PROFILE_SCHEMA_VERSION,
+        'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
         'name':'displayed-other-name','updatedAt':'2026-09-18T00:00:00+0000',
         'desired':desired,
     }), encoding='utf-8')
@@ -89,6 +95,7 @@ try:
     missing_time_path = service.path('missing-time')
     missing_time_path.write_text(json.dumps({
         'schemaVersion':PROFILE_SCHEMA_VERSION,
+        'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
         'name':'missing-time','desired':desired,
     }), encoding='utf-8')
     assert all(row['name'] != 'missing-time' for row in service.list())
