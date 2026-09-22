@@ -39,7 +39,7 @@ class _BackendLoggingSession:
         self.buffer = _StartupLogBuffer()
         self.file_handler = None
         self.root.addHandler(self.buffer)
-        if self.root.level == logging.NOTSET or self.root.level > logging.INFO:
+        if self.root.level > logging.INFO:
             self.root.setLevel(logging.INFO)
 
     def configure_file(self, log_path):
