@@ -105,7 +105,7 @@ struct Hades2TrainerView: View {
     }
 
     var body: some View {
-        catalogObservedContent
+        editorGenerationObservedContent
     }
 
     private var rootContent: some View {
@@ -359,6 +359,13 @@ struct Hades2TrainerView: View {
             }
     }
 
+    private var editorGenerationObservedContent: some View {
+        catalogObservedContent
+            .onChange(of: model.editGeneration) { _, _ in
+                rebuildEditorDraftsFromModel()
+            }
+    }
+
     private func syncConnectionSnapshot(_ snapshot: Hades2ViewConnectionSnapshot) {
         guard snapshot.connected else {
             resetEditorInputs()
@@ -474,6 +481,16 @@ struct Hades2TrainerView: View {
                 ? "MetaCurrency"
                 : (newValue.filteredResourceIDs.first ?? "")
         }
+    }
+
+    private func rebuildEditorDraftsFromModel() {
+        focusedField = nil
+        resetEditorInputs()
+        guard model.connected else { return }
+        syncConnectionSnapshot(connectionSnapshot)
+        syncStatSnapshot(statSnapshot)
+        syncConfigSnapshot(configSnapshot)
+        materialAmount = material.map { number($0.count) } ?? ""
     }
 
     private func resetEditorInputs() {
