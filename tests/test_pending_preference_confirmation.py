@@ -42,6 +42,9 @@ class PendingTransport:
             },
             'nextRoomReward': None,
             'runtimeDiagnostics': {},
+            'healthLocked': False,
+            'health': 100.0,
+            'maxHealth': 160.0,
             'stats': {},
             'resources': [],
             'elements': [],
@@ -83,6 +86,16 @@ class PendingTransport:
             elif '["reward"]=nil' in source:
                 self.state['nextRoomReward'] = None
                 self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
+        if 'dispatch("set_vital"' in source and '["vital"]="health"' in source:
+            field_match = re.search(r'\["field"\]="([^"]+)"', source)
+            value_match = re.search(r'\["value"\]=([0-9.]+)', source)
+            if field_match and value_match:
+                field = field_match.group(1)
+                value = float(value_match.group(1))
+                if field == 'current':
+                    self.state['health'] = value
+                elif field == 'max':
+                    self.state['maxHealth'] = value
         if 'dispatch("set_stat"' in source and '["stat"]="enemyHealth"' in source:
             locked = '["locked"]=true' in source
             value_match = re.search(r'\["value"\]=([0-9.]+)', source)
@@ -498,3 +511,48 @@ persisted_lock_retry = json.loads(
 assert persisted_lock_retry['statLocks'] == {'enemyHealth': 175.0}
 
 print('pending_preference_confirmation_owned_lock_persistence_ok')
+
+
+# A direct value edit does not own the lock switch. If the same vital has a
+# durable lock still pending in preferences while runtime remains unlocked,
+# set_vital may update the desired value but must not erase the pending lock.
+base_vital_value = Path(tempfile.mkdtemp(prefix='mgt-pending-vital-value-'))
+preparation.DATA = base_vital_value
+transport_vital_value = PendingTransport()
+transport_vital_value.fail_god_mode_once = False
+adapter_vital_value = Hades2Adapter(transport=transport_vital_value)
+adapter_vital_value._runtime_bootstrapped = True
+adapter_vital_value._catalog_initialized = True
+adapter_vital_value._apply_game_speed = lambda value: 1.0
+adapter_vital_value.state.update(
+    copy.deepcopy(transport_vital_value.state),
+    connected=True,
+    pid=transport_vital_value.pid,
+)
+adapter_vital_value.preference_initialized = True
+adapter_vital_value.preferences['vitalLocks'] = {
+    'health': {'current': 120.0, 'max': 160.0},
+}
+adapter_vital_value.preference_store.save(adapter_vital_value.preferences)
+adapter_vital_value.preference_dirty = True
+adapter_vital_value._overlay_preferences()
+
+adapter_vital_value.dispatch(
+    'set_vital',
+    {'vital': 'health', 'field': 'current', 'value': 130},
+    'vital-value-edit',
+)
+
+assert transport_vital_value.state['healthLocked'] is False
+assert adapter_vital_value.preferences['vitalLocks'] == {
+    'health': {'current': 130.0, 'max': 160.0},
+}, 'set_vital must update the pending lock value without clearing its lock intent'
+assert adapter_vital_value.preference_dirty is True
+persisted_vital_value = json.loads(
+    (base_vital_value / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_vital_value['vitalLocks'] == {
+    'health': {'current': 130.0, 'max': 160.0},
+}
+
+print('pending_preference_confirmation_direct_value_keeps_lock_ok')
