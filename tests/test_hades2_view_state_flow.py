@@ -103,6 +103,11 @@ struct Main {
         model.rerolls = 3.5
         model.dodgeValue = 12.345
         model.dodgeLocked = true
+        model.damageMultiplier = 2.75
+        model.moneyMultiplier = 3.5
+        model.resourceMultiplier = 4.25
+        model.boonRarityMultiplier = 135.5
+        model.gameSpeed = 1.3
         model.elements = [ElementCount(id: "Fire", name: "火", count: 4.5, locked: false)]
 
         host.layoutSubtreeIfNeeded()
