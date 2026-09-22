@@ -50,11 +50,11 @@ router = JsonlRequestRouter(adapter, save_data_root=Path(temporary_root.name))
 cases = (
     (
         {"id": "sell-screen-active", "command": "open_sell_traits", "params": {}},
-        "已有游戏界面打开，请先关闭当前界面后再打开出售祝福界面。",
+        "已有游戏界面打开，请先关闭当前界面后再打开净化之池。",
     ),
     (
         {"id": "special-screen-active", "command": "open_special_choice", "params": {"source": "Artemis"}},
-        "已有游戏界面打开，请先关闭当前界面后再打开特殊祝福选择。",
+        "已有游戏界面打开，请先关闭当前界面后再打开奖励选择界面。",
     ),
     (
         {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "godMode", "value": True}},
