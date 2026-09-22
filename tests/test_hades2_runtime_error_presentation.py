@@ -26,6 +26,12 @@ class RuntimeErrorHarnessAdapter(GameAdapter):
     def dispatch(self, command, params, request_id):
         return self.command_router.dispatch(command, params, request_id)
 
+    def set_desired(self, feature, value):
+        raise AdapterError(
+            "lua_error",
+            '[string "MacGamingTrainer"]:2999: Feature unavailable: synthetic runtime failure',
+        )
+
     def execute(self, command, params):
         messages = {
             "open_sell_traits": '[string "MacGamingTrainer"]:3086: Cannot open boon sell screen while another screen is active',
@@ -49,6 +55,10 @@ cases = (
     (
         {"id": "special-screen-active", "command": "open_special_choice", "params": {"source": "Artemis"}},
         "已有游戏界面打开，请先关闭当前界面后再打开特殊祝福选择。",
+    ),
+    (
+        {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "godMode", "value": True}},
+        "游戏内操作失败，请查看日志。",
     ),
 )
 
