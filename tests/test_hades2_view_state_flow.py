@@ -129,6 +129,13 @@ struct Main {
             fail("stale locked=true mutation survived unlock: \(statCommands)")
         }
 
+        let editGeneration = model.editGeneration
+        model.toggleConnection()
+        if model.editGeneration == editGeneration {
+            fail("disconnect barrier did not invalidate editor drafts")
+        }
+        pump(0.20)
+
         session.stop()
         pump(0.20)
         print("hades2_view_state_flow_ok")
