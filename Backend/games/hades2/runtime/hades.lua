@@ -2720,6 +2720,7 @@ if __MacGamingTrainerV1 == nil then
     open_special_choice = { "source" },
     spawn_reward = { "reward" },
   }
+  local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
   local function actionFingerprint(command, params)
     local keys = actionSemanticKeys[command]
     if type(keys) ~= "table" then error("Action fingerprint is undefined for " .. tostring(command)) end
@@ -2759,7 +2760,7 @@ if __MacGamingTrainerV1 == nil then
       if not sameActionFingerprint(prior.fingerprint, fingerprint) then
         error("requestId reused for a different action")
       end
-      if prior.status == "outcome_unknown" then
+      if not knownActionStatuses[prior.status] then
         error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
       end
       local result = state(params.includeCatalogs)
