@@ -4,7 +4,12 @@ import logging
 import math
 
 from .persistence import atomic_write_text, quarantine_corrupt_file, PersistenceError, UnsupportedSchemaVersionError
-from .schema import MULTIPLIERS, STAT_RULES, TOGGLES
+from .schema import (
+    BOON_RARITY_TARGETS, ELEMENT_IDS, MAX_AMOUNT, MULTIPLIERS,
+    NEXT_ROOM_REWARD_MAX_LENGTH, STAT_RULES, TOGGLES, VITALS,
+    default_boon_rarity, desired_feature_defaults, is_valid_next_room_reward,
+    normalize_desired_feature_value,
+)
 
 
 NEXT_ROOM_REWARD_MIGRATIONS = {
@@ -20,8 +25,6 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-_ELEMENT_IDS = frozenset(('Fire','Water','Earth','Air','Aether'))
-_MAX_AMOUNT = 999999
 DESIRED_STATE_SCHEMA_VERSION = 4
 
 
@@ -30,7 +33,7 @@ def _finite_number(value):
 
 
 def _normalize_amount(value):
-    if not _finite_number(value) or not 0<=value<=_MAX_AMOUNT:return None
+    if not _finite_number(value) or not 0<=value<=MAX_AMOUNT:return None
     if type(value) is int:return value
     if type(value) is float and value.is_integer():return int(value)
     return None
@@ -53,13 +56,13 @@ def _normalize_vital_locks(raw):
     if not isinstance(raw,dict):return {}
     result={}
     for vital,row in raw.items():
-        if vital not in ('health','mana','armor') or not isinstance(row,dict):continue
+        if vital not in VITALS or not isinstance(row,dict):continue
         current=row.get('current')
-        if not _finite_number(current) or not 0<=current<=_MAX_AMOUNT or (vital=='health' and current<1):continue
+        if not _finite_number(current) or not 0<=current<=MAX_AMOUNT or (vital=='health' and current<1):continue
         normalized={'current':current}
         if vital!='armor':
             maximum=row.get('max')
-            if not _finite_number(maximum) or not 0<=maximum<=_MAX_AMOUNT or (vital=='health' and maximum<1):continue
+            if not _finite_number(maximum) or not 0<=maximum<=MAX_AMOUNT or (vital=='health' and maximum<1):continue
             normalized['max']=maximum
         result[vital]=normalized
     return result
@@ -79,7 +82,7 @@ def _normalize_element_locks(raw):
     result={}
     for element,amount in raw.items():
         normalized=_normalize_amount(amount)
-        if element in _ELEMENT_IDS and normalized is not None:result[element]=normalized
+        if element in ELEMENT_IDS and normalized is not None:result[element]=normalized
     return result
 
 
@@ -99,7 +102,7 @@ def migrate_legacy_next_room_reward(raw):
     if not isinstance(raw,dict):return raw
     result=dict(raw)
     reward=result.get('nextRoomReward')
-    if reward is None or (isinstance(reward,str) and len(reward)<=128):
+    if is_valid_next_room_reward(reward):
         reward=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
     else:
         reward=None
@@ -151,10 +154,9 @@ class Hades2PreferenceStore:
 
     @staticmethod
     def defaults():
-        values={key:False for key in TOGGLES}
-        values.update(damageMultiplier=2.0,moneyMultiplier=2.0,resourceMultiplier=2.0,gameSpeed=1.0)
+        values=desired_feature_defaults()
         values.update(
-            boonRarity={'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
+            boonRarity=default_boon_rarity(),
             statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,
         )
         return values
@@ -163,16 +165,13 @@ class Hades2PreferenceStore:
     def normalize(cls, raw):
         result=cls.defaults()
         if not isinstance(raw,dict):return result
-        for key in TOGGLES:
-            if type(raw.get(key)) is bool:result[key]=raw[key]
-        for key in MULTIPLIERS:
-            value=raw.get(key)
-            if type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value):
-                if (key=='gameSpeed' and 0<=value<=10) or (key!='gameSpeed' and 1<=value<=100):result[key]=float(value)
+        for key in TOGGLES+MULTIPLIERS:
+            value=normalize_desired_feature_value(key,raw.get(key))
+            if value is not None:result[key]=value
         rarity=raw.get('boonRarity')
         if isinstance(rarity,dict):
             target=rarity.get('target');mult=rarity.get('multiplier')
-            if target in ('Common','Rare','Epic','Heroic'):result['boonRarity']['target']=target
+            if target in BOON_RARITY_TARGETS:result['boonRarity']['target']=target
             if type(mult) in (int,float) and not isinstance(mult,bool) and math.isfinite(mult) and 0<=mult<=1000:result['boonRarity']['multiplier']=float(mult)
             if type(rarity.get('forceLegendary')) is bool:result['boonRarity']['forceLegendary']=rarity['forceLegendary']
             if type(rarity.get('forceDuo')) is bool:result['boonRarity']['forceDuo']=rarity['forceDuo']
@@ -183,10 +182,10 @@ class Hades2PreferenceStore:
         value=_normalize_amount(raw.get('rerollsLock'))
         if value is not None:result['rerollsLock']=value
         reward=raw.get('nextRoomReward')
-        if reward is None or (isinstance(reward,str) and len(reward)<=128):
+        if is_valid_next_room_reward(reward):
             result['nextRoomReward']=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)
         token=raw.get('nextRoomRewardToken')
-        if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=128:
+        if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
             result['nextRoomRewardToken']=token
         return result
 
