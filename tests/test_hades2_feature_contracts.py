@@ -27,7 +27,7 @@ for label in (
 
 # Selene has two distinct native reward paths. SpellDrop chooses a Hex; TalentDrop
 # is the official Path of Stars consumable used to add points to the current Hex.
-assert '{ id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene"' in lua
+assert '{ id = "TalentDrop", name = "繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene"' in lua
 assert 'sourceId = "Selene", sourceName = "塞勒涅"' in lua
 spawn = lua[lua.index('if command == "spawn_reward" then'):lua.index('requireFunctions("loot spawning"', lua.index('if command == "spawn_reward" then'))]
 assert spawn.index('if entry.kind == "consumable" then') < spawn.index('if rewardId == "SpellDrop" then')

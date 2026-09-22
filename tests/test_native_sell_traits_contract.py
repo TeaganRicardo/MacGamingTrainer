@@ -47,9 +47,9 @@ assert 'CurrentRun.CurrentRoom.Store =' not in close_block, "trainer must never 
 
 assert 'func openSellTraits()' in model
 assert '.openSellTraits' in model
-assert 'Label("出售祝福"' in view
-assert 'Button("出售")' in view
-assert '打开祝福出售界面' not in view
+assert 'Label("净化之池"' in view
+assert 'Button("打开")' in view
+assert '出售祝福' not in view
 assert 'model.openSellTraits()' in view
 
 print("native_sell_traits_contract_ok")
