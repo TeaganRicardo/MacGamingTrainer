@@ -95,6 +95,7 @@ try:
             {'id':'ElementalBoost','kind':'consumable','name':'ElementalBoost'},
             {'id':'StoreRewardRandomStack','kind':'consumable','name':'StoreRewardRandomStack'},
             {'id':'HealBigDrop','kind':'consumable','name':'HealBigDrop'},
+            {'id':'HealDropMajor','kind':'consumable','name':'HealDropMajor'},
             {'id':'OreFSilverDrop','kind':'consumable','name':'OreFSilverDrop'},
             {'id':'MixerFBossDrop','kind':'consumable','name':'MixerFBossDrop'},
             {'id':'GemPointsDrop','kind':'consumable','name':'GemPointsDrop'},
@@ -158,6 +159,7 @@ for identifier,expected_zh,expected_en in [
     ('GemPointsBigDrop','大量宝石','Large Gemstones'),
     ('RandomLoot','随机奥林匹斯祝福','Random Olympian Boon'),
     ('BoostedRandomLoot','强化随机祝福','Boosted Random Boon'),
+    ('HealDropMajor','大型生命恢复','Major Healing'),
     ('HealDropMinor','少量治疗','Minor Healing'),
 ]:
     assert rows[identifier]['name'] == expected_zh
