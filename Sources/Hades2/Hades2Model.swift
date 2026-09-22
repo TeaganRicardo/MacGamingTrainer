@@ -467,25 +467,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard receipt != presentedActionReceipt else { return }
         presentedActionReceipt = receipt
 
+        guard let command = Hades2Command(rawValue: receipt.command) else { return }
         let title: String
-        switch receipt.command {
-        case "open_sell_traits": title = "祝福出售界面"
-        case "open_special_choice": title = "特殊祝福三选一"
+        switch command {
+        case .openSellTraits: title = "祝福出售界面"
+        case .openSpecialChoice: title = "特殊祝福三选一"
         default: return
         }
 
         switch receipt.outcome {
-        case "accepted":
+        case .accepted:
             notice = "\(title)已受理，等待游戏处理"
-        case "opened":
+        case .opened:
             notice = "\(title)已打开"
-        case "failed":
+        case .failed:
             notice = ""
             error = receipt.error.map { "\(title)失败：\($0)" } ?? "\(title)失败"
-        case "outcome_unknown":
+        case .outcomeUnknown:
             notice = ""
             error = "\(title)结果不明，请重新连接后检查游戏状态"
-        default:
+        case .completed:
             break
         }
     }
