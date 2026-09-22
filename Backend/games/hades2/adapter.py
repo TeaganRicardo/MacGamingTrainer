@@ -326,9 +326,11 @@ class Hades2Adapter(GameAdapter):
         normalized=self._normalize_preferences({'boonRarity':config})['boonRarity']
         preferences=dict(self.preferences);preferences['boonRarity']=normalized
         self.preference_store.save(preferences);self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=True;self._overlay_preferences()
+        self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=False;return result
+            result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
 
