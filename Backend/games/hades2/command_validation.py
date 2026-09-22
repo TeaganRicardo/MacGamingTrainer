@@ -15,13 +15,6 @@ from .schema import (
     validate_desired_feature_value,
 )
 
-
-_REQUEST_ID_COMMANDS = frozenset((
-    'set_resource','set_rerolls','spawn_reward','open_sell_traits',
-    'open_special_choice','lock_resource','lock_rerolls',
-))
-
-
 def validate_command_params(command, params, request_id):
     params=dict(params or {})
 
@@ -128,8 +121,5 @@ def validate_command_params(command, params, request_id):
         if reward is not None and (not isinstance(reward,str) or len(reward)>NEXT_ROOM_REWARD_MAX_LENGTH):
             raise ValueError('下一房奖励无效。')
         return {'reward':reward}
-
-    if command in _REQUEST_ID_COMMANDS:
-        params['requestId']=request_id
 
     return params
