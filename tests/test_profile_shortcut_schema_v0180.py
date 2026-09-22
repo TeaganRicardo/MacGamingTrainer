@@ -6,9 +6,10 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
+from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService, _normalize_shortcuts
 
-assert PROFILE_SCHEMA_VERSION == 4
+assert PROFILE_SCHEMA_VERSION == 5
 
 def chord(code, modifiers, label):
     return {'keyCode':code, 'modifiers':modifiers, 'keyLabel':label}
@@ -73,7 +74,8 @@ service = Hades2ProfileService(base/'profiles')
 desired = {'godMode': False}
 service.save('chords', desired, valid)
 on_disk = json.loads(service.path('chords').read_text(encoding='utf-8'))
-assert on_disk['schemaVersion'] == 4
+assert on_disk['schemaVersion'] == 5
+assert on_disk['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
 assert on_disk['shortcuts'] == valid
 assert service.load('chords')['shortcuts'] == valid
 assert service.list() == [{'name':'chords','updatedAt':on_disk['updatedAt'],'shortcuts':valid}]
@@ -82,7 +84,8 @@ assert service.list() == [{'name':'chords','updatedAt':on_disk['updatedAt'],'sho
 # empty shortcut patch and must not reset the user's local layout.
 path = service.path('no-shortcuts')
 path.write_text(json.dumps({
-    'schemaVersion': 4,
+    'schemaVersion': PROFILE_SCHEMA_VERSION,
+    'desiredSchemaVersion': DESIRED_STATE_SCHEMA_VERSION,
     'name': 'no-shortcuts',
     'updatedAt': '2026-09-18T00:00:00+0000',
     'desired': desired,
