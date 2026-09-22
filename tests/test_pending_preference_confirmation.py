@@ -1,0 +1,558 @@
+from pathlib import Path
+import copy
+import json
+import re
+import sys
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Backend'))
+
+from games.hades2 import adapter as adapter_module
+from games.hades2 import preparation
+from games.hades2.adapter import Hades2Adapter, TransportError
+from games.hades2.persistence import PersistenceError
+from games.hades2.schema import TOGGLES
+
+
+class PendingTransport:
+    pid = 123
+    last_duration = 0.001
+
+    def __init__(self):
+        self.live = True
+        self.fail_god_mode_once = True
+        self.spawn_count = 0
+        self.state = {
+            'status': 'ready',
+            'scene': 'run',
+            'capabilities': {'setFeature': True},
+            'desiredFeatures': {key: False for key in TOGGLES},
+            'activeFeatures': {key: False for key in TOGGLES},
+            'dormantFeatures': {},
+            'featureErrors': {},
+            'damageMultiplier': 2.0,
+            'moneyMultiplier': 2.0,
+            'resourceMultiplier': 2.0,
+            'boonRarity': {
+                'target': 'Epic',
+                'multiplier': 100.0,
+                'forceLegendary': False,
+                'forceDuo': False,
+            },
+            'nextRoomReward': None,
+            'runtimeDiagnostics': {},
+            'healthLocked': False,
+            'health': 100.0,
+            'maxHealth': 160.0,
+            'stats': {},
+            'resources': [],
+            'elements': [],
+        }
+
+    def alive(self):
+        return self.live
+
+    def detach(self):
+        self.live = False
+
+    def close(self):
+        self.live = False
+
+    def execute(self, source):
+        for feature in TOGGLES:
+            marker = '["feature"]="' + feature + '"'
+            if 'dispatch("set_feature"' not in source or marker not in source:
+                continue
+            value = '["value"]=true' in source[source.index(marker):]
+            if feature == 'godMode' and value and self.fail_god_mode_once:
+                self.fail_god_mode_once = False
+                raise TransportError('lua_error', 'simulated durable feature failure')
+            self.state['desiredFeatures'][feature] = value
+            self.state['activeFeatures'][feature] = value
+        if 'dispatch("set_boon_rarity"' in source:
+            self.state['boonRarity'] = {
+                'target': 'Heroic',
+                'multiplier': 250.0,
+                'forceLegendary': True,
+                'forceDuo': False,
+            }
+        if 'dispatch("set_next_room_reward"' in source:
+            if '["reward"]="WeaponUpgrade"' in source:
+                self.state['nextRoomReward'] = 'WeaponUpgrade'
+                match = re.search(r'\["token"\]="([^"]+)"', source)
+                if match:
+                    self.state['runtimeDiagnostics']['nextRoomRewardToken'] = match.group(1)
+            elif '["reward"]=nil' in source:
+                self.state['nextRoomReward'] = None
+                self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
+        if 'dispatch("set_vital"' in source and '["vital"]="health"' in source:
+            field_match = re.search(r'\["field"\]="([^"]+)"', source)
+            value_match = re.search(r'\["value"\]=([0-9.]+)', source)
+            if field_match and value_match:
+                field = field_match.group(1)
+                value = float(value_match.group(1))
+                if field == 'current':
+                    self.state['health'] = value
+                elif field == 'max':
+                    self.state['maxHealth'] = value
+        if 'dispatch("set_stat"' in source and '["stat"]="enemyHealth"' in source:
+            locked = '["locked"]=true' in source
+            value_match = re.search(r'\["value"\]=([0-9.]+)', source)
+            value = float(value_match.group(1)) if value_match else None
+            self.state['stats']['enemyHealth'] = {
+                'locked': locked,
+                'target': value if locked else None,
+                'value': value if value is not None else 100.0,
+            }
+        if 'dispatch("spawn_reward"' in source:
+            self.spawn_count += 1
+        return json.dumps(self.state)
+
+
+base = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-'))
+preparation.DATA = base
+adapter_module.localize_catalog = lambda payload: payload
+transport = PendingTransport()
+adapter = Hades2Adapter(transport=transport)
+adapter._runtime_bootstrapped = True
+adapter._catalog_initialized = True
+adapter._apply_game_speed = lambda value: 1.0
+adapter.state.update(copy.deepcopy(transport.state), connected=True, pid=transport.pid)
+adapter.preference_initialized = True
+adapter.preference_dirty = False
+
+# Durable A is persisted first, then its runtime application fails.
+first = adapter.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a',
+)
+assert first['desiredFeatures']['godMode'] is True
+assert adapter.preferences['godMode'] is True
+assert adapter.preference_dirty is True
+assert transport.state['desiredFeatures']['godMode'] is False
+persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted['godMode'] is True
+
+# An unrelated successful one-shot must not adopt the stale runtime projection
+# over durable desired state or clear the pending reconciliation.
+adapter.dispatch(
+    'spawn_reward',
+    {'reward': 'EmptyMaxHealthDrop'},
+    'spawn-1',
+)
+assert transport.spawn_count == 1
+assert adapter.preferences['godMode'] is True
+assert adapter.preference_dirty is True
+persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted['godMode'] is True
+
+# A later status reconciliation must still apply A. The one-shot is never replayed.
+adapter.dispatch('status', {}, 'status-1')
+assert transport.state['desiredFeatures']['godMode'] is True
+assert adapter.preferences['godMode'] is True
+assert adapter.preference_dirty is False
+assert transport.spawn_count == 1
+persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted['godMode'] is True
+
+print('pending_preference_confirmation_spawn_ok')
+
+
+# A successful durable B may confirm B, but it must not clear an older pending A.
+base_b = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-feature-b-'))
+preparation.DATA = base_b
+transport_b = PendingTransport()
+adapter_b = Hades2Adapter(transport=transport_b)
+adapter_b._runtime_bootstrapped = True
+adapter_b._catalog_initialized = True
+adapter_b._apply_game_speed = lambda value: 1.0
+adapter_b.state.update(copy.deepcopy(transport_b.state), connected=True, pid=transport_b.pid)
+adapter_b.preference_initialized = True
+adapter_b.preference_dirty = False
+
+adapter_b.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-b',
+)
+assert adapter_b.preference_dirty is True
+assert transport_b.state['desiredFeatures']['godMode'] is False
+
+adapter_b.dispatch(
+    'set_desired',
+    {'feature': 'gardenQoL', 'value': True},
+    'desired-b',
+)
+assert transport_b.state['desiredFeatures']['gardenQoL'] is True
+assert adapter_b.preferences['gardenQoL'] is True
+assert adapter_b.preferences['godMode'] is True
+assert adapter_b.preference_dirty is True, (
+    'successful feature B must not confirm failed feature A'
+)
+persisted_b = json.loads((base_b / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_b['godMode'] is True
+assert persisted_b['gardenQoL'] is True
+
+adapter_b.dispatch('status', {}, 'status-b')
+assert transport_b.state['desiredFeatures']['godMode'] is True
+assert adapter_b.preference_dirty is False
+
+print('pending_preference_confirmation_feature_b_ok')
+
+
+# Boon rarity is another durable desired family. Its success must not clear an
+# older failed feature that is still waiting for reconciliation.
+base_rarity = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-rarity-'))
+preparation.DATA = base_rarity
+transport_rarity = PendingTransport()
+adapter_rarity = Hades2Adapter(transport=transport_rarity)
+adapter_rarity._runtime_bootstrapped = True
+adapter_rarity._catalog_initialized = True
+adapter_rarity._apply_game_speed = lambda value: 1.0
+adapter_rarity.state.update(
+    copy.deepcopy(transport_rarity.state),
+    connected=True,
+    pid=transport_rarity.pid,
+)
+adapter_rarity.preference_initialized = True
+adapter_rarity.preference_dirty = False
+
+adapter_rarity.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-rarity',
+)
+assert adapter_rarity.preference_dirty is True
+
+rarity_config = {
+    'target': 'Heroic',
+    'multiplier': 250,
+    'forceLegendary': True,
+    'forceDuo': False,
+}
+adapter_rarity.dispatch(
+    'set_boon_rarity_desired',
+    rarity_config,
+    'desired-rarity',
+)
+assert transport_rarity.state['boonRarity']['target'] == 'Heroic'
+assert adapter_rarity.preferences['godMode'] is True
+assert adapter_rarity.preferences['boonRarity']['target'] == 'Heroic'
+assert adapter_rarity.preference_dirty is True, (
+    'successful boon rarity B must not confirm failed feature A'
+)
+persisted_rarity = json.loads(
+    (base_rarity / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_rarity['godMode'] is True
+assert persisted_rarity['boonRarity']['target'] == 'Heroic'
+
+adapter_rarity.dispatch('status', {}, 'status-rarity')
+assert transport_rarity.state['desiredFeatures']['godMode'] is True
+assert adapter_rarity.preference_dirty is False
+
+print('pending_preference_confirmation_rarity_ok')
+
+
+# nextRoomReward is a durable one-shot with an identity token. Arming it while
+# another field is pending must preserve that older pending work. Once the
+# resident reports consumption of this exact token, later reconciliation must
+# not resurrect the one-shot.
+base_reward = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-next-room-'))
+preparation.DATA = base_reward
+transport_reward = PendingTransport()
+adapter_reward = Hades2Adapter(transport=transport_reward)
+adapter_reward._runtime_bootstrapped = True
+adapter_reward._catalog_initialized = True
+adapter_reward._apply_game_speed = lambda value: 1.0
+adapter_reward.state.update(
+    copy.deepcopy(transport_reward.state),
+    connected=True,
+    pid=transport_reward.pid,
+)
+adapter_reward.preference_initialized = True
+adapter_reward.preference_dirty = False
+
+adapter_reward.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-reward',
+)
+assert adapter_reward.preference_dirty is True
+
+adapter_reward.dispatch(
+    'set_next_room_reward_desired',
+    {'reward': 'WeaponUpgrade'},
+    'desired-reward',
+)
+armed_token = adapter_reward.preferences['nextRoomRewardToken']
+assert isinstance(armed_token, str) and armed_token
+assert transport_reward.state['nextRoomReward'] == 'WeaponUpgrade'
+assert transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken'] == armed_token
+assert adapter_reward.preferences['godMode'] is True
+assert adapter_reward.preference_dirty is True, (
+    'successful next-room arm must not confirm failed feature A'
+)
+persisted_reward = json.loads(
+    (base_reward / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_reward['nextRoomReward'] == 'WeaponUpgrade'
+assert persisted_reward['nextRoomRewardToken'] == armed_token
+assert persisted_reward['godMode'] is True
+
+# Simulate resident consumption before the next status. The exact receipt proves
+# that this one-shot ran even though another durable field remains pending.
+transport_reward.state['nextRoomReward'] = None
+transport_reward.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
+transport_reward.state['runtimeDiagnostics'][
+    'lastConsumedNextRoomRewardToken'
+] = armed_token
+
+adapter_reward.dispatch('status', {}, 'status-reward')
+assert transport_reward.state['desiredFeatures']['godMode'] is True
+assert transport_reward.state['nextRoomReward'] is None
+assert adapter_reward.preferences['nextRoomReward'] is None
+assert adapter_reward.preferences['nextRoomRewardToken'] is None
+assert adapter_reward.preference_dirty is False
+persisted_reward = json.loads(
+    (base_reward / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_reward['nextRoomReward'] is None
+assert persisted_reward['nextRoomRewardToken'] is None
+assert persisted_reward['godMode'] is True
+
+print('pending_preference_confirmation_next_room_ok')
+
+
+# A successful runtime replay is not fully confirmed until the durable state can
+# also be persisted. If the confirmation write fails, the error is visible and
+# pending remains true. The already-persisted desired value on disk must remain
+# intact rather than being replaced by a false runtime projection.
+base_persist = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-persist-'))
+preparation.DATA = base_persist
+transport_persist = PendingTransport()
+adapter_persist = Hades2Adapter(transport=transport_persist)
+adapter_persist._runtime_bootstrapped = True
+adapter_persist._catalog_initialized = True
+adapter_persist._apply_game_speed = lambda value: 1.0
+adapter_persist.state.update(
+    copy.deepcopy(transport_persist.state),
+    connected=True,
+    pid=transport_persist.pid,
+)
+adapter_persist.preference_initialized = True
+adapter_persist.preference_dirty = False
+
+adapter_persist.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-persist',
+)
+assert adapter_persist.preference_dirty is True
+persisted_before = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_before['godMode'] is True
+
+original_persist_save = adapter_persist.preference_store.save
+fail_confirmation_once = True
+
+
+def fail_confirmation_save(preferences):
+    global fail_confirmation_once
+    if fail_confirmation_once:
+        fail_confirmation_once = False
+        raise PersistenceError('simulated confirmation persistence failure')
+    return original_persist_save(preferences)
+
+
+adapter_persist.preference_store.save = fail_confirmation_save
+try:
+    adapter_persist.dispatch('status', {}, 'status-persist-fail')
+except PersistenceError as error:
+    assert 'simulated confirmation persistence failure' in str(error)
+else:
+    raise AssertionError('confirmation persistence failure was hidden')
+
+assert transport_persist.state['desiredFeatures']['godMode'] is True
+assert adapter_persist.preferences['godMode'] is True
+assert adapter_persist.preference_dirty is True, (
+    'failed confirmation persistence must remain pending'
+)
+persisted_after_failure = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_after_failure['godMode'] is True
+
+# Once persistence recovers, a later status may confirm the already-applied
+# durable state without replaying any one-shot operation.
+adapter_persist.dispatch('status', {}, 'status-persist-retry')
+assert adapter_persist.preference_dirty is False
+persisted_after_retry = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_after_retry['godMode'] is True
+
+print('pending_preference_confirmation_persistence_ok')
+
+
+# A successful durable lock B owns only its lock family. While feature A remains
+# pending, B must still be captured and persisted without adopting unrelated
+# stale runtime fields. The later full reconciliation must preserve B.
+base_lock = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-lock-'))
+preparation.DATA = base_lock
+transport_lock = PendingTransport()
+adapter_lock = Hades2Adapter(transport=transport_lock)
+adapter_lock._runtime_bootstrapped = True
+adapter_lock._catalog_initialized = True
+adapter_lock._apply_game_speed = lambda value: 1.0
+adapter_lock.state.update(
+    copy.deepcopy(transport_lock.state),
+    connected=True,
+    pid=transport_lock.pid,
+)
+adapter_lock.preference_initialized = True
+adapter_lock.preference_dirty = False
+
+adapter_lock.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-lock',
+)
+assert adapter_lock.preference_dirty is True
+
+adapter_lock.dispatch(
+    'set_stat',
+    {'stat': 'enemyHealth', 'locked': True, 'value': 175},
+    'lock-b',
+)
+assert transport_lock.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock.preferences['godMode'] is True
+assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}, (
+    'successful stat lock B must persist its own durable field while A is pending'
+)
+assert adapter_lock.preference_dirty is True
+persisted_lock = json.loads(
+    (base_lock / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock['godMode'] is True
+assert persisted_lock['statLocks'] == {'enemyHealth': 175.0}
+
+adapter_lock.dispatch('status', {}, 'status-lock')
+assert transport_lock.state['desiredFeatures']['godMode'] is True
+assert transport_lock.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}
+assert adapter_lock.preference_dirty is False
+
+print('pending_preference_confirmation_owned_lock_ok')
+
+
+# A durable lock may apply in the runtime before its post-success persistence
+# commit runs. If that write fails, the error must remain visible and the
+# in-memory desired lock must stay pending for a later status reconciliation.
+base_lock_persist = Path(tempfile.mkdtemp(prefix='mgt-pending-lock-persist-'))
+preparation.DATA = base_lock_persist
+transport_lock_persist = PendingTransport()
+transport_lock_persist.fail_god_mode_once = False
+adapter_lock_persist = Hades2Adapter(transport=transport_lock_persist)
+adapter_lock_persist._runtime_bootstrapped = True
+adapter_lock_persist._catalog_initialized = True
+adapter_lock_persist._apply_game_speed = lambda value: 1.0
+adapter_lock_persist.state.update(
+    copy.deepcopy(transport_lock_persist.state),
+    connected=True,
+    pid=transport_lock_persist.pid,
+)
+adapter_lock_persist.preference_initialized = True
+adapter_lock_persist.preference_dirty = False
+adapter_lock_persist.preference_store.save(adapter_lock_persist.preferences)
+
+original_lock_persist_save = adapter_lock_persist.preference_store.save
+fail_lock_persist_once = True
+
+
+def fail_lock_persist_save(preferences):
+    global fail_lock_persist_once
+    if fail_lock_persist_once:
+        fail_lock_persist_once = False
+        raise PersistenceError('simulated lock persistence failure')
+    return original_lock_persist_save(preferences)
+
+
+adapter_lock_persist.preference_store.save = fail_lock_persist_save
+try:
+    adapter_lock_persist.dispatch(
+        'set_stat',
+        {'stat': 'enemyHealth', 'locked': True, 'value': 175},
+        'lock-persist-fail',
+    )
+except PersistenceError as error:
+    assert 'simulated lock persistence failure' in str(error)
+else:
+    raise AssertionError('post-success lock persistence failure was hidden')
+
+assert transport_lock_persist.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock_persist.preferences['statLocks'] == {'enemyHealth': 175.0}
+assert adapter_lock_persist.preference_dirty is True, (
+    'runtime-applied lock with failed persistence must remain pending'
+)
+persisted_lock_failure = json.loads(
+    (base_lock_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock_failure['statLocks'] == {}
+
+adapter_lock_persist.dispatch('status', {}, 'lock-persist-retry')
+assert adapter_lock_persist.preference_dirty is False
+persisted_lock_retry = json.loads(
+    (base_lock_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock_retry['statLocks'] == {'enemyHealth': 175.0}
+
+print('pending_preference_confirmation_owned_lock_persistence_ok')
+
+
+# A direct value edit does not own the lock switch. If the same vital has a
+# durable lock still pending in preferences while runtime remains unlocked,
+# set_vital may update the desired value but must not erase the pending lock.
+base_vital_value = Path(tempfile.mkdtemp(prefix='mgt-pending-vital-value-'))
+preparation.DATA = base_vital_value
+transport_vital_value = PendingTransport()
+transport_vital_value.fail_god_mode_once = False
+adapter_vital_value = Hades2Adapter(transport=transport_vital_value)
+adapter_vital_value._runtime_bootstrapped = True
+adapter_vital_value._catalog_initialized = True
+adapter_vital_value._apply_game_speed = lambda value: 1.0
+adapter_vital_value.state.update(
+    copy.deepcopy(transport_vital_value.state),
+    connected=True,
+    pid=transport_vital_value.pid,
+)
+adapter_vital_value.preference_initialized = True
+adapter_vital_value.preferences['vitalLocks'] = {
+    'health': {'current': 120.0, 'max': 160.0},
+}
+adapter_vital_value.preference_store.save(adapter_vital_value.preferences)
+adapter_vital_value.preference_dirty = True
+adapter_vital_value._overlay_preferences()
+
+adapter_vital_value.dispatch(
+    'set_vital',
+    {'vital': 'health', 'field': 'current', 'value': 130},
+    'vital-value-edit',
+)
+
+assert transport_vital_value.state['healthLocked'] is False
+assert adapter_vital_value.preferences['vitalLocks'] == {
+    'health': {'current': 130.0, 'max': 160.0},
+}, 'set_vital must update the pending lock value without clearing its lock intent'
+assert adapter_vital_value.preference_dirty is True
+persisted_vital_value = json.loads(
+    (base_vital_value / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_vital_value['vitalLocks'] == {
+    'health': {'current': 130.0, 'max': 160.0},
+}
+
+print('pending_preference_confirmation_direct_value_keeps_lock_ok')

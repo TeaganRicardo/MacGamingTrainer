@@ -289,6 +289,124 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True;self.preference_dirty=False
         self._save_preferences()
 
+    def _capture_command_preferences(self,command,params,decoded):
+        """Capture only durable state owned by one successful runtime command."""
+        if not isinstance(decoded,dict):return False
+        params=params if isinstance(params,dict) else {}
+
+        if command=='set_stat':
+            stat=params.get('stat')
+            locked=params.get('locked')
+            if not isinstance(stat,str) or type(locked) is not bool:return False
+            locks=dict(self.preferences.get('statLocks',{}))
+            if locked:
+                target=params.get('value')
+                if type(target) not in (int,float) or isinstance(target,bool):return False
+                locks[stat]=target
+            else:
+                locks.pop(stat,None)
+            self.preferences['statLocks']=locks
+            return True
+
+        if command=='set_vital':
+            vital=params.get('vital');field=params.get('field');value=params.get('value')
+            locks=dict(self.preferences.get('vitalLocks',{}))
+            row=locks.get(vital)
+            if not isinstance(row,dict) or field not in ('current','max'):return False
+            if type(value) not in (int,float) or isinstance(value,bool):return False
+            row=dict(row);row[field]=value;locks[vital]=row
+            self.preferences['vitalLocks']=locks
+            return True
+
+        if command=='lock_vital':
+            vital=params.get('vital');locked=params.get('locked')
+            if vital not in ('health','mana','armor') or type(locked) is not bool:return False
+            locks=dict(self.preferences.get('vitalLocks',{}))
+            if not locked:
+                locks.pop(vital,None)
+            else:
+                current=decoded.get(vital)
+                maximum=decoded.get('max'+vital.capitalize())
+                if type(current) not in (int,float) or isinstance(current,bool):return False
+                row={'current':current}
+                if vital!='armor':
+                    if type(maximum) not in (int,float) or isinstance(maximum,bool):return False
+                    row['max']=maximum
+                locks[vital]=row
+            self.preferences['vitalLocks']=locks
+            return True
+
+        if command=='set_resource':
+            resource=params.get('resource');amount=params.get('amount')
+            locks=dict(self.preferences.get('resourceLocks',{}))
+            if resource not in locks or type(amount) is not int:return False
+            locks[resource]=amount
+            self.preferences['resourceLocks']=locks
+            return True
+
+        if command=='lock_resource':
+            resource=params.get('resource');locked=params.get('locked')
+            if not isinstance(resource,str) or not resource or type(locked) is not bool:return False
+            locks=dict(self.preferences.get('resourceLocks',{}))
+            if not locked:
+                locks.pop(resource,None)
+            elif resource=='Money':
+                amount=decoded.get('money')
+                if type(amount) is not int:return False
+                locks[resource]=amount
+            else:
+                row=next((
+                    item for item in decoded.get('resources',[])
+                    if isinstance(item,dict) and item.get('id')==resource
+                ),None)
+                if not isinstance(row,dict) or type(row.get('count')) is not int:return False
+                locks[resource]=row['count']
+            self.preferences['resourceLocks']=locks
+            return True
+
+        if command=='set_rerolls':
+            amount=params.get('amount')
+            if self.preferences.get('rerollsLock') is None or type(amount) is not int:return False
+            self.preferences['rerollsLock']=amount
+            return True
+
+        if command=='lock_rerolls':
+            locked=params.get('locked')
+            if type(locked) is not bool:return False
+            if not locked:
+                self.preferences['rerollsLock']=None
+            else:
+                amount=decoded.get('rerolls')
+                if type(amount) is not int:return False
+                self.preferences['rerollsLock']=amount
+            return True
+
+        if command=='set_element':
+            element=params.get('element');amount=params.get('amount')
+            locks=dict(self.preferences.get('elementLocks',{}))
+            if element not in locks or type(amount) is not int:return False
+            locks[element]=amount
+            self.preferences['elementLocks']=locks
+            return True
+
+        if command=='lock_element':
+            element=params.get('element');locked=params.get('locked')
+            if not isinstance(element,str) or not element or type(locked) is not bool:return False
+            locks=dict(self.preferences.get('elementLocks',{}))
+            if not locked:
+                locks.pop(element,None)
+            else:
+                row=next((
+                    item for item in decoded.get('elements',[])
+                    if isinstance(item,dict) and item.get('id')==element
+                ),None)
+                if not isinstance(row,dict) or type(row.get('count')) is not int:return False
+                locks[element]=row['count']
+            self.preferences['elementLocks']=locks
+            return True
+
+        return False
+
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
         self.preference_store.save(preferences)
@@ -314,7 +432,7 @@ class Hades2Adapter(GameAdapter):
         if self.transport.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
-                self.preference_dirty=False
+                self.preference_dirty=was_dirty
                 return result
             except TransportError as error:
                 logging.warning('Desired feature %s stored pending reconnect: %s',feature,error)
@@ -326,9 +444,11 @@ class Hades2Adapter(GameAdapter):
         normalized=self._normalize_preferences({'boonRarity':config})['boonRarity']
         preferences=dict(self.preferences);preferences['boonRarity']=normalized
         self.preference_store.save(preferences);self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=True;self._overlay_preferences()
+        self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=False;return result
+            result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
 
@@ -337,9 +457,11 @@ class Hades2Adapter(GameAdapter):
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=True;self._overlay_preferences()
+        self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=False;return result
+            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
@@ -393,8 +515,10 @@ class Hades2Adapter(GameAdapter):
         if force_full or self.state.get('nextRoomReward')!=reward:
             pending.append(('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')}))
         if pending:self.execute('replay_preferences',{},replay=True,batch=pending)
+        self._capture_runtime_preferences(self.state)
+        self._save_preferences()
         self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
-        self._capture_runtime_preferences(self.state);self._save_preferences();self._overlay_preferences()
+        self._overlay_preferences()
         return dict(self.state)
 
     def scan(self):
@@ -627,8 +751,12 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                if teardown_persistence_error is None:
-                    self._capture_runtime_preferences(self.state);self._save_preferences()
+                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
+                    try:
+                        self._save_preferences()
+                    except PersistenceError:
+                        self.preference_dirty=True
+                        raise
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
