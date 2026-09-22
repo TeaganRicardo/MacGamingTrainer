@@ -19,12 +19,19 @@ _RUNTIME_COMMANDS = frozenset((
 ))
 
 
+_REQUEST_ID_COMMANDS = frozenset((
+    'set_resource','set_rerolls','spawn_reward','open_sell_traits',
+    'open_special_choice','lock_resource','lock_rerolls',
+))
+
+
 class Hades2CommandRouter:
     def __init__(self, adapter):
         self.adapter = adapter
 
     def dispatch(self, command, params, request_id):
         adapter=self.adapter
+        rid=request_id
         if command=='scan':
             result=adapter.scan()
         elif command=='connect':
@@ -36,11 +43,13 @@ class Hades2CommandRouter:
             result=adapter.runtime_reset()
         elif command=='reset_desired':result=adapter.reset_desired()
         elif command in _RUNTIME_COMMANDS:
-            validated=validate_command_params(command,params,request_id)
+            params=validate_command_params(command,params,request_id)
+            if command in _REQUEST_ID_COMMANDS:
+                params=dict(params,requestId=rid)
             if command=='set_desired':
-                result=adapter.set_desired(validated['feature'],validated['value'])
+                result=adapter.set_desired(params['feature'],params['value'])
             else:
-                result=adapter.execute(command,validated)
+                result=adapter.execute(command,params)
         elif command=='set_boon_rarity_desired':
             config=validate_command_params(command,params,request_id)
             result=adapter.set_boon_rarity_desired(config)
