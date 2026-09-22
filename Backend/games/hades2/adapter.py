@@ -627,7 +627,7 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                if teardown_persistence_error is None:
+                if teardown_persistence_error is None and not self.preference_dirty:
                     self._capture_runtime_preferences(self.state);self._save_preferences()
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
