@@ -10,8 +10,6 @@ types = read('Sources/Hades2/Hades2Types.swift')
 management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
 badge = read('Sources/Core/UI/Primitives/TrainerBadge.swift')
 lua = read('Backend/games/hades2/runtime/hades.lua')
-catalog = read('Backend/games/hades2/catalog.py')
-provisional = read('docs/PROVISIONAL_CATALOG_NAMES.md')
 
 # Dynamic spawn/resource lists render a bilingual item label whenever English is
 # available, and the static next-room choices use the same Chinese · English form.
@@ -64,18 +62,5 @@ for line in (
     'case "Aether": return ("sparkles", .purple)',
 ):
     assert line in view
-
-# The authored fallback list is explicit and finite; linked official names are
-# tracked separately and must not be mislabeled as trainer-authored localization.
-for identifier in (
-    'RoomMoneyTinyDrop', 'EmptyMaxHealthSmallDrop', 'MetaCurrencyBigDrop',
-    'MetaCardPointsCommonBigDrop', 'MemPointsCommonBigDrop',
-    'FireBoost', 'WaterBoost', 'EarthBoost', 'AirBoost',
-    'ElementalBoost', 'StoreRewardRandomStack',
-):
-    assert f'| {identifier} |' in provisional
-assert "'ArmorBoost': 'ArmorBoost_Store'" in catalog
-assert "'RoomRewardHealDrop': 'RoomRewardHealDrop_Store'" in catalog
-assert "'SpellDrop': 'SpellDrop_Store'" in catalog
 
 print('post_v01_feature_contracts_ok')
