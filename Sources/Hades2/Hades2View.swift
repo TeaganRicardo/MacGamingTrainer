@@ -55,6 +55,7 @@ struct Hades2TrainerView: View {
     @ViewState<Bool> private var statsInitialized = false
     @ViewState<String> private var boonRarityFactor = "100"
     @ViewState<Bool> private var boonConfigInitialized = false
+    @ViewState<Set<String>> private var editedConfigDrafts = []
     @ViewState<[String: String]> private var elementInputs = [:]
     @ViewState<Bool> private var elementsInitialized = false
 
@@ -153,7 +154,7 @@ struct Hades2TrainerView: View {
                     key: .damageEnabled,
                     icon: "bolt.fill",
                     enabled: model.damageEnabled,
-                    text: intentBinding($multiplier) { model.setMultiplier("damageMultiplier", text: $0) },
+                    text: configIntentBinding($multiplier, key: "damageMultiplier") { model.setMultiplier("damageMultiplier", text: $0) },
                     shortcut: .damageEnabled
                 ) {
                     model.feature(.damageEnabled, value: !model.damageEnabled)
@@ -449,9 +450,9 @@ struct Hades2TrainerView: View {
         }
         model.selectedNextRoomReward = snapshot.nextRoomReward ?? ""
         syncElementInputs(snapshot.elements)
-        if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
-        if focusedField != .moneyMultiplier { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
-        if focusedField != .resourceMultiplier { materialFactor = compactNumber(snapshot.resourceMultiplier) }
+        if !editedConfigDrafts.contains("damageMultiplier") { multiplier = compactNumber(snapshot.damageMultiplier) }
+        if !editedConfigDrafts.contains("moneyMultiplier") { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
+        if !editedConfigDrafts.contains("resourceMultiplier") { materialFactor = compactNumber(snapshot.resourceMultiplier) }
         if focusedField != .gameSpeed, gameSpeedPreview == nil {
             gameSpeedInput = speedNumber(snapshot.gameSpeed)
         }
@@ -514,6 +515,7 @@ struct Hades2TrainerView: View {
         materialFactor = "2"
         boonRarityFactor = "100"
         boonConfigInitialized = false
+        editedConfigDrafts.removeAll()
         graspLimit = ""
         dodgeChance = ""
         critChance = ""
@@ -810,7 +812,7 @@ struct Hades2TrainerView: View {
             title: title,
             icon: feature == "moneyMultiplier" ? "circle.hexagongrid.fill" : "shippingbox.fill",
             state: model.featurePresentation(toggle, enabled: enabled).trainerControlState(using: theme),
-            text: intentBinding(text) { model.setMultiplier(feature, text: $0) },
+            text: configIntentBinding(text, key: feature) { model.setMultiplier(feature, text: $0) },
             shortcutText: shortcut.map { model.shortcutText($0) }
         ) {
             model.feature(toggle, value: !enabled)
@@ -975,6 +977,21 @@ struct Hades2TrainerView: View {
         case "Aether": return ("sparkles", .purple)
         default: return ("circle.hexagongrid.fill", accent)
         }
+    }
+
+    private func configIntentBinding(
+        _ binding: Binding<String>,
+        key: String,
+        action: @escaping (String) -> Void
+    ) -> Binding<String> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: {
+                editedConfigDrafts.insert(key)
+                binding.wrappedValue = $0
+                action($0)
+            }
+        )
     }
 
     private func intentBinding(_ binding: Binding<String>, action: @escaping (String) -> Void) -> Binding<String> {
