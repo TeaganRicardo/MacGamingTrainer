@@ -217,11 +217,17 @@ struct Hades2StatePatch {
         guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return BoonOption(
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
-            category: row["category"] as? String ?? "神祇祝福",
+            category: row["category"] as? String ?? "祝福",
+            englishCategory: row["englishCategory"] as? String ?? "Boon",
             kind: row["kind"] as? String ?? "loot", group: row["group"] as? String ?? "pickup",
             sectionTitle: row["sectionTitle"] as? String ?? "",
+            englishSectionTitle: row["englishSectionTitle"] as? String ?? "",
             sourceId: row["sourceId"] as? String ?? "",
+            sourceName: row["sourceName"] as? String ?? "",
+            sourceEnglishName: row["sourceEnglishName"] as? String ?? "",
             nativeChoice: row["nativeChoice"] as? Bool ?? false,
+            nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? "",
+            nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? "",
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max
@@ -249,6 +255,7 @@ struct Hades2StatePatch {
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
             count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false,
             sectionTitle: row["sectionTitle"] as? String ?? "资源",
+            englishSectionTitle: row["englishSectionTitle"] as? String ?? "Resources",
             sortOrder: row["sortOrder"] as? Int ?? Int.max
         )
     }

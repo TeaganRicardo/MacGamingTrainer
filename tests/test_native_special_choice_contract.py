@@ -59,8 +59,17 @@ assert 'open_special_choice' not in replay
 
 assert 'let sourceId: String' in types
 assert 'let nativeChoice: Bool' in types
+assert 'let englishCategory: String' in types
+assert 'let englishSectionTitle: String' in types
+assert 'let sourceEnglishName: String' in types
+assert 'let nativeChoiceTitle: String' in types
+assert 'let nativeChoiceEnglishTitle: String' in types
 assert 'sourceId: row["sourceId"] as? String ?? ""' in state
 assert 'nativeChoice: row["nativeChoice"] as? Bool ?? false' in state
+assert 'nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? ""' in state
+assert 'nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? ""' in state
+assert 'englishCategory: row["englishCategory"] as? String ?? "Boon"' in state
+assert 'sourceEnglishName: row["sourceEnglishName"] as? String ?? ""' in state
 
 assert 'var specialRewardOptions: [BoonOption]' in model
 assert 'native-choice:' in model
@@ -69,15 +78,15 @@ assert 'func performSpecialReward(_ reward: String)' in model
 assert '.openSpecialChoice(source: option.sourceId)' in model
 assert 'spawnBoon(option.id)' in model
 assert 'performSpecialReward(selectedSpecialReward)' in model
-assert 'name: "\\(option.sectionTitle)的祝福"' in model
-assert 'englishName: "\\(option.sourceId) Boon"' in model
+assert 'name: option.nativeChoiceTitle.isEmpty ? option.sectionTitle : option.nativeChoiceTitle' in model
+assert 'englishName: option.nativeChoiceEnglishTitle.isEmpty ? option.englishSectionTitle : option.nativeChoiceEnglishTitle' in model
 assert 'model.specialRewardOptions' in view
 assert 'onAction: model.performSpecialReward' in view
 assert 'Button("原生三选一")' not in view
 assert 'actionTitle: "生成"' in view
 assert 'selectedSpecialRewardIsNativeChoice' not in view
-assert 'Button("出售")' in view
-assert 'Label("出售祝福"' in view
+assert 'Button("打开")' in view
+assert 'Label("净化之池"' in view
 assert '祝福管理' not in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]

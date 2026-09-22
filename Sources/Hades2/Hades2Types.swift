@@ -7,6 +7,7 @@ struct MaterialResource: Identifiable {
     let count: Double
     let locked: Bool
     let sectionTitle: String
+    let englishSectionTitle: String
     let sortOrder: Int
 }
 
@@ -15,11 +16,17 @@ struct BoonOption: Identifiable {
     let name: String
     let englishName: String
     let category: String
+    let englishCategory: String
     let kind: String
     let group: String
     let sectionTitle: String
+    let englishSectionTitle: String
     let sourceId: String
+    let sourceName: String
+    let sourceEnglishName: String
     let nativeChoice: Bool
+    let nativeChoiceTitle: String
+    let nativeChoiceEnglishTitle: String
     let sortSection: Int
     let sortGroup: Int
     let sortOrder: Int
@@ -73,9 +80,9 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .moneyMultiplierEnabled: return "金币获取倍率"
         case .resourceMultiplierEnabled: return "材料获取倍率"
         case .applyNextRoomReward: return "应用下一房奖励"
-        case .spawnOlympian: return "生成诸神祝福"
+        case .spawnOlympian: return "生成奥林匹斯的祝福"
         case .spawnPickup: return "生成资源与常规掉落"
-        case .spawnSpecial: return "生成特殊祝福"
+        case .spawnSpecial: return "生成角色奖励"
         case .disableAll: return "全部关闭"
         }
     }
