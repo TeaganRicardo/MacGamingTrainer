@@ -23,6 +23,8 @@ def desired_feature_defaults():
 
 
 def normalize_desired_feature_value(feature,value):
+    if not isinstance(feature,str):
+        return None
     if feature in TOGGLES:
         return value if type(value) is bool else None
     rule=MULTIPLIER_RULES.get(feature)
@@ -36,6 +38,8 @@ def normalize_desired_feature_value(feature,value):
 
 
 def validate_desired_feature_value(feature,value):
+    if not isinstance(feature,str):
+        raise ValueError('未知功能。')
     if feature not in TOGGLES and feature not in MULTIPLIER_RULES:
         raise ValueError('未知功能。')
     if feature in TOGGLES:
@@ -54,6 +58,12 @@ def validate_desired_feature_value(feature,value):
 
 VITALS = ('health','mana','armor')
 ELEMENT_IDS = frozenset(('Fire','Water','Earth','Air','Aether'))
+
+
+def is_known_element(value):
+    return isinstance(value,str) and value in ELEMENT_IDS
+
+
 MAX_AMOUNT = 999999
 BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
 NEXT_ROOM_REWARD_MAX_LENGTH = 128
