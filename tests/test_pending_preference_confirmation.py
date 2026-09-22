@@ -83,6 +83,15 @@ class PendingTransport:
             elif '["reward"]=nil' in source:
                 self.state['nextRoomReward'] = None
                 self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
+        if 'dispatch("set_stat"' in source and '["stat"]="enemyHealth"' in source:
+            locked = '["locked"]=true' in source
+            value_match = re.search(r'\["value"\]=([0-9.]+)', source)
+            value = float(value_match.group(1)) if value_match else None
+            self.state['stats']['enemyHealth'] = {
+                'locked': locked,
+                'target': value if locked else None,
+                'value': value if value is not None else 100.0,
+            }
         if 'dispatch("spawn_reward"' in source:
             self.spawn_count += 1
         return json.dumps(self.state)
@@ -374,3 +383,54 @@ persisted_after_retry = json.loads(
 assert persisted_after_retry['godMode'] is True
 
 print('pending_preference_confirmation_persistence_ok')
+
+
+# A successful durable lock B owns only its lock family. While feature A remains
+# pending, B must still be captured and persisted without adopting unrelated
+# stale runtime fields. The later full reconciliation must preserve B.
+base_lock = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-lock-'))
+preparation.DATA = base_lock
+transport_lock = PendingTransport()
+adapter_lock = Hades2Adapter(transport=transport_lock)
+adapter_lock._runtime_bootstrapped = True
+adapter_lock._catalog_initialized = True
+adapter_lock._apply_game_speed = lambda value: 1.0
+adapter_lock.state.update(
+    copy.deepcopy(transport_lock.state),
+    connected=True,
+    pid=transport_lock.pid,
+)
+adapter_lock.preference_initialized = True
+adapter_lock.preference_dirty = False
+
+adapter_lock.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-lock',
+)
+assert adapter_lock.preference_dirty is True
+
+adapter_lock.dispatch(
+    'set_stat',
+    {'stat': 'enemyHealth', 'locked': True, 'value': 175},
+    'lock-b',
+)
+assert transport_lock.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock.preferences['godMode'] is True
+assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}, (
+    'successful stat lock B must persist its own durable field while A is pending'
+)
+assert adapter_lock.preference_dirty is True
+persisted_lock = json.loads(
+    (base_lock / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock['godMode'] is True
+assert persisted_lock['statLocks'] == {'enemyHealth': 175.0}
+
+adapter_lock.dispatch('status', {}, 'status-lock')
+assert transport_lock.state['desiredFeatures']['godMode'] is True
+assert transport_lock.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}
+assert adapter_lock.preference_dirty is False
+
+print('pending_preference_confirmation_owned_lock_ok')
