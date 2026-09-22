@@ -27,6 +27,7 @@ Snapshot contents include:
 - `trait_references.csv`, `store_references.csv`, and `static_room_links.csv` static-reference indexes;
 - `aliases.csv` for reference-only selector/alias identifiers;
 - curated `catalog_legality.csv`, `well_shop.csv`, `reroll_ledger.csv`, and `native_interactions.csv` research ledgers;
+- `provisional_catalog_names.md` with the supported-build rationale for Trainer-authored/composed catalog labels;
 - `manifest.json` with source build and row counts.
 
 ## Usage
