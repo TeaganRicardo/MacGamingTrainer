@@ -48,3 +48,7 @@ assert 'intentBinding(' in main
 
 assert '.onChange(of: model.editGeneration)' in main
 assert 'rebuildEditorDraftsFromModel()' in main
+
+assert 'editedConfigDrafts' in main
+assert 'configIntentBinding(' in main
+assert 'editedConfigDrafts.removeAll()' in main
