@@ -117,8 +117,8 @@ assert 'asyncAfter' not in foreground
 # the Trainer's launch notification. The pre-connect watcher start is therefore
 # paired with an idempotent post-connect start so the event-driven lifecycle
 # cannot be permanently missed without adding polling.
-toggle_start = model.index('    func toggleConnection()')
-toggle_end = model.index('\n    func disableAllFromHost()', toggle_start)
+toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool)')
+toggle_end = model.index('\n    func restartBackendFromHost()', toggle_start)
 toggle = model[toggle_start:toggle_end]
 assert toggle.count('runLogWatcher.start()') >= 2
 completion_start = toggle.index('send(.connect')
