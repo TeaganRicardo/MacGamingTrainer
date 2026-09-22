@@ -146,10 +146,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(harness), encoding="utf-8")
 
+    generated = td / "ActiveGame.generated.swift"
+    subprocess.run(
+        [PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)],
+        check=True,
+        cwd=ROOT,
+    )
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [main_path]
+        + [generated, main_path]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
