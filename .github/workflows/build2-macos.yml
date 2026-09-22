@@ -32,7 +32,7 @@ jobs:
 
       - name: Docs-only fast path
         if: steps.scope.outputs.docs_only == 'true'
-        run: echo "Docs-only change; skipping macOS contracts/build/package."
+        run: echo "Docs-only change; skipping macOS platform checks/build/package."
 
       - name: Read release identity
         id: version
@@ -52,7 +52,7 @@ jobs:
           echo "source_tree=$source_tree" >> "$GITHUB_OUTPUT"
           echo "sha_short=${source_sha:0:8}" >> "$GITHUB_OUTPUT"
 
-      - name: Run full macOS contract suite
+      - name: Run macOS-only contract suite
         if: steps.scope.outputs.docs_only != 'true'
         run: bash Tools/run_macos_checks.sh
 
