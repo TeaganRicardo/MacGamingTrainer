@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 4,
+  "name": "profile-v4-desired-v4",
+  "updatedAt": "2026-09-20T12:00:00+0000",
+  "desired": {
+    "godMode": false,
+    "moneyMultiplierEnabled": true,
+    "moneyMultiplier": 5.0,
+    "nextRoomReward": "RoomMoneyDrop",
+    "nextRoomRewardToken": "profile-existing-v4-token"
+  },
+  "shortcuts": {
+    "godMode": {"keyCode": 18, "modifiers": 6144, "keyLabel": "1"}
+  }
+}
