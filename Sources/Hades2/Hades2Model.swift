@@ -137,8 +137,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self?.handleRunLogEvent(event)
     }
     private var pendingRunReadySignal = false
-    private var activationGraceWorkItems: [String: DispatchWorkItem] = [:]
-    @Published private var activationGraceFeatures: Set<String> = []
+    private var activationGraceWorkItems: [Hades2FeatureKey: DispatchWorkItem] = [:]
+    @Published private var activationGraceFeatures: Set<Hades2FeatureKey> = []
     private var hotkeys: GlobalHotkeys?
     private var shuttingDown = false
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
@@ -179,8 +179,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
-    func supportsFeature(_ key: String) -> Bool { featureSupport[key] ?? true }
-    func isFeatureActivationPending(_ key: String) -> Bool { activationGraceFeatures.contains(key) }
+    func supportsFeature(_ key: Hades2FeatureKey) -> Bool { featureSupport[key.rawValue] ?? true }
+    func isFeatureActivationPending(_ key: Hades2FeatureKey) -> Bool { activationGraceFeatures.contains(key) }
     var ready: Bool { canSetFeature }
     var statusTitle: String {
         if exiting { return "正在清理并退出" }
@@ -366,7 +366,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let patch = Hades2StatePatch(payload)
         let wasConnected = connected
         let oldPID = pid
-        let desiredBeforeApply = Dictionary(uniqueKeysWithValues: desiredFeatureKeys.map { ($0, desiredFeatureEnabled($0)) })
+        let desiredBeforeApply = Dictionary(uniqueKeysWithValues: Hades2FeatureKey.allCases.map { ($0, desiredFeatureEnabled($0)) })
 
         if let value = patch.connected, wasConnected && !value { invalidatePendingMutations() }
         if patch.pid.isPresent, oldPID != patch.pid.value { invalidatePendingMutations() }
@@ -386,16 +386,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             runtimeIssue = ""
         }
 
-        if let value = patch.godMode { godMode = value }
-        if let value = patch.infiniteHealth { infiniteHealth = value }
-        if let value = patch.infiniteMana { infiniteMana = value }
-        if let value = patch.instantCastCooldown { instantCastCooldown = value }
-        if let value = patch.hexAlwaysReady { hexAlwaysReady = value }
-        if let value = patch.infiniteAmmo { infiniteAmmo = value }
-        if let value = patch.autoMiniGames { autoMiniGames = value }
-        if let value = patch.gardenQoL { gardenQoL = value }
-        if let value = patch.boonRarityEnabled { boonRarityEnabled = value }
-        if let value = patch.damageEnabled { damageEnabled = value }
+        if let desired = patch.desiredFeatures {
+            for (key, value) in desired { self[keyPath: key.modelKeyPath] = value }
+        }
         if let value = patch.gameSpeed { gameSpeed = value }
         if let value = patch.damageMultiplier { damageMultiplier = value }
         if let value = patch.moneyLocked { moneyLocked = value }
@@ -437,14 +430,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             diagnosticsTotal = patch.diagnosticsTotal ?? value.count
         }
 
-        for key in activeFeatures.keys where activeFeatures[key] == true { clearFeatureActivationGrace(key) }
-        for key in desiredFeatureKeys where desiredFeatureEnabled(key)
-            && desiredBeforeApply[key] != true && activeFeatures[key] != true && dormantFeatures[key] != true {
+        for (rawKey, active) in activeFeatures where active {
+            if let key = Hades2FeatureKey(rawValue: rawKey) { clearFeatureActivationGrace(key) }
+        }
+        for key in Hades2FeatureKey.allCases where desiredFeatureEnabled(key)
+            && desiredBeforeApply[key] != true
+            && activeFeatures[key.rawValue] != true
+            && dormantFeatures[key.rawValue] != true {
             beginFeatureActivationGrace(key)
         }
         if !wasConnected && connected {
-            for key in desiredFeatureKeys where desiredFeatureEnabled(key)
-                && activeFeatures[key] != true && dormantFeatures[key] != true {
+            for key in Hades2FeatureKey.allCases where desiredFeatureEnabled(key)
+                && activeFeatures[key.rawValue] != true
+                && dormantFeatures[key.rawValue] != true {
                 beginFeatureActivationGrace(key)
             }
         }
@@ -492,31 +490,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(request, title: title, announceSuccess: announceSuccess, completion: completion)
     }
 
-    private let desiredFeatureKeys: [String] = [
-        "godMode", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
-        "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
-        "moneyMultiplierEnabled", "resourceMultiplierEnabled"
-    ]
-
-    private func desiredFeatureEnabled(_ key: String) -> Bool {
-        switch key {
-        case "godMode": return godMode
-        case "infiniteHealth": return infiniteHealth
-        case "infiniteMana": return infiniteMana
-        case "damageEnabled": return damageEnabled
-        case "instantCastCooldown": return instantCastCooldown
-        case "hexAlwaysReady": return hexAlwaysReady
-        case "infiniteAmmo": return infiniteAmmo
-        case "autoMiniGames": return autoMiniGames
-        case "gardenQoL": return gardenQoL
-        case "boonRarityEnabled": return boonRarityEnabled
-        case "moneyMultiplierEnabled": return moneyMultiplierEnabled
-        case "resourceMultiplierEnabled": return resourceMultiplierEnabled
-        default: return false
-        }
+    private func desiredFeatureEnabled(_ key: Hades2FeatureKey) -> Bool {
+        self[keyPath: key.modelKeyPath]
     }
 
-    private func beginFeatureActivationGrace(_ key: String, duration: TimeInterval = 0.9) {
+    private func beginFeatureActivationGrace(_ key: Hades2FeatureKey, duration: TimeInterval = 0.9) {
         activationGraceWorkItems[key]?.cancel()
         activationGraceFeatures.insert(key)
         let work = DispatchWorkItem { [weak self] in
@@ -528,7 +506,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
     }
 
-    private func clearFeatureActivationGrace(_ key: String) {
+    private func clearFeatureActivationGrace(_ key: Hades2FeatureKey) {
         activationGraceWorkItems[key]?.cancel()
         activationGraceWorkItems[key] = nil
         activationGraceFeatures.remove(key)
@@ -545,39 +523,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func feature(_ key: String, value: Any, completion: ((Bool) -> Void)? = nil) {
+    func feature(_ key: Hades2FeatureKey, value: Bool, completion: ((Bool) -> Void)? = nil) {
         guard canEditDesired else { return }
-        if let enabled = value as? Bool {
-            if enabled { beginFeatureActivationGrace(key) }
-            else { clearFeatureActivationGrace(key) }
-        }
+        if value { beginFeatureActivationGrace(key) }
+        else { clearFeatureActivationGrace(key) }
         // Desired state belongs to the trainer profile, not to the debugger
         // connection. Keep the UI intent editable while detached and let the
         // backend apply/replay it whenever a valid Lua scene becomes available.
-        switch key {
-        case "godMode": if let value = value as? Bool { godMode = value }
-        case "infiniteHealth": if let value = value as? Bool { infiniteHealth = value }
-        case "infiniteMana": if let value = value as? Bool { infiniteMana = value }
-        case "instantCastCooldown": if let value = value as? Bool { instantCastCooldown = value }
-        case "hexAlwaysReady": if let value = value as? Bool { hexAlwaysReady = value }
-        case "infiniteAmmo": if let value = value as? Bool { infiniteAmmo = value }
-        case "autoMiniGames": if let value = value as? Bool { autoMiniGames = value }
-        case "gardenQoL": if let value = value as? Bool { gardenQoL = value }
-        case "boonRarityEnabled": if let value = value as? Bool { boonRarityEnabled = value }
-        case "damageEnabled": if let value = value as? Bool { damageEnabled = value }
-        case "moneyMultiplierEnabled": if let value = value as? Bool { moneyMultiplierEnabled = value }
-        case "resourceMultiplierEnabled": if let value = value as? Bool { resourceMultiplierEnabled = value }
-        case "gameSpeed":
-            let speed: Double?
-            if let value = value as? Double { speed = value }
-            else if let value = value as? Int { speed = Double(value) }
-            else { speed = nil }
-            guard let speed else { return }
-            setGameSpeedValue(speed, completion: completion)
-            return
-        default: break
-        }
-        send(.setDesired(feature: key, value: value), title: "更新功能", completion: completion)
+        self[keyPath: key.modelKeyPath] = value
+        send(.setDesired(feature: key.rawValue, value: value), title: "更新功能", completion: completion)
     }
 
     func setGameSpeed(_ text: String) {
@@ -776,15 +730,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if shortcutError.isEmpty { installHotkeys() }
     }
 
-    private func featureHotkeyFeedback(_ key: String, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
+    private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
         guard targetEnabled else { return .disabled }
-        if activeFeatures[key] == true { return .enabled }
-        if dormantFeatures[key] == true || !connected || status != "ready" { return .deferred }
+        if activeFeatures[key.rawValue] == true { return .enabled }
+        if dormantFeatures[key.rawValue] == true || !connected || status != "ready" { return .deferred }
         return nil
     }
 
-    private func performFeatureShortcut(_ key: String, current: Bool) {
-        let targetEnabled = !current
+    private func performFeatureShortcut(_ key: Hades2FeatureKey) {
+        let targetEnabled = !desiredFeatureEnabled(key)
         feature(key, value: targetEnabled) { [weak self] success in
             guard let self, success else { return }
             if let feedback = self.featureHotkeyFeedback(key, targetEnabled: targetEnabled) {
@@ -798,7 +752,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let feedback: TrainerHotkeyFeedback
         if !targetEnabled {
             feedback = .disabled
-        } else if activeFeatures["boonRarityEnabled"] == true {
+        } else if activeFeatures[Hades2FeatureKey.boonRarityEnabled.rawValue] == true {
             feedback = .enabled
         } else {
             feedback = .deferred
@@ -816,18 +770,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
         guard !busy && !exiting else { return }
         switch action {
-        case .godMode: guard canEditDesired else { return }; performFeatureShortcut("godMode", current: godMode)
-        case .infiniteHealth: guard canEditDesired else { return }; performFeatureShortcut("infiniteHealth", current: infiniteHealth)
-        case .infiniteMana: guard canEditDesired else { return }; performFeatureShortcut("infiniteMana", current: infiniteMana)
-        case .instantCastCooldown: guard canEditDesired else { return }; performFeatureShortcut("instantCastCooldown", current: instantCastCooldown)
-        case .hexAlwaysReady: guard canEditDesired else { return }; performFeatureShortcut("hexAlwaysReady", current: hexAlwaysReady)
-        case .infiniteAmmo: guard canEditDesired else { return }; performFeatureShortcut("infiniteAmmo", current: infiniteAmmo)
-        case .damageEnabled: guard canEditDesired else { return }; performFeatureShortcut("damageEnabled", current: damageEnabled)
-        case .autoMiniGames: guard canEditDesired else { return }; performFeatureShortcut("autoMiniGames", current: autoMiniGames)
-        case .gardenQoL: guard canEditDesired else { return }; performFeatureShortcut("gardenQoL", current: gardenQoL)
-        case .boonRarityEnabled:
-            guard canEditDesired else { return }
-            performFeatureShortcut("boonRarityEnabled", current: boonRarityEnabled)
+        case .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+             .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
+             .moneyMultiplierEnabled, .resourceMultiplierEnabled:
+            guard canEditDesired, let key = action.featureKey else { return }
+            performFeatureShortcut(key)
         case .forceLegendary:
             guard canEditDesired else { return }
             let targetEnabled = !boonForceLegendary
@@ -850,12 +797,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             ) { [weak self] success in
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
-        case .moneyMultiplierEnabled:
-            guard canEditDesired else { return }
-            performFeatureShortcut("moneyMultiplierEnabled", current: moneyMultiplierEnabled)
-        case .resourceMultiplierEnabled:
-            guard canEditDesired else { return }
-            performFeatureShortcut("resourceMultiplierEnabled", current: resourceMultiplierEnabled)
         case .applyNextRoomReward:
             guard canEditDesired else { return }; setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward)
         case .spawnOlympian:
@@ -893,7 +834,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private var runtimeCleanupRequired: Bool {
         if activeFeatures.values.contains(true) || dormantFeatures.values.contains(true) { return true }
-        if desiredFeatureKeys.contains(where: desiredFeatureEnabled) { return true }
+        if Hades2FeatureKey.allCases.contains(where: desiredFeatureEnabled) { return true }
         if abs(gameSpeed - 1.0) > 0.0001 || nextRoomReward != nil { return true }
         if healthLocked || manaLocked || armorLocked || moneyLocked || rerollsLocked { return true }
         if resources.contains(where: \.locked) || elements.contains(where: \.locked) { return true }
@@ -944,5 +885,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         shuttingDown = true
         backendSession.stop(suppressTerminationError: true)
         completion(true)
+    }
+}
+
+private extension Hades2FeatureKey {
+    var modelKeyPath: ReferenceWritableKeyPath<Hades2TrainerModel, Bool> {
+        switch self {
+        case .godMode: return \.godMode
+        case .infiniteHealth: return \.infiniteHealth
+        case .infiniteMana: return \.infiniteMana
+        case .damageEnabled: return \.damageEnabled
+        case .instantCastCooldown: return \.instantCastCooldown
+        case .hexAlwaysReady: return \.hexAlwaysReady
+        case .infiniteAmmo: return \.infiniteAmmo
+        case .autoMiniGames: return \.autoMiniGames
+        case .gardenQoL: return \.gardenQoL
+        case .boonRarityEnabled: return \.boonRarityEnabled
+        case .moneyMultiplierEnabled: return \.moneyMultiplierEnabled
+        case .resourceMultiplierEnabled: return \.resourceMultiplierEnabled
+        }
     }
 }
