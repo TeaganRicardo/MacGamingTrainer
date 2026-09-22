@@ -21,10 +21,10 @@ assert validate_command_params("connect", {"probeRuntime": False}) == {"probeRun
 expect_error("connect", {"probeRuntime": 1}, "probeRuntime 必须为布尔值。")
 
 assert validate_command_params(
-    "set_desired", {"feature": "godMode", "value": True}, "req"
+    "set_desired", {"feature": "godMode", "value": True}
 ) == {"feature": "godMode", "value": True}
 assert validate_command_params(
-    "set_desired", {"feature": "gameSpeed", "value": 2}, "req"
+    "set_desired", {"feature": "gameSpeed", "value": 2}
 ) == {"feature": "gameSpeed", "value": 2.0}
 expect_error(
     "set_desired",
@@ -33,7 +33,7 @@ expect_error(
 )
 
 assert validate_command_params(
-    "set_vital", {"vital": "health", "field": "current", "value": 120}, "req"
+    "set_vital", {"vital": "health", "field": "current", "value": 120}
 ) == {"vital": "health", "field": "current", "value": 120}
 expect_error(
     "set_vital",
@@ -47,21 +47,21 @@ expect_error(
 )
 
 assert validate_command_params(
-    "set_counter", {"counter": "spellCharge", "value": 3}, "req"
+    "set_counter", {"counter": "spellCharge", "value": 3}
 ) == {"counter": "spellCharge", "value": 3}
 expect_error(
     "set_counter", {"counter": "unknown", "value": 3}, "未知局内计数器。"
 )
 
 assert validate_command_params(
-    "lock_vital", {"vital": "mana", "locked": True}, "req"
+    "lock_vital", {"vital": "mana", "locked": True}
 ) == {"vital": "mana", "locked": True}
 expect_error(
     "lock_vital", {"vital": "mana", "locked": 1}, "锁定值必须为布尔值。"
 )
 
 assert validate_command_params(
-    "set_stat", {"stat": "enemyHealth", "locked": True, "value": 175}, "req"
+    "set_stat", {"stat": "enemyHealth", "locked": True, "value": 175}
 ) == {"stat": "enemyHealth", "locked": True, "value": 175}
 expect_error(
     "set_stat",
@@ -70,7 +70,7 @@ expect_error(
 )
 
 assert validate_command_params(
-    "set_element", {"element": "Fire", "amount": 4}, "req"
+    "set_element", {"element": "Fire", "amount": 4}
 ) == {"element": "Fire", "amount": 4}
 expect_error(
     "set_element", {"element": "Void", "amount": 4}, "未知元素。"
@@ -81,26 +81,26 @@ expect_error(
 )
 
 assert validate_command_params(
-    "set_resource", {"resource": "Money", "amount": 10}, "resource-id"
+    "set_resource", {"resource": "Money", "amount": 10}
 ) == {"resource": "Money", "amount": 10}
 assert validate_command_params(
-    "lock_resource", {"resource": "Money", "locked": False}, "lock-resource-id"
+    "lock_resource", {"resource": "Money", "locked": False}
 ) == {"resource": "Money", "locked": False}
 assert validate_command_params(
-    "set_rerolls", {"amount": 7}, "reroll-id"
+    "set_rerolls", {"amount": 7}
 ) == {"amount": 7}
 assert validate_command_params(
-    "lock_rerolls", {"locked": True}, "lock-reroll-id"
+    "lock_rerolls", {"locked": True}
 ) == {"locked": True}
 
 assert validate_command_params(
-    "spawn_reward", {"reward": "EmptyMaxHealthDrop"}, "spawn-id"
+    "spawn_reward", {"reward": "EmptyMaxHealthDrop"}
 ) == {"reward": "EmptyMaxHealthDrop"}
 assert validate_command_params(
-    "open_sell_traits", {}, "sell-id"
+    "open_sell_traits", {}
 ) == {}
 assert validate_command_params(
-    "open_special_choice", {"source": "Zeus"}, "choice-id"
+    "open_special_choice", {"source": "Zeus"}
 ) == {"source": "Zeus"}
 
 assert validate_command_params(
@@ -130,10 +130,10 @@ expect_error(
 )
 
 assert validate_command_params(
-    "set_next_room_reward_desired", {"reward": "WeaponUpgrade"}, "next-room-id"
+    "set_next_room_reward_desired", {"reward": "WeaponUpgrade"}
 ) == {"reward": "WeaponUpgrade"}
 assert validate_command_params(
-    "set_next_room_reward_desired", {"reward": None}, "next-room-id"
+    "set_next_room_reward_desired", {"reward": None}
 ) == {"reward": None}
 expect_error(
     "set_next_room_reward_desired",
