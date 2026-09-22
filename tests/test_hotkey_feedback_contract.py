@@ -18,8 +18,8 @@ assert len({name for name in ("Glass", "Pop", "Tink") if name in text}) == 3
 assert "performFeatureShortcut" in model
 assert "TrainerHotkeyFeedbackPlayer.play" in model
 assert "guard success" in model
-assert "activeFeatures[key] == true" in model
-assert "dormantFeatures[key] == true" in model
+assert "activeFeatures[key.rawValue] == true" in model
+assert "dormantFeatures[key.rawValue] == true" in model
 assert "featureHotkeyFeedback" in model
 shortcut_block = model[model.index("private func performFeatureShortcut"):model.index("private func performBoonForceShortcutFeedback")]
 assert ".toggle(targetEnabled:" not in shortcut_block, "active=false alone must not be reported as deferred"
@@ -30,7 +30,7 @@ assert "if let feedback" in shortcut_block
 # dormant/unavailable; disabling is immediately off.
 assert "performBoonForceShortcutFeedback" in model
 force_helper = model[model.index("private func performBoonForceShortcutFeedback"):model.index("private func performShortcut")]
-assert 'activeFeatures["boonRarityEnabled"] == true' in force_helper
+assert "activeFeatures[Hades2FeatureKey.boonRarityEnabled.rawValue] == true" in force_helper
 assert ".enabled" in force_helper and ".deferred" in force_helper and ".disabled" in force_helper
 assert "forceLegendary" in model and "forceDuo" in model
 
