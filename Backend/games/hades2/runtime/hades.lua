@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 47 then
+if previousModule and previousModule.revision ~= 48 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 47, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 48, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -30,6 +30,7 @@ if __MacGamingTrainerV1 == nil then
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
+    lastActionReceipt = nil,
   }
   __MacGamingTrainerV1 = M
 
@@ -2743,11 +2744,11 @@ if __MacGamingTrainerV1 == nil then
       error = record.error,
     }
   end
+  local function publishActionReceipt(record)
+    M.lastActionReceipt = actionReceipt(record, record.requestId, false)
+  end
   latestActionReceipt = function()
-    local requestId = M.requestOrder[#M.requestOrder]
-    local record = requestId and M.requests[requestId] or nil
-    if type(record) ~= "table" then return nil end
-    return actionReceipt(record, requestId, false)
+    return M.lastActionReceipt
   end
   local function action(command, params, work)
     local requestId = params.requestId
@@ -2772,7 +2773,7 @@ if __MacGamingTrainerV1 == nil then
       if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
       return result
     end
-    local record = { command = command, fingerprint = fingerprint, status = "outcome_unknown" }
+    local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
     M.requests[requestId] = record
     M.requestOrder[#M.requestOrder + 1] = requestId
     if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
@@ -2780,10 +2781,12 @@ if __MacGamingTrainerV1 == nil then
     if not ok then
       record.status = "outcome_unknown"
       record.error = tostring(value)
+      publishActionReceipt(record)
       error("MGT_OUTCOME_UNKNOWN: " .. record.error)
     end
     if record.status == "outcome_unknown" then record.status = outcome or "completed" end
     record.lootObjectId = value
+    publishActionReceipt(record)
     local result = state(params.includeCatalogs)
     local receipt = actionReceipt(record, requestId, false)
     result.requestId, result.duplicate = requestId, false
@@ -3113,6 +3116,7 @@ if __MacGamingTrainerV1 == nil then
               DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. record.error })
             end
           end
+          publishActionReceipt(record)
         end
         thread(runSell)
         return nil, "accepted"
@@ -3303,6 +3307,7 @@ if __MacGamingTrainerV1 == nil then
               DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. record.error })
             end
           end
+          publishActionReceipt(record)
         end
         thread(runChoice)
         return nil, "accepted"
