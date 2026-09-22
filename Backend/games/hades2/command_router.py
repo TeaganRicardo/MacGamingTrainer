@@ -5,10 +5,12 @@ owns command selection and delegates side effects to the adapter/game services.
 """
 import subprocess
 
+from core.adapter import AdapterError
 from . import preparation
 from .command_validation import validate_command_params
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
+from .runtime_error_presentation import present_runtime_error
 
 
 _RUNTIME_COMMANDS = frozenset((
@@ -49,7 +51,13 @@ class Hades2CommandRouter:
             if command=='set_desired':
                 result=adapter.set_desired(params['feature'],params['value'])
             else:
-                result=adapter.execute(command,params)
+                try:
+                    result=adapter.execute(command,params)
+                except AdapterError as error:
+                    presented=present_runtime_error(command,error)
+                    if presented is error:
+                        raise
+                    raise presented from error
         elif command=='set_boon_rarity_desired':
             config=validate_command_params(command,params)
             result=adapter.set_boon_rarity_desired(config)
