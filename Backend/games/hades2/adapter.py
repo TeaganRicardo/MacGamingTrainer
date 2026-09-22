@@ -13,6 +13,9 @@ from .persistence import PersistenceError
 from .profile_service import Hades2ProfileService
 from .command_router import Hades2CommandRouter
 TransportError = AdapterError
+_TRANSIENT_ACTION_RESULT_FIELDS = (
+    'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',
+)
 
 def clear_active(state,preserve_desired=False):
     """Clear verified runtime state; optionally retain the user's desired feature profile."""
@@ -740,6 +743,8 @@ class Hades2Adapter(GameAdapter):
             # Backup is server-side and can take a verified stable snapshot while the game is running.
             capabilities['hotBackup']=True;capabilities['hotRestore']=False
             decoded['capabilities']=capabilities
+            for key in _TRANSIENT_ACTION_RESULT_FIELDS:
+                self.state.pop(key,None)
             self.state.update(decoded,connected=True,pid=self.transport.pid)
             self.state.pop('error',None)
             # nextRoomReward is a one-shot runtime request. A clean status in
