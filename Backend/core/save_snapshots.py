@@ -282,6 +282,8 @@ class SaveSnapshotStore:
                 raise SaveSnapshotError('Snapshot contains a symbolic link.')
             if not item.is_file():
                 continue
+            if item.name == '.DS_Store':
+                continue
             relative_to_files = item.relative_to(files_root)
             if len(relative_to_files.parts) < 2:
                 raise SaveSnapshotError('Snapshot file is missing a root ID.')
