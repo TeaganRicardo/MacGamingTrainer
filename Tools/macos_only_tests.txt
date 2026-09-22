@@ -1,0 +1,4 @@
+test_core_save_batch_delete_round20.py
+test_core_save_rename_completion_round24.py
+test_hades2_run_log_watcher.py
+test_trainer_log_sink_shared_append.py

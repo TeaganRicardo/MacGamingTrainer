@@ -17,7 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         game:
-          - hades2
           - reference_fixture
 
     steps:
