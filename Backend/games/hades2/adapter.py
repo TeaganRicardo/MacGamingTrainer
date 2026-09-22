@@ -5,7 +5,7 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 from . import preparation
 from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
-from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, desired_feature_defaults, disconnected_capabilities
+from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, default_boon_rarity, desired_feature_defaults, disconnected_capabilities
 from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
@@ -84,7 +84,7 @@ class Hades2Adapter(GameAdapter):
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
                     **desired_defaults,
-                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False}, 'nextRoomReward':None,
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
@@ -457,7 +457,6 @@ class Hades2Adapter(GameAdapter):
 
 
     def set_next_room_reward_desired(self,reward):
-        if reward is not None and (not isinstance(reward,str) or len(reward)>128):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
