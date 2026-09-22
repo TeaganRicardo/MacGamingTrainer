@@ -1,6 +1,7 @@
 from pathlib import Path
 import copy
 import json
+import re
 import sys
 import tempfile
 
@@ -72,6 +73,15 @@ class PendingTransport:
                 'forceLegendary': True,
                 'forceDuo': False,
             }
+        if 'dispatch("set_next_room_reward"' in source:
+            if '["reward"]="WeaponUpgrade"' in source:
+                self.state['nextRoomReward'] = 'WeaponUpgrade'
+                match = re.search(r'\["token"\]="([^"]+)"', source)
+                if match:
+                    self.state['runtimeDiagnostics']['nextRoomRewardToken'] = match.group(1)
+            elif '["reward"]=nil' in source:
+                self.state['nextRoomReward'] = None
+                self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
         if 'dispatch("spawn_reward"' in source:
             self.spawn_count += 1
         return json.dumps(self.state)
@@ -221,3 +231,73 @@ assert transport_rarity.state['desiredFeatures']['godMode'] is True
 assert adapter_rarity.preference_dirty is False
 
 print('pending_preference_confirmation_rarity_ok')
+
+
+# nextRoomReward is a durable one-shot with an identity token. Arming it while
+# another field is pending must preserve that older pending work. Once the
+# resident reports consumption of this exact token, later reconciliation must
+# not resurrect the one-shot.
+base_reward = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-next-room-'))
+preparation.DATA = base_reward
+transport_reward = PendingTransport()
+adapter_reward = Hades2Adapter(transport=transport_reward)
+adapter_reward._runtime_bootstrapped = True
+adapter_reward._catalog_initialized = True
+adapter_reward._apply_game_speed = lambda value: 1.0
+adapter_reward.state.update(
+    copy.deepcopy(transport_reward.state),
+    connected=True,
+    pid=transport_reward.pid,
+)
+adapter_reward.preference_initialized = True
+adapter_reward.preference_dirty = False
+
+adapter_reward.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-reward',
+)
+assert adapter_reward.preference_dirty is True
+
+adapter_reward.dispatch(
+    'set_next_room_reward_desired',
+    {'reward': 'WeaponUpgrade'},
+    'desired-reward',
+)
+armed_token = adapter_reward.preferences['nextRoomRewardToken']
+assert isinstance(armed_token, str) and armed_token
+assert transport_reward.state['nextRoomReward'] == 'WeaponUpgrade'
+assert transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken'] == armed_token
+assert adapter_reward.preferences['godMode'] is True
+assert adapter_reward.preference_dirty is True, (
+    'successful next-room arm must not confirm failed feature A'
+)
+persisted_reward = json.loads(
+    (base_reward / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_reward['nextRoomReward'] == 'WeaponUpgrade'
+assert persisted_reward['nextRoomRewardToken'] == armed_token
+assert persisted_reward['godMode'] is True
+
+# Simulate resident consumption before the next status. The exact receipt proves
+# that this one-shot ran even though another durable field remains pending.
+transport_reward.state['nextRoomReward'] = None
+transport_reward.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
+transport_reward.state['runtimeDiagnostics'][
+    'lastConsumedNextRoomRewardToken'
+] = armed_token
+
+adapter_reward.dispatch('status', {}, 'status-reward')
+assert transport_reward.state['desiredFeatures']['godMode'] is True
+assert transport_reward.state['nextRoomReward'] is None
+assert adapter_reward.preferences['nextRoomReward'] is None
+assert adapter_reward.preferences['nextRoomRewardToken'] is None
+assert adapter_reward.preference_dirty is False
+persisted_reward = json.loads(
+    (base_reward / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_reward['nextRoomReward'] is None
+assert persisted_reward['nextRoomRewardToken'] is None
+assert persisted_reward['godMode'] is True
+
+print('pending_preference_confirmation_next_room_ok')
