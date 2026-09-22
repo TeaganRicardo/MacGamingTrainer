@@ -33,7 +33,7 @@ struct Hades2StatePatch {
     let activeFeatures: [String: Bool]?
     let dormantFeatures: [String: Bool]?
     let featureSupport: [String: Bool]?
-    let featureErrors: [String: String]?
+    let featureErrors: Hades2FieldPatch<[String: String]>
     let desiredFeatures: [Hades2FeatureKey: Bool]?
 
     let gameSpeed: Double?
@@ -83,7 +83,7 @@ struct Hades2StatePatch {
         activeFeatures = Self.boolMap(payload["activeFeatures"])
         dormantFeatures = Self.boolMap(payload["dormantFeatures"])
         featureSupport = Self.boolMap(payload["featureSupport"])
-        featureErrors = Self.stringMap(payload["featureErrors"])
+        featureErrors = Self.stringMapField(payload, "featureErrors")
         desiredFeatures = Self.featureMap(payload["desiredFeatures"])
         gameSpeed = Self.number(payload["gameSpeed"])
         damageMultiplier = Self.number(payload["damageMultiplier"])
@@ -160,6 +160,11 @@ struct Hades2StatePatch {
         return values.reduce(into: [:]) { result, entry in
             if let value = entry.value as? String { result[entry.key] = value }
         }
+    }
+
+    private static func stringMapField(_ payload: [String: Any], _ key: String) -> Hades2FieldPatch<[String: String]> {
+        guard payload.keys.contains(key) else { return .absent }
+        return .present(stringMap(payload[key]))
     }
 
     private static func number(_ value: Any?) -> Double? {

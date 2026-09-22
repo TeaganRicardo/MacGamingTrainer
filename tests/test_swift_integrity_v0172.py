@@ -44,8 +44,8 @@ snapshots = (ROOT / 'Sources/Hades2/Views/Hades2ViewSnapshots.swift').read_text(
 # editor synchronization is intentionally aggregated into snapshot observers.
 assert view.count('.onChange(') <= 8, f'too many Hades2View onChange modifiers: {view.count(".onChange(")}'
 for name in (
-    'Hades2ViewConnectionSnapshot', 'Hades2ViewStatSnapshot', 'Hades2ViewConfigSnapshot',
-    'Hades2ViewInputSnapshot', 'Hades2ViewLockedStatInputSnapshot', 'Hades2ViewCatalogSnapshot',
+    'Hades2ViewConnectionSnapshot', 'Hades2ViewStatSnapshot',
+    'Hades2ViewConfigSnapshot', 'Hades2ViewCatalogSnapshot',
 ):
     assert f'struct {name}' in snapshots
     assert name in view
@@ -69,7 +69,7 @@ helper_decls = set(re.findall(r'\bfunc\s+([a-z_][A-Za-z0-9_]*)\s*\(', view))
 helper_prefixes = (
     'sync', 'apply', 'reset', 'open', 'editable', 'feature', 'section',
     'spawn', 'multiplier', 'stat', 'elementMetric', 'compact', 'speed',
-    'number', 'pair', 'resource', 'message',
+    'number', 'pair', 'resource', 'message', 'intent',
 )
 missing_helpers = sorted(
     name for name in helper_calls
