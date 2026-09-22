@@ -50,7 +50,7 @@ assert router_probe.calls == [
 try:
     command_router.dispatch("open_special_choice", {}, "invalid-native-choice")
 except ValueError as error:
-    assert str(error) == "请选择支持原生三选一的特殊祝福来源。"
+    assert str(error) == "请选择支持原生奖励选择界面的角色。"
 else:
     raise AssertionError("router bypassed native special-choice validation")
 assert len(router_probe.calls) == 1

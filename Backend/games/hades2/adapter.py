@@ -13,6 +13,9 @@ from .persistence import PersistenceError
 from .profile_service import Hades2ProfileService
 from .command_router import Hades2CommandRouter
 TransportError = AdapterError
+_TRANSIENT_ACTION_RESULT_FIELDS = (
+    'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',
+)
 
 def clear_active(state,preserve_desired=False):
     """Clear verified runtime state; optionally retain the user's desired feature profile."""
@@ -729,6 +732,12 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
+            last_action=decoded.get('lastAction')
+            if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
+                logging.warning(
+                    'LuaAction command=%s requestId=%s outcome=failed raw=%s',
+                    last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
+                )
             if not read_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
@@ -740,6 +749,8 @@ class Hades2Adapter(GameAdapter):
             # Backup is server-side and can take a verified stable snapshot while the game is running.
             capabilities['hotBackup']=True;capabilities['hotRestore']=False
             decoded['capabilities']=capabilities
+            for key in _TRANSIENT_ACTION_RESULT_FIELDS:
+                self.state.pop(key,None)
             self.state.update(decoded,connected=True,pid=self.transport.pid)
             self.state.pop('error',None)
             # nextRoomReward is a one-shot runtime request. A clean status in

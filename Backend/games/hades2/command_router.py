@@ -5,10 +5,12 @@ owns command selection and delegates side effects to the adapter/game services.
 """
 import subprocess
 
+from core.adapter import AdapterError
 from . import preparation
 from .command_validation import validate_command_params
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
+from .runtime_error_presentation import present_runtime_error
 
 
 _RUNTIME_COMMANDS = frozenset((
@@ -30,6 +32,15 @@ class Hades2CommandRouter:
         self.adapter = adapter
 
     def dispatch(self, command, params, request_id):
+        try:
+            return self._dispatch(command, params, request_id)
+        except AdapterError as error:
+            presented=present_runtime_error(command,error)
+            if presented is error:
+                raise
+            raise presented from error
+
+    def _dispatch(self, command, params, request_id):
         adapter=self.adapter
         rid=request_id
         if command=='scan':
