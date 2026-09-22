@@ -13,6 +13,9 @@ class ReferenceFixtureAdapter(GameAdapter):
         if command == 'connect':
             self.connected = True
             return {'connected': True, 'enabled': self.enabled}
+        if command == 'disconnect':
+            self.connected = False
+            return {'connected': False, 'enabled': self.enabled}
         if command == 'set_enabled':
             self.enabled = bool(params.get('value', False))
             return {'connected': self.connected, 'enabled': self.enabled}
