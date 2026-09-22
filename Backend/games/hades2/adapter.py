@@ -5,7 +5,7 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 from . import preparation
 from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
-from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, disconnected_capabilities
+from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, desired_feature_defaults, disconnected_capabilities
 from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
@@ -17,9 +17,10 @@ TransportError = AdapterError
 def clear_active(state,preserve_desired=False):
     """Clear verified runtime state; optionally retain the user's desired feature profile."""
     if not preserve_desired:
-        state.update({key:False for key in TOGGLES})
-        state['desiredFeatures']={key:False for key in TOGGLES}
-        state['gameSpeed']=1
+        defaults=desired_feature_defaults()
+        state.update({key:defaults[key] for key in TOGGLES})
+        state['desiredFeatures']={key:defaults[key] for key in TOGGLES}
+        state['gameSpeed']=defaults['gameSpeed']
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
@@ -80,9 +81,11 @@ class Hades2Adapter(GameAdapter):
         self._time_warp_speed=1.0;self._time_warp_error=''
         self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
+        desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
-                    'godMode':False,'infiniteHealth':False,'infiniteMana':False,'damageEnabled':False,'instantCastCooldown':False,'hexAlwaysReady':False,'infiniteAmmo':False,'autoMiniGames':False,'gardenQoL':False,'boonRarityEnabled':False,'damageMultiplier':2,'gameSpeed':1,'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False}, 'nextRoomReward':None,
-                    'desiredFeatures':{key:False for key in TOGGLES},
+                    **desired_defaults,
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':{'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False}, 'nextRoomReward':None,
+                    'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
                     'capabilities':disconnected_capabilities()}
@@ -163,10 +166,11 @@ class Hades2Adapter(GameAdapter):
         }
 
     def _overlay_preferences(self):
-        desired={key:bool(self.preferences.get(key,False)) for key in TOGGLES}
+        defaults=desired_feature_defaults()
+        desired={key:bool(self.preferences.get(key,defaults[key])) for key in TOGGLES}
         self.state['desiredFeatures']=desired
         for key,value in desired.items():self.state[key]=value
-        for key in MULTIPLIERS:self.state[key]=self.preferences.get(key,1.0 if key=='gameSpeed' else 2.0)
+        for key in MULTIPLIERS:self.state[key]=self.preferences.get(key,defaults[key])
         self.state['boonRarity']=dict(self.preferences.get('boonRarity',{}))
         self.state['nextRoomReward']=self.preferences.get('nextRoomReward')
         stat_locks=self.preferences.get('statLocks',{}) if isinstance(self.preferences.get('statLocks'),dict) else {}
@@ -466,7 +470,7 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
         if not self.transport.alive():return dict(self.state)
-        if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',1.0))
+        if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         if self.state.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
