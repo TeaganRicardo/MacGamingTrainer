@@ -95,9 +95,9 @@ model.setEnabled(true)
 guard waitUntil(2.0, { model.enabled && !model.busy }) else {
     fail("fixture could not re-enable through session")
 }
-model.disableAllFromHost()
+model.setEnabled(false)
 guard waitUntil(2.0, { !model.enabled && !model.busy }) else {
-    fail("disable_all did not round-trip through session")
+    fail("explicit fixture disable did not round-trip through session")
 }
 
 model.toggleConnectionFromHost()

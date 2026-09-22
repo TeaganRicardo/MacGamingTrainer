@@ -76,7 +76,7 @@ struct Main {
             onStatusChange: { _ in }
         )
 
-        let model = Hades2TrainerModel(session: session)
+        let model = Hades2GameModule.makeModel(session: session)
         let host = NSHostingView(rootView: Hades2TrainerView(model: model))
         host.frame = NSRect(x: 0, y: 0, width: 1200, height: 900)
         host.layoutSubtreeIfNeeded()
@@ -135,7 +135,7 @@ struct Main {
         }
 
         let editGeneration = model.editGeneration
-        model.toggleConnection()
+        model.toggleConnectionFromHost()
         if model.editGeneration == editGeneration {
             fail("disconnect barrier did not invalidate editor drafts")
         }

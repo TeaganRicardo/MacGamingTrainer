@@ -38,15 +38,9 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         backendSession.restart()
     }
 
-    func disableAllFromHost() {
-        send("disable_all", operation: "关闭 Reference Feature")
-    }
-
     func setEnabled(_ value: Bool) {
         send("set_enabled", params: ["value": value], operation: value ? "启用 Reference Feature" : "关闭 Reference Feature")
     }
-
-    func openLog() {}
 
     func prepareForTermination(completion: @escaping (Bool) -> Void) {
         backendSession.stop(suppressTerminationError: true)
@@ -147,5 +141,9 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
 
     static func makeHeaderActions(model: ReferenceFixtureModel) -> some View {
         EmptyView()
+    }
+
+    static func makeManagementCommands(model: ReferenceFixtureModel) -> TrainerEmptyCommands {
+        TrainerEmptyCommands()
     }
 }

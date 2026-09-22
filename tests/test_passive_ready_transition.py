@@ -79,7 +79,7 @@ assert host_foreground.index('connectionPolicy.targetStateChanged') < host_foreg
 assert 'func hostDidBecomeActive()' in contract
 assert 'extension TrainerHostModel' in contract
 start = model.index('    func hostDidBecomeActive()')
-end = model.index('\n    func toggleConnection()', start)
+end = model.index('\n    private func handleRunLogEvent', start)
 foreground = model[start:end]
 for token in (
     'guard connected',
@@ -117,8 +117,8 @@ assert 'asyncAfter' not in foreground
 # the Trainer's launch notification. The pre-connect watcher start is therefore
 # paired with an idempotent post-connect start so the event-driven lifecycle
 # cannot be permanently missed without adding polling.
-toggle_start = model.index('    func toggleConnection()')
-toggle_end = model.index('\n    func disableAllFromHost()', toggle_start)
+toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool)')
+toggle_end = model.index('\n    func restartBackendFromHost()', toggle_start)
 toggle = model[toggle_start:toggle_end]
 assert toggle.count('runLogWatcher.start()') >= 2
 completion_start = toggle.index('send(.connect')
@@ -157,7 +157,7 @@ for token in (
     assert token in model, token
 
 consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
-consume_end = model.index('\n    func toggleConnection()', consume_start)
+consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool)', consume_start)
 run_log_refresh = model[consume_start:consume_end]
 assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
 assert 'status == "ready"' not in run_log_refresh

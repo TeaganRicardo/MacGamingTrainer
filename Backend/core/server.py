@@ -12,6 +12,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from core.log_paths import trainer_log_path
 from core.protocol import JsonlRequestRouter
 from core.registry import available_games, create_adapter
 
@@ -67,17 +68,6 @@ class _BackendLoggingSession:
         self.root.setLevel(self.original_level)
 
 
-def _fallback_log_path(game_id):
-    return Path.home() / 'Library/Application Support/MacGamingTrainer' / game_id / 'trainer.log'
-
-
-def _adapter_log_path(adapter):
-    data_dir = getattr(adapter, 'data_dir', None)
-    if data_dir is not None:
-        return Path(data_dir) / 'trainer.log'
-    return _fallback_log_path(adapter.game_id)
-
-
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--game', default=os.environ.get('MGT_GAME_ID'))
@@ -112,11 +102,11 @@ def main(argv=None):
         try:
             adapter = create_adapter(game_id)
         except Exception:
-            logging_session.configure_file(_fallback_log_path(game_id))
+            logging_session.configure_file(trainer_log_path(game_id))
             logging.exception('Backend adapter initialization failed game=%s', game_id)
             raise
 
-        logging_session.configure_file(_adapter_log_path(adapter))
+        logging_session.configure_file(trainer_log_path(adapter.game_id))
         router = JsonlRequestRouter(adapter)
 
         def interrupt(signum, frame):
