@@ -732,6 +732,12 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
+            last_action=decoded.get('lastAction')
+            if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
+                logging.warning(
+                    'LuaAction command=%s requestId=%s outcome=failed raw=%s',
+                    last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
+                )
             if not read_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
