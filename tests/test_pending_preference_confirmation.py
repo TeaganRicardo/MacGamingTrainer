@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError
+from games.hades2.persistence import PersistenceError
 from games.hades2.schema import TOGGLES
 
 
@@ -301,3 +302,75 @@ assert persisted_reward['nextRoomRewardToken'] is None
 assert persisted_reward['godMode'] is True
 
 print('pending_preference_confirmation_next_room_ok')
+
+
+# A successful runtime replay is not fully confirmed until the durable state can
+# also be persisted. If the confirmation write fails, the error is visible and
+# pending remains true. The already-persisted desired value on disk must remain
+# intact rather than being replaced by a false runtime projection.
+base_persist = Path(tempfile.mkdtemp(prefix='mgt-pending-confirmation-persist-'))
+preparation.DATA = base_persist
+transport_persist = PendingTransport()
+adapter_persist = Hades2Adapter(transport=transport_persist)
+adapter_persist._runtime_bootstrapped = True
+adapter_persist._catalog_initialized = True
+adapter_persist._apply_game_speed = lambda value: 1.0
+adapter_persist.state.update(
+    copy.deepcopy(transport_persist.state),
+    connected=True,
+    pid=transport_persist.pid,
+)
+adapter_persist.preference_initialized = True
+adapter_persist.preference_dirty = False
+
+adapter_persist.dispatch(
+    'set_desired',
+    {'feature': 'godMode', 'value': True},
+    'desired-a-persist',
+)
+assert adapter_persist.preference_dirty is True
+persisted_before = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_before['godMode'] is True
+
+original_persist_save = adapter_persist.preference_store.save
+fail_confirmation_once = True
+
+
+def fail_confirmation_save(preferences):
+    global fail_confirmation_once
+    if fail_confirmation_once:
+        fail_confirmation_once = False
+        raise PersistenceError('simulated confirmation persistence failure')
+    return original_persist_save(preferences)
+
+
+adapter_persist.preference_store.save = fail_confirmation_save
+try:
+    adapter_persist.dispatch('status', {}, 'status-persist-fail')
+except PersistenceError as error:
+    assert 'simulated confirmation persistence failure' in str(error)
+else:
+    raise AssertionError('confirmation persistence failure was hidden')
+
+assert transport_persist.state['desiredFeatures']['godMode'] is True
+assert adapter_persist.preferences['godMode'] is True
+assert adapter_persist.preference_dirty is True, (
+    'failed confirmation persistence must remain pending'
+)
+persisted_after_failure = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_after_failure['godMode'] is True
+
+# Once persistence recovers, a later status may confirm the already-applied
+# durable state without replaying any one-shot operation.
+adapter_persist.dispatch('status', {}, 'status-persist-retry')
+assert adapter_persist.preference_dirty is False
+persisted_after_retry = json.loads(
+    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_after_retry['godMode'] is True
+
+print('pending_preference_confirmation_persistence_ok')
