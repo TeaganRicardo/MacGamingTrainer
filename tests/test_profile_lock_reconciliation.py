@@ -95,7 +95,7 @@ adapter.profile_service.save('partial-locks', desired)
 batches = []
 
 
-def fake_execute(command, params, replay=False, read_only=False, batch=None):
+def fake_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
     if command == 'replay_preferences':
         batches.append(list(batch or []))
     return dict(adapter.state)
@@ -134,7 +134,7 @@ no_lock_adapter.profile_service.save('no-locks', Hades2PreferenceStore.defaults(
 no_lock_batches = []
 
 
-def fake_no_lock_execute(command, params, replay=False, read_only=False, batch=None):
+def fake_no_lock_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
     if command == 'replay_preferences':
         no_lock_batches.append(list(batch or []))
     return dict(no_lock_adapter.state)
@@ -165,7 +165,7 @@ offline_adapter.transport.live = True
 offline_batches = []
 
 
-def fake_offline_execute(command, params, replay=False, read_only=False, batch=None):
+def fake_offline_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
     if command == 'replay_preferences':
         offline_batches.append(list(batch or []))
     return dict(offline_adapter.state)
@@ -180,26 +180,6 @@ assert has_call(offline_batch, 'lock_vital', vital='health', locked=False)
 assert has_call(offline_batch, 'lock_resource', resource='Money', locked=False)
 assert has_call(offline_batch, 'lock_rerolls', locked=False)
 assert has_call(offline_batch, 'lock_element', element='Water', locked=False)
-
-# A failed replay must remain dirty and surface the transport failure instead
-# of being reported as successfully applied.
-failure_adapter = make_adapter('mgt-profile-reconcile-failure-')
-seed_observed_locks(failure_adapter)
-failure_adapter.profile_service.save('failure-no-locks', Hades2PreferenceStore.defaults())
-
-
-def failing_execute(command, params, replay=False, read_only=False, batch=None):
-    raise TransportError('outcome_unknown', 'simulated replay failure')
-
-
-failure_adapter.execute = failing_execute
-try:
-    failure_adapter.load_profile('failure-no-locks')
-except TransportError as error:
-    assert error.code == 'outcome_unknown'
-else:
-    raise AssertionError('Profile replay failure was reported as success')
-assert failure_adapter.preference_dirty is True
 
 print('profile_lock_reconciliation_ok')
 
@@ -320,6 +300,9 @@ else:
 assert all(runtime_locks(retry_transport.state))
 assert retry_adapter.preference_dirty is True
 assert retry_adapter.state['status'] == 'ready'
+assert not any(runtime_locks(retry_adapter.state)), (
+    'failed replay may still project desired UI state, but must remain pending'
+)
 
 second_result = retry_adapter.load_profile('retry-unlocked')
 assert not any(runtime_locks(retry_transport.state)), (
