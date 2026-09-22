@@ -79,7 +79,7 @@ assert host_foreground.index('connectionPolicy.targetStateChanged') < host_foreg
 assert 'func hostDidBecomeActive()' in contract
 assert 'extension TrainerHostModel' in contract
 start = model.index('    func hostDidBecomeActive()')
-end = model.index('\n    func toggleConnection()', start)
+end = model.index('\n    private func handleRunLogEvent', start)
 foreground = model[start:end]
 for token in (
     'guard connected',
