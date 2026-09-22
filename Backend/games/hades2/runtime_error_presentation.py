@@ -15,27 +15,27 @@ _LUA_SOURCE_PREFIX = re.compile(r'^\[string "[^"]*"\]:\d+:\s*')
 _RUNTIME_MESSAGES = {
     'open_sell_traits': {
         'Cannot open boon sell screen while another screen is active':
-            '已有游戏界面打开，请先关闭当前界面后再打开出售祝福界面。',
+            '已有游戏界面打开，请先关闭当前界面后再打开净化之池。',
         'Boon selling requires an active run room':
-            '出售祝福仅可在局内房间使用。',
+            '净化之池仅可在局内房间打开。',
         'Native boon sell screen data is unavailable':
-            '当前游戏状态无法打开出售祝福界面。',
+            '当前游戏状态无法打开净化之池。',
     },
     'open_special_choice': {
         'Cannot open special blessing choice while another screen is active':
-            '已有游戏界面打开，请先关闭当前界面后再打开特殊祝福选择。',
+            '已有游戏界面打开，请先关闭当前界面后再打开奖励选择界面。',
         'Cannot open special blessing choice during a transition':
-            '场景切换中，暂时无法打开特殊祝福选择。',
+            '场景切换中，暂时无法打开奖励选择界面。',
         'Special blessing choice requires an active run room':
-            '特殊祝福选择仅可在局内房间使用。',
+            '奖励选择界面仅可在局内房间打开。',
         'Special blessing source has no audited native choice flow':
-            '该特殊祝福来源暂不支持原生选择界面。',
+            '该角色暂不支持原生奖励选择界面。',
         'Special blessing source data is unavailable':
-            '当前游戏状态无法读取该特殊祝福来源。',
+            '当前游戏状态无法读取该角色的奖励数据。',
         'Special blessing choice data is unavailable':
-            '当前游戏状态无法读取该特殊祝福选择。',
+            '当前游戏状态无法读取该角色的奖励选项。',
         'No eligible special blessings are available':
-            '当前没有可供选择的特殊祝福。',
+            '当前没有可供选择的角色奖励。',
     },
 }
 
