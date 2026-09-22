@@ -1811,7 +1811,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
-      lastAction = latestActionReceipt and latestActionReceipt() or nil,
+      lastAction = latestActionReceipt(),
       featureErrors = M.featureErrors,
       runtimeDiagnostics = {
         revision = M.revision, heroObjectId = hero.ObjectId, runCount = runCount,
@@ -3102,9 +3102,11 @@ if __MacGamingTrainerV1 == nil then
           end)
           if trainerScreen ~= nil and ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
           if ok then
-            record.status, record.error = "opened", nil
+            record.status = "opened"
+            record.error = nil
           else
-            record.status, record.error = "failed", tostring(message)
+            record.status = "failed"
+            record.error = tostring(message)
             if type(DebugPrint) == "function" then
               DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. record.error })
             end
@@ -3290,9 +3292,11 @@ if __MacGamingTrainerV1 == nil then
           end)
           if not cleanupOk then ok, message = false, cleanupMessage end
           if ok then
-            record.status, record.error = "opened", nil
+            record.status = "opened"
+            record.error = nil
           else
-            record.status, record.error = "failed", tostring(message)
+            record.status = "failed"
+            record.error = tostring(message)
             if type(DebugPrint) == "function" then
               DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. record.error })
             end
