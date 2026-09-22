@@ -231,7 +231,17 @@ class RuntimeTransport:
 
     def execute(self, source):
         self.sources.append(source)
-        if self.fail_once:
+        lock_mutation = any(
+            marker in source
+            for marker in (
+                'dispatch("set_stat"',
+                'dispatch("lock_vital"',
+                'dispatch("lock_resource"',
+                'dispatch("lock_rerolls"',
+                'dispatch("lock_element"',
+            )
+        )
+        if self.fail_once and lock_mutation:
             self.fail_once = False
             raise TransportError(
                 'lua_error',
