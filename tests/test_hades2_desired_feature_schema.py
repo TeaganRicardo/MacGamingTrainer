@@ -8,6 +8,7 @@ from games.hades2.schema import (
     MULTIPLIERS,
     TOGGLES,
     desired_feature_defaults,
+    is_known_element,
     normalize_desired_feature_value,
     validate_desired_feature_value,
 )
@@ -42,6 +43,18 @@ assert normalize_desired_feature_value("godMode", True) is True
 assert normalize_desired_feature_value("godMode", False) is False
 for value in (1, 0, "true", None):
     assert normalize_desired_feature_value("godMode", value) is None
+
+# Canonical schema predicates are total over arbitrary JSON-compatible keys.
+for malformed_feature in ([], {}):
+    assert normalize_desired_feature_value(malformed_feature, True) is None
+    try:
+        validate_desired_feature_value(malformed_feature, True)
+    except ValueError as error:
+        assert str(error) == "未知功能。"
+    else:
+        raise AssertionError(f"malformed feature accepted: {malformed_feature!r}")
+for malformed_element in ([], {}):
+    assert is_known_element(malformed_element) is False
 
 # Multipliers share one normalization contract between Host commands and
 # persisted desired state.
