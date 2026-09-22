@@ -34,17 +34,8 @@ struct Hades2StatePatch {
     let dormantFeatures: [String: Bool]?
     let featureSupport: [String: Bool]?
     let featureErrors: [String: String]?
+    let desiredFeatures: [Hades2FeatureKey: Bool]?
 
-    let godMode: Bool?
-    let infiniteHealth: Bool?
-    let infiniteMana: Bool?
-    let instantCastCooldown: Bool?
-    let hexAlwaysReady: Bool?
-    let infiniteAmmo: Bool?
-    let autoMiniGames: Bool?
-    let gardenQoL: Bool?
-    let boonRarityEnabled: Bool?
-    let damageEnabled: Bool?
     let gameSpeed: Double?
     let damageMultiplier: Double?
     let moneyLocked: Bool?
@@ -95,17 +86,7 @@ struct Hades2StatePatch {
         dormantFeatures = Self.boolMap(payload["dormantFeatures"])
         featureSupport = Self.boolMap(payload["featureSupport"])
         featureErrors = Self.stringMap(payload["featureErrors"])
-
-        godMode = payload["godMode"] as? Bool
-        infiniteHealth = payload["infiniteHealth"] as? Bool
-        infiniteMana = payload["infiniteMana"] as? Bool
-        instantCastCooldown = payload["instantCastCooldown"] as? Bool
-        hexAlwaysReady = payload["hexAlwaysReady"] as? Bool
-        infiniteAmmo = payload["infiniteAmmo"] as? Bool
-        autoMiniGames = payload["autoMiniGames"] as? Bool
-        gardenQoL = payload["gardenQoL"] as? Bool
-        boonRarityEnabled = payload["boonRarityEnabled"] as? Bool
-        damageEnabled = payload["damageEnabled"] as? Bool
+        desiredFeatures = Self.featureMap(payload["desiredFeatures"])
         gameSpeed = Self.number(payload["gameSpeed"])
         damageMultiplier = Self.number(payload["damageMultiplier"])
         moneyLocked = payload["moneyLocked"] as? Bool
@@ -167,6 +148,14 @@ struct Hades2StatePatch {
         guard let values = value as? [String: Any] else { return nil }
         return values.reduce(into: [:]) { result, entry in
             if let value = entry.value as? Bool { result[entry.key] = value }
+        }
+    }
+
+    private static func featureMap(_ value: Any?) -> [Hades2FeatureKey: Bool]? {
+        guard let values = value as? [String: Any] else { return nil }
+        return values.reduce(into: [:]) { result, entry in
+            guard let key = Hades2FeatureKey(rawValue: entry.key), let value = entry.value as? Bool else { return }
+            result[key] = value
         }
     }
 
