@@ -11,9 +11,19 @@ final class TrainerLogSink {
     private let formatter = ISO8601DateFormatter()
     private var handle: FileHandle?
 
-    init(url: URL? = nil) {
-        self.url = url ?? FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/MacGamingTrainer/trainer.log")
+    init(url: URL) {
+        self.url = url
+    }
+
+    init(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) {
+        self.url = Self.moduleLogURL(gameID: gameID, homeDirectory: homeDirectory)
+    }
+
+    static func moduleLogURL(gameID: String, homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
+        homeDirectory
+            .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+            .appendingPathComponent(gameID, isDirectory: true)
+            .appendingPathComponent("trainer.log")
     }
 
     deinit {
