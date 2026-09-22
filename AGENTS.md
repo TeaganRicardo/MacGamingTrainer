@@ -55,7 +55,7 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 ## Product versioning
 
 - `Info.plist` is the only source of the current app product version.
-- Both bundle version keys use the same three-part SemVer.
+- `CFBundleShortVersionString` is the three-part product SemVer; `CFBundleVersion` is the monotonic positive-integer bundle build number.
 - Host/module protocol and schema/runtime revisions are independent compatibility versions, not product SemVer.
 - See `VERSIONING.md` for release increment rules.
 
