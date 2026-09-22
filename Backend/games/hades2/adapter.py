@@ -123,7 +123,10 @@ class Hades2Adapter(GameAdapter):
         preferences=self._normalize_preferences(profile['desired'])
         if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
-        observed_locks=self._observed_locks() if self.state.get('connected') else None
+        observed_locks=None
+        if self.transport.alive() and self.state.get('connected'):
+            self.execute('status',{},read_only=True,project_desired=False)
+            observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
@@ -511,11 +514,13 @@ class Hades2Adapter(GameAdapter):
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
         return dict(self.state)
 
-    def execute(self,command,params,replay=False,read_only=False,batch=None):
+    def execute(self,command,params,replay=False,read_only=False,batch=None,project_desired=True):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
         # maintenance, so this is not yet a strict transport/Lua snapshot API.
         if read_only and command!='status':raise ValueError('read_only 仅允许 status。')
+        if not project_desired and not (read_only and command=='status'):
+            raise ValueError('仅允许只读 status 保留原始 runtime observation。')
         teardown=not read_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
         # Lua boundary. If that write is explicitly blocked/failed, still make a
@@ -624,7 +629,7 @@ class Hades2Adapter(GameAdapter):
             if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None:
                     self._capture_runtime_preferences(self.state);self._save_preferences()
-            self._overlay_preferences()
+            if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
@@ -637,7 +642,7 @@ class Hades2Adapter(GameAdapter):
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
-            self._overlay_preferences()
+            if project_desired:self._overlay_preferences()
             raise
     def disconnect(self):
         # Manual disconnect is a debugger detach only. The trainer Lua module
