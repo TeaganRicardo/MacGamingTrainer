@@ -544,12 +544,12 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var primarySessionMetrics: some View {
         editableVitalMetric(
-            "生命", icon: "heart.fill", current: $healthCurrent, maximum: $healthMaximum,
+            "生命值", icon: "heart.fill", current: $healthCurrent, maximum: $healthMaximum,
             currentField: .healthCurrent, maxField: .healthMax, color: .pink,
             vital: "health", locked: model.healthLocked
         )
         editableVitalMetric(
-            "魔力", icon: "sparkles", current: $manaCurrent, maximum: $manaMaximum,
+            "魔力值", icon: "sparkles", current: $manaCurrent, maximum: $manaMaximum,
             currentField: .manaCurrent, maxField: .manaMax, color: .cyan,
             vital: "mana", locked: model.manaLocked
         )
@@ -572,7 +572,7 @@ struct Hades2TrainerView: View {
     @ViewBuilder
     private var expandedSessionMetrics: some View {
         editableAmountMetric(
-            "重骰", icon: "dice.fill", text: $rerollAmount, focus: .rerolls,
+            "重塑命运", icon: "dice.fill", text: $rerollAmount, focus: .rerolls,
             color: accent, locked: model.rerollsLocked, enabled: model.canSetResource,
             onEdit: { model.setRerolls($0) }
         ) {
@@ -751,12 +751,12 @@ struct Hades2TrainerView: View {
 
     private var boonPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            spawnRow(title: "诸神祝福", icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
+            spawnRow(title: "奥林匹斯的祝福", icon: "sparkles", options: olympianBoons, selection: $model.selectedOlympianReward, shortcut: .spawnOlympian, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             Divider()
             spawnRow(title: "资源与常规掉落", icon: "shippingbox.fill", options: pickupRewards, selection: $model.selectedPickupReward, shortcut: .spawnPickup, enabled: model.canSpawnReward, onAction: model.spawnBoon)
             Divider()
             HStack {
-                Label("特殊祝福", systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
+                Label("角色奖励", systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
                 Spacer()
                 TextField("搜索官方中英文名或内部 ID", text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
@@ -772,9 +772,9 @@ struct Hades2TrainerView: View {
             )
             Divider()
             HStack {
-                Label("出售祝福", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
+                Label("净化之池", systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
-                Button("出售") { model.openSellTraits() }
+                Button("打开") { model.openSellTraits() }
                     .disabled(!model.canOpenNativeBoonScreen)
             }
         }.trainerPanel()
@@ -793,7 +793,7 @@ struct Hades2TrainerView: View {
         TrainerGroupedOptionPicker(
             title: title,
             icon: icon,
-            pickerLabel: title ?? "特殊祝福",
+            pickerLabel: title ?? "角色奖励",
             selection: selection,
             sections: boonGroups(options),
             enabled: enabled,
