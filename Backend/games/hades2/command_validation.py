@@ -99,7 +99,7 @@ def validate_command_params(command, params):
     if command=='open_special_choice':
         source=params.get('source')
         if not isinstance(source,str) or not source:
-            raise ValueError('请选择支持原生三选一的特殊祝福来源。')
+            raise ValueError('请选择支持原生选择界面的特殊祝福来源。')
 
     if command=='set_boon_rarity_desired':
         config={
