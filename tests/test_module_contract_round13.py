@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -7,22 +8,42 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 fixture = root / 'ContractFixtures/reference_module'
 game_id = 'reference_fixture'
-backend_module = root / 'Backend/games' / game_id
-frontend = root / 'Sources/ReferenceFixture'
+checkout_backend_module = root / 'Backend/games' / game_id
+checkout_frontend = root / 'Sources/ReferenceFixture'
 
 assert fixture.is_dir()
-assert not backend_module.exists() and not frontend.exists()
+assert not checkout_backend_module.exists() and not checkout_frontend.exists()
 
 fixture_swift = (fixture / 'frontend/ReferenceFixtureModule.swift').read_text()
 assert 'static func makeModel(session: TrainerBackendSession) -> ReferenceFixtureModel' in fixture_swift
 assert 'static func makeModel() -> ReferenceFixtureModel' not in fixture_swift
 
-shutil.copytree(fixture / 'backend', backend_module)
-shutil.copytree(fixture / 'frontend', frontend)
-try:
+with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
+    project = Path(td) / 'project'
+    backend_module = project / 'Backend/games' / game_id
+    frontend = project / 'Sources/ReferenceFixture'
+    tools = project / 'Tools'
+
+    (project / 'Backend/games').mkdir(parents=True)
+    (project / 'Sources').mkdir(parents=True)
+    tools.mkdir(parents=True)
+
+    # Install the reference fixture and the minimum shared project surface into
+    # an isolated temporary project. The repository checkout is never mutated.
+    shutil.copytree(fixture / 'backend', backend_module)
+    shutil.copytree(fixture / 'frontend', frontend)
+    shutil.copytree(root / 'Backend/core', project / 'Backend/core')
+    shutil.copytree(root / 'Sources/Core', project / 'Sources/Core')
+    shutil.copy2(root / 'Sources/App.swift', project / 'Sources/App.swift')
+    for name in ('module_support.py', 'validate_game_module.py', 'generate_game_binding.py'):
+        shutil.copy2(root / 'Tools' / name, tools / name)
+
+    env = os.environ.copy()
+    env['PYTHONDONTWRITEBYTECODE'] = '1'
+
     normalized = json.loads(subprocess.check_output([
-        'python3', str(root / 'Tools/validate_game_module.py'), game_id, '--json'
-    ], text=True))
+        'python3', str(tools / 'validate_game_module.py'), game_id, '--json'
+    ], text=True, cwd=project, env=env))
     assert normalized['id'] == game_id
     assert normalized['frontend']['moduleType'] == 'ReferenceFixtureGameModule'
     assert normalized['buildRequirements'] == {
@@ -32,38 +53,40 @@ try:
     }
     assert 'saveManagement' not in normalized
 
-    generated = Path(tempfile.mkstemp(suffix='.swift')[1])
-    try:
-        subprocess.run([
-            'python3', str(root / 'Tools/generate_game_binding.py'), game_id, str(generated)
-        ], check=True)
-        text = generated.read_text()
-        assert 'typealias ActiveGameModule = ReferenceFixtureGameModule' in text
-        assert 'expectedHostProtocolVersion: 5' in text
-        assert 'expectedModuleProtocolVersion: 1' in text
-        assert 'supportsSaveManagement: false' in text
+    generated = project / 'Generated/ActiveGameModule.swift'
+    subprocess.run([
+        'python3', str(tools / 'generate_game_binding.py'), game_id, str(generated)
+    ], check=True, cwd=project, env=env)
+    text = generated.read_text()
+    assert 'typealias ActiveGameModule = ReferenceFixtureGameModule' in text
+    assert 'expectedHostProtocolVersion: 5' in text
+    assert 'expectedModuleProtocolVersion: 1' in text
+    assert 'supportsSaveManagement: false' in text
 
-        core = sorted((root / 'Sources/Core').rglob('*.swift'))
-        sources = [root / 'Sources/App.swift'] + core + [
-            frontend / 'ReferenceFixtureModule.swift',
-            generated,
-        ]
-        if shutil.which('swiftc'):
-            subprocess.run(['swiftc', '-frontend', '-parse', *map(str, sources)], check=True)
-    finally:
-        generated.unlink(missing_ok=True)
+    core = sorted((project / 'Sources/Core').rglob('*.swift'))
+    sources = [project / 'Sources/App.swift'] + core + [
+        frontend / 'ReferenceFixtureModule.swift',
+        generated,
+    ]
+    if shutil.which('swiftc'):
+        subprocess.run(
+            ['swiftc', '-frontend', '-parse', *map(str, sources)],
+            check=True,
+            cwd=project,
+        )
 
     generic = (
-        (root / 'Sources/App.swift').read_text()
+        (project / 'Sources/App.swift').read_text()
         + '\n'
-        + '\n'.join(path.read_text() for path in (root / 'Sources/Core').rglob('*.swift'))
+        + '\n'.join(path.read_text() for path in (project / 'Sources/Core').rglob('*.swift'))
         + '\n'
         + (root / 'build.sh').read_text()
     )
     assert 'ReferenceFixture' not in generic
     assert 'reference_fixture' not in generic
-finally:
-    shutil.rmtree(backend_module, ignore_errors=True)
-    shutil.rmtree(frontend, ignore_errors=True)
+
+# Even successful execution must leave the source checkout untouched.
+assert not checkout_backend_module.exists()
+assert not checkout_frontend.exists()
 
 print('module_contract_round13_ok')
