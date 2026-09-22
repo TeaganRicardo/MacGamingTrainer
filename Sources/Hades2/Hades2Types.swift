@@ -25,7 +25,7 @@ struct BoonOption: Identifiable {
     let sortOrder: Int
 }
 
-enum Hades2FeatureKey: String, CaseIterable {
+enum Hades2FeatureKey: String, CaseIterable, Hashable {
     case godMode, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
     case hexAlwaysReady, infiniteAmmo, autoMiniGames, gardenQoL, boonRarityEnabled
     case moneyMultiplierEnabled, resourceMultiplierEnabled
