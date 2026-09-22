@@ -135,7 +135,7 @@ struct Main {
         }
 
         let editGeneration = model.editGeneration
-        model.toggleConnection()
+        model.toggleConnectionFromHost()
         if model.editGeneration == editGeneration {
             fail("disconnect barrier did not invalidate editor drafts")
         }
