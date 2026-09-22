@@ -339,9 +339,11 @@ class Hades2Adapter(GameAdapter):
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
-        self.preference_initialized=True;self.preference_dirty=True;self._overlay_preferences()
+        self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=False;return result
+            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
