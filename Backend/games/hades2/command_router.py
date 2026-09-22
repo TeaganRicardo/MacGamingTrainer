@@ -34,8 +34,7 @@ class Hades2CommandRouter:
             result=adapter.disconnect()
         elif command=='runtime_reset':
             result=adapter.runtime_reset()
-        elif command=='reset_desired':
-            result=adapter.reset_desired()
+        elif command=='reset_desired':result=adapter.reset_desired()
         elif command in _RUNTIME_COMMANDS:
             validated=validate_command_params(command,params,request_id)
             if command=='set_desired':
