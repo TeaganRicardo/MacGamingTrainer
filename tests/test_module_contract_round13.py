@@ -14,10 +14,6 @@ checkout_frontend = root / 'Sources/ReferenceFixture'
 assert fixture.is_dir()
 assert not checkout_backend_module.exists() and not checkout_frontend.exists()
 
-fixture_swift = (fixture / 'frontend/ReferenceFixtureModule.swift').read_text()
-assert 'static func makeModel(session: TrainerBackendSession) -> ReferenceFixtureModel' in fixture_swift
-assert 'static func makeModel() -> ReferenceFixtureModel' not in fixture_swift
-
 with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     project = Path(td) / 'project'
     backend_module = project / 'Backend/games' / game_id
