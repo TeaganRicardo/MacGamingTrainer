@@ -142,6 +142,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private var activationGraceFeatures: Set<Hades2FeatureKey> = []
     private var hotkeys: GlobalHotkeys?
     private var shuttingDown = false
+    private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     var canEditDesired: Bool { backendAvailable && !exiting }
     var canSetVitals: Bool { connected && capabilities["setVitals"] == true && !exiting }
@@ -400,6 +401,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if let value = patch.warningText { warning = value }
+        if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons { boons = value }
         if let value = patch.statSupport { statSupport = value }
         if let value = patch.statAvailable { statAvailable = value }
@@ -459,6 +461,34 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let issue = patch.error, !issue.isEmpty { error = issue }
 
 
+    }
+
+    private func presentActionReceipt(_ receipt: Hades2ActionReceipt) {
+        guard receipt != presentedActionReceipt else { return }
+        presentedActionReceipt = receipt
+
+        guard let command = Hades2Command(rawValue: receipt.command) else { return }
+        let title: String
+        switch command {
+        case .openSellTraits: title = "净化之池"
+        case .openSpecialChoice: title = "奖励选择界面"
+        default: return
+        }
+
+        switch receipt.outcome {
+        case .accepted:
+            notice = "\(title)已受理，等待游戏处理"
+        case .opened:
+            notice = "\(title)已打开"
+        case .failed:
+            notice = ""
+            error = "\(title)失败，请查看日志"
+        case .outcomeUnknown:
+            notice = ""
+            error = "\(title)结果不明，请重新连接后检查游戏状态"
+        case .completed:
+            break
+        }
     }
 
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
@@ -675,14 +705,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
-        send(.openSellTraits, title: "打开祝福出售界面")
+        send(.openSellTraits, title: "打开净化之池", announceSuccess: false)
     }
 
     func performSpecialReward(_ reward: String) {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {
             guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
-            send(.openSpecialChoice(source: option.sourceId), title: "打开特殊祝福三选一")
+            send(.openSpecialChoice(source: option.sourceId), title: "打开奖励选择界面", announceSuccess: false)
         } else {
             spawnBoon(option.id)
         }

@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 46 then
+if previousModule and previousModule.revision ~= 48 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 46, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 48, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -30,6 +30,7 @@ if __MacGamingTrainerV1 == nil then
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
+    lastActionReceipt = nil,
   }
   __MacGamingTrainerV1 = M
 
@@ -1141,7 +1142,7 @@ if __MacGamingTrainerV1 == nil then
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
   end
   local reconcileDesired
-  local forceCastAvailable, refillHex, currentSpellRuntime
+  local forceCastAvailable, refillHex, currentSpellRuntime, latestActionReceipt
   local function synchronize()
     local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
     if M.session ~= SessionState or M.run ~= CurrentRun or M.hero ~= hero then
@@ -1811,6 +1812,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
+      lastAction = latestActionReceipt(),
       featureErrors = M.featureErrors,
       runtimeDiagnostics = {
         revision = M.revision, heroObjectId = hero.ObjectId, runCount = runCount,
@@ -2712,33 +2714,85 @@ if __MacGamingTrainerV1 == nil then
       error("Amount must be an integer " .. minimum .. "..999999")
     end
   end
+  local actionSemanticKeys = {
+    set_resource = { "resource", "amount" },
+    set_rerolls = { "amount" },
+    open_sell_traits = {},
+    open_special_choice = { "source" },
+    spawn_reward = { "reward" },
+  }
+  local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
+  local function actionFingerprint(command, params)
+    local keys = actionSemanticKeys[command]
+    if type(keys) ~= "table" then error("Action fingerprint is undefined for " .. tostring(command)) end
+    local fingerprint = { command = command }
+    for _, key in ipairs(keys) do fingerprint[key] = params[key] end
+    return fingerprint
+  end
+  local function sameActionFingerprint(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" then return false end
+    for key, value in pairs(left) do if right[key] ~= value then return false end end
+    for key, value in pairs(right) do if left[key] ~= value then return false end end
+    return true
+  end
+  local function actionReceipt(record, requestId, duplicate)
+    return {
+      requestId = requestId,
+      command = record.command,
+      outcome = record.status,
+      duplicate = not not duplicate,
+      error = record.error,
+    }
+  end
+  local function publishActionReceipt(record)
+    M.lastActionReceipt = actionReceipt(record, record.requestId, false)
+  end
+  latestActionReceipt = function()
+    return M.lastActionReceipt
+  end
   local function action(command, params, work)
     local requestId = params.requestId
     if type(requestId) ~= "string" or #requestId == 0 or #requestId > 128 then
       error("Action requires a requestId of 1..128 characters")
     end
+    local fingerprint = actionFingerprint(command, params)
     local prior = M.requests[requestId]
     if prior then
-      if prior.command ~= command or prior.resource ~= params.resource
-          or prior.amount ~= params.amount or prior.loot ~= params.loot or prior.reward ~= params.reward then
+      if not sameActionFingerprint(prior.fingerprint, fingerprint) then
         error("requestId reused for a different action")
       end
-      if prior.status ~= "completed" then error("Previous action outcome is indeterminate; do not retry") end
+      if not knownActionStatuses[prior.status] then
+        error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+      end
       local result = state(params.includeCatalogs)
-      result.requestId, result.duplicate, result.applied = requestId, true, true
+      local receipt = actionReceipt(prior, requestId, true)
+      result.requestId, result.duplicate = requestId, true
+      result.actionOutcome = receipt.outcome
+      result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
+      if receipt.error then result.actionError = receipt.error end
       if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
       return result
     end
-    local record = { command = command, resource = params.resource, amount = params.amount,
-      loot = params.loot, reward = params.reward, status = "indeterminate" }
+    local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
     M.requests[requestId] = record
     M.requestOrder[#M.requestOrder + 1] = requestId
     if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
-    local ok, value = pcall(work)
-    if not ok then error("Action outcome is indeterminate: " .. tostring(value)) end
-    record.status, record.lootObjectId = "completed", value
+    local ok, value, outcome = pcall(work, record)
+    if not ok then
+      record.status = "outcome_unknown"
+      record.error = tostring(value)
+      publishActionReceipt(record)
+      error("MGT_OUTCOME_UNKNOWN: " .. record.error)
+    end
+    if record.status == "outcome_unknown" then record.status = outcome or "completed" end
+    record.lootObjectId = value
+    publishActionReceipt(record)
     local result = state(params.includeCatalogs)
-    result.requestId, result.duplicate, result.applied = requestId, false, true
+    local receipt = actionReceipt(record, requestId, false)
+    result.requestId, result.duplicate = requestId, false
+    result.actionOutcome = receipt.outcome
+    result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
+    if receipt.error then result.actionError = receipt.error end
     if record.lootObjectId then result.lootObjectId = record.lootObjectId end
     return result
   end
@@ -3033,30 +3087,39 @@ if __MacGamingTrainerV1 == nil then
         error("Native boon sell screen data is unavailable")
       end
       if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
-      return action(command, params, function()
+      return action(command, params, function(record)
         local function runSell()
           local originalScreen = ScreenData.SellTraits
-          local trainerScreen = DeepCopyTable(ScreenData.SellTraits)
-          local closeButton = trainerScreen.ComponentData
-            and trainerScreen.ComponentData.ActionBar
-            and trainerScreen.ComponentData.ActionBar.Children
-            and trainerScreen.ComponentData.ActionBar.Children.CloseButton
-          if type(closeButton) ~= "table" or type(closeButton.Data) ~= "table" then
-            if type(DebugPrint) == "function" then
-              DebugPrint({ Text = "MacGamingTrainer native sell screen missing close button data" })
+          local trainerScreen = nil
+          local ok, message = pcall(function()
+            trainerScreen = DeepCopyTable(ScreenData.SellTraits)
+            local closeButton = trainerScreen.ComponentData
+              and trainerScreen.ComponentData.ActionBar
+              and trainerScreen.ComponentData.ActionBar.Children
+              and trainerScreen.ComponentData.ActionBar.Children.CloseButton
+            if type(closeButton) ~= "table" or type(closeButton.Data) ~= "table" then
+              error("Native boon sell screen missing close button data")
             end
-            return
+            closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
+            ScreenData.SellTraits = trainerScreen
+            local menuArgs = {}
+            OpenSellTraitMenu(menuArgs)
+          end)
+          if trainerScreen ~= nil and ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
+          if ok then
+            record.status = "opened"
+            record.error = nil
+          else
+            record.status = "failed"
+            record.error = tostring(message)
+            if type(DebugPrint) == "function" then
+              DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. record.error })
+            end
           end
-          closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
-          ScreenData.SellTraits = trainerScreen
-          local ok, message = pcall(OpenSellTraitMenu, {})
-          if ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
-          if not ok and type(DebugPrint) == "function" then
-            DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. tostring(message) })
-          end
+          publishActionReceipt(record)
         end
         thread(runSell)
-        return nil
+        return nil, "accepted"
       end)
     end
     if command == "open_special_choice" then
@@ -3091,7 +3154,7 @@ if __MacGamingTrainerV1 == nil then
         requireFunctions("Circe familiar choice", { "GetProcessedTraitData", "SetTraitTextData" })
       end
 
-      return action(command, params, function()
+      return action(command, params, function(record)
         local source = DeepCopyTable(npcData)
         local syntheticName = "MacGamingTrainerSpecial_" .. params.source
         source.ObjectId = -1
@@ -3225,18 +3288,29 @@ if __MacGamingTrainerV1 == nil then
         local function runChoice()
           local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
           if ok and definition.post == "costume" then pcall(SetupCostume) end
-          lootPickups[source.Name] = previousPickup
-          if hadLootChoiceHistory then
-            while #history > historyCount do table.remove(history) end
-          elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
-            CurrentRun.LootChoiceHistory = nil
+          local cleanupOk, cleanupMessage = pcall(function()
+            lootPickups[source.Name] = previousPickup
+            if hadLootChoiceHistory then
+              while #history > historyCount do table.remove(history) end
+            elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
+              CurrentRun.LootChoiceHistory = nil
+            end
+          end)
+          if not cleanupOk then ok, message = false, cleanupMessage end
+          if ok then
+            record.status = "opened"
+            record.error = nil
+          else
+            record.status = "failed"
+            record.error = tostring(message)
+            if type(DebugPrint) == "function" then
+              DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. record.error })
+            end
           end
-          if not ok and type(DebugPrint) == "function" then
-            DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. tostring(message) })
-          end
+          publishActionReceipt(record)
         end
         thread(runChoice)
-        return nil
+        return nil, "accepted"
       end)
     end
     if command == "spawn_reward" then

@@ -256,7 +256,13 @@ class Hades2LuaTransport:
             if err.Fail():
                 self.tainted=True
                 raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
-            if result.GetValueAsSigned()!=0:raise TransportError('lua_error',text or 'Lua 执行失败')
+            if result.GetValueAsSigned()!=0:
+                marker='MGT_OUTCOME_UNKNOWN:'
+                if marker in text:
+                    self.tainted=True
+                    message=text.split(marker,1)[1].strip()
+                    raise TransportError('outcome_unknown',message or '游戏调用结果不明，未自动重试。')
+                raise TransportError('lua_error',text or 'Lua 执行失败')
             return text
         finally:
             if self.process and self.alive():

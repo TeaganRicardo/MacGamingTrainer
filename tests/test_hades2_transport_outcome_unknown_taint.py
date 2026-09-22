@@ -62,21 +62,30 @@ class FakeExpressionOptions:
 
 
 class FakeResult:
+    def __init__(self, value=0):
+        self.value = value
+
     def GetError(self):
         return FakeError()
 
     def GetValueAsSigned(self):
-        return 0
+        return self.value
 
 
 class FakeFrame:
+    def __init__(self, value=0):
+        self.value = value
+
     def EvaluateExpression(self, expression, options):
-        return FakeResult()
+        return FakeResult(self.value)
 
 
 class FakeThread:
+    def __init__(self, value=0):
+        self.value = value
+
     def GetFrameAtIndex(self, index):
-        return FakeFrame()
+        return FakeFrame(self.value)
 
 
 class FakeProcess:
@@ -130,5 +139,31 @@ except FakeTransportError as error:
     assert error.code == 'restart_required'
 else:
     raise AssertionError('tainted transport allowed another Lua boundary')
+
+# A resident action can also know that its own non-idempotent outcome became
+# uncertain after the Lua boundary was crossed. That sentinel must use the same
+# terminal trust semantics as a debugger result-read failure.
+class ResidentOutcomeUnknownProcess(FakeProcess):
+    def ReadCStringFromMemory(self, address, capacity, error):
+        return 'MGT_OUTCOME_UNKNOWN: native operation may have executed'
+
+
+resident = Transport.__new__(Transport)
+resident.tainted = False
+resident.process = ResidentOutcomeUnknownProcess()
+resident.target = object()
+resident.last_duration = 0
+resident.boundary = lambda: (FakeThread(1), 0x2000)
+resident.address = lambda name: 0x3000
+resident.alive = lambda: False
+
+try:
+    resident.execute('return true')
+except FakeTransportError as error:
+    assert error.code == 'outcome_unknown'
+else:
+    raise AssertionError('resident outcome-unknown marker did not surface outcome_unknown')
+
+assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 
 print('hades2_transport_outcome_unknown_taint_ok')
