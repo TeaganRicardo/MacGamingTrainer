@@ -247,10 +247,10 @@ class RuntimeTransport:
                 'lua_error',
                 'simulated known Lua command error before lock release',
             )
-        for command, fields in re.findall(r'dispatch\\("([^"]+)",(\\{[^}]*\\})\\)', source):
+        for command, fields in re.findall(r'dispatch\("([^"]+)",(\{[^}]*\})\)', source):
             params = {}
             for key, value in re.findall(
-                r'\\["([^"]+)"\\]=(true|false|nil|"[^"]*"|-?[\\d.]+)',
+                r'\["([^"]+)"\]=(true|false|nil|"[^"]*"|-?[\d.]+)',
                 fields,
             ):
                 params[key] = None if value == 'nil' else json.loads(value)
