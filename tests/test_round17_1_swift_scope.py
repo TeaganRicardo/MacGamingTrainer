@@ -32,10 +32,15 @@ for name in (
     'connectionObservedContent',
     'statObservedContent',
     'gameConfigObservedContent',
-    'inputObservedContent',
-    'lockedStatObservedContent',
     'catalogObservedContent',
 ):
     assert f'private var {name}: some View' in main, name
 
 print('round17_1_swift_scope_ok')
+
+# Runtime observation must not be routed through edit/mutation observers.
+assert 'private var inputObservedContent' not in main
+assert 'private var lockedStatObservedContent' not in main
+assert 'applyInputChanges' not in main
+assert 'applyLockedStatChanges' not in main
+assert 'intentBinding(' in main
