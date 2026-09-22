@@ -7,10 +7,10 @@ import math
 
 from .schema import (
     BOON_RARITY_TARGETS,
-    ELEMENT_IDS,
     MAX_AMOUNT,
     STAT_RULES,
     VITALS,
+    is_known_element,
     is_valid_next_room_reward,
     validate_desired_feature_value,
 )
@@ -71,7 +71,7 @@ def validate_command_params(command, params):
 
     elif command in ('set_element','lock_element'):
         element=params.get('element')
-        if element not in ELEMENT_IDS:
+        if not is_known_element(element):
             raise ValueError('未知元素。')
         if command=='set_element':
             amount=params.get('amount')
