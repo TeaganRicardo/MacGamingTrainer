@@ -4,7 +4,7 @@ import logging
 import math
 
 from .persistence import atomic_write_text, quarantine_corrupt_file, PersistenceError, UnsupportedSchemaVersionError
-from .schema import MULTIPLIERS, STAT_RULES, TOGGLES
+from .schema import MULTIPLIERS, STAT_RULES, TOGGLES, desired_feature_defaults, normalize_desired_feature_value
 
 
 NEXT_ROOM_REWARD_MIGRATIONS = {
@@ -151,8 +151,7 @@ class Hades2PreferenceStore:
 
     @staticmethod
     def defaults():
-        values={key:False for key in TOGGLES}
-        values.update(damageMultiplier=2.0,moneyMultiplier=2.0,resourceMultiplier=2.0,gameSpeed=1.0)
+        values=desired_feature_defaults()
         values.update(
             boonRarity={'target':'Epic','multiplier':100.0,'forceLegendary':False,'forceDuo':False},
             statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,
@@ -163,12 +162,9 @@ class Hades2PreferenceStore:
     def normalize(cls, raw):
         result=cls.defaults()
         if not isinstance(raw,dict):return result
-        for key in TOGGLES:
-            if type(raw.get(key)) is bool:result[key]=raw[key]
-        for key in MULTIPLIERS:
-            value=raw.get(key)
-            if type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value):
-                if (key=='gameSpeed' and 0<=value<=10) or (key!='gameSpeed' and 1<=value<=100):result[key]=float(value)
+        for key in TOGGLES+MULTIPLIERS:
+            value=normalize_desired_feature_value(key,raw.get(key))
+            if value is not None:result[key]=value
         rarity=raw.get('boonRarity')
         if isinstance(rarity,dict):
             target=rarity.get('target');mult=rarity.get('multiplier')
