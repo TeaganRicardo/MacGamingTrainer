@@ -30,6 +30,7 @@ required_invariants = {
     "save.transaction-recovery",
     "shortcut.collision-reflow",
     "runtime.revision-diff-discipline",
+    "profile.version-compatibility",
     "ci.portable-test-discovery",
 }
 

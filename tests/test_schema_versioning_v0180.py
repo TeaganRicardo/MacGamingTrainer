@@ -162,9 +162,10 @@ try:
     current_path = profiles.path('current')
     current_doc = json.loads(current_path.read_text(encoding='utf-8'))
     assert current_doc['schemaVersion'] == PROFILE_SCHEMA_VERSION
+    assert current_doc['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
 
-    # Profiles are intentionally current-schema-only. Older envelopes remain
-    # untouched and hidden instead of accumulating compatibility migrations.
+    # Pre-baseline Profile envelopes remain unsupported and untouched. Released
+    # v3/v4 compatibility is covered by test_profile_version_compatibility.py.
     legacy_profile_path = profiles.path('legacy')
     legacy_profile = {'name':'legacy','updatedAt':'','desired':legacy}
     legacy_profile_path.write_text(json.dumps(legacy_profile), encoding='utf-8')
@@ -185,8 +186,8 @@ try:
     assert replaced_profile['schemaVersion'] == PROFILE_SCHEMA_VERSION
     assert profiles.load('legacy')['desired']['godMode'] is True
 
-    # Future Profile schemas are likewise not read or listed. An explicit save
-    # with the same name replaces them; Profile compatibility is not maintained.
+    # Future Profile schemas are neither read/listed nor overwritten by save.
+    # Explicit delete remains the only destructive operation that ignores schema.
     future_profile_path = profiles.path('future')
     future_profile = {
         'schemaVersion': PROFILE_SCHEMA_VERSION + 1,
@@ -205,8 +206,14 @@ try:
         raise AssertionError('future Profile schema was accepted')
     assert future_profile_path.read_bytes() == future_profile_bytes
 
-    profiles.save('future', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
-    assert json.loads(future_profile_path.read_text(encoding='utf-8'))['schemaVersion'] == PROFILE_SCHEMA_VERSION
+    try:
+        profiles.save('future', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+    except UnsupportedSchemaVersionError as error:
+        assert error.code == 'unsupported_schema'
+    else:
+        raise AssertionError('future Profile schema was overwritten by save')
+    assert future_profile_path.read_bytes() == future_profile_bytes
+
     deleted = profiles.delete('future')
     assert deleted['deleted'] is True and not future_profile_path.exists()
 

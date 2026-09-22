@@ -168,6 +168,18 @@
           "path": ".github/workflows/linux-contracts.yml"
         }
       ]
+    },
+    "profile.version-compatibility": {
+      "evidence": [
+        {
+          "type": "behavior",
+          "path": "tests/test_profile_version_compatibility.py"
+        },
+        {
+          "type": "behavior",
+          "path": "tests/test_schema_versioning_v0180.py"
+        }
+      ]
     }
   }
 }

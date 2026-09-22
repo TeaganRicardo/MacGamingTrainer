@@ -6,7 +6,7 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
-from games.hades2.preferences import Hades2PreferenceStore
+from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION
 
 
@@ -177,6 +177,7 @@ profile_adapter = Hades2Adapter(transport=OfflineTransport())
 profile_path = profile_adapter.profile_service.path('bad-desired')
 profile_path.write_text(json.dumps({
     'schemaVersion': PROFILE_SCHEMA_VERSION,
+    'desiredSchemaVersion': DESIRED_STATE_SCHEMA_VERSION,
     'name':'bad-desired',
     'updatedAt':'2026-09-18T00:00:00+0000',
     'desired':{
