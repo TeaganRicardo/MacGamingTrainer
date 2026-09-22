@@ -434,3 +434,67 @@ assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}
 assert adapter_lock.preference_dirty is False
 
 print('pending_preference_confirmation_owned_lock_ok')
+
+
+# A durable lock may apply in the runtime before its post-success persistence
+# commit runs. If that write fails, the error must remain visible and the
+# in-memory desired lock must stay pending for a later status reconciliation.
+base_lock_persist = Path(tempfile.mkdtemp(prefix='mgt-pending-lock-persist-'))
+preparation.DATA = base_lock_persist
+transport_lock_persist = PendingTransport()
+transport_lock_persist.fail_god_mode_once = False
+adapter_lock_persist = Hades2Adapter(transport=transport_lock_persist)
+adapter_lock_persist._runtime_bootstrapped = True
+adapter_lock_persist._catalog_initialized = True
+adapter_lock_persist._apply_game_speed = lambda value: 1.0
+adapter_lock_persist.state.update(
+    copy.deepcopy(transport_lock_persist.state),
+    connected=True,
+    pid=transport_lock_persist.pid,
+)
+adapter_lock_persist.preference_initialized = True
+adapter_lock_persist.preference_dirty = False
+adapter_lock_persist.preference_store.save(adapter_lock_persist.preferences)
+
+original_lock_persist_save = adapter_lock_persist.preference_store.save
+fail_lock_persist_once = True
+
+
+def fail_lock_persist_save(preferences):
+    global fail_lock_persist_once
+    if fail_lock_persist_once:
+        fail_lock_persist_once = False
+        raise PersistenceError('simulated lock persistence failure')
+    return original_lock_persist_save(preferences)
+
+
+adapter_lock_persist.preference_store.save = fail_lock_persist_save
+try:
+    adapter_lock_persist.dispatch(
+        'set_stat',
+        {'stat': 'enemyHealth', 'locked': True, 'value': 175},
+        'lock-persist-fail',
+    )
+except PersistenceError as error:
+    assert 'simulated lock persistence failure' in str(error)
+else:
+    raise AssertionError('post-success lock persistence failure was hidden')
+
+assert transport_lock_persist.state['stats']['enemyHealth']['locked'] is True
+assert adapter_lock_persist.preferences['statLocks'] == {'enemyHealth': 175.0}
+assert adapter_lock_persist.preference_dirty is True, (
+    'runtime-applied lock with failed persistence must remain pending'
+)
+persisted_lock_failure = json.loads(
+    (base_lock_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock_failure['statLocks'] == {}
+
+adapter_lock_persist.dispatch('status', {}, 'lock-persist-retry')
+assert adapter_lock_persist.preference_dirty is False
+persisted_lock_retry = json.loads(
+    (base_lock_persist / 'desired-state.json').read_text(encoding='utf-8')
+)
+assert persisted_lock_retry['statLocks'] == {'enemyHealth': 175.0}
+
+print('pending_preference_confirmation_owned_lock_persistence_ok')
