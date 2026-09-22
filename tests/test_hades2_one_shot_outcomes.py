@@ -36,7 +36,8 @@ modal_model = model[model.index("func openSellTraits()"):model.index("func setMu
 assert "announceSuccess: false" in modal_model
 assert "Hades2Command(rawValue: receipt.command)" in model
 assert '"open_sell_traits"' not in model and '"open_special_choice"' not in model
-assert "特殊祝福选择" in model and "特殊祝福三选一" not in model
+assert "净化之池" in model
+assert "奖励选择界面" in model
 assert "case .accepted:" in model and "已受理" in model
 assert "case .opened:" in model and "已打开" in model
 assert "case .failed:" in model and "失败" in model
