@@ -42,6 +42,7 @@ _OFFICIAL_CATEGORY_TITLE_IDS = {
 }
 _PRODUCT_LABEL_EN_BY_ZH = {
     '角色奖励': _CHARACTER_REWARD_CATEGORY_EN,
+    '奖励选择界面': 'Reward Choice',
     '奥林匹斯诸神': _OLYMPIAN_GROUP_TITLE_EN,
     '资源与常规掉落': 'Resources & Standard Drops',
     '局外资源奖励': 'Meta Resources',
