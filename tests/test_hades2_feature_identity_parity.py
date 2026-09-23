@@ -38,12 +38,11 @@ assert swift_features == python_features == lua_features
 python_multiplier_block = backend_schema.split("MULTIPLIER_RULES = {", 1)[1].split("}", 1)[0]
 python_multipliers = set(re.findall(r"'([A-Za-z0-9_]+)':", python_multiplier_block))
 
-lua_multiplier_branch = lua.split('if feature == "damageMultiplier"', 1)[1].split("then", 1)[0]
 lua_multipliers = {"damageMultiplier", "moneyMultiplier", "resourceMultiplier"}
 assert lua_multipliers <= python_multipliers
 assert all(key in lua for key in lua_multipliers)
 
-assert 'if key==\'gameSpeed\':continue' in adapter or "if key == 'gameSpeed':continue" in adapter
+assert re.search(r"if\s+key\s*==\s*['\"]gameSpeed['\"]\s*:\s*continue", adapter)
 assert 'feature == "gameSpeed"' in adapter
 
 print("hades2_feature_identity_parity_ok")
