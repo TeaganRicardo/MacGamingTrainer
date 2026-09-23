@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 public enum TrainerPresentationLanguage: String, CaseIterable {
     case zhCN = "zh-CN"
