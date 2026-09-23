@@ -4,3 +4,4 @@ test_hades2_run_log_watcher.py
 test_trainer_log_sink_shared_append.py
 test_hades2_view_state_flow.py
 test_reference_fixture_session_integration.py
+test_host_localization_runtime.py
