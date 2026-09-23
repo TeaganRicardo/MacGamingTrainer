@@ -32,8 +32,6 @@ swift_features = swift_enum_cases(swift_types)
 python_features = python_toggle_keys(backend_schema)
 lua_features = lua_toggle_keys(lua)
 
-# Host may expose presentation-only actions, but every durable Hades feature
-# must have a backend schema owner and a Lua runtime owner.
 assert python_features <= swift_features
 assert python_features <= lua_features
 assert lua_features <= python_features
@@ -45,7 +43,6 @@ for key in ("damageMultiplier", "moneyMultiplier", "resourceMultiplier"):
     assert key in python_multipliers
     assert key in lua
 
-# gameSpeed is owned by the process time-warp boundary, not Lua toggle state.
 assert "gameSpeed" in backend_schema
 
 print("hades2_feature_identity_parity_ok")
