@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 49 then
+if previousModule and previousModule.revision ~= 48 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 49, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 48, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -260,9 +260,9 @@ if __MacGamingTrainerV1 == nil then
     { id = "StoreRewardRandomStack", name = "随机祝福强化", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "pom", familyOrder = 40, itemOrder = 40 },
     { id = "RerollDrop", name = "重塑命运", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 10 },
     { id = "LastStandDrop", name = "冥河之吻", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "utility", familyOrder = 45, itemOrder = 20 },
-    { id = "MinorTalentDrop", name = "黯淡繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
-    { id = "TalentDrop", name = "繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 30, sourceId = "Selene", sourceName = "塞勒涅" },
-    { id = "TalentBigDrop", name = "闪耀繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 40, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "MinorTalentDrop", name = "黯淡繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 20, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentDrop", name = "繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 30, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TalentBigDrop", name = "闪耀繁星之路", category = "特殊祝福", kind = "consumable", group = "special", family = "Selene", familyOrder = 10, itemOrder = 40, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "GiftDrop", name = "蜜露", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 10 },
     { id = "MetaCurrencyDrop", name = "骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 20 },
     { id = "MetaCurrencyBigDrop", name = "大量骨骸", category = "局外资源奖励", kind = "consumable", group = "pickup", family = "meta", familyOrder = 60, itemOrder = 25 },
@@ -300,14 +300,14 @@ if __MacGamingTrainerV1 == nil then
     { id = "EarthBoost", name = "土元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 30 },
     { id = "AirBoost", name = "风元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 40 },
     { id = "ElementalBoost", name = "元素精华", category = "元素奖励", kind = "consumable", group = "pickup", family = "element", familyOrder = 70, itemOrder = 50 },
-    { id = "SpellDrop", name = "月之礼赠", category = "角色奖励", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
-    { id = "TrialUpgrade", name = "卡俄斯的祝福", category = "角色奖励", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
+    { id = "SpellDrop", name = "月之礼赠", category = "特殊祝福", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
+    { id = "TrialUpgrade", name = "卡俄斯祝福", category = "特殊祝福", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
   }
   local elementNames = { Fire = "火", Water = "水", Earth = "土", Air = "风", Aether = "以太" }
   local specialSourceDefinitions = {
-    { id = "Artemis", name = "阿尔忒弥斯", order = 30 },
+    { id = "Artemis", name = "阿耳忒弥斯", order = 30 },
     { id = "Athena", name = "雅典娜", order = 40 },
-    { id = "Dionysus", name = "迪奥尼索司", order = 50 },
+    { id = "Dionysus", name = "狄俄尼索斯", order = 50 },
     { id = "Echo", name = "回声", order = 60 },
     { id = "Hades", name = "哈迪斯", order = 70 },
     { id = "Narcissus", name = "纳西索斯", order = 80 },
@@ -1539,7 +1539,7 @@ if __MacGamingTrainerV1 == nil then
 
     local officialGodOrder = officialOlympianOrder()
     for _, entry in ipairs(boonDefinitions) do
-      local item = { id = entry.id, name = entry.name, category = "奥林匹斯的祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
+      local item = { id = entry.id, name = entry.name, category = "诸神祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
       if type(LootData) == "table" and type(LootData[entry.id]) == "table" then allowed[entry.id] = item; result[#result + 1] = item end
     end
     local buckets = {}
@@ -1580,7 +1580,7 @@ if __MacGamingTrainerV1 == nil then
         local id = "trait:" .. traitName
         if not allowed[id] and not nativeChoiceOnlyTraits[traitName] then
           local item = {
-            id = id, name = traitName, category = "角色奖励", group = "special", kind = "trait", trait = traitName,
+            id = id, name = traitName, category = "特殊祝福", group = "special", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
             nativeChoice = nativeSpecialChoiceSources[source.id] == true,
             sortSection = 30, sortGroup = officialSourceOrder[source.id] or specialTraitSourceOrder[source.id] or 999, sortOrder = index,

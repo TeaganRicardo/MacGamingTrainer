@@ -157,20 +157,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard seenSources.insert(option.sourceId).inserted else { continue }
             nativeActions.append(BoonOption(
                 id: "native-choice:\(option.sourceId)",
-                name: option.nativeChoiceTitle.isEmpty ? option.sectionTitle : option.nativeChoiceTitle,
-                englishName: option.nativeChoiceEnglishTitle.isEmpty ? option.englishSectionTitle : option.nativeChoiceEnglishTitle,
+                name: "\(option.sectionTitle)的祝福",
+                englishName: "\(option.sourceId) Boon",
                 category: option.category,
-                englishCategory: option.englishCategory,
                 kind: "native_choice",
                 group: "special",
                 sectionTitle: option.sectionTitle,
-                englishSectionTitle: option.englishSectionTitle,
                 sourceId: option.sourceId,
-                sourceName: option.sourceName,
-                sourceEnglishName: option.sourceEnglishName,
                 nativeChoice: true,
-                nativeChoiceTitle: option.nativeChoiceTitle,
-                nativeChoiceEnglishTitle: option.nativeChoiceEnglishTitle,
                 sortSection: option.sortSection,
                 sortGroup: option.sortGroup,
                 sortOrder: Int.min
@@ -602,7 +596,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         default: return
         }
         if let current = current, abs(current - value) < 0.0001 { return }
-        let title = vital == "health" ? "生命值" : (vital == "mana" ? "魔力值" : "护甲")
+        let title = vital == "health" ? "生命" : (vital == "mana" ? "魔力" : "护甲")
         enqueueMutation(key: "vital.\(vital).\(field)", request: .setVital(vital: vital, field: field, value: value), title: "更新\(title)")
     }
 
@@ -630,12 +624,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setRerolls(_ amount: String) {
         guard canSetResource, let count = amountValue(amount) else { return }
         if let current = rerolls, Int(current.rounded()) == count { return }
-        enqueueMutation(key: "rerolls", request: .setRerolls(amount: count), title: "更新重塑命运次数")
+        enqueueMutation(key: "rerolls", request: .setRerolls(amount: count), title: "更新重骰次数")
     }
 
     func lockRerolls(_ locked: Bool) {
         guard canSetResource else { return }
-        send(.lockRerolls(locked: locked), title: locked ? "锁定重塑命运次数" : "解除重塑命运锁定")
+        send(.lockRerolls(locked: locked), title: locked ? "锁定重骰次数" : "解除重骰锁定")
     }
 
     func setStat(_ stat: String, text: String, locked: Bool) {
@@ -718,7 +712,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {
             guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
-            send(.openSpecialChoice(source: option.sourceId), title: "打开\(option.nativeChoiceTitle.isEmpty ? "奖励选择界面" : option.nativeChoiceTitle)", announceSuccess: false)
+            send(.openSpecialChoice(source: option.sourceId), title: "打开奖励选择界面", announceSuccess: false)
         } else {
             spawnBoon(option.id)
         }

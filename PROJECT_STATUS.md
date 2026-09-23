@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-09-23
+Updated: 2026-09-22
 
 This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work and sequencing live in planning issue #79; historical audit evidence lives under `docs/audits/`.
 
@@ -10,7 +10,7 @@ Start every development thread at `AGENTS.md`.
 
 - Default branch: `main`.
 - The mandatory audit freeze is closed. Normal bug-fix and user-selected feature work may proceed.
-- Hades II resident runtime revision: 49.
+- Hades II resident runtime revision: 46.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
 - Target reference: Hades II 1.139672 / Steam build 24556151.
@@ -21,19 +21,17 @@ Start every development thread at `AGENTS.md`.
 
 ## Verification baseline
 
-The latest behavior-changing Hades resident source accepted in the real game is the terminology-normalization PR #112 head:
+The latest behavior-changing Hades resident/census source accepted in the real game remains:
 
-`6239a770e9a2e3d39d01e9562a8a6a0817bbd2db`
+`8bf914badf023ebe5be42b2284790a5c9d9242d6`
 
-It merged as `a394f2b8eb1170a5085d1e3ac05433e9d78df476`; both commits have the same tree `6a50cab32dc7cf36b08c34eddac474efea52c4c8`.
+Exact-source automated evidence:
 
-Exact-head automated evidence:
+- Linux contracts `35594293605`: PASS;
+- module build matrix `35594293508`: Hades II + reference fixture + package isolation PASS;
+- Build 2 macOS `35594293527`: full macOS contracts/build/package PASS.
 
-- Linux contracts `35789142588`: PASS;
-- module build matrix `35789142544`: PASS;
-- Build 2 macOS `35789142529`: macOS contracts, Hades II build, package verification and RC packaging PASS.
-
-Real Hades II acceptance for resident revision 49 is complete against artifact `10721008543`, digest `sha256:c605bde145f4547611560c52de02647e0237ba01a0fec3b7b6975c817c2bfb1a`.
+Real Hades II acceptance for resident revision 46 is complete against artifact `10635953571`, digest `sha256:e25f3ad720cf679b06644c78e68857c2ea53e2bc71b42f3be8abac0d3fe09b2e`. Acceptance covered representative special-trait and Charon-Well behavior plus same-PID runtime reset/re-entry and durable preference replay.
 
 Documentation, repository-governance, and build-metadata cleanup may advance `main` after that behavior baseline without changing the resident acceptance status. Always query current remote `main` before new work.
 

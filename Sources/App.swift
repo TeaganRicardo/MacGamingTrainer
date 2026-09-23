@@ -67,7 +67,6 @@ private struct WindowCloseBridge: NSViewRepresentable {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     private let backendSession: TrainerBackendSession
     @StateObject private var model: ActiveGameModule.Model
-    @StateObject private var localization = TrainerLocalizationStore()
 
     init() {
         let backendSession = TrainerBackendSession()
@@ -81,7 +80,6 @@ private struct WindowCloseBridge: NSViewRepresentable {
                 .trainerTheme(.standard)
                 .tint(TrainerTheme.standard.accent)
                 .preferredColorScheme(.dark)
-                .environmentObject(localization)
                 .background(WindowCloseBridge(delegate: delegate, model: model).frame(width: 0, height: 0))
                 .onAppear { delegate.model = model }
         }
