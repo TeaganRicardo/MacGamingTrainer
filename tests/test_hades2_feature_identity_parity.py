@@ -15,7 +15,13 @@ lua = read("Backend/games/hades2/runtime/hades.lua")
 
 def swift_enum_cases(source):
     block = source.split("enum Hades2FeatureKey", 1)[1].split("}", 1)[0]
-    return set(re.findall(r"case ([A-Za-z0-9_]+)", block))
+    cases = set()
+    for line in block.splitlines():
+        match = re.search(r"case (.+)", line)
+        if not match:
+            continue
+        cases.update(item.strip() for item in match.group(1).split(","))
+    return {item for item in cases if re.fullmatch(r"[A-Za-z0-9_]+", item)}
 
 
 def python_toggle_keys(source):
