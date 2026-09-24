@@ -102,4 +102,13 @@ def test_registry_rejects_native_term_without_provenance():
         raise AssertionError("registry accepted a native term without English provenance")
 
 
+for _test in (
+    test_registry_loads_target_build_and_all_term_classes,
+    test_native_terms_keep_shared_localization_provenance,
+    test_product_terms_are_explicit_trainer_owned_pairs,
+    test_legacy_aliases_and_internal_terms_are_not_user_facing,
+    test_registry_rejects_native_term_without_provenance,
+):
+    _test()
+
 print("hades2_terminology_registry_ok")
