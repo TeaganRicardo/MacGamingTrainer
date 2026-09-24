@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-09-23
+Updated: 2026-09-24
 
 This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work and sequencing live in planning issue #79; historical audit evidence lives under `docs/audits/`.
 
