@@ -180,3 +180,29 @@ Source-text contracts remain acceptable where they enforce a structural boundary
 | release/manual QA artifact | all relevant CI | exact tested HEAD, prebuilt artifact and SHA256 |
 
 A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built.
+
+## 9. Terminology governance
+
+Terminology is part of the product contract. Classify a term before introducing it; provenance and ownership determine where it may appear. The governance model applies to UI, user-visible errors, logs, protocol payloads, files, tests and current documentation. Existing terms are not bulk-renamed solely to satisfy this model; new or touched surfaces must follow it.
+
+| Class | Ownership / provenance | Lifecycle | Allowed use | Forbidden use |
+| --- | --- | --- | --- | --- |
+| **Native Game Term** | Game-owned; sourced from the supported target build's official localization/catalog/reference, identified by its localization ID where available | Changes with the target build; re-verify when the supported build changes | Game-facing UI, game-facing errors, terminology-sensitive tests/docs, and protocol fields when they represent the native concept | Inventing a replacement label, silently mixing a different build's localization, or presenting an internal ID as the official name |
+| **Trainer Product Term** | Trainer-owned; an explicit label for a Trainer aggregation or state with no single native equivalent | Stable while the Trainer contract needs it; change deliberately and document the bilingual pair | Trainer UI, Trainer status/errors, product docs and tests | Presenting it as a native game title, using it to overwrite a native term, or changing only one language |
+| **Internal Domain Term** | Implementation-owned; stable identifier/model vocabulary chosen for code and contracts | Controlled by the implementation contract; may outlive a game-facing label | Code, protocol internals, fixtures and implementation-focused tests/docs | Exposing it as a native user-facing term without an explicit mapping |
+| **Compatibility Alias** | Transitional Trainer-owned mapping from a legacy/shorthand term to a canonical term; alias source must be identifiable | Temporary; remove after migration or when compatibility is no longer required | Input compatibility, migration, targeted compatibility tests and explicit diagnostics | New user-facing copy, canonical storage, protocol naming, or silently preserving an obsolete alias as the preferred term |
+
+### Bilingual and pairing rule
+
+For a Native Game Term, Chinese and English must resolve from the **same target-build localization ID**. Do not hand-pair translations from different entries or substitute a remembered/third-party translation. For a Trainer Product Term, declare an explicit `zh-CN`/English pair and record why the Trainer owns the label; it must never masquerade as native terminology. Internal Domain Terms and Compatibility Aliases do not become bilingual product labels unless they are deliberately exposed, in which case they must resolve through one of the two user-facing classes above.
+
+### Current Hades II examples
+
+The target-build terminology reference used by #112 is the evidence source for these classifications:
+
+- **Native Game Terms:** `祝福` / `Boon`, `奥林匹斯的祝福` / `Boon of Olympus`, `重塑命运` / `Change of Fate`, `净化之池` / `Pool of Purging`, `巫咒` / `Hex`, `生命值` / `Life`, `魔力值` / `Magick`, and `卡戎之井` / `Well of Charon`. Character/source names and native choice titles are also native terms when resolved from their target-build localization IDs.
+- **Trainer Product Terms:** `角色奖励` / `Character Rewards`, `奖励选择界面` / `Reward Choice`, `奥林匹斯诸神` / `Olympians`, `资源与常规掉落` / `Resources & Standard Drops`, `局外资源奖励` / `Meta Resources`, `元素奖励` / `Element Rewards`, `其他房间奖励` / `Other Room Rewards`, `商店商品` / `Shop Items`, and `资源` / `Resources`. These are Trainer-owned aggregations, not native screen titles.
+- **Internal Domain Terms:** identifiers such as `TalentDrop`, `SpellDrop`, `MetaCurrencyDrop`, `group = special`, and `group = olympian` remain implementation vocabulary. They may map to native or Trainer Product Terms, but they are not themselves player-facing terminology.
+- **Compatibility Aliases:** the #112 reference marks legacy/shorthand forms such as `特殊祝福`, `诸神祝福`, `重骰`, `祝福出售界面`, `出售祝福`, `原生三选一`, and `卡俄斯祝福` as forbidden user-facing aliases. They may be recognized only where a compatibility boundary explicitly requires them; canonical UI/docs must use the classified term instead.
+
+Game-specific classifications remain owned by the game module. In particular, Hades concepts must not be moved into Core merely because a label or grouping looks reusable; a cross-game abstraction requires an independently proven, game-agnostic contract.
