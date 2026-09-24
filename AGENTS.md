@@ -12,7 +12,7 @@ Use this order when facts conflict:
 4. `GAME_MODULES.md` when a task crosses the Core/game-module boundary;
 5. planning issue #79 for planned work and sequencing only.
 
-`docs/audits/**`, closed PRs, Git history, old branches and prior ChatGPT conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
+`docs/audits/**`, closed PRs, Git history, old branches and prior conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
 
 ## Minimal reading path
 
@@ -59,9 +59,5 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - `CFBundleShortVersionString` is the three-part product SemVer; `CFBundleVersion` is the monotonic positive-integer bundle build number.
 - Host/module protocol and schema/runtime revisions are independent compatibility versions, not product SemVer.
 - See `VERSIONING.md` for release increment rules.
-
-## Agent instruction locality
-
-Agent runtime instructions (tool availability, connectors, remote-desktop or GUI-control capability) live outside this repository, in the active agent runtime's local profile. They are never a repository concern: no task may assume a connector or capability that the active runtime has not demonstrated, and tasks requiring launching the target game, in-game interaction, visual confirmation, or real-game acceptance must hand off to the user with the exact Git SHA, the required build/artifact, a concise test procedure, and the expected result. Never claim an unavailable or unverified operation was completed.
 
 See `ENGINEERING_INVARIANTS.md` for the durable engineering rules behind these instructions.
