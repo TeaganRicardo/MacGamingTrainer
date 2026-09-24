@@ -1,5 +1,5 @@
-from pathlib import Path
 import csv
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "docs/reference/hades2/1.139672-24556151"

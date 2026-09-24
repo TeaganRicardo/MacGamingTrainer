@@ -1,4 +1,3 @@
-from pathlib import Path
 import datetime
 import json
 import logging
@@ -6,10 +5,11 @@ import os
 import tempfile
 import time
 import uuid
+from pathlib import Path
 
 from .save_resolution import load_save_provider, resolve_save_files
 from .save_restore import SaveBusyError, SaveRestoreTransaction, SaveRollbackError
-from .save_snapshots import SaveSnapshotStore, SaveSnapshotError
+from .save_snapshots import SaveSnapshotError, SaveSnapshotStore
 
 
 class SaveManagementUnsupportedError(RuntimeError):

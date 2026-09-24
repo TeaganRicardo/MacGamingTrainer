@@ -3,14 +3,26 @@ import json
 import logging
 import math
 
-from .persistence import atomic_write_text, quarantine_corrupt_file, PersistenceError, UnsupportedSchemaVersionError
+from .persistence import (
+    PersistenceError,
+    UnsupportedSchemaVersionError,
+    atomic_write_text,
+    quarantine_corrupt_file,
+)
 from .schema import (
-    BOON_RARITY_TARGETS, ELEMENT_IDS, MAX_AMOUNT, MULTIPLIERS,
-    NEXT_ROOM_REWARD_MAX_LENGTH, STAT_RULES, TOGGLES, VITALS,
-    default_boon_rarity, desired_feature_defaults, is_valid_next_room_reward,
+    BOON_RARITY_TARGETS,
+    ELEMENT_IDS,
+    MAX_AMOUNT,
+    MULTIPLIERS,
+    NEXT_ROOM_REWARD_MAX_LENGTH,
+    STAT_RULES,
+    TOGGLES,
+    VITALS,
+    default_boon_rarity,
+    desired_feature_defaults,
+    is_valid_next_room_reward,
     normalize_desired_feature_value,
 )
-
 
 NEXT_ROOM_REWARD_MIGRATIONS = {
     # Pre-1.0 / early-access reward identifiers retained by older trainer profiles.

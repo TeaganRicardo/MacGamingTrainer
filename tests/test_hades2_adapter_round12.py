@@ -1,13 +1,17 @@
+import io
+import json
+import logging
+import sys
+import tempfile
 from pathlib import Path
-import sys, tempfile, io, json, logging
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
-from games.hades2 import preparation as prep
-from core.adapter import AdapterError
-from games.hades2.adapter import Hades2Adapter, TOGGLES, STAT_RULES
 import games.hades2.adapter as adapter_module
+from core.adapter import AdapterError
+from games.hades2 import preparation as prep
+from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
 prep.DATA = base

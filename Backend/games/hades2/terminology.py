@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
-import json
 from pathlib import Path
 from typing import Any, Mapping
-
 
 REFERENCE_PATH = (
     Path(__file__).resolve().parents[3]

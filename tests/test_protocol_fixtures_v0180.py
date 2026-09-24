@@ -1,16 +1,15 @@
-from pathlib import Path
 import copy
 import json
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION, JsonlRequestRouter
-
 
 fixture_path = root/'ContractFixtures/host_protocol_v5.json'
 fixture = json.loads(fixture_path.read_text(encoding='utf-8'))

@@ -1,14 +1,15 @@
-from pathlib import Path
 import json
 import platform
 import subprocess
 import sys
 import time
 import zipfile
+from pathlib import Path
 
 from core.log_paths import trainer_log_path
-from core.protocol import PROTOCOL_VERSION, APP_BACKEND_VERSION
-from . import preparation, localization
+from core.protocol import APP_BACKEND_VERSION, PROTOCOL_VERSION
+
+from . import localization, preparation
 from .config import GAME_SPEC
 from .schema import STAT_RULES
 

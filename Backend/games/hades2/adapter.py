@@ -1,17 +1,37 @@
 """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
+import json
+import logging
+import math
+import subprocess
+import time
 from pathlib import Path
-import json, subprocess, time, logging, math
+
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
+
 from . import preparation
-from .config import GAME_SPEC, STEAM_SPEC, MODULE_MANIFEST, DATA
-from .schema import TOGGLES, MULTIPLIERS, STAT_RULES, default_boon_rarity, desired_feature_defaults, disconnected_capabilities, is_valid_next_room_reward
-from .catalog import localize_catalog
 from .boundary_ledger import execute_with_ledger
-from .preferences import Hades2PreferenceStore, next_room_reward_consumed
-from .persistence import PersistenceError
-from .profile_service import Hades2ProfileService
+from .catalog import localize_catalog
 from .command_router import Hades2CommandRouter
+from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
+from .persistence import PersistenceError
+from .preferences import Hades2PreferenceStore, next_room_reward_consumed
+from .profile_service import Hades2ProfileService
+from .schema import (
+    MULTIPLIERS,
+    STAT_RULES,
+    TOGGLES,
+    default_boon_rarity,
+    desired_feature_defaults,
+    disconnected_capabilities,
+    is_valid_next_room_reward,
+)
+
+__all__ = [
+    'AdapterError', 'GameAdapter', 'GameAdapterContext', 'Hades2Adapter',
+    'MULTIPLIERS', 'STAT_RULES', 'TOGGLES', 'TransportError',
+]
+
 TransportError = AdapterError
 _TRANSIENT_ACTION_RESULT_FIELDS = (
     'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',

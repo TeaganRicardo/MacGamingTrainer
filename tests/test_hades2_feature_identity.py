@@ -1,7 +1,7 @@
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which("swiftc")

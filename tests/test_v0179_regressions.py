@@ -1,14 +1,14 @@
-from pathlib import Path
 import json
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
-from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from games.hades2.preferences import Hades2PreferenceStore
 
 view = (ROOT/'Sources/Hades2/Hades2View.swift').read_text()
 card = (ROOT/'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()

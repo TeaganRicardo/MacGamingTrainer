@@ -9,7 +9,6 @@ import re
 
 from core.adapter import AdapterError
 
-
 _LUA_SOURCE_PREFIX = re.compile(r'^\[string "[^"]*"\]:\d+:\s*')
 
 _RUNTIME_MESSAGES = {

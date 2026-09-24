@@ -1,14 +1,17 @@
-from pathlib import Path
 import json
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.save_resolution import ResolvedSaveFile
-from core.save_snapshots import SaveSnapshotBusyError, SaveSnapshotError, SaveSnapshotStore
-
+from core.save_snapshots import (
+    SaveSnapshotBusyError,
+    SaveSnapshotError,
+    SaveSnapshotStore,
+)
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-snapshots-'))
 source = base / 'source'

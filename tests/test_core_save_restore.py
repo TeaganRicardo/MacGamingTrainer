@@ -1,16 +1,20 @@
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+import core.save_restore as restore_module
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_resolution import ResolvedSaveFile
+from core.save_restore import (
+    SaveBusyError,
+    SaveRestoreError,
+    SaveRestoreTransaction,
+    SaveRollbackError,
+)
 from core.save_snapshots import SaveSnapshotStore
-from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError, SaveRestoreTransaction
-import core.save_restore as restore_module
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-restore-'))
 save_root = base / 'game-saves'; save_root.mkdir()
