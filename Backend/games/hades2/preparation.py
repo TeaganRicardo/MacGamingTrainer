@@ -230,7 +230,7 @@ def prepare():
 
     if _entitlements(exe).get('com.apple.security.get-task-allow'):
         raise RuntimeError('当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
-    bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME))
+    bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME), allowed=(0, 1))
 
     root = _backup_dir('signature')
     original = root / GAME_SPEC.executable_name
@@ -240,10 +240,11 @@ def prepare():
     baseline = _command('/usr/bin/codesign', '--verify', '--strict', str(original), allowed=(0, 1))
     record['original_signature_baseline'] = {
         'bundle_returncode': bundle_signature.returncode,
+        'bundle_stderr': bundle_signature.stderr.decode('utf-8', errors='replace'),
         'returncode': baseline.returncode, 'strict_valid': baseline.returncode == 0,
         'stdout': baseline.stdout.decode('utf-8', errors='replace'),
         'stderr': baseline.stderr.decode('utf-8', errors='replace'),
-        'scope': 'Game bundle verified before backup; exact executable SHA-256 and UUID retained for restore',
+        'scope': 'Signature verification is diagnostic; exact executable SHA-256 and UUID are retained for restore',
     }
     details = _command('/usr/bin/codesign', '-dvvv', str(exe))
     (root / 'original-signature.txt').write_bytes(details.stdout + details.stderr)

@@ -66,7 +66,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         if args[1] == "--force":
             staged = Path(args[-1])
             staged.write_bytes(staged.read_bytes() + b"\nadhoc debug signature")
-        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        if args[1] == "--verify" and args[-1] == str(game):
+            result = SimpleNamespace(
+                returncode=1,
+                stdout=b"",
+                stderr=b"invalid Info.plist (plist or signature have been modified)",
+            )
+        else:
+            result = SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        if result.returncode not in allowed:
+            raise RuntimeError(result.stderr.decode())
+        return result
 
     preparation._command = command
     try:
@@ -78,6 +88,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         assert result["prepared"] is True
         assert result["manifest"]["compatible"] is False
         assert result["manifest"]["uuid"] == unknown_uuid
+        assert result["manifest"]["original_signature_baseline"]["bundle_returncode"] == 1
         prepared_bytes = executable.read_bytes()
         assert prepared_bytes != original_bytes
 
