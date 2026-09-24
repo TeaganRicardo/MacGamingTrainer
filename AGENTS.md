@@ -60,10 +60,8 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - Host/module protocol and schema/runtime revisions are independent compatibility versions, not product SemVer.
 - See `VERSIONING.md` for release increment rules.
 
-## External agent instruction rule
+## Agent instruction locality
 
-Any external agent profile (ChatGPT Project Instructions, Hermes Agent instructions, or equivalent) is an entry pointer into this repository, not a second authority. Keep such instructions thin. They should identify this repository, require GitHub as remote truth, enforce the reading path above, preserve the repository transport policy, and require branch/PR/exact-head verification. Do not copy architecture matrices, bug history or audit narratives into external instructions, and do not pin historical audit/handoff files as external context.
-
-When this repository is worked on through a different agent runtime than a previous instruction set assumed, update the external instruction set rather than the repository when only tool availability differs; repository rules stay runtime-agnostic. Tool-availability facts (which connectors, remote-desktop or GUI-control capabilities exist) belong in the external instruction set only and must never be assumed inside repository work: no task may rely on a connector or capability that the active runtime has not demonstrated. Tasks requiring launching the target game, in-game interaction, visual confirmation, or real-game acceptance must hand off to the user with the exact Git SHA, the required build/artifact, a concise test procedure, and the expected result. Never claim an unavailable or unverified operation was completed.
+Agent runtime instructions (tool availability, connectors, remote-desktop or GUI-control capability) live outside this repository, in the active agent runtime's local profile. They are never a repository concern: no task may assume a connector or capability that the active runtime has not demonstrated, and tasks requiring launching the target game, in-game interaction, visual confirmation, or real-game acceptance must hand off to the user with the exact Git SHA, the required build/artifact, a concise test procedure, and the expected result. Never claim an unavailable or unverified operation was completed.
 
 See `ENGINEERING_INVARIANTS.md` for the durable engineering rules behind these instructions.
