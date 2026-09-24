@@ -1,4 +1,4 @@
-"""Hades II executable/save preparation. Version-bound and recoverable."""
+"""Hades II executable/save preparation. Build-agnostic and recoverable."""
 import datetime
 import hashlib
 import json
@@ -62,8 +62,8 @@ def _uuid(exe):
     return match.group(1).upper()
 
 
-def compatibility(strict=True):
-    """Report version drift for scanning; mutations retain the strict default."""
+def compatibility(strict=False):
+    """Report version drift without blocking supported operations by default."""
     info = plistlib.loads((GAME / 'Contents/Info.plist').read_bytes())
     version = info.get('CFBundleVersion')
     steam = STEAM_SPEC.manifest_path
@@ -104,15 +104,17 @@ def _records():
             record = json.loads((root / 'manifest.json').read_text())
         except (OSError, ValueError):
             continue
-        if record.get('game') == str(GAME) and record.get('version') == VERSION:
+        if record.get('game') == str(GAME):
             yield root, record
 
 
 def _verify_backup(root, record):
     original = root / GAME_SPEC.executable_name
-    if record.get('original_sha256') != ORIGINAL_SHA256 or sha(original) != ORIGINAL_SHA256:
-        raise RuntimeError('原始备份损坏或不属于已验证版本；拒绝覆盖游戏。')
-    if _uuid(original) != UUID:
+    expected_sha256 = record.get('original_sha256')
+    expected_uuid = record.get('uuid')
+    if not isinstance(expected_sha256, str) or sha(original) != expected_sha256:
+        raise RuntimeError('原始备份损坏或与记录不匹配；拒绝覆盖游戏。')
+    if not isinstance(expected_uuid, str) or _uuid(original) != expected_uuid:
         raise RuntimeError('备份 UUID 不匹配。')
     return original
 
@@ -127,7 +129,7 @@ def _entitlements(exe):
     return plistlib.loads(combined[start:end + len(b'</plist>')])
 
 
-def _atomic_install(source, destination, expected_current):
+def _atomic_install(source, destination, expected_current, original_sha256=None, original_uuid=None):
     """Verify outside the app, then copy those bytes for same-volume replacement."""
     destination = Path(destination)
     backup_parent = DATA / 'backups'
@@ -142,7 +144,10 @@ def _atomic_install(source, destination, expected_current):
         shutil.copy2(source, verified)
         if sha(verified) != expected_source:
             raise RuntimeError('独立验证副本校验失败；未修改游戏。')
-        if expected_source == ORIGINAL_SHA256:
+        if original_sha256 is not None and expected_source == original_sha256:
+            if _uuid(verified) != original_uuid:
+                raise RuntimeError('原始恢复副本 UUID 不匹配；未修改游戏。')
+        elif expected_source == ORIGINAL_SHA256:
             # This exact local original fails standalone codesign verification
             # (Info.plist requirement), but its known hash and UUID establish
             # the restoration baseline. Do not generalize to other binaries.
@@ -187,7 +192,7 @@ def _stage_prepared(root, record, original, previous_prepared_sha256=None):
         '--entitlements', str(entitlement_path), str(staged))
     run('/usr/bin/codesign', '--verify', '--strict', str(staged))
     prepared_entitlements = _entitlements(staged)
-    if (_uuid(staged) != UUID or not prepared_entitlements.get('com.apple.security.get-task-allow')
+    if (_uuid(staged) != record.get('uuid') or not prepared_entitlements.get('com.apple.security.get-task-allow')
             or not prepared_entitlements.get('com.apple.security.cs.disable-library-validation')):
         raise RuntimeError('调试签名校验失败；未修改游戏。')
     record.update(status='staged', prepared_sha256=sha(staged))
@@ -223,8 +228,9 @@ def prepare():
         _write_json(root / 'manifest.json', record)
         return {'prepared': True, 'already_prepared': False, 'upgraded': True, 'backup': str(root), 'manifest': record}
 
-    if _entitlements(exe).get('com.apple.security.get-task-allow') or current != ORIGINAL_SHA256:
-        raise RuntimeError('当前可执行文件不是已验证的原版；拒绝将已修改文件备份为原版。')
+    if _entitlements(exe).get('com.apple.security.get-task-allow'):
+        raise RuntimeError('当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。')
+    bundle_signature = _command('/usr/bin/codesign', '--verify', '--strict', str(GAME))
 
     root = _backup_dir('signature')
     original = root / GAME_SPEC.executable_name
@@ -233,10 +239,11 @@ def prepare():
     _verify_backup(root, record)
     baseline = _command('/usr/bin/codesign', '--verify', '--strict', str(original), allowed=(0, 1))
     record['original_signature_baseline'] = {
+        'bundle_returncode': bundle_signature.returncode,
         'returncode': baseline.returncode, 'strict_valid': baseline.returncode == 0,
         'stdout': baseline.stdout.decode('utf-8', errors='replace'),
         'stderr': baseline.stderr.decode('utf-8', errors='replace'),
-        'scope': 'Exact locally verified original SHA-256 and UUID only',
+        'scope': 'Game bundle verified before backup; exact executable SHA-256 and UUID retained for restore',
     }
     details = _command('/usr/bin/codesign', '-dvvv', str(exe))
     (root / 'original-signature.txt').write_bytes(details.stdout + details.stderr)
@@ -253,13 +260,13 @@ def restore():
     compatibility()
     exe = GAME_SPEC.executable_path
     current = sha(exe)
-    if current == ORIGINAL_SHA256:
-        return {'restored': True, 'already_restored': True}
     for root, record in _records():
+        if current == record.get('original_sha256'):
+            return {'restored': True, 'already_restored': True}
         if current not in _prepared_hashes(record):
             continue
         original = _verify_backup(root, record)
-        _atomic_install(original, exe, current)
+        _atomic_install(original, exe, current, record['original_sha256'], record['uuid'])
         record.pop('previous_prepared_sha256', None)
         record['status'] = 'restored'
         _write_json(root / 'manifest.json', record)
