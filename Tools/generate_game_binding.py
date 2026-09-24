@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-from pathlib import Path
 import argparse
 import sys
+from pathlib import Path
 
-from module_support import HOST_PROTOCOL_VERSION, ManifestError, load_manifest, swift_string
+from module_support import (
+    HOST_PROTOCOL_VERSION,
+    ManifestError,
+    load_manifest,
+    swift_string,
+)
 
 
 def generate(manifest, output: Path):

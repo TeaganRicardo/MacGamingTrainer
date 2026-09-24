@@ -1,12 +1,15 @@
+import sys
 from contextlib import contextmanager
 from pathlib import Path
-import math
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController, ProcessTimeWarpError
+from core.process_time_warp import (
+    LLDBProcessTimeWarpDriver,
+    ProcessTimeWarpController,
+    ProcessTimeWarpError,
+)
 
 
 class FakeDriver:

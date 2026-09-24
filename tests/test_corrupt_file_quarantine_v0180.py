@@ -1,8 +1,8 @@
-from pathlib import Path
 import json
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -11,7 +11,6 @@ from games.hades2 import persistence
 from games.hades2.persistence import PersistenceError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-corrupt-quarantine-v0180-'))
 logging.disable(logging.CRITICAL)

@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()

@@ -3,8 +3,8 @@
 Only text/resource discovery belongs here; trainer preparation and save restore
 do not depend on localization.
 """
-from pathlib import Path
 import re
+from pathlib import Path
 
 from .config import GAME_SPEC
 

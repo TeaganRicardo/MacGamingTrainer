@@ -1,8 +1,8 @@
-from pathlib import Path
 import json
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -14,7 +14,6 @@ from games.hades2.profile_service import (
     PROFILE_SCHEMA_VERSION,
     Hades2ProfileService,
 )
-
 
 FIXTURES = ROOT / "tests/fixtures/hades2/profiles"
 assert PROFILE_SCHEMA_VERSION == 5

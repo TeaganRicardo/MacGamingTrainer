@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Require a resident-runtime revision bump when Hades Lua source changes."""
-from pathlib import Path
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 RUNTIME = Path('Backend/games/hades2/runtime/hades.lua')
 PREVIOUS_RE = re.compile(r'previousModule\.revision\s*~=\s*(\d+)')

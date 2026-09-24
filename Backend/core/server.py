@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Game-agnostic JSONL host. Game behavior lives under Backend/games/<game_id>."""
-from pathlib import Path
 import argparse
 import json
 import logging
 import os
 import signal
 import sys
+from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -15,7 +15,6 @@ if str(BACKEND_ROOT) not in sys.path:
 from core.log_paths import trainer_log_path
 from core.protocol import JsonlRequestRouter
 from core.registry import available_games, create_adapter
-
 
 _LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
 

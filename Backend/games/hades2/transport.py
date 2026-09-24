@@ -1,11 +1,17 @@
 """Supergiant/Hades II LLDB+Lua transport. This is a game-specific transport, not framework core."""
+import json
+import logging
+import subprocess
+import sys
+import time
 from pathlib import Path
-import subprocess, sys, time, json, logging
+
 sys.path.insert(0, subprocess.check_output(['xcrun','lldb','-P'], text=True).strip())
 import lldb
+from core.adapter import AdapterError as TransportError
+
 from .config import GAME_SPEC
 
-from core.adapter import AdapterError as TransportError
 
 class Hades2LuaTransport:
     def __init__(self):
@@ -219,9 +225,9 @@ class Hades2LuaTransport:
             self.target.BreakpointDelete(bp.GetID())
 
     def execute(self, source):
-        started=time.monotonic(); scratch=None; stopped=False
+        started=time.monotonic(); scratch=None
         try:
-            th,L=self.boundary();stopped=True
+            th,L=self.boundary()
             payload=source.encode('utf-8')
             if len(payload)>262144:raise TransportError('invalid_request','功能代码过长。')
             cap=262144;size=len(payload)+1+cap

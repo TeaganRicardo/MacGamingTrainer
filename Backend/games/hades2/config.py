@@ -1,9 +1,10 @@
+import json
 from dataclasses import dataclass
 from pathlib import Path
-import json
 
 from core.game_spec import GameSpec
 from core.module_manifest import GameModuleManifest
+
 
 @dataclass(frozen=True)
 class SteamSpec:

@@ -1,8 +1,8 @@
 from importlib import import_module
 from pathlib import Path
 
-from core.module_manifest import GameModuleManifest, ManifestError
 from core.adapter import GameAdapter, GameAdapterContext
+from core.module_manifest import GameModuleManifest, ManifestError
 
 _ROOT = Path(__file__).resolve().parents[1] / 'games'
 

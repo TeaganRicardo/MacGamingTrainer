@@ -1,10 +1,10 @@
-from contextlib import contextmanager
-from pathlib import Path
 import importlib
 import math
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
+from pathlib import Path
 
 from .adapter import AdapterError
 

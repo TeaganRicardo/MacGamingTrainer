@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-from pathlib import Path
-import re
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+from games.hades2.localization import _clean_display_name
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION
 from games.hades2.schema import TOGGLES
-from games.hades2.localization import _clean_display_name
 
 
 def read(relative):

@@ -1,11 +1,10 @@
-from pathlib import Path
-import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import textwrap
+from pathlib import Path
 
 if sys.platform != "darwin":
     raise SystemExit("macOS-only Hades2 SwiftUI state-flow test")

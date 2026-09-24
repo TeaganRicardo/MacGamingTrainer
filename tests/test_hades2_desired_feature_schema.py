@@ -1,9 +1,10 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.schema import (
     MULTIPLIERS,
     TOGGLES,
@@ -12,7 +13,6 @@ from games.hades2.schema import (
     normalize_desired_feature_value,
     validate_desired_feature_value,
 )
-from games.hades2.preferences import Hades2PreferenceStore
 
 EXPECTED_DEFAULTS = {
     "godMode": False,

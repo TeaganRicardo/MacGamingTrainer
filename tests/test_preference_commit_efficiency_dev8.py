@@ -1,13 +1,13 @@
-from pathlib import Path
 import json
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
-from games.hades2 import preparation
 import games.hades2.adapter as adapter_module
+from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 
 base = Path(tempfile.mkdtemp(prefix='mgt-dev8-pref-commit-'))

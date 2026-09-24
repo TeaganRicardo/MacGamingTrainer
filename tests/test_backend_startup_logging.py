@@ -1,4 +1,3 @@
-from pathlib import Path
 import contextlib
 import io
 import json
@@ -6,12 +5,13 @@ import logging
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.adapter import GameAdapter, GameAdapterContext
 from core import server
+from core.adapter import GameAdapter, GameAdapterContext
 from games.hades2.preferences import Hades2PreferenceStore
 
 

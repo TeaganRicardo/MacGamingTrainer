@@ -1,8 +1,8 @@
-from pathlib import Path
 import json
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -14,7 +14,6 @@ from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import PersistenceError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.profile_service import Hades2ProfileService
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-persistence-v0180-'))
 

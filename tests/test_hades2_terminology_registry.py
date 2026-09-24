@@ -1,10 +1,14 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.terminology import TermClass, TerminologyRegistry, load_hades2_terminology
+from games.hades2.terminology import (
+    TermClass,
+    TerminologyRegistry,
+    load_hades2_terminology,
+)
 
 
 def test_registry_loads_target_build_and_all_term_classes():

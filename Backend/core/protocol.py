@@ -1,9 +1,9 @@
-from collections import OrderedDict
-from pathlib import Path
 import json
 import logging
 import plistlib
 import subprocess
+from collections import OrderedDict
+from pathlib import Path
 
 # Host protocol covers only the JSONL envelope and request semantics. Each game
 # module has its own independent protocol/schema version exposed alongside it.
@@ -39,9 +39,8 @@ APP_BACKEND_VERSION = _product_version()
 
 
 from core.adapter import GameAdapter
-from core.save_service import CoreSaveService
 from core.save_restore import SaveBusyError
-
+from core.save_service import CoreSaveService
 
 _CORE_SAVE_PREFIX = 'core.save.'
 

@@ -1,10 +1,10 @@
-from pathlib import Path
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 fixture = root / 'ContractFixtures/reference_module'

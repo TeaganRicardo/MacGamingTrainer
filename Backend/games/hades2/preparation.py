@@ -1,5 +1,4 @@
 """Hades II executable/save preparation. Version-bound and recoverable."""
-from pathlib import Path
 import datetime
 import hashlib
 import json
@@ -9,9 +8,9 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
+from pathlib import Path
 
-from .config import GAME_SPEC, STEAM_SPEC, DATA
+from .config import DATA, GAME_SPEC, STEAM_SPEC
 
 GAME = GAME_SPEC.app_path
 SAVES = GAME_SPEC.save_path
@@ -268,7 +267,6 @@ def restore():
     raise RuntimeError('没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。')
 
 
-from .localization import _OFFICIAL_TEXT_CACHE
 
 def official_display_names(*args, **kwargs):
     from .localization import official_display_names as implementation

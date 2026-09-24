@@ -4,9 +4,12 @@ import logging
 import re
 import time
 
-from .persistence import atomic_write_text, quarantine_corrupt_file, UnsupportedSchemaVersionError
+from .persistence import (
+    UnsupportedSchemaVersionError,
+    atomic_write_text,
+    quarantine_corrupt_file,
+)
 from .preferences import DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
-
 
 PROFILE_SCHEMA_VERSION = 5
 PROFILE_COMPATIBILITY_FLOOR = 3
