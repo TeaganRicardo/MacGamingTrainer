@@ -1,14 +1,13 @@
-from pathlib import Path
 import json
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
 
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION
-
 
 # The persisted lock maps are executable desired state. Invalid nested values
 # must be removed during load/normalization instead of reaching replay where

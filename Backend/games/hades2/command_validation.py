@@ -15,6 +15,7 @@ from .schema import (
     validate_desired_feature_value,
 )
 
+
 def validate_command_params(command, params):
     params=dict(params or {})
 

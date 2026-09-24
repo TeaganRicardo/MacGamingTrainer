@@ -1,14 +1,14 @@
-from pathlib import Path
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+import core.protocol as protocol_module
 from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
-import core.protocol as protocol_module
 from core.protocol import JsonlRequestRouter
 from core.save_restore import SaveRollbackError
 

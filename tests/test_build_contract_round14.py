@@ -1,7 +1,7 @@
-from pathlib import Path
 import json
 import plistlib
 import subprocess
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
@@ -20,8 +20,10 @@ assert 'ui' not in manifest
 # actual dataclass surface, not comments that document the boundary.
 import sys
 from dataclasses import fields
+
 sys.path.insert(0, str(root/'Backend'))
 from core.module_manifest import GameModuleManifest
+
 assert {field.name for field in fields(GameModuleManifest)} == {
     'id','display_name','module_protocol_version','adapter','process_name','bundle_identifier','source_path','save_management'
 }

@@ -1,9 +1,9 @@
-from pathlib import Path
 import json
 import logging
 import plistlib
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -11,7 +11,12 @@ sys.path.insert(0, str(root/'Backend'))
 from core.adapter import GameAdapter, GameAdapterContext
 from core.game_spec import GameSpec
 from core.module_manifest import GameModuleManifest, ManifestError
-from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION, PROTOCOL_VERSION, JsonlRequestRouter
+from core.protocol import (
+    APP_BACKEND_VERSION,
+    HOST_PROTOCOL_VERSION,
+    PROTOCOL_VERSION,
+    JsonlRequestRouter,
+)
 from core.registry import available_games, create_adapter
 from core.server import encode_reply
 
@@ -117,6 +122,7 @@ assert manifest.public_metadata() == {
 # Reuse framework core while importing only the temporary game package.
 sys.path.insert(0, str(backend))
 import games as framework_games
+
 old_path = list(framework_games.__path__); framework_games.__path__.insert(0, str(games))
 try:
     rows = available_games(games)

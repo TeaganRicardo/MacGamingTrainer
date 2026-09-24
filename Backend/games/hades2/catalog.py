@@ -1,7 +1,6 @@
 from . import localization
 from .config import GAME_SPEC
 
-
 _SPECIAL_SOURCE_LOCALIZATION_IDS = {
     'Artemis': 'NPC_Artemis_Field_01',
     'Athena': 'NPC_Athena_01',

@@ -1,8 +1,8 @@
-from pathlib import Path
 import json
 import logging
 import sys
 import tempfile
+from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
@@ -12,7 +12,6 @@ from games.hades2.adapter import Hades2Adapter
 from games.hades2.persistence import UnsupportedSchemaVersionError
 from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-schema-version-v0180-'))
 logging.disable(logging.CRITICAL)

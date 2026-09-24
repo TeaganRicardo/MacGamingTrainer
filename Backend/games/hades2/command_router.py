@@ -6,12 +6,12 @@ owns command selection and delegates side effects to the adapter/game services.
 import subprocess
 
 from core.adapter import AdapterError
+
 from . import preparation
 from .command_validation import validate_command_params
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
 from .runtime_error_presentation import present_runtime_error
-
 
 _RUNTIME_COMMANDS = frozenset((
     'status','disable_all','set_desired','set_vital','set_counter','lock_vital',

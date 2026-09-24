@@ -1,13 +1,12 @@
-from pathlib import Path
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from core.save_resolution import ResolvedSaveFile
 from core.save_snapshots import SaveSnapshotStore
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-finder-metadata-'))
 source = base / 'source'

@@ -1,18 +1,21 @@
-from pathlib import Path
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+import core.save_restore as save_restore_module
+import core.save_service as save_service_module
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_restore import SaveBusyError, SaveRollbackError
-import core.save_service as save_service_module
-import core.save_restore as save_restore_module
-from core.save_service import CoreSaveService, SaveManagementUnsupportedError, SaveStagedUnavailableError
+from core.save_service import (
+    CoreSaveService,
+    SaveManagementUnsupportedError,
+    SaveStagedUnavailableError,
+)
 from core.save_snapshots import SaveSnapshotError
-
 
 base = Path(tempfile.mkdtemp(prefix='mgt-save-service-'))
 saves = base / 'saves'; saves.mkdir()

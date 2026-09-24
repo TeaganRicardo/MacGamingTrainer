@@ -1,7 +1,7 @@
-from pathlib import Path
 import ast
 import time
 import types
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 transport_path = ROOT / 'Backend/games/hades2/transport.py'

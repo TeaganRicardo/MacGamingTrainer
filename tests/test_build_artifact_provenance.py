@@ -1,10 +1,10 @@
-from pathlib import Path
 import hashlib
 import json
 import os
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "Tools/write_build_provenance.py"
