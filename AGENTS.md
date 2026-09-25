@@ -10,7 +10,7 @@ Use this order when facts conflict:
 2. `PROJECT_STATUS.md` for current operational state and active gate;
 3. `ENGINEERING_INVARIANTS.md` for stable ownership, lifecycle, replay and Save-safety rules;
 4. `GAME_MODULES.md` when a task crosses the Core/game-module boundary;
-5. planning issue #79 for planned work and sequencing only.
+5. planning issue #124 for planned work and sequencing only.
 
 `docs/audits/**`, closed PRs, Git history, old branches and prior conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
 
