@@ -130,7 +130,7 @@ class LLDBProcessTimeWarpDriver:
         try:
             module = importlib.import_module("lldb")
         except ImportError:
-            path = subprocess.check_output(["xcrun", "lldb", "-P"], text=True).strip()
+            path = subprocess.check_output(['/usr/bin/xcrun', 'lldb', '-P'], text=True, shell=False).strip()
             if path and path not in sys.path:
                 sys.path.insert(0, path)
             module = importlib.import_module("lldb")

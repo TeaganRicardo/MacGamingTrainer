@@ -79,9 +79,9 @@ class Hades2CommandRouter:
             result=build_diagnostics(adapter)
         elif command=='export_diagnostics':
             result=export_diagnostics(adapter)
-            subprocess.run(['/usr/bin/open','-R',result['diagnosticBundle']],check=True,timeout=10)
+            subprocess.run(['/usr/bin/open','-R',result['diagnosticBundle']],check=True,timeout=10, shell=False)
         elif command=='launch':
-            subprocess.run(['open',STEAM_SPEC.launch_url],check=True,timeout=10)
+            subprocess.run(['/usr/bin/open',STEAM_SPEC.launch_url],check=True,timeout=10,shell=False)
             result=adapter.scan()
         elif command in ('prepare','restore'):
             if adapter.transport.alive():
