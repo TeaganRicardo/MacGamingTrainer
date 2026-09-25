@@ -236,11 +236,14 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
 
     if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
         set_speed_continuous(1.0);
-        // R-02: rollback partial installation on failure so the caller can
-        // retry.  `dyld` has no API to unregister add-image callbacks, but we
-        // can clear the installed/filter state so subsequent installs with the
-        // same filter are not rejected as a conflict.
+        // R-02: roll back partial installation so the caller can retry. dyld
+        // has no unregister API for add-image callbacks, but on this path no
+        // symbol was ever rebound (hook_mask == 0), so re-registering on a
+        // retry is safe and required: the callback only fires for images
+        // loaded after registration, so without a fresh registration a
+        // corrected retry could never bind already-loaded images.
         atomic_store_explicit(&installed, false, memory_order_release);
+        atomic_store_explicit(&callback_registered, false, memory_order_release);
         image_filter_length = 0;
         return -3;
     }
