@@ -20,6 +20,9 @@ for symbol in (
 
 assert 'rebind_symbols_image(' in source
 assert '_dyld_register_func_for_add_image' in source
+assert 'uint32_t count = _dyld_image_count();' in source
+assert 'rebind_selected_image(_dyld_get_image_header(index), _dyld_get_image_vmaddr_slide(index));' in source
+assert 'atomic_store_explicit(&callback_registered, false' not in source
 assert 'mach_absolute_time' in source
 assert 'mach_continuous_time' in source
 assert 'clock_gettime' in source

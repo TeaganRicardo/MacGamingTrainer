@@ -232,18 +232,23 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
     bool was_registered = atomic_exchange_explicit(&callback_registered, true, memory_order_acq_rel);
     if (!was_registered) {
         _dyld_register_func_for_add_image(rebind_selected_image);
+    } else {
+        // A previous attempt registered the persistent callback but found no
+        // matching hooks. Re-scan images already loaded with the new filter;
+        // the existing callback continues to cover future images. Do not
+        // register another callback (dyld has no unregister API).
+        uint32_t count = _dyld_image_count();
+        for (uint32_t index = 0; index < count; index++) {
+            rebind_selected_image(_dyld_get_image_header(index), _dyld_get_image_vmaddr_slide(index));
+        }
     }
 
     if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
         set_speed_continuous(1.0);
-        // R-02: roll back partial installation so the caller can retry. dyld
-        // has no unregister API for add-image callbacks, but on this path no
-        // symbol was ever rebound (hook_mask == 0), so re-registering on a
-        // retry is safe and required: the callback only fires for images
-        // loaded after registration, so without a fresh registration a
-        // corrected retry could never bind already-loaded images.
+        // R-02: roll back installed/filter state so a corrected retry can
+        // update the filter and re-scan loaded images. Keep the one registered
+        // callback: it handles future images and must not be duplicated.
         atomic_store_explicit(&installed, false, memory_order_release);
-        atomic_store_explicit(&callback_registered, false, memory_order_release);
         image_filter_length = 0;
         return -3;
     }
