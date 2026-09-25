@@ -123,8 +123,44 @@ class SaveSnapshotStore:
                 raise SaveSnapshotError('Snapshot does not exist or is unsafe.')
         return path
 
+    def _inventory_path_for_id(self, snapshot_id):
+        """Resolve one displayed inventory directory, including invalid rows."""
+        if (
+            not isinstance(snapshot_id, str)
+            or not snapshot_id.startswith('snap-')
+            or '/' in snapshot_id
+            or '\\' in snapshot_id
+            or snapshot_id in ('.', '..')
+        ):
+            raise ValueError('Snapshot ID is invalid.')
+
+        self._ensure_parent()
+        data_root = self.data_root.resolve(strict=False)
+        snapshots = self.snapshots.resolve(strict=True)
+        try:
+            snapshots.relative_to(data_root)
+        except ValueError as error:
+            raise SaveSnapshotError('Snapshot storage escaped its data root.') from error
+
+        # Only operate on directories that the inventory itself would expose;
+        # this excludes symlinks, files, parent paths, and non-snap storage.
+        if not any(row['id'] == snapshot_id for row in self.list_snapshots()):
+            raise SaveNotFoundError('Snapshot does not exist or is unsafe.')
+        path = self.snapshots / snapshot_id
+        if path.is_symlink() or not path.is_dir():
+            raise SaveSnapshotError('Snapshot does not exist or is unsafe.')
+        resolved = path.resolve(strict=True)
+        if resolved.parent != snapshots or resolved == snapshots:
+            raise SaveSnapshotError('Snapshot path is unsafe.')
+        try:
+            resolved.relative_to(data_root)
+        except ValueError as error:
+            raise SaveSnapshotError('Snapshot path escaped its data root.') from error
+        return path, resolved
+
     def snapshot_folder(self, snapshot_id):
-        return str(self._path_for_id(snapshot_id).resolve())
+        _, resolved = self._inventory_path_for_id(snapshot_id)
+        return str(resolved)
 
     def _normalize_sources(self, files):
         unique = {}
@@ -385,7 +421,7 @@ class SaveSnapshotStore:
         return self._row(root, manifest, valid=True)
 
     def delete_snapshot(self, snapshot_id):
-        root = self._path_for_id(snapshot_id)
+        root, _ = self._inventory_path_for_id(snapshot_id)
         path = str(root.resolve())
         shutil.rmtree(root)
         if root.exists():
