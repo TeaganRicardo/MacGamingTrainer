@@ -64,12 +64,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         frontend / 'ReferenceFixtureModule.swift',
         generated,
     ]
-    if shutil.which('swiftc'):
-        subprocess.run(
-            ['swiftc', '-frontend', '-parse', *map(str, sources)],
-            check=True,
-            cwd=project,
-        )
+    swiftc = shutil.which('swiftc')
+    if not swiftc:
+        raise SystemExit('swiftc required for module contract test')
+    subprocess.run(
+        [swiftc, '-frontend', '-parse', *map(str, sources)],
+        check=True,
+        cwd=project,
+    )
 
     generic = (
         (project / 'Sources/App.swift').read_text()

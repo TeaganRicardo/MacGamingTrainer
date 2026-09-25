@@ -1,11 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "invariants": {
     "host.connection-lifetime": {
       "evidence": [
         {
           "type": "behavior",
-          "path": "tests/test_host_connection_policy_dev8.py"
+          "sourcePath": "tests/test_host_connection_policy_dev8.py",
+          "marker": "host_connection_policy_dev8_ok",
+          "command": "python3 tests/test_host_connection_policy_dev8.py"
         }
       ]
     },
@@ -13,12 +15,17 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_host_module_session_ownership.py",
+          "sourcePath": "tests/test_host_module_session_ownership.py",
+          "marker": "host_module_session_ownership_ok",
+          "command": "python3 tests/test_host_module_session_ownership.py",
           "reason": "Session construction is an ownership property of the static Swift composition graph; module builds prove compatibility but cannot observe duplicate hidden session construction."
         },
         {
-          "type": "build",
-          "path": ".github/workflows/build2-macos.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/build2-macos.yml",
+          "marker": "name: Build 2 macOS",
+          "command": "bash Tools/run_macos_checks.sh",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         }
       ]
     },
@@ -26,7 +33,9 @@
       "evidence": [
         {
           "type": "compiled-behavior",
-          "path": "tests/test_backend_session_recovery_dev8.py"
+          "sourcePath": "tests/test_backend_session_recovery_dev8.py",
+          "marker": "backend_session_recovery_dev8_ok",
+          "command": "python3 tests/test_backend_session_recovery_dev8.py"
         }
       ]
     },
@@ -34,16 +43,23 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_cross_game_isolation.py",
+          "sourcePath": "tests/test_cross_game_isolation.py",
+          "marker": "shared_core_propagation_ok",
+          "command": "python3 tests/test_cross_game_isolation.py",
           "reason": "Absence of Hades semantics from shared Core is a static ownership boundary; successful compilation alone does not prove semantic isolation."
         },
         {
           "type": "behavior",
-          "path": "tests/test_module_contract_round13.py"
+          "sourcePath": "tests/test_module_contract_round13.py",
+          "marker": "module_contract_round13_ok",
+          "command": "python3 tests/test_module_contract_round13.py"
         },
         {
-          "type": "build",
-          "path": ".github/workflows/module-build-matrix.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/module-build-matrix.yml",
+          "marker": "name: Module build matrix",
+          "command": "./build.sh \"${{ matrix.game }}\"",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         }
       ]
     },
@@ -51,7 +67,9 @@
       "evidence": [
         {
           "type": "compiled-behavior",
-          "path": "tests/test_hades2_run_log_watcher.py"
+          "sourcePath": "tests/test_hades2_run_log_watcher.py",
+          "marker": "hades2_run_log_watcher_ok",
+          "command": "python3 tests/test_hades2_run_log_watcher.py"
         }
       ]
     },
@@ -59,7 +77,9 @@
       "evidence": [
         {
           "type": "behavior",
-          "path": "tests/test_hades2_transport_outcome_unknown_taint.py"
+          "sourcePath": "tests/test_hades2_transport_outcome_unknown_taint.py",
+          "marker": "hades2_transport_outcome_unknown_taint_ok",
+          "command": "python3 tests/test_hades2_transport_outcome_unknown_taint.py"
         }
       ]
     },
@@ -67,19 +87,27 @@
       "evidence": [
         {
           "type": "behavior",
-          "path": "tests/test_core_save_restore.py"
+          "sourcePath": "tests/test_core_save_restore.py",
+          "marker": "core_save_restore_ok",
+          "command": "python3 tests/test_core_save_restore.py"
         },
         {
           "type": "behavior",
-          "path": "tests/test_core_save_service.py"
+          "sourcePath": "tests/test_core_save_service.py",
+          "marker": "core_save_service_ok",
+          "command": "python3 tests/test_core_save_service.py"
         },
         {
           "type": "behavior",
-          "path": "tests/test_core_save_running_transition.py"
+          "sourcePath": "tests/test_core_save_running_transition.py",
+          "marker": "core_save_running_transition_ok",
+          "command": "python3 tests/test_core_save_running_transition.py"
         },
         {
           "type": "behavior",
-          "path": "tests/test_core_save_snapshots.py"
+          "sourcePath": "tests/test_core_save_snapshots.py",
+          "marker": "core_save_snapshots_ok",
+          "command": "python3 tests/test_core_save_snapshots.py"
         }
       ]
     },
@@ -87,7 +115,9 @@
       "evidence": [
         {
           "type": "compiled-behavior",
-          "path": "tests/test_shortcut_chord_semantics.py"
+          "sourcePath": "tests/test_shortcut_chord_semantics.py",
+          "marker": "shortcut_chord_semantics_ok",
+          "command": "python3 tests/test_shortcut_chord_semantics.py"
         }
       ]
     },
@@ -95,23 +125,34 @@
       "evidence": [
         {
           "type": "diff-gate",
-          "path": "tests/test_runtime_revision_gate.py"
+          "sourcePath": "tests/test_runtime_revision_gate.py",
+          "marker": "runtime_revision_gate_ok",
+          "command": "python3 tests/test_runtime_revision_gate.py"
         },
         {
-          "type": "diff-gate",
-          "path": ".github/workflows/linux-contracts.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/linux-contracts.yml",
+          "marker": "name: Linux contracts",
+          "command": "python3 Tools/check_runtime_revision.py \"$BASE_SHA\" \"$HEAD_SHA\"",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         }
       ]
     },
-    "swift.production-graph-compiles": {
+    "swift.production-graph-build-configured": {
       "evidence": [
         {
-          "type": "build",
-          "path": ".github/workflows/build2-macos.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/build2-macos.yml",
+          "marker": "name: Build 2 macOS",
+          "command": "./build.sh hades2",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         },
         {
-          "type": "build",
-          "path": ".github/workflows/module-build-matrix.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/module-build-matrix.yml",
+          "marker": "name: Module build matrix",
+          "command": "./build.sh \"${{ matrix.game }}\"",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         }
       ]
     },
@@ -119,12 +160,16 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_native_sell_traits_contract.py",
+          "sourcePath": "tests/test_native_sell_traits_contract.py",
+          "marker": "native_sell_traits_contract_ok",
+          "command": "python3 tests/test_native_sell_traits_contract.py",
           "reason": "CI cannot drive the real Hades native sell modal; this guard is retained until exact game automation can observe the engine-owned UI lifecycle."
         },
         {
           "type": "source-boundary",
-          "path": "tests/test_native_special_choice_contract.py",
+          "sourcePath": "tests/test_native_special_choice_contract.py",
+          "marker": "native_special_choice_contract_ok",
+          "command": "python3 tests/test_native_special_choice_contract.py",
           "reason": "CI cannot drive the real Hades NPC/native choice screens; the Lua source boundary protects one-shot ownership until equivalent real-game automation exists."
         }
       ]
@@ -133,7 +178,9 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_hades2_session_hook_ownership.py",
+          "sourcePath": "tests/test_hades2_session_hook_ownership.py",
+          "marker": "hades2_session_hook_ownership_ok",
+          "command": "python3 tests/test_hades2_session_hook_ownership.py",
           "reason": "Resident Lua hook ownership is only fully observable inside the Hades runtime; static source guards remain the portable pre-game gate."
         }
       ]
@@ -142,7 +189,9 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_hades2_runtime_static_contract.py",
+          "sourcePath": "tests/test_hades2_runtime_static_contract.py",
+          "marker": "hades2_runtime_static_contract_ok",
+          "command": "python3 tests/test_hades2_runtime_static_contract.py",
           "reason": "Exact resident Lua/game-engine wiring cannot be semantically exercised in portable CI; Lua changes require real Hades acceptance, so this focused source guard is the pre-game boundary."
         }
       ]
@@ -151,7 +200,9 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_retired_hades_protocol_surface.py",
+          "sourcePath": "tests/test_retired_hades_protocol_surface.py",
+          "marker": "retired_hades_protocol_surface_ok",
+          "command": "python3 tests/test_retired_hades_protocol_surface.py",
           "reason": "Retired aliases are intentionally unreachable, so behavior tests cannot execute them; a focused static boundary prevents obsolete compatibility shims from re-entering the product surface."
         }
       ]
@@ -160,12 +211,17 @@
       "evidence": [
         {
           "type": "source-boundary",
-          "path": "tests/test_test_suite_discovery.py",
+          "sourcePath": "tests/test_test_suite_discovery.py",
+          "marker": "test_suite_discovery_ok",
+          "command": "python3 tests/test_test_suite_discovery.py",
           "reason": "Exhaustive portable-test discovery is a CI topology property; the focused contract inspects the runner/workflow wiring so future test entrypoints cannot silently fall outside the Linux lane."
         },
         {
-          "type": "build",
-          "path": ".github/workflows/linux-contracts.yml"
+          "type": "workflow-config",
+          "sourcePath": ".github/workflows/linux-contracts.yml",
+          "marker": "name: Linux contracts",
+          "command": "bash Tools/run_linux_checks.sh",
+          "claim": "configuration-only; does not attest a workflow run/check result or source SHA"
         }
       ]
     },
@@ -173,11 +229,15 @@
       "evidence": [
         {
           "type": "behavior",
-          "path": "tests/test_profile_version_compatibility.py"
+          "sourcePath": "tests/test_profile_version_compatibility.py",
+          "marker": "profile_version_compatibility_ok",
+          "command": "python3 tests/test_profile_version_compatibility.py"
         },
         {
           "type": "behavior",
-          "path": "tests/test_schema_versioning_v0180.py"
+          "sourcePath": "tests/test_schema_versioning_v0180.py",
+          "marker": "schema_versioning_v0180_ok",
+          "command": "python3 tests/test_schema_versioning_v0180.py"
         }
       ]
     }
