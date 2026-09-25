@@ -166,39 +166,64 @@ else:
 
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 
-# regression for R-01: decode failure after successful transport must taint
-# when the operation is not marked read_only.
-import sys
-sys.path.insert(0, str(ROOT))
-from Backend.games.hades2.boundary_ledger import execute_with_ledger
+# Regression for the decode-failure taint contract: when the Lua boundary was
+# crossed and returned a result but host-side decoding fails, a non-read-only
+# command is outcome-unknown and must taint the transport; a read-only command
+# must not; a failure from transport.execute itself must not (the transport
+# already owns its own taint semantics for those paths).
+import sys as _sys
+_sys.path.insert(0, str(ROOT / 'Backend'))
+from games.hades2.boundary_ledger import execute_with_ledger
 
-class FakeTransport:
+
+class LedgerFakeTransport:
     def __init__(self):
         self.tainted = False
+
     def execute(self, source):
         return '{"ok": true'
 
-def broken_decode(raw):
+
+class LedgerFailingTransport:
+    def __init__(self):
+        self.tainted = False
+
+    def execute(self, source):
+        raise RuntimeError('transport failed before returning a result')
+
+
+def json_decode(raw):
     import json
     return json.loads(raw)
 
-transport = FakeTransport()
+
+ledger_transport = LedgerFakeTransport()
 try:
-    execute_with_ledger(transport, 'test', 'return 1', broken_decode)
+    execute_with_ledger(ledger_transport, 'test', 'return 1', json_decode)
 except Exception:
     pass
 else:
     raise AssertionError('decode failure should raise')
-assert transport.tainted is True, 'decode failure left transport untainted'
+assert ledger_transport.tainted is True, 'decode failure left transport untainted'
 
-# read_only decode failure must not taint
-read_only_transport = FakeTransport()
+read_only_transport = LedgerFakeTransport()
 try:
-    execute_with_ledger(read_only_transport, 'test', 'return 1', broken_decode, read_only=True)
+    execute_with_ledger(read_only_transport, 'test', 'return 1', json_decode, read_only=True)
 except Exception:
     pass
 else:
     raise AssertionError('decode failure should raise')
 assert read_only_transport.tainted is False, 'read_only decode failure tainted transport'
+
+failing_transport = LedgerFailingTransport()
+try:
+    execute_with_ledger(failing_transport, 'test', 'return 1', json_decode)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('transport failure should raise')
+assert failing_transport.tainted is False, (
+    'transport-side failure was tainted by the ledger; transport owns its own taint semantics'
+)
 
 print('hades2_transport_outcome_unknown_taint_ok')
