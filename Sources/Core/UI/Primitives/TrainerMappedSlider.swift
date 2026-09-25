@@ -3,6 +3,8 @@ import SwiftUI
 struct TrainerMappedSlider: View {
     @Binding var value: Double
     let mapping: TrainerSliderMapping
+    let accessibilityLabel: String
+    let accessibilityHint: String
     var enabled = true
     var onPreviewValue: ((Double) -> Void)? = nil
 
@@ -117,7 +119,11 @@ struct TrainerMappedSlider: View {
                 ),
                 in: 0...1
             )
+            .accessibilityLabel(Text(accessibilityLabel))
+            .accessibilityHint(Text(accessibilityHint))
         }
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(Text(accessibilityHint))
         .accessibilityValue(Text(String(format: "%.1f", value)))
     }
 
