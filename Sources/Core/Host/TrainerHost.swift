@@ -4,6 +4,7 @@ import SwiftUI
 
 struct TrainerHostView<Module: TrainerGameModule>: View {
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @ObservedObject var model: Module.Model
     @StateObject private var targetMonitor: TrainerTargetProcessMonitor
     @StateObject private var saveManager: TrainerSaveManagerModel
@@ -33,7 +34,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                             saveManagerPresented = true
                             saveManager.refresh()
                         } label: {
-                            Label("存档管理", systemImage: "externaldrive")
+                            Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")
                         }
                         .disabled(!model.backendAvailable)
                     }
