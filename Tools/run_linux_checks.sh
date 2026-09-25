@@ -15,17 +15,12 @@ done < "$MACOS_ONLY_LIST"
 python3 -m compileall -q Backend
 python3 Tools/validate_game_module.py hades2
 
-# The shared list is the only exclusion source for Linux-portable tests.
-# Every other tests/test_*.py entrypoint runs here by default, so a newly added
-# portable regression cannot silently miss the fastest CI lane.
-for test_file in tests/test_*.py; do
-  name="$(basename "$test_file")"
-  if grep -Fqx -- "$name" "$MACOS_ONLY_LIST"; then
-    echo "==> SKIP macOS-only $test_file"
-    continue
-  fi
+# Linux collects paths recursively; the shared macOS-only list is the sole
+# exclusion source, so new portable tests cannot miss the gate.
+while IFS= read -r test_file; do
+  [[ -n "$test_file" ]] || continue
   echo "==> $test_file"
   python3 "$test_file"
-done
+done < <(python3 Tools/discover_linux_tests.py --root "$ROOT")
 
 echo "linux_checks_ok"
