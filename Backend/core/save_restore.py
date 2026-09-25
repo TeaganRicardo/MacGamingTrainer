@@ -24,6 +24,10 @@ class SaveRollbackError(SaveRestoreError):
         self.recovery_path = str(recovery_path)
 
 
+class SaveRestorePreparationInterrupted(KeyboardInterrupt):
+    """Rollback capture was interrupted before any save mutation began."""
+
+
 class SaveRestoreTransaction:
     def __init__(self, store, spec, resolver, busy_probe=None, snapshot_describer=None, target_running_probe=None):
         self.store = store
@@ -85,8 +89,10 @@ class SaveRestoreTransaction:
                     self._raise_race(target_running, 'Save changed while preparing restore.')
             self._ensure_cold_target_still_stopped(target_running)
             return rollback, rollback_rows, hashes
-        except Exception:
+        except BaseException as error:
             shutil.rmtree(rollback, ignore_errors=True)
+            if isinstance(error, KeyboardInterrupt):
+                raise SaveRestorePreparationInterrupted() from error
             raise
 
     def _verify_state(self, expected_hashes):
