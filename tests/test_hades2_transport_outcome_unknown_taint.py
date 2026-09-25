@@ -166,4 +166,39 @@ else:
 
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 
+# regression for R-01: decode failure after successful transport must taint
+# when the operation is not marked read_only.
+import sys
+sys.path.insert(0, str(ROOT))
+from Backend.games.hades2.boundary_ledger import execute_with_ledger
+
+class FakeTransport:
+    def __init__(self):
+        self.tainted = False
+    def execute(self, source):
+        return '{"ok": true'
+
+def broken_decode(raw):
+    import json
+    return json.loads(raw)
+
+transport = FakeTransport()
+try:
+    execute_with_ledger(transport, 'test', 'return 1', broken_decode)
+except Exception:
+    pass
+else:
+    raise AssertionError('decode failure should raise')
+assert transport.tainted is True, 'decode failure left transport untainted'
+
+# read_only decode failure must not taint
+read_only_transport = FakeTransport()
+try:
+    execute_with_ledger(read_only_transport, 'test', 'return 1', broken_decode, read_only=True)
+except Exception:
+    pass
+else:
+    raise AssertionError('decode failure should raise')
+assert read_only_transport.tainted is False, 'read_only decode failure tainted transport'
+
 print('hades2_transport_outcome_unknown_taint_ok')
