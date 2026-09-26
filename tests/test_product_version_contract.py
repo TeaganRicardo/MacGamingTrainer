@@ -19,7 +19,7 @@ assert APP_BACKEND_VERSION == version
 versioning = (ROOT / 'VERSIONING.md').read_text(encoding='utf-8')
 modules = (ROOT / 'GAME_MODULES.md').read_text(encoding='utf-8')
 workflow = (ROOT / '.github/workflows/build2-macos.yml').read_text(encoding='utf-8')
-fixture = (ROOT / 'ContractFixtures/host_protocol_v5.json').read_text(encoding='utf-8')
+fixture = (ROOT / 'ContractFixtures/host_protocol_v6.json').read_text(encoding='utf-8')
 
 # Policy documents describe rules, not a second copy of current release values.
 for stale in ('Current product version:', 'Current development build:', 'Latest released build:'):
