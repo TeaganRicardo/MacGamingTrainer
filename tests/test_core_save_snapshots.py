@@ -1,6 +1,8 @@
 import json
+import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +31,36 @@ def rows():
 
 
 store = SaveSnapshotStore('example', base / 'data')
-created = store.create_snapshot(rows, hot=False, display_name='Before boss', name_details=['Run 12', 'Crossroads'])
+# Write payload fsyncs must precede opening the manifest for persistence.
+fsync_events = []
+opened_files = {}
+original_path_open = Path.open
+original_fsync = os.fsync
+
+def tracked_path_open(path, mode='r', *args, **kwargs):
+    handle = original_path_open(path, mode, *args, **kwargs)
+    if path.name == 'manifest.json' and 'w' in mode:
+        fsync_events.append('manifest-open')
+        opened_files[handle.fileno()] = 'manifest'
+    elif mode == 'rb+' and path.name in ('Profile1.sav', 'activeProfile'):
+        opened_files[handle.fileno()] = 'payload'
+    return handle
+
+def tracked_fsync(fd):
+    fsync_events.append('fsync:' + opened_files.get(fd, 'unknown'))
+    return original_fsync(fd)
+
+Path.open = tracked_path_open
+os.fsync = tracked_fsync
+try:
+    created = store.create_snapshot(rows, hot=False, display_name='Before boss', name_details=['Run 12', 'Crossroads'])
+finally:
+    Path.open = original_path_open
+    os.fsync = original_fsync
+assert fsync_events.count('fsync:payload') == 2, fsync_events
+manifest_open_index = fsync_events.index('manifest-open')
+payload_fsync_indexes = [index for index, event in enumerate(fsync_events) if event == 'fsync:payload']
+assert max(payload_fsync_indexes) < manifest_open_index, fsync_events
 assert created['valid'] is True
 assert created['name'] == 'Before boss'
 assert created['fileCount'] == 2
@@ -256,3 +287,45 @@ for bad_details in (
         pass
     else:
         raise AssertionError('unsafe snapshot nameDetails accepted: {!r}'.format(bad_details))
+
+# Inventory reclaims only old, contained snapshot/manifest staging artifacts.
+created = store.create_snapshot(rows, hot=False, display_name='Keep normal snapshot')
+snapshots_root = store.snapshots
+old_cutoff = time.time() - 8 * 24 * 60 * 60
+stale_stage = snapshots_root / '.snapshot-orphaned123'
+stale_stage.mkdir()
+(stale_stage / 'partial').write_bytes(b'partial')
+os.utime(stale_stage, (old_cutoff, old_cutoff))
+fresh_stage = snapshots_root / '.snapshot-active123'
+fresh_stage.mkdir()
+(fresh_stage / 'partial').write_bytes(b'in progress')
+stale_manifest = Path(created['path']) / '.manifest-abandoned.json'
+stale_manifest.write_bytes(b'partial manifest')
+os.utime(stale_manifest, (old_cutoff, old_cutoff))
+fresh_manifest = Path(created['path']) / '.manifest-current.json'
+fresh_manifest.write_bytes(b'current manifest')
+bad_manifest_prefix = Path(created['path']) / '.manifest-abandoned.json.extra'
+bad_manifest_prefix.write_bytes(b'not the staging suffix')
+os.utime(bad_manifest_prefix, (old_cutoff, old_cutoff))
+outside = base / 'outside-stage'
+outside.mkdir()
+(outside / 'preserve').write_bytes(b'outside')
+manifest_escape = Path(created['path']) / '.manifest-external123.json'
+manifest_escape.symlink_to(outside / 'preserve')
+escape = snapshots_root / '.snapshot-ABCDEFGH'
+escape.symlink_to(outside, target_is_directory=True)
+unrelated = snapshots_root / 'snapshot-lookalike'
+unrelated.mkdir()
+bad_prefix = snapshots_root / '.snapshot-ABCDEFGH-extra'
+bad_prefix.mkdir()
+os.utime(bad_prefix, (old_cutoff, old_cutoff))
+
+inventory = store.list_snapshots()
+assert any(row['id'] == created['id'] and row['valid'] for row in inventory), inventory
+assert not stale_stage.exists()
+assert not stale_manifest.exists()
+assert fresh_stage.is_dir() and fresh_manifest.is_file()
+assert bad_manifest_prefix.is_file() and manifest_escape.is_symlink()
+assert escape.is_symlink() and (outside / 'preserve').read_bytes() == b'outside'
+assert unrelated.is_dir() and bad_prefix.is_dir()
+print('core_save_snapshot_staging_cleanup_ok')

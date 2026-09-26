@@ -12,6 +12,9 @@ from pathlib import Path
 from .save_resolution import ResolvedSaveFile
 
 _SCHEMA_VERSION = 1
+_STAGING_MIN_AGE_SECONDS = 24 * 60 * 60
+_SNAPSHOT_STAGE_RE = re.compile(r'^\.snapshot-[A-Za-z0-9_]+$')
+_MANIFEST_STAGE_RE = re.compile(r'^\.manifest-[A-Za-z0-9_]+\.json$')
 _SNAPSHOT_ID_RE = re.compile(r'^snap-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$')
 _SHA256_RE = re.compile(r'^[0-9a-f]{64}$')
 
@@ -106,6 +109,43 @@ class SaveSnapshotStore:
         self.snapshots.mkdir(parents=True, exist_ok=True)
         if self.snapshots.is_symlink() or not self.snapshots.is_dir():
             raise SaveSnapshotError('Snapshot storage path is unsafe.')
+
+    def _reclaim_stale_staging(self, now=None):
+        self._ensure_parent()
+        now = time.time() if now is None else now
+        snapshots_root = self.snapshots.resolve(strict=False)
+        for candidate in snapshots_root.iterdir():
+            is_snapshot_stage = _SNAPSHOT_STAGE_RE.fullmatch(candidate.name) is not None
+            if not is_snapshot_stage and not _SNAPSHOT_ID_RE.fullmatch(candidate.name):
+                continue
+            try:
+                if candidate.is_symlink():
+                    continue
+                stage_parent = candidate.resolve(strict=False)
+                if stage_parent.parent != snapshots_root:
+                    continue
+                if is_snapshot_stage:
+                    metadata = candidate.lstat()
+                    if now - metadata.st_mtime < _STAGING_MIN_AGE_SECONDS or not candidate.is_dir():
+                        continue
+                    shutil.rmtree(candidate)
+                    continue
+
+                for manifest_stage in candidate.iterdir():
+                    if not _MANIFEST_STAGE_RE.fullmatch(manifest_stage.name):
+                        continue
+                    try:
+                        metadata = manifest_stage.lstat()
+                        if now - metadata.st_mtime < _STAGING_MIN_AGE_SECONDS or manifest_stage.is_symlink():
+                            continue
+                        resolved = manifest_stage.resolve(strict=False)
+                        if resolved.parent != stage_parent or not manifest_stage.is_file():
+                            continue
+                        manifest_stage.unlink()
+                    except (FileNotFoundError, OSError):
+                        continue
+            except (FileNotFoundError, OSError):
+                continue
 
     def _new_id(self):
         stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
@@ -214,6 +254,9 @@ class SaveSnapshotStore:
                     destination = stage / 'files' / row.root_id / _safe_relative(row.relative_path)
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(row.source_path, destination)
+                    with destination.open('rb+') as payload:
+                        payload.flush()
+                        os.fsync(payload.fileno())
                     if _sha256(destination) != before or _sha256(row.source_path) != before:
                         raise _SaveSnapshotRace('Save changed while copying.')
                     copied_hashes[key] = before
@@ -381,6 +424,7 @@ class SaveSnapshotStore:
 
     def list_snapshots(self):
         self._ensure_parent()
+        self._reclaim_stale_staging()
         rows = []
         for root in sorted(self.snapshots.glob('snap-*'), reverse=True):
             if root.is_symlink() or not root.is_dir():
