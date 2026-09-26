@@ -50,15 +50,17 @@ let args = CommandLine.arguments
 if args.count != 2 { fail("expected temporary backend server path") }
 
 let session = TrainerBackendSession()
+var capturedLogs: [String] = []
 let model = ReferenceFixtureModel(
     session: session,
-    backendScriptURL: URL(fileURLWithPath: args[1])
+    backendScriptURL: URL(fileURLWithPath: args[1]),
+    log: { capturedLogs.append($0) }
 )
 
 guard waitUntil(3.0, {
     session.isStarted
         && model.backendAvailable
-        && model.backendStatus.backendProtocolVersion == 5
+        && model.backendStatus.backendProtocolVersion == 6
         && model.backendStatus.backendModuleProtocolVersion == 1
 }) else {
     fail("reference model did not start the injected Host backend session: \(model.backendStatus)")
@@ -66,6 +68,25 @@ guard waitUntil(3.0, {
 
 if model.connected { fail("fixture must start disconnected") }
 if model.enabled { fail("fixture must start disabled") }
+
+var failureDone: Bool? = nil
+session.send(
+    "fail",
+    operation: "Reference failure",
+    completion: { failureDone = $0 }
+)
+guard waitUntil(2.0, { failureDone != nil && !model.backendStatus.busy }) else {
+    fail("reference failure did not complete")
+}
+if failureDone != false { fail("reference failure unexpectedly succeeded") }
+if model.backendStatus.errorCode != "reference_failure" { fail("reference error identity was not preserved") }
+if model.backendStatus.error != "Reference fixture request failed." { fail("reference presentation did not reach Host status") }
+if model.backendStatus.error.contains("reference fixture diagnostic detail") {
+    fail("diagnostic detail leaked into user presentation")
+}
+if !capturedLogs.contains(where: { $0.contains("reference_failure") && $0.contains("reference fixture diagnostic detail") }) {
+    fail("reference diagnostic detail did not reach Host logging")
+}
 
 model.toggleConnectionFromHost()
 guard waitUntil(2.0, { model.connected && !model.busy }) else {
