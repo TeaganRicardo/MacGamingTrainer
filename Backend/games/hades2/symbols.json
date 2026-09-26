@@ -1,5 +1,5 @@
 {
-  "uuid": "6DFB0A36-6249-319F-8E18-5FC94898925A",
+  "uuid": "35CD2E50-2D78-3A63-835B-3EB1224C6D65",
   "preferred_base": 4294967296,
   "symbols": {
     "lua_gettop": {
@@ -29,7 +29,7 @@
       "rva": 100793566
     },
     "_ZN3sgg5World6UpdateEf": {
-      "rva": 2463068,
+      "rva": 2463044,
       "prefix": "ff0307d1ef3b126ded33136deb2b146d"
     }
   }
