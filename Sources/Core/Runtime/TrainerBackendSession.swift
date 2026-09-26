@@ -217,21 +217,24 @@ final class TrainerBackendSession {
             onTermination: { [weak self] exitStatus, stderrTail in
                 self?.handleTermination(status: exitStatus, stderrTail: stderrTail)
             },
-            onClientError: { [weak self] message, terminal in
+            onClientError: { [weak self] failure, terminal in
                 guard let self else { return }
+                let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
-                    configuration.log("后端通信终止：\(message)")
+                    configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = true
                         $0.operation = "恢复后端"
                         $0.errorCode = nil
-            $0.error = ""
+                        $0.error = ""
                         $0.notice = "后端通信异常，正在自动恢复"
                     }
                 } else {
+                    configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = false
-                        $0.error = message
+                        $0.errorCode = failure.code
+                        $0.error = failure.presentation
                     }
                 }
             }
