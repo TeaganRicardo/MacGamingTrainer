@@ -59,8 +59,7 @@ jobs:
       - name: Verify packaged module isolation
         if: steps.scope.outputs.docs_only != 'true'
         run: |
-          app="$(find dist -maxdepth 1 -type d -name '*.app' -print -quit)"
-          test -n "$app"
+          app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
           if [[ "${{ matrix.game }}" == "hades2" ]]; then
             test -f "$app/Contents/Resources/ui_terminology.json"

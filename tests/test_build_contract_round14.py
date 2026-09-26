@@ -36,6 +36,18 @@ assert 'Tools/validate_game_module.py' in build
 assert 'Tools/generate_game_binding.py' in build
 assert 'cp -R "$ROOT/Backend/core"' in build
 assert 'cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
+assert "subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)" in build
+assert 'cp -X' not in build and 'cp -RX' not in build
+assert 'Tools/clean_signing_metadata.py' in build
+assert '"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"' in build
+assert build.index('clean_signing_metadata.py') < build.index('codesign --force --sign - --entitlements')
+assert build.index('"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"') < build.index('codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"')
+assert 'DIST="${GENERATED_DIR}/dist"' in build
+assert 'PUBLISH_DIST="${ROOT}/dist"' in build
+assert '"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"' in build
+assert build.count('[[ ! -L "$PUBLISH_DIST" ]]') >= 2
+assert build.index('[[ ! -L "$PUBLISH_DIST" ]]') < build.index('"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"')
+assert '"${DIST}/${APP_NAME}.app"' in build
 assert '-typecheck' in build and build.index('-typecheck') < build.index('-O \\')
 clang_compile = build[build.index('\"$CLANG\" '):build.index('TIME_WARP_ARCH_BINARIES+=(\"$helper\")')]
 assert '-Wall' in clang_compile

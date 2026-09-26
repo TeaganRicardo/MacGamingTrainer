@@ -6,7 +6,7 @@ EXECUTABLE="MacGamingTrainer"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
-for tool in xcrun xcode-select codesign plutil grep find uname; do
+for tool in xcrun xcode-select codesign plutil grep find uname xattr; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
@@ -17,6 +17,8 @@ PYTHON="$(xcrun --find python3 2>/dev/null || true)"
 [[ -n "$CLANG" ]] || { echo "Xcode developer tools must provide clang." >&2; exit 1; }
 [[ -n "$PYTHON" ]] || { echo "Xcode developer tools must provide python3." >&2; exit 1; }
 [[ -x "$MODULE_VALIDATOR" && -x "$BINDING_GENERATOR" ]] || { echo "Missing game module build tools under Tools/." >&2; exit 1; }
+CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
+[[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
 
 DEFAULT_GAME_ID="$(tr -d '[:space:]' < "$ROOT/ACTIVE_GAME_ID")"
 ACTIVE_GAME_ID="${1:-${MGT_GAME_ID:-$DEFAULT_GAME_ID}}"
@@ -76,8 +78,11 @@ for arch in "${ARCHITECTURES[@]}"; do
     esac
 done
 
-DIST="${ROOT}/dist"
+DIST="${GENERATED_DIR}/dist"
+PUBLISH_DIST="${ROOT}/dist"
 APP="${DIST}/${APP_NAME}.app"
+PUBLISH_APP="${PUBLISH_DIST}/${APP_NAME}.app"
+[[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
 CONTENTS="${APP}/Contents"
 BACKEND="${CONTENTS}/Resources/Backend"
 LOCALIZATION_ROOT="${ROOT}/Resources/Localization"
@@ -170,13 +175,14 @@ else
     "$LIPO" -create "${ARCH_BINARIES[@]}" -output "${CONTENTS}/MacOS/${EXECUTABLE}"
 fi
 
-# Package generic backend core + only the selected game module.
+# Package generic backend core + only the selected game module. Preserve
+# permitted xattrs; clean only FinderInfo/ResourceFork before signing.
 cp -R "$ROOT/Backend/core" "$BACKEND/core"
 mkdir -p "$BACKEND/games"
 cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
 cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
 "$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources" <<'PY'
-import json, shutil, sys
+import json, subprocess, sys
 from pathlib import Path
 manifest_path, root, resources = map(Path, sys.argv[1:])
 root = root.resolve()
@@ -190,7 +196,7 @@ for item in manifest.get('appResources', []):
     if resources not in destination.parents:
         raise SystemExit(f"App resource destination escapes Contents/Resources: {item['destination']}")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, destination)
+    subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
     if not destination.is_file():
         raise SystemExit(f"App resource was not packaged: {item['destination']}")
 PY
@@ -233,6 +239,7 @@ else
     [[ -n "$TIME_WARP_LIPO" ]] || { echo "Universal Time Warp helper requested but lipo is unavailable." >&2; exit 1; }
     "$TIME_WARP_LIPO" -create "${TIME_WARP_ARCH_BINARIES[@]}" -output "$TIME_WARP_DYLIB"
 fi
+"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
 codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
 codesign --verify --strict "$TIME_WARP_DYLIB"
 cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
@@ -273,6 +280,10 @@ find "$BACKEND" -type f -exec chmod 644 {} +
 chmod 644 "${CONTENTS}/Info.plist"
 plutil -lint "${CONTENTS}/Info.plist" >/dev/null
 
+# Remove only the two attached-data classes that codesign rejects. Keep
+# com.apple.provenance and file-provider provenance/fpfs attributes untouched.
+"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
+
 if [[ -n "$ENTITLEMENTS_REL" ]]; then
     ENTITLEMENTS="$ROOT/$ENTITLEMENTS_REL"
     [[ -f "$ENTITLEMENTS" ]] || { echo "Missing module entitlements: $ENTITLEMENTS" >&2; exit 1; }
@@ -290,14 +301,19 @@ if [[ "$REQUIRES_DEBUGGER_ENTITLEMENT" == "1" ]]; then
     fi
 fi
 
+mkdir -p "$PUBLISH_DIST"
+[[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
+"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"
+"$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$PUBLISH_DIST" >/dev/null
+
 cat <<MSG
 Built:
-  $APP
+  $PUBLISH_APP
 Game module:
   $ACTIVE_GAME_ID
 Architectures:
   ${ARCHITECTURES[*]}
 
 Launch with Finder or:
-  open "$APP"
+  open "$PUBLISH_APP"
 MSG
