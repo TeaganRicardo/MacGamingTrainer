@@ -87,9 +87,12 @@ class JsonlRequestRouter:
             'moduleProtocolVersion': self.adapter.module_protocol_version,
         }
 
-    def error_reply(self, request_id, code, message, state=None):
+    def error_reply(self, request_id, code, presentation, state=None, diagnostic=None):
         reply = self._envelope(request_id, False)
-        reply['error'] = {'code': code, 'message': message}
+        error = {'code': code, 'presentation': presentation}
+        if isinstance(diagnostic, str) and diagnostic:
+            error['diagnostic'] = diagnostic
+        reply['error'] = error
         if isinstance(state, dict):
             candidate = dict(state)
             if self._json_safe(candidate):
@@ -198,7 +201,11 @@ class JsonlRequestRouter:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
             state = getattr(self.adapter, 'state', None)
             code = getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
-            reply = self.error_reply(request_id, code, str(error), state)
+            presentation = getattr(error, 'presentation', str(error))
+            diagnostic = getattr(error, 'diagnostic', None)
+            reply = self.error_reply(
+                request_id, code, presentation, state, diagnostic=diagnostic,
+            )
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path
