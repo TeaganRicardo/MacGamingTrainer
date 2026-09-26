@@ -52,6 +52,7 @@ preferences_before = json.loads(json.dumps(adapter.preferences))
 # replay dirty desired state or persist/capture runtime state.
 adapter.observe_runtime()
 assert transport.calls == 1
+assert adapter.state['desiredFeatures']['godMode'] is False
 assert adapter.preference_dirty is True
 assert adapter.preferences == preferences_before
 assert pref_path.read_bytes() == file_before
@@ -78,7 +79,12 @@ assert not (preparation.DATA/'desired-state.json').exists()
 
 # Runtime observation is a dedicated status-only API rather than a flag that
 # mutation callers can opt into.
-assert not hasattr(adapter2.observe_runtime, '__wrapped__')
+try:
+    adapter2.execute('set_feature', {'feature':'godMode','value':True}, read_only=True)
+except TypeError:
+    pass
+else:
+    raise AssertionError('execute still exposes the ambiguous read_only flag')
 assert transport2.calls == 1
 
 # Diagnostics itself must request the read-only path. A small probe isolates
