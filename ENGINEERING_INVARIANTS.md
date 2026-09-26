@@ -2,7 +2,7 @@
 
 Stable architecture and failure-semantics contract for MacGamingTrainer.
 
-This document describes rules that should remain true across feature work. `PROJECT_STATUS.md` owns current product status and planning issue #79 owns sequencing. Current code, Git history and executed tests remain the ultimate implementation evidence.
+This document describes rules that should remain true across feature work. `PROJECT_STATUS.md` owns current product status and planning issue #124 owns sequencing. Current code, Git history and executed tests remain the ultimate implementation evidence.
 
 ## 1. Ownership map
 
