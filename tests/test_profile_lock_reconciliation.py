@@ -95,7 +95,7 @@ adapter.profile_service.save('partial-locks', desired)
 batches = []
 
 
-def fake_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
+def fake_execute(command, params, replay=False, batch=None):
     if command == 'replay_preferences':
         batches.append(list(batch or []))
     return dict(adapter.state)
@@ -140,7 +140,7 @@ no_lock_adapter.profile_service.save('no-locks', Hades2PreferenceStore.defaults(
 no_lock_batches = []
 
 
-def fake_no_lock_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
+def fake_no_lock_execute(command, params, replay=False, batch=None):
     if command == 'replay_preferences':
         no_lock_batches.append(list(batch or []))
     return dict(no_lock_adapter.state)
@@ -171,7 +171,7 @@ offline_adapter.transport.live = True
 offline_batches = []
 
 
-def fake_offline_execute(command, params, replay=False, read_only=False, batch=None, project_desired=True):
+def fake_offline_execute(command, params, replay=False, batch=None):
     if command == 'replay_preferences':
         offline_batches.append(list(batch or []))
     return dict(offline_adapter.state)
