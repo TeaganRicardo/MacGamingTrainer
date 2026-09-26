@@ -8,7 +8,12 @@ import uuid
 from pathlib import Path
 
 from .save_resolution import load_save_provider, resolve_save_files
-from .save_restore import SaveBusyError, SaveRestoreTransaction, SaveRollbackError
+from .save_restore import (
+    SaveBusyError,
+    SaveRestorePreparationInterrupted,
+    SaveRestoreTransaction,
+    SaveRollbackError,
+)
 from .save_snapshots import SaveSnapshotError, SaveSnapshotStore
 
 
@@ -193,7 +198,11 @@ class CoreSaveService:
             pending = self._read_staged_marker(path)
             pending['indeterminate'] = False
             return pending
-        except Exception as error:
+        except OSError:
+            raise
+        except (ValueError, SaveSnapshotError) as error:
+            if isinstance(error.__cause__, OSError):
+                raise error.__cause__ from error
             quarantined = self._quarantine_staged(path)
             if quarantined is None and (path.exists() or path.is_symlink()):
                 raise RuntimeError('Corrupt staged restore marker could not be quarantined.') from error
@@ -307,6 +316,14 @@ class CoreSaveService:
                 preserve_current=pending['preserveCurrent'],
                 target_running=False,
             )
+        except SaveRestorePreparationInterrupted as error:
+            try:
+                os.replace(claimed, path)
+            except OSError:
+                logging.exception('Failed to restore staged marker after rollback-copy interruption: %s', claimed)
+            if isinstance(error.__cause__, KeyboardInterrupt):
+                raise error.__cause__
+            raise
         except SaveRollbackError:
             # Rollback has explicitly failed, so the real-save outcome is not
             # proven. Keep the applying claim visible as indeterminate; turning
