@@ -58,7 +58,13 @@ final class TrainerBackendSession {
     ) throws {
         guard !client.isStarted else { return }
         lifecycleID = UUID()
-        let scriptURL = try resolveScriptURL(backendScriptURL)
+        let scriptURL: URL
+        do {
+            scriptURL = try resolveScriptURL(backendScriptURL)
+        } catch {
+            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            throw error
+        }
         configuration = Configuration(
             descriptor: descriptor,
             scriptURL: scriptURL,
@@ -68,7 +74,12 @@ final class TrainerBackendSession {
             onStatusChange: onStatusChange
         )
         automaticRecoveryAttempts = 0
-        try startClient(clearStatus: true, recoveryNotice: nil)
+        do {
+            try startClient(clearStatus: true, recoveryNotice: nil)
+        } catch {
+            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            throw error
+        }
     }
 
     func send(
@@ -124,15 +135,25 @@ final class TrainerBackendSession {
         client.stop()
     }
 
-    func markUnavailable(_ failure: BackendFailure) {
-        updateStatus {
-            $0.backendAvailable = false
-            $0.busy = false
-            $0.errorCode = failure.code
-            $0.error = failure.presentation
-        }
-        let diagnostic = failure.diagnostic ?? failure.presentation
-        configuration?.log("后端不可用 [\(failure.code)]：\(diagnostic)")
+    private func publishStartupFailure(
+        _ error: Error,
+        log: (String) -> Void,
+        onStatusChange: (TrainerBackendStatus) -> Void
+    ) {
+        let failure = BackendFailure(
+            code: "backend_start_failed",
+            presentation: "无法启动后端，请查看日志。",
+            diagnostic: error.localizedDescription,
+            recoveryPath: nil
+        )
+        var next = status
+        next.backendAvailable = false
+        next.busy = false
+        next.errorCode = failure.code
+        next.error = failure.presentation
+        status = next
+        onStatusChange(next)
+        log("后端启动失败 [\(failure.code)]：\(failure.diagnostic ?? failure.presentation)")
     }
 
     private func resolveScriptURL(_ backendScriptURL: URL?) throws -> URL {
