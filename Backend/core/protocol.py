@@ -201,8 +201,15 @@ class JsonlRequestRouter:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
             state = getattr(self.adapter, 'state', None)
             code = getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
-            presentation = getattr(error, 'presentation', str(error))
-            diagnostic = getattr(error, 'diagnostic', None)
+            if hasattr(error, 'presentation'):
+                presentation = error.presentation
+                diagnostic = getattr(error, 'diagnostic', None)
+            elif isinstance(error, ValueError) or hasattr(error, 'code'):
+                presentation = str(error)
+                diagnostic = getattr(error, 'diagnostic', None)
+            else:
+                presentation = '操作失败，请查看日志。'
+                diagnostic = str(error)
             reply = self.error_reply(
                 request_id, code, presentation, state, diagnostic=diagnostic,
             )
