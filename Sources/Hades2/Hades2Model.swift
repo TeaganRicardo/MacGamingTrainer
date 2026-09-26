@@ -332,13 +332,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
             send(.scan, title: "检测游戏")
         } catch {
+            // TrainerBackendSession owns startup failure identity, presentation,
+            // diagnostics, and status projection.
             status = "backend_stopped"
-            backendSession.markUnavailable(BackendFailure(
-                code: "backend_start_failed",
-                presentation: "无法启动后端，请查看日志。",
-                diagnostic: error.localizedDescription,
-                recoveryPath: nil
-            ))
         }
     }
 
