@@ -7,6 +7,7 @@ struct TrainerBackendStatus: Equatable {
     var protocolCompatible = true
     var busy = false
     var operation = ""
+    var errorCode: String?
     var error = ""
     var notice = ""
 }
@@ -103,6 +104,7 @@ final class TrainerBackendSession {
         updateStatus {
             $0.busy = true
             $0.operation = "重启后端"
+            $0.errorCode = nil
             $0.error = ""
             $0.notice = ""
         }
@@ -165,7 +167,8 @@ final class TrainerBackendSession {
                 self?.updateStatus {
                     $0.busy = true
                     $0.operation = title
-                    $0.error = ""
+                    $0.errorCode = nil
+            $0.error = ""
                     if announceSuccess { $0.notice = "" }
                 }
             },
@@ -184,9 +187,18 @@ final class TrainerBackendSession {
                     if reply.announceSuccess { self.updateStatus { $0.notice = "\(reply.operation)完成" } }
                 } else {
                     if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
-                    let message = reply.errorMessage ?? "操作失败，请查看日志。"
-                    self.updateStatus { $0.error = message }
-                    configuration.log("\(reply.operation)失败 [\(reply.errorCode ?? "unknown")]：\(message)")
+                    let failure = reply.failure ?? BackendFailure(
+                        code: "operation_failed",
+                        presentation: "操作失败，请查看日志。",
+                        diagnostic: nil,
+                        recoveryPath: nil
+                    )
+                    self.updateStatus {
+                        $0.errorCode = failure.code
+                        $0.error = failure.presentation
+                    }
+                    let diagnostic = failure.diagnostic ?? failure.presentation
+                    configuration.log("\(reply.operation)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
             onProtocolMismatch: { [weak self] message in
@@ -195,6 +207,7 @@ final class TrainerBackendSession {
                     $0.protocolCompatible = false
                     $0.backendAvailable = false
                     $0.busy = false
+                    $0.errorCode = "protocol_mismatch"
                     $0.error = message + " 请使用同一发布包重新构建 App。"
                 }
                 configuration.log("协议不兼容：\(message)")
@@ -211,7 +224,8 @@ final class TrainerBackendSession {
                     self.updateStatus {
                         $0.busy = true
                         $0.operation = "恢复后端"
-                        $0.error = ""
+                        $0.errorCode = nil
+            $0.error = ""
                         $0.notice = "后端通信异常，正在自动恢复"
                     }
                 } else {
@@ -226,6 +240,7 @@ final class TrainerBackendSession {
             $0.backendAvailable = true
             $0.busy = false
             $0.operation = ""
+            $0.errorCode = nil
             $0.error = ""
             if let recoveryNotice { $0.notice = recoveryNotice }
         }
@@ -250,12 +265,13 @@ final class TrainerBackendSession {
             $0.busy = willRecover
             $0.operation = willRecover ? "恢复后端" : ""
             if !willRecover && !suppressTerminationError && !mismatch {
-                let suffix = stderrTail.isEmpty ? "" : "\n\n后端输出：\n\(stderrTail)"
-                $0.error = "后端已退出（状态 \(exitStatus)）。游戏内修改可能仍然生效。\(suffix)"
+                $0.errorCode = "backend_terminated"
+                $0.error = "后端已退出（状态 \(exitStatus)）。游戏内修改可能仍然生效。"
             }
         }
         configuration.resetGameState()
-        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover)")
+        let terminationDiagnostic = stderrTail.isEmpty ? "none" : stderrTail
+        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover) stderr=\(terminationDiagnostic)")
 
         suppressTerminationError = false
         if willRecover {
@@ -283,7 +299,8 @@ final class TrainerBackendSession {
                         $0.backendAvailable = false
                         $0.busy = false
                         $0.operation = ""
-                        $0.error = "无法恢复后端：\(error.localizedDescription)"
+                        $0.errorCode = "backend_recovery_failed"
+                        $0.error = "无法恢复后端，请查看日志。"
                     }
                 }
             }
