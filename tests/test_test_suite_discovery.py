@@ -45,6 +45,10 @@ assert 'chmod +x build.sh Tools/*.py' not in workflow
 # exclusion source, so new portable test_*.py files cannot miss the gate.
 linux_text = linux_runner.read_text()
 assert 'discover_linux_tests.py' in linux_text
+assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"' in linux_text, (
+    'discovery failure must propagate through the set -e runner, not process substitution'
+)
+assert 'done < <(' not in linux_text, 'process substitution hides discovery failure'
 assert 'macos_only_tests.txt' in linux_text
 assert 'python3 "$test_file"' in linux_text
 assert 'tests/test_*.py' not in linux_text
@@ -77,6 +81,16 @@ with tempfile.TemporaryDirectory() as temporary_root:
     )
     assert 'tests/nested/test_nested_fixture.py' in discovery.stdout
     assert 'tests/test_excluded_fixture.py' not in discovery.stdout
+
+    (fixture_root / 'Tools' / 'macos_only_tests.txt').write_text(
+        'test_excluded_fixture.py\ntest_nested_fixture.py\n'
+    )
+    empty = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/discover_linux_tests.py'), '--root', str(fixture_root)],
+        capture_output=True,
+        text=True,
+    )
+    assert empty.returncode != 0, 'zero portable tests must fail closed'
 
 assert not fixture_root.exists(), 'temporary discovery fixture was not cleaned up'
 

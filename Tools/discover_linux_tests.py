@@ -7,17 +7,22 @@ from pathlib import Path
 
 def discover_tests(root: Path) -> list[str]:
     tests_root = root / "tests"
+    if not tests_root.is_dir():
+        raise FileNotFoundError(f"test tree is missing: {tests_root}")
     macos_only_file = root / "Tools" / "macos_only_tests.txt"
     macos_only = {
         line.strip()
         for line in macos_only_file.read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
-    return sorted(
+    tests = sorted(
         path.relative_to(root).as_posix()
         for path in tests_root.rglob("test_*.py")
         if path.name not in macos_only
     )
+    if not tests:
+        raise RuntimeError("no portable tests discovered")
+    return tests
 
 
 def main() -> None:

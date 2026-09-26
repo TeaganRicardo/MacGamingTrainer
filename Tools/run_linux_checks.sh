@@ -17,10 +17,11 @@ python3 Tools/validate_game_module.py hades2
 
 # Linux collects paths recursively; the shared macOS-only list is the sole
 # exclusion source, so new portable tests cannot miss the gate.
+discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"
 while IFS= read -r test_file; do
   [[ -n "$test_file" ]] || continue
   echo "==> $test_file"
   python3 "$test_file"
-done < <(python3 Tools/discover_linux_tests.py --root "$ROOT")
+done <<< "$discovered_tests"
 
 echo "linux_checks_ok"
