@@ -17,9 +17,18 @@ from .schema import STAT_RULES
 def build_diagnostics(adapter):
     checks=[]
     def add(name,ok,detail=''): checks.append({'name':name,'ok':bool(ok),'detail':str(detail)})
+    state={}
     if adapter.transport.alive():
-        try: adapter.execute('status',{},read_only=True)
-        except Exception: pass
+        try:
+            refreshed=adapter.execute('status',{},read_only=True)
+            if not isinstance(refreshed,dict):
+                raise RuntimeError('status refresh returned no runtime state')
+            state=refreshed
+            add('运行时状态刷新',True,'已获取实时 runtime status')
+        except Exception as error:
+            add('运行时状态刷新',False,str(error))
+    else:
+        add('运行时状态刷新',False,'transport disconnected; runtime status unknown')
     add('协议版本',True,f'host {PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
     add('后端进程',True,sys.executable)
     add('Python',True,sys.version.split()[0]+' · '+platform.platform())
@@ -28,7 +37,11 @@ def build_diagnostics(adapter):
     add('symbols.json',symbols.is_file(),symbols)
     add('存档目录',preparation.SAVES.exists(),preparation.SAVES)
     try:
-        identity=preparation.compatibility(strict=False);add('游戏版本 / Build',True,f"{identity.get('version')} · Steam {identity.get('steam_build')}")
+        identity=preparation.compatibility(strict=False)
+        warnings=identity.get('warnings') if isinstance(identity.get('warnings'),list) else []
+        detail=f"{identity.get('version')} · Steam {identity.get('steam_build')}"
+        if warnings:detail+=' · '+'; '.join(map(str,warnings))
+        add('游戏版本 / Build',identity.get('compatible') is True,detail)
     except Exception as error:add('游戏版本 / Build',False,error)
     try:
         names=localization.official_display_names({'WeaponUpgrade'},'zh-CN');add('官方中文文本',bool(names.get('WeaponUpgrade')),names.get('WeaponUpgrade','未解析到 WeaponUpgrade'))
@@ -41,7 +54,6 @@ def build_diagnostics(adapter):
         result=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=8);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB Python',False,error)
 
-    state=adapter.state if isinstance(getattr(adapter,'state',None),dict) else {}
     add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
     add('Lua 连接',bool(state.get('connected')),state.get('status','unknown'))
     diag=state.get('runtimeDiagnostics',{}) if isinstance(state.get('runtimeDiagnostics'),dict) else {}
