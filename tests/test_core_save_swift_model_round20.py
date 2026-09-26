@@ -4,21 +4,29 @@ ROOT = Path(__file__).resolve().parents[1]
 types = ROOT / "Sources/Core/Save/TrainerSaveTypes.swift"
 model = ROOT / "Sources/Core/Save/TrainerSaveManagerModel.swift"
 client = ROOT / "Sources/Core/Runtime/BackendClient.swift"
+validator = ROOT / "Sources/Core/Save/TrainerSavePathValidator.swift"
 
 assert types.is_file(), "generic save types missing"
 assert model.is_file(), "generic save manager model missing"
 assert client.is_file(), "generic backend client missing"
+assert validator.is_file(), "Save path validator missing"
 
 types_text = types.read_text(encoding="utf-8")
 model_text = model.read_text(encoding="utf-8")
 client_text = client.read_text(encoding="utf-8")
-combined = types_text + "\n" + model_text
+combined = types_text + "\n" + model_text + "\n" + validator.read_text(encoding="utf-8")
 
 for token in (
     "struct TrainerSaveSnapshot",
     "struct TrainerPendingRestore",
-    "final class TrainerSaveManagerModel",
     "@Published private(set) var snapshots",
+    "final class TrainerSaveManagerModel",
+    "activeRequestTokens: Set<UUID>",
+    "self.busy = !self.activeRequestTokens.isEmpty",
+    "enum TrainerSavePathValidator",
+    "resolvingSymlinksInPath()",
+    'scheme.caseInsensitiveCompare("file")',
+    "candidateValues.isRegularFile == true",
     "@Published private(set) var pendingRestore",
     "@Published private(set) var recoveryPaths",
     "func refresh()",
@@ -70,7 +78,8 @@ assert "恢复副本保留在：" in model_text
 # optimistic rename state and to terminate sequential batch deletes. A backend
 # that is already unavailable must still complete the request with failure.
 request_block = model_text[model_text.index("    private func request("):model_text.index("    private func consume(")]
-guard_block = request_block[request_block.index("guard session.isRunning else"):request_block.index("        busy = true")]
+guard_block = request_block[request_block.index("guard session.isRunning else"):request_block.index("        let token")]
 assert "onComplete?(false)" in guard_block
+assert "activeRequestTokens.remove(token)" in request_block
 
 print("core_save_swift_model_round20_ok")

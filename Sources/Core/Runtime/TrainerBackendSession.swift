@@ -31,6 +31,7 @@ final class TrainerBackendSession {
 
     private let client: BackendClient
     private var status = TrainerBackendStatus()
+    private(set) var lifecycleID = UUID()
     private var configuration: Configuration?
     private var suppressTerminationError = false
     private var restartPending = false
@@ -55,6 +56,7 @@ final class TrainerBackendSession {
         onStatusChange: @escaping (TrainerBackendStatus) -> Void
     ) throws {
         guard !client.isStarted else { return }
+        lifecycleID = UUID()
         let scriptURL = try resolveScriptURL(backendScriptURL)
         configuration = Configuration(
             descriptor: descriptor,
