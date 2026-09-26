@@ -57,4 +57,10 @@ assert normalized['saveManagement'] == {
     'stagedRestore': True,
 }
 assert 'ui' not in normalized
+assert normalized['appResources'] == [
+    {
+        'source': 'docs/reference/hades2/1.139672-24556151/ui_terminology.json',
+        'destination': 'ui_terminology.json',
+    }
+]
 print('build_contract_round14_ok')

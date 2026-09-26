@@ -55,7 +55,7 @@ The fixture is architecture evidence, not a semantic template. A real game still
 
 The App/Host supplies the common shell, sidebar, header, connection status, backend session, and theme. Game modules compose those shared interfaces instead of recreating Host behavior locally.
 
-Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS requirements, and debugger/build requirements belong to the build tooling. Presentation labels/icons/header text remain in Swift.
+- Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS/debugger requirements, and declared app bundle resources belong to the build tooling. Presentation labels/icons/header text remain in Swift.
 
 ## Protocol and timeout rules
 
