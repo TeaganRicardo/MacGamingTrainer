@@ -50,7 +50,7 @@ preferences_before = json.loads(json.dumps(adapter.preferences))
 
 # A read-only status is allowed to refresh observable state, but it must not
 # replay dirty desired state or persist/capture runtime state.
-adapter.execute('status', {}, read_only=True)
+adapter.observe_runtime()
 assert transport.calls == 1
 assert adapter.preference_dirty is True
 assert adapter.preferences == preferences_before
@@ -60,7 +60,7 @@ assert pref_path.read_bytes() == file_before
 # persisted one-shot next-room request merely because runtime status reports it
 # absent.
 adapter.preference_dirty = False
-adapter.execute('status', {}, read_only=True)
+adapter.observe_runtime()
 assert transport.calls == 2
 assert adapter.preferences['nextRoomReward'] == 'WeaponUpgrade'
 assert pref_path.read_bytes() == file_before
@@ -72,18 +72,13 @@ preparation.DATA.mkdir(parents=True)
 transport2 = FakeTransport()
 adapter2 = Hades2Adapter(transport=transport2)
 assert adapter2.preference_initialized is False
-adapter2.execute('status', {}, read_only=True)
+adapter2.observe_runtime()
 assert adapter2.preference_initialized is False
 assert not (preparation.DATA/'desired-state.json').exists()
 
-# The read-only execution mode is deliberately narrow so a future caller cannot
-# accidentally use it to bypass persistence semantics for a mutation command.
-try:
-    adapter2.execute('set_feature', {'feature':'godMode','value':True}, read_only=True)
-except ValueError as error:
-    assert 'read_only' in str(error)
-else:
-    raise AssertionError('read_only mutation command unexpectedly accepted')
+# Runtime observation is a dedicated status-only API rather than a flag that
+# mutation callers can opt into.
+assert not hasattr(adapter2.observe_runtime, '__wrapped__')
 assert transport2.calls == 1
 
 # Diagnostics itself must request the read-only path. A small probe isolates
@@ -96,13 +91,13 @@ class DiagnosticsProbe:
     transport = AliveTransport()
     state = {}
     def __init__(self): self.calls = []
-    def execute(self, command, params, **kwargs):
-        self.calls.append((command, params, kwargs))
+    def observe_runtime(self):
+        self.calls.append('observe_runtime')
         return {}
     def list_profiles(self): return []
 
 probe = DiagnosticsProbe()
 build_diagnostics(probe)
-assert probe.calls == [('status', {}, {'read_only': True})]
+assert probe.calls == ['observe_runtime']
 
-print('diagnostics_read_only_v0190_ok')
+print('diagnostics_runtime_observation_v0190_ok')
