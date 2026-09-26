@@ -8,6 +8,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
 
     private let backendSession: TrainerBackendSession
     private let backendScriptURL: URL?
+    private let log: (String) -> Void
 
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
@@ -18,9 +19,14 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
         backendAvailable && !busy && backendStatus.protocolCompatible
     }
 
-    init(session: TrainerBackendSession, backendScriptURL: URL? = nil) {
+    init(
+        session: TrainerBackendSession,
+        backendScriptURL: URL? = nil,
+        log: @escaping (String) -> Void = { _ in }
+    ) {
         backendSession = session
         self.backendScriptURL = backendScriptURL
+        self.log = log
         DispatchQueue.main.async { [weak self] in
             self?.startBackend()
         }
@@ -58,14 +64,14 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
                 backendScriptURL: backendScriptURL,
                 applyPayload: { [weak self] payload in self?.apply(payload) },
                 resetGameState: { [weak self] in self?.resetGameState() },
-                log: { _ in },
+                log: log,
                 onStatusChange: { [weak self] status in
                     self?.backendStatus = status
                 }
             )
             refreshFromHost()
         } catch {
-            backendSession.markUnavailable("无法启动 Reference Fixture 后端：\(error.localizedDescription)")
+            // TrainerBackendSession already projected the typed startup failure.
         }
     }
 

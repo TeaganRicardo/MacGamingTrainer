@@ -50,4 +50,5 @@ def present_runtime_error(command, error):
         '游戏内操作失败，请查看日志。',
     )
     logging.warning('Hades Lua error command=%s raw=%s', command, raw)
-    return AdapterError(error.code, message)
+    diagnostic = error.diagnostic if isinstance(error.diagnostic, str) and error.diagnostic else raw
+    return AdapterError(error.code, message, diagnostic=diagnostic)

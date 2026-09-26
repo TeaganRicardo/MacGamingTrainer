@@ -7,6 +7,7 @@ struct TrainerBackendStatus: Equatable {
     var protocolCompatible = true
     var busy = false
     var operation = ""
+    var errorCode: String?
     var error = ""
     var notice = ""
 }
@@ -57,7 +58,13 @@ final class TrainerBackendSession {
     ) throws {
         guard !client.isStarted else { return }
         lifecycleID = UUID()
-        let scriptURL = try resolveScriptURL(backendScriptURL)
+        let scriptURL: URL
+        do {
+            scriptURL = try resolveScriptURL(backendScriptURL)
+        } catch {
+            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            throw error
+        }
         configuration = Configuration(
             descriptor: descriptor,
             scriptURL: scriptURL,
@@ -67,7 +74,12 @@ final class TrainerBackendSession {
             onStatusChange: onStatusChange
         )
         automaticRecoveryAttempts = 0
-        try startClient(clearStatus: true, recoveryNotice: nil)
+        do {
+            try startClient(clearStatus: true, recoveryNotice: nil)
+        } catch {
+            publishStartupFailure(error, log: log, onStatusChange: onStatusChange)
+            throw error
+        }
     }
 
     func send(
@@ -103,6 +115,7 @@ final class TrainerBackendSession {
         updateStatus {
             $0.busy = true
             $0.operation = "重启后端"
+            $0.errorCode = nil
             $0.error = ""
             $0.notice = ""
         }
@@ -122,12 +135,25 @@ final class TrainerBackendSession {
         client.stop()
     }
 
-    func markUnavailable(_ message: String) {
-        updateStatus {
-            $0.backendAvailable = false
-            $0.busy = false
-            $0.error = message
-        }
+    private func publishStartupFailure(
+        _ error: Error,
+        log: (String) -> Void,
+        onStatusChange: (TrainerBackendStatus) -> Void
+    ) {
+        let failure = BackendFailure(
+            code: "backend_start_failed",
+            presentation: "无法启动后端，请查看日志。",
+            diagnostic: error.localizedDescription,
+            recoveryPath: nil
+        )
+        var next = status
+        next.backendAvailable = false
+        next.busy = false
+        next.errorCode = failure.code
+        next.error = failure.presentation
+        status = next
+        onStatusChange(next)
+        log("后端启动失败 [\(failure.code)]：\(failure.diagnostic ?? failure.presentation)")
     }
 
     private func resolveScriptURL(_ backendScriptURL: URL?) throws -> URL {
@@ -165,7 +191,8 @@ final class TrainerBackendSession {
                 self?.updateStatus {
                     $0.busy = true
                     $0.operation = title
-                    $0.error = ""
+                    $0.errorCode = nil
+            $0.error = ""
                     if announceSuccess { $0.notice = "" }
                 }
             },
@@ -184,40 +211,55 @@ final class TrainerBackendSession {
                     if reply.announceSuccess { self.updateStatus { $0.notice = "\(reply.operation)完成" } }
                 } else {
                     if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
-                    let message = reply.errorMessage ?? "操作失败，请查看日志。"
-                    self.updateStatus { $0.error = message }
-                    configuration.log("\(reply.operation)失败 [\(reply.errorCode ?? "unknown")]：\(message)")
+                    let failure = reply.failure ?? BackendFailure(
+                        code: "operation_failed",
+                        presentation: "操作失败，请查看日志。",
+                        diagnostic: nil,
+                        recoveryPath: nil
+                    )
+                    self.updateStatus {
+                        $0.errorCode = failure.code
+                        $0.error = failure.presentation
+                    }
+                    let diagnostic = failure.diagnostic ?? failure.presentation
+                    configuration.log("\(reply.operation)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
-            onProtocolMismatch: { [weak self] message in
+            onProtocolMismatch: { [weak self] failure in
                 self?.cancelRecovery()
                 self?.updateStatus {
                     $0.protocolCompatible = false
                     $0.backendAvailable = false
                     $0.busy = false
-                    $0.error = message + " 请使用同一发布包重新构建 App。"
+                    $0.errorCode = failure.code
+                    $0.error = failure.presentation
                 }
-                configuration.log("协议不兼容：\(message)")
+                let diagnostic = failure.diagnostic ?? failure.presentation
+                configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
             },
             onStderr: { clean in configuration.log("BACKEND: \(clean)") },
             onLog: configuration.log,
             onTermination: { [weak self] exitStatus, stderrTail in
                 self?.handleTermination(status: exitStatus, stderrTail: stderrTail)
             },
-            onClientError: { [weak self] message, terminal in
+            onClientError: { [weak self] failure, terminal in
                 guard let self else { return }
+                let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
-                    configuration.log("后端通信终止：\(message)")
+                    configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = true
                         $0.operation = "恢复后端"
+                        $0.errorCode = nil
                         $0.error = ""
                         $0.notice = "后端通信异常，正在自动恢复"
                     }
                 } else {
+                    configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = false
-                        $0.error = message
+                        $0.errorCode = failure.code
+                        $0.error = failure.presentation
                     }
                 }
             }
@@ -226,6 +268,7 @@ final class TrainerBackendSession {
             $0.backendAvailable = true
             $0.busy = false
             $0.operation = ""
+            $0.errorCode = nil
             $0.error = ""
             if let recoveryNotice { $0.notice = recoveryNotice }
         }
@@ -250,12 +293,13 @@ final class TrainerBackendSession {
             $0.busy = willRecover
             $0.operation = willRecover ? "恢复后端" : ""
             if !willRecover && !suppressTerminationError && !mismatch {
-                let suffix = stderrTail.isEmpty ? "" : "\n\n后端输出：\n\(stderrTail)"
-                $0.error = "后端已退出（状态 \(exitStatus)）。游戏内修改可能仍然生效。\(suffix)"
+                $0.errorCode = "backend_terminated"
+                $0.error = "后端已退出。游戏内修改可能仍然生效。"
             }
         }
         configuration.resetGameState()
-        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover)")
+        let terminationDiagnostic = stderrTail.isEmpty ? "none" : stderrTail
+        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover) stderr=\(terminationDiagnostic)")
 
         suppressTerminationError = false
         if willRecover {
@@ -283,7 +327,8 @@ final class TrainerBackendSession {
                         $0.backendAvailable = false
                         $0.busy = false
                         $0.operation = ""
-                        $0.error = "无法恢复后端：\(error.localizedDescription)"
+                        $0.errorCode = "backend_recovery_failed"
+                        $0.error = "无法恢复后端，请查看日志。"
                     }
                 }
             }

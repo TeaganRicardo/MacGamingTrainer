@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 
 class AdapterError(RuntimeError):
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
+    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None):
+        super().__init__(presentation)
         self.code = code
+        self.presentation = presentation
+        self.diagnostic = diagnostic
 
 
 @dataclass(frozen=True)

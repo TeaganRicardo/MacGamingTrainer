@@ -16,9 +16,21 @@ p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.par
 for raw in sys.stdin:
     req=json.loads(raw)
     command=req['command']
+    if command == 'fail':
+        print(json.dumps({
+            'type':'result','id':req['id'],'protocolVersion':6,
+            'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
+            'error': {
+                'code':'fixture_failure',
+                'presentation':'Visible failure',
+                'diagnostic':'developer detail',
+                'recoveryPath':'/tmp/recovery-copy',
+            },
+        }), flush=True)
+        continue
     result = {'snapshots':[{'id':'snap-1'}]} if command == 'core.save.list' else {'connected':True}
     print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':5,
+        'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':5,'gameID':args.game,'ok':True,'result':result,
     }), flush=True)
 '''
@@ -59,7 +71,7 @@ struct Main {
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
             backendGameID: "test",
-            expectedHostProtocolVersion: 5,
+            expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 5
         )
 
@@ -91,6 +103,22 @@ struct Main {
         if events != ["reply", "completion"] { fail("reply/completion order changed: \(events)") }
         if snapshots != 1 { fail("request-specific reply did not receive Core payload") }
         if !applied.isEmpty { fail("Core payload leaked into game applyPayload") }
+
+        var failureReply: BackendReply? = nil
+        var failureDone: Bool? = nil
+        session.send(
+            "fail",
+            operation: "failure",
+            reply: { failureReply = $0 },
+            completion: { failureDone = $0 }
+        )
+        if !waitUntil(1.0, { failureReply != nil && failureDone != nil }) { fail("failure callback did not complete") }
+        if failureDone != false { fail("failure completion unexpectedly succeeded") }
+        guard let failure = failureReply?.failure else { fail("failure value missing") }
+        if failure.code != "fixture_failure" { fail("wrong failure code") }
+        if failure.presentation != "Visible failure" { fail("wrong failure presentation") }
+        if failure.diagnostic != "developer detail" { fail("wrong failure diagnostic") }
+        if failure.recoveryPath != "/tmp/recovery-copy" { fail("wrong recovery path") }
 
         var gameDone = false
         session.send("status", operation: "status", completion: { ok in gameDone = ok })

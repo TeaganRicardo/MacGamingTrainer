@@ -23,7 +23,7 @@ for raw in sys.stdin:
     else:
         name='old'
     print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':5,
+        'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':5,'gameID':args.game,'ok':True,
         'result':{'snapshots':[{
             'id':'snap','name':name,'createdAt':'2026-09-20T15:00:00',
@@ -68,7 +68,7 @@ struct Runner {
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
             backendGameID: "test",
-            expectedHostProtocolVersion: 5,
+            expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 5
         )
         try session.start(

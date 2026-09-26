@@ -67,7 +67,7 @@ try:
     for request, message in cases:
         reply = router.handle(request)
         assert reply["ok"] is False, request["id"]
-        assert reply["error"] == {"code": "invalid_request", "message": message}, request["id"]
+        assert reply["error"] == {"code": "invalid_request", "presentation": message}, request["id"]
 finally:
     logging.disable(logging.NOTSET)
     router.close()

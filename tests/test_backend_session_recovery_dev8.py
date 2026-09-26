@@ -6,6 +6,9 @@ import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+session_source = (ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift').read_text(encoding='utf-8')
+assert '后端已退出（状态 \\(exitStatus)）' not in session_source
+assert '后端退出 status=\\(exitStatus)' in session_source
 SWIFTC = shutil.which('swiftc')
 PYTHON = shutil.which('python3')
 if not SWIFTC or not PYTHON:
@@ -33,7 +36,7 @@ for raw in sys.stdin:
         time.sleep(5)
         continue
     print(json.dumps({
-        'type':'result', 'id':req.get('id',''), 'protocolVersion':5,
+        'type':'result', 'id':req.get('id',''), 'protocolVersion':6,
         'moduleProtocolVersion':5, 'gameID':args.game, 'ok':True,
         'result':{'command':command}
     }), flush=True)
@@ -65,7 +68,7 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected worker path") }
 let worker = args[1]
-let descriptor = GameModuleDescriptor(backendGameID: "test", expectedHostProtocolVersion: 5, expectedModuleProtocolVersion: 5)
+let descriptor = GameModuleDescriptor(backendGameID: "test", expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5)
 let backendProcess = BackendProcess(
     executableURL: URL(fileURLWithPath: ProcessInfo.processInfo.environment["MGT_DEV8_PYTHON"]!),
     argumentsPrefix: ["-u"],
