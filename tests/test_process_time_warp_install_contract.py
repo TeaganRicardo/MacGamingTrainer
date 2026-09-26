@@ -29,6 +29,7 @@ typedef void (*mgt_image_callback)(const struct mach_header *, intptr_t);
 uint32_t _dyld_image_count(void);
 const struct mach_header *_dyld_get_image_header(uint32_t index);
 const char *_dyld_get_image_name(uint32_t index);
+intptr_t _dyld_get_image_vmaddr_slide(uint32_t index);
 void _dyld_register_func_for_add_image(mgt_image_callback callback);
 """,
 }
@@ -70,6 +71,10 @@ const struct mach_header *_dyld_get_image_header(uint32_t index) {
 }
 const char *_dyld_get_image_name(uint32_t index) {
     return index == 0 ? "/fixture/TargetA" : index == 1 ? "/fixture/TargetB" : NULL;
+}
+intptr_t _dyld_get_image_vmaddr_slide(uint32_t index) {
+    (void)index;
+    return 0;
 }
 void _dyld_register_func_for_add_image(mgt_image_callback callback) {
     atomic_fetch_add_explicit(&register_calls, 1, memory_order_relaxed);
@@ -158,6 +163,112 @@ int main(void) {
 }
 """
 
+
+retry_harness = r"""
+#include <stdatomic.h>
+#include <stdio.h>
+#include <string.h>
+#include "ProcessTimeWarp.c"
+
+static _Atomic unsigned timebase_calls;
+static _Atomic unsigned register_calls;
+static _Atomic unsigned selected_rebinds;
+static _Atomic uint64_t ticks = 1000;
+static struct mach_header headers[2];
+static const char *image_paths[2] = {"/fixture/TargetA", "/fixture/TargetB"};
+static int original_marker;
+static mgt_image_callback registered_callback;
+
+kern_return_t mach_timebase_info(mach_timebase_info_data_t *info) {
+    atomic_fetch_add_explicit(&timebase_calls, 1, memory_order_relaxed);
+    info->numer = 1;
+    info->denom = 1;
+    return KERN_SUCCESS;
+}
+
+uint64_t mach_absolute_time(void) {
+    return atomic_fetch_add_explicit(&ticks, 1, memory_order_relaxed);
+}
+uint64_t mach_continuous_time(void) { return mach_absolute_time(); }
+CFTimeInterval CACurrentMediaTime(void) { return 1.0; }
+uint32_t _dyld_image_count(void) { return 2; }
+const struct mach_header *_dyld_get_image_header(uint32_t index) {
+    return index < 2 ? &headers[index] : NULL;
+}
+const char *_dyld_get_image_name(uint32_t index) {
+    return index < 2 ? image_paths[index] : NULL;
+}
+intptr_t _dyld_get_image_vmaddr_slide(uint32_t index) {
+    (void)index;
+    return 0;
+}
+void _dyld_register_func_for_add_image(mgt_image_callback callback) {
+    atomic_fetch_add_explicit(&register_calls, 1, memory_order_relaxed);
+    registered_callback = callback;
+    callback(&headers[0], 0);
+    callback(&headers[1], 0);
+}
+int rebind_symbols_image(void *header, intptr_t slide, struct rebinding bindings[], size_t count) {
+    (void)header;
+    (void)slide;
+    atomic_fetch_add_explicit(&selected_rebinds, 1, memory_order_relaxed);
+    for (size_t i = 0; i < count; ++i) {
+        if (bindings[i].replaced != NULL) *bindings[i].replaced = &original_marker;
+    }
+    return 0;
+}
+
+int main(void) {
+    int first = MGTTimeWarpInstall("Missing", strlen("Missing"), 2.0);
+    if (first != -3) {
+        fprintf(stderr, "expected zero-hook install to fail with -3, got %d\n", first);
+        return 20;
+    }
+    if (MGTTimeWarpSetSpeed(2.0) != -6) {
+        fprintf(stderr, "failed install remained marked installed\n");
+        return 21;
+    }
+
+    image_paths[1] = "/fixture/Missing";
+    registered_callback(&headers[1], 0);
+    if (MGTTimeWarpHookMask() != 0 ||
+            atomic_load_explicit(&selected_rebinds, memory_order_relaxed) != 0) {
+        fprintf(stderr, "failed install left its filter published\n");
+        return 22;
+    }
+    image_paths[1] = "/fixture/TargetB";
+
+    int retry = MGTTimeWarpInstall("TargetA", strlen("TargetA"), 2.0);
+    int same = MGTTimeWarpInstall("TargetA", strlen("TargetA"), 3.0);
+    int mismatch = MGTTimeWarpInstall("TargetB", strlen("TargetB"), 3.0);
+
+    if (retry != 0 || same != 0 || mismatch != -4) {
+        fprintf(stderr, "retry=%d same=%d mismatch=%d\n", retry, same, mismatch);
+        return 23;
+    }
+    if (atomic_load_explicit(&register_calls, memory_order_relaxed) != 1) {
+        fprintf(stderr, "dyld callback registered %u times\n",
+                atomic_load_explicit(&register_calls, memory_order_relaxed));
+        return 24;
+    }
+    if (atomic_load_explicit(&selected_rebinds, memory_order_relaxed) != 1 ||
+            MGTTimeWarpHookMask() == 0) {
+        fprintf(stderr, "retry did not re-scan the corrected loaded image\n");
+        return 25;
+    }
+    if (MGTTimeWarpGetSpeed() != 3.0) {
+        fprintf(stderr, "same-config reinstall did not update speed\n");
+        return 26;
+    }
+    if (atomic_load_explicit(&timebase_calls, memory_order_relaxed) != 2) {
+        fprintf(stderr, "unexpected timebase initialization count: %u\n",
+                atomic_load_explicit(&timebase_calls, memory_order_relaxed));
+        return 27;
+    }
+    return 0;
+}
+"""
+
 with tempfile.TemporaryDirectory(prefix="mgt-time-warp-install-") as td:
     temp = Path(td)
     for relative, content in stubs.items():
@@ -173,5 +284,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-time-warp-install-") as td:
         str(harness_path), "-lm", "-o", str(binary),
     ], check=True)
     subprocess.run([str(binary)], check=True, timeout=10)
+
+    retry_path = temp / "install_retry_harness.c"
+    retry_binary = temp / "install_retry_harness"
+    retry_path.write_text(retry_harness)
+    subprocess.run([
+        "cc", "-std=c11", "-D_DEFAULT_SOURCE", "-pthread", "-Wall", "-Wextra", "-Werror",
+        "-I", str(temp / "stubs"), "-I", str(NATIVE), "-I", str(NATIVE / "vendor/fishhook"),
+        str(retry_path), "-lm", "-o", str(retry_binary),
+    ], check=True)
+    subprocess.run([str(retry_binary)], check=True, timeout=10)
 
 print("process_time_warp_install_contract_ok")
