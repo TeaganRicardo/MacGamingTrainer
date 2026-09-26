@@ -113,7 +113,7 @@ class Hades2Adapter(GameAdapter):
         self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
-        self.state={'connected':False,'pid':None,'version':'1.139672','status':'disconnected','scene':'unknown',
+        self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
                     **desired_defaults,
                     'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
