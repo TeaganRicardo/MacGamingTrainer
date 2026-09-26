@@ -78,8 +78,10 @@ for arch in "${ARCHITECTURES[@]}"; do
     esac
 done
 
-DIST="${ROOT}/dist"
+DIST="${GENERATED_DIR}/dist"
+PUBLISH_DIST="${ROOT}/dist"
 APP="${DIST}/${APP_NAME}.app"
+PUBLISH_APP="${PUBLISH_DIST}/${APP_NAME}.app"
 CONTENTS="${APP}/Contents"
 BACKEND="${CONTENTS}/Resources/Backend"
 LOCALIZATION_ROOT="${ROOT}/Resources/Localization"
@@ -236,6 +238,7 @@ else
     [[ -n "$TIME_WARP_LIPO" ]] || { echo "Universal Time Warp helper requested but lipo is unavailable." >&2; exit 1; }
     "$TIME_WARP_LIPO" -create "${TIME_WARP_ARCH_BINARIES[@]}" -output "$TIME_WARP_DYLIB"
 fi
+"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
 codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
 codesign --verify --strict "$TIME_WARP_DYLIB"
 cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
@@ -297,16 +300,20 @@ if [[ "$REQUIRES_DEBUGGER_ENTITLEMENT" == "1" ]]; then
     fi
 fi
 
-"$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$DIST" >/dev/null
+mkdir -p "$PUBLISH_DIST"
+rm -rf "$PUBLISH_APP"
+cp -RX "$APP" "$PUBLISH_APP"
+codesign --verify --deep --strict "$PUBLISH_APP"
+"$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$PUBLISH_DIST" >/dev/null
 
 cat <<MSG
 Built:
-  $APP
+  $PUBLISH_APP
 Game module:
   $ACTIVE_GAME_ID
 Architectures:
   ${ARCHITECTURES[*]}
 
 Launch with Finder or:
-  open "$APP"
+  open "$PUBLISH_APP"
 MSG

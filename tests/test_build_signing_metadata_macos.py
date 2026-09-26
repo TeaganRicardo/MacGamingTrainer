@@ -59,7 +59,24 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
         value = subprocess.check_output(['xattr', '-px', name, str(copied)], text=True).split()
         subprocess.run(['xattr', '-wx', name, ''.join(value), str(resource)], check=True)
 
+    nested = contents / 'Resources/Backend/core/native/libMetadataTest.dylib'
+    nested.parent.mkdir(parents=True)
+    subprocess.run(
+        ['clang', '-dynamiclib', '-x', 'c', '-', '-o', str(nested)],
+        input='int metadata_test(void) { return 0; }\n', text=True, check=True,
+    )
+    subprocess.run(['xattr', '-w', 'com.apple.FinderInfo', 'F' * 32, str(nested)], check=True)
+    polluted_signing = subprocess.run(
+        ['codesign', '--force', '--sign', '-', '--timestamp=none', str(nested)],
+        capture_output=True, text=True,
+    )
+    assert polluted_signing.returncode != 0, 'nested code signing unexpectedly accepted FinderInfo'
+
     clean_signing_metadata(app, Path(temporary))
+    subprocess.run([
+        'codesign', '--force', '--sign', '-', '--timestamp=none', str(nested),
+    ], check=True)
+    subprocess.run(['codesign', '--verify', '--strict', str(nested)], check=True)
     remaining = set(subprocess.check_output(['xattr', str(resource)], text=True).splitlines())
     assert not (set(attributes) & remaining), remaining
     assert set(attributes) <= set(subprocess.check_output(

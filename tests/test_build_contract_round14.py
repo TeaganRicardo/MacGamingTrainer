@@ -39,6 +39,10 @@ assert 'cp -RX "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
 assert 'Tools/clean_signing_metadata.py' in build
 assert '"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"' in build
 assert build.index('clean_signing_metadata.py') < build.index('codesign --force --sign - --entitlements')
+assert build.index('"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"') < build.index('codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"')
+assert 'DIST="${GENERATED_DIR}/dist"' in build
+assert 'PUBLISH_DIST="${ROOT}/dist"' in build
+assert 'codesign --verify --deep --strict "$PUBLISH_APP"' in build
 assert '"${DIST}/${APP_NAME}.app"' in build
 assert '-typecheck' in build and build.index('-typecheck') < build.index('-O \\')
 clang_compile = build[build.index('\"$CLANG\" '):build.index('TIME_WARP_ARCH_BINARIES+=(\"$helper\")')]
