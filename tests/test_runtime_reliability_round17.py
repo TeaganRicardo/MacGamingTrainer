@@ -36,7 +36,7 @@ for raw in sys.stdin:
         sys.exit(7)
     def reply(reply_id):
         print(json.dumps({
-            'type':'result', 'id':reply_id, 'protocolVersion':6,
+            'type':'result', 'id':reply_id, 'protocolVersion':99 if game == 'mismatch' else 6,
             'moduleProtocolVersion':1, 'gameID':game, 'ok':True,
             'result':{'command':cmd}
         }), flush=True)
@@ -73,7 +73,7 @@ final class Probe {
     let client: BackendClient
     var replies: [String] = []
     var failures: [BackendFailure] = []
-    var mismatches: [String] = []
+    var mismatches: [BackendFailure] = []
     var terminations: [Int32] = []
     var completions: [String: [Bool]] = [:]
 
@@ -90,7 +90,7 @@ final class Probe {
             expectation: BackendProtocolExpectation(gameID: game, hostProtocolVersion: 6, moduleProtocolVersion: 1),
             onRequestStarted: { _, _ in },
             onReply: { [weak self] reply in self?.replies.append(reply.command) },
-            onProtocolMismatch: { [weak self] message in self?.mismatches.append(message) },
+            onProtocolMismatch: { [weak self] failure in self?.mismatches.append(failure) },
             onStderr: { _ in },
             onLog: { _ in },
             onTermination: { [weak self] status, _ in self?.terminations.append(status) },
@@ -131,6 +131,23 @@ do {
     p.send("bad", timeout: 1.0) { result = $0 }
     if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("malformed stdout did not fail") }
     if result != false || !p.failures.contains(where: { $0.code == "backend_protocol_error" }) { fail("malformed stdout semantics wrong") }
+}
+
+// Protocol mismatch has a stable identity and keeps version detail diagnostic-only.
+do {
+    let p = try Probe(python: python, worker: worker, game: "mismatch")
+    var result: Bool? = nil
+    p.send("probe", timeout: 1.0) { result = $0 }
+    if !waitUntil(1.0, { result != nil && !p.mismatches.isEmpty }) { fail("protocol mismatch did not resolve") }
+    if result != false { fail("protocol mismatch completion must fail") }
+    guard let mismatch = p.mismatches.first else { fail("protocol mismatch failure missing") }
+    if mismatch.code != "protocol_mismatch" { fail("protocol mismatch identity changed") }
+    if mismatch.presentation.contains("99") || mismatch.presentation.contains("v6") {
+        fail("protocol version detail leaked into user presentation")
+    }
+    if !(mismatch.diagnostic?.contains("99") ?? false) || !(mismatch.diagnostic?.contains("v6") ?? false) {
+        fail("protocol mismatch diagnostic detail missing")
+    }
 }
 
 // A wrong request ID is ignored; the correct reply can still complete the request.
