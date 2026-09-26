@@ -37,6 +37,10 @@ assert 'Tools/generate_game_binding.py' in build
 assert 'cp -R "$ROOT/Backend/core"' in build
 assert 'cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
 assert '-typecheck' in build and build.index('-typecheck') < build.index('-O \\')
+clang_compile = build[build.index('\"$CLANG\" '):build.index('TIME_WARP_ARCH_BINARIES+=(\"$helper\")')]
+assert '-Wall' in clang_compile
+assert '-Wextra' in clang_compile
+assert '-Werror' not in clang_compile
 for token in ('Hades II','1145350','Supergiant'):
     assert token not in build, token
 

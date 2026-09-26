@@ -189,12 +189,16 @@ mkdir -p "$TIME_WARP_NATIVE_DIR"
 TIME_WARP_ARCH_BINARIES=()
 for arch in "${ARCHITECTURES[@]}"; do
     helper="$GENERATED_DIR/libMGTTimeWarp.$arch.dylib"
+    # Production Process Time Warp + bundled fishhook compile. Keep warnings visible
+    # without making pre-existing/vendor diagnostics a new build-failure gate.
     "$CLANG" \
         -dynamiclib \
         -isysroot "$SDK" \
         -arch "$arch" \
         -mmacosx-version-min="$MIN_MACOS" \
         -std=c11 \
+        -Wall \
+        -Wextra \
         -Os \
         -fvisibility=hidden \
         -I"$TIME_WARP_ROOT/vendor/fishhook" \

@@ -6,8 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which("swiftc")
 if not swiftc:
-    print("hades2_feature_identity_skipped_no_swiftc")
-    raise SystemExit(0)
+    raise SystemExit("swiftc required for Hades II feature identity test")
 
 harness = r'''
 import Foundation

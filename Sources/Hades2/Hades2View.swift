@@ -264,6 +264,8 @@ struct Hades2TrainerView: View {
                 TrainerMappedSlider(
                     value: gameSpeedSliderValue,
                     mapping: gameSpeedMapping,
+                    accessibilityLabel: "游戏速度 / Game Speed",
+                    accessibilityHint: "调整 Hades II 游戏速度；当前速度以倍数显示。Adjust Hades II game speed; the current value is shown as a multiplier.",
                     enabled: model.canEditDesired,
                     onPreviewValue: { gameSpeedPreview = speedNumber($0) }
                 )
