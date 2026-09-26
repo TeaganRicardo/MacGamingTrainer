@@ -80,6 +80,7 @@ DIST="${ROOT}/dist"
 APP="${DIST}/${APP_NAME}.app"
 CONTENTS="${APP}/Contents"
 BACKEND="${CONTENTS}/Resources/Backend"
+LOCALIZATION_ROOT="${ROOT}/Resources/Localization"
 
 if [[ "$REQUIRES_LLDB" == "1" ]]; then
     LLDB="$(xcrun --find lldb 2>/dev/null || true)"
@@ -104,8 +105,26 @@ grep -q "typealias ActiveGameModule = ${FRONTEND_MODULE_TYPE}" "$GENERATED_SWIFT
 }
 
 rm -rf "$APP"
-mkdir -p "${CONTENTS}/MacOS" "$BACKEND"
+mkdir -p "${CONTENTS}/MacOS" "$BACKEND" "${CONTENTS}/Resources"
 cp "$ROOT/Info.plist" "${CONTENTS}/Info.plist"
+for language in en zh-CN; do
+    source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"
+    [[ -f "$source" ]] || { echo "Missing Host localization table: $source" >&2; exit 1; }
+    destination="${CONTENTS}/Resources/${language}.lproj"
+    mkdir -p "$destination"
+    cp "$source" "${destination}/Host.strings"
+done
+"$PYTHON" - "$LOCALIZATION_ROOT" "${CONTENTS}/Resources" <<'PY'
+import sys
+from pathlib import Path
+
+source_root, resources = map(Path, sys.argv[1:])
+for language in ("en", "zh-CN"):
+    source = source_root / f"{language}.lproj/Host.strings"
+    packaged = resources / f"{language}.lproj/Host.strings"
+    if not packaged.is_file() or packaged.read_bytes() != source.read_bytes():
+        raise SystemExit(f"Host localization package mismatch: {packaged}")
+PY
 
 SWIFT_SOURCES=("$ROOT/Sources/App.swift")
 while IFS= read -r file; do SWIFT_SOURCES+=("$file"); done < <(find "$ROOT/Sources/Core" -type f -name '*.swift' | sort)

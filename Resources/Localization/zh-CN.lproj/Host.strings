@@ -1,5 +1,7 @@
 "host.gameLibrary" = "游戏库";
 "host.language" = "语言";
 "host.saveManagement" = "存档管理";
+"host.connectGame" = "连接游戏";
+"host.disconnectGame" = "断开连接";
 "host.connected" = "已连接";
 "host.disconnected" = "未连接";

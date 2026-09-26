@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrainerConnectionStatusCard: View {
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let busy: Bool
     let connected: Bool
     let operationText: String
@@ -29,7 +30,7 @@ struct TrainerConnectionStatusCard: View {
                 .help("按需读取状态，不进行持续调试轮询")
                 .disabled(!backendAvailable || !actionsEnabled)
             if backendAvailable {
-                Button(connected ? "断开连接" : "连接游戏", action: onPrimary)
+                Button(connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"), action: onPrimary)
                     .buttonStyle(.borderedProminent)
                     .disabled(!actionsEnabled)
             } else {

@@ -1,5 +1,7 @@
 "host.gameLibrary" = "Game Library";
 "host.language" = "Language";
 "host.saveManagement" = "Save Management";
+"host.connectGame" = "Connect Game";
+"host.disconnectGame" = "Disconnect";
 "host.connected" = "Connected";
 "host.disconnected" = "Disconnected";

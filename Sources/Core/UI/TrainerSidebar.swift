@@ -29,7 +29,7 @@ struct TrainerSidebar<Actions: View>: View {
             .padding(.top, 14)
 
             VStack(alignment: .leading, spacing: 12) {
-                Text(localization.language == .en ? "Game Library" : "游戏库")
+                Text(localization.localized("host.gameLibrary"))
                     .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 HStack(spacing: 12) {
                     Image(systemName: presentation.sidebarIconSystemName).font(.title2).foregroundStyle(theme.accent)
