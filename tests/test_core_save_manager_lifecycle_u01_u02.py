@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import tempfile
@@ -17,7 +18,8 @@ for raw in sys.stdin:
     req=json.loads(raw)
     command=req.get('command','')
     params=req.get('params',{})
-    result={'snapshots': [], 'pendingRestore': None, 'recoveryPaths': []}
+    recovery=pathlib.Path.home()/'Library/Application Support/MacGamingTrainer/test/transactions/.rollback-fixture'
+    result={'snapshots': [], 'pendingRestore': None, 'recoveryPaths': [str(recovery)]}
     if command == 'core.save.list':
         time.sleep(0.10)
     elif command == 'core.save.backup':
@@ -32,6 +34,7 @@ for raw in sys.stdin:
                 'type':'result','id':req['id'],'protocolVersion':5,
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
                 'error':{'code':'unsafe_storage','message':'后端拒绝显示存档'},
+                'result':{'folder':str(pathlib.Path(__file__).parent)},
             }), flush=True)
             continue
         result['folder']=str(pathlib.Path(__file__).parent)
@@ -70,7 +73,7 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 struct Runner {
     static func main() throws {
         let args = CommandLine.arguments
-        if args.count != 3 { fail("expected python + worker") }
+        if args.count != 4 { fail("expected python + worker + recovery fixture") }
         let process = BackendProcess(
             executableURL: URL(fileURLWithPath: args[1]),
             argumentsPrefix: ["-u"],
@@ -100,6 +103,11 @@ struct Runner {
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         if !model.busy { fail("busy cleared while a concurrent Save request was still pending") }
         if !waitUntil(2.0, { !model.busy }) { fail("concurrent Save requests did not finish") }
+        let recoveryPath = args[3]
+        if model.recoveryPaths != [recoveryPath] { fail("alternate HOME hid a valid recovery copy") }
+        if TrainerSavePathValidator.validatedDirectoryURL(for: recoveryPath)?.path != recoveryPath {
+            fail("alternate HOME rejected a valid directory reveal")
+        }
 
         var trackingDeleteChain = false
         var prematureIdle = false
@@ -256,6 +264,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
     binary = base / "lifecycle"
     worker_path.write_text(textwrap.dedent(worker), encoding="utf-8")
     main_path.write_text(textwrap.dedent(lifecycle_harness), encoding="utf-8")
+    home = base / "effective-home"
+    recovery = home / "Library/Application Support/MacGamingTrainer/test/transactions/.rollback-fixture"
+    recovery.mkdir(parents=True)
+    environment = os.environ.copy()
+    environment["HOME"] = str(home)
     subprocess.run([
         SWIFTC, "-parse-as-library",
         str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
@@ -267,8 +280,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-manager-behavior-") as td:
         str(main_path), "-framework", "AppKit", "-o", str(binary),
     ], check=True, cwd=ROOT)
     proc = subprocess.run(
-        [str(binary), PYTHON, str(worker_path)],
-        cwd=ROOT, text=True, capture_output=True, timeout=12
+        [str(binary), PYTHON, str(worker_path), str(recovery)],
+        cwd=ROOT, env=environment, text=True, capture_output=True, timeout=12
     )
     if proc.returncode != 0:
         print(proc.stdout)

@@ -3,7 +3,10 @@ import Foundation
 enum TrainerSavePathValidator {
     /// Mirrors Backend/core/protocol.py's default Core data root.
     static var trainerDataRoot: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        let home = ProcessInfo.processInfo.environment["HOME"]
+            .flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0, isDirectory: true) : nil }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        return home
             .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
             .standardizedFileURL
     }
