@@ -24,7 +24,7 @@ for raw in sys.stdin:
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':5,
+        'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':5,'gameID':args.game,'ok':True,
         'result':{'connected':True},
     }), flush=True)

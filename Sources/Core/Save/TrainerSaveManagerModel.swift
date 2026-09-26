@@ -181,9 +181,10 @@ final class TrainerSaveManagerModel: ObservableObject {
 
     private func consume(_ reply: BackendReply) {
         guard reply.success else {
-            var message = reply.errorMessage ?? "存档操作失败。"
-            if reply.errorCode == "rollback_failed",
-               let recoveryPath = reply.recoveryPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let failure = reply.failure
+            var message = failure?.presentation ?? "存档操作失败。"
+            if failure?.code == "rollback_failed",
+               let recoveryPath = failure?.recoveryPath?.trimmingCharacters(in: .whitespacesAndNewlines),
                !recoveryPath.isEmpty {
                 message += "\n恢复副本保留在：\(recoveryPath)"
             }

@@ -1,6 +1,6 @@
 {
   "fixtureSchemaVersion": 1,
-  "hostProtocolVersion": 5,
+  "hostProtocolVersion": 6,
   "game": {
     "id": "fixture",
     "displayName": "Fixture Game",
@@ -14,12 +14,12 @@
         "id": "hello-1",
         "type": "result",
         "ok": true,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
         "result": {
           "backendVersion": "__PRODUCT_VERSION__",
-          "hostProtocolVersion": 5,
+          "hostProtocolVersion": 6,
           "game": {"id": "fixture", "displayName": "Fixture Game", "protocolVersion": 7}
         }
       }
@@ -31,7 +31,7 @@
         "id": "echo-1",
         "type": "result",
         "ok": true,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
         "result": {"command": "echo", "params": {"count": 2, "label": "测试"}, "requestId": "echo-1"}
@@ -44,7 +44,7 @@
         "id": "echo-1",
         "type": "result",
         "ok": true,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
         "result": {"command": "echo", "params": {"count": 2, "label": "测试"}, "requestId": "echo-1"}
@@ -57,10 +57,10 @@
         "id": "echo-1",
         "type": "result",
         "ok": false,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
-        "error": {"code": "duplicate_conflict", "message": "同一请求 ID 的内容发生变化。"}
+        "error": {"code": "duplicate_conflict", "presentation": "同一请求 ID 的内容发生变化。"}
       }
     },
     {
@@ -70,10 +70,14 @@
         "id": "fail-1",
         "type": "result",
         "ok": false,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
-        "error": {"code": "fixture_failure", "message": "fixture failure"},
+        "error": {
+          "code": "fixture_failure",
+          "presentation": "Fixture request failed.",
+          "diagnostic": "fixture synthetic diagnostic"
+        },
         "state": {"connected": false, "scene": "fixture"}
       }
     },
@@ -84,10 +88,10 @@
         "id": "invalid-1",
         "type": "result",
         "ok": false,
-        "protocolVersion": 5,
+        "protocolVersion": 6,
         "gameID": "fixture",
         "moduleProtocolVersion": 7,
-        "error": {"code": "invalid_request", "message": "params 必须是对象。"},
+        "error": {"code": "invalid_request", "presentation": "params 必须是对象。"},
         "state": {"connected": false, "scene": "fixture"}
       }
     }

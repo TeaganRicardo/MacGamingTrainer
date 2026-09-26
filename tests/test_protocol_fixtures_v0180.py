@@ -11,7 +11,7 @@ sys.path.insert(0, str(root/'Backend'))
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION, JsonlRequestRouter
 
-fixture_path = root/'ContractFixtures/host_protocol_v5.json'
+fixture_path = root/'ContractFixtures/host_protocol_v6.json'
 fixture = json.loads(fixture_path.read_text(encoding='utf-8'))
 assert fixture['fixtureSchemaVersion'] == 1
 assert fixture['hostProtocolVersion'] == HOST_PROTOCOL_VERSION
@@ -33,7 +33,7 @@ class FixtureAdapter(GameAdapter):
         if command == 'echo':
             return {'command': command, 'params': params, 'requestId': request_id}
         if command == 'fail':
-            raise AdapterError('fixture_failure', 'fixture failure')
+            raise AdapterError('fixture_failure', 'Fixture request failed.', diagnostic='fixture synthetic diagnostic')
         raise ValueError('fixture command unsupported')
 
     def close(self):

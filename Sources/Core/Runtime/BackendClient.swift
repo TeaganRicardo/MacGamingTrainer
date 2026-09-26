@@ -6,6 +6,13 @@ struct BackendProtocolExpectation {
     let moduleProtocolVersion: Int
 }
 
+struct BackendFailure: Equatable {
+    let code: String
+    let presentation: String
+    let diagnostic: String?
+    let recoveryPath: String?
+}
+
 struct BackendReply {
     let requestID: String
     let command: String
@@ -17,9 +24,7 @@ struct BackendReply {
     let success: Bool
     let result: [String: Any]?
     let state: [String: Any]?
-    let errorCode: String?
-    let errorMessage: String?
-    let recoveryPath: String?
+    let failure: BackendFailure?
 }
 
 /// Game-agnostic request lifecycle around BackendProcess. It owns JSONL request
@@ -50,11 +55,11 @@ final class BackendClient {
 
     private var onRequestStarted: ((String, Bool) -> Void)?
     private var onReply: ((BackendReply) -> Void)?
-    private var onProtocolMismatch: ((String) -> Void)?
+    private var onProtocolMismatch: ((BackendFailure) -> Void)?
     private var onStderr: ((String) -> Void)?
     private var onLog: ((String) -> Void)?
     private var onTermination: ((Int32, String) -> Void)?
-    private var onClientError: ((String, Bool) -> Void)?
+    private var onClientError: ((BackendFailure, Bool) -> Void)?
 
     init(process: BackendProcess = BackendProcess(), maxQueueDepth: Int = 64) {
         self.process = process
@@ -71,11 +76,11 @@ final class BackendClient {
         expectation: BackendProtocolExpectation,
         onRequestStarted: @escaping (String, Bool) -> Void,
         onReply: @escaping (BackendReply) -> Void,
-        onProtocolMismatch: @escaping (String) -> Void,
+        onProtocolMismatch: @escaping (BackendFailure) -> Void,
         onStderr: @escaping (String) -> Void,
         onLog: @escaping (String) -> Void,
         onTermination: @escaping (Int32, String) -> Void,
-        onClientError: @escaping (String, Bool) -> Void
+        onClientError: @escaping (BackendFailure, Bool) -> Void
     ) throws {
         guard !process.isStarted else { return }
         self.expectation = expectation
@@ -114,7 +119,12 @@ final class BackendClient {
         completion: ((Bool) -> Void)? = nil
     ) {
         guard process.isRunning && !terminalFailureReported else {
-            onClientError?("后端未运行或正在停止。", true)
+            onClientError?(BackendFailure(
+                code: "backend_unavailable",
+                presentation: "后端未运行或正在停止。",
+                diagnostic: nil,
+                recoveryPath: nil
+            ), true)
             completion?(false)
             return
         }
@@ -153,7 +163,12 @@ final class BackendClient {
             return
         }
         guard queue.count < maxQueueDepth else {
-            onClientError?("后端请求队列已满（上限 \(maxQueueDepth)），已拒绝「\(request.operation)」。", false)
+            onClientError?(BackendFailure(
+                code: "backend_queue_full",
+                presentation: "后端请求队列已满，请稍后重试。",
+                diagnostic: "queueLimit=\(maxQueueDepth) operation=\(request.operation)",
+                recoveryPath: nil
+            ), false)
             request.completion?(false)
             return
         }
@@ -165,7 +180,12 @@ final class BackendClient {
         guard process.isRunning && !terminalFailureReported else {
             terminalFailureReported = true
             let queued = takeQueuedRequests()
-            onClientError?("后端未运行或正在停止。", true)
+            onClientError?(BackendFailure(
+                code: "backend_unavailable",
+                presentation: "后端未运行或正在停止。",
+                diagnostic: nil,
+                recoveryPath: nil
+            ), true)
             request.completion?(false)
             complete(queued, success: false)
             process.stop()
@@ -182,7 +202,12 @@ final class BackendClient {
             cancelCurrentTimeout()
             current = nil
             let queued = takeQueuedRequests()
-            onClientError?("发送失败：\(error.localizedDescription)；为避免未知执行结果，已停止后端。", true)
+            onClientError?(BackendFailure(
+                code: "backend_send_failed",
+                presentation: "发送失败；为避免未知执行结果，已停止后端。",
+                diagnostic: error.localizedDescription,
+                recoveryPath: nil
+            ), true)
             process.stop()
             request.completion?(false)
             complete(queued, success: false)
@@ -224,14 +249,28 @@ final class BackendClient {
             let actualHost = hostVersion.map(String.init) ?? "未知"
             let actualModule = moduleVersion.map(String.init) ?? "未知"
             let actualGame = gameID ?? "未知"
-            onProtocolMismatch?(
-                "Backend 协议不兼容（host 需要 v\(expectation.hostProtocolVersion)，当前 \(actualHost)；module 需要 v\(expectation.moduleProtocolVersion)，当前 \(actualModule)；game=\(actualGame)）。"
-            )
+            onProtocolMismatch?(BackendFailure(
+                code: "protocol_mismatch",
+                presentation: "Backend 协议不兼容，请使用同一发布包重新构建 App。",
+                diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
+                recoveryPath: nil
+            ))
             return
         }
 
         let success = message["ok"] as? Bool ?? false
         let detail = message["error"] as? [String: Any]
+        let failure: BackendFailure?
+        if success {
+            failure = nil
+        } else {
+            failure = BackendFailure(
+                code: detail?["code"] as? String ?? "operation_failed",
+                presentation: detail?["presentation"] as? String ?? "操作失败，请查看日志。",
+                diagnostic: detail?["diagnostic"] as? String,
+                recoveryPath: detail?["recoveryPath"] as? String
+            )
+        }
         let reply = BackendReply(
             requestID: request.id,
             command: request.command,
@@ -243,9 +282,7 @@ final class BackendClient {
             success: success,
             result: message["result"] as? [String: Any],
             state: message["state"] as? [String: Any],
-            errorCode: detail?["code"] as? String,
-            errorMessage: detail?["message"] as? String,
-            recoveryPath: detail?["recoveryPath"] as? String
+            failure: failure
         )
 
         cancelCurrentTimeout()
@@ -278,7 +315,12 @@ final class BackendClient {
         guard !terminalFailureReported, let request = current, request.id == id else { return }
         terminalFailureReported = true
         let outstanding = takeOutstandingRequests()
-        onClientError?("后端请求「\(request.operation)」在 \(String(format: "%.1f", request.timeout)) 秒内未响应。为避免未知执行结果，已停止后端。", true)
+        onClientError?(BackendFailure(
+            code: "backend_timeout",
+            presentation: "后端请求「\(request.operation)」超时；为避免未知执行结果，已停止后端。",
+            diagnostic: "request=\(request.command) id=\(request.id) timeout=\(String(format: "%.1f", request.timeout))s",
+            recoveryPath: nil
+        ), true)
         process.stop()
         complete(outstanding, success: false)
     }
@@ -287,7 +329,12 @@ final class BackendClient {
         guard !terminalFailureReported else { return }
         terminalFailureReported = true
         let outstanding = takeOutstandingRequests()
-        onClientError?("后端通信协议错误：\(message) 已停止后端。", true)
+        onClientError?(BackendFailure(
+            code: "backend_protocol_error",
+            presentation: "后端通信协议错误，已停止后端。",
+            diagnostic: message,
+            recoveryPath: nil
+        ), true)
         process.stop()
         complete(outstanding, success: false)
     }

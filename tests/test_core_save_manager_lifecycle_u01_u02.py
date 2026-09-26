@@ -31,15 +31,15 @@ for raw in sys.stdin:
     elif command == 'core.save.open_folder':
         if params.get('snapshotId') == 'error':
             print(json.dumps({
-                'type':'result','id':req['id'],'protocolVersion':5,
+                'type':'result','id':req['id'],'protocolVersion':6,
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
-                'error':{'code':'unsafe_storage','message':'后端拒绝显示存档'},
+                'error':{'code':'unsafe_storage','presentation':'后端拒绝显示存档'},
                 'result':{'folder':str(pathlib.Path(__file__).parent)},
             }), flush=True)
             continue
         result['folder']=str(pathlib.Path(__file__).parent)
     print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':5,
+        'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':5,'gameID':args.game,'ok':True,'result':result,
     }), flush=True)
 '''
@@ -82,7 +82,7 @@ struct Runner {
         let session = TrainerBackendSession(client: BackendClient(process: process))
         let descriptor = GameModuleDescriptor(
             backendGameID: "test",
-            expectedHostProtocolVersion: 5,
+            expectedHostProtocolVersion: 6,
             expectedModuleProtocolVersion: 5
         )
         var dispatchedDeletes = 0

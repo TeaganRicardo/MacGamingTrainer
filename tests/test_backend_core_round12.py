@@ -48,7 +48,7 @@ class FakeAdapter(GameAdapter):
 
 
 product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShortVersionString']
-assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 6
 assert APP_BACKEND_VERSION == product_version
 assert any(row['id'] == 'hades2' and row['protocolVersion'] == 5 for row in available_games())
 
@@ -59,7 +59,7 @@ context = GameAdapterContext(
 adapter = FakeAdapter(context)
 router = JsonlRequestRouter(adapter)
 hello = router.handle({'id':'hello','command':'hello','params':{}})
-assert hello['ok'] and hello['protocolVersion'] == 5
+assert hello['ok'] and hello['protocolVersion'] == 6
 assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
 assert hello['result']['backendVersion'] == product_version
 reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
@@ -70,13 +70,20 @@ assert router.handle({'id':'a','command':'poke','params':{'x':2}})['error']['cod
 logging.disable(logging.CRITICAL)
 try:
     assert router.handle({'id':'b','command':'fail','params':{}})['error']['code'] == 'invalid_request'
-    assert router.handle({'id':'c','command':'scalar','params':{}})['error']['code'] == 'operation_failed'
+    scalar = router.handle({'id':'c','command':'scalar','params':{}})
+    assert scalar['error']['code'] == 'operation_failed'
+    assert scalar['error']['presentation'] == '操作失败，请查看日志。'
+    assert 'JSON object' in scalar['error']['diagnostic']
     for request_id, command in (('d','nan'),('e','bytes')):
         unsafe = router.handle({'id':request_id,'command':command,'params':{}})
         assert unsafe['ok'] is False and unsafe['error']['code'] == 'operation_failed'
+        assert unsafe['error']['presentation'] == '操作失败，请查看日志。'
+        assert 'non-JSON-safe' in unsafe['error']['diagnostic']
         json.dumps(unsafe, ensure_ascii=False, allow_nan=False)
     bad_state = router.handle({'id':'f','command':'bad-state','params':{}})
     assert bad_state['ok'] is False and 'state' not in bad_state
+    assert bad_state['error']['presentation'] == '操作失败，请查看日志。'
+    assert bad_state['error']['diagnostic'] == 'bad state'
     json.dumps(bad_state, ensure_ascii=False, allow_nan=False)
 finally:
     logging.disable(logging.NOTSET)

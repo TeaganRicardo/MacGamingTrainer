@@ -51,25 +51,33 @@ cases = (
     (
         {"id": "sell-screen-active", "command": "open_sell_traits", "params": {}},
         "已有游戏界面打开，请先关闭当前界面后再打开净化之池。",
+        '[string "MacGamingTrainer"]:3086: Cannot open boon sell screen while another screen is active',
     ),
     (
         {"id": "special-screen-active", "command": "open_special_choice", "params": {"source": "Artemis"}},
         "已有游戏界面打开，请先关闭当前界面后再打开奖励选择界面。",
+        '[string "MacGamingTrainer"]:3131: Cannot open special blessing choice while another screen is active',
     ),
     (
         {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "godMode", "value": True}},
         "游戏内操作失败，请查看日志。",
+        '[string "MacGamingTrainer"]:2999: Feature unavailable: synthetic runtime failure',
     ),
 )
 
 logging.disable(logging.CRITICAL)
 try:
-    for request, expected in cases:
+    for request, expected, diagnostic in cases:
         reply = router.handle(request)
         assert reply["ok"] is False, request["id"]
-        assert reply["error"] == {"code": "lua_error", "message": expected}, reply["error"]
-        assert "[string " not in reply["error"]["message"]
-        assert "Cannot open" not in reply["error"]["message"]
+        assert reply["error"] == {
+            "code": "lua_error",
+            "presentation": expected,
+            "diagnostic": diagnostic,
+        }, reply["error"]
+        assert "message" not in reply["error"]
+        assert "[string " not in reply["error"]["presentation"]
+        assert "Cannot open" not in reply["error"]["presentation"]
 finally:
     logging.disable(logging.NOTSET)
     router.close()

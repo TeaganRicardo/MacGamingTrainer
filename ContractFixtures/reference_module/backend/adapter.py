@@ -1,4 +1,4 @@
-from core.adapter import GameAdapter
+from core.adapter import AdapterError, GameAdapter
 
 
 class ReferenceFixtureAdapter(GameAdapter):
@@ -22,6 +22,12 @@ class ReferenceFixtureAdapter(GameAdapter):
         if command == 'disable_all':
             self.enabled = False
             return {'connected': self.connected, 'enabled': False}
+        if command == 'fail':
+            raise AdapterError(
+                'reference_failure',
+                'Reference fixture request failed.',
+                diagnostic='reference fixture diagnostic detail',
+            )
         raise ValueError('unknown reference-fixture command')
 
     def close(self):
