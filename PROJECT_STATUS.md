@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-09-24
+Updated: 2026-09-26
 
 This is the canonical current-development handoff. It records present state only. Stable engineering rules live in `ENGINEERING_INVARIANTS.md`; release/version rules live in `VERSIONING.md`; planned work and sequencing live in planning issue #124; historical audit evidence lives under `docs/audits/`.
 
@@ -9,48 +9,78 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- The mandatory audit freeze is closed. Normal bug-fix and user-selected feature work may proceed.
+- Current main at this handoff: `290fffdb60416ce332942df9bf6fd28f6cfa2dd9`.
 - Hades II resident runtime revision: 49.
 - Hades II desired-state schema: 4.
 - Host protocol: 5. Hades II module protocol: 5.
-- Target reference: Hades II 1.139672 / Steam build 24556151.
-- The target-build Hades II catalog/reference census lives under `docs/reference/hades2/1.139672-24556151/`; the closed consumable, loot, and trait-facing census results are retained there rather than duplicated here.
+- Verified Hades II compatibility target: 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
+- The retained target-build census/reference data remains under `docs/reference/hades2/1.139672-24556151/`. Static compatibility work for 1.143476 confirmed that the currently consumed native terminology identities/values and curated reward/runtime dependencies remain valid; do not silently treat the directory name as the current executable identity.
+- The Hades terminology registry is now an executable governance source for stable term identity, ownership, bilingual presentation, lifecycle, alias targets, provenance, and allowed/forbidden surfaces.
+- Runtime observation is explicit: `observe_runtime()` performs fresh resident status observation with resident synchronization maintenance while suppressing Host adoption/replay/persistence and desired-state projection.
 - Core Save Management remains optional cross-game infrastructure; Hades save codec/schema/edit semantics remain Hades-owned.
 - `ContractFixtures/reference_module` remains the executable proof that a second module does not require Hades-shaped Core APIs.
 - Current product release metadata is owned only by `Info.plist`; do not duplicate its current values in status documentation.
 
-## Verification baseline
+## Recent accepted implementation state
 
-The latest behavior-changing Hades resident source accepted in the real game is the terminology-normalization PR #112 head:
+The 2026-09-26 governance/hardening sequence now present on `main` includes:
 
-`6239a770e9a2e3d39d01e9562a8a6a0817bbd2db`
+- Process Time Warp zero-hook installation can recover to a retryable state without duplicating dyld callback registration or weakening successful-install immutability (#167).
+- The Hades terminology registry carries authoritative governance metadata and validates native bilingual provenance, compatibility alias targets, and surface restrictions (#168).
+- Hades II 1.143476 / Steam build 25481925 is the verified macOS target; executable identity and transport symbol evidence were updated without changing resident Lua (#172).
+- Runtime observation vs Host adoption/replay/persistence semantics are explicit; Diagnostics and live Profile reconciliation consume `observe_runtime()` instead of the former adapter-facing `read_only` execution mode (#181).
 
-It merged as `a394f2b8eb1170a5085d1e3ac05433e9d78df476`; both commits have the same tree `6a50cab32dc7cf36b08c34eddac474efea52c4c8`.
+PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` passed Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run real-game smoke acceptance before merge.
 
-Exact-head automated evidence:
+PR #181 head `6293204733fa1b9bdfb245aaf8d3ed9047ae50f9` passed Linux contracts, module build matrix, and Build 2 macOS before merge.
 
-- Linux contracts `35789142588`: PASS;
-- module build matrix `35789142544`: PASS;
-- Build 2 macOS `35789142529`: macOS contracts, Hades II build, package verification and RC packaging PASS.
+## Resident runtime acceptance
 
-Real Hades II acceptance for resident revision 49 is complete against artifact `10721008543`, digest `sha256:c605bde145f4547611560c52de02647e0237ba01a0fec3b7b6975c817c2bfb1a`.
+The latest behavior-changing Hades resident source accepted in the real game remains resident revision 49 from the terminology-normalization line. The newer compatibility and governance work did not change `Backend/games/hades2/runtime/hades.lua`, so no resident revision bump was required.
 
-Documentation, repository-governance, and build-metadata cleanup may advance `main` after that behavior baseline without changing the resident acceptance status. Always query current remote `main` before new work.
+The previously recorded resident-revision-49 real-game acceptance remains valid for resident behavior. In addition, the 1.143476 / 25481925 compatibility artifact from PR #172 received user-run attach/status and representative feature smoke acceptance on the new game build.
+
+Automated tests are not substitutes for real-game acceptance when a future change modifies resident Lua semantics.
+
+## Architecture/governance state
+
+Completed foundations:
+
+- A01 terminology governance foundation: complete.
+- A02 authoritative terminology registry: complete via #168.
+- A03 Runtime / Protocol Boundary: complete. `GAME_MODULES.md`, the reference fixture, Backend Core contracts, and the module matrix prove Core remains game-agnostic.
+- A04 Runtime Observation / Synchronization Semantics: complete via #181.
+- Profile versioning/migration compatibility: complete via #108 / PR #109.
+- C01 durable feature identity parity: complete via #132 / PR #159.
+
+Current governance frontier:
+
+1. #175 — separate localized user presentation, stable machine error identity, and developer diagnostics.
+2. #131 — complete the Host bilingual foundation.
+3. #176 — migrate Core/shared Host presentation.
+4. #177 — migrate Hades presentation through the terminology registry.
+5. #178 — evidence-driven repository naming governance.
+6. #179 — package/module-resource/artifact naming governance.
+7. #180 — terminology and presentation drift CI.
+
+Per current project direction, ordinary Phase D feature expansion is intentionally held until #180 closes. This is a governance-first sequencing choice, not a repository-wide emergency freeze.
 
 ## Current development gate
 
-There is no mandatory repository-wide audit before ordinary work.
+For every task:
 
-For each task:
-
-1. confirm current `main` HEAD;
-2. create one focused branch/PR;
+1. confirm current remote `main` HEAD;
+2. create one focused branch/PR and serialize overlapping implementation work;
 3. read the owning production files and nearest behavior tests;
 4. preserve the contracts in `ENGINEERING_INVARIANTS.md`;
 5. use RED -> GREEN for demonstrated correctness defects;
-6. run the applicable Linux/module/macOS gates on the final changed SHA.
+6. run the applicable Linux/module/macOS gates on the final changed SHA;
+7. hand the actual PR head to an independent review thread before merge;
+8. use manual user execution for any game launch, in-game test, or visual acceptance requirement.
 
-Hades II Save Editor is not implicitly authorized by lifting the audit freeze. If selected as a product task, its binary mutation design still requires separate explicit design/safety approval.
+Do not stack new implementation on unmerged overlapping PR heads.
+
+Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
 ## Known non-blocking risks
 
@@ -58,7 +88,7 @@ Hades II Save Editor is not implicitly authorized by lifting the audit freeze. I
 - Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
 - Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
 
-These are not feature freezes. Promote them only when new evidence or requirements justify work.
+Promote these only when new evidence or a selected requirement justifies work.
 
 ## Historical evidence
 
