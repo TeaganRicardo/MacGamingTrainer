@@ -11,6 +11,7 @@ final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var notice = ""
 
     private let session: TrainerBackendSession
+    private var activeRequestTokens: Set<UUID> = []
 
     init(session: TrainerBackendSession) {
         self.session = session
@@ -50,10 +51,9 @@ final class TrainerSaveManagerModel: ObservableObject {
     }
 
     func revealRecoveryCopies() {
-        let urls = recoveryPaths
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .map { URL(fileURLWithPath: $0) }
+        let urls = recoveryPaths.compactMap {
+            TrainerSavePathValidator.validatedLocalURL(for: $0)
+        }
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
@@ -66,9 +66,14 @@ final class TrainerSaveManagerModel: ObservableObject {
             params: params,
             operation: id == nil ? "打开存档目录" : "显示存档",
             successNotice: nil
-        ) { reply in
-            guard let path = reply.result?["folder"] as? String else { return }
-            let url = URL(fileURLWithPath: path)
+        ) { [weak self] reply in
+            guard let self else { return }
+            guard reply.success else { return }
+            guard let path = reply.result?["folder"] as? String,
+                  let url = TrainerSavePathValidator.validatedDirectoryURL(for: path) else {
+                self.error = "后端返回的存档目录无效或不安全。"
+                return
+            }
             if id == nil {
                 NSWorkspace.shared.open(url)
             } else {
@@ -109,7 +114,6 @@ final class TrainerSaveManagerModel: ObservableObject {
 
     private func deleteNext(_ ids: [String], deleted: Int) {
         guard let first = ids.first else {
-            busy = false
             notice = deleted == 1 ? "已删除 1 个存档" : "已删除 \(deleted) 个存档"
             return
         }
@@ -138,6 +142,9 @@ final class TrainerSaveManagerModel: ObservableObject {
             onComplete?(false)
             return
         }
+        let requestLifecycleID = session.lifecycleID
+        let token = UUID()
+        activeRequestTokens.insert(token)
         busy = true
         error = ""
         notice = ""
@@ -149,7 +156,9 @@ final class TrainerSaveManagerModel: ObservableObject {
             announceSuccess: false,
             timeout: 15,
             reply: { [weak self] reply in
-                guard let self else { return }
+                guard let self,
+                      self.session.lifecycleID == requestLifecycleID,
+                      self.activeRequestTokens.contains(token) else { return }
                 receivedReply = true
                 self.consume(reply)
                 onReply?(reply)
@@ -158,12 +167,14 @@ final class TrainerSaveManagerModel: ObservableObject {
                 }
             },
             completion: { [weak self] success in
-                guard let self else { return }
-                self.busy = false
+                guard let self,
+                      self.session.lifecycleID == requestLifecycleID,
+                      self.activeRequestTokens.remove(token) != nil else { return }
                 if !success, !receivedReply, self.error.isEmpty {
                     self.error = "存档操作未完成。"
                 }
                 onComplete?(success)
+                self.busy = !self.activeRequestTokens.isEmpty
             }
         )
     }
@@ -184,8 +195,7 @@ final class TrainerSaveManagerModel: ObservableObject {
             snapshots = rows.compactMap(TrainerSaveSnapshot.init(row:))
         }
         recoveryPaths = (result["recoveryPaths"] as? [String] ?? [])
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .compactMap { TrainerSavePathValidator.validatedLocalURL(for: $0)?.path }
         if let pending = result["pendingRestore"] as? [String: Any] {
             pendingRestore = TrainerPendingRestore(row: pending)
         } else {
