@@ -6,6 +6,9 @@ import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+session_source = (ROOT / 'Sources/Core/Runtime/TrainerBackendSession.swift').read_text(encoding='utf-8')
+assert '后端已退出（状态 \\(exitStatus)）' not in session_source
+assert '后端退出 status=\\(exitStatus)' in session_source
 SWIFTC = shutil.which('swiftc')
 PYTHON = shutil.which('python3')
 if not SWIFTC or not PYTHON:
