@@ -27,9 +27,17 @@ from .schema import (
     is_valid_next_room_reward,
 )
 
+# Keep these imports public for established adapter-module consumers. In
+# particular, tests and downstream callers import STAT_RULES from here.
 __all__ = [
-    'AdapterError', 'GameAdapter', 'GameAdapterContext', 'Hades2Adapter',
-    'MULTIPLIERS', 'STAT_RULES', 'TOGGLES', 'TransportError',
+    'MULTIPLIERS',
+    'STAT_RULES',
+    'TOGGLES',
+    'AdapterError',
+    'GameAdapter',
+    'GameAdapterContext',
+    'Hades2Adapter',
+    'TransportError',
 ]
 
 TransportError = AdapterError

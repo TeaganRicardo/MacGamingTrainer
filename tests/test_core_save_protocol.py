@@ -55,6 +55,26 @@ listed = router.handle({'id':'l1','command':'core.save.list','params':{}})
 assert listed['ok'] is True and listed['result']['snapshots'][0]['id'] == snapshot_id
 assert adapter.calls == []
 
+# Invalid inventory rows remain actionable through the public Core Save
+# protocol, not only through the snapshot store helper.
+router.save_service.store._ensure_parent()
+invalid_snapshot = router.save_service.store.snapshots / 'snap-bad'
+invalid_snapshot.mkdir()
+invalid_list = router.handle({'id':'invalid-list','command':'core.save.list','params':{}})
+invalid_row = next(row for row in invalid_list['result']['snapshots'] if row['id'] == 'snap-bad')
+assert invalid_row['valid'] is False
+invalid_folder = router.handle({
+    'id':'invalid-folder','command':'core.save.open_folder','params':{'snapshotId':'snap-bad'},
+})
+assert invalid_folder['ok'] is True
+assert Path(invalid_folder['result']['folder']) == invalid_snapshot.resolve()
+invalid_deleted = router.handle({
+    'id':'invalid-delete','command':'core.save.delete','params':{'snapshotId':'snap-bad'},
+})
+assert invalid_deleted['ok'] is True and invalid_deleted['result']['operation']['deleted'] is True
+assert not invalid_snapshot.exists()
+assert all(row['id'] != 'snap-bad' for row in invalid_deleted['result']['snapshots'])
+
 renamed = router.handle({'id':'r1','command':'core.save.rename','params':{'snapshotId':snapshot_id,'name':'Renamed'}})
 assert renamed['ok'] is True and renamed['result']['operation']['name'] == 'Renamed'
 assert adapter.calls == []
