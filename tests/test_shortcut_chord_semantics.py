@@ -6,8 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 swiftc = shutil.which('swiftc')
 if not swiftc:
-    print('shortcut_chord_semantics_skipped_no_swiftc')
-    raise SystemExit(0)
+    raise SystemExit('swiftc required for shortcut chord semantics test')
 
 harness = r'''
 import Foundation
