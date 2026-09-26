@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, subprocess.check_output(['xcrun','lldb','-P'], text=True).strip())
+sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun','lldb','-P'], text=True, shell=False).strip())
 import lldb
 from core.adapter import AdapterError as TransportError
 
