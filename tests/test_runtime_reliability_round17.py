@@ -93,7 +93,7 @@ final class Probe {
             onStderr: { _ in },
             onLog: { _ in },
             onTermination: { [weak self] status, _ in self?.terminations.append(status) },
-            onClientError: { [weak self] message, _ in self?.errors.append(message) }
+            onClientError: { [weak self] failure, _ in self?.errors.append(failure.presentation) }
         )
     }
 
