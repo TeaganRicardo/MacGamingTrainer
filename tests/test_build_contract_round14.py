@@ -34,8 +34,12 @@ assert 'LSArchitecturePriority' not in base_plist
 assert '-target arm64-apple-macosx14.0' not in build
 assert 'Tools/validate_game_module.py' in build
 assert 'Tools/generate_game_binding.py' in build
-assert 'cp -R "$ROOT/Backend/core"' in build
-assert 'cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
+assert 'cp -RX "$ROOT/Backend/core"' in build
+assert 'cp -RX "$ROOT/Backend/games/$ACTIVE_GAME_ID"' in build
+assert 'Tools/clean_signing_metadata.py' in build
+assert '"$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"' in build
+assert build.index('clean_signing_metadata.py') < build.index('codesign --force --sign - --entitlements')
+assert '"${DIST}/${APP_NAME}.app"' in build
 assert '-typecheck' in build and build.index('-typecheck') < build.index('-O \\')
 clang_compile = build[build.index('\"$CLANG\" '):build.index('TIME_WARP_ARCH_BINARIES+=(\"$helper\")')]
 assert '-Wall' in clang_compile
