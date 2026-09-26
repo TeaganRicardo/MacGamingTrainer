@@ -1,0 +1,99 @@
+{
+  "fixtureSchemaVersion": 1,
+  "hostProtocolVersion": 6,
+  "game": {
+    "id": "fixture",
+    "displayName": "Fixture Game",
+    "moduleProtocolVersion": 7
+  },
+  "steps": [
+    {
+      "name": "hello",
+      "request": {"id": "hello-1", "command": "hello", "params": {}},
+      "reply": {
+        "id": "hello-1",
+        "type": "result",
+        "ok": true,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "result": {
+          "backendVersion": "__PRODUCT_VERSION__",
+          "hostProtocolVersion": 6,
+          "game": {"id": "fixture", "displayName": "Fixture Game", "protocolVersion": 7}
+        }
+      }
+    },
+    {
+      "name": "success",
+      "request": {"id": "echo-1", "command": "echo", "params": {"count": 2, "label": "测试"}},
+      "reply": {
+        "id": "echo-1",
+        "type": "result",
+        "ok": true,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "result": {"command": "echo", "params": {"count": 2, "label": "测试"}, "requestId": "echo-1"}
+      }
+    },
+    {
+      "name": "duplicate-replay",
+      "request": {"id": "echo-1", "command": "echo", "params": {"count": 2, "label": "测试"}},
+      "reply": {
+        "id": "echo-1",
+        "type": "result",
+        "ok": true,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "result": {"command": "echo", "params": {"count": 2, "label": "测试"}, "requestId": "echo-1"}
+      }
+    },
+    {
+      "name": "duplicate-conflict",
+      "request": {"id": "echo-1", "command": "echo", "params": {"count": 3, "label": "测试"}},
+      "reply": {
+        "id": "echo-1",
+        "type": "result",
+        "ok": false,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "error": {"code": "duplicate_conflict", "presentation": "同一请求 ID 的内容发生变化。"}
+      }
+    },
+    {
+      "name": "typed-module-error",
+      "request": {"id": "fail-1", "command": "fail", "params": {}},
+      "reply": {
+        "id": "fail-1",
+        "type": "result",
+        "ok": false,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "error": {
+          "code": "fixture_failure",
+          "presentation": "Fixture request failed.",
+          "diagnostic": "fixture synthetic diagnostic"
+        },
+        "state": {"connected": false, "scene": "fixture"}
+      }
+    },
+    {
+      "name": "invalid-params",
+      "request": {"id": "invalid-1", "command": "echo", "params": []},
+      "reply": {
+        "id": "invalid-1",
+        "type": "result",
+        "ok": false,
+        "protocolVersion": 6,
+        "gameID": "fixture",
+        "moduleProtocolVersion": 7,
+        "error": {"code": "invalid_request", "presentation": "params 必须是对象。"},
+        "state": {"connected": false, "scene": "fixture"}
+      }
+    }
+  ]
+}
