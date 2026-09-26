@@ -36,7 +36,7 @@ for raw in sys.stdin:
         sys.exit(7)
     def reply(reply_id):
         print(json.dumps({
-            'type':'result', 'id':reply_id, 'protocolVersion':5,
+            'type':'result', 'id':reply_id, 'protocolVersion':6,
             'moduleProtocolVersion':1, 'gameID':game, 'ok':True,
             'result':{'command':cmd}
         }), flush=True)
@@ -86,7 +86,7 @@ final class Probe {
         client = BackendClient(process: process, maxQueueDepth: queueDepth)
         try client.start(
             scriptURL: URL(fileURLWithPath: worker),
-            expectation: BackendProtocolExpectation(gameID: game, hostProtocolVersion: 5, moduleProtocolVersion: 1),
+            expectation: BackendProtocolExpectation(gameID: game, hostProtocolVersion: 6, moduleProtocolVersion: 1),
             onRequestStarted: { _, _ in },
             onReply: { [weak self] reply in self?.replies.append(reply.command) },
             onProtocolMismatch: { [weak self] message in self?.errors.append("mismatch:" + message) },
