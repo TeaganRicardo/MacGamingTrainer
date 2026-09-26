@@ -114,15 +114,26 @@ def main(argv=None):
         signal.signal(signal.SIGTERM, interrupt)
         signal.signal(signal.SIGINT, interrupt)
         try:
-            for line in sys.stdin:
+            input_stream = getattr(sys.stdin, 'buffer', sys.stdin)
+            while True:
+                line = input_stream.readline(65537)
+                if not line:
+                    break
+                line_bytes = 0
                 try:
-                    if len(line) > 65536:
+                    line_bytes = len(line.encode('utf-8')) if isinstance(line, str) else len(line)
+                    if line_bytes > 65536:
                         raise ValueError('请求过长。')
                     request = json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError('非有限 JSON 数值：' + value)))
                     reply = router.handle(request)
                 except Exception as error:
                     reply = router.error_reply(None, 'invalid_request', str(error))
                 print(encode_reply(router, reply), flush=True)
+                if line_bytes > 65536:
+                    # Stay in sync with the next JSONL record without holding
+                    # the rest of this untrusted line in memory.
+                    while line and line[-1:] not in ('\n', b'\n'):
+                        line = input_stream.readline(65537)
         except KeyboardInterrupt:
             pass
     finally:

@@ -11,6 +11,7 @@ from core.protocol import APP_BACKEND_VERSION, PROTOCOL_VERSION
 
 from . import localization, preparation
 from .config import GAME_SPEC
+from .operation_budgets import LLDB_DISCOVERY_TIMEOUT_SECONDS, LLDB_PYTHON_TIMEOUT_SECONDS
 from .schema import STAT_RULES
 
 
@@ -47,11 +48,11 @@ def build_diagnostics(adapter):
         names=localization.official_display_names({'WeaponUpgrade'},'zh-CN');add('官方中文文本',bool(names.get('WeaponUpgrade')),names.get('WeaponUpgrade','未解析到 WeaponUpgrade'))
     except Exception as error:add('官方中文文本',False,error)
     try:
-        result=subprocess.run(['/usr/bin/xcrun','--find','lldb'],capture_output=True,text=True,timeout=5);add('LLDB',result.returncode==0,result.stdout.strip() or result.stderr.strip())
+        result=subprocess.run(['/usr/bin/xcrun','--find','lldb'],capture_output=True,text=True,timeout=LLDB_DISCOVERY_TIMEOUT_SECONDS);add('LLDB',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB',False,error)
     try:
         probe='import subprocess,sys; p=subprocess.check_output(["/usr/bin/xcrun","lldb","-P"], text=True).strip(); sys.path.insert(0,p); import lldb; print(lldb.SBDebugger)'
-        result=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=8);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
+        result=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=LLDB_PYTHON_TIMEOUT_SECONDS);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB Python',False,error)
 
     add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
