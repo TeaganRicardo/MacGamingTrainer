@@ -5,9 +5,11 @@ from typing import Any, Mapping
 
 
 class AdapterError(RuntimeError):
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
+    def __init__(self, code: str, presentation: str, *, diagnostic: str | None = None):
+        super().__init__(presentation)
         self.code = code
+        self.presentation = presentation
+        self.diagnostic = diagnostic
 
 
 @dataclass(frozen=True)
