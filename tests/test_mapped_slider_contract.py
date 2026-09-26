@@ -29,6 +29,10 @@ assert "@Environment(\\.trainerTheme)" in component_text
 assert ".fill(theme.accent)" in component_text
 assert "Circle()\n                    .fill(Color.white)" in component_text
 assert "onPreviewValue: ((Double) -> Void)?" in component_text
+assert ".accessibilityLabel(Text(accessibilityLabel))" in component_text
+assert ".accessibilityHint(Text(accessibilityHint))" in component_text
+assert "accessibilityLabel:" in view
+assert "accessibilityHint:" in view
 changed_block = component_text[component_text.index(".onChanged"):component_text.index(".onEnded")]
 ended_block = component_text[component_text.index(".onEnded"):component_text.index(".accessibilityRepresentation")]
 assert "commit(" not in changed_block
