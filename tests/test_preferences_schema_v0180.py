@@ -144,7 +144,7 @@ adapter.state.update({
     'nextRoomReward': None,
 })
 replay_calls = []
-def fake_execute(command, params, replay=False, read_only=False, batch=None):
+def fake_execute(command, params, replay=False, batch=None):
     replay_calls.append((command, dict(params), replay, batch))
     return dict(adapter.state)
 adapter.execute = fake_execute
