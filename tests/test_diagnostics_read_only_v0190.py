@@ -12,6 +12,13 @@ from games.hades2.diagnostics import build_diagnostics
 from games.hades2.preferences import Hades2PreferenceStore
 
 
+# Source-boundary evidence for the real resident contract: status enters the
+# same dispatch path as mutations and synchronize() runs before command routing.
+lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
+dispatch = lua[lua.index('  function M.dispatch(command, params)'):]
+assert dispatch.index('    synchronize()') < dispatch.index('    if command == "status"')
+
+
 class FakeTransport:
     def __init__(self):
         self.pid = 7331
