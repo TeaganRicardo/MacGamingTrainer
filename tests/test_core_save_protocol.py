@@ -104,7 +104,7 @@ finally:
 assert rollback_failed['ok'] is False
 assert rollback_failed['error'] == {
     'code':'rollback_failed',
-    'message':'restore and rollback failed',
+    'presentation':'restore and rollback failed',
     'recoveryPath':str(recovery_path),
 }
 assert adapter.calls == []
@@ -151,7 +151,7 @@ finally:
     logging.disable(logging.NOTSET)
 assert empty_backup['ok'] is False
 assert empty_backup['error']['code'] == 'save_not_found'
-assert 'save' in empty_backup['error']['message'].lower()
+assert 'save' in empty_backup['error']['presentation'].lower()
 
 # Process-query failure is not evidence that the game stopped. Core Save must
 # fail closed before a hotPreferred restore can mutate real save bytes.

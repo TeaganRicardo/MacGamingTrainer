@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     ], check=True, cwd=project, env=env)
     text = generated.read_text()
     assert 'typealias ActiveGameModule = ReferenceFixtureGameModule' in text
-    assert 'expectedHostProtocolVersion: 5' in text
+    assert 'expectedHostProtocolVersion: 6' in text
     assert 'expectedModuleProtocolVersion: 1' in text
     assert 'supportsSaveManagement: false' in text
 
