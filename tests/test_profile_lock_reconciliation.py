@@ -102,7 +102,13 @@ def fake_execute(command, params, replay=False, read_only=False, batch=None, pro
 
 
 adapter.execute = fake_execute
+observations = []
+def observe_runtime():
+    observations.append('runtime')
+    return dict(adapter.state)
+adapter.observe_runtime = observe_runtime
 adapter.load_profile('partial-locks')
+assert observations == ['runtime']
 assert len(batches) == 1
 batch = batches[0]
 
