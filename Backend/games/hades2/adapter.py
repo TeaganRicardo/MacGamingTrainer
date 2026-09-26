@@ -680,26 +680,25 @@ class Hades2Adapter(GameAdapter):
         state intentionally excludes durable desired-state projection.
         """
         return self._execute_runtime(
-            'status',{},host_observation_only=True,project_desired=False,
+            'status',{},host_observation_only=True,
         )
 
     def execute(self,command,params,replay=False,batch=None):
         return self._execute_runtime(
             command,params,replay=replay,batch=batch,
-            host_observation_only=False,project_desired=True,
+            host_observation_only=False,
         )
 
     def _execute_runtime(
         self,command,params,replay=False,batch=None,
-        host_observation_only=False,project_desired=True,
+        host_observation_only=False,
     ):
         # host_observation_only suppresses Host adoption/replay/persistence.
         # Resident status may still perform synchronize() maintenance, so this
         # path is observation-with-maintenance, not a pure runtime snapshot.
         if host_observation_only and command!='status':
             raise ValueError('runtime observation 仅允许 status。')
-        if not project_desired and not (host_observation_only and command=='status'):
-            raise ValueError('仅 runtime observation 可保留未投影的 runtime 状态。')
+        project_desired=not host_observation_only
         teardown=not host_observation_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
         # Lua boundary. If that write is explicitly blocked/failed, still make a
