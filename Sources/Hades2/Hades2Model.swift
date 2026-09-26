@@ -344,6 +344,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activeFeatures = [:]
         dormantFeatures = [:]
         featureSupport = [:]
+        statSupport = [:]
         statAvailable = [:]
         activationGraceWorkItems.values.forEach { $0.cancel() }
         activationGraceWorkItems = [:]
@@ -351,18 +352,46 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         invalidatePendingMutations()
         pendingRunReadySignal = false
         pid = nil
+        version = "等待检测"
+        warning = ""
         runtimeIssue = ""
-        health = nil
-        maxHealth = nil
-        mana = nil
-        maxMana = nil
-        armor = nil
+        presentedActionReceipt = nil
+        // Lock flags and locked values mirror durable desired targets from the
+        // backend preference store; retain those projections across a worker
+        // restart. Unlocked values are observations and are cleared below.
+        // Catalog-backed element/resource rows are runtime snapshots and reset.
+        if !healthLocked {
+            health = nil
+            maxHealth = nil
+        }
+        if !manaLocked {
+            mana = nil
+            maxMana = nil
+        }
+        if !armorLocked { armor = nil }
+        if !moneyLocked { money = nil }
+        if !rerollsLocked { rerolls = nil }
+        if !graspLocked { graspValue = nil }
+        if !dodgeLocked { dodgeValue = nil }
+        if !critLocked { critValue = nil }
+        if !chargeSpeedLocked { chargeSpeedValue = nil }
+        if !moveSpeedLocked { moveSpeedValue = nil }
+        if !sprintSpeedLocked { sprintSpeedValue = nil }
+        if !dashSpeedLocked { dashSpeedValue = nil }
+        if !attackSpeedLocked { attackSpeedValue = nil }
+        if !manaRegenLocked { manaRegenValue = nil }
+        if !enemyDamageLocked { enemyDamageValue = nil }
+        if !enemyHealthLocked { enemyHealthValue = nil }
         spellCharge = nil
         spellChargeCost = nil
-        money = nil
-        rerolls = nil
+        runCount = nil
+        elements = []
         resources = []
         boons = []
+        diagnostics = []
+        diagnosticsPassed = 0
+        diagnosticsTotal = 0
+        notice = ""
         status = "backend_stopped"
     }
 
@@ -406,7 +435,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
-        if let value = patch.warningText { warning = value }
+        if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons { boons = value }
         if let value = patch.statSupport { statSupport = value }
