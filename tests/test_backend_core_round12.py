@@ -48,7 +48,7 @@ class FakeAdapter(GameAdapter):
 
 
 product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShortVersionString']
-assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 5
+assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 6
 assert APP_BACKEND_VERSION == product_version
 assert any(row['id'] == 'hades2' and row['protocolVersion'] == 5 for row in available_games())
 
@@ -59,7 +59,7 @@ context = GameAdapterContext(
 adapter = FakeAdapter(context)
 router = JsonlRequestRouter(adapter)
 hello = router.handle({'id':'hello','command':'hello','params':{}})
-assert hello['ok'] and hello['protocolVersion'] == 5
+assert hello['ok'] and hello['protocolVersion'] == 6
 assert hello['gameID'] == 'fake' and hello['moduleProtocolVersion'] == 7
 assert hello['result']['backendVersion'] == product_version
 reply = router.handle({'id':'a','command':'poke','params':{'x':1}})
