@@ -73,7 +73,7 @@ assert "preferences.get('nextRoomRewardToken') is None" not in load_profile
 assert "'token':self.preferences.get('nextRoomRewardToken')" in adapter
 assert 'next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)' in adapter
 assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)') < adapter.index(
-    "if not read_only and command=='status' and self.preference_dirty and not replay:"
+    "if not host_observation_only and command=='status' and self.preference_dirty and not replay:"
 )
 
 assert runtime_revision(lua) >= 42

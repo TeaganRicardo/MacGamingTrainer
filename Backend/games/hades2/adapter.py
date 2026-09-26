@@ -159,7 +159,7 @@ class Hades2Adapter(GameAdapter):
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         observed_locks=None
         if self.transport.alive() and self.state.get('connected'):
-            self.execute('status',{},read_only=True,project_desired=False)
+            self.observe_runtime()
             observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
@@ -673,14 +673,33 @@ class Hades2Adapter(GameAdapter):
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
         return dict(self.state)
 
-    def execute(self,command,params,replay=False,read_only=False,batch=None,project_desired=True):
-        # read_only suppresses host-side adoption/replay/persistence only. The
-        # current Lua status dispatch still performs its resident synchronize()
-        # maintenance, so this is not yet a strict transport/Lua snapshot API.
-        if read_only and command!='status':raise ValueError('read_only 仅允许 status。')
-        if not project_desired and not (read_only and command=='status'):
-            raise ValueError('仅允许只读 status 保留原始 runtime observation。')
-        teardown=not read_only and command in ('disable_all','cleanup')
+    def observe_runtime(self):
+        """Refresh runtime observation without Host adoption/replay/persistence.
+
+        Resident status may still run synchronize() maintenance. The returned
+        state intentionally excludes durable desired-state projection.
+        """
+        return self._execute_runtime(
+            'status',{},host_observation_only=True,
+        )
+
+    def execute(self,command,params,replay=False,batch=None):
+        return self._execute_runtime(
+            command,params,replay=replay,batch=batch,
+            host_observation_only=False,
+        )
+
+    def _execute_runtime(
+        self,command,params,replay=False,batch=None,
+        host_observation_only=False,
+    ):
+        # host_observation_only suppresses Host adoption/replay/persistence.
+        # Resident status may still perform synchronize() maintenance, so this
+        # path is observation-with-maintenance, not a pure runtime snapshot.
+        if host_observation_only and command!='status':
+            raise ValueError('runtime observation 仅允许 status。')
+        project_desired=not host_observation_only
+        teardown=not host_observation_only and command in ('disable_all','cleanup')
         # Durable intent is reset before any potentially slow debugger attach or
         # Lua boundary. If that write is explicitly blocked/failed, still make a
         # best-effort runtime teardown; report the persistence error afterwards
@@ -740,7 +759,7 @@ class Hades2Adapter(GameAdapter):
                     try:
                         decoded=execute_with_ledger(
                             self.transport,command,code,decode_runtime,
-                            replay=replay,read_only=read_only,
+                            replay=replay,read_only=host_observation_only,
                         )
                         break
                     except TransportError as error:
@@ -766,7 +785,7 @@ class Hades2Adapter(GameAdapter):
                     'LuaAction command=%s requestId=%s outcome=failed raw=%s',
                     last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
                 )
-            if not read_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
+            if not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
             if prior_warnings or catalog_warnings:
@@ -786,14 +805,14 @@ class Hades2Adapter(GameAdapter):
             # disappears. Across a backend restart, require Lua's persisted
             # consumed-token receipt so a command that never reached Lua remains
             # replayable while an already-consumed one-shot cannot resurrect.
-            if not read_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
+            if not host_observation_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
                 self.preferences['nextRoomReward']=None
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
-            if not read_only and command=='status' and self.preference_dirty and not replay:
+            if not host_observation_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
-            if not read_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
+            if not host_observation_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
                     try:
                         self._save_preferences()

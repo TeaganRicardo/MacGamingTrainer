@@ -38,8 +38,8 @@ class FakeAdapter:
         self.refresh_error = refresh_error
         self.calls = []
 
-    def execute(self, command, params, **kwargs):
-        self.calls.append((command, params, kwargs))
+    def observe_runtime(self):
+        self.calls.append("observe_runtime")
         if self.refresh_error is not None:
             raise self.refresh_error
         return self.refresh_result
@@ -69,8 +69,8 @@ def build(adapter, identity):
 def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
     adapter = FakeAdapter(refresh_error=RuntimeError("status refresh failed"))
     result = build(adapter, {
-        "version": "1.139672",
-        "steam_build": "24556151",
+        "version": "143476",
+        "steam_build": "25481925",
         "compatible": True,
         "warnings": [],
     })
@@ -88,16 +88,16 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
     ):
         assert checks[name]["ok"] is False, name
     assert result["state"] == {}
-    assert adapter.calls == [("status", {}, {"read_only": True})]
+    assert adapter.calls == ["observe_runtime"]
 
 
 def test_incompatible_game_identity_fails_check_and_reports_warnings():
     fresh_state = {"connected": False, "pid": None, "status": "not_running"}
     adapter = FakeAdapter(refresh_result=fresh_state)
-    warning = "未经验证的游戏版本：version=143476, build=25481925。"
+    warning = "未经验证的游戏版本：version=199999, build=99999999。"
     result = build(adapter, {
-        "version": "143476",
-        "steam_build": "25481925",
+        "version": "199999",
+        "steam_build": "99999999",
         "compatible": False,
         "warnings": [warning],
     })
