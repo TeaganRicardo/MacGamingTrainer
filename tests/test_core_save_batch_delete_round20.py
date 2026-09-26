@@ -24,7 +24,7 @@ for raw in sys.stdin:
     else:
         result={'snapshots':[],'pendingRestore':None}
     print(json.dumps({
-        'type':'result','id':req['id'],'protocolVersion':5,
+        'type':'result','id':req['id'],'protocolVersion':6,
         'moduleProtocolVersion':5,'gameID':args.game,'ok':True,'result':result,
     }), flush=True)
 '''
@@ -62,7 +62,7 @@ let process = BackendProcess(
 let session = TrainerBackendSession(client: BackendClient(process: process))
 let descriptor = GameModuleDescriptor(
     backendGameID: "test",
-    expectedHostProtocolVersion: 5,
+    expectedHostProtocolVersion: 6,
     expectedModuleProtocolVersion: 5
 )
 try session.start(
