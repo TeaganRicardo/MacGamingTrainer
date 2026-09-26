@@ -49,6 +49,26 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected temporary backend server path") }
 
+let missingSession = TrainerBackendSession()
+var missingLogs: [String] = []
+let missingModel = ReferenceFixtureModel(
+    session: missingSession,
+    backendScriptURL: URL(fileURLWithPath: "/definitely/missing/mgt-backend.py"),
+    log: { missingLogs.append($0) }
+)
+guard waitUntil(1.0, { missingModel.backendStatus.errorCode != nil }) else {
+    fail("missing backend startup failure was not surfaced")
+}
+if missingModel.backendStatus.errorCode != "backend_start_failed" {
+    fail("missing backend startup failure identity changed")
+}
+if missingModel.backendStatus.error.contains("/definitely/missing") {
+    fail("startup diagnostic path leaked into user presentation")
+}
+if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
+    fail("startup diagnostic detail did not reach logging")
+}
+
 let session = TrainerBackendSession()
 var capturedLogs: [String] = []
 let model = ReferenceFixtureModel(
