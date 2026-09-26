@@ -33,7 +33,7 @@ for raw in sys.stdin:
         time.sleep(5)
         continue
     print(json.dumps({
-        'type':'result', 'id':req.get('id',''), 'protocolVersion':5,
+        'type':'result', 'id':req.get('id',''), 'protocolVersion':6,
         'moduleProtocolVersion':5, 'gameID':args.game, 'ok':True,
         'result':{'command':command}
     }), flush=True)
@@ -65,7 +65,7 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected worker path") }
 let worker = args[1]
-let descriptor = GameModuleDescriptor(backendGameID: "test", expectedHostProtocolVersion: 5, expectedModuleProtocolVersion: 5)
+let descriptor = GameModuleDescriptor(backendGameID: "test", expectedHostProtocolVersion: 6, expectedModuleProtocolVersion: 5)
 let backendProcess = BackendProcess(
     executableURL: URL(fileURLWithPath: ProcessInfo.processInfo.environment["MGT_DEV8_PYTHON"]!),
     argumentsPrefix: ["-u"],
