@@ -55,8 +55,8 @@ adapter = Hades2Adapter(transport=transport)
 assert adapter.preference_dirty is True
 preferences_before = json.loads(json.dumps(adapter.preferences))
 
-# A read-only status is allowed to refresh observable state, but it must not
-# replay dirty desired state or persist/capture runtime state.
+# Runtime observation refreshes observable state, but it must not replay
+# dirty desired state or persist/capture runtime state.
 adapter.observe_runtime()
 assert transport.calls == 1
 assert adapter.state['desiredFeatures']['godMode'] is False
@@ -94,8 +94,8 @@ else:
     raise AssertionError('execute still exposes the ambiguous read_only flag')
 assert transport2.calls == 1
 
-# Diagnostics itself must request the read-only path. A small probe isolates
-# this contract from the real platform checks performed by build_diagnostics.
+# Diagnostics itself must request the explicit runtime-observation seam. A
+# small probe isolates this contract from the real platform checks performed by build_diagnostics.
 class AliveTransport:
     def alive(self): return True
 
