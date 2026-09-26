@@ -200,6 +200,43 @@ assert interrupt_pending['indeterminate'] is True
 assert interrupt_service.apply_staged()['indeterminate'] is True
 assert interrupt_service.cancel_staged()['cancelled'] is True
 
+# An interruption while preparing the rollback copy is known to precede save
+# mutation: remove its temporary directory and return the staged marker to pending.
+precopy_saves = base / 'precopy-interrupt-saves'; precopy_saves.mkdir()
+precopy_spec = SaveManagementSpec(
+    roots=(SaveRootSpec('main', str(precopy_saves), ('*.sav',)),), provider=None,
+    hot_backup=False, restore_policy='stoppedOnly', staged_restore=True,
+)
+precopy_service = CoreSaveService('precopy-interrupt', precopy_spec, data, is_running)
+(precopy_saves / 'Profile1.sav').write_bytes(b'precopy-target')
+precopy_target = precopy_service.backup()
+(precopy_saves / 'Profile1.sav').write_bytes(b'precopy-current')
+running = True
+precopy_service.restore(precopy_target['id'], preserve_current=False)
+running = False
+real_copy2 = save_restore_module.shutil.copy2
+def interrupt_rollback_copy(source, destination, *args, **kwargs):
+    if '.rollback-' in str(destination):
+        raise KeyboardInterrupt()
+    return real_copy2(source, destination, *args, **kwargs)
+save_restore_module.shutil.copy2 = interrupt_rollback_copy
+try:
+    try:
+        precopy_service.apply_staged()
+    except KeyboardInterrupt:
+        pass
+    else:
+        raise AssertionError('rollback pre-copy interruption unexpectedly succeeded')
+finally:
+    save_restore_module.shutil.copy2 = real_copy2
+precopy_transactions = precopy_service.store.ensure_storage_root() / 'transactions'
+assert not list(precopy_transactions.glob('.rollback-*'))
+assert precopy_service._staged_path().exists()
+precopy_pending = precopy_service.pending_restore()
+assert precopy_pending['snapshotId'] == precopy_target['id']
+assert precopy_pending['indeterminate'] is False
+assert (precopy_saves / 'Profile1.sav').read_bytes() == b'precopy-current'
+
 # A transaction that explicitly reports rollback_failed has already told Core
 # that real-save state cannot be proven. The claimed staged marker must stay in
 # the indeterminate namespace instead of becoming an ordinary auto-retry.
@@ -403,6 +440,33 @@ assert reloaded.pending_restore() is None
 assert not marker.exists()
 assert len(list(marker.parent.glob('staged-restore.json.corrupt-*'))) == 1
 assert reloaded.cancel_staged()['cancelled'] is False
+
+# Transient marker reads must not consume or quarantine staged bytes.
+read_error_marker = marker.parent / 'staged-restore.json'
+read_error_marker.write_text(
+    '{"snapshotId":"' + stopped_target['id'] + '","preserveCurrent":false,"stagedAt":"test"}',
+    encoding='utf-8',
+)
+read_error_bytes = read_error_marker.read_bytes()
+real_read_text = Path.read_text
+def fail_pending_marker_read(path, *args, **kwargs):
+    if path == read_error_marker:
+        raise PermissionError('simulated temporary marker read failure')
+    return real_read_text(path, *args, **kwargs)
+Path.read_text = fail_pending_marker_read
+try:
+    try:
+        reloaded.pending_restore()
+    except PermissionError:
+        pass
+    else:
+        raise AssertionError('temporary marker read failure was swallowed')
+finally:
+    Path.read_text = real_read_text
+assert read_error_marker.exists()
+assert read_error_marker.read_bytes() == read_error_bytes
+assert len(list(marker.parent.glob('staged-restore.json.corrupt-*'))) == 1
+read_error_marker.unlink()
 
 # A pending target cannot be deleted until staging is cancelled.
 (saves / 'Profile1.sav').write_bytes(b'delete-target')
