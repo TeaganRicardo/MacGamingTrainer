@@ -118,10 +118,21 @@ enum Hades2Request {
             return 12.0
         case .launch:
             return 10.0
-        case .prepare, .restore:
-            return 30.0
-        case .diagnostics, .exportDiagnostics:
-            return 15.0
+        case .prepare:
+            // Longest prepare branch has 16 bounded commands plus compatibility
+            // and process scans. Keep this above the explicit 515 s budget.
+            return 560.0
+        case .restore:
+            // Longest restore branch has 6 bounded commands plus compatibility
+            // and process scans. Keep this above the explicit 215 s budget.
+            return 240.0
+        case .diagnostics:
+            // Includes compatibility and up to two status boundaries during
+            // runtime recovery, plus LLDB probes; explicit budget is 65 s.
+            return 70.0
+        case .exportDiagnostics:
+            // Diagnostics plus the separately bounded Finder reveal; budget is 75 s.
+            return 85.0
         default:
             return 6.0
         }

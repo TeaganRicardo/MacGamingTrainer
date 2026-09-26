@@ -11,6 +11,7 @@ from . import preparation
 from .command_validation import validate_command_params
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
+from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
 from .runtime_error_presentation import present_runtime_error
 
 _RUNTIME_COMMANDS = frozenset((
@@ -79,7 +80,7 @@ class Hades2CommandRouter:
             result=build_diagnostics(adapter)
         elif command=='export_diagnostics':
             result=export_diagnostics(adapter)
-            subprocess.run(['/usr/bin/open','-R',result['diagnosticBundle']],check=True,timeout=10, shell=False)
+            subprocess.run(['/usr/bin/open','-R',result['diagnosticBundle']],check=True,timeout=EXPORT_REVEAL_TIMEOUT_SECONDS,shell=False)
         elif command=='launch':
             subprocess.run(['/usr/bin/open',STEAM_SPEC.launch_url],check=True,timeout=10,shell=False)
             result=adapter.scan()
