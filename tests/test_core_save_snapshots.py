@@ -82,13 +82,58 @@ else:
 deleted = store.delete_snapshot(created['id'])
 assert deleted['deleted'] is True and not snapshot.exists()
 
-for invalid in ('../snap-x', '/tmp/snap-x', 'snapshot-x', 'snap-../../x'):
+# Non-canonical inventory rows remain explicitly revealable/deletable, but
+# only as their own contained snapshots directory.
+store._ensure_parent()
+invalid_folder = store.snapshots / 'snap-bad'
+invalid_folder.mkdir()
+invalid_rows = store.list_snapshots()
+assert len(invalid_rows) == 1 and invalid_rows[0]['id'] == 'snap-bad'
+assert invalid_rows[0]['valid'] is False
+assert Path(store.snapshot_folder('snap-bad')) == invalid_folder.resolve()
+deleted_invalid = store.delete_snapshot('snap-bad')
+assert deleted_invalid['deleted'] is True and not invalid_folder.exists()
+assert not any(row['id'] == 'snap-bad' for row in store.list_snapshots())
+
+# Inventory actions must not admit paths, parent directories, or symlinked
+# snapshot folders, even when their basename resembles an inventory ID.
+for invalid in ('../snap-x', '/tmp/snap-x', 'snapshot-x', 'snap-../../x', 'snapshots'):
+    for action in (store.snapshot_folder, store.delete_snapshot):
+        try:
+            action(invalid)
+        except (ValueError, SaveSnapshotError):
+            pass
+        else:
+            raise AssertionError('unsafe snapshot id accepted: ' + invalid)
+
+outside_folder = base / 'outside-snap'; outside_folder.mkdir()
+nested_link_folder = store.snapshots / 'snap-bad-nested-link'
+nested_link_folder.mkdir()
+(nested_link_folder / 'outside').symlink_to(outside_folder, target_is_directory=True)
+assert any(row['id'] == nested_link_folder.name and not row['valid'] for row in store.list_snapshots())
+store.delete_snapshot(nested_link_folder.name)
+assert not nested_link_folder.exists() and outside_folder.exists()
+
+symlinked_folder = store.snapshots / 'snap-symlink'
+symlinked_folder.symlink_to(outside_folder, target_is_directory=True)
+for action in (store.snapshot_folder, store.delete_snapshot):
     try:
-        store.snapshot_folder(invalid)
+        action('snap-symlink')
     except (ValueError, SaveSnapshotError):
         pass
     else:
-        raise AssertionError('unsafe snapshot id accepted: ' + invalid)
+        raise AssertionError('symlinked inventory folder accepted')
+assert outside_folder.exists()
+symlinked_folder.unlink()
+
+# Canonical IDs with corrupt contents are still inventory rows and may be
+# revealed/deleted, while verified operations continue to reject them.
+corrupt_folder = store.snapshots / 'snap-20260925-120000-deadbeef'
+corrupt_folder.mkdir()
+assert any(row['id'] == corrupt_folder.name and not row['valid'] for row in store.list_snapshots())
+assert Path(store.snapshot_folder(corrupt_folder.name)) == corrupt_folder.resolve()
+store.delete_snapshot(corrupt_folder.name)
+assert not any(row['id'] == corrupt_folder.name for row in store.list_snapshots())
 
 created = store.create_snapshot(rows, hot=False)
 snapshot = Path(created['path'])
