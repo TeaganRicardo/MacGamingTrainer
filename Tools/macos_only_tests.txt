@@ -6,4 +6,5 @@ test_host_localization_behavior.py
 test_shortcut_chord_semantics.py
 test_trainer_log_sink_shared_append.py
 test_hades2_view_state_flow.py
+test_hades2_backend_state_cleanup.py
 test_reference_fixture_session_integration.py

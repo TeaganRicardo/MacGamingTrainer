@@ -61,7 +61,7 @@ struct Hades2StatePatch {
     let rerolls: Hades2FieldPatch<Double>
     let rerollsLocked: Bool?
 
-    let warningText: String?
+    let warningText: Hades2FieldPatch<String>
     let boons: [BoonOption]?
     let statSupport: [String: Bool]?
     let statAvailable: [String: Bool]?
@@ -119,8 +119,13 @@ struct Hades2StatePatch {
         rerolls = Self.numberField(payload, "rerolls")
         rerollsLocked = payload["rerollsLocked"] as? Bool
 
-        if let warnings = payload["warnings"] as? [String] { warningText = warnings.joined(separator: "\n") }
-        else { warningText = payload["warning"] as? String }
+        if let warnings = payload["warnings"] {
+            warningText = .present((warnings as? [String])?.joined(separator: "\n"))
+        } else if let warning = payload["warning"] {
+            warningText = .present(warning as? String)
+        } else {
+            warningText = .absent
+        }
 
         let rewardRows = (payload["rewards"] as? [[String: Any]]) ?? (payload["boons"] as? [[String: Any]])
         boons = rewardRows?.compactMap(Self.decodeBoon)
