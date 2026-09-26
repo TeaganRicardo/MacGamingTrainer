@@ -38,8 +38,8 @@ class FakeAdapter:
         self.refresh_error = refresh_error
         self.calls = []
 
-    def execute(self, command, params, **kwargs):
-        self.calls.append((command, params, kwargs))
+    def observe_runtime(self):
+        self.calls.append("observe_runtime")
         if self.refresh_error is not None:
             raise self.refresh_error
         return self.refresh_result
@@ -88,7 +88,7 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
     ):
         assert checks[name]["ok"] is False, name
     assert result["state"] == {}
-    assert adapter.calls == [("status", {}, {"read_only": True})]
+    assert adapter.calls == ["observe_runtime"]
 
 
 def test_incompatible_game_identity_fails_check_and_reports_warnings():
