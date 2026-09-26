@@ -92,13 +92,13 @@ try:
     transport.raw_result = '{broken'
     try:
         adapter.execute('status', {})
-    except json.JSONDecodeError:
-        pass
+    except AdapterError as error:
+        assert error.code == 'outcome_unknown'
     else:
         raise AssertionError('malformed Lua JSON unexpectedly decoded')
     log = stream.getvalue()
     assert 'LuaBoundary command=status' in log
-    assert 'outcome=JSONDecodeError' in log
+    assert 'outcome=outcome_unknown' in log
     assert 'crossed_transport=yes' in log
 
     # Pre-boundary failures must not be mislabeled as debugger/Lua crossings.

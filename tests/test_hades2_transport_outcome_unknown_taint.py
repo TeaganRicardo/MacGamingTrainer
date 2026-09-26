@@ -166,4 +166,63 @@ else:
 
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 
+# A host decode failure after Lua returned is an unknown outcome, even for
+# status: the read-only flag suppresses host adoption but status may perform
+# resident maintenance. Transport-side failures retain their own semantics.
+import sys as _sys
+_sys.path.insert(0, str(ROOT / 'Backend'))
+from core.adapter import AdapterError
+from games.hades2.boundary_ledger import execute_with_ledger
+
+
+class LedgerFakeTransport:
+    def __init__(self):
+        self.tainted = False
+
+    def execute(self, source):
+        return '{"ok": true'
+
+
+class LedgerFailingTransport:
+    def __init__(self):
+        self.tainted = False
+
+    def execute(self, source):
+        raise RuntimeError('transport failed before returning a result')
+
+
+def json_decode(raw):
+    import json
+    return json.loads(raw)
+
+
+ledger_transport = LedgerFakeTransport()
+try:
+    execute_with_ledger(ledger_transport, 'test', 'return 1', json_decode)
+except AdapterError as error:
+    assert error.code == 'outcome_unknown', error.code
+else:
+    raise AssertionError('decode failure should raise')
+assert ledger_transport.tainted is True, 'decode failure left transport untainted'
+
+read_only_transport = LedgerFakeTransport()
+try:
+    execute_with_ledger(read_only_transport, 'test', 'return 1', json_decode, read_only=True)
+except AdapterError as error:
+    assert error.code == 'outcome_unknown', error.code
+else:
+    raise AssertionError('decode failure should raise')
+assert read_only_transport.tainted is True, 'read_only decode failure left transport reusable'
+
+failing_transport = LedgerFailingTransport()
+try:
+    execute_with_ledger(failing_transport, 'test', 'return 1', json_decode)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('transport failure should raise')
+assert failing_transport.tainted is False, (
+    'transport-side failure was tainted by the ledger; transport owns its own taint semantics'
+)
+
 print('hades2_transport_outcome_unknown_taint_ok')
