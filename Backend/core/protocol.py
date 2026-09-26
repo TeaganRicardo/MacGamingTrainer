@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Host protocol covers only the JSONL envelope and request semantics. Each game
 # module has its own independent protocol/schema version exposed alongside it.
-HOST_PROTOCOL_VERSION = 5
+HOST_PROTOCOL_VERSION = 6
 PROTOCOL_VERSION = HOST_PROTOCOL_VERSION  # compatibility alias for older module code
 
 
