@@ -5,6 +5,8 @@ import Foundation
 /// utility queue avoids reopening and seeking the log file for every backend
 /// request while preserving line ordering across game modules.
 final class TrainerLogSink {
+    static let maximumFileSize = 1_048_576
+
     let url: URL
 
     private let queue = DispatchQueue(label: "com.gao.macgamingtrainer.log", qos: .utility)
@@ -42,10 +44,26 @@ final class TrainerLogSink {
         queue.async { [weak self] in
             guard let self else { return }
             do {
-                let handle = try self.ensureHandle()
                 let text = "\(self.formatter.string(from: Date())) \(source) \(line)\n"
                 if let data = text.data(using: .utf8) {
-                    try handle.write(contentsOf: data)
+                    let writeLimit = Self.maximumFileSize - 1
+                    var bytesToWrite = data
+                    if data.count > writeLimit {
+                        var start = data.count - writeLimit
+                        while start < data.count && (data[start] & 0xC0) == 0x80 {
+                            start += 1
+                        }
+                        bytesToWrite = Data(data[start...])
+                    }
+                    var handle = try self.ensureHandle()
+                    let fileAttributes = try? FileManager.default.attributesOfItem(atPath: self.url.path)
+                    let externalFileSize = (fileAttributes?[.size] as? NSNumber)?.uint64Value ?? handle.offsetInFile
+                    let currentFileSize = max(handle.offsetInFile, externalFileSize)
+                    if currentFileSize + UInt64(bytesToWrite.count) > UInt64(Self.maximumFileSize) {
+                        try self.rotateLogs(closing: handle)
+                        handle = try self.ensureHandle()
+                    }
+                    try handle.write(contentsOf: bytesToWrite)
                 }
             } catch {
                 // Logging must never take down the trainer or interfere with a
@@ -56,6 +74,25 @@ final class TrainerLogSink {
 
     func flush() {
         queue.sync { try? handle?.synchronize() }
+    }
+
+    private func rotateLogs(closing oldHandle: FileHandle) throws {
+        try oldHandle.synchronize()
+        try oldHandle.close()
+        handle = nil
+
+        for index in stride(from: 3, through: 1, by: -1) {
+            let source = index == 1 ? url : url.appendingPathExtension("\(index - 1)")
+            let destination = url.appendingPathExtension("\(index)")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            if FileManager.default.fileExists(atPath: source.path) {
+                try FileManager.default.moveItem(at: source, to: destination)
+            }
+        }
+        _ = FileManager.default.createFile(atPath: url.path, contents: nil)
+        handle = try ensureHandle()
     }
 
     private func ensureHandle() throws -> FileHandle {
