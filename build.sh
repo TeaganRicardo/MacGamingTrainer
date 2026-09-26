@@ -111,13 +111,13 @@ grep -q "typealias ActiveGameModule = ${FRONTEND_MODULE_TYPE}" "$GENERATED_SWIFT
 
 rm -rf "$APP"
 mkdir -p "${CONTENTS}/MacOS" "$BACKEND" "${CONTENTS}/Resources"
-cp -X "$ROOT/Info.plist" "${CONTENTS}/Info.plist"
+cp "$ROOT/Info.plist" "${CONTENTS}/Info.plist"
 for language in en zh-CN; do
     source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"
     [[ -f "$source" ]] || { echo "Missing Host localization table: $source" >&2; exit 1; }
     destination="${CONTENTS}/Resources/${language}.lproj"
     mkdir -p "$destination"
-    cp -X "$source" "${destination}/Host.strings"
+    cp "$source" "${destination}/Host.strings"
 done
 "$PYTHON" - "$LOCALIZATION_ROOT" "${CONTENTS}/Resources" <<'PY'
 import sys
@@ -168,21 +168,21 @@ for arch in "${ARCHITECTURES[@]}"; do
 done
 
 if [[ ${#ARCH_BINARIES[@]} -eq 1 ]]; then
-    cp -X "${ARCH_BINARIES[0]}" "${CONTENTS}/MacOS/${EXECUTABLE}"
+    cp "${ARCH_BINARIES[0]}" "${CONTENTS}/MacOS/${EXECUTABLE}"
 else
     LIPO="$(xcrun --find lipo 2>/dev/null || true)"
     [[ -n "$LIPO" ]] || { echo "Universal build requested but lipo is unavailable." >&2; exit 1; }
     "$LIPO" -create "${ARCH_BINARIES[@]}" -output "${CONTENTS}/MacOS/${EXECUTABLE}"
 fi
 
-# Package generic backend core + only the selected game module using cp -X.
-# This prevents FinderInfo/ResourceFork from entering the staging tree.
-cp -RX "$ROOT/Backend/core" "$BACKEND/core"
+# Package generic backend core + only the selected game module. Preserve
+# permitted xattrs; clean only FinderInfo/ResourceFork before signing.
+cp -R "$ROOT/Backend/core" "$BACKEND/core"
 mkdir -p "$BACKEND/games"
-cp -X "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
-cp -RX "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
+cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
+cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
 "$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources" <<'PY'
-import json, shutil, sys
+import json, subprocess, sys
 from pathlib import Path
 manifest_path, root, resources = map(Path, sys.argv[1:])
 root = root.resolve()
@@ -196,7 +196,7 @@ for item in manifest.get('appResources', []):
     if resources not in destination.parents:
         raise SystemExit(f"App resource destination escapes Contents/Resources: {item['destination']}")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, destination)
+    subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
     if not destination.is_file():
         raise SystemExit(f"App resource was not packaged: {item['destination']}")
 PY
@@ -233,7 +233,7 @@ for arch in "${ARCHITECTURES[@]}"; do
     TIME_WARP_ARCH_BINARIES+=("$helper")
 done
 if [[ ${#TIME_WARP_ARCH_BINARIES[@]} -eq 1 ]]; then
-    cp -X "${TIME_WARP_ARCH_BINARIES[0]}" "$TIME_WARP_DYLIB"
+    cp "${TIME_WARP_ARCH_BINARIES[0]}" "$TIME_WARP_DYLIB"
 else
     TIME_WARP_LIPO="$(xcrun --find lipo 2>/dev/null || true)"
     [[ -n "$TIME_WARP_LIPO" ]] || { echo "Universal Time Warp helper requested but lipo is unavailable." >&2; exit 1; }
@@ -249,7 +249,7 @@ printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
 
 HAS_ICON=0
 if [[ -f "$ROOT/AppIcon.icns" ]]; then
-    cp -X "$ROOT/AppIcon.icns" "${CONTENTS}/Resources/AppIcon.icns"
+    cp "$ROOT/AppIcon.icns" "${CONTENTS}/Resources/AppIcon.icns"
     HAS_ICON=1
 fi
 
@@ -303,9 +303,7 @@ fi
 
 mkdir -p "$PUBLISH_DIST"
 [[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
-rm -rf "$PUBLISH_APP"
-cp -R "$APP" "$PUBLISH_APP"
-codesign --verify --deep --strict "$PUBLISH_APP"
+"$PYTHON" "$ROOT/Tools/publish_module_build.py" "$APP" "$PUBLISH_DIST" "$APP_NAME"
 "$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$PUBLISH_DIST" >/dev/null
 
 cat <<MSG

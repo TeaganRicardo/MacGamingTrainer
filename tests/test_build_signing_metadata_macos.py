@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / 'Tools'
 sys.path.insert(0, str(TOOLS))
 from clean_signing_metadata import CLEANUP_XATTRS, clean_signing_metadata
+from publish_module_build import publish_app
 
 if sys.platform != 'darwin':
     print('SKIP build_signing_metadata: real macOS xattrs/codesign required')
@@ -52,13 +53,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
         provenance_set = False
         print(f'SKIP setting com.apple.provenance on this host: {error}')
 
-    copied = Path(temporary) / 'staging/data.txt'
-    copied.parent.mkdir()
-    subprocess.run(['cp', '-R', str(source), str(copied)], check=True)
-    resource.write_bytes(copied.read_bytes())
-    for name in subprocess.check_output(['xattr', str(copied)], text=True).splitlines():
-        value = subprocess.check_output(['xattr', '-px', name, str(copied)], text=True).split()
-        subprocess.run(['xattr', '-wx', name, ''.join(value), str(resource)], check=True)
+    subprocess.run(['cp', '-R', str(source), str(resource)], check=True)
 
     nested = contents / 'Resources/Backend/core/native/libMetadataTest.dylib'
     nested.parent.mkdir(parents=True)
@@ -97,9 +92,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
         'codesign', '--verify', '--deep', '--strict', str(app),
     ], check=True)
 
-    published = Path(temporary) / 'published' / app.name
-    published.parent.mkdir()
-    subprocess.run(['cp', '-R', str(app), str(published)], check=True)
+    published = publish_app(app, Path(temporary) / 'published', 'Metadata Test')
     published_resource = published / resource.relative_to(app)
     published_attributes = set(subprocess.check_output(
         ['xattr', str(published_resource)], text=True

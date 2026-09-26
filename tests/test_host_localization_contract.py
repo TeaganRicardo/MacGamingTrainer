@@ -11,7 +11,7 @@ for language in ("zh-CN", "en"):
     source = ROOT / f"Resources/Localization/{language}.lproj/Host.strings"
     assert source.is_file(), f"missing source localization table: {source}"
 assert 'source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"' in build
-assert 'cp -X "$source" "${destination}/Host.strings"' in build
+assert 'cp "$source" "${destination}/Host.strings"' in build
 assert 'packaged.read_bytes() != source.read_bytes()' in build, "build must verify packaged tables match sources"
 
 assert "Bundle.standard" in localization and "url(forResource: language.rawValue, withExtension: \"lproj\")" in localization, "lookup must load the selected table from Bundle.standard"
