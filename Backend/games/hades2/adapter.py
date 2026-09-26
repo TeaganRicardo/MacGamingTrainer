@@ -673,6 +673,14 @@ class Hades2Adapter(GameAdapter):
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
         return dict(self.state)
 
+    def observe_runtime(self):
+        """Refresh runtime observation without Host adoption/replay/persistence.
+
+        Resident status may still run synchronize() maintenance. The returned
+        state intentionally excludes durable desired-state projection.
+        """
+        return self.execute('status',{},read_only=True,project_desired=False)
+
     def execute(self,command,params,replay=False,read_only=False,batch=None,project_desired=True):
         # read_only suppresses host-side adoption/replay/persistence only. The
         # current Lua status dispatch still performs its resident synchronize()
