@@ -1,3 +1,5 @@
+import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -39,5 +41,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-scope-') as temporary:
         else:
             raise AssertionError(f'cleanup accepted a non-staged app: {target}')
     assert source.read_text() == 'do not modify this source'
+
+build = (TOOLS.parent / 'build.sh').read_text(encoding='utf-8')
+publish_guard = next(
+    line for line in build.splitlines() if line.startswith('[[ ! -L "$PUBLISH_DIST" ]]')
+)
+with tempfile.TemporaryDirectory(prefix='mgt-publish-symlink-') as temporary:
+    root = Path(temporary)
+    outside = root / 'outside'
+    saved_app = outside / 'Existing.app'
+    saved_app.mkdir(parents=True)
+    sentinel = saved_app / 'keep.txt'
+    sentinel.write_text('preserved')
+    link = root / 'dist'
+    link.symlink_to(outside, target_is_directory=True)
+    result = subprocess.run(
+        ['bash', '-c', publish_guard],
+        env={**os.environ, 'PUBLISH_DIST': str(link)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    assert sentinel.read_text() == 'preserved'
 
 print('build_signing_scope_ok')

@@ -37,6 +37,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
     }
     for name, value in attributes.items():
         subprocess.run(['xattr', '-w', name, value, str(source)], check=True)
+    subprocess.run(['xattr', '-w', 'com.example.MGTAllowed', 'preserved', str(source)], check=True)
 
     # Provenance is allowed build provenance, not Finder attached data. Some
     # macOS versions reserve it to the system, so retain it if settable and
@@ -79,6 +80,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
     subprocess.run(['codesign', '--verify', '--strict', str(nested)], check=True)
     remaining = set(subprocess.check_output(['xattr', str(resource)], text=True).splitlines())
     assert not (set(attributes) & remaining), remaining
+    assert 'com.example.MGTAllowed' in remaining
     assert set(attributes) <= set(subprocess.check_output(
         ['xattr', str(source)], text=True
     ).splitlines())
@@ -94,5 +96,20 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
     subprocess.run([
         'codesign', '--verify', '--deep', '--strict', str(app),
     ], check=True)
+
+    published = Path(temporary) / 'published' / app.name
+    published.parent.mkdir()
+    subprocess.run(['cp', '-R', str(app), str(published)], check=True)
+    published_resource = published / resource.relative_to(app)
+    published_attributes = set(subprocess.check_output(
+        ['xattr', str(published_resource)], text=True
+    ).splitlines())
+    assert not (set(attributes) & published_attributes)
+    assert 'com.example.MGTAllowed' in published_attributes
+    if provenance_set:
+        assert subprocess.check_output(
+            ['xattr', '-px', 'com.apple.provenance', str(published_resource)], text=True
+        ).strip().split()[0:2] == ['01', '02']
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(published)], check=True)
 
 print('build_signing_metadata_ok')

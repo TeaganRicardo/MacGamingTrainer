@@ -82,6 +82,7 @@ DIST="${GENERATED_DIR}/dist"
 PUBLISH_DIST="${ROOT}/dist"
 APP="${DIST}/${APP_NAME}.app"
 PUBLISH_APP="${PUBLISH_DIST}/${APP_NAME}.app"
+[[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
 CONTENTS="${APP}/Contents"
 BACKEND="${CONTENTS}/Resources/Backend"
 LOCALIZATION_ROOT="${ROOT}/Resources/Localization"
@@ -301,8 +302,9 @@ if [[ "$REQUIRES_DEBUGGER_ENTITLEMENT" == "1" ]]; then
 fi
 
 mkdir -p "$PUBLISH_DIST"
+[[ ! -L "$PUBLISH_DIST" ]] || { echo "Build output dist must not be a symlink: $PUBLISH_DIST" >&2; exit 1; }
 rm -rf "$PUBLISH_APP"
-cp -RX "$APP" "$PUBLISH_APP"
+cp -R "$APP" "$PUBLISH_APP"
 codesign --verify --deep --strict "$PUBLISH_APP"
 "$PYTHON" "$ROOT/Tools/verify_module_build.py" "$ACTIVE_GAME_ID" --dist-dir "$PUBLISH_DIST" >/dev/null
 
