@@ -47,7 +47,7 @@ Automated tests are not substitutes for real-game acceptance when a future chang
 
 ## Architecture/governance state
 
-Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), and Profile versioning/migration compatibility (#108 / PR #109).
+Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
 The current active governance package is #131, completing the Host bilingual localization foundation. Subsequent governance sequencing remains owned by planning issue #124. Under the current user direction, ordinary Phase D feature expansion remains held until the final governance lock #180 closes; this is a sequencing choice, not a repository-wide emergency freeze.
 
