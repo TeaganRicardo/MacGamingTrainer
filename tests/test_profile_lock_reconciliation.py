@@ -147,6 +147,7 @@ def fake_no_lock_execute(command, params, replay=False, batch=None):
 
 
 no_lock_adapter.execute = fake_no_lock_execute
+no_lock_adapter.observe_runtime = lambda: dict(no_lock_adapter.state)
 no_lock_adapter.load_profile('no-locks')
 assert len(no_lock_batches) == 1
 empty_batch = no_lock_batches[0]
