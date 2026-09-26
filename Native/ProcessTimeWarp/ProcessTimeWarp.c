@@ -32,10 +32,14 @@ static _Atomic uint32_t hook_mask = 0;
 static atomic_flag speed_lock = ATOMIC_FLAG_INIT;
 static _Atomic bool installed = false;
 static _Atomic bool callback_registered = false;
+static _Atomic bool image_filter_published = false;
+static atomic_flag install_lock = ATOMIC_FLAG_INIT;
 
 static mach_timebase_info_data_t timebase = {0, 0};
-static char image_filter[MGT_IMAGE_FILTER_CAPACITY];
-static size_t image_filter_length = 0;
+static struct {
+    char names[MGT_IMAGE_FILTER_CAPACITY];
+    size_t length;
+} image_filter;
 
 static void *original_mach_absolute = NULL;
 static void *original_mach_continuous = NULL;
@@ -48,6 +52,14 @@ static void lock_speed(void) {
 
 static void unlock_speed(void) {
     atomic_flag_clear_explicit(&speed_lock, memory_order_release);
+}
+
+static void lock_install(void) {
+    while (atomic_flag_test_and_set_explicit(&install_lock, memory_order_acquire)) {}
+}
+
+static void unlock_install(void) {
+    atomic_flag_clear_explicit(&install_lock, memory_order_release);
 }
 
 static bool valid_speed(double speed) {
@@ -157,9 +169,10 @@ static const char *image_basename(const char *path) {
 }
 
 static bool selected_image_name(const char *path) {
+    if (!atomic_load_explicit(&image_filter_published, memory_order_acquire)) return false;
     const char *name = image_basename(path);
-    const char *cursor = image_filter;
-    const char *limit = image_filter + image_filter_length;
+    const char *cursor = image_filter.names;
+    const char *limit = image_filter.names + image_filter.length;
     while (cursor < limit) {
         const char *newline = memchr(cursor, '\n', (size_t)(limit - cursor));
         const char *end = newline ? newline : limit;
@@ -216,29 +229,47 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
     if (image_names == NULL || length == 0 || length >= MGT_IMAGE_FILTER_CAPACITY) return -2;
     if (!valid_speed(speed)) return -1;
 
+    lock_install();
     if (atomic_load_explicit(&installed, memory_order_acquire)) {
-        if (length != image_filter_length || memcmp(image_names, image_filter, length) != 0) return -4;
-        if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) return -3;
-        return set_speed_continuous(speed);
+        int result;
+        if (length != image_filter.length || memcmp(image_names, image_filter.names, length) != 0) {
+            result = -4;
+        } else if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
+            result = -3;
+        } else {
+            result = set_speed_continuous(speed);
+        }
+        unlock_install();
+        return result;
     }
 
-    memcpy(image_filter, image_names, length);
-    image_filter[length] = '\0';
-    image_filter_length = length;
-    if (mach_timebase_info(&timebase) != KERN_SUCCESS || timebase.numer == 0 || timebase.denom == 0) return -5;
-    if (set_speed_continuous(speed) != 0) return -1;
+    memcpy(image_filter.names, image_names, length);
+    image_filter.names[length] = '\0';
+    image_filter.length = length;
 
+    if (mach_timebase_info(&timebase) != KERN_SUCCESS || timebase.numer == 0 || timebase.denom == 0) {
+        unlock_install();
+        return -5;
+    }
+    if (set_speed_continuous(speed) != 0) {
+        unlock_install();
+        return -1;
+    }
+
+    /* Publish one immutable filter snapshot before dyld can invoke callbacks. */
+    atomic_store_explicit(&image_filter_published, true, memory_order_release);
     atomic_store_explicit(&installed, true, memory_order_release);
     bool was_registered = atomic_exchange_explicit(&callback_registered, true, memory_order_acq_rel);
     if (!was_registered) {
+        /* dyld calls this callback synchronously for loaded images; it must not
+         * acquire install_lock. The immutable filter snapshot is published above. */
         _dyld_register_func_for_add_image(rebind_selected_image);
     }
 
-    if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
-        set_speed_continuous(1.0);
-        return -3;
-    }
-    return 0;
+    int result = atomic_load_explicit(&hook_mask, memory_order_acquire) == 0 ? -3 : 0;
+    if (result == -3) set_speed_continuous(1.0);
+    unlock_install();
+    return result;
 }
 
 MGT_EXPORT int MGTTimeWarpSetSpeed(double speed) {
