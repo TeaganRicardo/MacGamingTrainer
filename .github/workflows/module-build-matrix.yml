@@ -28,6 +28,7 @@ jobs:
       matrix:
         game:
           - reference_fixture
+          - hades2
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +62,11 @@ jobs:
           app="$(find dist -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$app"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
+          if [[ "${{ matrix.game }}" == "hades2" ]]; then
+            test -f "$app/Contents/Resources/ui_terminology.json"
+          else
+            test ! -e "$app/Contents/Resources/ui_terminology.json"
+          fi
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"

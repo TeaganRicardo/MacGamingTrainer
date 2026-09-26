@@ -175,6 +175,25 @@ cp -R "$ROOT/Backend/core" "$BACKEND/core"
 mkdir -p "$BACKEND/games"
 cp "$ROOT/Backend/games/__init__.py" "$BACKEND/games/__init__.py"
 cp -R "$ROOT/Backend/games/$ACTIVE_GAME_ID" "$BACKEND/games/$ACTIVE_GAME_ID"
+"$PYTHON" - "$NORMALIZED_MANIFEST" "$ROOT" "${CONTENTS}/Resources" <<'PY'
+import json, shutil, sys
+from pathlib import Path
+manifest_path, root, resources = map(Path, sys.argv[1:])
+root = root.resolve()
+resources = resources.resolve()
+manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+for item in manifest.get('appResources', []):
+    source = (root / item['source']).resolve()
+    destination = (resources / item['destination']).resolve()
+    if root not in source.parents or not source.is_file():
+        raise SystemExit(f"Invalid/missing app resource source: {item['source']}")
+    if resources not in destination.parents:
+        raise SystemExit(f"App resource destination escapes Contents/Resources: {item['destination']}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    if not destination.is_file():
+        raise SystemExit(f"App resource was not packaged: {item['destination']}")
+PY
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
 TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"

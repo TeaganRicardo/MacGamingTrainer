@@ -1,6 +1,6 @@
 # Hades II reference data
 
-This directory stores versioned research/reference snapshots extracted from an installed Hades II build. It is documentation data only: production code, packaging, tests, and runtime behavior must not depend on it.
+This directory stores versioned research/reference snapshots extracted from an installed Hades II build. The curated `ui_terminology.json` is an intentional exception: Hades II production code consumes it as a bundled app resource, with a source-tree fallback for development. Other reference snapshots, including generated inventories and research ledgers, are documentation data only and must not become production dependencies.
 
 Current snapshot:
 - Hades II 1.139672
@@ -131,7 +131,7 @@ The remaining 12 `stub` rows are structural configuration keys rather than omitt
 
 The 35 repeated IDs are also intentional cross-namespace reuse rather than duplicate entities. Thirty-three names occur once as an `ObjectiveData` objective descriptor and once as an `ObjectiveSetData` objective-set definition; `BaseMetaUpgrade` is separately defined in `MetaUpgradeCardData` and `MetaUpgradeData`; and `DefaultGameStateRequirements` is a configuration key in both the fishing and harvesting views. Consumers must therefore identify progression rows by at least `(table, id)`, not by `id` alone.
 
-The historical extractor that produced this static snapshot is not part of the repository, and production code/tests intentionally do not depend on `docs/reference/**`. This correction is therefore recorded in the versioned snapshot and audit notes rather than introducing a new runtime/test dependency solely to regenerate documentation data.
+The historical extractor that produced this static snapshot is not part of the repository. Production code and tests may consume the curated `ui_terminology.json` as a packaged Hades II resource; the exhaustive snapshot tables and research ledgers remain documentation/reference data, not production dependencies. The `manifest.json` `outputs` keys are paths relative to this snapshot directory, including `generated/` where applicable.
 
 ## Native interaction census completeness check
 
