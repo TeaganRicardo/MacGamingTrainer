@@ -33,6 +33,7 @@ static atomic_flag speed_lock = ATOMIC_FLAG_INIT;
 static _Atomic bool installed = false;
 static _Atomic bool callback_registered = false;
 static _Atomic bool image_filter_published = false;
+static _Atomic unsigned image_filter_readers = 0;
 static atomic_flag install_lock = ATOMIC_FLAG_INIT;
 
 static mach_timebase_info_data_t timebase = {0, 0};
@@ -169,7 +170,6 @@ static const char *image_basename(const char *path) {
 }
 
 static bool selected_image_name(const char *path) {
-    if (!atomic_load_explicit(&image_filter_published, memory_order_acquire)) return false;
     const char *name = image_basename(path);
     const char *cursor = image_filter.names;
     const char *limit = image_filter.names + image_filter.length;
@@ -192,8 +192,17 @@ static const char *path_for_header(const struct mach_header *header) {
 }
 
 static void rebind_selected_image(const struct mach_header *header, intptr_t slide) {
+    atomic_fetch_add_explicit(&image_filter_readers, 1, memory_order_acquire);
+    if (!atomic_load_explicit(&image_filter_published, memory_order_acquire)) {
+        atomic_fetch_sub_explicit(&image_filter_readers, 1, memory_order_release);
+        return;
+    }
+
     const char *path = path_for_header(header);
-    if (!selected_image_name(path)) return;
+    if (!selected_image_name(path)) {
+        atomic_fetch_sub_explicit(&image_filter_readers, 1, memory_order_release);
+        return;
+    }
 
     struct rebinding bindings[] = {
         {"mach_absolute_time", (void *)warped_mach_absolute_time, &original_mach_absolute},
@@ -201,16 +210,25 @@ static void rebind_selected_image(const struct mach_header *header, intptr_t sli
         {"clock_gettime", (void *)warped_clock_gettime, &original_clock_gettime},
         {"CACurrentMediaTime", (void *)warped_ca_current_media_time, &original_ca_media_time},
     };
-    if (rebind_symbols_image((void *)header, slide, bindings, sizeof(bindings) / sizeof(bindings[0])) != 0) {
-        return;
+    if (rebind_symbols_image((void *)header, slide, bindings, sizeof(bindings) / sizeof(bindings[0])) == 0) {
+        uint32_t discovered = 0;
+        if (original_mach_absolute != NULL) discovered |= MGT_HOOK_MACH_ABSOLUTE;
+        if (original_mach_continuous != NULL) discovered |= MGT_HOOK_MACH_CONTINUOUS;
+        if (original_clock_gettime != NULL) discovered |= MGT_HOOK_CLOCK_GETTIME;
+        if (original_ca_media_time != NULL) discovered |= MGT_HOOK_CA_MEDIA_TIME;
+        atomic_fetch_or_explicit(&hook_mask, discovered, memory_order_release);
     }
+    atomic_fetch_sub_explicit(&image_filter_readers, 1, memory_order_release);
+}
 
-    uint32_t discovered = 0;
-    if (original_mach_absolute != NULL) discovered |= MGT_HOOK_MACH_ABSOLUTE;
-    if (original_mach_continuous != NULL) discovered |= MGT_HOOK_MACH_CONTINUOUS;
-    if (original_clock_gettime != NULL) discovered |= MGT_HOOK_CLOCK_GETTIME;
-    if (original_ca_media_time != NULL) discovered |= MGT_HOOK_CA_MEDIA_TIME;
-    atomic_fetch_or_explicit(&hook_mask, discovered, memory_order_release);
+static void rebind_loaded_images(void) {
+    uint32_t count = _dyld_image_count();
+    for (uint32_t index = 0; index < count; index++) {
+        const struct mach_header *header = _dyld_get_image_header(index);
+        if (header != NULL) {
+            rebind_selected_image(header, _dyld_get_image_vmaddr_slide(index));
+        }
+    }
 }
 
 MGT_EXPORT uint32_t MGTTimeWarpABI(void) {
@@ -256,20 +274,35 @@ MGT_EXPORT int MGTTimeWarpInstall(const char *image_names, size_t length, double
         return -1;
     }
 
-    /* Publish one immutable filter snapshot before dyld can invoke callbacks. */
+    /* Publish an immutable filter while callbacks may read it. Failed installs
+     * unpublish and drain readers before allowing a later retry to replace it. */
     atomic_store_explicit(&image_filter_published, true, memory_order_release);
-    atomic_store_explicit(&installed, true, memory_order_release);
     bool was_registered = atomic_exchange_explicit(&callback_registered, true, memory_order_acq_rel);
     if (!was_registered) {
-        /* dyld calls this callback synchronously for loaded images; it must not
-         * acquire install_lock. The immutable filter snapshot is published above. */
+        /* dyld invokes a newly registered callback synchronously for loaded
+         * images. The callback must not acquire install_lock. */
         _dyld_register_func_for_add_image(rebind_selected_image);
+    } else {
+        rebind_loaded_images();
     }
 
-    int result = atomic_load_explicit(&hook_mask, memory_order_acquire) == 0 ? -3 : 0;
-    if (result == -3) set_speed_continuous(1.0);
+    if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
+        atomic_store_explicit(&image_filter_published, false, memory_order_release);
+        while (atomic_load_explicit(&image_filter_readers, memory_order_acquire) != 0) {}
+
+        /* A callback that began before publication was disabled may have bound
+         * a hook while we drained it. Preserve that successful install. */
+        if (atomic_load_explicit(&hook_mask, memory_order_acquire) == 0) {
+            set_speed_continuous(1.0);
+            unlock_install();
+            return -3;
+        }
+        atomic_store_explicit(&image_filter_published, true, memory_order_release);
+    }
+
+    atomic_store_explicit(&installed, true, memory_order_release);
     unlock_install();
-    return result;
+    return 0;
 }
 
 MGT_EXPORT int MGTTimeWarpSetSpeed(double speed) {
