@@ -124,12 +124,15 @@ final class TrainerBackendSession {
         client.stop()
     }
 
-    func markUnavailable(_ message: String) {
+    func markUnavailable(_ failure: BackendFailure) {
         updateStatus {
             $0.backendAvailable = false
             $0.busy = false
-            $0.error = message
+            $0.errorCode = failure.code
+            $0.error = failure.presentation
         }
+        let diagnostic = failure.diagnostic ?? failure.presentation
+        configuration?.log("后端不可用 [\(failure.code)]：\(diagnostic)")
     }
 
     private func resolveScriptURL(_ backendScriptURL: URL?) throws -> URL {
@@ -201,16 +204,17 @@ final class TrainerBackendSession {
                     configuration.log("\(reply.operation)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
-            onProtocolMismatch: { [weak self] message in
+            onProtocolMismatch: { [weak self] failure in
                 self?.cancelRecovery()
                 self?.updateStatus {
                     $0.protocolCompatible = false
                     $0.backendAvailable = false
                     $0.busy = false
-                    $0.errorCode = "protocol_mismatch"
-                    $0.error = message + " 请使用同一发布包重新构建 App。"
+                    $0.errorCode = failure.code
+                    $0.error = failure.presentation
                 }
-                configuration.log("协议不兼容：\(message)")
+                let diagnostic = failure.diagnostic ?? failure.presentation
+                configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
             },
             onStderr: { clean in configuration.log("BACKEND: \(clean)") },
             onLog: configuration.log,
