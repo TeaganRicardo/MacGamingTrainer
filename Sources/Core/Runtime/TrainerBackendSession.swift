@@ -294,7 +294,7 @@ final class TrainerBackendSession {
             $0.operation = willRecover ? "恢复后端" : ""
             if !willRecover && !suppressTerminationError && !mismatch {
                 $0.errorCode = "backend_terminated"
-                $0.error = "后端已退出（状态 \(exitStatus)）。游戏内修改可能仍然生效。"
+                $0.error = "后端已退出。游戏内修改可能仍然生效。"
             }
         }
         configuration.resetGameState()
