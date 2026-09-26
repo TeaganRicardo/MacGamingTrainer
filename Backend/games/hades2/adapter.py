@@ -159,7 +159,7 @@ class Hades2Adapter(GameAdapter):
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         observed_locks=None
         if self.transport.alive() and self.state.get('connected'):
-            self.execute('status',{},read_only=True,project_desired=False)
+            self.observe_runtime()
             observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
