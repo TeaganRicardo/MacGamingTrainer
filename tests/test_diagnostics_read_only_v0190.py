@@ -12,6 +12,13 @@ from games.hades2.diagnostics import build_diagnostics
 from games.hades2.preferences import Hades2PreferenceStore
 
 
+# Source-boundary evidence for the real resident contract: status enters the
+# same dispatch path as mutations and synchronize() runs before command routing.
+lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
+dispatch = lua[lua.index('  function M.dispatch(command, params)'):]
+assert dispatch.index('    synchronize()') < dispatch.index('    if command == "status"')
+
+
 class FakeTransport:
     def __init__(self):
         self.pid = 7331
@@ -48,10 +55,11 @@ adapter = Hades2Adapter(transport=transport)
 assert adapter.preference_dirty is True
 preferences_before = json.loads(json.dumps(adapter.preferences))
 
-# A read-only status is allowed to refresh observable state, but it must not
-# replay dirty desired state or persist/capture runtime state.
-adapter.execute('status', {}, read_only=True)
+# Runtime observation refreshes observable state, but it must not replay
+# dirty desired state or persist/capture runtime state.
+adapter.observe_runtime()
 assert transport.calls == 1
+assert adapter.state['desiredFeatures']['godMode'] is False
 assert adapter.preference_dirty is True
 assert adapter.preferences == preferences_before
 assert pref_path.read_bytes() == file_before
@@ -60,7 +68,7 @@ assert pref_path.read_bytes() == file_before
 # persisted one-shot next-room request merely because runtime status reports it
 # absent.
 adapter.preference_dirty = False
-adapter.execute('status', {}, read_only=True)
+adapter.observe_runtime()
 assert transport.calls == 2
 assert adapter.preferences['nextRoomReward'] == 'WeaponUpgrade'
 assert pref_path.read_bytes() == file_before
@@ -72,22 +80,22 @@ preparation.DATA.mkdir(parents=True)
 transport2 = FakeTransport()
 adapter2 = Hades2Adapter(transport=transport2)
 assert adapter2.preference_initialized is False
-adapter2.execute('status', {}, read_only=True)
+adapter2.observe_runtime()
 assert adapter2.preference_initialized is False
 assert not (preparation.DATA/'desired-state.json').exists()
 
-# The read-only execution mode is deliberately narrow so a future caller cannot
-# accidentally use it to bypass persistence semantics for a mutation command.
+# Runtime observation is a dedicated status-only API rather than a flag that
+# mutation callers can opt into.
 try:
     adapter2.execute('set_feature', {'feature':'godMode','value':True}, read_only=True)
-except ValueError as error:
-    assert 'read_only' in str(error)
+except TypeError:
+    pass
 else:
-    raise AssertionError('read_only mutation command unexpectedly accepted')
+    raise AssertionError('execute still exposes the ambiguous read_only flag')
 assert transport2.calls == 1
 
-# Diagnostics itself must request the read-only path. A small probe isolates
-# this contract from the real platform checks performed by build_diagnostics.
+# Diagnostics itself must request the explicit runtime-observation seam. A
+# small probe isolates this contract from the real platform checks performed by build_diagnostics.
 class AliveTransport:
     def alive(self): return True
 
@@ -96,13 +104,13 @@ class DiagnosticsProbe:
     transport = AliveTransport()
     state = {}
     def __init__(self): self.calls = []
-    def execute(self, command, params, **kwargs):
-        self.calls.append((command, params, kwargs))
+    def observe_runtime(self):
+        self.calls.append('observe_runtime')
         return {}
     def list_profiles(self): return []
 
 probe = DiagnosticsProbe()
 build_diagnostics(probe)
-assert probe.calls == [('status', {}, {'read_only': True})]
+assert probe.calls == ['observe_runtime']
 
-print('diagnostics_read_only_v0190_ok')
+print('diagnostics_runtime_observation_v0190_ok')

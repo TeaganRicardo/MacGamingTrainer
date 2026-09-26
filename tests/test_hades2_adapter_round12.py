@@ -217,7 +217,7 @@ assert a.delete_profile('模块化测试')['deleted']
 
 # Game-specific validation now lives behind the Hades adapter, not core server.
 calls = []
-def fake_execute(command, params, replay=False, read_only=False, batch=None):
+def fake_execute(command, params, replay=False, batch=None):
     calls.append((command, dict(params), replay, batch))
     return {'connected': True, 'status': 'ready'}
 a.execute = fake_execute

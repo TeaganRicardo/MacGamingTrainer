@@ -21,7 +21,7 @@ def build_diagnostics(adapter):
     state={}
     if adapter.transport.alive():
         try:
-            refreshed=adapter.execute('status',{},read_only=True)
+            refreshed=adapter.observe_runtime()
             if not isinstance(refreshed,dict):
                 raise RuntimeError('status refresh returned no runtime state')
             state=refreshed
