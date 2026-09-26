@@ -71,7 +71,12 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
             )
             refreshFromHost()
         } catch {
-            backendSession.markUnavailable("无法启动 Reference Fixture 后端：\(error.localizedDescription)")
+            backendSession.markUnavailable(BackendFailure(
+                code: "backend_start_failed",
+                presentation: "无法启动 Reference Fixture 后端，请查看日志。",
+                diagnostic: error.localizedDescription,
+                recoveryPath: nil
+            ))
         }
     }
 
