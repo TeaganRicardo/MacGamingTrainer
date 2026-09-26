@@ -166,13 +166,12 @@ else:
 
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
 
-# Regression for the decode-failure taint contract: when the Lua boundary was
-# crossed and returned a result but host-side decoding fails, a non-read-only
-# command is outcome-unknown and must taint the transport; a read-only command
-# must not; a failure from transport.execute itself must not (the transport
-# already owns its own taint semantics for those paths).
+# A host decode failure after Lua returned is an unknown outcome, even for
+# status: the read-only flag suppresses host adoption but status may perform
+# resident maintenance. Transport-side failures retain their own semantics.
 import sys as _sys
 _sys.path.insert(0, str(ROOT / 'Backend'))
+from core.adapter import AdapterError
 from games.hades2.boundary_ledger import execute_with_ledger
 
 
@@ -200,8 +199,8 @@ def json_decode(raw):
 ledger_transport = LedgerFakeTransport()
 try:
     execute_with_ledger(ledger_transport, 'test', 'return 1', json_decode)
-except Exception:
-    pass
+except AdapterError as error:
+    assert error.code == 'outcome_unknown', error.code
 else:
     raise AssertionError('decode failure should raise')
 assert ledger_transport.tainted is True, 'decode failure left transport untainted'
@@ -209,11 +208,11 @@ assert ledger_transport.tainted is True, 'decode failure left transport untainte
 read_only_transport = LedgerFakeTransport()
 try:
     execute_with_ledger(read_only_transport, 'test', 'return 1', json_decode, read_only=True)
-except Exception:
-    pass
+except AdapterError as error:
+    assert error.code == 'outcome_unknown', error.code
 else:
     raise AssertionError('decode failure should raise')
-assert read_only_transport.tainted is False, 'read_only decode failure tainted transport'
+assert read_only_transport.tainted is True, 'read_only decode failure left transport reusable'
 
 failing_transport = LedgerFailingTransport()
 try:
