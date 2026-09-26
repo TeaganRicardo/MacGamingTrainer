@@ -16,11 +16,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
     executable.write_bytes(original_bytes)
     (game / "Contents/Info.plist").write_bytes(
         b"<?xml version='1.0'?><plist version='1.0'><dict>"
-        b"<key>CFBundleVersion</key><string>143476</string>"
+        b"<key>CFBundleVersion</key><string>199999</string>"
         b"</dict></plist>"
     )
     manifest = root / "appmanifest_1145350.acf"
-    manifest.write_text('"buildid" "25481925"', encoding="utf-8")
+    manifest.write_text('"buildid" "99999999"', encoding="utf-8")
 
     old_values = {
         "GAME": preparation.GAME,
@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-unverified-build-") as directory:
         "_entitlements": preparation._entitlements,
         "_command": preparation._command,
     }
-    unknown_uuid = "35CD2E50-2D78-3A63-835B-3EB1224C6D65"
+    unknown_uuid = "11111111-2222-3333-4444-555555555555"
     prepared_entitlements = {
         "com.apple.security.get-task-allow": True,
         "com.apple.security.cs.disable-library-validation": True,
