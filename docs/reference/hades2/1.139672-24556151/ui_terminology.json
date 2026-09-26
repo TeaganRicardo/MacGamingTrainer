@@ -300,18 +300,131 @@
       "reason": "Generic Trainer grouping for material resources."
     }
   },
-  "forbiddenUserFacingAliases": [
-    "特殊祝福",
-    "特殊祝福三选一",
-    "特殊祝福选择",
-    "诸神祝福",
-    "神祇祝福",
-    "重骰",
-    "阿耳忒弥斯",
-    "狄俄尼索斯",
-    "祝福出售界面",
-    "出售祝福",
-    "原生三选一",
-    "卡俄斯祝福"
-  ]
+  "registry": {
+    "owner": "Backend/games/hades2",
+    "classPolicies": {
+      "native_game": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "user_ui",
+          "user_error",
+          "diagnostic",
+          "protocol",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": []
+      },
+      "trainer_product": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "user_ui",
+          "user_error",
+          "diagnostic",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "protocol",
+          "storage"
+        ]
+      },
+      "internal_domain": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "diagnostic",
+          "protocol",
+          "storage",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "user_ui",
+          "user_error"
+        ]
+      },
+      "compatibility_alias": {
+        "lifecycle": "compatibility",
+        "allowedSurfaces": [
+          "compatibility_input",
+          "diagnostic",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "user_ui",
+          "user_error",
+          "protocol",
+          "storage"
+        ]
+      }
+    }
+  },
+  "internalTerms": {
+    "talentDrop": {
+      "value": "TalentDrop"
+    },
+    "spellDrop": {
+      "value": "SpellDrop"
+    },
+    "metaCurrencyDrop": {
+      "value": "MetaCurrencyDrop"
+    },
+    "specialGroup": {
+      "value": "group = special"
+    },
+    "olympianGroup": {
+      "value": "group = olympian"
+    }
+  },
+  "compatibilityAliases": {
+    "specialBoon": {
+      "value": "特殊祝福",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "specialBoonThreeChoice": {
+      "value": "特殊祝福三选一",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "specialBoonChoice": {
+      "value": "特殊祝福选择",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "godsBoon": {
+      "value": "诸神祝福",
+      "canonicalTerm": "officialTerms.olympianBoons"
+    },
+    "divineBoon": {
+      "value": "神祇祝福",
+      "canonicalTerm": "officialTerms.olympianBoons"
+    },
+    "rerollShort": {
+      "value": "重骰",
+      "canonicalTerm": "officialTerms.reroll"
+    },
+    "artemisAlt": {
+      "value": "阿耳忒弥斯",
+      "canonicalTerm": "officialSourceNames.Artemis"
+    },
+    "dionysusAlt": {
+      "value": "狄俄尼索斯",
+      "canonicalTerm": "officialSourceNames.Dionysus"
+    },
+    "sellBoonScreen": {
+      "value": "祝福出售界面",
+      "canonicalTerm": "officialTerms.purgingPool"
+    },
+    "sellBoon": {
+      "value": "出售祝福",
+      "canonicalTerm": "officialTerms.purgingPool"
+    },
+    "nativeThreeChoice": {
+      "value": "原生三选一",
+      "canonicalTerm": "productTerms.rewardChoiceScreen"
+    },
+    "chaosBoonShort": {
+      "value": "卡俄斯祝福",
+      "canonicalTerm": "nativeChoiceTitles.Chaos"
+    }
+  }
 }

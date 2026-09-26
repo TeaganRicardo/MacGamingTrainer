@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import catalog, localization
+from games.hades2.terminology import TermClass, load_hades2_terminology
 
 reference = json.loads(
     (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8")
@@ -48,8 +49,8 @@ surface_paths += sorted(reference_dir.glob("*.md"))
 surface_paths += sorted(reference_dir.glob("*.csv"))
 surface_paths += [ROOT / "docs/reference/hades2/README.md"]
 surface_text = "\n".join(path.read_text(encoding="utf-8") for path in surface_paths)
-for alias in reference["forbiddenUserFacingAliases"]:
-    assert alias not in surface_text, alias
+for alias in load_hades2_terminology().by_class(TermClass.COMPATIBILITY_ALIAS):
+    assert alias.zh_cn not in surface_text, alias.key
 
 # Both languages resolve from the same target-build localization IDs.
 official_zh = {}

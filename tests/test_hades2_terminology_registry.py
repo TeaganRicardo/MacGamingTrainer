@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -6,6 +7,8 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.terminology import (
     TermClass,
+    TermLifecycle,
+    TermSurface,
     TerminologyRegistry,
     load_hades2_terminology,
 )
@@ -95,7 +98,17 @@ def test_registry_rejects_native_term_without_provenance():
         "nativeChoiceTitles": {},
         "officialSourceNames": {},
         "productTerms": {},
-        "forbiddenUserFacingAliases": [],
+        "internalTerms": {},
+        "compatibilityAliases": {},
+        "registry": {
+            "owner": "Backend/games/hades2",
+            "classPolicies": {
+                "native_game": {"lifecycle": "active", "allowedSurfaces": ["user_ui"], "forbiddenSurfaces": []},
+                "trainer_product": {"lifecycle": "active", "allowedSurfaces": ["user_ui"], "forbiddenSurfaces": ["protocol"]},
+                "internal_domain": {"lifecycle": "active", "allowedSurfaces": ["protocol"], "forbiddenSurfaces": ["user_ui"]},
+                "compatibility_alias": {"lifecycle": "compatibility", "allowedSurfaces": ["compatibility_input"], "forbiddenSurfaces": ["user_ui"]},
+            },
+        },
     }
 
     try:
@@ -106,12 +119,82 @@ def test_registry_rejects_native_term_without_provenance():
         raise AssertionError("registry accepted a native term without English provenance")
 
 
+def test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms():
+    registry = load_hades2_terminology()
+
+    alias = registry.get("compatibilityAliases.specialBoon")
+    assert alias.alias_of == "productTerms.characterRewards"
+    assert alias.lifecycle is TermLifecycle.COMPATIBILITY
+    assert TermSurface.COMPATIBILITY_INPUT in alias.allowed_surfaces
+    assert TermSurface.USER_UI in alias.forbidden_surfaces
+
+    internal = registry.get("internalTerms.talentDrop")
+    assert internal.owner == "Backend/games/hades2"
+    assert internal.lifecycle is TermLifecycle.ACTIVE
+    assert TermSurface.USER_UI in internal.forbidden_surfaces
+
+    native = registry.get("officialTerms.boon")
+    assert native.lifecycle is TermLifecycle.ACTIVE
+    assert TermSurface.USER_UI in native.allowed_surfaces
+
+
+def test_registry_rejects_mismatched_native_bilingual_source_pair():
+    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    reference["officialTerms"]["boon"]["englishSource"] = "TraitText.en.sjson"
+
+    try:
+        TerminologyRegistry.from_reference(reference)
+    except ValueError as exc:
+        assert "bilingual source mismatch" in str(exc)
+    else:
+        raise AssertionError("registry accepted native zh-CN/en values from different localization tables")
+
+
+def test_registry_reports_forbidden_surface_leakage_from_registry_policy():
+    registry = load_hades2_terminology()
+
+    leaks = registry.surface_leaks(TermSurface.USER_UI, "按钮：特殊祝福 / TalentDrop")
+    assert {term.key for term in leaks} == {
+        "compatibilityAliases.specialBoon",
+        "internalTerms.talentDrop",
+    }
+    assert registry.surface_leaks(TermSurface.USER_UI, "角色奖励 / Character Rewards") == ()
+
+
+def test_aliases_have_one_authoritative_registry_representation():
+    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    assert "forbiddenUserFacingAliases" not in reference
+    assert {row["value"] for row in reference["compatibilityAliases"].values()} == {
+        term.zh_cn for term in load_hades2_terminology().by_class(TermClass.COMPATIBILITY_ALIAS)
+    }
+
+
+def test_registry_rejects_alias_target_regression():
+    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    reference["compatibilityAliases"]["specialBoon"]["canonicalTerm"] = "productTerms.missing"
+
+    try:
+        TerminologyRegistry.from_reference(reference)
+    except ValueError as exc:
+        assert "valid canonical target" in str(exc)
+    else:
+        raise AssertionError("registry accepted an alias whose canonical target disappeared")
+
+
 for _test in (
     test_registry_loads_target_build_and_all_term_classes,
     test_native_terms_keep_shared_localization_provenance,
     test_product_terms_are_explicit_trainer_owned_pairs,
     test_legacy_aliases_and_internal_terms_are_not_user_facing,
     test_registry_rejects_native_term_without_provenance,
+    test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms,
+    test_registry_rejects_mismatched_native_bilingual_source_pair,
+    test_registry_reports_forbidden_surface_leakage_from_registry_policy,
+    test_aliases_have_one_authoritative_registry_representation,
+    test_registry_rejects_alias_target_regression,
 ):
     _test()
 
