@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from .config import DATA, GAME_SPEC, STEAM_SPEC
+from .operation_budgets import SUBPROCESS_TIMEOUT_SECONDS
 
 GAME = GAME_SPEC.app_path
 SAVES = GAME_SPEC.save_path
@@ -18,7 +19,7 @@ VERSION = '139672'
 STEAM_BUILD = '24556151'
 UUID = '6DFB0A36-6249-319F-8E18-5FC94898925A'
 ORIGINAL_SHA256 = 'bf77da0b5aec6a6a24d1b9a08c8593227c95ec431c19600b2d93b4cb347d08f4'
-TIMEOUT = 30
+TIMEOUT = SUBPROCESS_TIMEOUT_SECONDS
 
 
 def sha(path):
