@@ -102,6 +102,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-batch-delete-") as td:
         str(ROOT/"Sources/Core/Runtime/BackendClient.swift"),
         str(ROOT/"Sources/Core/Runtime/TrainerBackendSession.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSaveTypes.swift"),
+        str(ROOT/"Sources/Core/Save/TrainerSavePathValidator.swift"),
         str(ROOT/"Sources/Core/Save/TrainerSaveManagerModel.swift"),
         str(main_path),
         "-framework", "AppKit",
