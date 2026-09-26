@@ -55,7 +55,7 @@ final class BackendClient {
 
     private var onRequestStarted: ((String, Bool) -> Void)?
     private var onReply: ((BackendReply) -> Void)?
-    private var onProtocolMismatch: ((String) -> Void)?
+    private var onProtocolMismatch: ((BackendFailure) -> Void)?
     private var onStderr: ((String) -> Void)?
     private var onLog: ((String) -> Void)?
     private var onTermination: ((Int32, String) -> Void)?
@@ -76,7 +76,7 @@ final class BackendClient {
         expectation: BackendProtocolExpectation,
         onRequestStarted: @escaping (String, Bool) -> Void,
         onReply: @escaping (BackendReply) -> Void,
-        onProtocolMismatch: @escaping (String) -> Void,
+        onProtocolMismatch: @escaping (BackendFailure) -> Void,
         onStderr: @escaping (String) -> Void,
         onLog: @escaping (String) -> Void,
         onTermination: @escaping (Int32, String) -> Void,
@@ -249,9 +249,12 @@ final class BackendClient {
             let actualHost = hostVersion.map(String.init) ?? "未知"
             let actualModule = moduleVersion.map(String.init) ?? "未知"
             let actualGame = gameID ?? "未知"
-            onProtocolMismatch?(
-                "Backend 协议不兼容（host 需要 v\(expectation.hostProtocolVersion)，当前 \(actualHost)；module 需要 v\(expectation.moduleProtocolVersion)，当前 \(actualModule)；game=\(actualGame)）。"
-            )
+            onProtocolMismatch?(BackendFailure(
+                code: "protocol_mismatch",
+                presentation: "Backend 协议不兼容，请使用同一发布包重新构建 App。",
+                diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
+                recoveryPath: nil
+            ))
             return
         }
 
