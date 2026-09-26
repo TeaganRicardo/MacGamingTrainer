@@ -89,6 +89,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            TrainerLanguageCommands(localization: localization)
             ActiveGameModule.makeManagementCommands(model: model)
         }
     }

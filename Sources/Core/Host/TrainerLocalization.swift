@@ -1,9 +1,12 @@
 import Foundation
 import Combine
+import SwiftUI
 
-public enum TrainerPresentationLanguage: String, CaseIterable {
+public enum TrainerPresentationLanguage: String, CaseIterable, Identifiable {
     case zhCN = "zh-CN"
     case en = "en"
+
+    public var id: String { rawValue }
 }
 
 public struct TrainerLocalizedText: Hashable {
@@ -36,5 +39,32 @@ public final class TrainerLocalizationStore: ObservableObject {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.language = TrainerPresentationLanguage(rawValue: defaults.string(forKey: Self.userDefaultsKey) ?? "") ?? Self.defaultLanguage
+    }
+
+    public func localized(_ key: String) -> String {
+        let tableURL = Bundle.standard.url(forResource: language.rawValue, withExtension: "lproj")
+        let bundle = tableURL.flatMap(Bundle.init(url:)) ?? Bundle.standard
+        return bundle.localizedString(forKey: key, value: key, table: "Host")
+    }
+}
+
+private extension Bundle {
+    static let standard = Bundle.main
+}
+
+struct TrainerLanguageCommands: Commands {
+    @ObservedObject private var localization: TrainerLocalizationStore
+
+    init(localization: TrainerLocalizationStore) {
+        _localization = ObservedObject(wrappedValue: localization)
+    }
+
+    var body: some Commands {
+        CommandMenu(localization.localized("host.language")) {
+            Picker(localization.localized("host.language"), selection: $localization.language) {
+                Text("简体中文").tag(TrainerPresentationLanguage.zhCN)
+                Text("English").tag(TrainerPresentationLanguage.en)
+            }
+        }
     }
 }
