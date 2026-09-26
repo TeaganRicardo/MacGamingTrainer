@@ -72,7 +72,8 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 final class Probe {
     let client: BackendClient
     var replies: [String] = []
-    var errors: [String] = []
+    var failures: [BackendFailure] = []
+    var mismatches: [String] = []
     var terminations: [Int32] = []
     var completions: [String: [Bool]] = [:]
 
@@ -89,11 +90,11 @@ final class Probe {
             expectation: BackendProtocolExpectation(gameID: game, hostProtocolVersion: 6, moduleProtocolVersion: 1),
             onRequestStarted: { _, _ in },
             onReply: { [weak self] reply in self?.replies.append(reply.command) },
-            onProtocolMismatch: { [weak self] message in self?.errors.append("mismatch:" + message) },
+            onProtocolMismatch: { [weak self] message in self?.mismatches.append(message) },
             onStderr: { _ in },
             onLog: { _ in },
             onTermination: { [weak self] status, _ in self?.terminations.append(status) },
-            onClientError: { [weak self] failure, _ in self?.errors.append(failure.presentation) }
+            onClientError: { [weak self] failure, _ in self?.failures.append(failure) }
         )
     }
 
@@ -119,7 +120,7 @@ do {
     p.send("hang", timeout: 0.15) { result = $0 }
     if !waitUntil(1.5, { result != nil && !p.terminations.isEmpty }) { fail("timeout did not resolve/terminate") }
     if result != false { fail("timeout completion must be false") }
-    if !p.errors.contains(where: { $0.contains("未响应") }) { fail("timeout error missing") }
+    if !p.failures.contains(where: { $0.code == "backend_timeout" }) { fail("timeout failure identity missing") }
     if p.client.isStarted { fail("timed-out backend still marked started") }
 }
 
@@ -129,7 +130,7 @@ do {
     var result: Bool? = nil
     p.send("bad", timeout: 1.0) { result = $0 }
     if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("malformed stdout did not fail") }
-    if result != false || !p.errors.contains(where: { $0.contains("通信协议错误") }) { fail("malformed stdout semantics wrong") }
+    if result != false || !p.failures.contains(where: { $0.code == "backend_protocol_error" }) { fail("malformed stdout semantics wrong") }
 }
 
 // A wrong request ID is ignored; the correct reply can still complete the request.
@@ -168,7 +169,7 @@ do {
     p.send("q2") { if $0 { accepted += 1 } }
     p.send("q3") { rejected = $0 }
     if !waitUntil(0.5, { rejected != nil }) || rejected != false { fail("queue overflow not rejected") }
-    if !p.errors.contains(where: { $0.contains("队列已满") }) { fail("queue overflow error missing") }
+    if !p.failures.contains(where: { $0.code == "backend_queue_full" }) { fail("queue overflow failure identity missing") }
     if !waitUntil(2.0, { accepted == 3 }) { fail("accepted queue work did not finish") }
     p.stopAndWait()
 }
@@ -188,7 +189,9 @@ do {
     var result: Bool? = nil
     p.send("huge", timeout: 1.0) { result = $0 }
     if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("stdout overflow did not fail") }
-    if result != false || !p.errors.contains(where: { $0.contains("stdout") }) { fail("stdout overflow semantics wrong") }
+    if result != false || !p.failures.contains(where: {
+        $0.code == "backend_protocol_error" && ($0.diagnostic?.contains("stdout") ?? false)
+    }) { fail("stdout overflow semantics wrong") }
 }
 
 print("runtime_reliability_round17_ok")
