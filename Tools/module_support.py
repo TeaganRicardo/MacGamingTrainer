@@ -40,11 +40,18 @@ class BuildRequirements:
 
 
 @dataclass(frozen=True)
+class AppResource:
+    source: str
+    destination: str
+
+
+@dataclass(frozen=True)
 class BuildManifest:
     runtime: GameModuleManifest
     frontend: FrontendBuildSpec
     app: AppBuildSpec
     requirements: BuildRequirements
+    app_resources: tuple
     raw: dict
 
     @property
@@ -122,6 +129,25 @@ def load_manifest(game_id: str) -> BuildManifest:
         raise ManifestError('debuggerEntitlement requires an entitlements file.')
     requirements = BuildRequirements(lldb_python, debugger_entitlement, entitlements)
 
+    resources_value = raw.get('appResources', [])
+    if not isinstance(resources_value, list):
+        raise ManifestError('appResources must be a list.')
+    app_resources = []
+    destinations = set()
+    for index, item in enumerate(resources_value):
+        field = f'appResources[{index}]'
+        if not isinstance(item, dict) or set(item) != {'source', 'destination'}:
+            raise ManifestError(f'{field} must contain exactly source and destination.')
+        source = _safe_relative_path(item.get('source'), f'{field}.source')
+        destination = _safe_relative_path(item.get('destination'), f'{field}.destination')
+        source_path = (ROOT / source).resolve()
+        if not source_path.is_file() or ROOT.resolve() not in source_path.parents:
+            raise ManifestError(f'{field}.source must exist inside the project root.')
+        if destination in destinations:
+            raise ManifestError(f'appResources has duplicate destination: {destination}.')
+        destinations.add(destination)
+        app_resources.append(AppResource(source, destination))
+
     frontend_path = (ROOT / source_directory).resolve()
     if not frontend_path.is_dir() or (ROOT / 'Sources').resolve() not in frontend_path.parents:
         raise ManifestError('frontend source directory must exist under Sources/.')
@@ -131,7 +157,7 @@ def load_manifest(game_id: str) -> BuildManifest:
         if not entitlement_path.is_file() or module_dir not in entitlement_path.parents:
             raise ManifestError('entitlements must exist inside the selected game module.')
 
-    return BuildManifest(runtime, frontend_spec, app_spec, requirements, raw)
+    return BuildManifest(runtime, frontend_spec, app_spec, requirements, tuple(app_resources), raw)
 
 
 def normalized_manifest(manifest: BuildManifest) -> dict:
@@ -154,6 +180,10 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
             'debuggerEntitlement': manifest.requirements.debugger_entitlement,
             'entitlements': manifest.requirements.entitlements,
         },
+        'appResources': [
+            {'source': resource.source, 'destination': resource.destination}
+            for resource in manifest.app_resources
+        ],
     }
 
 

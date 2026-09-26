@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     ], text=True, cwd=project, env=env))
     assert normalized['id'] == game_id
     assert normalized['frontend']['moduleType'] == 'ReferenceFixtureGameModule'
+    assert normalized['appResources'] == []  # No Hades-specific resource required by a second module.
     assert normalized['buildRequirements'] == {
         'lldbPython': False,
         'debuggerEntitlement': False,
@@ -79,9 +80,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         + '\n'.join(path.read_text() for path in (project / 'Sources/Core').rglob('*.swift'))
         + '\n'
         + (root / 'build.sh').read_text()
+        + '\n'
+        + (root / 'Tools/module_support.py').read_text()
     )
     assert 'ReferenceFixture' not in generic
     assert 'reference_fixture' not in generic
+    assert 'hades2' not in generic
+    assert 'ui_terminology.json' not in generic
 
 # Even successful execution must leave the source checkout untouched.
 assert not checkout_backend_module.exists()

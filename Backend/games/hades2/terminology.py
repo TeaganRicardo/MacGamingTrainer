@@ -7,10 +7,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
-REFERENCE_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
-)
+def _reference_path(module_file: Path = Path(__file__)) -> Path:
+    module_file = module_file.resolve()
+    resource_root = module_file.parents[3]
+    bundled_reference = resource_root / "ui_terminology.json"
+
+    if resource_root.name == "Resources" and resource_root.parent.name == "Contents":
+        return bundled_reference
+    return module_file.parents[3] / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
 
 
 class TermClass(str, Enum):
@@ -182,8 +186,8 @@ class TerminologyRegistry:
         return cls(tuple(terms), target)
 
     @classmethod
-    def load(cls, path: Path = REFERENCE_PATH) -> "TerminologyRegistry":
-        reference = json.loads(path.read_text(encoding="utf-8"))
+    def load(cls, path: Path | None = None) -> "TerminologyRegistry":
+        reference = json.loads((path or _reference_path()).read_text(encoding="utf-8"))
         return cls.from_reference(reference)
 
 

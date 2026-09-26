@@ -24,6 +24,12 @@
     "bundleIdentifier": "com.gao.macgamingtrainer",
     "displayName": "Mac Gaming Trainer"
   },
+  "appResources": [
+    {
+      "source": "docs/reference/hades2/1.139672-24556151/ui_terminology.json",
+      "destination": "ui_terminology.json"
+    }
+  ],
   "targetApplication": {
     "processName": "Hades II",
     "bundleIdentifier": "com.supergiantgames.macos.hades2"
