@@ -33,7 +33,7 @@ for raw in sys.stdin:
             print(json.dumps({
                 'type':'result','id':req['id'],'protocolVersion':6,
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
-                'error':{'code':'unsafe_storage','message':'后端拒绝显示存档'},
+                'error':{'code':'unsafe_storage','presentation':'后端拒绝显示存档'},
                 'result':{'folder':str(pathlib.Path(__file__).parent)},
             }), flush=True)
             continue
