@@ -45,7 +45,7 @@ public final class TrainerLocalizationStore: ObservableObject {
         let tableURL = Bundle.standard.url(forResource: language.rawValue, withExtension: "lproj")
         let bundle = tableURL.flatMap(Bundle.init(url:)) ?? Bundle.standard
         var value = bundle.localizedString(forKey: key, value: key, table: "Host")
-        for (index, argument) in arguments.enumerated() {
+        for (index, argument) in arguments.enumerated().reversed() {
             value = value.replacingOccurrences(of: "{\(index)}", with: argument)
         }
         return value
