@@ -34,9 +34,15 @@ struct HotkeyBinding {
     let chord: HotkeyChord
 }
 
-struct TrainerHotkeyRegistrationFailure: Equatable {
-    let presentationKey: String
-    let arguments: [String]
+struct TrainerHotkeyRegistrationConflict: Equatable {
+    let actionID: String
+    let chordText: String
+    let status: Int32
+}
+
+enum TrainerHotkeyRegistrationFailure: Equatable {
+    case listenerInitialization(status: Int32)
+    case registrationConflicts([TrainerHotkeyRegistrationConflict])
 }
 
 final class GlobalHotkeys {
@@ -67,15 +73,12 @@ final class GlobalHotkeys {
 
     func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
         guard handlerInstallStatus == noErr, handler != nil else {
-            return TrainerHotkeyRegistrationFailure(
-                presentationKey: "host.hotkeys.listenerFailed",
-                arguments: [String(handlerInstallStatus)]
-            )
+            return .listenerInitialization(status: handlerInstallStatus)
         }
         references.forEach { UnregisterEventHotKey($0) }
         references.removeAll()
         eventActions.removeAll()
-        var failures: [String] = []
+        var failures: [TrainerHotkeyRegistrationConflict] = []
         for (index, binding) in bindings.enumerated() {
             var reference: EventHotKeyRef?
             let eventID = UInt32(index + 1)
@@ -91,14 +94,15 @@ final class GlobalHotkeys {
                 references.append(reference)
                 eventActions[eventID] = binding.actionID
             } else {
-                failures.append("\(binding.chord.displayText) \(binding.title)（\(result)）")
+                failures.append(TrainerHotkeyRegistrationConflict(
+                    actionID: binding.actionID,
+                    chordText: binding.chord.displayText,
+                    status: result
+                ))
             }
         }
         guard !failures.isEmpty else { return nil }
-        return TrainerHotkeyRegistrationFailure(
-            presentationKey: "host.hotkeys.registrationFailed",
-            arguments: [failures.joined(separator: ", ")]
-        )
+        return .registrationConflicts(failures)
     }
 
     deinit {
