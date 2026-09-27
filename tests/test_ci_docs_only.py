@@ -203,4 +203,31 @@ with tempfile.TemporaryDirectory() as tmp:
     assert paths == ["docs/a.md"], paths
     assert module.is_docs_only(paths)
 
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    git(root, "init", "-q", "-b", "main")
+    git(root, "config", "user.email", "ci@example.invalid")
+    git(root, "config", "user.name", "CI")
+
+    (root / "README.md").write_text("base\n")
+    initial = commit_all(root, "base")
+    git(root, "branch", "feature", initial)
+
+    main_only = root / "Backend/main_only.py"
+    main_only.parent.mkdir(parents=True)
+    main_only.write_text("x = 1\n")
+    main_tip = commit_all(root, "main-only change")
+
+    git(root, "checkout", "-q", "feature")
+    feature_doc = root / "docs/feature.md"
+    feature_doc.parent.mkdir(parents=True)
+    feature_doc.write_text("feature docs\n")
+    feature_tip = commit_all(root, "feature docs")
+
+    # PR scope is merge-base..head, not a tip-to-tip tree comparison. A change
+    # that exists only on a newer base branch must not contaminate the PR scope.
+    paths = module.changed_paths(main_tip, feature_tip, root)
+    assert paths == ["docs/feature.md"], paths
+    assert module.is_docs_only(paths)
+
 print("ci_docs_only_ok")
