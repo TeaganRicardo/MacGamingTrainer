@@ -90,7 +90,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
         .commands {
             CommandGroup(replacing: .newItem) { }
             TrainerLanguageCommands(localization: localization)
-            ActiveGameModule.makeManagementCommands(model: model)
+            ActiveGameModule.makeManagementCommands(model: model, localization: localization)
         }
     }
 }

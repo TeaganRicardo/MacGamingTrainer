@@ -1,6 +1,12 @@
 import Foundation
 import AppKit
 
+enum Hades2ShortcutIssue: Equatable {
+    case unrecognized
+    case conflict(chordText: String, action: ShortcutAction)
+    case registration(TrainerHotkeyRegistrationFailure)
+}
+
 final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private static let expectedHostProtocolVersion = Hades2GameModule.descriptor.expectedHostProtocolVersion
     private static let expectedModuleProtocolVersion = Hades2GameModule.descriptor.expectedModuleProtocolVersion
@@ -129,7 +135,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var diagnosticsTotal = 0
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
-    @Published var shortcutError = ""
+    @Published var shortcutIssue: Hades2ShortcutIssue?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
 
@@ -229,7 +235,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func refreshFromHost() {
-        send(connected ? .status : .scan, title: "刷新状态")
+        send(connected ? .status : .scan, title: "host.refreshStatus")
     }
 
     func hostDidBecomeActive() {
@@ -286,13 +292,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func toggleConnection(probeRuntime: Bool) {
         if connected {
-            sendBarrier(.disconnect, title: "断开调试连接（保留修改）")
+            sendBarrier(.disconnect, title: "host.disconnectGame")
         } else {
             if probeRuntime {
                 pendingRunReadySignal = false
             }
             runLogWatcher.start()
-            send(.connect(probeRuntime: probeRuntime), title: "连接游戏") { [weak self] _ in
+            send(.connect(probeRuntime: probeRuntime), title: "host.connectGame") { [weak self] _ in
                 guard let self else { return }
                 self.runLogWatcher.start()
                 self.consumeRunLogReadySignalIfPossible()
@@ -302,10 +308,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func restartBackendFromHost() { restartBackend() }
 
-    func launchGame() { send(.launch, title: "启动游戏") }
+    func launchGame() { send(.launch, title: "host.launchGame") }
     func prepareDebugging() { send(.prepare, title: "准备调试签名") }
     func restoreOriginalSignature() { send(.restore, title: "恢复原始签名") }
-    func disableAll() { sendBarrier(.disableAll, title: "全部关闭") }
+    func disableAll() { sendBarrier(.disableAll, title: "host.disableAll") }
 
     private func restartBackend() {
         guard !exiting else { return }
@@ -788,8 +794,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
 
     func setShortcut(action: ShortcutAction, chord: HotkeyChord) {
-        shortcutError = shortcutStore.set(action, chord: chord) ?? ""
-        if shortcutError.isEmpty { installHotkeys() }
+        if let conflict = shortcutStore.set(action, chord: chord) {
+            shortcutIssue = .conflict(chordText: chord.displayText, action: conflict)
+        } else {
+            clearShortcutIssue()
+            installHotkeys()
+        }
+    }
+
+    func clearShortcutIssue() {
+        shortcutIssue = nil
+    }
+
+    func setUnrecognizedShortcutIssue() {
+        shortcutIssue = .unrecognized
     }
 
     private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
@@ -825,7 +843,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func performShortcut(_ action: ShortcutAction) {
         if action == .disableAll {
             guard connected && !busy && !exiting else { return }
-            sendBarrier(.disableAll, title: "全部关闭") { success in
+            sendBarrier(.disableAll, title: "host.disableAll") { success in
                 if success { TrainerHotkeyFeedbackPlayer.play(.disabled) }
             }
             return
@@ -878,9 +896,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             self.performShortcut(action)
         }
         let bindings = ShortcutAction.uiOrder.map { action in
-            HotkeyBinding(actionID: action.rawValue, title: action.title, chord: shortcutChord(action))
+            HotkeyBinding(actionID: action.rawValue, chord: shortcutChord(action))
         }
-        shortcutError = instance.register(bindings)
+        if let failure = instance.register(bindings) {
+            shortcutIssue = .registration(failure)
+        } else {
+            clearShortcutIssue()
+        }
         hotkeys = instance
     }
 

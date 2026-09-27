@@ -70,9 +70,11 @@ assert 'NSWorkspace.shared.activateFileViewerSelecting' in model_text
 # rollback_failed is the one Core error that carries a user-actionable path.
 assert "let recoveryPath: String?" in client_text
 assert 'recoveryPath: detail?["recoveryPath"] as? String' in client_text
-assert 'failure?.code == "rollback_failed"' in model_text
-assert "failure?.recoveryPath" in model_text
-assert "恢复副本保留在：" in model_text
+assert 'case "rollback_failed":' in model_text
+assert "failure.recoveryPath" in model_text
+assert '"rollback_failed"' in model_text
+assert '"host.save.error.rollbackFailed"' in model_text
+assert "errorArguments" in model_text and "noticeArguments" in model_text
 
 # Completion is a total contract: Save Manager callers use it to clear
 # optimistic rename state and to terminate sequential batch deletes. A backend

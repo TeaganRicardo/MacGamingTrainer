@@ -8,7 +8,9 @@ final class TrainerSaveManagerModel: ObservableObject {
     @Published private(set) var recoveryPaths: [String] = []
     @Published private(set) var busy = false
     @Published private(set) var error = ""
+    @Published private(set) var errorArguments: [String] = []
     @Published private(set) var notice = ""
+    @Published private(set) var noticeArguments: [String] = []
 
     private let session: TrainerBackendSession
     private var activeRequestTokens: Set<UUID> = []
@@ -18,7 +20,7 @@ final class TrainerSaveManagerModel: ObservableObject {
     }
 
     func refresh() {
-        request("core.save.list", operation: "刷新存档", successNotice: nil)
+        request("core.save.list", operation: "host.save.operation.refresh", successNotice: nil)
     }
 
     func backup(name: String? = nil) {
@@ -26,7 +28,7 @@ final class TrainerSaveManagerModel: ObservableObject {
         if let name, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             params["name"] = name
         }
-        request("core.save.backup", params: params, operation: "创建存档备份", successNotice: "已创建存档备份")
+        request("core.save.backup", params: params, operation: "host.save.operation.create", successNotice: "host.save.notice.created")
     }
 
     func rename(id: String, name: String, completion: ((Bool) -> Void)? = nil) {
@@ -38,8 +40,8 @@ final class TrainerSaveManagerModel: ObservableObject {
         request(
             "core.save.rename",
             params: ["snapshotId": id, "name": clean],
-            operation: "重命名存档",
-            successNotice: "已重命名存档",
+            operation: "host.save.operation.rename",
+            successNotice: "host.save.notice.renamed",
             onComplete: completion
         )
     }
@@ -64,14 +66,14 @@ final class TrainerSaveManagerModel: ObservableObject {
         request(
             "core.save.open_folder",
             params: params,
-            operation: id == nil ? "打开存档目录" : "显示存档",
+            operation: id == nil ? "host.save.operation.openFolder" : "host.save.operation.show",
             successNotice: nil
         ) { [weak self] reply in
             guard let self else { return }
             guard reply.success else { return }
             guard let path = reply.result?["folder"] as? String,
                   let url = TrainerSavePathValidator.validatedDirectoryURL(for: path) else {
-                self.error = "后端返回的存档目录无效或不安全。"
+                self.setError("host.save.error.invalidFolder")
                 return
             }
             if id == nil {
@@ -87,40 +89,44 @@ final class TrainerSaveManagerModel: ObservableObject {
         request(
             "core.save.restore",
             params: ["snapshotId": id, "preserveCurrent": preserveCurrent],
-            operation: "恢复存档",
-            successNotice: "恢复请求已提交"
+            operation: "host.save.operation.restore",
+            successNotice: "host.save.notice.restoreSubmitted"
         )
     }
 
     func cancelStaged() {
         request(
             "core.save.cancel_staged",
-            operation: "取消等待恢复",
-            successNotice: "已取消等待恢复"
+            operation: "host.save.operation.cancelPending",
+            successNotice: "host.save.notice.pendingCancelled"
         )
     }
 
     func applyStagedIfPossible() {
         request(
             "core.save.apply_staged",
-            operation: "应用等待恢复",
+            operation: "host.save.operation.applyPending",
             successNotice: nil
         ) { [weak self] reply in
             guard let operation = reply.result?["operation"] as? [String: Any],
                   operation["applied"] as? Bool == true else { return }
-            self?.notice = "已应用等待恢复"
+            self?.setNotice("host.save.notice.pendingApplied")
         }
     }
 
     private func deleteNext(_ ids: [String], deleted: Int) {
         guard let first = ids.first else {
-            notice = deleted == 1 ? "已删除 1 个存档" : "已删除 \(deleted) 个存档"
+            if deleted == 1 {
+                setNotice("host.save.notice.deletedOne")
+            } else {
+                setNotice("host.save.notice.deletedMany", arguments: [String(deleted)])
+            }
             return
         }
         request(
             "core.save.delete",
             params: ["snapshotId": first],
-            operation: "删除存档",
+            operation: "host.save.operation.delete",
             successNotice: nil,
             onComplete: { [weak self] success in
                 guard let self, success else { return }
@@ -138,7 +144,7 @@ final class TrainerSaveManagerModel: ObservableObject {
         onComplete: ((Bool) -> Void)? = nil
     ) {
         guard session.isRunning else {
-            error = "后端未运行。"
+            setError("host.save.error.backendUnavailable")
             onComplete?(false)
             return
         }
@@ -147,7 +153,9 @@ final class TrainerSaveManagerModel: ObservableObject {
         activeRequestTokens.insert(token)
         busy = true
         error = ""
+        errorArguments = []
         notice = ""
+        noticeArguments = []
         var receivedReply = false
         session.send(
             command,
@@ -163,7 +171,7 @@ final class TrainerSaveManagerModel: ObservableObject {
                 self.consume(reply)
                 onReply?(reply)
                 if reply.success, let successNotice {
-                    self.notice = successNotice
+                    self.setNotice(successNotice)
                 }
             },
             completion: { [weak self] success in
@@ -171,7 +179,7 @@ final class TrainerSaveManagerModel: ObservableObject {
                       self.session.lifecycleID == requestLifecycleID,
                       self.activeRequestTokens.remove(token) != nil else { return }
                 if !success, !receivedReply, self.error.isEmpty {
-                    self.error = "存档操作未完成。"
+                    self.setError("host.save.error.incomplete")
                 }
                 onComplete?(success)
                 self.busy = !self.activeRequestTokens.isEmpty
@@ -179,16 +187,49 @@ final class TrainerSaveManagerModel: ObservableObject {
         )
     }
 
+    private func setError(_ key: String, arguments: [String] = []) {
+        error = key
+        errorArguments = arguments
+    }
+
+    private func setNotice(_ key: String, arguments: [String] = []) {
+        notice = key
+        noticeArguments = arguments
+    }
+
     private func consume(_ reply: BackendReply) {
         guard reply.success else {
-            let failure = reply.failure
-            var message = failure?.presentation ?? "存档操作失败。"
-            if failure?.code == "rollback_failed",
-               let recoveryPath = failure?.recoveryPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !recoveryPath.isEmpty {
-                message += "\n恢复副本保留在：\(recoveryPath)"
+            guard let failure = reply.failure else {
+                setError("host.save.error.failed")
+                return
             }
-            error = message
+            switch failure.code {
+            case "save_busy":
+                setError("host.save.error.busy")
+            case "save_not_found":
+                setError("host.save.error.notFound")
+            case "save_unsupported":
+                setError("host.save.error.unsupported")
+            case "staged_unavailable":
+                setError("host.save.error.stagedUnavailable")
+            case "staged_indeterminate":
+                setError("host.save.error.stagedIndeterminate")
+            case "save_unsafe":
+                setError("host.save.error.unsafe")
+            case "snapshot_invalid":
+                setError("host.save.error.invalidSnapshot")
+            case "restore_failed":
+                setError("host.save.error.restoreFailed")
+            case "rollback_failed":
+                let recoveryPath = failure.recoveryPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if recoveryPath.isEmpty {
+                    setError("host.save.error.restoreFailed")
+                } else {
+                    setError("host.save.error.rollbackFailed", arguments: [recoveryPath])
+                }
+            default:
+                setError("host.save.error.failed")
+            }
             return
         }
         guard let result = reply.result else { return }

@@ -121,7 +121,7 @@ final class BackendClient {
         guard process.isRunning && !terminalFailureReported else {
             onClientError?(BackendFailure(
                 code: "backend_unavailable",
-                presentation: "后端未运行或正在停止。",
+                presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
                 recoveryPath: nil
             ), true)
@@ -165,7 +165,7 @@ final class BackendClient {
         guard queue.count < maxQueueDepth else {
             onClientError?(BackendFailure(
                 code: "backend_queue_full",
-                presentation: "后端请求队列已满，请稍后重试。",
+                presentation: "host.backend.error.queueFull",
                 diagnostic: "queueLimit=\(maxQueueDepth) operation=\(request.operation)",
                 recoveryPath: nil
             ), false)
@@ -182,7 +182,7 @@ final class BackendClient {
             let queued = takeQueuedRequests()
             onClientError?(BackendFailure(
                 code: "backend_unavailable",
-                presentation: "后端未运行或正在停止。",
+                presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
                 recoveryPath: nil
             ), true)
@@ -204,7 +204,7 @@ final class BackendClient {
             let queued = takeQueuedRequests()
             onClientError?(BackendFailure(
                 code: "backend_send_failed",
-                presentation: "发送失败；为避免未知执行结果，已停止后端。",
+                presentation: "host.backend.error.sendFailed",
                 diagnostic: error.localizedDescription,
                 recoveryPath: nil
             ), true)
@@ -251,7 +251,7 @@ final class BackendClient {
             let actualGame = gameID ?? "未知"
             onProtocolMismatch?(BackendFailure(
                 code: "protocol_mismatch",
-                presentation: "Backend 协议不兼容，请使用同一发布包重新构建 App。",
+                presentation: "host.backend.error.protocolMismatch",
                 diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
                 recoveryPath: nil
             ))
@@ -266,7 +266,7 @@ final class BackendClient {
         } else {
             failure = BackendFailure(
                 code: detail?["code"] as? String ?? "operation_failed",
-                presentation: detail?["presentation"] as? String ?? "操作失败，请查看日志。",
+                presentation: detail?["presentation"] as? String ?? "host.backend.error.operationFailed",
                 diagnostic: detail?["diagnostic"] as? String,
                 recoveryPath: detail?["recoveryPath"] as? String
             )
@@ -317,7 +317,7 @@ final class BackendClient {
         let outstanding = takeOutstandingRequests()
         onClientError?(BackendFailure(
             code: "backend_timeout",
-            presentation: "后端请求「\(request.operation)」超时；为避免未知执行结果，已停止后端。",
+            presentation: "host.backend.error.timeout",
             diagnostic: "request=\(request.command) id=\(request.id) timeout=\(String(format: "%.1f", request.timeout))s",
             recoveryPath: nil
         ), true)
@@ -331,7 +331,7 @@ final class BackendClient {
         let outstanding = takeOutstandingRequests()
         onClientError?(BackendFailure(
             code: "backend_protocol_error",
-            presentation: "后端通信协议错误，已停止后端。",
+            presentation: "host.backend.error.protocolError",
             diagnostic: message,
             recoveryPath: nil
         ), true)

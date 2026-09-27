@@ -13,7 +13,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: String { backendStatus.operation }
-    var statusTitle: String { connected ? "已连接" : "尚未连接" }
+    var statusTitle: String { connected ? "host.connected" : "host.disconnected" }
     var connectionDetailText: String { "Reference fixture" }
     var hostActionsEnabled: Bool {
         backendAvailable && !busy && backendStatus.protocolCompatible
@@ -33,11 +33,11 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     }
 
     func toggleConnectionFromHost() {
-        send(connected ? "disconnect" : "connect", operation: connected ? "断开 Reference Fixture" : "连接 Reference Fixture")
+        send(connected ? "disconnect" : "connect", operation: connected ? "host.disconnectGame" : "host.connectGame")
     }
 
     func refreshFromHost() {
-        send("status", operation: "刷新 Reference Fixture", announceSuccess: false)
+        send("status", operation: "host.refreshStatus", announceSuccess: false)
     }
 
     func restartBackendFromHost() {
@@ -45,7 +45,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     }
 
     func setEnabled(_ value: Bool) {
-        send("set_enabled", params: ["value": value], operation: value ? "启用 Reference Feature" : "关闭 Reference Feature")
+        send("set_enabled", params: ["value": value], operation: value ? "host.feature.enable" : "host.feature.disable")
     }
 
     func prepareForTermination(completion: @escaping (Bool) -> Void) {
@@ -109,6 +109,13 @@ enum ReferenceFixtureLocalizationProbe {
     static func hostGameLibrary(using localization: TrainerLocalizationStore) -> String {
         localization.localized("host.gameLibrary")
     }
+
+    static func hostConnectionStatus(
+        connected: Bool,
+        using localization: TrainerLocalizationStore
+    ) -> String {
+        localization.presentation(connected ? "host.connected" : "host.disconnected")
+    }
 }
 
 struct ReferenceFixtureContent: View {
@@ -162,7 +169,10 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         EmptyView()
     }
 
-    static func makeManagementCommands(model: ReferenceFixtureModel) -> TrainerEmptyCommands {
+    static func makeManagementCommands(
+        model: ReferenceFixtureModel,
+        localization: TrainerLocalizationStore
+    ) -> TrainerEmptyCommands {
         TrainerEmptyCommands()
     }
 }

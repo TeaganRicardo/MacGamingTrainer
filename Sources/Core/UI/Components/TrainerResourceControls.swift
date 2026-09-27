@@ -8,6 +8,7 @@ struct TrainerPickerSection<Item: Identifiable>: Identifiable {
 
 struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     @Binding var search: String
@@ -30,8 +31,8 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         sections: [TrainerPickerSection<Item>],
         enabled: Bool,
         locked: Bool,
-        searchPlaceholder: String = "搜索名称或资源 ID",
-        emptyLabel: String = "没有匹配项目",
+        searchPlaceholder: String = "host.resource.searchPlaceholder",
+        emptyLabel: String = "host.resource.noMatches",
         itemLabel: @escaping (Item) -> String,
         onLock: @escaping () -> Void
     ) {
@@ -56,13 +57,13 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(theme.accent)
                 Spacer()
-                TextField(searchPlaceholder, text: $search)
+                TextField(localization.presentation(searchPlaceholder), text: $search)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 260)
             }
             Picker(title, selection: $selection) {
                 if selection.isEmpty || sections.allSatisfy({ $0.items.isEmpty }) {
-                    Text(emptyLabel).tag("")
+                    Text(localization.presentation(emptyLabel)).tag("")
                 }
                 ForEach(sections) { section in
                     Section(header: Text(section.title)) {
@@ -78,9 +79,9 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
 
             HStack(spacing: 12) {
                 Spacer()
-                TrainerNumberField(text: $amount, placeholder: "数量", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading)
+                TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading)
                 Button(action: onLock) {
-                    Label(locked ? "已锁定" : "锁定", systemImage: locked ? "lock.fill" : "lock.open")
+                    Label(localization.localized(locked ? "host.locked" : "host.lock"), systemImage: locked ? "lock.fill" : "lock.open")
                         .foregroundStyle(locked ? theme.accent : .secondary)
                 }
                 .disabled(!enabled || selection.isEmpty)

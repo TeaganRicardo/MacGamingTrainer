@@ -111,7 +111,7 @@ struct Runner {
         if stoppedCompletion != false {
             fail("stopped-backend rename did not fail its completion")
         }
-        if model.error != "后端未运行。" {
+        if model.error != "host.save.error.backendUnavailable" {
             fail("stopped-backend rename did not surface the expected model error")
         }
 
