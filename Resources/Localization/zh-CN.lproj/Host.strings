@@ -36,6 +36,7 @@
 "host.backend.notice.recovering" = "后端通信异常，正在自动恢复";
 "host.backend.notice.restarted" = "后端已重启";
 "host.backend.notice.recovered" = "后端已自动恢复";
+"host.backend.notice.completed" = "操作完成";
 "host.save.openFolder" = "打开存档目录";
 "host.refresh" = "刷新";
 "host.save.createBackup" = "创建备份";
