@@ -34,6 +34,11 @@ struct HotkeyBinding {
     let chord: HotkeyChord
 }
 
+struct TrainerHotkeyRegistrationFailure: Equatable {
+    let presentationKey: String
+    let arguments: [String]
+}
+
 final class GlobalHotkeys {
     private var references: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
@@ -60,9 +65,12 @@ final class GlobalHotkeys {
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 
-    func register(_ bindings: [HotkeyBinding]) -> String {
+    func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
         guard handlerInstallStatus == noErr, handler != nil else {
-            return "快捷键监听初始化失败（\(handlerInstallStatus)）。"
+            return TrainerHotkeyRegistrationFailure(
+                presentationKey: "host.hotkeys.listenerFailed",
+                arguments: [String(handlerInstallStatus)]
+            )
         }
         references.forEach { UnregisterEventHotKey($0) }
         references.removeAll()
@@ -86,7 +94,11 @@ final class GlobalHotkeys {
                 failures.append("\(binding.chord.displayText) \(binding.title)（\(result)）")
             }
         }
-        return failures.isEmpty ? "" : "快捷键注册失败，可能已被系统或其他应用占用：" + failures.joined(separator: "、")
+        guard !failures.isEmpty else { return nil }
+        return TrainerHotkeyRegistrationFailure(
+            presentationKey: "host.hotkeys.registrationFailed",
+            arguments: [failures.joined(separator: ", ")]
+        )
     }
 
     deinit {
