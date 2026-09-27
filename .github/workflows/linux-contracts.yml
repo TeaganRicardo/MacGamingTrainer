@@ -28,23 +28,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect docs-only change
+      - name: Classify change scope
         id: scope
         run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Docs-only fast path
-        if: steps.scope.outputs.docs_only == 'true'
-        run: echo "Docs-only change; skipping Linux contract suite."
+      - name: Require explicit scope decision
+        if: steps.scope.outputs.needs_linux != 'true' && steps.scope.outputs.needs_linux != 'false'
+        run: |
+          echo "Change-scope classifier did not emit needs_linux=true|false." >&2
+          exit 1
+
+      - name: Fast path
+        if: steps.scope.outputs.needs_linux == 'false'
+        run: echo "Change does not require Linux contract execution."
 
       - uses: actions/setup-python@v5
-        if: steps.scope.outputs.docs_only != 'true'
+        if: steps.scope.outputs.needs_linux == 'true'
         with:
           python-version: '3.12'
 
       - name: Enforce diff-based invariants
-        if: steps.scope.outputs.docs_only != 'true'
+        if: steps.scope.outputs.needs_linux == 'true'
         run: python3 Tools/check_runtime_revision.py "$BASE_SHA" "$HEAD_SHA"
 
       - name: Run Linux contract checks
-        if: steps.scope.outputs.docs_only != 'true'
+        if: steps.scope.outputs.needs_linux == 'true'
         run: bash Tools/run_linux_checks.sh
