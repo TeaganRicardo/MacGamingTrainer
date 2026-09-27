@@ -38,8 +38,11 @@ def main(argv):
     if len(argv) != 3:
         fail('usage: check_runtime_revision.py <base-ref> <head-ref>')
     base, head = argv[1:]
+    merge_base = git('merge-base', base, head).strip()
+    if not merge_base:
+        fail('unable to resolve merge-base for runtime revision gate')
     changed = subprocess.run(
-        ['git', 'diff', '--quiet', base, head, '--', RUNTIME.as_posix()],
+        ['git', 'diff', '--quiet', merge_base, head, '--', RUNTIME.as_posix()],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
@@ -49,7 +52,7 @@ def main(argv):
     if changed.returncode != 1:
         fail(changed.stderr.strip() or 'unable to compare runtime source')
 
-    base_revision = revision_at(base)
+    base_revision = revision_at(merge_base)
     head_revision = revision_at(head)
     if head_revision <= base_revision:
         fail(

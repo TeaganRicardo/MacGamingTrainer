@@ -77,10 +77,18 @@ def test_packaging_and_verification_include_only_the_hades_resource():
         }
     ]
     assert "appResources" in build
-    assert "ui_terminology.json" in macos_workflow
-    assert "if [[ \"${{ matrix.game }}\" == \"hades2\" ]]" in module_matrix
-    assert "if [[ \"${{ matrix.game }}\" == \"reference_fixture\" ]]" not in module_matrix
-    assert "ui_terminology.json" in module_matrix
+
+    # Build 2 owns the production Hades build and proves the Hades-only
+    # terminology resource is present there.
+    assert "./build.sh hades2" in macos_workflow
+    assert 'test -f "$app/Contents/Resources/ui_terminology.json"' in macos_workflow
+
+    # The module matrix exists only to prove the independent reference fixture.
+    # It must not duplicate the Hades build, and the Hades-only resource must
+    # not leak into that packaged module.
+    assert "- reference_fixture" in module_matrix
+    assert "- hades2" not in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/ui_terminology.json"' in module_matrix
 
 
 for _test in (

@@ -54,6 +54,40 @@ with tempfile.TemporaryDirectory(prefix='mgt-runtime-revision-') as td:
     assert failed.returncode != 0, failed.stdout + failed.stderr
     assert 'consistent' in failed.stderr.lower(), failed.stderr
 
+with tempfile.TemporaryDirectory(prefix='mgt-runtime-revision-diverged-') as td:
+    repo = Path(td)
+    subprocess.run(['git', 'init', '-b', 'main'], cwd=repo, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['git', 'config', 'user.email', 'test@example.invalid'], cwd=repo, check=True)
+    subprocess.run(['git', 'config', 'user.name', 'MGT test'], cwd=repo, check=True)
+    runtime = repo / 'Backend/games/hades2/runtime/hades.lua'
+    runtime.parent.mkdir(parents=True)
+    runtime.write_text(
+        'local previousModule = __MacGamingTrainerV1\n'
+        'if previousModule and previousModule.revision ~= 42 then previousModule = nil end\n'
+        'local M = { version = 1, revision = 42 }\n',
+        encoding='utf-8',
+    )
+    initial = commit(repo, 'baseline')
+    subprocess.run(['git', 'branch', 'feature', initial], cwd=repo, check=True)
+
+    runtime.write_text(
+        runtime.read_text(encoding='utf-8')
+        .replace('revision ~= 42', 'revision ~= 43')
+        .replace('revision = 42', 'revision = 43')
+        + '-- main-only runtime change\n',
+        encoding='utf-8',
+    )
+    main_tip = commit(repo, 'main runtime bump')
+
+    subprocess.run(['git', 'checkout', '-q', 'feature'], cwd=repo, check=True)
+    (repo / 'README.md').write_text('feature-only docs\n', encoding='utf-8')
+    feature_tip = commit(repo, 'feature docs')
+
+    # A PR behind main did not change the runtime. Base-only runtime work must
+    # not make the feature branch fail the runtime revision gate.
+    passed = run('python3', str(SCRIPT), main_tip, feature_tip, cwd=repo)
+    assert passed.returncode == 0, passed.stdout + passed.stderr
+
 print('runtime_revision_gate_ok')
 
 workflow = (ROOT / '.github/workflows/linux-contracts.yml').read_text()
