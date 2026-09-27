@@ -113,3 +113,4 @@
 "host.hotkeys.registrationFailed" = "部分快捷键注册失败，可能已被系统或其他应用占用：{0}";
 "host.feature.enable" = "启用功能";
 "host.feature.disable" = "关闭功能";
+"host.hotkeys.conflict" = "快捷键 {0} 已分配给「{1}」。";
