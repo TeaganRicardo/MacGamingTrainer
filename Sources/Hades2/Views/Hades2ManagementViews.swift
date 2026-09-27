@@ -3,13 +3,14 @@ import AppKit
 
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @Binding var isPresented: Bool
     @State private var profileName = ""
     @State private var selectedProfile = ""
 
     var body: some View {
         TrainerSheetScaffold(title: "自定义配置", icon: "slider.horizontal.3", width: 620) {
-            Button("刷新") { model.listProfiles() }.disabled(model.busy)
+            Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
         } content: {
             Text("只保存你创建的自定义配置，不内置任何预设。配置包含功能开关、倍率、属性/资源/元素锁、祝福稀有度、下一房奖励和快捷键。")
                 .foregroundStyle(.secondary)
@@ -37,13 +38,15 @@ struct Hades2ProfileManagerView: View {
                         enabled: !model.busy && !selectedProfile.isEmpty,
                         action: { model.loadProfile(selectedProfile) }
                     )
-                    Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: { Label("删除", systemImage: "trash") }
+                    Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
+                        Label(localization.localized("host.delete"), systemImage: "trash")
+                    }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()
                 }
             }
         } footer: {
-            HStack { Spacer(); Button("完成") { isPresented = false } }
+            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
         .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
             if !names.contains(selectedProfile) {
@@ -57,6 +60,7 @@ struct Hades2DiagnosticsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Binding var isPresented: Bool
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
 
     var body: some View {
         TrainerSheetScaffold(title: "运行自检", icon: "stethoscope", width: 700) {
@@ -89,7 +93,7 @@ struct Hades2DiagnosticsView: View {
             }
             .frame(minHeight: 260, maxHeight: 430)
         } footer: {
-            HStack { Spacer(); Button("完成") { isPresented = false } }
+            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
     }
 }
