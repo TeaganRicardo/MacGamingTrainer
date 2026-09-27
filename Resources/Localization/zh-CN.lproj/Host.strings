@@ -99,3 +99,17 @@
 "host.save.error.unsafe" = "存档路径不安全，操作已停止。";
 "host.save.error.invalidSnapshot" = "该存档备份无效，无法恢复。";
 "host.save.error.restoreFailed" = "存档恢复失败。";
+"host.trainerMenu" = "修改器";
+"host.shortcutSettings" = "快捷键设置";
+"host.viewRuntimeLog" = "查看运行日志";
+"host.viewLog" = "查看日志";
+"host.launchGame" = "启动游戏";
+"host.refreshStatus" = "刷新状态";
+"host.disableAll" = "全部关闭";
+"host.hotkeys.help" = "点击任一快捷键后直接按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。";
+"host.hotkeys.pressNew" = "按下新快捷键…";
+"host.hotkeys.unrecognized" = "无法识别该按键，请换一个组合。";
+"host.hotkeys.listenerFailed" = "快捷键监听初始化失败（{0}）。";
+"host.hotkeys.registrationFailed" = "部分快捷键注册失败，可能已被系统或其他应用占用：{0}";
+"host.feature.enable" = "启用功能";
+"host.feature.disable" = "关闭功能";
