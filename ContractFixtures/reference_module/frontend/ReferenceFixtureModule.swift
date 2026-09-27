@@ -104,11 +104,23 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     }
 }
 
+@MainActor
+enum ReferenceFixtureLocalizationProbe {
+    static func hostGameLibrary(using localization: TrainerLocalizationStore) -> String {
+        localization.localized("host.gameLibrary")
+    }
+}
+
 struct ReferenceFixtureContent: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @ObservedObject var model: ReferenceFixtureModel
 
     var body: some View {
-        TrainerFeatureToggleRow(
+        VStack(alignment: .leading, spacing: 12) {
+            Text(ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TrainerFeatureToggleRow(
             title: "Reference Feature",
             icon: "checkmark.circle",
             state: TrainerFeatureControlState(
@@ -121,8 +133,9 @@ struct ReferenceFixtureContent: View {
                 isWarning: false
             ),
             shortcutText: nil
-        ) {
-            model.setEnabled(!model.enabled)
+            ) {
+                model.setEnabled(!model.enabled)
+            }
         }
     }
 }
