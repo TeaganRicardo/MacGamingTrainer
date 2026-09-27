@@ -45,7 +45,8 @@ for workflow in WORKFLOWS:
 linux = (ROOT / '.github/workflows/linux-contracts.yml').read_text()
 assert 'python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA"' in linux
 assert "steps.scope.outputs.needs_linux == 'true'" in linux
-assert "steps.scope.outputs.needs_linux != 'true'" in linux
+assert "steps.scope.outputs.needs_linux != 'true' && steps.scope.outputs.needs_linux != 'false'" in linux
+assert "steps.scope.outputs.needs_linux == 'false'" in linux
 runtime_line = [line for line in linux.splitlines() if 'check_runtime_revision.py' in line][0]
 assert '"$BASE_SHA"' in runtime_line and '"$HEAD_SHA"' in runtime_line
 
@@ -54,7 +55,8 @@ assert 'scope:\n    runs-on: ubuntu-latest' in build2
 assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
 assert 'needs: scope' in build2
 assert "needs.scope.outputs.needs_macos == 'true' && 'macos-latest' || 'ubuntu-latest'" in build2
-assert "needs.scope.outputs.needs_macos != 'true'" in build2
+assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
+assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
 assert './build.sh hades2' in build2
 
@@ -63,7 +65,8 @@ assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
 assert "needs.scope.outputs.needs_module == 'true' && 'macos-latest' || 'ubuntu-latest'" in module_matrix
-assert "needs.scope.outputs.needs_module != 'true'" in module_matrix
+assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
+assert "needs.scope.outputs.needs_module == 'false'" in module_matrix
 assert '- reference_fixture' in module_matrix
 assert '- hades2' not in module_matrix, 'Hades II build is already owned by Build 2 macOS'
 assert './build.sh "${{ matrix.game }}"' in module_matrix
