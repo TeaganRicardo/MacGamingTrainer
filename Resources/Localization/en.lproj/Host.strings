@@ -99,3 +99,17 @@
 "host.save.error.unsafe" = "The save path is unsafe. The operation was stopped.";
 "host.save.error.invalidSnapshot" = "The save backup is invalid and cannot be restored.";
 "host.save.error.restoreFailed" = "The save restore failed.";
+"host.trainerMenu" = "Trainer";
+"host.shortcutSettings" = "Shortcut Settings";
+"host.viewRuntimeLog" = "View Runtime Log";
+"host.viewLog" = "View Log";
+"host.launchGame" = "Launch Game";
+"host.refreshStatus" = "Refresh Status";
+"host.disableAll" = "Disable All";
+"host.hotkeys.help" = "Click a shortcut, then press the new key combination. Esc cancels capture; Control / Option / Shift / Command with numbers, letters, arrow keys, and function keys are supported.";
+"host.hotkeys.pressNew" = "Press new shortcut…";
+"host.hotkeys.unrecognized" = "That key could not be recognized. Try another combination.";
+"host.hotkeys.listenerFailed" = "Hotkey listener initialization failed ({0}).";
+"host.hotkeys.registrationFailed" = "Some hotkeys could not be registered because they may already be used by the system or another app: {0}";
+"host.feature.enable" = "Enable Feature";
+"host.feature.disable" = "Disable Feature";
