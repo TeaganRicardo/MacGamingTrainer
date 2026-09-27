@@ -208,7 +208,7 @@ final class TrainerBackendSession {
                 let coreOwned = reply.command.hasPrefix("core.")
                 if reply.success {
                     if !coreOwned, let result = reply.result { configuration.applyPayload(result) }
-                    if reply.announceSuccess { self.updateStatus { $0.notice = "\(reply.operation)完成" } }
+                    if reply.announceSuccess { self.updateStatus { $0.notice = "host.backend.notice.completed" } }
                 } else {
                     if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
                     let failure = reply.failure ?? BackendFailure(
