@@ -15,6 +15,7 @@ struct Hades2TrainerView: View {
 
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @FocusState private var focusedField: EditField?
 
     private var accent: Color { theme.accent }
