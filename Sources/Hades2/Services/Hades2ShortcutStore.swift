@@ -28,11 +28,11 @@ struct Hades2ShortcutStore {
         Dictionary(uniqueKeysWithValues: ShortcutAction.uiOrder.map { ($0.rawValue, chord($0).payload) })
     }
 
-    mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> String? {
+    mutating func set(_ action: ShortcutAction, chord newChord: HotkeyChord) -> ShortcutAction? {
         if let other = ShortcutAction.uiOrder.first(where: {
             $0 != action && chord($0).keyCode == newChord.keyCode && chord($0).modifiers == newChord.modifiers
         }) {
-            return "快捷键 \(newChord.displayText) 已分配给「\(other.title)」。"
+            return other
         }
 
         if newChord == Self.defaultLayout()[action] {
