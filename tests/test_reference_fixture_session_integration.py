@@ -151,8 +151,14 @@ let localizationContractPassed = MainActor.assumeIsolated {
     guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "游戏库" else {
         return false
     }
+    guard ReferenceFixtureLocalizationProbe.hostConnectionStatus(connected: false, using: localization) == "未连接" else {
+        return false
+    }
     localization.language = .en
     guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "Game Library" else {
+        return false
+    }
+    guard ReferenceFixtureLocalizationProbe.hostConnectionStatus(connected: true, using: localization) == "Connected" else {
         return false
     }
     guard localizationDefaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "en" else {
