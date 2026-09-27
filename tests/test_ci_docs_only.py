@@ -51,6 +51,33 @@ assert_scope(
     macos=False,
     module_build=False,
 )
+
+for shared_backend_seam in (
+    "Backend/core/__init__.py",
+    "Backend/core/adapter.py",
+    "Backend/core/game_spec.py",
+    "Backend/core/module_manifest.py",
+    "Backend/core/protocol.py",
+    "Backend/core/registry.py",
+    "Backend/core/server.py",
+):
+    assert_scope(
+        [shared_backend_seam],
+        docs_only=False,
+        linux=True,
+        macos=True,
+        module_build=True,
+    )
+
+# Core Save implementation remains ordinary Backend/Core Python unless a
+# separate packaging/platform boundary is touched.
+assert_scope(
+    ["Backend/core/save_service.py"],
+    docs_only=False,
+    linux=True,
+    macos=False,
+    module_build=False,
+)
 assert_scope(
     [REFERENCE_DATA],
     docs_only=False,
