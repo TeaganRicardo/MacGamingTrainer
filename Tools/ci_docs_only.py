@@ -115,8 +115,17 @@ def classify_scope(
 def changed_paths(base_sha: str, head_sha: str, cwd: Path | None = None) -> list[str]:
     if not base_sha or not head_sha or set(base_sha) == {"0"}:
         return []
+    merge_base = subprocess.run(
+        ["git", "merge-base", base_sha, head_sha],
+        cwd=cwd,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+    if not merge_base:
+        raise RuntimeError("unable to resolve merge-base for CI change scope")
     result = subprocess.run(
-        ["git", "diff", "--no-renames", "--name-only", base_sha, head_sha, "--"],
+        ["git", "diff", "--no-renames", "--name-only", merge_base, head_sha, "--"],
         cwd=cwd,
         check=True,
         text=True,
