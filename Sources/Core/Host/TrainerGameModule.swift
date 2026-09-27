@@ -72,7 +72,7 @@ protocol TrainerGameModule {
     static func makeContent(model: Model) -> ContentView
     static func makeSidebarActions(model: Model) -> SidebarActions
     static func makeHeaderActions(model: Model) -> HeaderActions
-    static func makeManagementCommands(model: Model) -> ManagementCommands
+    static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> ManagementCommands
 }
 
 struct TrainerEmptyCommands: Commands {
