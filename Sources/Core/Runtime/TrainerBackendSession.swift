@@ -114,7 +114,7 @@ final class TrainerBackendSession {
         suppressTerminationError = true
         updateStatus {
             $0.busy = true
-            $0.operation = "重启后端"
+            $0.operation = "host.restartBackend"
             $0.errorCode = nil
             $0.error = ""
             $0.notice = ""
@@ -142,7 +142,7 @@ final class TrainerBackendSession {
     ) {
         let failure = BackendFailure(
             code: "backend_start_failed",
-            presentation: "无法启动后端，请查看日志。",
+            presentation: "host.backend.error.startFailed",
             diagnostic: error.localizedDescription,
             recoveryPath: nil
         )
@@ -213,13 +213,13 @@ final class TrainerBackendSession {
                     if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
                     let failure = reply.failure ?? BackendFailure(
                         code: "operation_failed",
-                        presentation: "操作失败，请查看日志。",
+                        presentation: "host.backend.error.operationFailed",
                         diagnostic: nil,
                         recoveryPath: nil
                     )
                     self.updateStatus {
                         $0.errorCode = failure.code
-                        $0.error = failure.presentation
+                        $0.error = coreOwned ? "host.backend.error.operationFailed" : failure.presentation
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
                     configuration.log("\(reply.operation)失败 [\(failure.code)]：\(diagnostic)")
@@ -232,7 +232,7 @@ final class TrainerBackendSession {
                     $0.backendAvailable = false
                     $0.busy = false
                     $0.errorCode = failure.code
-                    $0.error = failure.presentation
+                    $0.error = "host.backend.error.protocolMismatch"
                 }
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
@@ -249,17 +249,17 @@ final class TrainerBackendSession {
                     configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = true
-                        $0.operation = "恢复后端"
+                        $0.operation = "host.backend.operation.recover"
                         $0.errorCode = nil
                         $0.error = ""
-                        $0.notice = "后端通信异常，正在自动恢复"
+                        $0.notice = "host.backend.notice.recovering"
                     }
                 } else {
                     configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = false
                         $0.errorCode = failure.code
-                        $0.error = failure.presentation
+                        $0.error = self.hostClientFailurePresentation(failure)
                     }
                 }
             }
@@ -291,10 +291,10 @@ final class TrainerBackendSession {
             $0.backendModuleProtocolVersion = nil
             if !mismatch { $0.protocolCompatible = true }
             $0.busy = willRecover
-            $0.operation = willRecover ? "恢复后端" : ""
+            $0.operation = willRecover ? "host.backend.operation.recover" : ""
             if !willRecover && !suppressTerminationError && !mismatch {
                 $0.errorCode = "backend_terminated"
-                $0.error = "后端已退出。游戏内修改可能仍然生效。"
+                $0.error = "host.backend.error.terminated"
             }
         }
         configuration.resetGameState()
@@ -317,7 +317,7 @@ final class TrainerBackendSession {
             guard let self else { return }
             self.recoveryWorkItem = nil
             do {
-                try self.startClient(clearStatus: false, recoveryNotice: manual ? "后端已重启" : "后端已自动恢复")
+                try self.startClient(clearStatus: false, recoveryNotice: manual ? "host.backend.notice.restarted" : "host.backend.notice.recovered")
             } catch {
                 self.configuration?.log("后端恢复启动失败：\(error.localizedDescription)")
                 if !manual && self.automaticRecoveryAttempts < self.maximumAutomaticRecoveryAttempts {
@@ -328,7 +328,7 @@ final class TrainerBackendSession {
                         $0.busy = false
                         $0.operation = ""
                         $0.errorCode = "backend_recovery_failed"
-                        $0.error = "无法恢复后端，请查看日志。"
+                        $0.error = "host.backend.error.recoveryFailed"
                     }
                 }
             }
@@ -340,6 +340,25 @@ final class TrainerBackendSession {
     private func cancelRecovery() {
         recoveryWorkItem?.cancel()
         recoveryWorkItem = nil
+    }
+
+    private func hostClientFailurePresentation(_ failure: BackendFailure) -> String {
+        switch failure.code {
+        case "backend_unavailable":
+            return "host.backend.error.unavailable"
+        case "backend_queue_full":
+            return "host.backend.error.queueFull"
+        case "backend_send_failed":
+            return "host.backend.error.sendFailed"
+        case "protocol_mismatch":
+            return "host.backend.error.protocolMismatch"
+        case "backend_timeout":
+            return "host.backend.error.timeout"
+        case "backend_protocol_error":
+            return "host.backend.error.protocolError"
+        default:
+            return "host.backend.error.operationFailed"
+        }
     }
 
     private func updateStatus(_ change: (inout TrainerBackendStatus) -> Void) {
