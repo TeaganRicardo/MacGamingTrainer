@@ -126,8 +126,8 @@ struct Hades2ShortcutSettingsView: View {
                     .buttonStyle(.bordered)
                 }
             }
-            if !model.shortcutError.isEmpty {
-                Text(localization.presentation(model.shortcutError, arguments: model.shortcutErrorArguments))
+            if let issue = model.shortcutIssue {
+                Text(shortcutIssueText(issue))
                     .foregroundStyle(theme.warning)
                     .font(.caption)
             }
@@ -147,14 +147,14 @@ struct Hades2ShortcutSettingsView: View {
     private func beginCapture(_ action: ShortcutAction) {
         stopCapture()
         capturing = action
-        model.clearShortcutError()
+        model.clearShortcutIssue()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
                 DispatchQueue.main.async { stopCapture() }
                 return nil
             }
             guard let chord = HotkeyChord.capture(event) else {
-                model.setUnrecognizedShortcutError()
+                model.setUnrecognizedShortcutIssue()
                 return nil
             }
             DispatchQueue.main.async {
@@ -162,6 +162,23 @@ struct Hades2ShortcutSettingsView: View {
                 stopCapture()
             }
             return nil
+        }
+    }
+
+    private func shortcutIssueText(_ issue: Hades2ShortcutIssue) -> String {
+        switch issue {
+        case .unrecognized:
+            return localization.localized("host.hotkeys.unrecognized")
+        case let .conflict(chordText, action):
+            return localization.localized("host.hotkeys.conflict", arguments: [chordText, action.title])
+        case let .registration(.listenerInitialization(status)):
+            return localization.localized("host.hotkeys.listenerFailed", arguments: [String(status)])
+        case let .registration(.registrationConflicts(conflicts)):
+            let details = conflicts.map { conflict in
+                let title = ShortcutAction(rawValue: conflict.actionID)?.title ?? conflict.actionID
+                return "\(conflict.chordText) \(title) (\(conflict.status))"
+            }.joined(separator: ", ")
+            return localization.localized("host.hotkeys.registrationFailed", arguments: [details])
         }
     }
 
