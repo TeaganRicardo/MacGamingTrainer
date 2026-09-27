@@ -141,4 +141,8 @@ assert "重塑命运" in view
 assert "生成奥林匹斯的祝福" in types
 assert "生成角色奖励" in types
 
+host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
+assert 'CommandMenu("修改器")' in host_actions
+assert 'CommandMenu("训练器")' not in host_actions
+
 print("hades2_official_terminology_ok")
