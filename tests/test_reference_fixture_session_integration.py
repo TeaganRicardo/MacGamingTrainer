@@ -76,10 +76,6 @@ let localizationDomain = "ReferenceFixtureLocalization-\(UUID().uuidString)"
 let localizationDefaults = UserDefaults(suiteName: localizationDomain)!
 localizationDefaults.removePersistentDomain(forName: localizationDomain)
 defer { localizationDefaults.removePersistentDomain(forName: localizationDomain) }
-let localization = TrainerLocalizationStore(defaults: localizationDefaults)
-if ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) != "游戏库" {
-    fail("reference fixture did not resolve zh-CN through Host localization")
-}
 
 let session = TrainerBackendSession()
 var capturedLogs: [String] = []
@@ -150,18 +146,28 @@ guard waitUntil(2.0, { model.enabled && !model.busy }) else {
 }
 
 let protocolBeforeLanguageChange = model.backendStatus.backendProtocolVersion
-localization.language = .en
-if ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) != "Game Library" {
-    fail("reference fixture did not update through live Host language selection")
+let localizationContractPassed = MainActor.assumeIsolated {
+    let localization = TrainerLocalizationStore(defaults: localizationDefaults)
+    guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "游戏库" else {
+        return false
+    }
+    localization.language = .en
+    guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "Game Library" else {
+        return false
+    }
+    guard localizationDefaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "en" else {
+        return false
+    }
+    return TrainerLocalizationStore(defaults: localizationDefaults).language == .en
+}
+if !localizationContractPassed {
+    fail("reference fixture did not preserve the Host live/persisted localization contract")
 }
 if !model.connected || !model.enabled {
     fail("presentation language changed fixture runtime state")
 }
 if model.backendStatus.backendProtocolVersion != protocolBeforeLanguageChange || protocolBeforeLanguageChange != 6 {
     fail("presentation language changed protocol identity")
-}
-if localizationDefaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) != "en" {
-    fail("reference fixture language selection did not persist through Host store")
 }
 
 model.setEnabled(false)
