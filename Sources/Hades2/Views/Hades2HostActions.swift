@@ -28,7 +28,7 @@ struct Hades2ManagementCommands: Commands {
     @ObservedObject var model: Hades2TrainerModel
 
     var body: some Commands {
-        CommandMenu("训练器") {
+        CommandMenu("修改器") {
             Button("刷新状态") { model.refreshFromHost() }
                 .disabled(model.busy)
             Button("全部关闭") { model.disableAll() }
