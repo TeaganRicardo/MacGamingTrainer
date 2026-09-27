@@ -12,10 +12,18 @@ PORTABLE_TOOL_PATHS = {
     "Tools/discover_linux_tests.py",
     "Tools/run_linux_checks.sh",
 }
+BACKEND_MODULE_BOUNDARY_PATHS = {
+    "Backend/core/__init__.py",
+    "Backend/core/adapter.py",
+    "Backend/core/game_spec.py",
+    "Backend/core/module_manifest.py",
+    "Backend/core/protocol.py",
+    "Backend/core/registry.py",
+    "Backend/core/server.py",
+}
 MODULE_EXACT_PATHS = {
     ".github/workflows/module-build-matrix.yml",
     "ACTIVE_GAME_ID",
-    "Backend/core/module_manifest.py",
     "Backend/games/__init__.py",
     "Info.plist",
     "Sources/App.swift",
@@ -59,7 +67,11 @@ def load_macos_only_tests(root: Path = ROOT) -> set[str]:
 
 
 def needs_module_build_for_path(path: str) -> bool:
-    if path in MODULE_EXACT_PATHS or path.startswith(MODULE_PREFIXES):
+    if (
+        path in BACKEND_MODULE_BOUNDARY_PATHS
+        or path in MODULE_EXACT_PATHS
+        or path.startswith(MODULE_PREFIXES)
+    ):
         return True
     return path.startswith("Backend/games/") and path.endswith("/module.json")
 
