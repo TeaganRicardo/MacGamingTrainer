@@ -13,7 +13,7 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
     var operation: String { backendStatus.operation }
-    var statusTitle: String { connected ? "已连接" : "尚未连接" }
+    var statusTitle: String { connected ? "host.connected" : "host.disconnected" }
     var connectionDetailText: String { "Reference fixture" }
     var hostActionsEnabled: Bool {
         backendAvailable && !busy && backendStatus.protocolCompatible
@@ -108,6 +108,13 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
 enum ReferenceFixtureLocalizationProbe {
     static func hostGameLibrary(using localization: TrainerLocalizationStore) -> String {
         localization.localized("host.gameLibrary")
+    }
+
+    static func hostConnectionStatus(
+        connected: Bool,
+        using localization: TrainerLocalizationStore
+    ) -> String {
+        localization.presentation(connected ? "host.connected" : "host.disconnected")
     }
 }
 
