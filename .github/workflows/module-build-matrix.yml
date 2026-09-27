@@ -34,6 +34,12 @@ jobs:
         id: scope
         run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Require explicit scope decision
+        if: steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'
+        run: |
+          echo "Change-scope classifier did not emit needs_module=true|false." >&2
+          exit 1
+
   build:
     needs: scope
     if: ${{ always() }}
@@ -53,7 +59,7 @@ jobs:
           exit 1
 
       - name: Fast path
-        if: needs.scope.result == 'success' && needs.scope.outputs.needs_module != 'true'
+        if: needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'false'
         run: echo "Change does not require the reference module build."
 
       - uses: actions/checkout@v4
