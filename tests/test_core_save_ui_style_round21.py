@@ -9,7 +9,7 @@ assert "TrainerSelectionControl(" in save_view
 assert "TrainerListCard" not in save_view
 assert "TrainerRow" in save_view
 assert ".trainerGroupedRows()" in save_view
-assert 'TrainerSection(title: "备份历史"' in save_view
+assert 'TrainerSection(title: localization.localized("host.save.history")' in save_view
 
 # Snapshot name is the visual primary text; timestamp/details remain muted
 # secondary information.
