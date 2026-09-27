@@ -53,6 +53,7 @@ func commands(at url: URL) -> [[String: Any]] {
 
 @main
 struct Main {
+    @MainActor
     static func main() throws {
         let args = CommandLine.arguments
         guard args.count == 3 else { fail("expected python + worker") }
@@ -76,7 +77,14 @@ struct Main {
         )
 
         let model = Hades2GameModule.makeModel(session: session)
-        let host = NSHostingView(rootView: Hades2TrainerView(model: model))
+        let localizationSuite = "mgt.hades-view.localization.\(UUID().uuidString)"
+        let localizationDefaults = UserDefaults(suiteName: localizationSuite)!
+        localizationDefaults.removePersistentDomain(forName: localizationSuite)
+        let localization = TrainerLocalizationStore(defaults: localizationDefaults)
+        let host = NSHostingView(
+            rootView: Hades2TrainerView(model: model)
+                .environmentObject(localization)
+        )
         host.frame = NSRect(x: 0, y: 0, width: 1200, height: 900)
         host.layoutSubtreeIfNeeded()
         pump(0.10)
