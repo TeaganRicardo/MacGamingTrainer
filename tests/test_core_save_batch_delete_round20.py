@@ -81,7 +81,7 @@ RunLoop.current.run(until: Date().addingTimeInterval(0.20))
 if !model.busy { fail("batch delete became idle between queued deletions") }
 if !model.notice.isEmpty { fail("batch delete announced completion too early") }
 
-if !waitUntil(2.0, { !model.busy && model.notice.contains("2") }) {
+if !waitUntil(2.0, { !model.busy && model.notice == "host.save.notice.deletedMany" && model.noticeArguments == ["2"] }) {
     fail("batch delete did not finish coherently: busy=\(model.busy) notice=\(model.notice)")
 }
 session.stop()

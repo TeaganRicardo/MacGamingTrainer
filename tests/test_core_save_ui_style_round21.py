@@ -9,13 +9,13 @@ assert "TrainerSelectionControl(" in save_view
 assert "TrainerListCard" not in save_view
 assert "TrainerRow" in save_view
 assert ".trainerGroupedRows()" in save_view
-assert 'TrainerSection(title: "备份历史"' in save_view
+assert 'TrainerSection(title: localization.localized("host.save.history")' in save_view
 
 # Snapshot name is the visual primary text; timestamp/details remain muted
 # secondary information.
 assert "Text(snapshot.name)" in save_view
 assert ".font(.headline.weight(.semibold))" in save_view
-assert 'TrainerPillBadge(text: "热备份"' in save_view
+assert 'TrainerPillBadge(text: localization.localized("host.save.hotBackup")' in save_view
 assert ".font(.caption)" in save_view
 assert ".foregroundStyle(.secondary)" in save_view
 

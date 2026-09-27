@@ -33,7 +33,7 @@ for raw in sys.stdin:
             print(json.dumps({
                 'type':'result','id':req['id'],'protocolVersion':6,
                 'moduleProtocolVersion':5,'gameID':args.game,'ok':False,
-                'error':{'code':'unsafe_storage','presentation':'后端拒绝显示存档'},
+                'error':{'code':'save_unsafe','presentation':'后端拒绝显示存档'},
                 'result':{'folder':str(pathlib.Path(__file__).parent)},
             }), flush=True)
             continue
@@ -127,7 +127,7 @@ struct Runner {
         trackingDeleteChain = false
         model.refresh() // Queue another request behind the final delete.
         trackingQueuedRequest = true
-        if !waitUntil(2.0, { model.notice.contains("2") }) {
+        if !waitUntil(2.0, { model.notice == "host.save.notice.deletedMany" && model.noticeArguments == ["2"] }) {
             fail("recursive delete chain did not finish coherently")
         }
         trackingQueuedRequest = false
@@ -138,10 +138,10 @@ struct Runner {
 
         model.reveal(id: "error")
         if !waitUntil(2.0, { !model.busy }) { fail("failed reveal did not finish") }
-        if model.error != "后端拒绝显示存档" { fail("failed reveal masked backend error") }
+        if model.error != "host.save.error.unsafe" { fail("failed reveal did not map stable Save error code") }
         model.reveal(id: "unsafe")
         if !waitUntil(2.0, { !model.busy }) { fail("unsafe reveal did not finish") }
-        if model.error != "后端返回的存档目录无效或不安全。" {
+        if model.error != "host.save.error.invalidFolder" {
             fail("unsafe backend folder was not rejected")
         }
 
@@ -150,8 +150,8 @@ struct Runner {
         if !model.busy { fail("concurrent Save requests did not start before restart") }
         session.restart()
         if model.busy { fail("restarting the backend left cancelled Save requests busy") }
-        if !model.error.contains("存档操作未完成") { fail("restart did not surface request failure") }
-        if !waitUntil(3.0, { session.currentStatus.notice == "后端已重启" && session.isRunning }) {
+        if model.error != "host.save.error.incomplete" { fail("restart did not surface request failure") }
+        if !waitUntil(3.0, { session.currentStatus.notice == "host.backend.notice.restarted" && session.isRunning }) {
             fail("backend did not recover after restart")
         }
         model.refresh()
@@ -161,7 +161,7 @@ struct Runner {
         session.stop()
         _ = waitUntil(1.0) { !session.isStarted }
         if model.busy { fail("stopping the backend left Save busy") }
-        if !model.error.contains("存档操作未完成") { fail("stopped request did not surface failure") }
+        if model.error != "host.save.error.incomplete" { fail("stopped request did not surface failure") }
         print("core_save_manager_lifecycle_u01_ok")
     }
 }

@@ -12,22 +12,26 @@ app = app_path.read_text(encoding="utf-8")
 
 for token in (
     "struct TrainerSaveManagerView",
+    "@EnvironmentObject private var localization: TrainerLocalizationStore",
     "@State private var selectedIDs: Set<String>",
     "@State private var editingID:",
     "TrainerInlineNameEditor",
     ".onTapGesture(count: 2)",
-    'TrainerPillBadge(text: "热备份"',
+    'TrainerPillBadge(text: localization.localized("host.save.hotBackup")',
     "TrainerOverflowMenu",
-    'Label("在 Finder 中显示"',
-    'Label("删除"',
-    'Button("恢复")',
-    'TrainerCheckboxControl(',
-    'title: "恢复前保留当前存档"',
+    'Label(localization.localized("host.showInFinder")',
+    'Label(localization.localized("host.delete")',
+    'Button(localization.localized("host.restore"))',
+    "TrainerCheckboxControl(",
+    'title: localization.localized("host.save.preserveCurrent")',
     "deleteIDs = selectedIDs",
     "model.delete(ids: ids)",
     "model.reveal(id: snapshot.id)",
     "model.restore(id:",
     "LazyVStack",
+    'localization.localized("host.save.fileCount", arguments:',
+    'localization.presentation(model.error, arguments: model.errorArguments)',
+    'localization.presentation(model.notice, arguments: model.noticeArguments)',
 ):
     assert token in view, token
 
@@ -36,13 +40,13 @@ assert "Inspector" not in view
 assert "Hades" not in view
 assert "Timer.scheduledTimer" not in view
 assert "@FocusState" not in view
-assert 'pending.indeterminate' in view
-assert '结果无法确认' in view
-assert 'pending.indeterminate ? "清除状态" : "取消"' in view
-assert 'if !model.recoveryPaths.isEmpty' in view
-assert '检测到上次恢复中断后保留的恢复副本' in view
-assert 'model.revealRecoveryCopies()' in view
-assert 'model.recoveryPaths.joined(separator: \"\\n\")' in view
+assert "pending.indeterminate" in view
+assert 'localization.localized("host.save.pendingIndeterminate")' in view
+assert '"host.clearStatus" : "host.cancel"' in view
+assert "if !model.recoveryPaths.isEmpty" in view
+assert 'localization.localized("host.save.recoveryCopiesWarning")' in view
+assert "model.revealRecoveryCopies()" in view
+assert 'model.recoveryPaths.joined(separator: "\\n")' in view
 
 for token in (
     "@StateObject private var saveManager: TrainerSaveManagerModel",

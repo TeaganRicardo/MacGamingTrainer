@@ -103,6 +103,7 @@ struct TrainerInlineNameEditor: View {
 
 struct TrainerSelectionControl: View {
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let selected: Bool
     let enabled: Bool
     let helpText: String
@@ -126,12 +127,13 @@ struct TrainerSelectionControl: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .help(helpText)
-        .accessibilityLabel(selected ? "取消选择" : "选择")
-        .accessibilityValue(selected ? "已选择" : "未选择")
+        .accessibilityLabel(localization.localized(selected ? "host.selection.deselect" : "host.selection.select"))
+        .accessibilityValue(localization.localized(selected ? "host.selection.selected" : "host.selection.notSelected"))
     }
 }
 
 struct TrainerOverflowMenu<Content: View>: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let enabled: Bool
     let content: Content
 
@@ -153,7 +155,7 @@ struct TrainerOverflowMenu<Content: View>: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(!enabled)
-        .help("更多")
+        .help(localization.localized("host.more"))
     }
 }
 

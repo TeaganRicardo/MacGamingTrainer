@@ -14,6 +14,7 @@ struct TrainerFeatureControlState {
 }
 
 struct TrainerFeatureToggleRow: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     let state: TrainerFeatureControlState
@@ -34,7 +35,7 @@ struct TrainerFeatureToggleRow: View {
                     action: action
                 )
                 .accessibilityLabel(title)
-                .accessibilityValue(state.isOn ? "开启" : "关闭")
+                .accessibilityValue(localization.localized(state.isOn ? "host.accessibility.on" : "host.accessibility.off"))
             }
         }
     }

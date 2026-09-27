@@ -22,19 +22,20 @@ struct TrainerConnectionStatusCard: View {
                 Circle().fill(connected ? theme.success : theme.inactive).frame(width: 8, height: 8)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(busy ? operationText + "…" : statusText).font(.subheadline.weight(.medium))
+                Text(busy ? localization.presentation(operationText) + "…" : localization.presentation(statusText))
+                    .font(.subheadline.weight(.medium))
                 Text(detailText).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
-                .help("按需读取状态，不进行持续调试轮询")
+                .help(localization.localized("host.refreshStatusHelp"))
                 .disabled(!backendAvailable || !actionsEnabled)
             if backendAvailable {
                 Button(connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"), action: onPrimary)
                     .buttonStyle(.borderedProminent)
                     .disabled(!actionsEnabled)
             } else {
-                Button("重启后端", action: onRestart)
+                Button(localization.localized("host.restartBackend"), action: onRestart)
                     .buttonStyle(.borderedProminent)
                     .disabled(!actionsEnabled)
             }

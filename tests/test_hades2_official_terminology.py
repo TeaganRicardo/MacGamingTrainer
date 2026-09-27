@@ -142,7 +142,12 @@ assert "生成奥林匹斯的祝福" in types
 assert "生成角色奖励" in types
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
-assert 'CommandMenu("修改器")' in host_actions
+host_zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encoding="utf-8")
+host_en = (ROOT / "Resources/Localization/en.lproj/Host.strings").read_text(encoding="utf-8")
+assert 'CommandMenu(localization.localized("host.trainerMenu"))' in host_actions
+assert '"host.trainerMenu" = "修改器";' in host_zh
+assert '"host.trainerMenu" = "Trainer";' in host_en
 assert 'CommandMenu("训练器")' not in host_actions
+assert 'CommandMenu("修改器")' not in host_actions
 
 print("hades2_official_terminology_ok")

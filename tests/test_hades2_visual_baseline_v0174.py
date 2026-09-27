@@ -57,7 +57,7 @@ assert '.frame(width: 58)' in stats
 assert 'TrainerRow(opacity:' in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(text: $amount' in resource
-assert 'Label(locked ? "已锁定" : "锁定"' in resource
+assert 'Label(localization.localized(locked ? "host.locked" : "host.lock")' in resource
 
 print('hades2_visual_baseline_v0175_ok')
 

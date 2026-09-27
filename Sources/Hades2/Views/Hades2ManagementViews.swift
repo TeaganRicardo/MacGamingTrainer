@@ -3,13 +3,14 @@ import AppKit
 
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @Binding var isPresented: Bool
     @State private var profileName = ""
     @State private var selectedProfile = ""
 
     var body: some View {
         TrainerSheetScaffold(title: "自定义配置", icon: "slider.horizontal.3", width: 620) {
-            Button("刷新") { model.listProfiles() }.disabled(model.busy)
+            Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
         } content: {
             Text("只保存你创建的自定义配置，不内置任何预设。配置包含功能开关、倍率、属性/资源/元素锁、祝福稀有度、下一房奖励和快捷键。")
                 .foregroundStyle(.secondary)
@@ -37,13 +38,15 @@ struct Hades2ProfileManagerView: View {
                         enabled: !model.busy && !selectedProfile.isEmpty,
                         action: { model.loadProfile(selectedProfile) }
                     )
-                    Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: { Label("删除", systemImage: "trash") }
+                    Button(role: .destructive) { model.deleteProfile(selectedProfile) } label: {
+                        Label(localization.localized("host.delete"), systemImage: "trash")
+                    }
                         .disabled(model.busy || selectedProfile.isEmpty)
                     Spacer()
                 }
             }
         } footer: {
-            HStack { Spacer(); Button("完成") { isPresented = false } }
+            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
         .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
             if !names.contains(selectedProfile) {
@@ -57,6 +60,7 @@ struct Hades2DiagnosticsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Binding var isPresented: Bool
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
 
     var body: some View {
         TrainerSheetScaffold(title: "运行自检", icon: "stethoscope", width: 700) {
@@ -89,7 +93,7 @@ struct Hades2DiagnosticsView: View {
             }
             .frame(minHeight: 260, maxHeight: 430)
         } footer: {
-            HStack { Spacer(); Button("完成") { isPresented = false } }
+            HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
     }
 }
@@ -97,14 +101,15 @@ struct Hades2DiagnosticsView: View {
 struct Hades2ShortcutSettingsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var capturing: ShortcutAction?
     @State private var keyMonitor: Any?
 
     var body: some View {
-        TrainerSheetScaffold(title: "快捷键设置", width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
             EmptyView()
         } content: {
-            Text("点击任一快捷键后直接按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。")
+            Text(localization.localized("host.hotkeys.help"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(ShortcutAction.uiOrder) { action in
@@ -114,20 +119,22 @@ struct Hades2ShortcutSettingsView: View {
                     Button {
                         beginCapture(action)
                     } label: {
-                        Text(capturing == action ? "按下新快捷键…" : model.shortcutText(action))
+                        Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
                             .font(.system(.body, design: .monospaced))
                             .frame(minWidth: 110)
                     }
                     .buttonStyle(.bordered)
                 }
             }
-            if !model.shortcutError.isEmpty {
-                Text(model.shortcutError).foregroundStyle(theme.warning).font(.caption)
+            if let issue = model.shortcutIssue {
+                Text(shortcutIssueText(issue))
+                    .foregroundStyle(theme.warning)
+                    .font(.caption)
             }
         } footer: {
             HStack {
                 Spacer()
-                Button("完成") {
+                Button(localization.localized("host.done")) {
                     stopCapture()
                     model.shortcutSettingsPresented = false
                 }
@@ -140,14 +147,14 @@ struct Hades2ShortcutSettingsView: View {
     private func beginCapture(_ action: ShortcutAction) {
         stopCapture()
         capturing = action
-        model.shortcutError = ""
+        model.clearShortcutIssue()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
                 DispatchQueue.main.async { stopCapture() }
                 return nil
             }
             guard let chord = HotkeyChord.capture(event) else {
-                model.shortcutError = "无法识别该按键，请换一个组合。"
+                model.setUnrecognizedShortcutIssue()
                 return nil
             }
             DispatchQueue.main.async {
@@ -155,6 +162,23 @@ struct Hades2ShortcutSettingsView: View {
                 stopCapture()
             }
             return nil
+        }
+    }
+
+    private func shortcutIssueText(_ issue: Hades2ShortcutIssue) -> String {
+        switch issue {
+        case .unrecognized:
+            return localization.localized("host.hotkeys.unrecognized")
+        case let .conflict(chordText, action):
+            return localization.localized("host.hotkeys.conflict", arguments: [chordText, action.title])
+        case let .registration(.listenerInitialization(status)):
+            return localization.localized("host.hotkeys.listenerFailed", arguments: [String(status)])
+        case let .registration(.registrationConflicts(conflicts)):
+            let details = conflicts.map { conflict in
+                let title = ShortcutAction(rawValue: conflict.actionID)?.title ?? conflict.actionID
+                return "\(conflict.chordText) \(title) (\(conflict.status))"
+            }.joined(separator: ", ")
+            return localization.localized("host.hotkeys.registrationFailed", arguments: [details])
         }
     }
 

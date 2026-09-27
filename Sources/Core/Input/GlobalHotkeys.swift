@@ -30,8 +30,18 @@ extension HotkeyChord {
 
 struct HotkeyBinding {
     let actionID: String
-    let title: String
     let chord: HotkeyChord
+}
+
+struct TrainerHotkeyRegistrationConflict: Equatable {
+    let actionID: String
+    let chordText: String
+    let status: Int32
+}
+
+enum TrainerHotkeyRegistrationFailure: Equatable {
+    case listenerInitialization(status: Int32)
+    case registrationConflicts([TrainerHotkeyRegistrationConflict])
 }
 
 final class GlobalHotkeys {
@@ -60,14 +70,14 @@ final class GlobalHotkeys {
         }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
     }
 
-    func register(_ bindings: [HotkeyBinding]) -> String {
+    func register(_ bindings: [HotkeyBinding]) -> TrainerHotkeyRegistrationFailure? {
         guard handlerInstallStatus == noErr, handler != nil else {
-            return "快捷键监听初始化失败（\(handlerInstallStatus)）。"
+            return .listenerInitialization(status: handlerInstallStatus)
         }
         references.forEach { UnregisterEventHotKey($0) }
         references.removeAll()
         eventActions.removeAll()
-        var failures: [String] = []
+        var failures: [TrainerHotkeyRegistrationConflict] = []
         for (index, binding) in bindings.enumerated() {
             var reference: EventHotKeyRef?
             let eventID = UInt32(index + 1)
@@ -83,10 +93,15 @@ final class GlobalHotkeys {
                 references.append(reference)
                 eventActions[eventID] = binding.actionID
             } else {
-                failures.append("\(binding.chord.displayText) \(binding.title)（\(result)）")
+                failures.append(TrainerHotkeyRegistrationConflict(
+                    actionID: binding.actionID,
+                    chordText: binding.chord.displayText,
+                    status: result
+                ))
             }
         }
-        return failures.isEmpty ? "" : "快捷键注册失败，可能已被系统或其他应用占用：" + failures.joined(separator: "、")
+        guard !failures.isEmpty else { return nil }
+        return .registrationConflicts(failures)
     }
 
     deinit {

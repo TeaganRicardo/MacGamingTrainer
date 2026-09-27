@@ -25,6 +25,9 @@ struct LocalizationBehaviorTest {
         precondition(missingValue.language == .zhCN, "missing preference must default to zh-CN")
         precondition(missingValue.localized("host.gameLibrary") == "游戏库", "zh-CN must load from the bundled strings table")
         precondition(missingValue.localized("host.language") == "语言", "zh-CN language menu must load from the bundled table")
+        precondition(missingValue.localized("host.save.fileCount", arguments: ["3"]) == "3 个文件", "zh-CN argument substitution must use the shared table")
+        precondition(missingValue.presentation("host.connected") == "已连接", "Host key presentation must resolve")
+        precondition(missingValue.presentation("module-owned copy") == "module-owned copy", "module presentation must remain opaque")
 
         defaults.set("fr", forKey: TrainerLocalizationStore.userDefaultsKey)
         let invalidValue = TrainerLocalizationStore(defaults: defaults)
@@ -36,6 +39,8 @@ struct LocalizationBehaviorTest {
         precondition(defaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "en", "selection must persist")
         precondition(missingValue.localized("host.gameLibrary") == "Game Library", "live selection must update lookup")
         precondition(missingValue.localized("host.language") == "Language", "live language menu must update")
+        precondition(missingValue.localized("host.save.fileCount", arguments: ["3"]) == "3 files", "English argument substitution must update live")
+        precondition(missingValue.presentation("host.connected") == "Connected", "Host key presentation must update live")
         precondition(emitted == [.zhCN, .en], "published language must update live observers")
         precondition(TrainerLocalizationStore(defaults: defaults).language == .en, "saved selection must load on next launch")
         withExtendedLifetime(subscription) { }
