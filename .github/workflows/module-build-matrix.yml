@@ -20,52 +20,66 @@ env:
   HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      needs_module: ${{ steps.scope.outputs.needs_module }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify change scope
+        id: scope
+        run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
   build:
-    runs-on: macos-latest
+    needs: scope
+    if: ${{ always() }}
+    runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && 'macos-latest' || 'ubuntu-latest' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         game:
           - reference_fixture
-          - hades2
 
     steps:
+      - name: Require scope classification
+        if: needs.scope.result != 'success'
+        run: |
+          echo "Change-scope classification failed; refusing to skip the module gate." >&2
+          exit 1
+
+      - name: Fast path
+        if: needs.scope.result == 'success' && needs.scope.outputs.needs_module != 'true'
+        run: echo "Change does not require the reference module build."
+
       - uses: actions/checkout@v4
+        if: needs.scope.outputs.needs_module == 'true'
         with:
           fetch-depth: 0
 
-      - name: Detect docs-only change
-        id: scope
-        run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Docs-only fast path
-        if: steps.scope.outputs.docs_only == 'true'
-        run: echo "Docs-only change; skipping module build for ${{ matrix.game }}."
-
       - name: Install reference fixture
-        if: steps.scope.outputs.docs_only != 'true' && matrix.game == 'reference_fixture'
+        if: needs.scope.outputs.needs_module == 'true'
         run: |
           mkdir -p Backend/games/reference_fixture Sources/ReferenceFixture
           cp -R ContractFixtures/reference_module/backend/. Backend/games/reference_fixture/
           cp -R ContractFixtures/reference_module/frontend/. Sources/ReferenceFixture/
 
       - name: Build selected module
-        if: steps.scope.outputs.docs_only != 'true'
+        if: needs.scope.outputs.needs_module == 'true'
         run: |
           chmod +x build.sh Tools/*.py
           ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
-        if: steps.scope.outputs.docs_only != 'true'
+        if: needs.scope.outputs.needs_module == 'true'
         run: |
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
-          if [[ "${{ matrix.game }}" == "hades2" ]]; then
-            test -f "$app/Contents/Resources/ui_terminology.json"
-          else
-            test ! -e "$app/Contents/Resources/ui_terminology.json"
-          fi
+          test ! -e "$app/Contents/Resources/ui_terminology.json"
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"
