@@ -51,6 +51,10 @@ for literal in (
 ):
     assert literal not in host_actions, f"Host shell action copy bypasses localization seam: {literal}"
 
+assert not re.search(r"[\u3400-\u9fff]", host_actions), (
+    "shell-placement actions must not own one-language copy"
+)
+
 for token in (
     '@EnvironmentObject private var localization: TrainerLocalizationStore',
     'Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")',
@@ -86,6 +90,12 @@ for token in (
     'localization.localized("host.hotkeys.pressNew")',
     'localization.presentation(model.shortcutError, arguments: model.shortcutErrorArguments)',
     'localization.localized("host.done")',
+):
+    assert token in management, token
+
+for token in (
+    'Button(localization.localized("host.refresh"))',
+    'Label(localization.localized("host.delete"), systemImage: "trash")',
 ):
     assert token in management, token
 
