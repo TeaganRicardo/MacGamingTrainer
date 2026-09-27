@@ -36,6 +36,7 @@
 "host.backend.notice.recovering" = "Backend communication failed. Recovering automatically.";
 "host.backend.notice.restarted" = "Backend restarted";
 "host.backend.notice.recovered" = "Backend recovered automatically";
+"host.backend.notice.completed" = "Operation completed";
 "host.save.openFolder" = "Open Save Folder";
 "host.refresh" = "Refresh";
 "host.save.createBackup" = "Create Backup";
