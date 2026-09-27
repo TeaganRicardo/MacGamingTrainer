@@ -45,13 +45,13 @@ The newer compatibility and governance work did not change `Backend/games/hades2
 
 Automated tests are not substitutes for real-game acceptance when a future change modifies resident Lua semantics.
 
-PR #184 established the current CI routing baseline. Pull-request change scope and runtime-revision enforcement use merge-base -> PR head, and missing/invalid scope decisions fail closed. Ordinary documentation keeps the existing required check names but takes lightweight Ubuntu fast paths. Portable Backend/tests/executable reference data run Linux contracts; Swift/AppKit/native/build/package/macOS-only paths also run Build 2 macOS; module/Core/build-boundary paths additionally run the reference-fixture module build. The explicit shared Backend/Core seams `__init__.py`, `adapter.py`, `game_spec.py`, `module_manifest.py`, `protocol.py`, `registry.py`, and `server.py` are conservatively routed through macOS + reference-fixture verification, while ordinary portable Core Python such as `save_service.py` remains Linux-only. Build 2 is the sole production Hades build/package/signing proof; the module matrix builds only `reference_fixture`.
+PR #184 established the current CI routing baseline. Pull-request change scope and runtime-revision enforcement use merge-base -> PR head, and missing/invalid scope decisions fail closed. Ordinary documentation keeps the existing required check names but takes lightweight Ubuntu fast paths. Linux-portable Backend/tests/reference data run Linux contracts only. Paths that are not Linux-portable, including Swift/AppKit/native/build/package/macOS-only work and the bundled Hades `ui_terminology.json` resource, also run Build 2 macOS. Module/Core/build-boundary paths additionally run the reference-fixture module build. The explicit shared Backend/Core seams `__init__.py`, `adapter.py`, `game_spec.py`, `module_manifest.py`, `protocol.py`, `registry.py`, and `server.py` are conservatively routed through macOS + reference-fixture verification, while ordinary portable Core Python such as `save_service.py` remains Linux-only. Build 2 is the sole production Hades build/package/signing proof; the module matrix builds only `reference_fixture`.
 
 ## Architecture/governance state
 
 Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
-The next shared-presentation implementation gate is #176. The subsequent Hades-presentation gate is #177. Further dependency, parallel-work, feature-admission, and governance sequencing remains owned by planning issue #124 and is intentionally not duplicated here.
+Planning issue #124 remains the sequencing authority. This status file records only the current operational gate and does not mirror the roadmap.
 
 ## Current development gate
 
@@ -68,7 +68,7 @@ For every task:
 
 Do not stack new implementation on unmerged overlapping PR heads.
 
-The next shared-presentation gate is #176, followed by Hades presentation gate #177. All other admission and sequencing decisions remain in #124.
+The next shared-presentation implementation gate is #176. The subsequent Hades-presentation gate is #177. All other admission and sequencing decisions remain in #124.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
