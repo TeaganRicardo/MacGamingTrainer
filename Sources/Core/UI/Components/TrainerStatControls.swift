@@ -177,7 +177,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
             HStack(spacing: 12) {
                 Text(title).font(.subheadline.weight(.semibold))
                 Spacer()
-                TrainerNumberField(text: $text, placeholder: "数值", width: 90, enabled: isEditable, alignment: .leading)
+                TrainerNumberField(text: $text, placeholder: "host.value", width: 90, enabled: isEditable, alignment: .leading)
                     .focused(focus, equals: focusValue)
                 if !suffix.isEmpty {
                     Text(suffix).foregroundStyle(.secondary).frame(width: 18)
