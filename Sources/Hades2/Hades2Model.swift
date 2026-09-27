@@ -130,6 +130,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
     @Published var shortcutError = ""
+    @Published var shortcutErrorArguments: [String] = []
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
 
@@ -788,8 +789,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func shortcutText(_ action: ShortcutAction) -> String { shortcutStore.chord(action).displayText }
 
     func setShortcut(action: ShortcutAction, chord: HotkeyChord) {
-        shortcutError = shortcutStore.set(action, chord: chord) ?? ""
-        if shortcutError.isEmpty { installHotkeys() }
+        if let conflict = shortcutStore.set(action, chord: chord) {
+            shortcutError = "host.hotkeys.conflict"
+            shortcutErrorArguments = [chord.displayText, conflict.title]
+        } else {
+            clearShortcutError()
+            installHotkeys()
+        }
+    }
+
+    func clearShortcutError() {
+        shortcutError = ""
+        shortcutErrorArguments = []
+    }
+
+    func setUnrecognizedShortcutError() {
+        shortcutError = "host.hotkeys.unrecognized"
+        shortcutErrorArguments = []
     }
 
     private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
@@ -880,7 +896,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let bindings = ShortcutAction.uiOrder.map { action in
             HotkeyBinding(actionID: action.rawValue, title: action.title, chord: shortcutChord(action))
         }
-        shortcutError = instance.register(bindings)
+        if let failure = instance.register(bindings) {
+            shortcutError = failure.presentationKey
+            shortcutErrorArguments = failure.arguments
+        } else {
+            clearShortcutError()
+        }
         hotkeys = instance
     }
 
