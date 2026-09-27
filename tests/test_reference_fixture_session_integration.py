@@ -25,6 +25,9 @@ assert "_ = session" not in fixture_source, (
     "reference fixture still discards the Host-owned TrainerBackendSession"
 )
 assert "ReferenceFixtureModel(session: session)" in fixture_source
+assert "ReferenceFixtureLocalizationProbe" in fixture_source, (
+    "reference fixture does not consume the Host localization seam"
+)
 assert "model.enabled.toggle()" not in fixture_source, (
     "fixture content still bypasses the backend session with a local-only toggle"
 )
@@ -68,6 +71,11 @@ if missingModel.backendStatus.error.contains("/definitely/missing") {
 if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
     fail("startup diagnostic detail did not reach logging")
 }
+
+let localizationDomain = "ReferenceFixtureLocalization-\(UUID().uuidString)"
+let localizationDefaults = UserDefaults(suiteName: localizationDomain)!
+localizationDefaults.removePersistentDomain(forName: localizationDomain)
+defer { localizationDefaults.removePersistentDomain(forName: localizationDomain) }
 
 let session = TrainerBackendSession()
 var capturedLogs: [String] = []
@@ -136,6 +144,32 @@ model.setEnabled(true)
 guard waitUntil(2.0, { model.enabled && !model.busy }) else {
     fail("fixture could not re-enable through session")
 }
+
+let protocolBeforeLanguageChange = model.backendStatus.backendProtocolVersion
+let localizationContractPassed = MainActor.assumeIsolated {
+    let localization = TrainerLocalizationStore(defaults: localizationDefaults)
+    guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "游戏库" else {
+        return false
+    }
+    localization.language = .en
+    guard ReferenceFixtureLocalizationProbe.hostGameLibrary(using: localization) == "Game Library" else {
+        return false
+    }
+    guard localizationDefaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "en" else {
+        return false
+    }
+    return TrainerLocalizationStore(defaults: localizationDefaults).language == .en
+}
+if !localizationContractPassed {
+    fail("reference fixture did not preserve the Host live/persisted localization contract")
+}
+if !model.connected || !model.enabled {
+    fail("presentation language changed fixture runtime state")
+}
+if model.backendStatus.backendProtocolVersion != protocolBeforeLanguageChange || protocolBeforeLanguageChange != 6 {
+    fail("presentation language changed protocol identity")
+}
+
 model.setEnabled(false)
 guard waitUntil(2.0, { !model.enabled && !model.busy }) else {
     fail("explicit fixture disable did not round-trip through session")
@@ -173,6 +207,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     shutil.copytree(FIXTURE / "backend", project / "Backend/games/reference_fixture")
     shutil.copytree(ROOT / "Sources/Core", project / "Sources/Core")
     shutil.copytree(FIXTURE / "frontend", project / "Sources/ReferenceFixture")
+    for language in ("zh-CN", "en"):
+        shutil.copytree(
+            ROOT / f"Resources/Localization/{language}.lproj",
+            project / f"{language}.lproj",
+        )
     shutil.copytree(ROOT / "Tools", project / "Tools")
 
     generated = project / "Generated/ActiveGameModule.swift"
