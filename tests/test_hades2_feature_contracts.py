@@ -15,15 +15,17 @@ lua = read('Backend/games/hades2/runtime/hades.lua')
 # available, and the static next-room choices use the same Chinese · English form.
 assert '"\\(option.name) · \\(option.englishName)"' in view
 assert '"\\(resource.name) · \\(resource.englishName)"' in view
-for label in (
-    '金币 · Gold Crowns',
-    '半人马之心 · Centaur Heart',
-    '灵魂之水 · Soul Tonic',
-    '力量石榴 · Pom of Power',
-    '狄德勒斯之锤 · Daedalus Hammer',
-    '月之礼赠 · Gift of the Moon',
+# Next-room reward labels resolve through the shipped bilingual table, so the
+# view names a key per reward id instead of embedding either language.
+for reward in (
+    'RoomMoneyDrop',
+    'MaxHealthDrop',
+    'MaxManaDrop',
+    'StackUpgrade',
+    'WeaponUpgrade',
+    'SpellDrop',
 ):
-    assert label in view
+    assert f'rewardLabel("{reward}")' in view
 
 # Selene has two distinct native reward paths. SpellDrop chooses a Hex; TalentDrop
 # is the official Path of Stars consumable used to add points to the current Hex.

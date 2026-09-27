@@ -42,26 +42,34 @@ struct Hades2FeaturePresentation: Equatable {
         }
     }
 
-    var helpText: String {
+    /// Language-neutral help copy. The Host resolves it, so this value stays
+    /// comparable (no localized string inside a presentation struct) and a
+    /// language switch re-renders without rebuilding the model.
+    var helpToken: TrainerTextToken? {
         switch phase {
-        case .waiting:
-            return "当前运行环境尚不可用；保持开启并在条件满足时自动生效。"
-        case .detached:
-            return "已保留开启状态；重新连接后自动恢复。"
-        case .mismatch:
-            return "已请求开启，但运行时尚未确认生效。"
-        default:
-            return ""
+        case .waiting: return Hades2Presentation.token("hades2.phase.waiting")
+        case .detached: return Hades2Presentation.token("hades2.phase.detached")
+        case .mismatch: return Hades2Presentation.token("hades2.phase.mismatch")
+        default: return nil
         }
     }
-    func trainerControlState(using theme: TrainerTheme) -> TrainerFeatureControlState {
+
+    /// Resolved help copy for call sites that already hold the Host store.
+    @MainActor
+    func helpText(using localization: TrainerLocalizationStore) -> String {
+        guard let helpToken else { return "" }
+        return localization.string(helpToken)
+    }
+
+    @MainActor
+    func trainerControlState(using theme: TrainerTheme, localization: TrainerLocalizationStore) -> TrainerFeatureControlState {
         TrainerFeatureControlState(
             isOn: enabled,
             isInteractive: isInteractive,
             canEditValue: canEditDesired,
             opacity: opacity,
             indicatorColor: tint(using: theme),
-            helpText: helpText,
+            helpText: helpText(using: localization),
             isWarning: phase == .waiting || phase == .mismatch
         )
     }

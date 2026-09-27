@@ -40,19 +40,46 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var backendModuleProtocolVersion: Int? { backendStatus.backendModuleProtocolVersion }
     var protocolCompatible: Bool { backendStatus.protocolCompatible }
     var busy: Bool { backendStatus.busy }
-    var operation: String { backendStatus.operation }
-    var connectionDetailText: String { "版本 \(version)" + (pid.map { " · PID \($0)" } ?? "") }
+    var operation: TrainerTextToken { backendStatus.operation }
+    /// Version plus PID as one token. An undetected version is its own key so
+    /// the awaiting-detection state survives a language switch.
+    var connectionDetailText: Hades2Presentation.Text {
+        guard !version.isEmpty else {
+            return Hades2Presentation.token("hades2.status.awaitingDetect")
+        }
+        guard let pid else {
+            return Hades2Presentation.token("hades2.status.versionDetail", arguments: [version])
+        }
+        return Hades2Presentation.token("hades2.status.detailWithPID", arguments: [version, String(pid)])
+    }
     var hostActionsEnabled: Bool { !busy && !exiting && protocolCompatible }
+    // Hades-owned notice/error are language-neutral tokens. Core-owned failures
+    // still arrive as backendStatus strings, which the Host resolves; anything
+    // Hades produces itself is a token so it can be re-resolved live.
+    @Published private var noticeToken: TrainerTextToken?
+    @Published private var errorToken: TrainerTextToken?
+    @Published private var runtimeIssueToken: TrainerTextToken?
+
+    /// Core-owned error text (for example a protocol failure raised by the Host).
     var error: String {
         get { backendStatus.error }
         set { backendStatus.error = newValue }
     }
+
+    /// Core-owned notice text.
     var notice: String {
         get { backendStatus.notice }
         set { backendStatus.notice = newValue }
     }
+
+    /// Latest user-facing notice, resolved by the module's presentation layer.
+    var noticeText: TrainerTextToken { noticeToken ?? TrainerTextToken(key: "") }
+    /// Latest user-facing error, resolved by the module's presentation layer.
+    var errorText: TrainerTextToken { errorToken ?? TrainerTextToken(key: "") }
+    /// Runtime activation issues, when the backend reported any.
+    var runtimeIssueText: TrainerTextToken { runtimeIssueToken ?? TrainerTextToken(key: "") }
     @Published var pid: Int?
-    @Published var version = "等待检测"
+    @Published var version = ""
     @Published var status = "disconnected"
     @Published var scene = "unknown"
     @Published var capabilities: [String: Bool] = [:]
@@ -196,23 +223,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func supportsFeature(_ key: Hades2FeatureKey) -> Bool { featureSupport[key.rawValue] ?? true }
     func isFeatureActivationPending(_ key: Hades2FeatureKey) -> Bool { activationGraceFeatures.contains(key) }
     var ready: Bool { canSetFeature }
-    var statusTitle: String {
-        if exiting { return "正在清理并退出" }
+    /// Language-neutral status key. The Host renders it, so switching language
+    /// updates the connection card without a backend round trip.
+    var statusTitle: Hades2Presentation.Text {
+        if exiting { return Hades2Presentation.token("hades2.manage.exiting") }
         switch status {
         case "ready":
-            if scene == "crossroads" { return "已连接 · 三岔路口" }
-            if scene == "run" { return "已连接 · 局内可用" }
-            return "已连接 · 可操作"
+            if scene == "crossroads" { return Hades2Presentation.token("hades2.status.crossroads") }
+            if scene == "run" { return Hades2Presentation.token("hades2.status.run") }
+            return Hades2Presentation.token("hades2.status.operable")
         case "waiting":
-            if scene == "loading" { return "已连接 · 场景切换中" }
-            if scene == "main_menu" { return "已连接 · 主菜单" }
-            return "已连接 · 等待可操作场景"
-        case "not_running": return "游戏尚未运行"
-        case "incompatible": return "版本未验证 · 可尝试连接"
-        case "restart_required": return "需要重启游戏"
-        case "backend_stopped": return "后端已停止"
-        case "disconnected": return "尚未连接"
-        default: return status
+            if scene == "loading" { return Hades2Presentation.token("hades2.status.loading") }
+            if scene == "main_menu" { return Hades2Presentation.token("hades2.status.mainMenu") }
+            return Hades2Presentation.token("hades2.status.awaitingScene")
+        case "not_running": return Hades2Presentation.token("hades2.status.notRunning")
+        case "incompatible": return Hades2Presentation.token("hades2.status.incompatible")
+        case "restart_required": return Hades2Presentation.token("hades2.status.restartRequired")
+        case "backend_stopped": return Hades2Presentation.token("hades2.status.backendStopped")
+        case "disconnected": return Hades2Presentation.token("hades2.status.disconnected")
+        // An unknown status is backend-owned machine identity, not copy, so it
+        // is reported as-is instead of being looked up as a presentation key.
+        default: return TrainerTextToken(key: status)
         }
     }
 
@@ -244,7 +275,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
               backendAvailable,
               !busy,
               !exiting else { return }
-        send(.status, title: "检测可操作场景", announceSuccess: false)
+        send(.status, title: "hades2.op.probeScene", announceSuccess: false)
     }
 
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
@@ -267,7 +298,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             activationGraceWorkItems = [:]
             activationGraceFeatures = []
             if event == .runtimeReset {
-                send(.runtimeReset, title: "记录运行时重置", announceSuccess: false)
+                send(.runtimeReset, title: "hades2.op.recordRuntimeReset", announceSuccess: false)
             }
         case .runtimeReady:
             pendingRunReadySignal = true
@@ -285,7 +316,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             exiting: exiting
         ) else { return }
         pendingRunReadySignal = false
-        send(.status, title: "检测可操作场景", announceSuccess: false) { [weak self] _ in
+        send(.status, title: "hades2.op.probeScene", announceSuccess: false) { [weak self] _ in
             self?.consumeRunLogReadySignalIfPossible()
         }
     }
@@ -309,15 +340,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func restartBackendFromHost() { restartBackend() }
 
     func launchGame() { send(.launch, title: "host.launchGame") }
-    func prepareDebugging() { send(.prepare, title: "准备调试签名") }
-    func restoreOriginalSignature() { send(.restore, title: "恢复原始签名") }
+    func prepareDebugging() { send(.prepare, title: "hades2.manage.prepareSigning") }
+    func restoreOriginalSignature() { send(.restore, title: "hades2.manage.restoreSigning") }
     func disableAll() { sendBarrier(.disableAll, title: "host.disableAll") }
 
     private func restartBackend() {
         guard !exiting else { return }
         invalidatePendingMutations()
         error = ""
+        errorToken = nil
         notice = ""
+        noticeToken = nil
         backendSession.restart()
     }
 
@@ -336,7 +369,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                     }
                 }
             )
-            send(.scan, title: "检测游戏")
+            send(.scan, title: "hades2.op.detectGame")
         } catch {
             // TrainerBackendSession owns startup failure identity, presentation,
             // diagnostics, and status projection.
@@ -359,9 +392,17 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         invalidatePendingMutations()
         pendingRunReadySignal = false
         pid = nil
-        version = "等待检测"
+        // Empty means "not detected yet"; the connection detail resolves that as
+        // its own key, so a restart returns to the awaiting-detection state.
+        version = ""
         warning = ""
+        // Both the Core-owned strings and the Hades-owned tokens must be
+        // cleared: the banner prefers the token, so a stale token would
+        // outlive this reset.
         runtimeIssue = ""
+        runtimeIssueToken = nil
+        noticeToken = nil
+        errorToken = nil
         presentedActionReceipt = nil
         // Lock flags and locked values mirror durable desired targets from the
         // backend preference store; retain those projections across a worker
@@ -399,6 +440,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         diagnosticsPassed = 0
         diagnosticsTotal = 0
         notice = ""
+        noticeToken = nil
         status = "backend_stopped"
     }
 
@@ -422,7 +464,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.featureErrors.isPresent {
             let values = patch.featureErrors.value ?? [:]
             let issues = values.compactMap { key, message in message.isEmpty ? nil : "\(key): \(message)" }.sorted()
-            runtimeIssue = issues.isEmpty ? "" : "运行时未激活：" + issues.joined(separator: "；")
+            runtimeIssueToken = issues.isEmpty
+                ? nil
+                : presentation("hades2.status.runtimeInactive", arguments: [issues.joined(separator: "; ")])
         }
 
         if let desired = patch.desiredFeatures {
@@ -510,24 +554,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         presentedActionReceipt = receipt
 
         guard let command = Hades2Command(rawValue: receipt.command) else { return }
-        let title: String
+        // The receipt title stays a token so the notice/error text below is
+        // resolved once, by the Host, against the live language.
+        let title: TrainerTextToken
         switch command {
-        case .openSellTraits: title = "净化之池"
-        case .openSpecialChoice: title = "奖励选择界面"
+        case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
+        case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         default: return
         }
 
         switch receipt.outcome {
         case .accepted:
-            notice = "\(title)已受理，等待游戏处理"
+            noticeToken = presentation("hades2.receipt.accepted", arguments: [title.key])
         case .opened:
-            notice = "\(title)已打开"
+            noticeToken = presentation("hades2.receipt.opened", arguments: [title.key])
         case .failed:
-            notice = ""
-            error = "\(title)失败，请查看日志"
+            noticeToken = nil
+            errorToken = presentation("hades2.receipt.failed", arguments: [title.key])
         case .outcomeUnknown:
-            notice = ""
-            error = "\(title)结果不明，请重新连接后检查游戏状态"
+            noticeToken = nil
+            errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
             break
         }
@@ -539,8 +585,29 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         locked = snapshot.locked
     }
 
-    private func send(_ request: Hades2Request, title: String, coalesceKey: String? = nil, announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
-        api.request(request, operation: title, coalesceKey: coalesceKey, announceSuccess: announceSuccess, completion: completion)
+    private func send(
+        _ request: Hades2Request,
+        title: String,
+        titleArguments: [String] = [],
+        coalesceKey: String? = nil,
+        announceSuccess: Bool = true,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        api.request(
+            request,
+            operation: title,
+            operationArguments: titleArguments,
+            coalesceKey: coalesceKey,
+            announceSuccess: announceSuccess,
+            completion: completion
+        )
+    }
+
+    /// The model never embeds localized copy. Notices and errors carry a token
+    /// that the Host resolves against the live language, so switching language
+    /// re-renders them without re-issuing any work.
+    private func presentation(_ key: String, arguments: [String] = []) -> TrainerTextToken {
+        TrainerTextToken(key: key, arguments: arguments)
     }
 
     private func invalidatePendingMutations() {
@@ -552,9 +619,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         mutationScheduler.flushAll()
     }
 
-    private func sendBarrier(_ request: Hades2Request, title: String, announceSuccess: Bool = true, completion: ((Bool) -> Void)? = nil) {
+    private func sendBarrier(
+        _ request: Hades2Request,
+        title: String,
+        titleArguments: [String] = [],
+        announceSuccess: Bool = true,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         invalidatePendingMutations()
-        send(request, title: title, announceSuccess: announceSuccess, completion: completion)
+        send(request, title: title, titleArguments: titleArguments, announceSuccess: announceSuccess, completion: completion)
     }
 
     private func desiredFeatureEnabled(_ key: Hades2FeatureKey) -> Bool {
@@ -584,9 +657,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // creates visible frame-time spikes. Runtime state is refreshed by user-driven
     // requests (and the explicit Refresh action) instead.
 
-    func enqueueMutation(key: String, request: Hades2Request, title: String, delay: TimeInterval = 0.35, completion: ((Bool) -> Void)? = nil) {
+    func enqueueMutation(
+        key: String,
+        request: Hades2Request,
+        title: String,
+        titleArguments: [String] = [],
+        delay: TimeInterval = 0.35,
+        completion: ((Bool) -> Void)? = nil
+    ) {
         mutationScheduler.schedule(key: key, delay: delay) { [weak self] in
-            self?.send(request, title: title, coalesceKey: key, announceSuccess: false, completion: completion)
+            self?.send(
+                request,
+                title: title,
+                titleArguments: titleArguments,
+                coalesceKey: key,
+                announceSuccess: false,
+                completion: completion
+            )
         }
     }
 
@@ -598,7 +685,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // connection. Keep the UI intent editable while detached and let the
         // backend apply/replay it whenever a valid Lua scene becomes available.
         self[keyPath: key.modelKeyPath] = value
-        send(.setDesired(feature: key.rawValue, value: value), title: "更新功能", completion: completion)
+        send(.setDesired(feature: key.rawValue, value: value), title: "hades2.op.updateFeature", completion: completion)
     }
 
     func setGameSpeed(_ text: String) {
@@ -613,7 +700,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         gameSpeed = value
         send(
             .setDesired(feature: "gameSpeed", value: value),
-            title: "更新游戏速度",
+            title: "hades2.op.updateGameSpeed",
             coalesceKey: "feature.gameSpeed",
             announceSuccess: false,
             completion: completion
@@ -638,13 +725,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         default: return
         }
         if let current = current, abs(current - value) < 0.0001 { return }
-        let title = vital == "health" ? "生命值" : (vital == "mana" ? "魔力值" : "护甲")
-        enqueueMutation(key: "vital.\(vital).\(field)", request: .setVital(vital: vital, field: field, value: value), title: "更新\(title)")
+        let titleKey = vital == "health" ? "hades2.vital.health" : (vital == "mana" ? "hades2.vital.mana" : "hades2.vital.armor")
+        enqueueMutation(
+            key: "vital.\(vital).\(field)",
+            request: .setVital(vital: vital, field: field, value: value),
+            title: "hades2.op.updateVital",
+            titleArguments: [titleKey]
+        )
     }
 
     func lockVital(_ vital: String, locked: Bool) {
         guard canSetVitals, ["health", "mana", "armor"].contains(vital) else { return }
-        send(.lockVital(vital: vital, locked: locked), title: locked ? "锁定局内数值" : "解除局内数值锁定")
+        send(.lockVital(vital: vital, locked: locked), title: locked ? "hades2.op.lockVital" : "hades2.op.unlockVital")
     }
 
     func setResource(_ resource: String, amount: String) {
@@ -654,48 +746,48 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         else { current = resources.first(where: { $0.id == resource })?.count }
         guard resource == "Money" || resources.contains(where: { $0.id == resource }) else { return }
         if let current = current, Int(current.rounded()) == count { return }
-        enqueueMutation(key: "resource.\(resource)", request: .setResource(resource: resource, amount: count), title: "更新资源")
+        enqueueMutation(key: "resource.\(resource)", request: .setResource(resource: resource, amount: count), title: "hades2.op.updateResource")
     }
 
     func lockResource(_ resource: String, locked: Bool) {
         guard canSetResource else { return }
         guard resource == "Money" || resources.contains(where: { $0.id == resource }) else { return }
-        send(.lockResource(resource: resource, locked: locked), title: locked ? "锁定当前资源数量" : "解除资源锁定")
+        send(.lockResource(resource: resource, locked: locked), title: locked ? "hades2.op.lockResource" : "hades2.op.unlockResource")
     }
 
     func setRerolls(_ amount: String) {
         guard canSetResource, let count = amountValue(amount) else { return }
         if let current = rerolls, Int(current.rounded()) == count { return }
-        enqueueMutation(key: "rerolls", request: .setRerolls(amount: count), title: "更新重塑命运次数")
+        enqueueMutation(key: "rerolls", request: .setRerolls(amount: count), title: "hades2.op.updateRerolls")
     }
 
     func lockRerolls(_ locked: Bool) {
         guard canSetResource else { return }
-        send(.lockRerolls(locked: locked), title: locked ? "锁定重塑命运次数" : "解除重塑命运锁定")
+        send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
     }
 
     func setStat(_ stat: String, text: String, locked: Bool) {
         guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false, statAvailable[stat] != false else { return }
         if !locked {
             mutationScheduler.cancel(key: "stat.\(stat)")
-            send(.setStat(stat: stat, locked: false, value: nil), title: "解除属性锁定")
+            send(.setStat(stat: stat, locked: false, value: nil), title: "hades2.op.unlockStat")
             return
         }
         guard let value = Double(text), value.isFinite, (rule.min...rule.max).contains(value) else { return }
         if rule.integer && value.rounded() != value { return }
         let encodedValue: Any = rule.integer ? Int(value) : value
-        enqueueMutation(key: "stat.\(stat)", request: .setStat(stat: stat, locked: true, value: encodedValue), title: "更新属性锁定")
+        enqueueMutation(key: "stat.\(stat)", request: .setStat(stat: stat, locked: true, value: encodedValue), title: "hades2.op.updateStatLock")
     }
 
     func setElement(_ element: String, text: String) {
         guard canSetElements, let amount = amountValue(text), elements.contains(where: { $0.id == element }) else { return }
         if let current = elements.first(where: { $0.id == element })?.count, Int(current.rounded()) == amount { return }
-        enqueueMutation(key: "element.\(element)", request: .setElement(element: element, amount: amount), title: "更新元素数量")
+        enqueueMutation(key: "element.\(element)", request: .setElement(element: element, amount: amount), title: "hades2.op.updateElement")
     }
 
     func lockElement(_ element: String, locked: Bool) {
         guard canSetElements, elements.contains(where: { $0.id == element }) else { return }
-        send(.lockElement(element: element, locked: locked), title: locked ? "锁定元素数量" : "解除元素锁定")
+        send(.lockElement(element: element, locked: locked), title: locked ? "hades2.op.lockElement" : "hades2.op.unlockElement")
     }
 
     func setBoonRarity(target: String, multiplier: String, forceLegendary: Bool, forceDuo: Bool, completion: ((Bool) -> Void)? = nil) {
@@ -705,7 +797,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         enqueueMutation(
             key: "boon.rarity",
             request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
-            title: "更新祝福稀有度",
+            title: "hades2.op.updateBoonRarity",
             completion: completion
         )
     }
@@ -714,7 +806,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setNextRoomReward(_ reward: String?) {
         guard canEditDesired else { return }
         nextRoomReward = reward
-        send(.setNextRoomReward(reward), title: reward == nil ? "清除下一房奖励" : "设置下一房奖励")
+        send(.setNextRoomReward(reward), title: reward == nil ? "hades2.op.clearNextRoom" : "hades2.op.setNextRoom")
     }
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
@@ -723,38 +815,47 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         flushPendingMutations()
-        send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "保存自定义配置")
+        send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile")
     }
 
     func loadProfile(_ name: String) {
         guard !name.isEmpty else { return }
-        sendBarrier(.loadProfile(name), title: "载入自定义配置")
+        sendBarrier(.loadProfile(name), title: "hades2.op.loadProfile")
     }
 
     func deleteProfile(_ name: String) {
         guard !name.isEmpty else { return }
-        send(.deleteProfile(name), title: "删除自定义配置")
+        send(.deleteProfile(name), title: "hades2.op.deleteProfile")
     }
 
-    func listProfiles() { send(.listProfiles, title: "读取自定义配置") }
-    func runDiagnostics() { send(.diagnostics, title: "运行自检") }
-    func exportDiagnostics() { send(.exportDiagnostics, title: "导出诊断包") }
+    func listProfiles() { send(.listProfiles, title: "hades2.op.listProfiles") }
+    func runDiagnostics() { send(.diagnostics, title: "hades2.op.runDiagnostics") }
+    func exportDiagnostics() { send(.exportDiagnostics, title: "hades2.op.exportDiagnostics") }
 
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
-        send(.spawnReward(loot), title: "生成掉落物")
+        send(.spawnReward(loot), title: "hades2.op.spawnReward")
     }
 
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
-        send(.openSellTraits, title: "打开净化之池", announceSuccess: false)
+        send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
     }
 
     func performSpecialReward(_ reward: String) {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {
             guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
-            send(.openSpecialChoice(source: option.sourceId), title: "打开\(option.nativeChoiceTitle.isEmpty ? "奖励选择界面" : option.nativeChoiceTitle)", announceSuccess: false)
+            send(
+                .openSpecialChoice(source: option.sourceId),
+                title: "hades2.receipt.openChoice",
+                titleArguments: [option.nativeChoiceTitle.isEmpty
+                    // A backend-supplied native title is already text; an
+                    // unknown source falls back to the module's own key.
+                    ? "hades2.spawn.rewardChoice"
+                    : option.nativeChoiceTitle],
+                announceSuccess: false
+            )
         } else {
             spawnBoon(option.id)
         }
@@ -776,13 +877,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case "resourceMultiplier": resourceMultiplier = value
         default: break
         }
-        enqueueMutation(key: "feature.\(key)", request: .setDesired(feature: key, value: value), title: "更新倍率")
+        enqueueMutation(key: "feature.\(key)", request: .setDesired(feature: key, value: value), title: "hades2.op.updateMultiplier")
     }
 
     func setCounter(_ counter: String, text: String) {
         guard canSetVitals, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if counter == "spellCharge", let current = spellCharge, abs(current - value) < 0.0001 { return }
-        enqueueMutation(key: "counter.\(counter)", request: .setCounter(counter: counter, value: value), title: "更新局内计数")
+        enqueueMutation(key: "counter.\(counter)", request: .setCounter(counter: counter, value: value), title: "hades2.op.updateCounter")
     }
 
     private func applyProfileShortcuts(_ values: [String: Any]) {
@@ -907,7 +1008,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func openLog() {
-        appendLog("日志已创建")
+        // The log is a diagnostic surface and stays language-neutral, so it
+        // records the stable operation key rather than resolved wording.
+        appendLog(presentation("hades2.op.logCreated").key)
         logSink.flush()
         NSWorkspace.shared.open(logSink.url)
     }
@@ -932,7 +1035,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             finishExit(completion: completion)
             return
         }
-        sendBarrier(.disconnect, title: "退出前分离进程", announceSuccess: false) { [weak self] _ in
+        sendBarrier(.disconnect, title: "hades2.op.exitDetach", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(true); return }
             self.finishExit(completion: completion)
         }
@@ -951,13 +1054,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // projection. Durable intent and resident teardown have separate owners:
         // reset_desired never crosses Lua; runtime cleanup is best-effort only.
         let cleanupRequired = runtimeCleanupRequired
-        sendBarrier(.resetDesired, title: "退出前重置修改状态", announceSuccess: false) { [weak self] _ in
+        sendBarrier(.resetDesired, title: "hades2.op.exitReset", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(true); return }
             guard self.connected, cleanupRequired else {
                 self.detachForTermination(completion: completion)
                 return
             }
-            self.sendBarrier(.disableAll, title: "退出前清理运行时", announceSuccess: false) { [weak self] _ in
+            self.sendBarrier(.disableAll, title: "hades2.op.exitCleanup", announceSuccess: false) { [weak self] _ in
                 guard let self else { completion(true); return }
                 self.detachForTermination(completion: completion)
             }

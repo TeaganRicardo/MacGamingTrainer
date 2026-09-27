@@ -196,6 +196,7 @@ final class Hades2API {
     func request(
         _ request: Hades2Request,
         operation: String,
+        operationArguments: [String] = [],
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         completion: ((Bool) -> Void)? = nil
@@ -204,6 +205,7 @@ final class Hades2API {
             request.command.rawValue,
             params: request.params,
             operation: operation,
+            operationArguments: operationArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: request.timeout,

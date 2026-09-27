@@ -20,6 +20,17 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         ))
     }
 
+    /// Register the selected module's presentation namespace before the first
+    /// render. Core stores only the resolver closure, so the shell resolves
+    /// module tokens without knowing the module's vocabulary, and switching
+    /// language re-resolves them live.
+    private func registerModulePresentation(_ localization: TrainerLocalizationStore) {
+        localization.registerModulePresentation(prefix: Module.presentationKeyPrefix) {
+            key, arguments, language in
+            Module.presentationText(key: key, arguments: arguments, language: language)
+        }
+    }
+
     var body: some View {
         TrainerShell {
             TrainerSidebar(
@@ -48,9 +59,9 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 TrainerConnectionStatusCard(
                     busy: model.busy,
                     connected: model.connected,
-                    operationText: model.operation,
-                    statusText: model.statusTitle,
-                    detailText: model.connectionDetailText,
+                    operationToken: model.operation,
+                    statusToken: model.statusTitle,
+                    detailToken: model.connectionDetailText,
                     backendAvailable: model.backendAvailable,
                     actionsEnabled: model.hostActionsEnabled,
                     onRefresh: model.refreshFromHost,
@@ -62,6 +73,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             .frame(minWidth: theme.contentMinWidth, maxWidth: theme.pageMaxWidth, minHeight: theme.contentMinHeight, alignment: .topLeading)
         }
         .onAppear {
+            registerModulePresentation(localization)
             targetMonitor.refresh()
             connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
             reconcileAutomaticConnection()

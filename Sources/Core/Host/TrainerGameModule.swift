@@ -30,9 +30,14 @@ protocol TrainerHostModel: ObservableObject {
     var backendAvailable: Bool { get }
     var busy: Bool { get }
     var connected: Bool { get }
-    var operation: String { get }
-    var statusTitle: String { get }
-    var connectionDetailText: String { get }
+    /// Language-neutral operation identity shown while a request is in flight.
+    var operation: TrainerTextToken { get }
+    /// Language-neutral presentation tokens. The Host resolves them against the
+    /// selected module's presentation layer, so a module never embeds localized
+    /// copy in its observable state and a language switch re-renders without a
+    /// backend round trip.
+    var statusTitle: TrainerTextToken { get }
+    var connectionDetailText: TrainerTextToken { get }
     var hostActionsEnabled: Bool { get }
 
     func toggleConnectionFromHost()
@@ -73,6 +78,23 @@ protocol TrainerGameModule {
     static func makeSidebarActions(model: Model) -> SidebarActions
     static func makeHeaderActions(model: Model) -> HeaderActions
     static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> ManagementCommands
+
+    /// Key namespace this module owns. Registering it lets the Host resolve the
+    /// model's tokens without Core learning any module vocabulary.
+    static var presentationKeyPrefix: String { get }
+
+    /// Resolve one of this module's own keys. Returning the key itself for an
+    /// unknown entry keeps a missing translation visible instead of blank.
+    static func presentationText(
+        key: String,
+        arguments: [String],
+        language: TrainerPresentationLanguage
+    ) -> String
+}
+
+extension TrainerGameModule {
+    /// A module without its own namespace has no module-owned text to resolve.
+    public static var presentationKeyPrefix: String { "" }
 }
 
 struct TrainerEmptyCommands: Commands {

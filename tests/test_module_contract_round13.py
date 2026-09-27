@@ -87,6 +87,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     assert 'reference_fixture' not in generic
     assert 'hades2' not in generic
     assert 'ui_terminology.json' not in generic
+    # Comments count: Core must not name a module even to explain a decision.
+    assert 'Hades' not in generic
+    for vocabulary in ('Boon', 'Olympian', 'Hex', 'Olympus'):
+        assert vocabulary not in generic, vocabulary
 
 # Even successful execution must leave the source checkout untouched.
 assert not checkout_backend_module.exists()

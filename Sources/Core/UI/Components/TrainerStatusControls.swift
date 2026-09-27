@@ -5,9 +5,9 @@ struct TrainerConnectionStatusCard: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
     let busy: Bool
     let connected: Bool
-    let operationText: String
-    let statusText: String
-    let detailText: String
+    let operationToken: TrainerTextToken
+    let statusToken: TrainerTextToken
+    let detailToken: TrainerTextToken
     let backendAvailable: Bool
     let actionsEnabled: Bool
     let onRefresh: () -> Void
@@ -22,9 +22,12 @@ struct TrainerConnectionStatusCard: View {
                 Circle().fill(connected ? theme.success : theme.inactive).frame(width: 8, height: 8)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(busy ? localization.presentation(operationText) + "…" : localization.presentation(statusText))
+                // Both are language-neutral tokens: a module owns its wording,
+                // the Host owns resolution, and a language switch re-renders
+                // without a backend round trip.
+                Text(busy ? localization.string(operationToken) + "…" : localization.string(statusToken))
                     .font(.subheadline.weight(.medium))
-                Text(detailText).font(.caption).foregroundStyle(.secondary)
+                Text(localization.string(detailToken)).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
