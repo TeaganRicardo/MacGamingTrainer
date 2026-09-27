@@ -97,14 +97,15 @@ struct Hades2DiagnosticsView: View {
 struct Hades2ShortcutSettingsView: View {
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var capturing: ShortcutAction?
     @State private var keyMonitor: Any?
 
     var body: some View {
-        TrainerSheetScaffold(title: "快捷键设置", width: 560) {
+        TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
             EmptyView()
         } content: {
-            Text("点击任一快捷键后直接按下新的组合键。Esc 取消捕获；支持 Control / Option / Shift / Command 与数字、字母、方向键、F 键等组合。")
+            Text(localization.localized("host.hotkeys.help"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(ShortcutAction.uiOrder) { action in
@@ -114,7 +115,7 @@ struct Hades2ShortcutSettingsView: View {
                     Button {
                         beginCapture(action)
                     } label: {
-                        Text(capturing == action ? "按下新快捷键…" : model.shortcutText(action))
+                        Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
                             .font(.system(.body, design: .monospaced))
                             .frame(minWidth: 110)
                     }
@@ -122,12 +123,14 @@ struct Hades2ShortcutSettingsView: View {
                 }
             }
             if !model.shortcutError.isEmpty {
-                Text(model.shortcutError).foregroundStyle(theme.warning).font(.caption)
+                Text(localization.presentation(model.shortcutError, arguments: model.shortcutErrorArguments))
+                    .foregroundStyle(theme.warning)
+                    .font(.caption)
             }
         } footer: {
             HStack {
                 Spacer()
-                Button("完成") {
+                Button(localization.localized("host.done")) {
                     stopCapture()
                     model.shortcutSettingsPresented = false
                 }
@@ -140,14 +143,14 @@ struct Hades2ShortcutSettingsView: View {
     private func beginCapture(_ action: ShortcutAction) {
         stopCapture()
         capturing = action
-        model.shortcutError = ""
+        model.clearShortcutError()
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 {
                 DispatchQueue.main.async { stopCapture() }
                 return nil
             }
             guard let chord = HotkeyChord.capture(event) else {
-                model.shortcutError = "无法识别该按键，请换一个组合。"
+                model.setUnrecognizedShortcutError()
                 return nil
             }
             DispatchQueue.main.async {
