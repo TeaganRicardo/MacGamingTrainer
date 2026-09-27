@@ -896,7 +896,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             self.performShortcut(action)
         }
         let bindings = ShortcutAction.uiOrder.map { action in
-            HotkeyBinding(actionID: action.rawValue, title: action.title, chord: shortcutChord(action))
+            HotkeyBinding(actionID: action.rawValue, chord: shortcutChord(action))
         }
         if let failure = instance.register(bindings) {
             shortcutIssue = .registration(failure)
