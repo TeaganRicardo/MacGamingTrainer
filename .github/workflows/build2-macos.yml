@@ -36,6 +36,12 @@ jobs:
         id: scope
         run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Require explicit scope decision
+        if: steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'
+        run: |
+          echo "Change-scope classifier did not emit needs_macos=true|false." >&2
+          exit 1
+
   build:
     needs: scope
     if: ${{ always() }}
@@ -50,7 +56,7 @@ jobs:
           exit 1
 
       - name: Fast path
-        if: needs.scope.result == 'success' && needs.scope.outputs.needs_macos != 'true'
+        if: needs.scope.result == 'success' && needs.scope.outputs.needs_macos == 'false'
         run: echo "Change does not require macOS platform checks/build/package."
 
       - uses: actions/checkout@v4
