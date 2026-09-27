@@ -121,18 +121,18 @@ struct ReferenceFixtureContent: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             TrainerFeatureToggleRow(
-            title: "Reference Feature",
-            icon: "checkmark.circle",
-            state: TrainerFeatureControlState(
-                isOn: model.enabled,
-                isInteractive: model.backendAvailable && !model.busy,
-                canEditValue: false,
-                opacity: 1,
-                indicatorColor: .accentColor,
-                helpText: "",
-                isWarning: false
-            ),
-            shortcutText: nil
+                title: "Reference Feature",
+                icon: "checkmark.circle",
+                state: TrainerFeatureControlState(
+                    isOn: model.enabled,
+                    isInteractive: model.backendAvailable && !model.busy,
+                    canEditValue: false,
+                    opacity: 1,
+                    indicatorColor: .accentColor,
+                    helpText: "",
+                    isWarning: false
+                ),
+                shortcutText: nil
             ) {
                 model.setEnabled(!model.enabled)
             }
