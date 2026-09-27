@@ -826,7 +826,9 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Spacer()
-                    Button { model.disableAll() } label: { Label("全部关闭  \(model.shortcutText(.disableAll))", systemImage: "power") }
+                    Button { model.disableAll() } label: {
+                        Label("\(localization.localized("host.disableAll"))  \(model.shortcutText(.disableAll))", systemImage: "power")
+                    }
                         .disabled(!model.connected || model.busy || model.exiting)
                 }
                 HStack(spacing: 12) {
@@ -837,7 +839,9 @@ struct Hades2TrainerView: View {
                 HStack(spacing: 12) {
                     Button { model.prepareDebugging() } label: { Label("准备调试签名", systemImage: "signature") }
                     Button { model.restoreOriginalSignature() } label: { Label("恢复原始签名", systemImage: "arrow.uturn.backward.circle") }
-                    Button { model.openLog() } label: { Label("打开日志", systemImage: "doc.text.magnifyingglass") }
+                    Button { model.openLog() } label: {
+                        Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")
+                    }
                 }.disabled(model.busy || model.exiting)
             }.trainerPanel()
         }
