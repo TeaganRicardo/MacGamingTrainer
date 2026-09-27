@@ -8,6 +8,7 @@ SCRIPT = ROOT / "Tools/ci_docs_only.py"
 REFERENCE_ROOT = "docs/reference/hades2/1.139672-24556151"
 REFERENCE_DATA = f"{REFERENCE_ROOT}/catalog_legality.csv"
 GENERATED_DATA = f"{REFERENCE_ROOT}/generated/loot.csv"
+TERMINOLOGY_RESOURCE = f"{REFERENCE_ROOT}/ui_terminology.json"
 
 spec = importlib.util.spec_from_file_location("ci_docs_only", SCRIPT)
 module = importlib.util.module_from_spec(spec)
@@ -23,6 +24,103 @@ assert not module.is_docs_only(["docs/a.md", ".github/workflows/build2-macos.yml
 assert not module.is_docs_only([REFERENCE_DATA])
 assert not module.is_docs_only([f"{REFERENCE_ROOT}/manifest.json"])
 assert not module.is_docs_only(["docs/a.md", REFERENCE_DATA])
+
+MACOS_ONLY = {"test_hades2_run_log_watcher.py"}
+
+
+def assert_scope(paths, *, docs_only, linux, macos, module_build):
+    assert module.classify_scope(paths, macos_only_tests=MACOS_ONLY) == {
+        "docs_only": docs_only,
+        "needs_linux": linux,
+        "needs_macos": macos,
+        "needs_module": module_build,
+    }
+
+
+assert_scope(
+    ["README.md"],
+    docs_only=True,
+    linux=False,
+    macos=False,
+    module_build=False,
+)
+assert_scope(
+    ["Backend/games/hades2/adapter.py"],
+    docs_only=False,
+    linux=True,
+    macos=False,
+    module_build=False,
+)
+assert_scope(
+    [REFERENCE_DATA],
+    docs_only=False,
+    linux=True,
+    macos=False,
+    module_build=False,
+)
+assert_scope(
+    [TERMINOLOGY_RESOURCE],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+)
+assert_scope(
+    ["Sources/Hades2/Hades2Model.swift"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+)
+assert_scope(
+    ["Sources/Core/UI/TrainerTheme.swift"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+)
+assert_scope(
+    ["ContractFixtures/reference_module/backend/adapter.py"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+)
+assert_scope(
+    ["Backend/games/hades2/module.json"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+)
+assert_scope(
+    ["Backend/games/hades2/trainer-entitlements.plist"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+)
+assert_scope(
+    ["tests/test_hades2_run_log_watcher.py"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=False,
+)
+assert_scope(
+    ["tests/test_hades2_transport_outcome_unknown_taint.py"],
+    docs_only=False,
+    linux=True,
+    macos=False,
+    module_build=False,
+)
+assert_scope(
+    ["Tools/ci_docs_only.py"],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+)
 
 
 def git(root: Path, *args: str) -> None:
