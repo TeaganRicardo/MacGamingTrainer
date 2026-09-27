@@ -22,12 +22,7 @@ enum Hades2PresentationText {
         ]
     }
 
-    static func product(_ key: String, language: TrainerLanguage) -> String {
-        switch language {
-        case .zhCN:
-            return Product.zhCN[key] ?? key
-        case .english:
-            return Product.en[key] ?? key
-        }
+    static func product(_ key: String, isChinese: Bool) -> String {
+        isChinese ? (Product.zhCN[key] ?? key) : (Product.en[key] ?? key)
     }
 }
