@@ -113,3 +113,4 @@
 "host.hotkeys.registrationFailed" = "Some hotkeys could not be registered because they may already be used by the system or another app: {0}";
 "host.feature.enable" = "Enable Feature";
 "host.feature.disable" = "Disable Feature";
+"host.hotkeys.conflict" = "Shortcut {0} is already assigned to “{1}”.";
