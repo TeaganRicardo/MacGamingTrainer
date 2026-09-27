@@ -60,6 +60,7 @@ required_keys = {
     "host.backend.notice.recovering",
     "host.backend.notice.restarted",
     "host.backend.notice.recovered",
+    "host.backend.notice.completed",
     "host.save.openFolder",
     "host.refresh",
     "host.save.createBackup",
@@ -200,7 +201,10 @@ for key in (
     "host.backend.notice.recovering",
     "host.backend.notice.restarted",
     "host.backend.notice.recovered",
+    "host.backend.notice.completed",
 ):
     assert key in session, key
+
+assert '\\(reply.operation)完成' not in session, "generic completion notice must not hard-code one language"
 
 print("host_shared_localization_coverage_ok")
