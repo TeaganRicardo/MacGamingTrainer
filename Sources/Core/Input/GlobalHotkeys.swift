@@ -30,7 +30,6 @@ extension HotkeyChord {
 
 struct HotkeyBinding {
     let actionID: String
-    let title: String
     let chord: HotkeyChord
 }
 
