@@ -88,7 +88,7 @@ for token in (
     'localization.localized("host.shortcutSettings")',
     'localization.localized("host.hotkeys.help")',
     'localization.localized("host.hotkeys.pressNew")',
-    'localization.presentation(model.shortcutError, arguments: model.shortcutErrorArguments)',
+    'Text(shortcutIssueText(issue))',
     'localization.localized("host.done")',
 ):
     assert token in management, token
@@ -100,8 +100,9 @@ for token in (
     assert token in management, token
 
 assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
-assert 'presentationKey: "host.hotkeys.listenerFailed"' in global_hotkeys
-assert 'presentationKey: "host.hotkeys.registrationFailed"' in global_hotkeys
+assert "case listenerInitialization(status: Int32)" in global_hotkeys
+assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in global_hotkeys
+assert "presentationKey" not in global_hotkeys
 assert not re.search(r"[\u3400-\u9fff]", global_hotkeys), (
     "Core hotkey registration must not emit one-language presentation"
 )
