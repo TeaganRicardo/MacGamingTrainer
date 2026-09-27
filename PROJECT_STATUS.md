@@ -9,7 +9,7 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Baseline main used for this handoff: `6c1f3979592b4198d0802fa856ea84d6a4de3751`.
+- Baseline main used for this handoff: `5319e3c6e2a0f3b8a99eb21d93cfb15715470b2b`.
 - Hades II resident runtime revision: 49.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
@@ -28,7 +28,7 @@ The current hardening baseline also includes:
 - Core Save preserves staged recovery evidence across uncertain failures, persists snapshot payloads before manifests, contains stale staging/rollback recovery, exposes deliberate reveal/delete for invalid inventory rows, keeps Swift busy state tied to outstanding requests, and rejects reveal paths outside the effective Trainer data root or through symlink escape.
 - Hades transport/diagnostics preserve trust boundaries after host-side decode failure, refresh diagnostics from current runtime state, distinguish absent warning fields from explicit clears, reset runtime-only observation when the backend terminates, and use explicit aggregate operation budgets.
 - Backend JSONL input is bounded; Host trainer logs rotate within bounds; Process Time Warp uses serialized installation and fixed system tool paths.
-- Host zh-CN/English resources and a persisted live language selector are packaged for participating Host presentation. #131 owns completion of the full Host/reference-fixture bilingual foundation and its acceptance.
+- B01 / #131 / PR #183 completed the Host bilingual localization foundation: one persisted live zh-CN/English language state, packaged Host resources, and reference-fixture consumption of the same game-agnostic seam. Broad shared Host/Core presentation migration remains #176; Hades-owned presentation migration follows in #177.
 - Hades durable feature identity has executable parity coverage across Swift controls/model paths, Python router/adapter paths, resident Lua consumers, and the separate Core-owned `gameSpeed` path without adding another production feature schema.
 - Hades terminology is packaged through module `appResources`; selected-module builds verify the intended app identity instead of accepting arbitrary stale output.
 - macOS build/sign publication uses isolated staging, removes only signing-blocking FinderInfo/ResourceFork metadata, preserves permitted provenance metadata, rejects unsafe publish roots, and verifies the published selected-module app.
@@ -45,11 +45,13 @@ The newer compatibility and governance work did not change `Backend/games/hades2
 
 Automated tests are not substitutes for real-game acceptance when a future change modifies resident Lua semantics.
 
+PR #184 established the current CI routing baseline. Pull-request change scope and runtime-revision enforcement use merge-base -> PR head, and missing/invalid scope decisions fail closed. Ordinary documentation keeps the existing required check names but takes lightweight Ubuntu fast paths. Portable Backend/tests/executable reference data run Linux contracts; Swift/AppKit/native/build/package/macOS-only paths also run Build 2 macOS; module/Core/build-boundary paths additionally run the reference-fixture module build. The explicit shared Backend/Core seams `__init__.py`, `adapter.py`, `game_spec.py`, `module_manifest.py`, `protocol.py`, `registry.py`, and `server.py` are conservatively routed through macOS + reference-fixture verification, while ordinary portable Core Python such as `save_service.py` remains Linux-only. Build 2 is the sole production Hades build/package/signing proof; the module matrix builds only `reference_fixture`.
+
 ## Architecture/governance state
 
-Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
+Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
-The current active governance package is #131, completing the Host bilingual localization foundation. Subsequent governance sequencing remains owned by planning issue #124. Under the current user direction, ordinary Phase D feature expansion remains held until the final governance lock #180 closes; this is a sequencing choice, not a repository-wide emergency freeze.
+The next shared-presentation implementation gate is #176. The subsequent Hades-presentation gate is #177. Further dependency, parallel-work, feature-admission, and governance sequencing remains owned by planning issue #124 and is intentionally not duplicated here.
 
 ## Current development gate
 
@@ -66,11 +68,12 @@ For every task:
 
 Do not stack new implementation on unmerged overlapping PR heads.
 
+The next shared-presentation gate is #176, followed by Hades presentation gate #177. All other admission and sequencing decisions remain in #124.
+
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
 ## Known non-blocking risks
 
-- Docs-only changes keep the normal required check names but use the repository fast path instead of running heavy Linux/module/macOS work.
 - Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
 - Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
 
