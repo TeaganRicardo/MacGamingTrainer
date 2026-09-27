@@ -117,7 +117,7 @@ do {
     let startIndex = states.count
     var hangCompletion: Bool? = nil
     session.send("hang", operation: "hang", timeout: 0.15, completion: { hangCompletion = $0 })
-    waitForRecovery(after: startIndex, notice: "后端已自动恢复")
+    waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if hangCompletion != false { fail("timeout request completion must fail") }
     var ping: Bool? = nil
     session.send("ping-after-timeout", operation: "ping", timeout: 1.0, completion: { ping = $0 })
