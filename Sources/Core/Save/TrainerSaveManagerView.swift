@@ -4,6 +4,7 @@ struct TrainerSaveManagerView: View {
     @ObservedObject var model: TrainerSaveManagerModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
 
     @State private var selectedIDs: Set<String> = []
     @State private var editingID: String?
@@ -15,14 +16,14 @@ struct TrainerSaveManagerView: View {
     @State private var confirmDelete = false
 
     var body: some View {
-        TrainerSheetScaffold(title: "存档管理", icon: "externaldrive.fill", width: 780) {
+        TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: "externaldrive.fill", width: 780) {
             if model.busy { ProgressView() }
-            Button { model.reveal() } label: { Label("打开存档目录", systemImage: "folder") }
+            Button { model.reveal() } label: { Label(localization.localized("host.save.openFolder"), systemImage: "folder") }
                 .disabled(model.busy)
-            Button { model.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
+            Button { model.refresh() } label: { Label(localization.localized("host.refresh"), systemImage: "arrow.clockwise") }
                 .disabled(model.busy)
             TrainerPrimaryActionButton(
-                title: "创建备份",
+                title: localization.localized("host.save.createBackup"),
                 systemImage: "plus",
                 enabled: !model.busy,
                 action: { model.backup() }
@@ -36,7 +37,7 @@ struct TrainerSaveManagerView: View {
                             .font(.caption)
                             .foregroundStyle(pending.indeterminate ? theme.warning : theme.deferred)
                         Spacer()
-                        Button(pending.indeterminate ? "清除状态" : "取消") { model.cancelStaged() }
+                        Button(localization.localized(pending.indeterminate ? "host.clearStatus" : "host.cancel")) { model.cancelStaged() }
                             .disabled(model.busy)
                     }
                 }
@@ -47,7 +48,7 @@ struct TrainerSaveManagerView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "exclamationmark.triangle")
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("检测到上次恢复中断后保留的恢复副本。请先检查这些文件，再决定是否继续恢复。")
+                            Text(localization.localized("host.save.recoveryCopiesWarning"))
                                 .font(.caption)
                                 .foregroundStyle(theme.warning)
                             Text(model.recoveryPaths.joined(separator: "\n"))
@@ -56,19 +57,19 @@ struct TrainerSaveManagerView: View {
                                 .textSelection(.enabled)
                         }
                         Spacer()
-                        Button("显示") { model.revealRecoveryCopies() }
+                        Button(localization.localized("host.show")) { model.revealRecoveryCopies() }
                             .disabled(model.busy)
                     }
                 }
             }
 
             if !model.error.isEmpty {
-                TrainerMessageBanner(text: model.error, icon: "exclamationmark.triangle", color: theme.warning)
+                TrainerMessageBanner(text: localization.presentation(model.error, arguments: model.errorArguments), icon: "exclamationmark.triangle", color: theme.warning)
             } else if !model.notice.isEmpty {
-                TrainerMessageBanner(text: model.notice, icon: "checkmark.circle", color: theme.success)
+                TrainerMessageBanner(text: localization.presentation(model.notice, arguments: model.noticeArguments), icon: "checkmark.circle", color: theme.success)
             }
 
-            TrainerSection(title: "备份历史", icon: "clock.arrow.circlepath") {
+            TrainerSection(title: localization.localized("host.save.history"), icon: "clock.arrow.circlepath") {
                 if !selectedIDs.isEmpty {
                     selectionActions
                 }
@@ -77,7 +78,7 @@ struct TrainerSaveManagerView: View {
                     if model.snapshots.isEmpty {
                         VStack(spacing: 1) {
                             TrainerRow {
-                                TrainerEmptyState(text: "暂无存档备份。")
+                                TrainerEmptyState(text: localization.localized("host.save.empty"))
                             }
                         }
                         .trainerGroupedRows()
@@ -96,7 +97,7 @@ struct TrainerSaveManagerView: View {
             HStack {
                 Spacer()
                 TrainerPrimaryActionButton(
-                    title: "完成",
+                    title: localization.localized("host.done"),
                     enabled: !model.busy,
                     action: dismiss.callAsFunction
                 )
@@ -117,15 +118,15 @@ struct TrainerSaveManagerView: View {
             .trainerTheme(theme)
         }
         .alert(deleteTitle, isPresented: $confirmDelete) {
-            Button("取消", role: .cancel) { deleteIDs.removeAll() }
-            Button("永久删除", role: .destructive) {
+            Button(localization.localized("host.cancel"), role: .cancel) { deleteIDs.removeAll() }
+            Button(localization.localized("host.deletePermanently"), role: .destructive) {
                 let ids = deleteIDs
                 selectedIDs.subtract(ids)
                 deleteIDs.removeAll()
                 model.delete(ids: ids)
             }
         } message: {
-            Text(deleteIDs.count > 1 ? "将永久删除所选的 \(deleteIDs.count) 个备份。此操作不会修改当前游戏存档。" : "将永久删除该备份。此操作不会修改当前游戏存档。")
+            Text(deleteIDs.count > 1 ? localization.localized("host.save.deleteSelectedMessage", arguments: [String(deleteIDs.count)]) : localization.localized("host.save.deleteOneMessage"))
         }
         .onChange(of: model.snapshots.map(\.id), initial: true) { _, ids in
             let current = Set(ids)
@@ -139,7 +140,7 @@ struct TrainerSaveManagerView: View {
 
     private var selectionActions: some View {
         HStack(spacing: 10) {
-            Text("已选 \(selectedIDs.count) 项")
+            Text(localization.localized("host.selectedCount", arguments: [String(selectedIDs.count)]))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -147,7 +148,7 @@ struct TrainerSaveManagerView: View {
                 deleteIDs = selectedIDs
                 confirmDelete = true
             } label: {
-                Label("删除所选", systemImage: "trash")
+                Label(localization.localized("host.deleteSelected"), systemImage: "trash")
             }
             .disabled(model.busy)
         }
@@ -161,7 +162,7 @@ struct TrainerSaveManagerView: View {
                 TrainerSelectionControl(
                     selected: selectedIDs.contains(snapshot.id),
                     enabled: !model.busy,
-                    helpText: "选择以进行批量管理"
+                    helpText: localization.localized("host.save.bulkSelectionHelp")
                 ) {
                     toggleSelection(snapshot.id)
                 }
@@ -171,7 +172,7 @@ struct TrainerSaveManagerView: View {
                         if editingID == snapshot.id {
                             TrainerInlineNameEditor(
                                 text: $renameText,
-                                placeholder: "存档名称",
+                                placeholder: localization.localized("host.save.namePlaceholder"),
                                 onCommit: commitRename,
                                 onCancel: cancelRename
                             )
@@ -180,10 +181,10 @@ struct TrainerSaveManagerView: View {
                                 .font(.headline.weight(.semibold))
                                 .lineLimit(1)
                                 .onTapGesture(count: 2) { beginRename(snapshot) }
-                                .help("双击重命名")
+                                .help(localization.localized("host.save.doubleClickRename"))
                         }
                         if snapshot.hot {
-                            TrainerPillBadge(text: "热备份", color: theme.info)
+                            TrainerPillBadge(text: localization.localized("host.save.hotBackup"), color: theme.info)
                         }
                     }
 
@@ -192,7 +193,7 @@ struct TrainerSaveManagerView: View {
                             Text(snapshot.createdAt.replacingOccurrences(of: "T", with: " "))
                             Text("·")
                         }
-                        Text("\(snapshot.fileCount) 个文件")
+                        Text(localization.localized("host.save.fileCount", arguments: [String(snapshot.fileCount)]))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -205,7 +206,7 @@ struct TrainerSaveManagerView: View {
                     }
 
                     if !snapshot.valid {
-                        Text(snapshot.error.isEmpty ? "备份校验失败，无法恢复" : snapshot.error)
+                        Text(localization.localized("host.save.invalidBackup"))
                             .font(.caption)
                             .foregroundStyle(theme.warning)
                             .lineLimit(2)
@@ -214,7 +215,7 @@ struct TrainerSaveManagerView: View {
 
                 Spacer(minLength: 12)
 
-                Button("恢复") {
+                Button(localization.localized("host.restore")) {
                     preserveCurrent = true
                     restoreCandidate = snapshot
                 }
@@ -225,19 +226,19 @@ struct TrainerSaveManagerView: View {
                     Button {
                         beginRename(snapshot)
                     } label: {
-                        Label("重命名", systemImage: "pencil")
+                        Label(localization.localized("host.rename"), systemImage: "pencil")
                     }
                     Button {
                         model.reveal(id: snapshot.id)
                     } label: {
-                        Label("在 Finder 中显示", systemImage: "folder")
+                        Label(localization.localized("host.showInFinder"), systemImage: "folder")
                     }
                     Divider()
                     Button(role: .destructive) {
                         deleteIDs = [snapshot.id]
                         confirmDelete = true
                     } label: {
-                        Label("删除", systemImage: "trash")
+                        Label(localization.localized("host.delete"), systemImage: "trash")
                     }
                 }
             }
@@ -245,15 +246,15 @@ struct TrainerSaveManagerView: View {
     }
 
     private var deleteTitle: String {
-        deleteIDs.count > 1 ? "删除所选存档？" : "删除存档？"
+        localization.localized(deleteIDs.count > 1 ? "host.save.deleteSelectedTitle" : "host.save.deleteTitle")
     }
 
     private func pendingRestoreText(_ pending: TrainerPendingRestore) -> String {
         if pending.indeterminate {
-            return "上次等待恢复在执行中被中断，结果无法确认。请检查游戏存档后清除此状态，必要时再手动恢复备份。"
+            return localization.localized("host.save.pendingIndeterminate")
         }
         let name = model.snapshots.first(where: { $0.id == pending.snapshotID })?.name ?? pending.snapshotID
-        return "“\(name)”等待游戏退出后恢复。"
+        return localization.localized("host.save.pendingWaiting", arguments: [name])
     }
 
     private func toggleSelection(_ id: String) {
@@ -294,22 +295,23 @@ struct TrainerSaveManagerView: View {
 }
 
 private struct TrainerSaveRestoreConfirmationView: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let snapshot: TrainerSaveSnapshot
     @Binding var preserveCurrent: Bool
     let onCancel: () -> Void
     let onRestore: () -> Void
 
     var body: some View {
-        TrainerSheetScaffold(title: "恢复存档", icon: "arrow.counterclockwise", width: 460) {
+        TrainerSheetScaffold(title: localization.localized("host.save.restoreTitle"), icon: "arrow.counterclockwise", width: 460) {
             EmptyView()
         } content: {
-            TrainerSection(title: "恢复选项", icon: "arrow.counterclockwise") {
+            TrainerSection(title: localization.localized("host.save.restoreOptions"), icon: "arrow.counterclockwise") {
                 VStack(spacing: 1) {
                     TrainerRow {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(snapshot.name)
                                 .font(.headline.weight(.semibold))
-                            Text("Trainer 会自动决定立即恢复、热替换或等待游戏退出；无需手动判断文件是否被占用。")
+                            Text(localization.localized("host.save.restoreExplanation"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -317,7 +319,7 @@ private struct TrainerSaveRestoreConfirmationView: View {
                     }
                     TrainerRow {
                         TrainerCheckboxControl(
-                            title: "恢复前保留当前存档",
+                            title: localization.localized("host.save.preserveCurrent"),
                             isOn: preserveCurrent,
                             onChange: { preserveCurrent = $0 }
                         )
@@ -328,8 +330,8 @@ private struct TrainerSaveRestoreConfirmationView: View {
         } footer: {
             HStack {
                 Spacer()
-                Button("取消", action: onCancel)
-                TrainerPrimaryActionButton(title: "恢复", action: onRestore)
+                Button(localization.localized("host.cancel"), action: onCancel)
+                TrainerPrimaryActionButton(title: localization.localized("host.restore"), action: onRestore)
             }
         }
     }
