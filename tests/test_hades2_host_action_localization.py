@@ -103,6 +103,9 @@ assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
 assert "case listenerInitialization(status: Int32)" in global_hotkeys
 assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in global_hotkeys
 assert "presentationKey" not in global_hotkeys
+assert "let title: String" not in global_hotkeys, "Core hotkey binding must not carry module presentation"
+assert "host.hotkeys." not in model, "Hades shortcut state must remain typed, not store Host localization keys"
+assert "@Published var shortcutIssue: Hades2ShortcutIssue?" in model
 assert not re.search(r"[\u3400-\u9fff]", global_hotkeys), (
     "Core hotkey registration must not emit one-language presentation"
 )
