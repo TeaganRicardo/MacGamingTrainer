@@ -1,5 +1,26 @@
 import Foundation
 
+/// A language-neutral presentation token contributed by a game module.
+///
+/// A game model must stay free of localized copy, but the Host still has to
+/// render that model's status, operation titles, banners and errors. A token
+/// carries only a stable key plus runtime arguments, so the module keeps the
+/// identity while the module's own presentation layer owns the wording.
+///
+/// The reference fixture and any future module use the same type; Core never
+/// learns a module's key namespace or vocabulary.
+public struct TrainerTextToken: Hashable {
+    public let key: String
+    public let arguments: [String]
+
+    public init(key: String, arguments: [String] = []) {
+        self.key = key
+        self.arguments = arguments
+    }
+}
+
+import Foundation
+
 struct BackendProtocolExpectation {
     let gameID: String
     let hostProtocolVersion: Int
@@ -19,7 +40,9 @@ struct BackendReply {
     let hostProtocolVersion: Int
     let moduleProtocolVersion: Int
     let gameID: String
-    let operation: String
+    /// Language-neutral operation identity. Diagnostics log the key; the UI
+    /// resolves the wording through the owning presentation layer.
+    let operation: TrainerTextToken
     let announceSuccess: Bool
     let success: Bool
     let result: [String: Any]?
@@ -36,6 +59,7 @@ final class BackendClient {
         let command: String
         let params: [String: Any]
         let operation: String
+        let operationArguments: [String]
         let coalesceKey: String?
         let announceSuccess: Bool
         let timeout: TimeInterval
@@ -53,7 +77,7 @@ final class BackendClient {
     private var terminalFailureReported = false
     private var stderrTail = ""
 
-    private var onRequestStarted: ((String, Bool) -> Void)?
+    private var onRequestStarted: ((TrainerTextToken, Bool) -> Void)?
     private var onReply: ((BackendReply) -> Void)?
     private var onProtocolMismatch: ((BackendFailure) -> Void)?
     private var onStderr: ((String) -> Void)?
@@ -74,7 +98,7 @@ final class BackendClient {
     func start(
         scriptURL: URL,
         expectation: BackendProtocolExpectation,
-        onRequestStarted: @escaping (String, Bool) -> Void,
+        onRequestStarted: @escaping (TrainerTextToken, Bool) -> Void,
         onReply: @escaping (BackendReply) -> Void,
         onProtocolMismatch: @escaping (BackendFailure) -> Void,
         onStderr: @escaping (String) -> Void,
@@ -112,6 +136,7 @@ final class BackendClient {
         _ command: String,
         params: [String: Any] = [:],
         operation: String,
+        operationArguments: [String] = [],
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
@@ -133,6 +158,7 @@ final class BackendClient {
             command: command,
             params: params,
             operation: operation,
+            operationArguments: operationArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
@@ -193,7 +219,7 @@ final class BackendClient {
         }
         do {
             current = request
-            onRequestStarted?(request.operation, request.announceSuccess)
+            onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
             try process.send(["id": request.id, "command": request.command, "params": request.params])
             scheduleTimeout(for: request)
             onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
@@ -277,7 +303,7 @@ final class BackendClient {
             hostProtocolVersion: hostVersion!,
             moduleProtocolVersion: moduleVersion!,
             gameID: gameID!,
-            operation: request.operation,
+            operation: TrainerTextToken(key: request.operation, arguments: request.operationArguments),
             announceSuccess: request.announceSuccess,
             success: success,
             result: message["result"] as? [String: Any],

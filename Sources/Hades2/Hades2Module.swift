@@ -9,6 +9,18 @@ struct Hades2GameModule: TrainerGameModule {
         headerTitle: "HADES II"
     )
 
+    /// Hades-owned presentation namespace. The Host registers this so it can
+    /// resolve Hades model tokens without Core learning any Hades vocabulary.
+    static let presentationKeyPrefix = Hades2Presentation.Key.prefix
+
+    static func presentationText(
+        key: String,
+        arguments: [String],
+        language: TrainerPresentationLanguage
+    ) -> String {
+        Hades2Presentation.shared.string(key, language: language, arguments: arguments)
+    }
+
     static func makeModel(session: TrainerBackendSession) -> Hades2TrainerModel {
         Hades2TrainerModel(session: session, logSink: TrainerLogSink(gameID: descriptor.id))
     }

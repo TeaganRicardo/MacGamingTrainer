@@ -46,19 +46,19 @@ router = JsonlRequestRouter(adapter, save_data_root=Path(temporary_root.name))
 cases = (
     (
         {"id": "feature-list", "command": "set_desired", "params": {"feature": [], "value": True}},
-        "未知功能。",
+        "hades2.error.unknownFeature",
     ),
     (
         {"id": "feature-object", "command": "set_desired", "params": {"feature": {}, "value": True}},
-        "未知功能。",
+        "hades2.error.unknownFeature",
     ),
     (
         {"id": "element-list", "command": "set_element", "params": {"element": [], "amount": 1}},
-        "未知元素。",
+        "hades2.error.unknownElement",
     ),
     (
         {"id": "element-object", "command": "set_element", "params": {"element": {}, "amount": 1}},
-        "未知元素。",
+        "hades2.error.unknownElement",
     ),
 )
 
@@ -67,7 +67,15 @@ try:
     for request, message in cases:
         reply = router.handle(request)
         assert reply["ok"] is False, request["id"]
-        assert reply["error"] == {"code": "invalid_request", "presentation": message}, request["id"]
+        error = reply["error"]
+        # Player-facing copy is a language-neutral key; the readable text stays
+        # on the diagnostic so the operator trace is unchanged.
+        assert error["code"] == "invalid_request", request["id"]
+        assert error["presentation"] == message, request["id"]
+        assert error["diagnostic"], request["id"]
+        assert not any("一" <= character <= "鿿" for character in error["presentation"]), (
+            request["id"]
+        )
 finally:
     logging.disable(logging.NOTSET)
     router.close()

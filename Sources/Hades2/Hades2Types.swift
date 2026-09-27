@@ -63,27 +63,32 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
     ]
 
-    var title: String {
+    /// Presentation key for this action's label. Resolved by
+    /// `Hades2Presentation` at the presentation boundary so a language switch
+    /// re-renders the shortcut sheet and its conflict diagnostics live.
+    var presentationKey: String {
         switch self {
-        case .godMode: return "God Mode"
-        case .infiniteHealth: return "无限生命"
-        case .infiniteMana: return "无限魔力"
-        case .instantCastCooldown: return "法阵始终可用"
-        case .hexAlwaysReady: return "巫咒始终可用"
-        case .infiniteAmmo: return "无限弹药"
-        case .damageEnabled: return "伤害倍率"
-        case .autoMiniGames: return "小游戏自动成功"
-        case .gardenQoL: return "花园便捷操作"
-        case .boonRarityEnabled: return "祝福稀有度控制"
-        case .forceLegendary: return "强制传奇"
-        case .forceDuo: return "强制双重"
-        case .moneyMultiplierEnabled: return "金币获取倍率"
-        case .resourceMultiplierEnabled: return "材料获取倍率"
-        case .applyNextRoomReward: return "应用下一房奖励"
-        case .spawnOlympian: return "生成奥林匹斯的祝福"
-        case .spawnPickup: return "生成资源与常规掉落"
-        case .spawnSpecial: return "生成角色奖励"
-        case .disableAll: return "全部关闭"
+        case .godMode: return "hades2.feature.godMode"
+        case .infiniteHealth: return "hades2.feature.infiniteHealth"
+        case .infiniteMana: return "hades2.feature.infiniteMana"
+        case .instantCastCooldown: return "hades2.feature.instantCastCooldown"
+        case .hexAlwaysReady: return "hades2.feature.hexAlwaysReady"
+        case .infiniteAmmo: return "hades2.feature.infiniteAmmo"
+        case .damageEnabled: return "hades2.feature.damageMultiplier"
+        case .autoMiniGames: return "hades2.feature.autoMiniGames"
+        case .gardenQoL: return "hades2.feature.gardenQoL"
+        case .boonRarityEnabled: return "hades2.feature.boonRarity"
+        case .forceLegendary: return "hades2.feature.forceLegendary"
+        case .forceDuo: return "hades2.feature.forceDuo"
+        case .moneyMultiplierEnabled: return "hades2.feature.moneyMultiplier"
+        case .resourceMultiplierEnabled: return "hades2.feature.resourceMultiplier"
+        case .applyNextRoomReward: return "hades2.nextRoom.title"
+        case .spawnOlympian: return "hades2.spawn.olympianBoons"
+        case .spawnPickup: return "hades2.spawn.pickupRewards"
+        case .spawnSpecial: return "hades2.spawn.characterRewards"
+        // Disable All is a Host-shell action that happens to live in the Hades
+        // module, so it keeps the Host key and the Host resource.
+        case .disableAll: return "host.disableAll"
         }
     }
 }

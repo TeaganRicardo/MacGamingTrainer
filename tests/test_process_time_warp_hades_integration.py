@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
+from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
@@ -90,8 +91,9 @@ assert transport.sources == [], "process Time Warp unexpectedly crossed the Lua 
 
 try:
     adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 10.1}, "speed-invalid")
-except ValueError:
-    pass
+except Hades2PresentationError as error:
+    # Out-of-range input is rejected with a language-neutral presentation key.
+    assert error.presentation == "hades2.error.gameSpeedRange", error.presentation
 else:
     raise AssertionError("gameSpeed > 10 was accepted")
 

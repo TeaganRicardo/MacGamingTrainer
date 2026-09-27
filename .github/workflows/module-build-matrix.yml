@@ -86,6 +86,8 @@ jobs:
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           test -f "$app/Contents/Resources/Backend/games/${{ matrix.game }}/module.json"
           test ! -e "$app/Contents/Resources/ui_terminology.json"
+          test ! -e "$app/Contents/Resources/hades2.zh-CN.json"
+          test ! -e "$app/Contents/Resources/hades2.en.json"
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"

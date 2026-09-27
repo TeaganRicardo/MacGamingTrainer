@@ -11,6 +11,7 @@ from . import preparation
 from .command_validation import validate_command_params
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
+from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
 from .runtime_error_presentation import present_runtime_error
 
@@ -35,11 +36,33 @@ class Hades2CommandRouter:
     def dispatch(self, command, params, request_id):
         try:
             return self._dispatch(command, params, request_id)
-        except AdapterError as error:
-            presented=present_runtime_error(command,error)
-            if presented is error:
-                raise
-            raise presented from error
+        except Exception as error:
+            # Runtime Lua errors are keyed on the Lua detail rather than the
+            # raised text, so translate them first; every remaining Hades
+            # failure then goes through the same key funnel. One exit, no bypass.
+            raise self._as_presentation_key(
+                present_runtime_error(command, error)
+            ) from error
+
+    @staticmethod
+    def _as_presentation_key(error):
+        """Replace Hades-owned player-facing copy with a language-neutral key.
+
+        Every Hades failure leaves through this one funnel, so this is the only
+        place that decides what is player-facing. The readable text is preserved
+        as the diagnostic; `code` stays the machine identity. A message that is
+        not registered Hades copy is returned unchanged, so an internal or
+        developer-facing failure cannot be silently reclassified as UI text.
+        """
+        key, arguments = presentation_for(str(error))
+        if key is None:
+            return error
+        return Hades2PresentationError(
+            getattr(error, 'code', 'invalid_request'),
+            key,
+            arguments,
+            diagnostic=str(error),
+        )
 
     def _dispatch(self, command, params, request_id):
         adapter=self.adapter

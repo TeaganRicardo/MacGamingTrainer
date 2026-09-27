@@ -12,6 +12,7 @@ import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
+from games.hades2.error_presentation import Hades2PresentationError
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
 prep.DATA = base
@@ -237,8 +238,9 @@ for bad in (
 ):
     try:
         a.dispatch(bad[0], bad[1], 'bad')
-    except ValueError:
-        pass
+    except Hades2PresentationError as error:
+        # Invalid input is rejected with a language-neutral presentation key.
+        assert error.presentation.startswith('hades2.error.'), error.presentation
     else:
         raise AssertionError('invalid Hades command accepted: '+repr(bad))
 

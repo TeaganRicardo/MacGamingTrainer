@@ -12,9 +12,14 @@ final class ReferenceFixtureModel: ObservableObject, TrainerHostModel {
 
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var busy: Bool { backendStatus.busy }
-    var operation: String { backendStatus.operation }
-    var statusTitle: String { connected ? "host.connected" : "host.disconnected" }
-    var connectionDetailText: String { "Reference fixture" }
+    var operation: TrainerTextToken { backendStatus.operation }
+    // Language-neutral tokens, exactly like a real game module. The fixture uses
+    // the shared Host keys here; a module with its own namespace registers a
+    // resolver instead. Core requires neither shape to know the module.
+    var statusTitle: TrainerTextToken {
+        TrainerTextToken(key: connected ? "host.connected" : "host.disconnected")
+    }
+    var connectionDetailText: TrainerTextToken { TrainerTextToken(key: "host.gameLibrary") }
     var hostActionsEnabled: Bool {
         backendAvailable && !busy && backendStatus.protocolCompatible
     }
@@ -174,5 +179,26 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         localization: TrainerLocalizationStore
     ) -> TrainerEmptyCommands {
         TrainerEmptyCommands()
+    }
+
+    // A module owns its own key namespace. This fixture uses a prefix of its own
+    // rather than a real game module's, which is what proves the seam is generic.
+    static let presentationKeyPrefix = "referenceFixture."
+
+    static func presentationText(
+        key: String,
+        arguments: [String],
+        language: TrainerPresentationLanguage
+    ) -> String {
+        let tables: [String: [TrainerPresentationLanguage: String]] = [
+            "referenceFixture.connected": [.zhCN: "夹具已连接", .en: "Fixture Connected"],
+            "referenceFixture.operable": [.zhCN: "夹具可操作", .en: "Fixture Ready"],
+        ]
+        guard let template = tables[key]?[language] else { return key }
+        var value = template
+        for (index, argument) in arguments.enumerated() {
+            value = value.replacingOccurrences(of: "{\(index)}", with: argument)
+        }
+        return value
     }
 }
