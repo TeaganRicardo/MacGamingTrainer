@@ -121,10 +121,7 @@ struct Hades2TrainerView: View {
         // Some shell actions the module hosts (Disable All) keep their Host key
         // and Host resource, so a non-Hades prefix must resolve through the Host
         // table rather than being looked up as a Hades key.
-        if !key.hasPrefix("hades2.") {
-            return localization.string(key)
-        }
-        return Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
+        Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
     /// Resolve a Hades-owned message token, including its nested key arguments.
