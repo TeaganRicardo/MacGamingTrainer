@@ -1,0 +1,746 @@
+{
+  "direct": {
+    " 失败（sample-value）": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.commandFailed"
+    },
+    " 超时（sample-value 秒）": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.timeout"
+    },
+    "Legendary / Duo 设置无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidLegendaryDuo"
+    },
+    "Lua 执行失败": {
+      "arguments": [],
+      "key": "hades2.error.luaFailed"
+    },
+    "Native sell predicate is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.sellPredicateUnavailable"
+    },
+    "Profile desired 字段无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileDesiredInvalid"
+    },
+    "Profile desiredSchemaVersion 无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileDesiredSchemaInvalid"
+    },
+    "Profile schemaVersion 无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileSchemaInvalid"
+    },
+    "Profile shortcuts 字段无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileShortcutsInvalid"
+    },
+    "Profile updatedAt 字段无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileUpdatedAtInvalid"
+    },
+    "Profile updatedAt 字段缺失。": {
+      "arguments": [],
+      "key": "hades2.error.profileUpdatedAtMissing"
+    },
+    "Profile 包含当前 schema 未定义的顶层字段。": {
+      "arguments": [],
+      "key": "hades2.error.profileUnknownFields"
+    },
+    "Profile 名称不能包含路径分隔符。": {
+      "arguments": [],
+      "key": "hades2.error.profileNameSeparator"
+    },
+    "Profile 名称与文件标识不一致。": {
+      "arguments": [],
+      "key": "hades2.error.profileNameIdentifierMismatch"
+    },
+    "Profile 名称必须为 1–64 个可见字符。": {
+      "arguments": [],
+      "key": "hades2.error.profileNameLength"
+    },
+    "Profile 名称无效。": {
+      "arguments": [],
+      "key": "hades2.error.profileNameInvalid"
+    },
+    "Profile 名称未规范化。": {
+      "arguments": [],
+      "key": "hades2.error.profileNameNotNormalized"
+    },
+    "Profile 文件已损坏。": {
+      "arguments": [],
+      "key": "hades2.error.profileCorrupt"
+    },
+    "Some Game 适配器需要 arm64 原生游戏。": {
+      "arguments": [
+        "Some Game",
+        "arm64"
+      ],
+      "key": "hades2.error.architectureRequired"
+    },
+    "Trait is not present in the current run: sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not sell-eligible, so no safe removal exists: sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait removal requires a trait name": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNeedsName"
+    },
+    "Trait removal requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNeedsRun"
+    },
+    "command 无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidCommandValue"
+    },
+    "desired-state schemaVersion 无效。": {
+      "arguments": [],
+      "key": "hades2.error.desiredSchemaInvalid"
+    },
+    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 8），": {
+      "arguments": [
+        "kind",
+        "1",
+        "8"
+      ],
+      "key": "hades2.error.preferenceOlderFormat"
+    },
+    "kind 使用了更新的数据格式（schemaVersion=9，当前支持 8），": {
+      "arguments": [
+        "kind",
+        "9",
+        "8"
+      ],
+      "key": "hades2.error.preferenceNewerFormat"
+    },
+    "params 必须是对象。": {
+      "arguments": [],
+      "key": "hades2.error.invalidParamsObject"
+    },
+    "probeRuntime 必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.probeRuntimeBoolean"
+    },
+    "runtime observation 仅允许 status。": {
+      "arguments": [],
+      "key": "hades2.error.runtimeObservationOnly"
+    },
+    "some tool 失败（1）：detail": {
+      "arguments": [
+        "some tool",
+        "1",
+        "detail"
+      ],
+      "key": "hades2.error.commandFailed"
+    },
+    "some tool 超时（30 秒）；": {
+      "arguments": [
+        "some tool",
+        "30"
+      ],
+      "key": "hades2.error.timeout"
+    },
+    "上次调用结果不明，请重启游戏后重新连接。": {
+      "arguments": [],
+      "key": "hades2.error.restartRequired"
+    },
+    "下一房奖励无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextRoomReward"
+    },
+    "使用新的数据格式": {
+      "arguments": [],
+      "key": "hades2.error.preferenceNewerFormat"
+    },
+    "倍率必须为有限数值。": {
+      "arguments": [],
+      "key": "hades2.error.multiplierFinite"
+    },
+    "倍率范围为 1–100。": {
+      "arguments": [],
+      "key": "hades2.error.multiplierRange"
+    },
+    "元素数量必须为 0–": {
+      "arguments": [],
+      "key": "hades2.error.elementRange"
+    },
+    "元素数量必须为 0–sample-value 的整数。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.elementRange"
+    },
+    "功能代码过长。": {
+      "arguments": [],
+      "key": "hades2.error.featureCodeTooLong"
+    },
+    "原始备份损坏或与记录不匹配；拒绝覆盖游戏。": {
+      "arguments": [],
+      "key": "hades2.error.backupCorrupt"
+    },
+    "原始恢复副本 UUID 不匹配；未修改游戏。": {
+      "arguments": [],
+      "key": "hades2.error.restoreUUIDMismatch"
+    },
+    "参数类型不支持。": {
+      "arguments": [],
+      "key": "hades2.error.invalidParamsObject"
+    },
+    "同一请求 ID 的内容发生变化。": {
+      "arguments": [],
+      "key": "hades2.error.duplicateConflict"
+    },
+    "后台暂停标志尚未恢复，请保持连接重试断开。": {
+      "arguments": [],
+      "key": "hades2.error.focusNotRestored"
+    },
+    "后台暂停标志恢复失败：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复校验失败。": {
+      "arguments": [],
+      "key": "hades2.error.focusRestoreMismatch"
+    },
+    "后台运行标志无法验证。": {
+      "arguments": [],
+      "key": "hades2.error.runFlagUnverifiable"
+    },
+    "备份 UUID 不匹配。": {
+      "arguments": [],
+      "key": "hades2.error.backupUUIDMismatch"
+    },
+    "局内数值字段无效。": {
+      "arguments": [],
+      "key": "hades2.error.vitalField"
+    },
+    "局内数值必须为 0–": {
+      "arguments": [],
+      "key": "hades2.error.vitalRange"
+    },
+    "局内数值必须为 0–sample-value。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.vitalRange"
+    },
+    "属性值必须为有限数值。": {
+      "arguments": [],
+      "key": "hades2.error.statFinite"
+    },
+    "巫咒充能必须为 0–": {
+      "arguments": [],
+      "key": "hades2.error.spellChargeRange"
+    },
+    "巫咒充能必须为 0–sample-value。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.spellChargeRange"
+    },
+    "已准备文件缺少调试权限。": {
+      "arguments": [],
+      "key": "hades2.error.missingDebugPermission"
+    },
+    "开关值必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.featureToggleBoolean"
+    },
+    "当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。": {
+      "arguments": [],
+      "key": "hades2.error.noMatchingBackup"
+    },
+    "必须输入有限数值。": {
+      "arguments": [],
+      "key": "hades2.error.statFinite"
+    },
+    "悟性上限必须是 0–999 的整数。": {
+      "arguments": [],
+      "key": "hades2.error.graspRange"
+    },
+    "找不到匹配架构的 Mach-O UUID suffix。": {
+      "arguments": [
+        "suffix"
+      ],
+      "key": "hades2.error.uuidLookupFailed"
+    },
+    "护甲仅提供当前值，不存在可编辑上限。": {
+      "arguments": [],
+      "key": "hades2.error.armorNoMaximum"
+    },
+    "损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。": {
+      "arguments": [],
+      "key": "hades2.error.preferenceWriteBlocked"
+    },
+    "敌人伤害倍率必须为 0–1000%。": {
+      "arguments": [],
+      "key": "hades2.error.enemyDamageRange"
+    },
+    "敌人生命倍率必须为 10–1000%。": {
+      "arguments": [],
+      "key": "hades2.error.enemyHealthRange"
+    },
+    "数量必须是 0–": {
+      "arguments": [],
+      "key": "hades2.error.amountRange"
+    },
+    "数量必须是 0–sample-value 的整数。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.amountRange"
+    },
+    "新版本关键符号不可读：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号无法唯一定位：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "无法在时限内暂停游戏。": {
+      "arguments": [],
+      "key": "hades2.error.pauseFailed"
+    },
+    "无法安全写入本地配置。": {
+      "arguments": [],
+      "key": "hades2.error.localWriteFailed"
+    },
+    "无法定位游戏镜像。": {
+      "arguments": [],
+      "key": "hades2.error.imageNotFound"
+    },
+    "无法恢复游戏运行：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法读取原始权限；未修改游戏。": {
+      "arguments": [],
+      "key": "hades2.error.permissionsUnreadable"
+    },
+    "无法读取操作结果；请检查游戏，不要重复资源操作。": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownUnreadable"
+    },
+    "无法运行 sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "无法运行 some tool：detail": {
+      "arguments": [
+        "some tool",
+        "detail"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "暂存文件校验失败；未修改游戏。": {
+      "arguments": [],
+      "key": "hades2.error.stagedVerificationFailed"
+    },
+    "最低稀有度无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidRarityTarget"
+    },
+    "未从本机 Hades II 中文语言文件解析到 3 项": {
+      "arguments": [
+        "Hades II",
+        "3"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机 sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未找到该 Profile。": {
+      "arguments": [],
+      "key": "hades2.error.profileNotFound"
+    },
+    "未知元素。": {
+      "arguments": [],
+      "key": "hades2.error.unknownElement"
+    },
+    "未知功能。": {
+      "arguments": [],
+      "key": "hades2.error.unknownFeature"
+    },
+    "未知命令。": {
+      "arguments": [],
+      "key": "hades2.error.invalidCommand"
+    },
+    "未知局内数值。": {
+      "arguments": [],
+      "key": "hades2.error.unknownVital"
+    },
+    "未知局内计数器。": {
+      "arguments": [],
+      "key": "hades2.error.unknownCounter"
+    },
+    "未知属性。": {
+      "arguments": [],
+      "key": "hades2.error.unknownStat"
+    },
+    "未知错误": {
+      "arguments": [],
+      "key": "hades2.error.unknownDetail"
+    },
+    "未经验证的游戏版本：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "未经验证的游戏版本：version=1.2, build=3, UUID=abc。": {
+      "arguments": [
+        "1.2",
+        "3",
+        "abc"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "查询 sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询Hades II 进程失败（-9）：boom": {
+      "arguments": [
+        "Hades II",
+        "-9",
+        "boom"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询sample-value 进程失败（sample-code）：sample-detail": {
+      "arguments": [
+        "sample-value",
+        "sample-code",
+        "sample-detail"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "检测到多个Hades II 进程，请保留一个。": {
+      "arguments": [
+        "Hades II"
+      ],
+      "key": "hades2.error.multipleProcesses"
+    },
+    "检测到多个sample-value 进程，请保留一个。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.multipleProcesses"
+    },
+    "概率必须为 0–100。": {
+      "arguments": [],
+      "key": "hades2.error.percentRange"
+    },
+    "没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。": {
+      "arguments": [],
+      "key": "hades2.error.noOriginalBackup"
+    },
+    "游戏内操作失败，请查看日志。": {
+      "arguments": [],
+      "key": "hades2.error.runtimeActionFailed"
+    },
+    "游戏发生非预期停顿，已停止当前操作。": {
+      "arguments": [],
+      "key": "hades2.error.unexpectedStop"
+    },
+    "游戏已退出或连接已断开。": {
+      "arguments": [],
+      "key": "hades2.error.notAttached"
+    },
+    "游戏文件在操作期间改变；拒绝覆盖。": {
+      "arguments": [],
+      "key": "hades2.error.fileChangedDuringOperation"
+    },
+    "游戏未能恢复运行。": {
+      "arguments": [],
+      "key": "hades2.error.resumeUnverified"
+    },
+    "游戏调用结果不明，未自动重试。": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownEmpty"
+    },
+    "游戏调用结果不明，未自动重试：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试；请检查游戏并重启。": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownGeneric"
+    },
+    "游戏进程已结束。": {
+      "arguments": [],
+      "key": "hades2.error.processExited"
+    },
+    "游戏进程已退出。": {
+      "arguments": [],
+      "key": "hades2.error.processExitedSecond"
+    },
+    "游戏进程状态切换超时。": {
+      "arguments": [],
+      "key": "hades2.error.processTimeout"
+    },
+    "游戏速度范围为 0–10。": {
+      "arguments": [],
+      "key": "hades2.error.gameSpeedRange"
+    },
+    "独立验证副本校验失败；未修改游戏。": {
+      "arguments": [],
+      "key": "hades2.error.verificationFailed"
+    },
+    "现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。": {
+      "arguments": [],
+      "key": "hades2.error.preferenceWriteBlocked"
+    },
+    "现有 desired-state 无法安全隔离，已禁止覆盖原文件。": {
+      "arguments": [],
+      "key": "hades2.error.preferenceWriteBlocked"
+    },
+    "生命值必须至少为 1。": {
+      "arguments": [],
+      "key": "hades2.error.healthMinimum"
+    },
+    "稀有度倍率必须为 0–1000%。": {
+      "arguments": [],
+      "key": "hades2.error.invalidRarityMultiplier"
+    },
+    "等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。": {
+      "arguments": [],
+      "key": "hades2.error.worldUpdateTimeout"
+    },
+    "缺少符号：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "请先启动 sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动Hades II 并进入存档。": {
+      "arguments": [
+        "Hades II"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动sample-value 并进入存档。": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先连接游戏。": {
+      "arguments": [],
+      "key": "hades2.error.notConnected"
+    },
+    "请先退出 Hades II；": {
+      "arguments": [
+        "Hades II"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出 sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请断开连接并退出游戏后操作。": {
+      "arguments": [],
+      "key": "hades2.error.disconnectBeforePrepare"
+    },
+    "请求 ID 无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidRequestId"
+    },
+    "请求包含不可序列化的 JSON 值。": {
+      "arguments": [],
+      "key": "hades2.error.unserializableRequest"
+    },
+    "请选择掉落物或祝福。": {
+      "arguments": [],
+      "key": "hades2.error.selectReward"
+    },
+    "请选择支持原生奖励选择界面的角色。": {
+      "arguments": [],
+      "key": "hades2.error.selectChoiceSource"
+    },
+    "请选择要移除的祝福。": {
+      "arguments": [],
+      "key": "hades2.error.selectTraitToRemove"
+    },
+    "请选择资源。": {
+      "arguments": [],
+      "key": "hades2.error.selectResource"
+    },
+    "调试签名校验失败；未修改游戏。": {
+      "arguments": [],
+      "key": "hades2.error.signingVerificationFailed"
+    },
+    "运行中的游戏函数校验失败：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "连接被拒绝：operation not permitted。退出游戏后使用": {
+      "arguments": [
+        "operation not permitted"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝：sample-value": {
+      "arguments": [
+        "sample-value"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "速度倍率必须为 10–1000%。": {
+      "arguments": [],
+      "key": "hades2.error.speedMultiplierRange"
+    },
+    "锁定值必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.lockedBoolean"
+    },
+    "额外魔力恢复必须为 0–1000/秒。": {
+      "arguments": [],
+      "key": "hades2.error.manaRegenRange"
+    }
+  },
+  "fallback_key": "hades2.error.runtimeActionFailed",
+  "runtime": {
+    "open_sell_traits::Boon selling requires an active run room": {
+      "arguments": [],
+      "key": "Boon selling requires an active run room"
+    },
+    "open_sell_traits::Cannot open boon sell screen while another screen is active": {
+      "arguments": [],
+      "key": "Cannot open boon sell screen while another screen is active"
+    },
+    "open_sell_traits::Native boon sell screen data is unavailable": {
+      "arguments": [],
+      "key": "Native boon sell screen data is unavailable"
+    },
+    "open_sell_traits::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
+      "arguments": [],
+      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
+    },
+    "open_special_choice::Cannot open special blessing choice during a transition": {
+      "arguments": [],
+      "key": "Cannot open special blessing choice during a transition"
+    },
+    "open_special_choice::Cannot open special blessing choice while another screen is active": {
+      "arguments": [],
+      "key": "Cannot open special blessing choice while another screen is active"
+    },
+    "open_special_choice::No eligible special blessings are available": {
+      "arguments": [],
+      "key": "No eligible special blessings are available"
+    },
+    "open_special_choice::Special blessing choice data is unavailable": {
+      "arguments": [],
+      "key": "Special blessing choice data is unavailable"
+    },
+    "open_special_choice::Special blessing choice requires an active run room": {
+      "arguments": [],
+      "key": "Special blessing choice requires an active run room"
+    },
+    "open_special_choice::Special blessing source data is unavailable": {
+      "arguments": [],
+      "key": "Special blessing source data is unavailable"
+    },
+    "open_special_choice::Special blessing source has no audited native choice flow": {
+      "arguments": [],
+      "key": "Special blessing source has no audited native choice flow"
+    },
+    "open_special_choice::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
+      "arguments": [],
+      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
+    },
+    "remove_trait::Action requires a requestId of 1..128 characters": {
+      "arguments": [],
+      "key": "Action requires a requestId of 1..128 characters"
+    },
+    "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "arguments": [],
+      "key": "MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry"
+    },
+    "remove_trait::Native sell predicate is unavailable": {
+      "arguments": [],
+      "key": "Native sell predicate is unavailable"
+    },
+    "remove_trait::Trait is not present in the current run": {
+      "arguments": [],
+      "key": "Trait is not present in the current run"
+    },
+    "remove_trait::Trait is not present in the current run: TraitOfHermes": {
+      "arguments": [],
+      "key": "Trait is not present in the current run: TraitOfHermes"
+    },
+    "remove_trait::Trait is not sell-eligible, so no safe removal exists": {
+      "arguments": [],
+      "key": "Trait is not sell-eligible, so no safe removal exists"
+    },
+    "remove_trait::Trait is not sell-eligible, so no safe removal exists: TraitOfHermes": {
+      "arguments": [],
+      "key": "Trait is not sell-eligible, so no safe removal exists: TraitOfHermes"
+    },
+    "remove_trait::Trait removal requires a trait name": {
+      "arguments": [],
+      "key": "Trait removal requires a trait name"
+    },
+    "remove_trait::Trait removal requires an active run room": {
+      "arguments": [],
+      "key": "Trait removal requires an active run room"
+    },
+    "remove_trait::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
+      "arguments": [],
+      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
+    },
+    "remove_trait::requestId reused for a different action": {
+      "arguments": [],
+      "key": "requestId reused for a different action"
+    }
+  },
+  "runtime_commands": [
+    "open_sell_traits",
+    "open_special_choice",
+    "remove_trait"
+  ]
+}

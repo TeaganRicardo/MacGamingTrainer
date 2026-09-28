@@ -76,8 +76,7 @@ for language, entries in TABLES.items():
             assert term not in value, f"{language} {key} leaks non-canonical term {term!r}"
 
 # 4. Every backend presentation key resolves in every language.
-BACKEND_KEYS = set(error_presentation.MESSAGE_KEYS.values())
-BACKEND_KEYS |= set(error_presentation.PREFIX_KEYS.values())
+BACKEND_KEYS = {rule["key"] for rule in error_presentation.REGISTRY}
 BACKEND_KEYS.add(runtime_error_presentation._FALLBACK_KEY)
 for per_command in runtime_error_presentation._RUNTIME_KEYS.values():
     BACKEND_KEYS |= set(per_command.values())
@@ -87,11 +86,17 @@ for key in sorted(BACKEND_KEYS):
 
 # 5. A prefix rule must not be shadowed by a whole-message rule, and every
 #    prefix key must take an argument so an interpolated value is not dropped.
-for message in error_presentation.MESSAGE_KEYS:
-    for prefix in error_presentation.PREFIX_KEYS:
-        assert not message.startswith(prefix), (message, prefix)
-for prefix, key in error_presentation.PREFIX_KEYS.items():
-    assert key in error_presentation._ARGUMENT_KEYS, (prefix, key)
+_LITERAL_MESSAGES = [r["message"] for r in error_presentation.REGISTRY
+                     if r["match"] == "literal"]
+_PREFIX_RULES = [r for r in error_presentation.REGISTRY if r["match"] == "prefix"]
+for message in _LITERAL_MESSAGES:
+    for rule in _PREFIX_RULES:
+        assert not message.startswith(rule["prefix"]), (message, rule["prefix"])
+for rule in _PREFIX_RULES:
+    # A prefix rule that dropped its remainder would silently discard an
+    # interpolated value, so the argument convention is declared per rule and
+    # checked here rather than carried in a side table the registry cannot miss.
+    assert rule.get("argument") == "remainder", (rule["prefix"], rule.get("argument"))
 
 # 6. Interpolated messages keep the value out of the key. The static tail of a
 #    composed sentence belongs to the template, not to the argument, so a prefix
