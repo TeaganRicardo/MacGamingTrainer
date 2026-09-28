@@ -187,7 +187,10 @@ assert "hades2.traits.removalUnavailable" in row_block, (
 revision = int(re.search(r"version = 1, revision = (\d+)", LUA).group(1))
 previous = int(re.search(r"previousModule\.revision ~= (\d+)", LUA).group(1))
 assert revision == previous, "resident revision guard and declared revision disagree"
-assert revision == 50, f"resident revision must be 49 -> 50, found {revision}"
+# 50 was this feature's own bump (49 -> 50). 51 is the review fix, which only
+# deletes the no-op loop in `traitOwner` — still resident source, so still a
+# bump, and still exactly one.
+assert revision == 51, f"resident revision must be 50 -> 51, found {revision}"
 
 
 # --- 10. Every new key exists in both shipped languages ---
@@ -263,17 +266,129 @@ unknown = rep.present_runtime_error(
     "remove_trait", AdapterError("lua_error", '[string "MacGamingTrainer"]:1: something else'))
 assert unknown.presentation == "hades2.error.runtimeActionFailed", unknown.presentation
 
-# Every message the removal path raises must be covered by the runtime table,
-# so a new refusal cannot silently degrade to the generic key.
+# Every message the removal path can actually raise must be covered, so a new
+# refusal cannot silently degrade to the generic key.
+#
+# Scanning `error("…")` literals is not enough: the block also raises through
+# `requireFunctions` and `action()`, both of which compose their text at
+# runtime. A literal-only scan validated the block against itself and was blind
+# to every composed message — which is exactly how the four refusals above went
+# unregistered. So the call graph is followed instead: each helper the block
+# calls is resolved to its own `error(...)` sites, and each of those is probed
+# through the real funnel.
 _removal_block = LUA[LUA.index('if command == "remove_trait" then'):LUA.index('if command == "open_sell_traits" then')]
+
+# Helpers the block calls whose messages are composed rather than literal.
+_HELPER_ERROR_SITES = {
+    "requireFunctions": [
+        'Unsupported {label}: missing {name}',
+    ],
+    "action": [
+        'Action requires a requestId of 1..128 characters',
+        'requestId reused for a different action',
+        'MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry',
+    ],
+}
+# The concrete values a composed message carries at runtime.
+_COMPOSED_SAMPLES = {
+    "{label}": "native trait removal",
+    "{name}": "RemoveWeaponTrait",
+}
+# What each key's arguments must be, so a greedy pattern that still resolves
+# cannot pass by handing one value the other's text.
+_COMPOSED_EXPECTED_ARGS = {
+    "hades2.error.nativeFunctionMissing": ("native trait removal", "RemoveWeaponTrait"),
+}
+
+_composed_failures = []
+for helper in re.findall(r'\b([a-zA-Z_][A-Za-z0-9_]*)\s*\(', _removal_block):
+    for template in _HELPER_ERROR_SITES.get(helper, ()):
+        message = template
+        for token, value in _COMPOSED_SAMPLES.items():
+            message = message.replace(token, value)
+        raw = f'[string "MacGamingTrainer"]:3200: {message}'
+        mapped = rep.present_runtime_error("remove_trait", AdapterError("lua_error", raw))
+        if mapped.presentation == "hades2.error.runtimeActionFailed":
+            _composed_failures.append(f"{helper}: {message!r} -> {mapped.presentation}")
+        else:
+            # A key that resolves is not enough: the rule has to split the
+            # sentence at the right places too. A greedy pattern still resolves
+            # while handing one value the other's text, so each value is checked
+            # for the punctuation that separates them in the real message.
+            for index, expected in enumerate(_COMPOSED_EXPECTED_ARGS.get(mapped.presentation, ())):
+                actual = mapped.arguments[index] if index < len(mapped.arguments) else ""
+                assert actual == expected, (
+                    f"{helper}: {message!r} -> {mapped.presentation} argument "
+                    f"{index} is {actual!r}, expected {expected!r}")
+        # The technical text must survive on the diagnostic.
+        assert message.split(":")[-1].strip() in (mapped.diagnostic or ""), (
+            helper, message, mapped.diagnostic)
+assert not _composed_failures, sorted(set(_composed_failures))
+
 _raised = set(re.findall(r'error\("([^"]+)"', _removal_block))
-_runtime_known = set(rep._RUNTIME_KEYS.get("remove_trait", {})) | {prefix for prefix, _ in rep._COMPOSED_PREFIXES["remove_trait"]}
+# Probe each literal through the real funnel rather than string-matching a key
+# table. A prefix rule and a whole-message rule can both "cover" a string in the
+# table while only one of them actually resolves, and probing is the only check
+# that agrees with what the player will see.
+_literal_failures = []
 for message in _raised:
-    assert any(message.startswith(known) for known in _runtime_known), (
-        f"removal raises an unregistered message: {message!r}")
+    # The block appends a runtime value to some refusals; stand one in.
+    probe = f"{message} BoonX" if message.endswith(":") else message
+    raw = f'[string "MacGamingTrainer"]:3200: {probe}'
+    mapped = rep.present_runtime_error("remove_trait", AdapterError("lua_error", raw))
+    if mapped.presentation == "hades2.error.runtimeActionFailed":
+        _literal_failures.append(f"{message!r} -> {mapped.presentation}")
+assert not _literal_failures, sorted(set(_literal_failures))
+
+# Every key the removal path can produce must exist in both shipped languages.
+_LOCALIZATION = Path(__file__).resolve().parents[1] / "Sources/Hades2/Presentation/Localization"
+_TABLES = {
+    language: json.loads((_LOCALIZATION / f"hades2.{language}.json").read_text(encoding="utf-8"))["entries"]
+    for language in ("zh-CN", "en")
+}
+_removal_keys = set(rep._RUNTIME_KEYS["remove_trait"].values())
+_removal_keys |= {key for _, key in rep._COMPOSED_PREFIXES["remove_trait"]}
+_removal_keys |= {key for _, key in rep._SHARED_COMPOSED}
+for _key in _removal_keys:
+    for _language, _entries in _TABLES.items():
+        assert _key in _entries, f"{_language} is missing removal key {_key}"
 
 
-# --- 12. The client validation rejects a missing name ---
+# --- 12. A failed removal must not report success ---
+#
+# The resident work path swallows its own failure: it pcall-wraps the teardown
+# and publishes a `failed` receipt instead of raising, so the request itself
+# succeeds. With the default `announceSuccess`, the Host would then show the
+# green "completed" notice while the boon is still owned — and because
+# `presentActionReceipt` had no `remove_trait` case, the `failed` receipt was
+# dropped before it could set an error. The other two one-shot actions already
+# pass `announceSuccess: false` for this reason.
+_MODEL = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
+_removal_model = _MODEL[_MODEL.index("func removeTrait"):_MODEL.index("func performSpecialReward")]
+assert "announceSuccess: false" in _removal_model, (
+    "removeTrait must not announce transport success; the receipt carries the real outcome")
+
+_receipt_switch = _MODEL[_MODEL.index("private func presentActionReceipt"):]
+_receipt_switch = _receipt_switch[:_receipt_switch.index("\n    private func ")]
+assert "case .removeTrait:" in _receipt_switch, (
+    "presentActionReceipt must handle remove_trait or a failed receipt is dropped")
+# A `completed` outcome must still say so, or the removal is silent on success.
+assert "hades2.receipt.traitRemovalCompleted" in _receipt_switch, (
+    "a completed removal must present its own outcome, not fall through")
+for _key in ("hades2.receipt.traitRemovalCompleted", "hades2.receipt.traitRemoved"):
+    for _language, _entries in _TABLES.items():
+        assert _key in _entries, f"{_language} is missing {_key}"
+
+# The sibling one-shot actions must keep the same discipline.
+for _name in ("openSellTraits", "performSpecialReward"):
+    _start = _MODEL.index(f"func {_name}")
+    _body = _MODEL[_start:_start + 900]
+    _body = _body[:_body.index("\n    func ")] if "\n    func " in _body else _body
+    assert "announceSuccess: false" in _body, (
+        f"{_name} must not announce transport success for a one-shot action")
+
+
+# --- 13. The client validation rejects a missing name ---
 assert "remove_trait" in VALIDATION
 assert "请选择要移除的祝福。" in VALIDATION
 

@@ -14,6 +14,7 @@ The Chinese text that used to be the raised message is retained as the
 authoritative source for each key and is still surfaced through the diagnostic,
 so the operator trace is unchanged while the wire stops being localized.
 """
+import re
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
@@ -192,26 +193,88 @@ PREFIX_KEYS = {
     'Trait is not present in the current run: ': 'hades2.error.traitNotPresent',
     'Native trait removal failed: ': 'hades2.error.traitRemovalFailed',
     '请先启动 ': 'hades2.error.gameNotRunning',
-    '检测到多个 ': 'hades2.error.multipleProcesses',
     '查询 ': 'hades2.error.processQueryFailed',
     '连接被拒绝：': 'hades2.error.attachDenied',
-    ' 适配器需要 ': 'hades2.error.architectureRequired',
     '缺少符号：': 'hades2.error.missingSymbol',
     '新版本关键符号无法唯一定位：': 'hades2.error.symbolNotUnique',
     '新版本关键符号不可读：': 'hades2.error.symbolUnreadable',
     '运行中的游戏函数校验失败：': 'hades2.error.runtimeVerificationFailed',
     '无法恢复游戏运行：': 'hades2.error.resumeFailed',
     '后台暂停标志恢复失败：': 'hades2.error.focusRestoreFailed',
-    '找不到匹配架构的 Mach-O UUID': 'hades2.error.uuidLookupFailed',
     '请先退出 ': 'hades2.error.prepareWhileRunning',
     '无法运行 ': 'hades2.error.commandLaunchFailed',
-    ' 游戏调用结果不明，未自动重试：': 'hades2.error.outcomeUnknownTransport',
+    '游戏调用结果不明，未自动重试：': 'hades2.error.outcomeUnknownTransport',
     '未经验证的游戏版本：': 'hades2.error.unverifiedBuildWarning',
-    ' 适配器需要 ': 'hades2.error.architectureRequired',
-    '使用了更新的数据格式': 'hades2.error.preferenceNewerFormat',
-    '使用了已不再支持的旧数据格式': 'hades2.error.preferenceOlderFormat',
     '未从本机 ': 'hades2.error.missingOfficialNames',
 }
+
+# Messages whose interpolated value sits *inside* the sentence, so neither a
+# whole-message nor a prefix rule can isolate it.
+#
+# A leading-space prefix such as `' 适配器需要 '` looks correct in isolation but
+# never matches: `startswith` anchors at position 0, and the real message leads
+# with the game display name (`transport.py`). A value-leading prefix such as
+# `'使用了更新的数据格式'` fails the same way for the opposite reason. Both used
+# to fall through to a raw Chinese message on the wire.
+#
+# Each entry is a pattern anchored to the whole message whose groups are the
+# arguments, in template order. Anchoring matters: a pattern that matches only
+# part of the sentence would again absorb the static tail into an argument.
+REGEX_KEYS = (
+    # `f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。'`
+    (re.compile(r'^(?P<game>.+?) 适配器需要 (?P<requirement>.+?) 原生游戏。$'),
+     'hades2.error.architectureRequired'),
+    # transport.py: `'连接被拒绝：' + detail + '。退出游戏后…'` — the OS error
+    # sits between the prefix and a second, static sentence, so a plain prefix
+    # rule handed the rest of the message to the template as the error detail.
+    (re.compile(r'^连接被拒绝：(?P<detail>.+?)。退出游戏后使用'),
+     'hades2.error.attachDenied'),
+    # `'找不到匹配架构的 Mach-O UUID' + suffix + '。'` — the sentence owns its
+    # own period, so it must not be handed to the template as an argument. The
+    # suffix may or may not carry its own parentheses, and may be absent
+    # entirely when the source-derived contract probe is the bare first literal.
+    (re.compile(r'^找不到匹配架构的 Mach-O UUID\s*(?P<suffix>[^\s，。]*)?。?$'),
+     'hades2.error.uuidLookupFailed'),
+    # catalog.py: `未从本机 {game} 中文语言文件解析到 {count} 项{term:…}的官方中文名称，…`
+    (re.compile(r'^未从本机 (?P<game>.+?) 中文语言文件解析到 (?P<count>.+?) 项'),
+     'hades2.error.missingOfficialNames'),
+    # preparation.py: `f'{args[0]} 失败（{rc}）：{detail}'`
+    (re.compile(r'^(?P<tool>.+?) 失败（(?P<returncode>.+?)）：(?P<detail>.+)$'),
+     'hades2.error.commandFailed'),
+    # preparation.py: `f'{args[0]} 超时（{TIMEOUT} 秒）；操作结果需重新检查。'`
+    (re.compile(r'^(?P<tool>.+?) 超时（(?P<timeout>.+?) 秒）；'),
+     'hades2.error.timeout'),
+    # preparation.py: `f'请先退出 {game}；运行中不能修改签名或恢复存档。'`
+    (re.compile(r'^请先退出 (?P<game>.+?)；'),
+     'hades2.error.prepareWhileRunning'),
+    # preparation.py: `f'未经验证的游戏版本：version={v}, build={b}, UUID={u}。'`
+    (re.compile(
+        r'^未经验证的游戏版本：version=(?P<version>.*?), '
+        r'build=(?P<build>.*?), UUID=(?P<uuid>.*?)。$'),
+     'hades2.error.unverifiedBuildWarning'),
+    # preparation.py: `f'无法运行 {args[0]}：{error}'` — the tool name and the
+    # OS error are two values, not one; joining them left `{1}` unfilled.
+    (re.compile(r'^无法运行 (?P<tool>[^：]+)：(?P<detail>.+)$'),
+     'hades2.error.commandLaunchFailed'),
+)
+
+# Messages composed into a local variable and only raised later, which a
+# `raise`-site scan cannot see at all. `persistence.py` builds its text with
+# `.format(...)` and calls `super().__init__(message)`, so a scan that
+# "replays every real raise" never looked at these — and the
+# `使用了更新的数据格式` rule shipped broken anyway because nothing probed it.
+ASSIGNED_KEYS = (
+    # '{} 使用了更新的数据格式（schemaVersion={}，当前支持 {}），本次读取已拒绝且原文件保持不变。'
+    (re.compile(
+        r'^(?P<kind>.+?) 使用了更新的数据格式'
+        r'（schemaVersion=(?P<found>[^，]*)，当前支持 (?P<supported>[^）]*)），'),
+     'hades2.error.preferenceNewerFormat'),
+    # '{} 使用了已不再支持的旧数据格式（…），本次读取已拒绝且原文件保持不变。'
+    (re.compile(
+        r'^(?P<kind>.+?) 使用了已不再支持的旧数据格式'
+        r'（schemaVersion=(?P<found>[^，]*)，当前支持 (?P<supported>[^）]*)），'),
+     'hades2.error.preferenceOlderFormat'),
+)
 
 # Messages whose interpolated value is delimited, with the sentence's own
 # leading and trailing text. These are matched before the plain prefix rules so
@@ -219,6 +282,7 @@ PREFIX_KEYS = {
 # where the module can translate it.
 DELIMITED_AFFIX_KEYS = {
     '请先启动': (' 并进入存档。', 'hades2.error.gameNotRunning'),
+    '检测到多个': (' 进程，请保留一个。', 'hades2.error.multipleProcesses'),
 }
 
 # Messages shaped `lead + value + middle + code + tail + detail`, mapped to a
@@ -283,6 +347,17 @@ def presentation_for(message, diagnostic: Optional[str] = None):
     key = MESSAGE_KEYS.get(message)
     if key is not None:
         return key, []
+    for pattern, candidate in REGEX_KEYS + ASSIGNED_KEYS:
+        match = pattern.match(message)
+        if match is None:
+            continue
+        # Group order is the template's {n} order, so the static wording stays
+        # in the module's own table instead of riding along as an argument.
+        # Positions are preserved: dropping a group would shift every later
+        # value into the wrong placeholder. An absent optional value is kept as
+        # an empty string so its position still holds.
+        arguments = [group or '' for group in match.groups()]
+        return candidate, arguments
     for lead, (tail, candidate) in DELIMITED_AFFIX_KEYS.items():
         if not message.startswith(lead) or not message.endswith(tail):
             continue

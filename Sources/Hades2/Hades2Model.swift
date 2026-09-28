@@ -404,6 +404,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         featureSupport = [:]
         statSupport = [:]
         statAvailable = [:]
+        // Observable state, so it cannot outlive the backend that produced it.
+        // The next payload repopulates it; until then an empty list means
+        // "not observed yet" rather than the previous run's traits.
+        currentRunTraits = []
         activationGraceWorkItems.values.forEach { $0.cancel() }
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
@@ -588,6 +592,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch command {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
+        // Removal has no screen to open, so its subject is the trait itself. It
+        // must be listed here: `default: return` below would drop a `failed`
+        // receipt on the floor and leave the player with no outcome at all.
+        case .removeTrait: title = presentation("hades2.receipt.traitRemoved")
         default: return
         }
 
@@ -603,7 +611,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             noticeToken = nil
             errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
-            break
+            noticeToken = presentation("hades2.receipt.traitRemovalCompleted", arguments: [title.key])
         }
     }
 
@@ -878,10 +886,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     /// outcome-unknown request is never auto-replayed.
     func removeTrait(_ trait: CurrentRunTrait) {
         guard trait.canRemove, trait.removalScopeAllMatching else { return }
+        // Not `announceSuccess`. The resident work path swallows its own failure
+        // (it pcall-wraps the teardown and publishes a `failed` receipt), so the
+        // request itself succeeds and the default green "completed" notice would
+        // claim a removal that never happened. The receipt carries the real
+        // outcome, exactly as it does for the other one-shot actions.
         send(
             .removeTrait(trait.name),
             title: "hades2.receipt.traitRemoved",
-            titleArguments: [trait.name]
+            titleArguments: [trait.name],
+            announceSuccess: false
         )
     }
 
