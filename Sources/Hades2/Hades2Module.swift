@@ -21,6 +21,29 @@ struct Hades2GameModule: TrainerGameModule {
         Hades2Presentation.shared.string(key, language: language, arguments: arguments)
     }
 
+    /// Resolve a key that may belong to either owner.
+    ///
+    /// A module-hosted shell action (Disable All) deliberately keeps its Host key
+    /// and Host resource, so `hades2.`-prefixed copy comes from the module
+    /// catalogue and every other key comes from the Host table. Without this
+    /// split a Host key is looked up in the Hades catalogue, misses, and renders
+    /// as its own raw name.
+    @MainActor
+    static func resolveText(
+        key: String,
+        arguments: [String] = [],
+        localization: TrainerLocalizationStore
+    ) -> String {
+        guard key.hasPrefix(Hades2Presentation.Key.prefix) else {
+            return localization.string(key, arguments: arguments)
+        }
+        return Hades2Presentation.shared.string(
+            key,
+            language: localization.language,
+            arguments: arguments
+        )
+    }
+
     static func makeModel(session: TrainerBackendSession) -> Hades2TrainerModel {
         Hades2TrainerModel(session: session, logSink: TrainerLogSink(gameID: descriptor.id))
     }

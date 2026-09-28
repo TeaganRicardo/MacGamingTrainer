@@ -10,7 +10,7 @@ struct Hades2ProfileManagerView: View {
 
     /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
-        Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
+        Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
     var body: some View {
@@ -69,7 +69,7 @@ struct Hades2DiagnosticsView: View {
 
     /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
-        Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
+        Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
     var body: some View {
@@ -118,8 +118,12 @@ struct Hades2ShortcutSettingsView: View {
     @State private var keyMonitor: Any?
 
     /// Resolve one Hades presentation key against the live Host language.
+    ///
+    /// Some shell actions the module hosts (Disable All) deliberately keep their
+    /// Host key and Host resource, so a non-Hades prefix must resolve through the
+    /// Host table rather than being looked up as a Hades key.
     private func text(_ key: String) -> String {
-        Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
+        Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
     var body: some View {

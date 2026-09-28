@@ -39,6 +39,17 @@ _RUNTIME_KEYS = {
             'hades2.error.traitNotSellEligible',
         'Trait is not present in the current run':
             'hades2.error.traitNotPresent',
+        # Raised by `action()` itself, not by the removal block, so it is not in
+        # the list above. These are the refusals that matter most for a
+        # non-idempotent operation: a generic "operation failed" would be the
+        # worst possible message here, and `MGT_OUTCOME_UNKNOWN` in particular
+        # must never read as an ordinary failure.
+        'Action requires a requestId of 1..128 characters':
+            'hades2.error.requestIdRequired',
+        'requestId reused for a different action':
+            'hades2.error.requestIdReused',
+        'MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry':
+            'hades2.error.outcomeUnknownRuntime',
     },
     'open_special_choice': {
         'Cannot open special blessing choice while another screen is active':
@@ -71,6 +82,26 @@ _COMPOSED_PREFIXES = {
     ),
 }
 
+# Composed messages built by helpers the command block calls, not written as
+# `error("…")` in it. `requireFunctions` raises
+# `"Unsupported " .. label .. ": missing " .. name` with a caller-supplied
+# label, so it appears nowhere in a literal scan of the removal block and
+# silently degraded to the generic key. These are matched by regex across every
+# command because the helper is shared.
+_SHARED_COMPOSED = (
+    # requireFunctions: purpose, then the missing native function names.
+    (re.compile(r'^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$'),
+     'hades2.error.nativeFunctionMissing'),
+)
+
+
+def _match_shared_composed(detail):
+    for pattern, key in _SHARED_COMPOSED:
+        match = pattern.match(detail)
+        if match:
+            return key, tuple(group for group in match.groups() if group)
+    return None, ()
+
 
 def present_runtime_error(command, error):
     if not isinstance(error, AdapterError) or error.code != 'lua_error':
@@ -94,6 +125,8 @@ def present_runtime_error(command, error):
                 key = expected
                 arguments = (detail[len(prefix):].strip(),)
                 break
+    if key is None:
+        key, arguments = _match_shared_composed(detail)
     if key is None:
         key = _FALLBACK_KEY
     logging.warning('Hades Lua error command=%s raw=%s', command, raw)

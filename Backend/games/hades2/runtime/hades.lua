@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 50 then
+if previousModule and previousModule.revision ~= 51 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 50, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 51, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1756,9 +1756,6 @@ if __MacGamingTrainerV1 == nil then
   end
   local traitOwner = function(trait)
     if type(trait) ~= "table" then return "" end
-    for _, key in ipairs({ "Rarity", "LootData", "FieldLootData", "GodLoot" }) do
-      if trait[key] ~= nil then break end
-    end
     if type(trait.LootDataName) == "string" then return trait.LootDataName end
     if type(trait.SourceId) == "string" then return trait.SourceId end
     return ""
