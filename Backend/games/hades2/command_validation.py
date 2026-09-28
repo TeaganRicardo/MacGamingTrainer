@@ -102,6 +102,14 @@ def validate_command_params(command, params):
         if not isinstance(source,str) or not source:
             raise ValueError('请选择支持原生奖励选择界面的角色。')
 
+    if command=='remove_trait':
+        # Only a trait NAME is accepted. Instance identity is current-run only
+        # and is not a removal input, because the proven native teardown is
+        # name-level and removes every matching instance.
+        name=params.get('trait')
+        if not isinstance(name,str) or not name:
+            raise ValueError('请选择要移除的祝福。')
+
     if command=='set_boon_rarity_desired':
         config={
             'target':params.get('target'),

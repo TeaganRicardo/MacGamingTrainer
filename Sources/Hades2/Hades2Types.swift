@@ -112,3 +112,54 @@ struct DiagnosticCheck: Identifiable {
     let ok: Bool
     let detail: String
 }
+
+
+// MARK: - Current-run trait/buff inventory
+//
+// A row projected from live runtime state, never from the boon catalog and
+// never from desired state.
+//
+// `instanceID` is the game's own current-run trait identity. D00 proved it is
+// assigned per instance and is NOT stable across run reload, game restart or a
+// save round trip, so it is presented as current-run identity only and is never
+// persisted or compared across runs.
+//
+// `removalCapability` is machine-readable. `.nameLevelAllMatching` is the only
+// proven-safe teardown: the native sell screen removes every instance sharing a
+// name, so the scope is stated rather than implied. `.none` means no safe
+// teardown has been proven for that entry.
+enum TraitRemovalCapability: String, Codable, Equatable, Sendable {
+    case none
+    case nameLevelAllMatching
+}
+
+struct CurrentRunTrait: Identifiable, Equatable, Sendable {
+    /// Current-run instance identity. Not durable.
+    let instanceID: String
+    let name: String
+    let family: String
+    let owner: String
+    let hasRarity: Bool
+    let remainingUses: Double?
+
+    let removalCapability: TraitRemovalCapability
+    /// Why removal is unavailable, when it is. Empty when removal is available.
+    let removalReason: String
+    /// Explicitly states that the removal scope is every matching instance.
+    let removalScopeAllMatching: Bool
+
+    var id: String { instanceID }
+    var canRemove: Bool { removalCapability == .nameLevelAllMatching }
+}
+
+/// The identity scope the runtime reported, carried so the UI cannot imply more
+/// than the backend proved.
+struct CurrentRunTraitScope: Equatable, Sendable {
+    let identityScope: String
+    let isPersistent: Bool
+
+    static let currentRun = CurrentRunTraitScope(
+        identityScope: "currentRunInstance",
+        isPersistent: false
+    )
+}
