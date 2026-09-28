@@ -43,11 +43,10 @@ class Hades2PresentationKey:
 class Hades2PresentationError(AdapterError):
     """A Hades failure whose player-facing value is a presentation key.
 
-    `presentation` is the key (Core passes it through opaquely and the Host
-    resolves it), and `diagnostic` keeps the readable text. `arguments` is
-    carried separately because the wire envelope is Core-owned and a second
-    game-specific field would be a protocol change; the Host resolves a key
-    with no arguments, and an interpolated value stays on the diagnostic.
+    `presentation` is the key and `diagnostic` keeps the readable text.
+    `arguments` fills the key's `{n}` placeholders and travels alongside the
+    key in the Core-owned `error.arguments` envelope field, so the Host can
+    render the module's own sentence in the player's language.
     """
 
     def __init__(self, code, key, arguments=(), *, diagnostic=None):
@@ -175,6 +174,12 @@ MESSAGE_KEYS = {
 # Messages built by interpolation: the prefix selects the key and the remainder
 # becomes its runtime argument, so a tool error or process name is never baked
 # into a localized sentence.
+#
+# A prefix must end exactly where the runtime value ends. A prefix that stops
+# early drags the sentence's own static tail into the argument, which then
+# renders as a hole-free but wrong value; a prefix that runs past the value
+# cannot match at all. The source-derived contract test replays every real raise
+# through this table, so a mismatched boundary fails there rather than in the UI.
 PREFIX_KEYS = {
     '请先启动 ': 'hades2.error.gameNotRunning',
     '检测到多个 ': 'hades2.error.multipleProcesses',
@@ -196,6 +201,20 @@ PREFIX_KEYS = {
     '使用了更新的数据格式': 'hades2.error.preferenceNewerFormat',
     '使用了已不再支持的旧数据格式': 'hades2.error.preferenceOlderFormat',
     '未从本机 ': 'hades2.error.missingOfficialNames',
+}
+
+# Messages whose interpolated value is delimited, with the sentence's own
+# leading and trailing text. These are matched before the plain prefix rules so
+# the runtime value is isolated and the static wording stays in the template,
+# where the module can translate it.
+DELIMITED_AFFIX_KEYS = {
+    '请先启动': (' 并进入存档。', 'hades2.error.gameNotRunning'),
+}
+
+# Messages shaped `lead + value + middle + code + tail + detail`, mapped to a
+# key whose template takes all three values positionally.
+SEGMENTED_KEYS = {
+    '查询': (' 进程失败（', '）：', 'hades2.error.processQueryFailed'),
 }
 
 # Keys whose template takes the interpolated value as its first argument.
@@ -250,6 +269,28 @@ def presentation_for(message, diagnostic: Optional[str] = None):
     key = MESSAGE_KEYS.get(message)
     if key is not None:
         return key, []
+    for lead, (tail, candidate) in DELIMITED_AFFIX_KEYS.items():
+        if not message.startswith(lead) or not message.endswith(tail):
+            continue
+        value = message[len(lead):len(message) - len(tail)].strip()
+        if not value:
+            continue
+        return candidate, [value]
+    for lead, (middle, tail, candidate) in SEGMENTED_KEYS.items():
+        if not message.startswith(lead):
+            continue
+        rest = message[len(lead):]
+        split = rest.find(middle)
+        if split < 0:
+            continue
+        value, remainder = rest[:split].strip(), rest[split + len(middle):]
+        split2 = remainder.find(tail)
+        if split2 < 0:
+            continue
+        code, detail = remainder[:split2], remainder[split2 + len(tail):]
+        if not value or not code:
+            continue
+        return candidate, [value, code, detail]
     for prefix, candidate in PREFIX_KEYS.items():
         if message.startswith(prefix):
             remainder = message[len(prefix):]

@@ -63,15 +63,28 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     /// Core-owned error text (for example a protocol failure raised by the Host).
     var error: String {
         get { backendStatus.error }
-        set { backendStatus.error = newValue }
+        set {
+            // A Core-owned error is newer than anything the model has presented,
+            // so a stale Hades-owned token must not keep winning the banner.
+            if !newValue.isEmpty { errorToken = nil }
+            backendStatus.error = newValue
+        }
     }
 
     /// Core-owned notice text.
     var notice: String {
         get { backendStatus.notice }
-        set { backendStatus.notice = newValue }
+        set {
+            if !newValue.isEmpty { noticeToken = nil }
+            backendStatus.notice = newValue
+        }
     }
 
+    /// Latest backend-reported error as a token, with the arguments the backend
+    /// sent for it. Empty when the current error is Core-owned plain text.
+    var backendErrorText: TrainerTextToken {
+        TrainerTextToken(key: backendStatus.error, arguments: backendStatus.errorArguments)
+    }
     /// Latest user-facing notice, resolved by the module's presentation layer.
     var noticeText: TrainerTextToken { noticeToken ?? TrainerTextToken(key: "") }
     /// Latest user-facing error, resolved by the module's presentation layer.

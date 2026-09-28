@@ -9,7 +9,10 @@ struct TrainerBackendStatus: Equatable {
     /// Language-neutral operation identity shown while a request is in flight.
     var operation = TrainerTextToken(key: "")
     var errorCode: String?
+    /// Error keys are stored with their arguments so the owning module can render
+    /// the sentence in the Host's live language.
     var error = ""
+    var errorArguments: [String] = []
     var notice = ""
 }
 
@@ -120,6 +123,7 @@ final class TrainerBackendSession {
             $0.operation = TrainerTextToken(key: "host.restartBackend")
             $0.errorCode = nil
             $0.error = ""
+            $0.errorArguments = []
             $0.notice = ""
         }
         if client.isStarted {
@@ -147,7 +151,8 @@ final class TrainerBackendSession {
             code: "backend_start_failed",
             presentation: "host.backend.error.startFailed",
             diagnostic: error.localizedDescription,
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         )
         var next = status
         next.backendAvailable = false
@@ -196,6 +201,7 @@ final class TrainerBackendSession {
                     $0.operation = title
                     $0.errorCode = nil
                     $0.error = ""
+                    $0.errorArguments = []
                     if announceSuccess { $0.notice = "" }
                 }
             },
@@ -218,11 +224,13 @@ final class TrainerBackendSession {
                         code: "operation_failed",
                         presentation: "host.backend.error.operationFailed",
                         diagnostic: nil,
-                        recoveryPath: nil
+                        recoveryPath: nil,
+                        presentationArguments: []
                     )
                     self.updateStatus {
                         $0.errorCode = failure.code
                         $0.error = coreOwned ? "host.backend.error.operationFailed" : failure.presentation
+                        $0.errorArguments = coreOwned ? [] : failure.presentationArguments
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
                     configuration.log("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
@@ -255,6 +263,7 @@ final class TrainerBackendSession {
                         $0.operation = TrainerTextToken(key: "host.backend.operation.recover")
                         $0.errorCode = nil
                         $0.error = ""
+                        $0.errorArguments = []
                         $0.notice = "host.backend.notice.recovering"
                     }
                 } else {
@@ -273,6 +282,7 @@ final class TrainerBackendSession {
             $0.operation = TrainerTextToken(key: "")
             $0.errorCode = nil
             $0.error = ""
+            $0.errorArguments = []
             if let recoveryNotice { $0.notice = recoveryNotice }
         }
     }

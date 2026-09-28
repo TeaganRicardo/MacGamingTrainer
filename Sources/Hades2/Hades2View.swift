@@ -118,7 +118,13 @@ struct Hades2TrainerView: View {
 
     /// Resolve one Hades presentation key against the live Host language.
     private func text(_ key: String) -> String {
-        Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
+        // Some shell actions the module hosts (Disable All) keep their Host key
+        // and Host resource, so a non-Hades prefix must resolve through the Host
+        // table rather than being looked up as a Hades key.
+        if !key.hasPrefix("hades2.") {
+            return localization.string(key)
+        }
+        return Hades2GameModule.presentationText(key: key, arguments: [], language: localization.language)
     }
 
     /// Resolve a Hades-owned message token, including its nested key arguments.
@@ -934,7 +940,13 @@ struct Hades2TrainerView: View {
             if !model.errorText.key.isEmpty {
                 TrainerMessageBanner(text: resolved(model.errorText), icon: "exclamationmark.triangle.fill", color: theme.warning)
             } else if !model.error.isEmpty {
-                TrainerMessageBanner(text: model.error, icon: "exclamationmark.triangle.fill", color: theme.warning)
+                // A Hades error arrives as a key plus its arguments, so render it
+                // through the Hades tables. A Core-owned error is not a Hades key
+                // and is passed through for the Host banner to resolve.
+                let copy = model.backendErrorText.key.hasPrefix("hades2.")
+                    ? resolved(model.backendErrorText)
+                    : model.error
+                TrainerMessageBanner(text: copy, icon: "exclamationmark.triangle.fill", color: theme.warning)
             } else if !model.runtimeIssueText.key.isEmpty {
                 TrainerMessageBanner(text: resolved(model.runtimeIssueText), icon: "exclamationmark.triangle.fill", color: theme.warning)
             } else if !model.runtimeIssue.isEmpty {

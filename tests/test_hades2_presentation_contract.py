@@ -92,9 +92,13 @@ for message in error_presentation.MESSAGE_KEYS:
 for prefix, key in error_presentation.PREFIX_KEYS.items():
     assert key in error_presentation._ARGUMENT_KEYS, (prefix, key)
 
-# 6. Interpolated messages keep the value out of the key.
+# 6. Interpolated messages keep the value out of the key. The static tail of a
+#    composed sentence belongs to the template, not to the argument, so a prefix
+#    that absorbs it would render a value that is not the thing that failed.
 key, arguments = error_presentation.presentation_for("请先启动 Hades II 并进入存档。")
-assert (key, arguments) == ("hades2.error.gameNotRunning", ["Hades II 并进入存档。"]), (key, arguments)
+assert (key, arguments) == ("hades2.error.gameNotRunning", ["Hades II"]), (key, arguments)
+key, arguments = error_presentation.presentation_for("查询 Hades II 进程失败（-9）：boom")
+assert (key, arguments) == ("hades2.error.processQueryFailed", ["Hades II", "-9", "boom"]), (key, arguments)
 key, arguments = error_presentation.presentation_for("未知功能。")
 assert (key, arguments) == ("hades2.error.unknownFeature", []), (key, arguments)
 
