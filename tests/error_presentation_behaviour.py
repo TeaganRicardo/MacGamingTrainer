@@ -45,8 +45,28 @@ class _AdapterError(Exception):
         self.diagnostic = raw
 
 
-#: The registry must produce at least this many genuine shape collisions for the
-#: cross-shape probe set to be worth anything. See MIN_SHAPE_COLLISIONS usage.
+#: Per-family floors on GENUINE shape contests -- messages that two different
+#: shapes claim, with different outcomes.
+#:
+#: This was previously a single global `MIN_SHAPE_COLLISIONS = 2`, and that was
+#: worse than decorative. It never caught the exact regression it was written for:
+#: removing the space from a prefix value still left 96 collisions from the
+#: prefix-vs-delimited family, comfortably over the floor, while the two families
+#: that actually depended on the space dropped to zero. It read like it policed
+#: the cross-shape set and silently did not.
+#:
+#: A global count cannot work here: the prefix-vs-delimited family contributes 96
+#: on its own, so it would mask the disappearance of any other family. Each
+#: family therefore needs its own floor, and the floors differ because the
+#: families differ -- the two prefix families each have exactly one genuine
+#: contest, so their floor is 1 and not 2.
+MIN_GENUINE_CONTEST_FLOORS = {
+    "affix-vs-prefix": 1,
+    "segmented-vs-prefix": 1,
+    "prefix-vs-delimited": 2,
+}
+
+#: Kept for readers of older reports. Not a guard: see the note above.
 MIN_SHAPE_COLLISIONS = 2
 
 
@@ -192,7 +212,170 @@ def _cross_shape_probes(rules) -> set[str]:
             if sample.startswith(head) and any(
                     _re.match(p, sample) for p in regex_patterns):
                 probes.add(sample)
+
+    # prefix vs delimited. Round 3 missed this pair entirely, and it is the one
+    # that matters most: a delimited rule is delimited by an OPEN and a CLOSE, so
+    # a message that merely CONTAINS the opener competes with a prefix rule whose
+    # remainder is that same text. The concrete case, from the live Lua:
+    #
+    #   prefix     'Trait is not present in the current run: '  -> traitNotPresent
+    #   delimited  ' 失败（' ... '）'                   -> commandFailed
+    #
+    # and 'Trait is not present in the current run:  失败（5）' is claimed
+    # by BOTH -- the prefix rule with the remainder ' 失败（5）', and the
+    # delimited rule with the argument '5'. Dispatching delimited first turns a
+    # precise "this trait is not in your run" into a bare "command failed", and
+    # both suites stayed green, because the cross-shape probes above only ever
+    # compared affix/segmented against prefix and prefix against regex.
+    #
+    # So: for every delimited rule, embed its opener and closer inside a message
+    # that also starts with a prefix rule's head. The prefix rule must win.
+    for rule in rules:
+        if rule.get("match") != "delimited":
+            continue
+        opener, closer = rule["open"], rule["close"]
+        for other in rules:
+            if other.get("match") != "prefix":
+                continue
+            head = other["prefix"]
+            message = f"{head}{opener}5{closer}"
+            # Only a real overlap counts: the message has to be claimed by the
+            # delimited rule as well, or this probe is decoration again.
+            if opener in message and closer in message and message != opener:
+                probes.add(message)
+                if message.startswith(head) and opener not in head:
+                    collisions += 1
     return probes, collisions
+
+def _claims(rules, message):
+    """Every (shape, key) that would claim `message`, per the real matchers.
+
+    This is a decision table, not the dispatcher. It answers "which shapes COULD
+    claim this", which is what a contest is, and it deliberately does not consult
+    `presentation_for` -- that returns the winner, and a contest is invisible in
+    the winner.
+    """
+    import re as _re
+    out = []
+    for rule in rules:
+        shape = rule.get("match")
+        if shape == "literal":
+            if message == rule.get("message"):
+                out.append((shape, rule["key"]))
+        elif shape == "regex":
+            if _re.match(rule["pattern"], message):
+                out.append((shape, rule["key"]))
+        elif shape == "prefix":
+            if message.startswith(rule["prefix"]):
+                out.append((shape, rule["key"]))
+        elif shape == "affix":
+            o, c = rule["prefix"], rule["suffix"]
+            if message.startswith(o) and message.endswith(c) \
+                    and message[len(o):len(message) - len(c)].strip():
+                out.append((shape, rule["key"]))
+        elif shape == "segmented":
+            if message.startswith(rule["prefix"]) and rule["separator"] in message:
+                out.append((shape, rule["key"]))
+        elif shape in ("delimited", "delimited_affix"):
+            o, c = rule.get("open"), rule.get("close")
+            if o in message and message.find(c, message.find(o) + len(o)) > message.find(o) + len(o):
+                out.append((shape, rule["key"]))
+    return out
+
+
+
+def _resolve_with(rules, message, shape):
+    """What `shape` alone would return for `message`, or None if it cannot claim it.
+
+    A copy of the dispatcher's per-shape semantics, narrowed to one shape. It
+    exists so the contest counter can ask what each rival WOULD have produced,
+    which is the only way to tell a real contest from a harmless double match.
+    """
+    import re as _re
+    for rule in rules:
+        if rule.get("match") != shape:
+            continue
+        if shape == "regex":
+            m = _re.match(rule["pattern"], message)
+            if m:
+                return rule["key"], list(m.groups())
+        elif shape == "prefix":
+            if message.startswith(rule["prefix"]):
+                return rule["key"], [message[len(rule["prefix"]):]]
+        elif shape == "affix":
+            o, c = rule["prefix"], rule["suffix"]
+            if message.startswith(o) and message.endswith(c) \
+                    and message[len(o):len(message) - len(c)].strip():
+                return rule["key"], [message[len(o):len(message) - len(c)].strip()]
+        elif shape == "segmented":
+            lead, sep, tail = rule["prefix"], rule["separator"], rule["terminator"]
+            if not message.startswith(lead):
+                continue
+            rest = message[len(lead):]
+            s = rest.find(sep)
+            if s < 0:
+                continue
+            value, rem = rest[:s].strip(), rest[s + len(sep):]
+            e = rem.find(tail)
+            if e > 0 and value and rem[:e].strip():
+                return rule["key"], [value, rem[:e].strip()]
+        elif shape == "delimited":
+            o, c = rule.get("open"), rule.get("close")
+            b = message.find(o)
+            if b < 0:
+                continue
+            e = message.find(c, b + len(o))
+            if e > b + len(o):
+                return rule["key"], [message[b + len(o):e].strip()]
+        elif shape == "literal":
+            if message == rule.get("message"):
+                return rule["key"], []
+    return None
+
+
+def _same_outcome(rules, message, shape_a, shape_b) -> bool:
+    """True when both shapes would produce the same key AND the same arguments."""
+    a = _resolve_with(rules, message, shape_a)
+    b = _resolve_with(rules, message, shape_b)
+    if a is None or b is None:
+        return True          # one shape cannot claim it: not a contest
+    return a == b
+
+
+def _genuine_contests_by_family(rules, probes) -> dict:
+    """Family -> count of messages that two shapes would answer DIFFERENTLY.
+
+    A contest matters when the rivals disagree about the outcome -- but the
+    outcome is the key AND the arguments, and here those two cases disagree on
+    the arguments while agreeing on the key:
+
+        '请先启动 Hades II 并进入存档。'
+            affix  -> gameNotRunning ['Hades II']
+            prefix -> gameNotRunning [' Hades II 并进入存档。']
+
+    So a key-only comparison reports 0 genuine contests for both prefix families
+    and the floor fires on a healthy tree. What distinguishes them is the
+    arguments: identical keys with different arguments is exactly the failure
+    this registry refactor exists to prevent -- a translated message silently
+    reverting to its untranslated static tail.
+    """
+    from itertools import combinations
+    families: dict = {name: 0 for name in MIN_GENUINE_CONTEST_FLOORS}
+    for message in probes:
+        claimed = _claims(rules, message)
+        shapes = {s for s, _ in claimed}
+        for a, b in combinations(sorted(shapes), 2):
+            if _same_outcome(rules, message, a, b):
+                continue          # both shapes would answer identically
+            name = f"{a}-vs-{b}"
+            reverse = f"{b}-vs-{a}"
+            for candidate in (name, reverse):
+                if candidate in families:
+                    families[candidate] += 1
+                    break
+    return families
+
+
 def _regex_probes() -> list[str]:
     """Concrete messages for the pattern rules, so a regex change is caught."""
     samples = {

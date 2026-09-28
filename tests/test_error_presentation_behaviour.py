@@ -103,10 +103,40 @@ def test_the_registry_has_no_unreachable_or_invalid_rules():
         raise AssertionError(f"a registry rule can never fire: {detail}")
 
 
+def test_each_overlapping_family_still_has_a_genuine_contest():
+    """The cross-shape guard must not become decoration.
+
+    The previous check was one global floor, `MIN_SHAPE_COLLISIONS = 2`, and it
+    never fired on the regression it was written for: deleting the space from a
+    prefix value left 96 collisions from the prefix-vs-delimited family, so the
+    global count stayed at 96 while the two families that actually depended on
+    that space fell to zero. A single number cannot work -- the delimited family
+    alone is 96 -- so each family needs its own floor.
+    """
+    from games.hades2 import error_presentation as error_presentation
+
+    behaviour = _load_behaviour_module()
+    rules = behaviour.ep.REGISTRY
+    probes, _ = behaviour._cross_shape_probes(rules)
+    families = behaviour._genuine_contests_by_family(rules, probes)
+
+    problems = []
+    for name, floor in sorted(behaviour.MIN_GENUINE_CONTEST_FLOORS.items()):
+        got = families.get(name, 0)
+        if got < floor:
+            problems.append(f"  {name}: {got} genuine contest(s), floor is {floor}")
+    if problems:
+        raise AssertionError(
+            "an overlapping shape family lost its contests, so the cross-shape\n"
+            "probes for it can no longer detect a dispatch-order change:\n"
+            + "\n".join(problems))
+
+
 def main():
     test_every_declared_message_maps_to_the_pinned_key_and_arguments()
     test_the_snapshot_covers_the_whole_registry()
     test_the_registry_has_no_unreachable_or_invalid_rules()
+    test_each_overlapping_family_still_has_a_genuine_contest()
     print("error_presentation_behaviour_ok")
 
 

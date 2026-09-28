@@ -83,15 +83,87 @@
       ],
       "key": "hades2.error.architectureRequired"
     },
+    "Trait is not present in the current run:  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not present in the current run:  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
     "Trait is not present in the current run: sample-value": {
       "arguments": [
         "sample-value"
       ],
       "key": "hades2.error.traitNotPresent"
     },
+    "Trait is not present in the current run: 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not present in the current run: 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not present in the current run: 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not present in the current run: 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "Trait is not sell-eligible, so no safe removal exists:  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait is not sell-eligible, so no safe removal exists:  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
     "Trait is not sell-eligible, so no safe removal exists: sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait is not sell-eligible, so no safe removal exists: 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait is not sell-eligible, so no safe removal exists: 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait is not sell-eligible, so no safe removal exists: 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "Trait is not sell-eligible, so no safe removal exists: 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.traitNotSellEligible"
     },
@@ -208,9 +280,45 @@
       "arguments": [],
       "key": "hades2.error.focusNotRestored"
     },
+    "后台暂停标志恢复失败： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复失败： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
     "后台暂停标志恢复失败：sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复失败：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复失败：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复失败：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.focusRestoreFailed"
+    },
+    "后台暂停标志恢复失败：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.focusRestoreFailed"
     },
@@ -306,15 +414,87 @@
       ],
       "key": "hades2.error.amountRange"
     },
+    "新版本关键符号不可读： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号不可读： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
     "新版本关键符号不可读：sample-value": {
       "arguments": [
         "sample-value"
       ],
       "key": "hades2.error.symbolUnreadable"
     },
+    "新版本关键符号不可读：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号不可读：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号不可读：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号不可读：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.symbolUnreadable"
+    },
+    "新版本关键符号无法唯一定位： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "新版本关键符号无法唯一定位： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
     "新版本关键符号无法唯一定位：sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "新版本关键符号无法唯一定位：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "新版本关键符号无法唯一定位：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "新版本关键符号无法唯一定位：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.symbolNotUnique"
+    },
+    "新版本关键符号无法唯一定位：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.symbolNotUnique"
     },
@@ -330,9 +510,45 @@
       "arguments": [],
       "key": "hades2.error.imageNotFound"
     },
+    "无法恢复游戏运行： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法恢复游戏运行： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
     "无法恢复游戏运行：sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法恢复游戏运行：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法恢复游戏运行：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法恢复游戏运行：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.resumeFailed"
+    },
+    "无法恢复游戏运行：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.resumeFailed"
     },
@@ -343,6 +559,18 @@
     "无法读取操作结果；请检查游戏，不要重复资源操作。": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownUnreadable"
+    },
+    "无法运行  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "无法运行  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
     },
     "无法运行 sample-value": {
       "arguments": [
@@ -357,6 +585,30 @@
       ],
       "key": "hades2.error.commandLaunchFailed"
     },
+    "无法运行 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "无法运行 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "无法运行 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
+    "无法运行 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.commandLaunchFailed"
+    },
     "暂存文件校验失败；未修改游戏。": {
       "arguments": [],
       "key": "hades2.error.stagedVerificationFailed"
@@ -364,6 +616,18 @@
     "最低稀有度无效。": {
       "arguments": [],
       "key": "hades2.error.invalidRarityTarget"
+    },
+    "未从本机  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.missingOfficialNames"
     },
     "未从本机 Hades II 中文语言文件解析到 3 项": {
       "arguments": [
@@ -375,6 +639,30 @@
     "未从本机 sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.missingOfficialNames"
+    },
+    "未从本机 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.missingOfficialNames"
     },
@@ -410,6 +698,18 @@
       "arguments": [],
       "key": "hades2.error.unknownDetail"
     },
+    "未经验证的游戏版本： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "未经验证的游戏版本： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
     "未经验证的游戏版本：sample-value": {
       "arguments": [
         "sample-value"
@@ -424,6 +724,42 @@
       ],
       "key": "hades2.error.unverifiedBuildWarning"
     },
+    "未经验证的游戏版本：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "未经验证的游戏版本：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "未经验证的游戏版本：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "未经验证的游戏版本：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.unverifiedBuildWarning"
+    },
+    "查询  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
     "查询 Hades II 进程失败（-9）：boom": {
       "arguments": [
         "Hades II",
@@ -435,6 +771,30 @@
     "查询 sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.processQueryFailed"
     },
@@ -490,9 +850,45 @@
       "arguments": [],
       "key": "hades2.error.outcomeUnknownEmpty"
     },
+    "游戏调用结果不明，未自动重试： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
     "游戏调用结果不明，未自动重试：sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.outcomeUnknownTransport"
+    },
+    "游戏调用结果不明，未自动重试：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.outcomeUnknownTransport"
     },
@@ -540,11 +936,59 @@
       "arguments": [],
       "key": "hades2.error.worldUpdateTimeout"
     },
+    "缺少符号： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "缺少符号： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
     "缺少符号：sample-value": {
       "arguments": [
         "sample-value"
       ],
       "key": "hades2.error.missingSymbol"
+    },
+    "缺少符号：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "缺少符号：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "缺少符号：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "缺少符号：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.missingSymbol"
+    },
+    "请先启动  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.gameNotRunning"
     },
     "请先启动 Hades II 并进入存档。": {
       "arguments": [
@@ -558,6 +1002,30 @@
       ],
       "key": "hades2.error.gameNotRunning"
     },
+    "请先启动 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
+    "请先启动 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.gameNotRunning"
+    },
     "请先启动sample-value 并进入存档。": {
       "arguments": [
         "sample-value"
@@ -568,6 +1036,18 @@
       "arguments": [],
       "key": "hades2.error.notConnected"
     },
+    "请先退出  失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出  超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
     "请先退出 Hades II；": {
       "arguments": [
         "Hades II"
@@ -577,6 +1057,30 @@
     "请先退出 sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出 元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出 局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出 巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.prepareWhileRunning"
+    },
+    "请先退出 数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.prepareWhileRunning"
     },
@@ -612,11 +1116,59 @@
       "arguments": [],
       "key": "hades2.error.signingVerificationFailed"
     },
+    "运行中的游戏函数校验失败： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "运行中的游戏函数校验失败： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
     "运行中的游戏函数校验失败：sample-value": {
       "arguments": [
         "sample-value"
       ],
       "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "运行中的游戏函数校验失败：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "运行中的游戏函数校验失败：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "运行中的游戏函数校验失败：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "运行中的游戏函数校验失败：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
+      ],
+      "key": "hades2.error.runtimeVerificationFailed"
+    },
+    "连接被拒绝： 失败（5）": {
+      "arguments": [
+        " 失败（5）"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝： 超时（5 秒）": {
+      "arguments": [
+        " 超时（5 秒）"
+      ],
+      "key": "hades2.error.attachDenied"
     },
     "连接被拒绝：operation not permitted。退出游戏后使用": {
       "arguments": [
@@ -627,6 +1179,30 @@
     "连接被拒绝：sample-value": {
       "arguments": [
         "sample-value"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝：元素数量必须为 0–5 的整数。": {
+      "arguments": [
+        "元素数量必须为 0–5 的整数。"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝：局内数值必须为 0–5。": {
+      "arguments": [
+        "局内数值必须为 0–5。"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝：巫咒充能必须为 0–5。": {
+      "arguments": [
+        "巫咒充能必须为 0–5。"
+      ],
+      "key": "hades2.error.attachDenied"
+    },
+    "连接被拒绝：数量必须是 0–5 的整数。": {
+      "arguments": [
+        "数量必须是 0–5 的整数。"
       ],
       "key": "hades2.error.attachDenied"
     },
