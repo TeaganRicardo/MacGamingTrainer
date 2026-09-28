@@ -139,7 +139,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
         ],
         check=True,
     )
-    result = subprocess.run([str(executable)], check=True, text=True, capture_output=True)
+    # No `check=True`. The harness runs the binary and re-raises
+    # CalledProcessError when it fails, and that exception's message is only
+    # `died with <Signals.SIGTRAP: 5>` -- the diagnostic the child actually
+    # printed is captured and then thrown away. So a genuine assertion failure
+    # and a genuine crash became indistinguishable from outside, and the gate had
+    # to fall back on the bare signal to recognise a Swift catch at all. The
+    # signal is not evidence: a force-unwrap nil produces exactly the same one.
+    # Asserting on the captured output instead keeps the reason, which is what
+    # lets the classifier tell an assertion from a crash.
+    result = subprocess.run([str(executable)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
     assert "host_localization_behavior_ok" in result.stdout
 
 print("host_localization_runtime_behavior_ok")

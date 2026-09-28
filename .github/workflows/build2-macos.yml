@@ -86,6 +86,14 @@ jobs:
         if: needs.scope.outputs.needs_macos == 'true'
         run: bash Tools/run_macos_checks.sh
 
+      # Declared behavioural invariants, proven to fail when the code that
+      # guards them is broken. Several of these tests compile Swift and drive
+      # the real presentation and protocol paths, so this belongs in the
+      # macOS lane rather than the portable one.
+      - name: Verify declared invariants fail under mutation
+        if: needs.scope.outputs.needs_macos == 'true'
+        run: python3 Tools/mutation_gate.py
+
       - name: Build Hades II trainer
         if: needs.scope.outputs.needs_macos == 'true'
         run: ./build.sh hades2
