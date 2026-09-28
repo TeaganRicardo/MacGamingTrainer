@@ -195,6 +195,26 @@ struct Main {
         model.clearPresentedNoticeForTest()
         model.clearPresentedErrorForTest()
 
+        // A failed non-idempotent action must never present as success. The
+        // removal path is a runtime mutation wrapped in pcall, so it reports
+        // failure through the receipt rather than by raising; if the model
+        // missed remove_trait, the player saw a green success while the trait
+        // was still owned. Asserted on presented state, not on source text.
+        model.clearPresentedNoticeForTest()
+        model.clearPresentedErrorForTest()
+        model.apply(["lastAction": [
+            "requestId": "request-3",
+            "command": "remove_trait",
+            "outcome": "failed",
+            "error": "Trait is not sell-eligible, so no safe removal exists: BoonOfHermes",
+        ]])
+        check(model.noticeText.key.isEmpty,
+              "a failed trait removal presented a success notice")
+        check(!model.errorText.key.isEmpty,
+              "a failed trait removal presented no error")
+        check(model.errorText.key.hasPrefix("hades2."),
+              "a failed trait removal did not present Hades-owned copy")
+
         // The receipt must be forgotten so an identical receipt from a new
         // backend lifetime is presented rather than deduplicated as stale.
         model.apply(["lastAction": receipt])

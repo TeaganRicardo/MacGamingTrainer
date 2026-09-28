@@ -23,10 +23,13 @@ class ReferenceFixtureAdapter(GameAdapter):
             self.enabled = False
             return {'connected': self.connected, 'enabled': False}
         if command == 'fail':
+            # Exercises the host envelope end to end: a stable presentation
+            # key, its arguments, and technical detail that stays diagnostic.
             raise AdapterError(
                 'reference_failure',
-                'Reference fixture request failed.',
+                'referenceFixture.error.failed',
                 diagnostic='reference fixture diagnostic detail',
+                arguments=['Fixture Game', '42'],
             )
         raise ValueError('unknown reference-fixture command')
 
