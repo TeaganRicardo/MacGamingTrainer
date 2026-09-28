@@ -8,16 +8,21 @@ struct Hades2ProfileManagerView: View {
     @State private var profileName = ""
     @State private var selectedProfile = ""
 
+    /// Resolve one Hades presentation key against the live Host language.
+    private func text(_ key: String) -> String {
+        Hades2GameModule.resolveText(key: key, localization: localization)
+    }
+
     var body: some View {
-        TrainerSheetScaffold(title: "自定义配置", icon: "slider.horizontal.3", width: 620) {
+        TrainerSheetScaffold(title: text("hades2.manage.profiles"), icon: "slider.horizontal.3", width: 620) {
             Button(localization.localized("host.refresh")) { model.listProfiles() }.disabled(model.busy)
         } content: {
-            Text("只保存你创建的自定义配置，不内置任何预设。配置包含功能开关、倍率、属性/资源/元素锁、祝福稀有度、下一房奖励和快捷键。")
+            Text(text("hades2.profile.explanation"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
-                TextField("新配置名称", text: $profileName).textFieldStyle(.roundedBorder)
-                Button("保存当前状态") {
+                TextField(text("hades2.profile.namePlaceholder"), text: $profileName).textFieldStyle(.roundedBorder)
+                Button(text("hades2.profile.saveCurrent")) {
                     model.saveProfile(profileName)
                     selectedProfile = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
@@ -25,16 +30,16 @@ struct Hades2ProfileManagerView: View {
             }
             Divider()
             if model.profiles.isEmpty {
-                TrainerEmptyState(text: "暂无自定义配置。保存后会出现在这里。")
+                TrainerEmptyState(text: text("hades2.profile.empty"))
             } else {
-                Picker("配置", selection: $selectedProfile) {
+                Picker(text("hades2.profile.picker"), selection: $selectedProfile) {
                     ForEach(model.profiles) { profile in
                         Text(profile.updatedAt.isEmpty ? profile.name : "\(profile.name) · \(profile.updatedAt)").tag(profile.name)
                     }
                 }
                 HStack {
                     TrainerPrimaryActionButton(
-                        title: "载入",
+                        title: text("hades2.profile.load"),
                         enabled: !model.busy && !selectedProfile.isEmpty,
                         action: { model.loadProfile(selectedProfile) }
                     )
@@ -62,14 +67,21 @@ struct Hades2DiagnosticsView: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
+    /// Resolve one Hades presentation key against the live Host language.
+    private func text(_ key: String) -> String {
+        Hades2GameModule.resolveText(key: key, localization: localization)
+    }
+
     var body: some View {
-        TrainerSheetScaffold(title: "运行自检", icon: "stethoscope", width: 700) {
+        TrainerSheetScaffold(title: text("hades2.diagnostics.title"), icon: "stethoscope", width: 700) {
             Text("\(model.diagnosticsPassed)/\(model.diagnosticsTotal)").font(.headline).monospacedDigit()
-            Button { model.exportDiagnostics() } label: { Label("导出诊断包", systemImage: "square.and.arrow.up") }
+            Button { model.exportDiagnostics() } label: {
+                Label(text("hades2.diagnostics.export"), systemImage: "square.and.arrow.up")
+            }
                 .disabled(model.busy || !model.backendAvailable)
-            Button("重新检测") { model.runDiagnostics() }.disabled(model.busy)
+            Button(text("hades2.diagnostics.rerun")) { model.runDiagnostics() }.disabled(model.busy)
         } content: {
-            Text("检测开发工具、协议版本、游戏安装/进程、Lua 连接与运行时 revision。诊断包仅包含状态、自检结果、symbols.json 与 trainer.log 尾部，不包含存档或自定义 Profile。")
+            Text(text("hades2.diagnostics.explanation"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView {
@@ -105,6 +117,15 @@ struct Hades2ShortcutSettingsView: View {
     @State private var capturing: ShortcutAction?
     @State private var keyMonitor: Any?
 
+    /// Resolve one Hades presentation key against the live Host language.
+    ///
+    /// Some shell actions the module hosts (Disable All) deliberately keep their
+    /// Host key and Host resource, so a non-Hades prefix must resolve through the
+    /// Host table rather than being looked up as a Hades key.
+    private func text(_ key: String) -> String {
+        Hades2GameModule.resolveText(key: key, localization: localization)
+    }
+
     var body: some View {
         TrainerSheetScaffold(title: localization.localized("host.shortcutSettings"), width: 560) {
             EmptyView()
@@ -114,7 +135,7 @@ struct Hades2ShortcutSettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(ShortcutAction.uiOrder) { action in
                 HStack {
-                    Text(action.title)
+                    Text(text(action.presentationKey))
                     Spacer()
                     Button {
                         beginCapture(action)
@@ -170,12 +191,15 @@ struct Hades2ShortcutSettingsView: View {
         case .unrecognized:
             return localization.localized("host.hotkeys.unrecognized")
         case let .conflict(chordText, action):
-            return localization.localized("host.hotkeys.conflict", arguments: [chordText, action.title])
+            return localization.localized(
+                "host.hotkeys.conflict",
+                arguments: [chordText, text(action.presentationKey)]
+            )
         case let .registration(.listenerInitialization(status)):
             return localization.localized("host.hotkeys.listenerFailed", arguments: [String(status)])
         case let .registration(.registrationConflicts(conflicts)):
             let details = conflicts.map { conflict in
-                let title = ShortcutAction(rawValue: conflict.actionID)?.title ?? conflict.actionID
+                let title = ShortcutAction(rawValue: conflict.actionID).map { text($0.presentationKey) } ?? conflict.actionID
                 return "\(conflict.chordText) \(title) (\(conflict.status))"
             }.joined(separator: ", ")
             return localization.localized("host.hotkeys.registrationFailed", arguments: [details])

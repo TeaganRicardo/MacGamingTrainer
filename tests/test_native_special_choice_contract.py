@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
 from games.hades2.command_router import Hades2CommandRouter
+from games.hades2.error_presentation import Hades2PresentationError
 
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
 types = (ROOT / 'Sources/Hades2/Hades2Types.swift').read_text()
@@ -50,8 +51,11 @@ assert router_probe.calls == [
 
 try:
     command_router.dispatch("open_special_choice", {}, "invalid-native-choice")
-except ValueError as error:
-    assert str(error) == "请选择支持原生奖励选择界面的角色。"
+except Hades2PresentationError as error:
+    # Player-facing copy is a language-neutral key resolved by the module tables.
+    assert error.code == "invalid_request", error.code
+    assert error.presentation == "hades2.error.selectChoiceSource", error.presentation
+    assert error.diagnostic == "请选择支持原生奖励选择界面的角色。", error.diagnostic
 else:
     raise AssertionError("router bypassed native special-choice validation")
 assert len(router_probe.calls) == 1
@@ -69,7 +73,9 @@ assert 'sourceId: row["sourceId"] as? String ?? ""' in state
 assert 'nativeChoice: row["nativeChoice"] as? Bool ?? false' in state
 assert 'nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? ""' in state
 assert 'nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? ""' in state
-assert 'englishCategory: row["englishCategory"] as? String ?? "Boon"' in state
+# A missing catalog label is not a name, so decoding leaves it empty rather than
+# embedding one language's term in the decoder.
+assert 'englishCategory: row["englishCategory"] as? String ?? ""' in state
 assert 'sourceEnglishName: row["sourceEnglishName"] as? String ?? ""' in state
 
 assert 'var specialRewardOptions: [BoonOption]' in model
@@ -83,11 +89,12 @@ assert 'name: option.nativeChoiceTitle.isEmpty ? option.sectionTitle : option.na
 assert 'englishName: option.nativeChoiceEnglishTitle.isEmpty ? option.englishSectionTitle : option.nativeChoiceEnglishTitle' in model
 assert 'model.specialRewardOptions' in view
 assert 'onAction: model.performSpecialReward' in view
-assert 'Button("原生三选一")' not in view
-assert 'actionTitle: "生成"' in view
+# The view names presentation keys; the wording lives in the shipped tables.
+assert 'text("hades2.spawn.rewardChoice")' not in view
+assert 'actionTitle: text("hades2.spawn.generate")' in view
 assert 'selectedSpecialRewardIsNativeChoice' not in view
-assert 'Button("打开")' in view
-assert 'Label("净化之池"' in view
+assert 'text("hades2.spawn.open")' in view
+assert 'Label(text("hades2.spawn.purgingPool")' in view
 assert '祝福管理' not in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]

@@ -129,17 +129,25 @@ for declaration in (
     "let sourceEnglishName: String", "let nativeChoiceEnglishTitle: String",
 ):
     assert declaration in types
-assert 'englishCategory: row["englishCategory"] as? String ?? "Boon"' in state
+# A missing catalog label is not a name, so decoding leaves it empty and the
+# view resolves the default from the module presentation table instead of
+# embedding one language's term in the decoder.
+assert 'englishCategory: row["englishCategory"] as? String ?? ""' in state
 assert 'englishSectionTitle: row["englishSectionTitle"] as? String ?? ""' in state
 assert 'sourceEnglishName: row["sourceEnglishName"] as? String ?? ""' in state
 assert 'nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? ""' in state
 assert "option.nativeChoiceEnglishTitle" in model
 assert "$0.englishCategory.localizedCaseInsensitiveContains(specialSearch)" in view
-assert "净化之池" in model and "净化之池" in view
-assert "角色奖励" in view and "奥林匹斯的祝福" in view
-assert "重塑命运" in view
-assert "生成奥林匹斯的祝福" in types
-assert "生成角色奖励" in types
+# User-facing native terms resolve through the shipped table by key, so the
+# model/view/types carry identity rather than either language's wording. The
+# wording itself is checked in both languages in the packaging test.
+assert 'presentation("hades2.spawn.purgingPool")' in model
+assert 'text("hades2.spawn.purgingPool")' in view
+assert 'text("hades2.spawn.characterRewards")' in view
+assert 'text("hades2.spawn.olympianBoons")' in view
+assert 'text("hades2.metric.rerolls")' in view
+assert "hades2.spawn.olympianBoons" in types
+assert "hades2.spawn.characterRewards" in types
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 host_zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encoding="utf-8")

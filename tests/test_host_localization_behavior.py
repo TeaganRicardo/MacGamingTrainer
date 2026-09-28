@@ -29,6 +29,36 @@ struct LocalizationBehaviorTest {
         precondition(missingValue.presentation("host.connected") == "已连接", "Host key presentation must resolve")
         precondition(missingValue.presentation("module-owned copy") == "module-owned copy", "module presentation must remain opaque")
 
+        // A module contributes its own namespace and resolver; Core stores only
+        // the closure, so its tokens re-resolve on a language switch.
+        missingValue.registerModulePresentation(prefix: "fixture.") { key, arguments, language in
+            let tables: [String: [TrainerPresentationLanguage: String]] = [
+                "fixture.ready": [.zhCN: "夹具就绪", .en: "Fixture Ready"],
+                "fixture.count": [.zhCN: "共 {0} 项", .en: "{0} Items"],
+            ]
+            guard var value = tables[key]?[language] else { return key }
+            for (index, argument) in arguments.enumerated() {
+                value = value.replacingOccurrences(of: "{\(index)}", with: argument)
+            }
+            return value
+        }
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.ready")) == "夹具就绪",
+            "a registered module namespace must resolve"
+        )
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.count", arguments: ["4"])) == "共 4 项",
+            "a module token must fill its arguments"
+        )
+        precondition(
+            missingValue.presentation("fixture.ready") == "夹具就绪",
+            "module-owned keys must route through the module resolver"
+        )
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.missing")) == "fixture.missing",
+            "an unknown module key must render as its own identity"
+        )
+
         defaults.set("fr", forKey: TrainerLocalizationStore.userDefaultsKey)
         let invalidValue = TrainerLocalizationStore(defaults: defaults)
         precondition(invalidValue.language == .zhCN, "invalid preference must fall back to zh-CN")
@@ -41,6 +71,23 @@ struct LocalizationBehaviorTest {
         precondition(missingValue.localized("host.language") == "Language", "live language menu must update")
         precondition(missingValue.localized("host.save.fileCount", arguments: ["3"]) == "3 files", "English argument substitution must update live")
         precondition(missingValue.presentation("host.connected") == "Connected", "Host key presentation must update live")
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.ready")) == "Fixture Ready",
+            "a module token must re-resolve on a language switch"
+        )
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.count", arguments: ["4"])) == "4 Items",
+            "module arguments must re-resolve on a language switch"
+        )
+        missingValue.removeModulePresentation(prefix: "fixture.")
+        precondition(
+            missingValue.string(TrainerTextToken(key: "fixture.ready")) == "fixture.ready",
+            "removing a module must remove its copy"
+        )
+        precondition(
+            missingValue.localized("host.gameLibrary") == "Game Library",
+            "removing a module must not disturb the shared Host table"
+        )
         precondition(emitted == [.zhCN, .en], "published language must update live observers")
         precondition(TrainerLocalizationStore(defaults: defaults).language == .en, "saved selection must load on next launch")
         withExtendedLifetime(subscription) { }
@@ -58,7 +105,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
     harness_path.write_text(harness, encoding="utf-8")
     executable = temp / "localization-tests"
     subprocess.run(
-        [SWIFT, "-parse-as-library", str(ROOT / "Sources/Core/Host/TrainerLocalization.swift"), str(harness_path), "-o", str(executable)],
+        [
+            SWIFT,
+            "-parse-as-library",
+            # The token type lives in the Runtime layer, beside the wire identity
+            # it travels with, so the Host store alone is no longer compilable.
+            str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
+            str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
+            str(ROOT / "Sources/Core/Host/TrainerLocalization.swift"),
+            str(harness_path),
+            "-o", str(executable),
+        ],
         check=True,
     )
     result = subprocess.run([str(executable)], check=True, text=True, capture_output=True)

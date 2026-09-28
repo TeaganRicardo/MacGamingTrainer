@@ -247,11 +247,12 @@ def swift_view_toggle_routes(view, toggles):
     # SwiftUI cannot be built in Linux CI; bind each visible control to its
     # exact displayed/edited property, not merely the union of token names.
     row = re.compile(
-        r'featureRow\("[^"]+", key: \.(\w+), .*?enabled: model\.(\w+), '
+        r'featureRow\((?:text\("[^"]+"\)|"[^"]+"), key: \.(\w+), .*?enabled: model\.(\w+), '
         r'.*?shortcut: \.(\w+)\) \{ model\.feature\(\.(\w+), value: !model\.(\w+)\) \}'
     )
     rows = row.findall(view)
-    assert len(rows) == view.count('featureRow("'), "Swift toggle view row no longer has a verified dispatch"
+    assert len(rows) == view.count("featureRow(") - view.count("private func featureRow("), (
+        "Swift toggle view row no longer has a verified dispatch")
     for key, enabled, shortcut, action, inverted in rows:
         assert key == enabled == shortcut == action == inverted, "Swift view toggle misroutes: " + key
     identities = [key for key, *_ in rows]
@@ -259,7 +260,10 @@ def swift_view_toggle_routes(view, toggles):
     combat = swift_tokens(balanced_text_block(view, "private var combatSection"))
     damage = "damageMultiplier"
     assert any(combat[i:i + 2] == ["featureMultiplierRow", "("]
-               and combat[i + 3:i + 8] == [",", "key", ":", ".", "damageEnabled"]
+               # The title is a presentation lookup, not a literal, so the
+               # binding arguments follow `text(...)` rather than a string.
+               and combat[i + 2:i + 4] == ["text", "("]
+               and combat[i + 6:i + 11] == [",", "key", ":", ".", "damageEnabled"]
                for i in range(len(combat) - 7)), "Swift damage multiplier control missing"
     for expected in (
         ["enabled", ":", "model", ".", "damageEnabled"],

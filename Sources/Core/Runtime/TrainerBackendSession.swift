@@ -6,9 +6,13 @@ struct TrainerBackendStatus: Equatable {
     var backendModuleProtocolVersion: Int?
     var protocolCompatible = true
     var busy = false
-    var operation = ""
+    /// Language-neutral operation identity shown while a request is in flight.
+    var operation = TrainerTextToken(key: "")
     var errorCode: String?
+    /// Error keys are stored with their arguments so the owning module can render
+    /// the sentence in the Host's live language.
     var error = ""
+    var errorArguments: [String] = []
     var notice = ""
 }
 
@@ -86,6 +90,7 @@ final class TrainerBackendSession {
         _ command: String,
         params: [String: Any] = [:],
         operation: String,
+        operationArguments: [String] = [],
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
@@ -96,6 +101,7 @@ final class TrainerBackendSession {
             command,
             params: params,
             operation: operation,
+            operationArguments: operationArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout,
@@ -114,9 +120,10 @@ final class TrainerBackendSession {
         suppressTerminationError = true
         updateStatus {
             $0.busy = true
-            $0.operation = "host.restartBackend"
+            $0.operation = TrainerTextToken(key: "host.restartBackend")
             $0.errorCode = nil
             $0.error = ""
+            $0.errorArguments = []
             $0.notice = ""
         }
         if client.isStarted {
@@ -144,7 +151,8 @@ final class TrainerBackendSession {
             code: "backend_start_failed",
             presentation: "host.backend.error.startFailed",
             diagnostic: error.localizedDescription,
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         )
         var next = status
         next.backendAvailable = false
@@ -192,7 +200,8 @@ final class TrainerBackendSession {
                     $0.busy = true
                     $0.operation = title
                     $0.errorCode = nil
-            $0.error = ""
+                    $0.error = ""
+                    $0.errorArguments = []
                     if announceSuccess { $0.notice = "" }
                 }
             },
@@ -215,14 +224,16 @@ final class TrainerBackendSession {
                         code: "operation_failed",
                         presentation: "host.backend.error.operationFailed",
                         diagnostic: nil,
-                        recoveryPath: nil
+                        recoveryPath: nil,
+                        presentationArguments: []
                     )
                     self.updateStatus {
                         $0.errorCode = failure.code
                         $0.error = coreOwned ? "host.backend.error.operationFailed" : failure.presentation
+                        $0.errorArguments = coreOwned ? [] : failure.presentationArguments
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
-                    configuration.log("\(reply.operation)失败 [\(failure.code)]：\(diagnostic)")
+                    configuration.log("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
             onProtocolMismatch: { [weak self] failure in
@@ -249,9 +260,10 @@ final class TrainerBackendSession {
                     configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = true
-                        $0.operation = "host.backend.operation.recover"
+                        $0.operation = TrainerTextToken(key: "host.backend.operation.recover")
                         $0.errorCode = nil
                         $0.error = ""
+                        $0.errorArguments = []
                         $0.notice = "host.backend.notice.recovering"
                     }
                 } else {
@@ -267,9 +279,10 @@ final class TrainerBackendSession {
         updateStatus {
             $0.backendAvailable = true
             $0.busy = false
-            $0.operation = ""
+            $0.operation = TrainerTextToken(key: "")
             $0.errorCode = nil
             $0.error = ""
+            $0.errorArguments = []
             if let recoveryNotice { $0.notice = recoveryNotice }
         }
     }
@@ -291,7 +304,7 @@ final class TrainerBackendSession {
             $0.backendModuleProtocolVersion = nil
             if !mismatch { $0.protocolCompatible = true }
             $0.busy = willRecover
-            $0.operation = willRecover ? "host.backend.operation.recover" : ""
+            $0.operation = TrainerTextToken(key: willRecover ? "host.backend.operation.recover" : "")
             if !willRecover && !suppressTerminationError && !mismatch {
                 $0.errorCode = "backend_terminated"
                 $0.error = "host.backend.error.terminated"
@@ -326,7 +339,7 @@ final class TrainerBackendSession {
                     self.updateStatus {
                         $0.backendAvailable = false
                         $0.busy = false
-                        $0.operation = ""
+                        $0.operation = TrainerTextToken(key: "")
                         $0.errorCode = "backend_recovery_failed"
                         $0.error = "host.backend.error.recoveryFailed"
                     }

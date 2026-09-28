@@ -154,6 +154,17 @@ assert 'value.hasPrefix("host.")' in localization, "only Host-owned key tokens m
 assert 'localization.localized("host.language.zhCN")' in localization
 assert 'localization.localized("host.language.en")' in localization
 
+# Core owns the token shape but never a module's vocabulary: a module supplies
+# its own namespace plus resolver, and Core stores only that closure. The token
+# lives in the Runtime layer, beside the wire identity it travels with.
+backend_client = (ROOT / "Sources/Core/Runtime/BackendClient.swift").read_text(encoding="utf-8")
+assert "struct TrainerTextToken" in backend_client, "modules need one language-neutral token type"
+assert "func registerModulePresentation(" in localization, "modules must be able to contribute their own keys"
+assert "func removeModulePresentation(" in localization, "a module namespace must be removable"
+for leak in ("hades2", "Boon", "祝福", "Hex", "Olympian"):
+    assert leak not in localization, f"Core localization leaked module vocabulary: {leak}"
+    assert leak not in backend_client, f"Core runtime leaked module vocabulary: {leak}"
+
 message_banner = (ROOT / "Sources/Core/UI/Primitives/TrainerMessageBanner.swift").read_text(encoding="utf-8")
 assert "localization.presentation(text)" in message_banner, (
     "shared Host status/error key tokens must resolve at the presentation boundary"
@@ -161,8 +172,9 @@ assert "localization.presentation(text)" in message_banner, (
 
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
 for token in (
-    "localization.presentation(operationText)",
-    "localization.presentation(statusText)",
+    "localization.string(operationToken)",
+    "localization.string(statusToken)",
+    "localization.string(detailToken)",
     'localization.localized("host.refreshStatusHelp")',
     'localization.localized("host.restartBackend")',
 ):
@@ -171,6 +183,9 @@ for token in (
 reference = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift").read_text(encoding="utf-8")
 assert 'connected ? "host.connected" : "host.disconnected"' in reference
 assert "hostConnectionStatus" in reference, "reference fixture must exercise the shared status localization seam"
+assert "TrainerTextToken" in reference, "a second module must use the shared language-neutral token type"
+for leak in ("hades2", "Boon", "祝福"):
+    assert leak not in reference, f"reference fixture leaked Hades vocabulary: {leak}"
 
 # These files own shared product presentation. They may still contain stable
 # identifiers, symbols, diagnostics, or product branding, but the known

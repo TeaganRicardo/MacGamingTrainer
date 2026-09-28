@@ -87,11 +87,19 @@ class JsonlRequestRouter:
             'moduleProtocolVersion': self.adapter.module_protocol_version,
         }
 
-    def error_reply(self, request_id, code, presentation, state=None, diagnostic=None):
+    def error_reply(self, request_id, code, presentation, state=None, diagnostic=None,
+                    arguments=None):
         reply = self._envelope(request_id, False)
         error = {'code': code, 'presentation': presentation}
         if isinstance(diagnostic, str) and diagnostic:
             error['diagnostic'] = diagnostic
+        # A module may need values to render its own sentence for this key. The
+        # Host carries them opaquely; only the module that owns the wording
+        # knows what they mean.
+        if isinstance(arguments, (list, tuple)):
+            values = [value for value in arguments if isinstance(value, (str, int, float, bool))]
+            if values:
+                error['arguments'] = [str(value) for value in values]
         reply['error'] = error
         if isinstance(state, dict):
             candidate = dict(state)
@@ -201,9 +209,11 @@ class JsonlRequestRouter:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
             state = getattr(self.adapter, 'state', None)
             code = getattr(error, 'code', 'invalid_request' if isinstance(error, ValueError) else 'operation_failed')
+            arguments = None
             if hasattr(error, 'presentation'):
                 presentation = error.presentation
                 diagnostic = getattr(error, 'diagnostic', None)
+                arguments = getattr(error, 'arguments', None)
             elif isinstance(error, ValueError) or hasattr(error, 'code'):
                 presentation = str(error)
                 diagnostic = getattr(error, 'diagnostic', None)
@@ -212,6 +222,7 @@ class JsonlRequestRouter:
                 diagnostic = str(error)
             reply = self.error_reply(
                 request_id, code, presentation, state, diagnostic=diagnostic,
+                arguments=arguments,
             )
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:

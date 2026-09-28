@@ -222,8 +222,10 @@ struct Hades2StatePatch {
         guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
         return BoonOption(
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
-            category: row["category"] as? String ?? "祝福",
-            englishCategory: row["englishCategory"] as? String ?? "Boon",
+            // A missing catalog label is not a name. Leave it empty so the view
+            // resolves the default from the module's shipped presentation table.
+            category: row["category"] as? String ?? "",
+            englishCategory: row["englishCategory"] as? String ?? "",
             kind: row["kind"] as? String ?? "loot", group: row["group"] as? String ?? "pickup",
             sectionTitle: row["sectionTitle"] as? String ?? "",
             englishSectionTitle: row["englishSectionTitle"] as? String ?? "",
@@ -259,7 +261,7 @@ struct Hades2StatePatch {
         return MaterialResource(
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
             count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false,
-            sectionTitle: row["sectionTitle"] as? String ?? "资源",
+            sectionTitle: row["sectionTitle"] as? String ?? "",
             englishSectionTitle: row["englishSectionTitle"] as? String ?? "Resources",
             sortOrder: row["sortOrder"] as? Int ?? Int.max
         )

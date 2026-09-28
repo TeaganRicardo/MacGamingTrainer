@@ -103,6 +103,8 @@ jobs:
           test "$build" = "$expected_build"
           test -f "$app/Contents/Resources/Backend/games/hades2/module.json"
           test -f "$app/Contents/Resources/ui_terminology.json"
+          test -f "$app/Contents/Resources/hades2.zh-CN.json"
+          test -f "$app/Contents/Resources/hades2.en.json"
           count=$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')
           test "$count" = "1"
           codesign --verify --deep --strict "$app"

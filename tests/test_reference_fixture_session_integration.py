@@ -164,6 +164,28 @@ let localizationContractPassed = MainActor.assumeIsolated {
     guard localizationDefaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == "en" else {
         return false
     }
+    // A module-owned namespace resolves through the same store, proving Core
+    // needs no game-specific table. The fixture module supplies its own prefix
+    // and resolver, so register exactly what a real module would.
+    localization.registerModulePresentation(
+        prefix: ReferenceFixtureGameModule.presentationKeyPrefix
+    ) { key, arguments, language in
+        ReferenceFixtureGameModule.presentationText(key: key, arguments: arguments, language: language)
+    }
+    guard localization.string(TrainerTextToken(key: "referenceFixture.connected")) == "Fixture Connected" else {
+        return false
+    }
+    guard localization.presentation("referenceFixture.operable") == "Fixture Ready" else {
+        return false
+    }
+    guard localization.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library" else {
+        return false
+    }
+    // Unregistering must remove the module's copy completely.
+    localization.removeModulePresentation(prefix: ReferenceFixtureGameModule.presentationKeyPrefix)
+    guard localization.string(TrainerTextToken(key: "referenceFixture.connected")) == "referenceFixture.connected" else {
+        return false
+    }
     return TrainerLocalizationStore(defaults: localizationDefaults).language == .en
 }
 if !localizationContractPassed {
