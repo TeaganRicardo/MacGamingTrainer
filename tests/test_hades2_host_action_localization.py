@@ -139,3 +139,21 @@ for token in (
     assert token in reference, token
 
 print("hades2_host_action_localization_regression_ok")
+
+# A Host-owned key resolved through the Hades view helper must not be looked up
+# in the Hades tables. `host.disableAll` keeps its Host key and Host resource on
+# purpose, and before the fallback existed it rendered as a literal
+# `[host.disableAll]` in the shortcut sheet — a regression against main.
+hades_text_helper = hades_view[hades_view.index("private func text(_ key: String) -> String {"):]
+hades_text_helper = hades_text_helper[:hades_text_helper.index("\n    private func")]
+assert 'if !key.hasPrefix("hades2.")' in hades_text_helper, (
+    "the Hades view helper has no Host-key fallback")
+assert "return localization.string(key)" in hades_text_helper, (
+    "a Host key is not resolved through the Host table")
+# A Hades key must still resolve through the module tables, not the Host one.
+assert "Hades2GameModule.presentationText" in hades_text_helper
+# And the fallback must be real: the Host table actually owns that key.
+for language, expected in (("zh-CN", "全部关闭"), ("en", "Disable All")):
+    host_strings = (ROOT / f"Resources/Localization/{language}.lproj/Host.strings").read_text(encoding="utf-8")
+    assert f'"host.disableAll" = "{expected}"' in host_strings, (
+        f"{language} Host table no longer supplies the Disable All wording")
