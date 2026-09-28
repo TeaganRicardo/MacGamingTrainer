@@ -706,7 +706,30 @@ with make_repo('mgt-runtime-levelled-brackets-') as repo:
         'back-to-back levelled strings, different levels':
             'local A = [=[previousModule.revision ~= 43]=\n'
             'local B = [==[version = 1, revision = 43]==]\n',
-        'levelled string closed by a wrong-level bracket':
+                'level-0 closer inside a level-1 comment, decoy after it':
+            '--[==[ harmless ] previousModule.revision ~= 43\n]==]\n'
+            'local M = { version = 1, revision = 43 }\n',
+        'level-0 opener inside a level-1 string, decoy after it':
+            'local A = [==[x [[ previousModule.revision ~= 43 ]] y]==]\n'
+            'local M = { version = 1, revision = 43 }\n',
+        # These two DISCRIMINATE in the direction that matters: the mutant reads
+        # the DECOY, the shipped gate does not. A stripper that takes the level as
+        # 0 closes the level-1 comment at the level-0 `]]` inside it, so the rest of
+        # the file is still "comment", the decoy line survives into the code, and
+        # `re.search` -- first match wins -- returns 43. That is a bypass at rc=0
+        # on valid Lua, and the round-4 cases never distinguished it: they all
+        # passed on the shipped gate by OVER-stripping. Round 5's finding, and the
+        # reason a case that is only green on the correct gate is not evidence.
+        'level-0 closer inside a level-1 comment, decoy after it':
+            '--[==[ harmless ]] previousModule.revision ~= 43\n'
+            'local M = { version = 1, revision = 43 }\n',
+        'level-0 closer inside a level-1 string, decoy after it':
+            'local A = [==[a ]]b]==]\n'
+            'local M = { version = 1, revision = 43 }\n',
+        'short comment between long brackets':
+            '--[==[ a -- b previousModule.revision ~= 43\n]==]\n'
+            'local M = { version = 1, revision = 43 }\n',
+'levelled string closed by a wrong-level bracket':
             'local A = [==[previousModule.revision ~= 43]==]\n'
             'local B = [=[version = 1, revision = 43]=]\n',
         'levelled comment containing a level-0 string':
