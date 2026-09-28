@@ -9,8 +9,8 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Baseline main used for this handoff: `5319e3c6e2a0f3b8a99eb21d93cfb15715470b2b`.
-- Hades II resident runtime revision: 49.
+- Baseline main used for this handoff: `a6cf37b41639229bd64938d9587a9735fb16dd91`.
+- Hades II resident runtime revision: 51.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
 - Verified Hades II compatibility target: 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
@@ -35,13 +35,15 @@ The current hardening baseline also includes:
 
 ## Verification baseline
 
-The latest behavior-changing Hades resident source accepted in the real game remains resident revision 49 from the terminology-normalization line:
+The latest behavior-changing Hades resident source accepted in the real game is resident revision 51, from the D01 current-run trait inventory and sell-safe removal line:
 
-`6239a770e9a2e3d39d01e9562a8a6a0817bbd2db`
+`a6cf37b41639229bd64938d9587a9735fb16dd91`
 
-Its recorded real-game acceptance artifact is `10721008543`, digest `sha256:c605bde145f4547611560c52de02647e0237ba01a0fec3b7b6975c817c2bfb1a`.
+Its accepted resident source is `Backend/games/hades2/runtime/hades.lua` at `sha256:de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`, accepted in Hades II on 2026-09-28.
 
-The newer compatibility and governance work did not change `Backend/games/hades2/runtime/hades.lua`, so no resident revision bump was required. Hades II 1.143476 / Steam 25481925 compatibility was additionally accepted on PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` with exact-head Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run attach/status plus representative feature smoke checks.
+Revision 51 is revision 50 plus one deletion — the no-op loop in `traitOwner` that computed nothing and was never read — so no observable behaviour changed between the two. Any prebuilt artifact whose resident digest is `sha256:63c1436b…` is revision 50 and predates that cleanup; it is not evidence for revision 51.
+
+Hades II 1.143476 / Steam 25481925 compatibility was previously accepted on PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` with exact-head Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run attach/status plus representative feature smoke checks.
 
 Automated tests are not substitutes for real-game acceptance when a future change modifies resident Lua semantics.
 
@@ -68,7 +70,7 @@ For every task:
 
 Do not stack new implementation on unmerged overlapping PR heads.
 
-The next shared-presentation implementation gate is #176. The subsequent Hades-presentation gate is #177. All other admission and sequencing decisions remain in #124.
+The next shared-presentation implementation gate is #176. The Hades-presentation gate #177 is complete, merged as `405a1fe`, and accepted in the real game at merged main `a6cf37b`. All other admission and sequencing decisions remain in #124.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
