@@ -201,7 +201,7 @@ struct Hades2TrainerView: View {
     private var combatSection: some View {
         TrainerSection(title: text("hades2.section.combat"), icon: "shield.checkered") {
             VStack(spacing: 1) {
-                featureRow("God Mode", key: .godMode, icon: "shield.fill", enabled: model.godMode, shortcut: .godMode) { model.feature(.godMode, value: !model.godMode) }
+                featureRow(text("hades2.feature.godMode"), key: .godMode, icon: "shield.fill", enabled: model.godMode, shortcut: .godMode) { model.feature(.godMode, value: !model.godMode) }
                 featureRow(text("hades2.feature.infiniteHealth"), key: .infiniteHealth, icon: "heart.fill", enabled: model.infiniteHealth, shortcut: .infiniteHealth) { model.feature(.infiniteHealth, value: !model.infiniteHealth) }
                 featureRow(text("hades2.feature.infiniteMana"), key: .infiniteMana, icon: "sparkles", enabled: model.infiniteMana, shortcut: .infiniteMana) { model.feature(.infiniteMana, value: !model.infiniteMana) }
                 featureRow(text("hades2.feature.instantCastCooldown"), key: .instantCastCooldown, icon: "circle.dotted.circle", enabled: model.instantCastCooldown, shortcut: .instantCastCooldown) { model.feature(.instantCastCooldown, value: !model.instantCastCooldown) }

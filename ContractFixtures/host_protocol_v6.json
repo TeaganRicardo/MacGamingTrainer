@@ -125,7 +125,7 @@
         "moduleProtocolVersion": 7,
         "error": {
           "code": "reference_failure",
-          "presentation": "fixture.error.failed",
+          "presentation": "referenceFixture.error.failed",
           "arguments": [
             "Fixture Game",
             "42"

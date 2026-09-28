@@ -51,8 +51,9 @@ class Hades2PresentationError(AdapterError):
     """
 
     def __init__(self, code, key, arguments=(), *, diagnostic=None):
-        super().__init__(code, key, diagnostic=diagnostic)
-        self.arguments = tuple(arguments)
+        # Routed through the Core constructor so every AdapterError exposes one
+        # shape for `arguments`; assigning it here produced a second one.
+        super().__init__(code, key, diagnostic=diagnostic, arguments=arguments)
 
 
 # Raised message (pre-migration Chinese) -> presentation key.

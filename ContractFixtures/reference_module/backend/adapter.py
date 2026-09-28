@@ -27,7 +27,7 @@ class ReferenceFixtureAdapter(GameAdapter):
             # key, its arguments, and technical detail that stays diagnostic.
             raise AdapterError(
                 'reference_failure',
-                'fixture.error.failed',
+                'referenceFixture.error.failed',
                 diagnostic='reference fixture diagnostic detail',
                 arguments=['Fixture Game', '42'],
             )

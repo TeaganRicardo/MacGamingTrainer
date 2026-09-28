@@ -146,7 +146,7 @@
     "hades2.feature.forceDuo": "Force Duo",
     "hades2.feature.forceLegendary": "Force Legendary",
     "hades2.feature.gardenQoL": "Garden Convenience",
-    "hades2.feature.godMode": "God Mode",
+    "hades2.feature.godMode": "{term:productTerms.godMode}",
     "hades2.feature.hexAlwaysReady": "Hex Always Ready",
     "hades2.feature.infiniteAmmo": "Infinite Ammo",
     "hades2.feature.infiniteHealth": "Infinite Life",

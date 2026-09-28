@@ -340,13 +340,40 @@ for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")):
         # Command names, feature ids, icons and format strings stay neutral.
         assert not has_cjk(literal), f"{path.relative_to(ROOT)} embeds user-facing copy: {literal!r}"
 
+# 11b. A feature row must never carry a literal title. Every player-visible
+# title in the module's main view goes through the seam so a language switch
+# re-renders it. One row passed a bare literal, which froze English into the
+# combat screen and made the table edit that fixed it invisible to the player.
+_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
+_literal_titles = re.findall(
+    r'feature(?:Row|MultiplierRow)\(\s*("(?:[^"\\]|\\.)*")', _view)
+assert not _literal_titles, (
+    "a feature row carries a literal title instead of a presentation key, so "
+    f"its text cannot re-render on a language switch: {_literal_titles}")
+
+# 11c. A Trainer Product Term must be declared in the terminology registry and
+# referenced through it, not spelled out in a table. A hardcoded bilingual pair
+# records its provenance only in a comment.
+_reg = json.loads(
+    (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8"))
+_god = (_reg.get("productTerms") or {}).get("godMode")
+assert _god, "the god-mode Trainer Product Term is not declared in the registry"
+assert _god["value"] != _god["englishValue"], "a product term pair must differ by language"
+for _language, _entries in TABLES.items():
+    assert _entries.get("hades2.feature.godMode") == "{term:productTerms.godMode}", (
+        f"{_language} spells the god-mode label out instead of using the registry")
+
 # 12. No player-facing entry may ship as the same string in both languages.
 # A zh-CN table entry that is byte-identical to its en counterpart means the
 # Chinese user is reading untranslated English. God mode was the only such
 # entry: the pre-B03 Chinese literal "无敌" was replaced by "God Mode" when
 # the tables were authored, and nothing flagged it.
+# A registry-backed entry is language-neutral BY DESIGN: both tables hold the
+# same {term:...} token and the resolver picks the language. Only flag a
+# pair that is identical AND carries no token, which means a language
+# leaked into the zh table as literal text.
 _identical = sorted(k for k, v in TABLES["en"].items()
-                   if TABLES["zh-CN"].get(k) == v)
+                   if TABLES["zh-CN"].get(k) == v and "{term:" not in v)
 assert not _identical, (
     "zh-CN and en entries are identical, so a Chinese user reads untranslated "
     f"English: {_identical}")

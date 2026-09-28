@@ -298,6 +298,12 @@
       "englishValue": "Resources",
       "status": "trainer_product_label",
       "reason": "Generic Trainer grouping for material resources."
+    },
+    "godMode": {
+      "value": "无敌模式",
+      "englishValue": "God Mode",
+      "status": "trainer_product_label",
+      "reason": "God Mode is a Trainer-owned feature, not a Hades II game concept, so it has no official localization. The Trainer owns the label and declares this pair."
     }
   },
   "registry": {

@@ -13,12 +13,12 @@ class AdapterError(RuntimeError):
     """
 
     def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None,
-                 arguments: Optional[Sequence[Any]] = None):
+                 arguments: Sequence[Any] = ()):
         super().__init__(presentation)
         self.code = code
         self.presentation = presentation
         self.diagnostic = diagnostic
-        self.arguments = None if arguments is None else list(arguments)
+        self.arguments = list(arguments)
 
 
 @dataclass(frozen=True)
