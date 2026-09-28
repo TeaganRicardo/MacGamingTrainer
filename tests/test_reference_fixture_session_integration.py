@@ -108,7 +108,8 @@ guard waitUntil(2.0, { failureDone != nil && !model.backendStatus.busy }) else {
 }
 if failureDone != false { fail("reference failure unexpectedly succeeded") }
 if model.backendStatus.errorCode != "reference_failure" { fail("reference error identity was not preserved") }
-if model.backendStatus.error != "Reference fixture request failed." { fail("reference presentation did not reach Host status") }
+if model.backendStatus.error != "fixture.error.failed" { fail("reference presentation key did not reach Host status") }
+if model.backendStatus.errorArguments != ["Fixture Game", "42"] { fail("reference presentation arguments did not reach Host status") }
 if model.backendStatus.error.contains("reference fixture diagnostic detail") {
     fail("diagnostic detail leaked into user presentation")
 }

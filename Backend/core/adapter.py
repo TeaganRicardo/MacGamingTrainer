@@ -1,15 +1,24 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 
 class AdapterError(RuntimeError):
-    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None):
+    """Module-raised failure with a stable presentation identity.
+
+    `presentation` is a stable key or a message the Host resolves; `arguments`
+    are the values for its placeholders. The host envelope carries both, and
+    `diagnostic` is technical detail that never reaches the player.
+    """
+
+    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None,
+                 arguments: Optional[Sequence[Any]] = None):
         super().__init__(presentation)
         self.code = code
         self.presentation = presentation
         self.diagnostic = diagnostic
+        self.arguments = None if arguments is None else list(arguments)
 
 
 @dataclass(frozen=True)

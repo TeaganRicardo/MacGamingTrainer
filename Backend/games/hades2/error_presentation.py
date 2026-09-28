@@ -189,9 +189,7 @@ MESSAGE_KEYS = {
 # through this table, so a mismatched boundary fails there rather than in the UI.
 PREFIX_KEYS = {
     'Trait is not sell-eligible, so no safe removal exists: ': 'hades2.error.traitNotSellEligible',
-    'Trait removal is not proven safe: ': 'hades2.error.traitRemovalNotProven',
     'Trait is not present in the current run: ': 'hades2.error.traitNotPresent',
-    'Native trait removal failed: ': 'hades2.error.traitRemovalFailed',
     '请先启动 ': 'hades2.error.gameNotRunning',
     '查询 ': 'hades2.error.processQueryFailed',
     '连接被拒绝：': 'hades2.error.attachDenied',
@@ -294,9 +292,7 @@ SEGMENTED_KEYS = {
 # Keys whose template takes the interpolated value as its first argument.
 _ARGUMENT_KEYS = frozenset((
     'hades2.error.traitNotSellEligible',
-    'hades2.error.traitRemovalNotProven',
     'hades2.error.traitNotPresent',
-    'hades2.error.traitRemovalFailed',
     'hades2.error.missingSymbol',
     'hades2.error.symbolNotUnique',
     'hades2.error.symbolUnreadable',

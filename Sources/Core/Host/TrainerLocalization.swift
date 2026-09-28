@@ -70,6 +70,12 @@ public final class TrainerLocalizationStore: ObservableObject {
         prefix: String,
         resolver: @escaping (String, [String], TrainerPresentationLanguage) -> String
     ) {
+        // A module that declares no namespace gets the protocol default of "",
+        // and every key has that prefix. Registering it would send Host-owned
+        // chrome through the module's resolver and replace the whole shell with
+        // its own copy. An empty namespace owns nothing, so it registers
+        // nothing rather than claiming everything.
+        guard !prefix.isEmpty else { return }
         moduleResolvers[prefix] = resolver
     }
 

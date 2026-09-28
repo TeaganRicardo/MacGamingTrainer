@@ -77,8 +77,7 @@ _COMPOSED_PREFIXES = {
     'remove_trait': (
         ('Trait is not sell-eligible, so no safe removal exists:',
          'hades2.error.traitNotSellEligible'),
-        ('Trait removal is not proven safe:', 'hades2.error.traitRemovalNotProven'),
-        ('Trait is not present in the current run:', 'hades2.error.traitNotPresent'),
+            ('Trait is not present in the current run:', 'hades2.error.traitNotPresent'),
     ),
 }
 

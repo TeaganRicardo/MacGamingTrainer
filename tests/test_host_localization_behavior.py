@@ -79,6 +79,27 @@ struct LocalizationBehaviorTest {
             missingValue.string(TrainerTextToken(key: "fixture.count", arguments: ["4"])) == "4 Items",
             "module arguments must re-resolve on a language switch"
         )
+        // A module that does not declare its own namespace falls back to the
+        // protocol default of "". Every key has that prefix, so the module
+        // resolver would swallow Host-owned chrome and replace the whole shell
+        // with its own copy. Registering must refuse that.
+        let emptyPrefix = TrainerLocalizationStore(defaults: defaults)
+        emptyPrefix.registerModulePresentation(prefix: "") { key, _, _ in
+            "MODULE[\(key)]"
+        }
+        precondition(
+            emptyPrefix.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library",
+            "an empty module prefix must not hijack Host-owned keys"
+        )
+        precondition(
+            emptyPrefix.presentation("host.disableAll") == "Disable All",
+            "an empty module prefix must not hijack Host presentation"
+        )
+        precondition(
+            emptyPrefix.string(TrainerTextToken(key: "unowned.key")) != "MODULE[unowned.key]",
+            "an empty module prefix must not claim unowned keys"
+        )
+
         missingValue.removeModulePresentation(prefix: "fixture.")
         precondition(
             missingValue.string(TrainerTextToken(key: "fixture.ready")) == "fixture.ready",

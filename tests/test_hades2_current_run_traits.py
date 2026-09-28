@@ -145,7 +145,7 @@ assert "IsGodTrait, traitName, { ForShop = true }" in removal_block, (
     "removal does not re-check the native sell predicate")
 assert "HeroHasTrait" in removal_block, "removal does not verify presence in the run"
 # A row that is not sell-eligible must be refused by name.
-assert "not sell-eligible" in removal_block or "not proven safe" in removal_block
+assert "not sell-eligible" in removal_block
 
 
 # --- 7. The Swift side is language-neutral and uses the presentation seam ---
@@ -224,7 +224,6 @@ for message, expected in (
     ("请选择要移除的祝福。", "hades2.error.selectTraitToRemove"),
     ("Trait removal requires an active run room", "hades2.error.traitRemovalNeedsRun"),
     ("Trait is not sell-eligible, so no safe removal exists: BoonX", "hades2.error.traitNotSellEligible"),
-    ("Trait removal is not proven safe: BoonY", "hades2.error.traitRemovalNotProven"),
     ("Trait is not present in the current run: BoonZ", "hades2.error.traitNotPresent"),
 ):
     key, _ = ep.presentation_for(message)

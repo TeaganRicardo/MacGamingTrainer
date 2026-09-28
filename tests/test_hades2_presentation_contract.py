@@ -340,4 +340,15 @@ for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")):
         # Command names, feature ids, icons and format strings stay neutral.
         assert not has_cjk(literal), f"{path.relative_to(ROOT)} embeds user-facing copy: {literal!r}"
 
+# 12. No player-facing entry may ship as the same string in both languages.
+# A zh-CN table entry that is byte-identical to its en counterpart means the
+# Chinese user is reading untranslated English. God mode was the only such
+# entry: the pre-B03 Chinese literal "无敌" was replaced by "God Mode" when
+# the tables were authored, and nothing flagged it.
+_identical = sorted(k for k, v in TABLES["en"].items()
+                   if TABLES["zh-CN"].get(k) == v)
+assert not _identical, (
+    "zh-CN and en entries are identical, so a Chinese user reads untranslated "
+    f"English: {_identical}")
+
 print("hades2_presentation_contract_ok")
