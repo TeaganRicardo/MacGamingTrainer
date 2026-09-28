@@ -213,7 +213,7 @@ class JsonlRequestRouter:
             if hasattr(error, 'presentation'):
                 presentation = error.presentation
                 diagnostic = getattr(error, 'diagnostic', None)
-                arguments = getattr(error, 'arguments', None)
+                arguments = error.arguments
             elif isinstance(error, ValueError) or hasattr(error, 'code'):
                 presentation = str(error)
                 diagnostic = getattr(error, 'diagnostic', None)

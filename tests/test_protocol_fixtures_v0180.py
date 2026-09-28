@@ -33,7 +33,12 @@ class FixtureAdapter(GameAdapter):
         if command == 'echo':
             return {'command': command, 'params': params, 'requestId': request_id}
         if command == 'fail':
-            raise AdapterError('fixture_failure', 'Fixture request failed.', diagnostic='fixture synthetic diagnostic')
+            # Exercises the envelope's optional arguments field: a module must
+            # be able to supply them without a Core change, and the Host must
+            # receive them on the wire.
+            raise AdapterError('reference_failure', 'referenceFixture.error.failed',
+                               diagnostic='reference fixture diagnostic detail',
+                               arguments=['Fixture Game', '42'])
         raise ValueError('fixture command unsupported')
 
     def close(self):

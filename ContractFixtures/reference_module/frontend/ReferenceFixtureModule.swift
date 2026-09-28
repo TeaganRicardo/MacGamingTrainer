@@ -193,6 +193,10 @@ struct ReferenceFixtureGameModule: TrainerGameModule {
         let tables: [String: [TrainerPresentationLanguage: String]] = [
             "referenceFixture.connected": [.zhCN: "夹具已连接", .en: "Fixture Connected"],
             "referenceFixture.operable": [.zhCN: "夹具可操作", .en: "Fixture Ready"],
+            // The key the fixture backend emits on a typed failure. It lives in
+            // this module's own namespace so the fixture proves the seam end to
+            // end: key -> module table -> text, not just a wire shape.
+            "referenceFixture.error.failed": [.zhCN: "夹具请求失败（{0}，{1}）。", .en: "Fixture request failed ({0}, {1})."],
         ]
         guard let template = tables[key]?[language] else { return key }
         var value = template

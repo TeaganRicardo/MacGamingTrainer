@@ -108,7 +108,8 @@ guard waitUntil(2.0, { failureDone != nil && !model.backendStatus.busy }) else {
 }
 if failureDone != false { fail("reference failure unexpectedly succeeded") }
 if model.backendStatus.errorCode != "reference_failure" { fail("reference error identity was not preserved") }
-if model.backendStatus.error != "Reference fixture request failed." { fail("reference presentation did not reach Host status") }
+if model.backendStatus.error != "referenceFixture.error.failed" { fail("reference presentation key did not reach Host status") }
+if model.backendStatus.errorArguments != ["Fixture Game", "42"] { fail("reference presentation arguments did not reach Host status") }
 if model.backendStatus.error.contains("reference fixture diagnostic detail") {
     fail("diagnostic detail leaked into user presentation")
 }
@@ -176,6 +177,14 @@ let localizationContractPassed = MainActor.assumeIsolated {
         return false
     }
     guard localization.presentation("referenceFixture.operable") == "Fixture Ready" else {
+        return false
+    }
+    // The key the backend emits on a typed failure must resolve in the
+    // fixture's OWN table, with its arguments filled. A key that only travels
+    // the wire proves the envelope, not the seam.
+    let rendered = localization.string(TrainerTextToken(
+        key: "referenceFixture.error.failed", arguments: ["Fixture Game", "42"]))
+    guard rendered == "Fixture request failed (Fixture Game, 42)." else {
         return false
     }
     guard localization.string(TrainerTextToken(key: "host.gameLibrary")) == "Game Library" else {
