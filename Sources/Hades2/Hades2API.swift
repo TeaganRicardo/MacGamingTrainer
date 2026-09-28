@@ -20,6 +20,7 @@ enum Hades2Command: String {
     case setNextRoomRewardDesired = "set_next_room_reward_desired"
     case spawnReward = "spawn_reward"
     case openSellTraits = "open_sell_traits"
+    case removeTrait = "remove_trait"
     case openSpecialChoice = "open_special_choice"
     case listProfiles = "list_profiles"
     case saveProfile = "save_profile"
@@ -51,6 +52,7 @@ enum Hades2Request {
     case setNextRoomReward(String?)
     case spawnReward(String)
     case openSellTraits
+    case removeTrait(String)
     case openSpecialChoice(source: String)
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
@@ -84,6 +86,7 @@ enum Hades2Request {
         case .setNextRoomReward: return .setNextRoomRewardDesired
         case .spawnReward: return .spawnReward
         case .openSellTraits: return .openSellTraits
+        case .removeTrait: return .removeTrait
         case .openSpecialChoice: return .openSpecialChoice
         case .listProfiles: return .listProfiles
         case .saveProfile: return .saveProfile
@@ -174,6 +177,10 @@ enum Hades2Request {
             return ["reward": reward]
         case .openSellTraits:
             return [:]
+        case .removeTrait(let name):
+            // The name is the removal input: the proven native teardown is
+            // name-level and removes every matching instance.
+            return ["trait": name]
         case .openSpecialChoice(let source):
             return ["source": source]
         case .saveProfile(let name, let shortcuts):

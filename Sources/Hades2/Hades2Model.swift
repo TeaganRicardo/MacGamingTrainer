@@ -168,6 +168,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var manaRegenLocked = false
     @Published var enemyDamageLocked = false
     @Published var enemyHealthLocked = false
+    /// Current-run trait/buff inventory, projected from live runtime state.
+    @Published var currentRunTraits: [CurrentRunTrait] = []
+    /// The identity scope the runtime reported, so the UI never implies a
+    /// durable identifier the runtime has not proven.
+    @Published var currentRunTraitScope: CurrentRunTraitScope = .currentRun
     @Published var elements: [ElementCount] = []
     @Published var profiles: [TrainerProfile] = []
     @Published var diagnostics: [DiagnosticCheck] = []
@@ -468,6 +473,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
         if let value = patch.version { version = value }
+        if let value = patch.currentRunTraits { currentRunTraits = value }
+        if let value = patch.currentRunTraitIdentityScope {
+            // The runtime states its own identity scope. Carry it verbatim so a
+            // future build that proves a stronger scope is not downgraded, and
+            // so the UI can only claim what the runtime claimed.
+            currentRunTraitScope = CurrentRunTraitScope(
+                identityScope: value,
+                isPersistent: patch.currentRunTraitIdentityPersistent ?? false
+            )
+        }
         if let value = patch.status { status = value }
         if let value = patch.scene { scene = value }
         if let value = patch.capabilities { capabilities = value }
@@ -853,6 +868,21 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
+    }
+
+    /// Remove a current-run trait through the only native teardown proven safe.
+    ///
+    /// The removal scope is name-level and removes every instance sharing that
+    /// name, so the guard requires a row the runtime marked removable. Removal
+    /// is non-idempotent: the session supplies the request id, and an
+    /// outcome-unknown request is never auto-replayed.
+    func removeTrait(_ trait: CurrentRunTrait) {
+        guard trait.canRemove, trait.removalScopeAllMatching else { return }
+        send(
+            .removeTrait(trait.name),
+            title: "hades2.receipt.traitRemoved",
+            titleArguments: [trait.name]
+        )
     }
 
     func performSpecialReward(_ reward: String) {

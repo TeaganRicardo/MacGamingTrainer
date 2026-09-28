@@ -102,3 +102,24 @@ def disconnected_capabilities():
         'spawnReward':False,'setStats':False,'setElements':False,
         'hotBackup':True,'hotRestore':False,'diagnostics':True,
     }
+
+
+# Current-run trait/buff inventory. This is an OBSERVATION surface projected
+# from live runtime state, not a desired-state or catalog surface.
+#
+# Removal capability values are machine-readable and deliberately narrow:
+#   'nameLevelAllMatching' - the only proven-safe teardown (D00 section 6:
+#     native SellTraits -> RemoveWeaponTrait(name), which removes every
+#     instance of that name);
+#   'none'                 - no safe teardown has been proven for this entry.
+#
+# Nothing here exposes a generic per-instance or RemoveTraitData escape hatch.
+TRAIT_REMOVAL_NAME_LEVEL = 'nameLevelAllMatching'
+TRAIT_REMOVAL_NONE = 'none'
+TRAIT_REMOVAL_CAPABILITIES = (TRAIT_REMOVAL_NAME_LEVEL, TRAIT_REMOVAL_NONE)
+# The identity scope is current-run only. D00 proved `trait.Id` is assigned by
+# GetTraitUniqueId and is NOT stable across run reload, restart or save
+# round-trip, so it must never be persisted or presented as durable.
+TRAIT_IDENTITY_SCOPE = 'currentRunInstance'
+# Families D00 explicitly left outside the sell-safe subset.
+TRAIT_UNPROVEN_FAMILIES = ('Chaos', 'Selene', 'Weapon', 'Spell', 'Costume', 'Unknown')
