@@ -85,13 +85,27 @@ let model = ReferenceFixtureModel(
     log: { capturedLogs.append($0) }
 )
 
-guard waitUntil(3.0, {
+// This wait measures a subprocess round trip -- spawn the backend script,
+// complete the JSONL hello, receive the protocol versions -- unlike every other
+// wait in this harness, which observes a state flip. A 3s budget failed roughly
+// one run in three on a loaded machine, and on a CI runner that has just
+// compiled Swift for the preceding tests, which is the same 1-in-3 failure. The
+// predicate is unchanged and still exact: a backend that never reports 6 and 1
+// still fails, only later.
+let handshakeBudget: TimeInterval = 30.0
+guard waitUntil(handshakeBudget, {
     session.isStarted
         && model.backendAvailable
         && model.backendStatus.backendProtocolVersion == 6
         && model.backendStatus.backendModuleProtocolVersion == 1
 }) else {
-    fail("reference model did not start the injected Host backend session: \(model.backendStatus)")
+    // A slow runner and a wedged backend must not produce the same message, or
+    // this cannot be triaged without a local reproduction.
+    let lastLog = capturedLogs.last ?? "<none>"
+    let detail = "within \\(handshakeBudget)s status=\\(model.backendStatus)"
+        + " sessionStarted=\\(session.isStarted) sessionRunning=\\(session.isRunning)"
+        + " logLines=\\(capturedLogs.count) lastLog=\\(lastLog)"
+    fail("reference model did not start the injected Host backend session \\(detail)")
 }
 
 if model.connected { fail("fixture must start disconnected") }
