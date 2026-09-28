@@ -85,6 +85,9 @@ struct Hades2StatePatch {
     let money: Hades2FieldPatch<Double>
     let runCount: Hades2FieldPatch<Int>
     let elements: [ElementCount]?
+    let currentRunTraits: [CurrentRunTrait]?
+    let currentRunTraitIdentityScope: String?
+    let currentRunTraitIdentityPersistent: Bool?
     let resources: [MaterialResource]?
     let lastAction: Hades2ActionReceipt?
     let error: String?
@@ -157,6 +160,9 @@ struct Hades2StatePatch {
         money = Self.numberField(payload, "money")
         runCount = Self.field(payload, "runCount", Int.self)
         elements = (payload["elements"] as? [[String: Any]])?.compactMap(Self.decodeElement)
+        currentRunTraits = (payload["currentRunTraits"] as? [[String: Any]])?.compactMap(Self.decodeCurrentRunTrait)
+        currentRunTraitIdentityScope = payload["currentRunTraitIdentityScope"] as? String
+        currentRunTraitIdentityPersistent = payload["currentRunTraitIdentityPersistent"] as? Bool
         resources = (payload["resources"] as? [[String: Any]])?.compactMap(Self.decodeResource)
         if let row = payload["lastAction"] as? [String: Any],
            let requestID = row["requestId"] as? String,
@@ -249,6 +255,30 @@ struct Hades2StatePatch {
     private static func decodeDiagnostic(_ row: [String: Any]) -> DiagnosticCheck? {
         guard let name = row["name"] as? String else { return nil }
         return DiagnosticCheck(name: name, ok: row["ok"] as? Bool ?? false, detail: String(describing: row["detail"] ?? ""))
+    }
+
+
+    private static func decodeCurrentRunTrait(_ row: [String: Any]) -> CurrentRunTrait? {
+        // `name` is the only required field: it is the removal input, and a row
+        // without one cannot be acted on truthfully.
+        guard let name = row["name"] as? String, !name.isEmpty else { return nil }
+        let instanceID = row["instanceId"] as? String ?? name
+        let capabilityRaw = row["removalCapability"] as? String ?? TraitRemovalCapability.none.rawValue
+        // An unrecognised capability must read as "no removal", never as a
+        // guess that grants one.
+        let capability = TraitRemovalCapability(rawValue: capabilityRaw) ?? .none
+        return CurrentRunTrait(
+            instanceID: instanceID,
+            name: name,
+            family: row["family"] as? String ?? "",
+            owner: row["owner"] as? String ?? "",
+            hasRarity: row["hasRarity"] as? Bool ?? false,
+            remainingUses: number(row["remainingUses"]),
+            removalCapability: capability,
+            removalReason: row["removalReason"] as? String ?? "",
+            // Only assert all-matching scope when the runtime said so.
+            removalScopeAllMatching: row["removalScopeAllMatching"] as? Bool ?? false
+        )
     }
 
     private static func decodeElement(_ row: [String: Any]) -> ElementCount? {

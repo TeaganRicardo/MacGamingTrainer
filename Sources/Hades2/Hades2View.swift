@@ -169,6 +169,11 @@ struct Hades2TrainerView: View {
             buildSection
             resourceSection
             spawnSection
+            // Live runtime observation, not desired state or a catalog. Only
+            // meaningful once a run is active.
+            if model.connected {
+                currentRunTraitsSection
+            }
             management
         }
     }
@@ -229,6 +234,84 @@ struct Hades2TrainerView: View {
         TrainerSection(title: text("hades2.section.build"), icon: "chart.bar.xaxis") {
             metaStatPanel
             boonRarityPanel
+        }
+    }
+
+    private var currentRunTraitsSection: some View {
+        VStack(alignment: .leading, spacing: theme.pageSpacing) {
+            TrainerSection(title: text("hades2.traits.section"), icon: "list.bullet.rectangle") {
+                currentRunTraitsPanel
+            }
+        }
+    }
+
+    /// Live current-run inventory. Every row is observation only; removal is
+    /// offered exactly where the runtime proved a safe teardown, and the button
+    /// names the scope so a name-level, all-matching delete is never presented
+    /// as a single-instance removal.
+    /// Resolve a Hades key with runtime arguments against the live Host
+    /// language. An argument is normally runtime text (a display name); it is
+    /// resolved as a key only when this catalogue owns that key.
+    private func text(_ key: String, arguments: [String]) -> String {
+        Hades2GameModule.presentationText(
+            key: key,
+            arguments: arguments,
+            language: localization.language
+        )
+    }
+
+    private var currentRunTraitsPanel: some View {
+        VStack(alignment: .leading, spacing: theme.sectionSpacing) {
+            if model.currentRunTraits.isEmpty {
+                Text(text("hades2.traits.empty"))
+                    .font(.callout)
+                    .foregroundStyle(theme.mutedFill)
+            } else {
+                ForEach(model.currentRunTraits) { trait in
+                    currentRunTraitRow(trait)
+                }
+            }
+            // The runtime states its own identity scope. Showing it verbatim
+            // keeps the UI from implying a durable identifier.
+            if !model.currentRunTraitScope.isPersistent {
+                Text(text("hades2.traits.identityScope"))
+                    .font(.caption)
+                    .foregroundStyle(theme.mutedFill)
+            }
+        }
+    }
+
+    private func currentRunTraitRow(_ trait: CurrentRunTrait) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: theme.sectionSpacing) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(trait.name)
+                    .font(.body)
+                if trait.canRemove {
+                    // State the real scope rather than implying one row, one delete.
+                    Text(text("hades2.traits.removeAllMatching", arguments: [trait.name]))
+                        .font(.caption)
+                        .foregroundStyle(theme.mutedFill)
+                } else {
+                    Text(text("hades2.traits.removalReason.\(trait.removalReason.isEmpty ? "ownerSpecificLifecycle" : trait.removalReason)"))
+                        .font(.caption)
+                        .foregroundStyle(theme.mutedFill)
+                }
+            }
+            Spacer(minLength: theme.sectionSpacing)
+            if trait.canRemove {
+                Button {
+                    model.removeTrait(trait)
+                } label: {
+                    Text(text("hades2.traits.remove"))
+                }
+                .buttonStyle(.bordered)
+            } else {
+                // Unsupported categories stay visible and disabled, with a
+                // truthful reason instead of a hidden control.
+                Text(text("hades2.traits.removalUnavailable"))
+                    .font(.caption)
+                    .foregroundStyle(theme.mutedFill)
+            }
         }
     }
 
