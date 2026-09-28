@@ -28,7 +28,7 @@ The current hardening baseline also includes:
 - Core Save preserves staged recovery evidence across uncertain failures, persists snapshot payloads before manifests, contains stale staging/rollback recovery, exposes deliberate reveal/delete for invalid inventory rows, keeps Swift busy state tied to outstanding requests, and rejects reveal paths outside the effective Trainer data root or through symlink escape.
 - Hades transport/diagnostics preserve trust boundaries after host-side decode failure, refresh diagnostics from current runtime state, distinguish absent warning fields from explicit clears, reset runtime-only observation when the backend terminates, and use explicit aggregate operation budgets.
 - Backend JSONL input is bounded; Host trainer logs rotate within bounds; Process Time Warp uses serialized installation and fixed system tool paths.
-- B01 / #131 / PR #183 completed the Host bilingual localization foundation: one persisted live zh-CN/English language state, packaged Host resources, and reference-fixture consumption of the same game-agnostic seam. Broad shared Host/Core presentation migration remains #176; Hades-owned presentation migration follows in #177.
+- B01 / #131 / PR #183 completed the Host bilingual localization foundation: one persisted live zh-CN/English language state, packaged Host resources, and reference-fixture consumption of the same game-agnostic seam. B02 / PR #189 then migrated the remaining shared Host/Core product copy onto that seam in `Resources/Localization/{zh-CN,en}.lproj/Host.strings`, with `test_host_shared_localization_coverage.py` as the leakage gate. B03 / #177 migrated Hades-owned presentation through the terminology registry.
 - Hades durable feature identity has executable parity coverage across Swift controls/model paths, Python router/adapter paths, resident Lua consumers, and the separate Core-owned `gameSpeed` path without adding another production feature schema.
 - Hades terminology is packaged through module `appResources`; selected-module builds verify the intended app identity instead of accepting arbitrary stale output.
 - macOS build/sign publication uses isolated staging, removes only signing-blocking FinderInfo/ResourceFork metadata, preserves permitted provenance metadata, rejects unsafe publish roots, and verifies the published selected-module app.
@@ -51,7 +51,7 @@ PR #184 established the current CI routing baseline. Pull-request change scope a
 
 ## Architecture/governance state
 
-Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
+Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), B02 shared Host/Core presentation migration (PR #189), B03 Hades presentation migration (#177), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
 Planning issue #124 remains the sequencing authority. This status file records only the current operational gate and does not mirror the roadmap.
 
@@ -70,7 +70,7 @@ For every task:
 
 Do not stack new implementation on unmerged overlapping PR heads.
 
-The next shared-presentation implementation gate is #176. The Hades-presentation gate #177 is complete, merged as `405a1fe`, and accepted in the real game at merged main `a6cf37b`. All other admission and sequencing decisions remain in #124.
+The shared-presentation migration is complete: B01 / #131 / PR #183, B02 / PR #189, and B03 / #177 all merged, with B02 and B03 both accepted in the real game at merged main `a6cf37b`. No presentation gate is outstanding. The next gate is whatever #124 sequences next; admission and sequencing decisions remain in #124.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
