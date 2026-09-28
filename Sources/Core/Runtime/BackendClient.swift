@@ -1,5 +1,26 @@
 import Foundation
 
+/// A language-neutral presentation token contributed by a game module.
+///
+/// A game model must stay free of localized copy, but the Host still has to
+/// render that model's status, operation titles, banners and errors. A token
+/// carries only a stable key plus runtime arguments, so the module keeps the
+/// identity while the module's own presentation layer owns the wording.
+///
+/// The reference fixture and any future module use the same type; Core never
+/// learns a module's key namespace or vocabulary.
+public struct TrainerTextToken: Hashable {
+    public let key: String
+    public let arguments: [String]
+
+    public init(key: String, arguments: [String] = []) {
+        self.key = key
+        self.arguments = arguments
+    }
+}
+
+import Foundation
+
 struct BackendProtocolExpectation {
     let gameID: String
     let hostProtocolVersion: Int
@@ -11,6 +32,10 @@ struct BackendFailure: Equatable {
     let presentation: String
     let diagnostic: String?
     let recoveryPath: String?
+    /// Optional positional arguments for a presentation key. A game module
+    /// sends the bare key and the values it needs; Core carries them without
+    /// knowing the wording, and the owning module renders the sentence.
+    let presentationArguments: [String]
 }
 
 struct BackendReply {
@@ -19,7 +44,9 @@ struct BackendReply {
     let hostProtocolVersion: Int
     let moduleProtocolVersion: Int
     let gameID: String
-    let operation: String
+    /// Language-neutral operation identity. Diagnostics log the key; the UI
+    /// resolves the wording through the owning presentation layer.
+    let operation: TrainerTextToken
     let announceSuccess: Bool
     let success: Bool
     let result: [String: Any]?
@@ -36,6 +63,7 @@ final class BackendClient {
         let command: String
         let params: [String: Any]
         let operation: String
+        let operationArguments: [String]
         let coalesceKey: String?
         let announceSuccess: Bool
         let timeout: TimeInterval
@@ -53,7 +81,7 @@ final class BackendClient {
     private var terminalFailureReported = false
     private var stderrTail = ""
 
-    private var onRequestStarted: ((String, Bool) -> Void)?
+    private var onRequestStarted: ((TrainerTextToken, Bool) -> Void)?
     private var onReply: ((BackendReply) -> Void)?
     private var onProtocolMismatch: ((BackendFailure) -> Void)?
     private var onStderr: ((String) -> Void)?
@@ -74,7 +102,7 @@ final class BackendClient {
     func start(
         scriptURL: URL,
         expectation: BackendProtocolExpectation,
-        onRequestStarted: @escaping (String, Bool) -> Void,
+        onRequestStarted: @escaping (TrainerTextToken, Bool) -> Void,
         onReply: @escaping (BackendReply) -> Void,
         onProtocolMismatch: @escaping (BackendFailure) -> Void,
         onStderr: @escaping (String) -> Void,
@@ -112,6 +140,7 @@ final class BackendClient {
         _ command: String,
         params: [String: Any] = [:],
         operation: String,
+        operationArguments: [String] = [],
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
@@ -123,7 +152,8 @@ final class BackendClient {
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             completion?(false)
             return
@@ -133,6 +163,7 @@ final class BackendClient {
             command: command,
             params: params,
             operation: operation,
+            operationArguments: operationArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
@@ -167,7 +198,8 @@ final class BackendClient {
                 code: "backend_queue_full",
                 presentation: "host.backend.error.queueFull",
                 diagnostic: "queueLimit=\(maxQueueDepth) operation=\(request.operation)",
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), false)
             request.completion?(false)
             return
@@ -184,7 +216,8 @@ final class BackendClient {
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             request.completion?(false)
             complete(queued, success: false)
@@ -193,7 +226,7 @@ final class BackendClient {
         }
         do {
             current = request
-            onRequestStarted?(request.operation, request.announceSuccess)
+            onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
             try process.send(["id": request.id, "command": request.command, "params": request.params])
             scheduleTimeout(for: request)
             onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
@@ -206,7 +239,8 @@ final class BackendClient {
                 code: "backend_send_failed",
                 presentation: "host.backend.error.sendFailed",
                 diagnostic: error.localizedDescription,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             process.stop()
             request.completion?(false)
@@ -253,7 +287,8 @@ final class BackendClient {
                 code: "protocol_mismatch",
                 presentation: "host.backend.error.protocolMismatch",
                 diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ))
             return
         }
@@ -268,7 +303,8 @@ final class BackendClient {
                 code: detail?["code"] as? String ?? "operation_failed",
                 presentation: detail?["presentation"] as? String ?? "host.backend.error.operationFailed",
                 diagnostic: detail?["diagnostic"] as? String,
-                recoveryPath: detail?["recoveryPath"] as? String
+                recoveryPath: detail?["recoveryPath"] as? String,
+                presentationArguments: (detail?["arguments"] as? [Any])?.compactMap { $0 as? String } ?? []
             )
         }
         let reply = BackendReply(
@@ -277,7 +313,7 @@ final class BackendClient {
             hostProtocolVersion: hostVersion!,
             moduleProtocolVersion: moduleVersion!,
             gameID: gameID!,
-            operation: request.operation,
+            operation: TrainerTextToken(key: request.operation, arguments: request.operationArguments),
             announceSuccess: request.announceSuccess,
             success: success,
             result: message["result"] as? [String: Any],
@@ -319,7 +355,8 @@ final class BackendClient {
             code: "backend_timeout",
             presentation: "host.backend.error.timeout",
             diagnostic: "request=\(request.command) id=\(request.id) timeout=\(String(format: "%.1f", request.timeout))s",
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         ), true)
         process.stop()
         complete(outstanding, success: false)
@@ -333,7 +370,8 @@ final class BackendClient {
             code: "backend_protocol_error",
             presentation: "host.backend.error.protocolError",
             diagnostic: message,
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         ), true)
         process.stop()
         complete(outstanding, success: false)

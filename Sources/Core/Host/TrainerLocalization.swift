@@ -35,6 +35,7 @@ public final class TrainerLocalizationStore: ObservableObject {
     }
 
     private let defaults: UserDefaults
+    private var moduleResolvers: [String: (String, [String], TrainerPresentationLanguage) -> String] = [:]
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -54,8 +55,77 @@ public final class TrainerLocalizationStore: ObservableObject {
     /// Resolve only Host-owned presentation keys. Module/game copy stays
     /// opaque here and remains owned by the module presentation layer.
     public func presentation(_ value: String, arguments: [String] = []) -> String {
+        if isModuleOwned(value) { return string(value, arguments: arguments) }
         guard value.hasPrefix("host.") else { return value }
         return localized(value, arguments: arguments)
+    }
+
+    /// Register the selected module's presentation resolver.
+    ///
+    /// This is a game-agnostic seam: the module supplies a closure that maps its
+    /// own key namespace to text, and the Host simply re-resolves tokens when the
+    /// language changes. Core stores no module vocabulary, and removing a
+    /// module cannot leave stale copy behind.
+    public func registerModulePresentation(
+        prefix: String,
+        resolver: @escaping (String, [String], TrainerPresentationLanguage) -> String
+    ) {
+        moduleResolvers[prefix] = resolver
+    }
+
+    public func removeModulePresentation(prefix: String) {
+        moduleResolvers.removeValue(forKey: prefix)
+    }
+
+    /// Resolve one token from whichever layer owns it.
+    ///
+    /// Order is deliberate: an explicitly registered module resolver wins, then
+    /// the shared Host table, then the key itself. An unknown key renders as
+    /// its own identity so a missing entry is visible instead of blank.
+    public func string(_ token: TrainerTextToken) -> String {
+        string(token.key, arguments: token.arguments)
+    }
+
+    public func string(_ key: String, arguments: [String] = []) -> String {
+        if let resolved = resolveModule(key, arguments: arguments) { return resolved }
+        if key.hasPrefix("host.") { return localized(key, arguments: arguments) }
+        // A key with no owning table and no arguments is not copy, it is a
+        // defect. Showing the raw key makes that visible; a missing `{0}`
+        // argument is dropped rather than rendered, because a literal "{0}" in
+        // player-facing text is worse than a missing value.
+        return substitute(key, arguments: arguments, dropUnfilled: true)
+    }
+
+    private func isModuleOwned(_ key: String) -> Bool {
+        moduleResolvers.keys.contains { key.hasPrefix($0) }
+    }
+
+    private func resolveModule(_ key: String, arguments: [String]) -> String? {
+        for (prefix, resolver) in moduleResolvers where key.hasPrefix(prefix) {
+            return resolver(key, arguments, language)
+        }
+        return nil
+    }
+
+    private func substitute(_ template: String, arguments: [String]) -> String {
+        substitute(template, arguments: arguments, dropUnfilled: false)
+    }
+
+    /// Replace `{n}` placeholders.
+    ///
+    /// `dropUnfilled` removes placeholders that have no argument instead of
+    /// leaving them visible, which is what an unresolved key needs.
+    private func substitute(_ template: String, arguments: [String], dropUnfilled: Bool) -> String {
+        var result = template
+        for (index, argument) in arguments.enumerated().reversed() {
+            result = result.replacingOccurrences(of: "{\(index)}", with: argument)
+        }
+        if dropUnfilled {
+            for index in stride(from: 32, through: 0, by: -1) {
+                result = result.replacingOccurrences(of: "{\(index)}", with: "")
+            }
+        }
+        return result
     }
 }
 

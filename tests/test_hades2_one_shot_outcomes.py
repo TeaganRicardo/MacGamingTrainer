@@ -48,12 +48,14 @@ modal_model = model[model.index("func openSellTraits()"):model.index("func setMu
 assert "announceSuccess: false" in modal_model
 assert "Hades2Command(rawValue: receipt.command)" in model
 assert '"open_sell_traits"' not in model and '"open_special_choice"' not in model
-assert "净化之池" in model
-assert "奖励选择界面" in model
-assert "case .accepted:" in model and "已受理" in model
-assert "case .opened:" in model and "已打开" in model
-assert "case .failed:" in model and "失败" in model
+# The model carries language-neutral keys; the module presentation table owns
+# the wording in both languages, so a language switch re-renders the receipt.
+assert 'presentation("hades2.spawn.purgingPool")' in model
+assert 'presentation("hades2.spawn.rewardChoice")' in model
+assert "case .accepted:" in model and "hades2.receipt.accepted" in model
+assert "case .opened:" in model and "hades2.receipt.opened" in model
+assert "case .failed:" in model and "hades2.receipt.failed" in model
 assert "receipt.error.map" not in model
-assert "失败，请查看日志" in model
+assert "hades2.receipt.outcomeUnknown" in model
 
 print("hades2_one_shot_outcomes_ok")

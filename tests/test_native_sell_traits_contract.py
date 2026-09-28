@@ -47,8 +47,10 @@ assert 'CurrentRun.CurrentRoom.Store =' not in close_block, "trainer must never 
 
 assert 'func openSellTraits()' in model
 assert '.openSellTraits' in model
-assert 'Label("净化之池"' in view
-assert 'Button("打开")' in view
+# Player-facing copy resolves through the module presentation table, so the view
+# names a key rather than embedding the official term.
+assert 'Label(text("hades2.spawn.purgingPool")' in view
+assert 'text("hades2.spawn.open")' in view
 assert '出售祝福' not in view
 assert 'model.openSellTraits()' in view
 

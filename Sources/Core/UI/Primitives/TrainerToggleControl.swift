@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// Single shared switch implementation used by every trainer game surface.
-/// It intentionally mirrors the compact native macOS switch used by the
-/// pre-decoupling Hades UI: small control size, purple accent and native thumb
-/// animation. Feature rows may supply their neutral presentation tint so the
-/// switch and its corresponding indicator communicate the same phase.
+/// It intentionally mirrors the compact native macOS switch: small control
+/// size, purple accent and native thumb animation. Feature rows may supply
+/// their neutral presentation tint so the switch and its corresponding
+/// indicator communicate the same phase.
 struct TrainerToggleControl: View {
     @Environment(\.trainerTheme) private var theme
     let isOn: Bool

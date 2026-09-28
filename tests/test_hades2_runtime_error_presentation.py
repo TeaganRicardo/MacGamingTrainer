@@ -47,20 +47,22 @@ temporary_root = tempfile.TemporaryDirectory(prefix="mgt-hades2-runtime-error-pr
 adapter = RuntimeErrorHarnessAdapter()
 router = JsonlRequestRouter(adapter, save_data_root=Path(temporary_root.name))
 
+# Player-facing copy is a language-neutral key; the Lua source text stays on the
+# diagnostic, so the operator trace is unchanged and the wire is not localized.
 cases = (
     (
         {"id": "sell-screen-active", "command": "open_sell_traits", "params": {}},
-        "已有游戏界面打开，请先关闭当前界面后再打开净化之池。",
+        "hades2.error.sellScreenBusy",
         '[string "MacGamingTrainer"]:3086: Cannot open boon sell screen while another screen is active',
     ),
     (
         {"id": "special-screen-active", "command": "open_special_choice", "params": {"source": "Artemis"}},
-        "已有游戏界面打开，请先关闭当前界面后再打开奖励选择界面。",
+        "hades2.error.choiceScreenBusy",
         '[string "MacGamingTrainer"]:3131: Cannot open special blessing choice while another screen is active',
     ),
     (
         {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "godMode", "value": True}},
-        "游戏内操作失败，请查看日志。",
+        "hades2.error.runtimeActionFailed",
         '[string "MacGamingTrainer"]:2999: Feature unavailable: synthetic runtime failure',
     ),
 )
@@ -76,8 +78,10 @@ try:
             "diagnostic": diagnostic,
         }, reply["error"]
         assert "message" not in reply["error"]
+        # Lua source locations and English runtime text must never reach the UI.
         assert "[string " not in reply["error"]["presentation"]
         assert "Cannot open" not in reply["error"]["presentation"]
+        assert not any("一" <= character <= "鿿" for character in reply["error"]["presentation"])
 finally:
     logging.disable(logging.NOTSET)
     router.close()

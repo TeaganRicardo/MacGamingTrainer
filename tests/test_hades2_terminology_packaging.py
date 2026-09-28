@@ -74,21 +74,39 @@ def test_packaging_and_verification_include_only_the_hades_resource():
         {
             "source": "docs/reference/hades2/1.139672-24556151/ui_terminology.json",
             "destination": "ui_terminology.json",
-        }
+        },
+        {
+            "source": "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json",
+            "destination": "hades2.zh-CN.json",
+        },
+        {
+            "source": "Sources/Hades2/Presentation/Localization/hades2.en.json",
+            "destination": "hades2.en.json",
+        },
     ]
     assert "appResources" in build
 
+    # Both shipped languages must exist in the source tree: a missing table
+    # would silently drop one language back to raw keys at runtime.
+    for language in ("zh-CN", "en"):
+        table = ROOT / f"Sources/Hades2/Presentation/Localization/hades2.{language}.json"
+        assert table.is_file(), f"missing packaged Hades presentation table: {table}"
+
     # Build 2 owns the production Hades build and proves the Hades-only
-    # terminology resource is present there.
+    # terminology and presentation resources are present there.
     assert "./build.sh hades2" in macos_workflow
     assert 'test -f "$app/Contents/Resources/ui_terminology.json"' in macos_workflow
+    assert 'test -f "$app/Contents/Resources/hades2.zh-CN.json"' in macos_workflow
+    assert 'test -f "$app/Contents/Resources/hades2.en.json"' in macos_workflow
 
     # The module matrix exists only to prove the independent reference fixture.
-    # It must not duplicate the Hades build, and the Hades-only resource must
+    # It must not duplicate the Hades build, and the Hades-only resources must
     # not leak into that packaged module.
     assert "- reference_fixture" in module_matrix
     assert "- hades2" not in module_matrix
     assert 'test ! -e "$app/Contents/Resources/ui_terminology.json"' in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/hades2.zh-CN.json"' in module_matrix
+    assert 'test ! -e "$app/Contents/Resources/hades2.en.json"' in module_matrix
 
 
 for _test in (

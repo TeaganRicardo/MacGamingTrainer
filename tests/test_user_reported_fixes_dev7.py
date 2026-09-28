@@ -19,8 +19,9 @@ def main():
     # Native boon-choice count is retired instead of pretending to support >3.
     view = read('Sources/Hades2/Hades2View.swift')
     assert '祝福选项数量' not in view
-    assert '强制传奇 Legendary' in view
-    assert '强制双重 Duo' in view
+    # Rarity controls resolve through the module presentation table.
+    assert 'text("hades2.rarity.legendary")' in view
+    assert 'text("hades2.rarity.duo")' in view
     assert view.count('enabled: model.canEditDesired && model.boonRarityEnabled') >= 2
     assert 'boonChoiceEnabled' not in TOGGLES
     assert 'boonChoiceCount' not in Hades2PreferenceStore.defaults()

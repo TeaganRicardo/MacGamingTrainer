@@ -129,13 +129,18 @@ struct Main {
             "outcome": "accepted",
         ]
         model.apply(["lastAction": receipt])
-        check(!model.notice.isEmpty, "action receipt was not presented before reset")
+        check(!model.noticeText.key.isEmpty, "action receipt was not presented before reset")
+        check(model.noticeText.key == "hades2.receipt.accepted", "receipt did not present the accepted copy")
 
         model.resetAfterBackendTermination()
 
         // U-04: backend termination must discard only observed/session state.
         check(!model.connected && model.pid == nil, "connection identity survived termination")
-        check(model.version == "等待检测", "runtime version survived termination")
+        // An undetected version is the empty language-neutral state; the
+        // connection detail resolves it to the awaiting-detection key.
+        check(model.version.isEmpty, "runtime version survived termination")
+        check(model.connectionDetailText.key == "hades2.status.awaitingDetect",
+              "awaiting-detection state was not restored")
         check(model.scene == "unknown", "scene survived termination")
         check(model.capabilities.isEmpty && model.activeFeatures.isEmpty && model.dormantFeatures.isEmpty,
               "runtime feature state survived termination")
@@ -165,19 +170,23 @@ struct Main {
               "diagnostics survived termination")
         check(model.warning.isEmpty && model.runtimeIssue.isEmpty,
               "runtime messages survived termination")
+        check(model.noticeText.key.isEmpty && model.errorText.key.isEmpty
+                && model.runtimeIssueText.key.isEmpty,
+              "Hades presentation tokens survived termination")
 
         // The receipt must be forgotten so an identical receipt from a new
         // backend lifetime is presented rather than deduplicated as stale.
-        model.notice = ""
         model.apply(["lastAction": receipt])
-        check(!model.notice.isEmpty, "last action receipt was not presented after termination")
-        model.notice = ""
+        check(!model.noticeText.key.isEmpty, "last action receipt was not presented after termination")
+        // Deduplication is keyed on receipt identity, not on the presented copy,
+        // so the same receipt is suppressed until the copy is cleared.
+        model.clearPresentedNoticeForTest()
         model.apply(["lastAction": receipt])
-        check(model.notice.isEmpty, "identical receipt was not deduplicated within one backend lifetime")
+        check(model.noticeText.key.isEmpty, "identical receipt was not deduplicated within one backend lifetime")
         model.resetAfterBackendTermination()
-        model.notice = ""
+        model.clearPresentedNoticeForTest()
         model.apply(["lastAction": receipt])
-        check(!model.notice.isEmpty, "last action receipt deduplication survived backend termination")
+        check(!model.noticeText.key.isEmpty, "last action receipt deduplication survived backend termination")
 
         // Durable desired intent remains available for replay.
         check(model.godMode && model.gameSpeed == 2.5 && model.damageMultiplier == 3.0,
@@ -205,6 +214,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-state-cleanup-") as td:
     model_source = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
     model_source = model_source.replace("private func apply(_ payload:", "func apply(_ payload:")
     model_source = model_source.replace("private func resetAfterBackendTermination()", "func resetAfterBackendTermination()")
+    # The presented-copy token is private state; expose a clear for the harness
+    # so a test can reset what it just consumed.
+    model_source = model_source.replace(
+        "    @Published private var noticeToken: TrainerTextToken?",
+        "    @Published var noticeToken: TrainerTextToken?\n"
+        "    func clearPresentedNoticeForTest() { noticeToken = nil }",
+    )
     testable_model = td / "Hades2Model.swift"
     testable_model.write_text(model_source, encoding="utf-8")
 

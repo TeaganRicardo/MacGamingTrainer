@@ -73,6 +73,14 @@ assert normalized['appResources'] == [
     {
         'source': 'docs/reference/hades2/1.139672-24556151/ui_terminology.json',
         'destination': 'ui_terminology.json',
+    },
+    {
+        'source': 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json',
+        'destination': 'hades2.zh-CN.json',
+    },
+    {
+        'source': 'Sources/Hades2/Presentation/Localization/hades2.en.json',
+        'destination': 'hades2.en.json',
     }
 ]
 print('build_contract_round14_ok')
