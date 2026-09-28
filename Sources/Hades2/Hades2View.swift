@@ -252,7 +252,9 @@ struct Hades2TrainerView: View {
     /// offered exactly where the runtime proved a safe teardown, and the button
     /// names the scope so a name-level, all-matching delete is never presented
     /// as a single-instance removal.
-    /// Resolve a Hades key with arguments against the live Host language.
+    /// Resolve a Hades key with runtime arguments against the live Host
+    /// language. An argument is normally runtime text (a display name); it is
+    /// resolved as a key only when this catalogue owns that key.
     private func text(_ key: String, arguments: [String]) -> String {
         Hades2GameModule.presentationText(
             key: key,
