@@ -32,6 +32,10 @@ struct BackendFailure: Equatable {
     let presentation: String
     let diagnostic: String?
     let recoveryPath: String?
+    /// Optional positional arguments for a presentation key. A game module
+    /// sends the bare key and the values it needs; Core carries them without
+    /// knowing the wording, and the owning module renders the sentence.
+    let presentationArguments: [String]
 }
 
 struct BackendReply {
@@ -148,7 +152,8 @@ final class BackendClient {
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             completion?(false)
             return
@@ -193,7 +198,8 @@ final class BackendClient {
                 code: "backend_queue_full",
                 presentation: "host.backend.error.queueFull",
                 diagnostic: "queueLimit=\(maxQueueDepth) operation=\(request.operation)",
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), false)
             request.completion?(false)
             return
@@ -210,7 +216,8 @@ final class BackendClient {
                 code: "backend_unavailable",
                 presentation: "host.backend.error.unavailable",
                 diagnostic: nil,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             request.completion?(false)
             complete(queued, success: false)
@@ -232,7 +239,8 @@ final class BackendClient {
                 code: "backend_send_failed",
                 presentation: "host.backend.error.sendFailed",
                 diagnostic: error.localizedDescription,
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ), true)
             process.stop()
             request.completion?(false)
@@ -279,7 +287,8 @@ final class BackendClient {
                 code: "protocol_mismatch",
                 presentation: "host.backend.error.protocolMismatch",
                 diagnostic: "host expected v\(expectation.hostProtocolVersion), actual \(actualHost); module expected v\(expectation.moduleProtocolVersion), actual \(actualModule); game=\(actualGame)",
-                recoveryPath: nil
+                recoveryPath: nil,
+                presentationArguments: []
             ))
             return
         }
@@ -294,7 +303,8 @@ final class BackendClient {
                 code: detail?["code"] as? String ?? "operation_failed",
                 presentation: detail?["presentation"] as? String ?? "host.backend.error.operationFailed",
                 diagnostic: detail?["diagnostic"] as? String,
-                recoveryPath: detail?["recoveryPath"] as? String
+                recoveryPath: detail?["recoveryPath"] as? String,
+                presentationArguments: (detail?["arguments"] as? [Any])?.compactMap { $0 as? String } ?? []
             )
         }
         let reply = BackendReply(
@@ -345,7 +355,8 @@ final class BackendClient {
             code: "backend_timeout",
             presentation: "host.backend.error.timeout",
             diagnostic: "request=\(request.command) id=\(request.id) timeout=\(String(format: "%.1f", request.timeout))s",
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         ), true)
         process.stop()
         complete(outstanding, success: false)
@@ -359,7 +370,8 @@ final class BackendClient {
             code: "backend_protocol_error",
             presentation: "host.backend.error.protocolError",
             diagnostic: message,
-            recoveryPath: nil
+            recoveryPath: nil,
+            presentationArguments: []
         ), true)
         process.stop()
         complete(outstanding, success: false)
