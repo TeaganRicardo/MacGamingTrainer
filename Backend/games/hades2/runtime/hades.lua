@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 49 then
+if previousModule and previousModule.revision ~= 51 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 49, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 51, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1725,6 +1725,91 @@ if __MacGamingTrainerV1 == nil then
     end
     return supportMap, activeMap, dormantMap
   end
+  -- Current-run trait/buff inventory, projected from live runtime state only.
+  --
+  -- D00 established that a runtime trait's `Id` is a current-run instance
+  -- identity assigned by GetTraitUniqueId, and that it is NOT proven stable
+  -- across run reload, game restart or a save round trip. So `instanceId` here
+  -- is current-run identity and is never presented as durable.
+  --
+  -- Removal capability is derived from the native SellTraits predicate proven in
+  -- D00 section 6: GenerateSellTraitValues admits a trait only when
+  -- IsGodTrait(name, { ForShop = true }) holds and the trait has a Rarity, and
+  -- the native teardown is name-level and all-matching
+  -- (HandleSellChoiceSelection -> RemoveWeaponTrait(name, { Silent = true }),
+  -- which loops while the hero still owns that name). Therefore the only
+  -- capability exposed here is `nameLevelAllMatching`, and it is reported with
+  -- that scope rather than as a single-instance delete.
+  --
+  -- Every other owner-specific lifecycle is reported as not removable. That is
+  -- the safe, truthful answer: no generic RemoveTraitData escape hatch is
+  -- reachable from here.
+  local traitFamily = function(trait)
+    if type(trait) ~= "table" then return "Unknown" end
+    if type(trait.Slot) == "string" and trait.Slot ~= "" then return trait.Slot end
+    local name = trait.Name
+    if type(name) == "string" then
+      if name:match("^WeaponUpgrade") or trait.Slot == "Weapon" then return "Weapon" end
+      if name:match("^TrialUpgrade") then return "Chaos" end
+    end
+    return "Boon"
+  end
+  local traitOwner = function(trait)
+    if type(trait) ~= "table" then return "" end
+    if type(trait.LootDataName) == "string" then return trait.LootDataName end
+    if type(trait.SourceId) == "string" then return trait.SourceId end
+    return ""
+  end
+  -- Is this trait admitted by the native sell-screen predicate? D00 section 6:
+  -- IsGodTrait(name, { ForShop = true }) and a non-nil Rarity.
+  local sellScreenEligible = function(trait)
+    if type(trait) ~= "table" then return false, "" end
+    if type(trait.Name) ~= "string" or trait.Name == "" then return false, "noTraitName" end
+    if trait.Rarity == nil then return false, "noRarity" end
+    if type(IsGodTrait) ~= "function" then return false, "predicateUnavailable" end
+    local ok, isGod = pcall(IsGodTrait, trait.Name, { ForShop = true })
+    if not ok then return false, "predicateFailed" end
+    if not isGod then return false, "notShopGodOwned" end
+    return true, ""
+  end
+  local currentRunTraits = function()
+    local result = setmetatable({}, arrayMeta)
+    if not ready() or type(CurrentRun) ~= "table" or type(CurrentRun.Hero) ~= "table"
+        or type(CurrentRun.Hero.Traits) ~= "table" then return result, "noActiveRun" end
+    for index, trait in ipairs(CurrentRun.Hero.Traits) do
+      if type(trait) == "table" and type(trait.Name) == "string" and trait.Name ~= "" then
+        local eligible, reason = sellScreenEligible(trait)
+        local owner = traitOwner(trait)
+        local family = traitFamily(trait)
+        -- The capability is name-level and removes every matching instance, so
+        -- the row says so explicitly instead of implying one row, one delete.
+        local scope = "none"
+        if eligible then scope = "nameLevelAllMatching" end
+        local capabilityReason = reason
+        if eligible then capabilityReason = "" end
+        if not eligible and family ~= "Boon" and family ~= "Weapon" then
+          capabilityReason = reason ~= "" and reason or "ownerSpecificLifecycle"
+        elseif not eligible and reason == "" then
+          capabilityReason = "notShopGodOwned"
+        end
+        result[#result + 1] = {
+          -- Current-run instance identity only; never durable across runs.
+          instanceId = tostring(trait.Id or index),
+          name = trait.Name,
+          family = family,
+          owner = owner,
+          rarity = trait.Rarity,
+          hasRarity = trait.Rarity ~= nil,
+          remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
+          removalCapability = scope,
+          removalReason = capabilityReason,
+          removalScopeAllMatching = (scope == "nameLevelAllMatching"),
+        }
+      end
+    end
+    return result, nil
+  end
+
   local function state(includeCatalogs)
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
@@ -1755,6 +1840,9 @@ if __MacGamingTrainerV1 == nil then
     if M.desiredFeatures.resourceMultiplierEnabled and economySupported and not activeResources then dormantFeatureMap.resourceMultiplierEnabled = true end
     local canSpawn = ready() and currentScene == "run" and type(MapState) == "table"
       and type(MapState.RoomRequiredObjects) == "table" and type(LootObjects) == "table"
+    -- Current-run trait/buff inventory: live runtime truth, never the catalog
+    -- and never desired state.
+    local traitList, traitListReason = currentRunTraits()
     local elementList = setmetatable({}, arrayMeta)
     local heroElements = type(hero.Elements) == "table" and hero.Elements or {}
     local orderedElements = { "Fire", "Water", "Earth", "Air", "Aether" }
@@ -1798,6 +1886,13 @@ if __MacGamingTrainerV1 == nil then
       boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
       boonRarity = { target = M.boonRarityTarget, multiplier = M.boonRarityMultiplier * 100,
         forceLegendary = M.boonForceLegendary, forceDuo = M.boonForceDuo },
+      -- Identity is current-run only. D00 proved `trait.Id` is assigned by
+      -- GetTraitUniqueId and is NOT stable across run reload or restart, so the
+      -- payload says so rather than implying a durable identifier.
+      currentRunTraits = traitList,
+      currentRunTraitIdentityScope = "currentRunInstance",
+      currentRunTraitIdentityPersistent = false,
+      currentRunTraitsReason = traitListReason,
       nextRoomReward = M.nextRoomReward,
       damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
@@ -2718,6 +2813,7 @@ if __MacGamingTrainerV1 == nil then
     set_resource = { "resource", "amount" },
     set_rerolls = { "amount" },
     open_sell_traits = {},
+    remove_trait = { "trait" },
     open_special_choice = { "source" },
     spawn_reward = { "reward" },
   }
@@ -3074,6 +3170,64 @@ if __MacGamingTrainerV1 == nil then
         CurrentRun.NumRerolls = params.amount
         ShowRerollUI()
         UpdateRerollUI(params.amount)
+      end)
+    end
+    if command == "remove_trait" then
+      -- Removal is non-idempotent: it changes the run and cannot be replayed
+      -- safely, so it goes through action() and requires a requestId. An
+      -- outcome-unknown request is never auto-retried.
+      if not ready() or sceneName() ~= "run" then error("Trait removal requires an active run room") end
+      local traitName = params.trait
+      if type(traitName) ~= "string" or traitName == "" then
+        error("Trait removal requires a trait name")
+      end
+      requireFunctions("native trait removal", { "IsGodTrait", "RemoveWeaponTrait" })
+      -- The capability is re-checked here, not trusted from the caller: the
+      -- inventory is a report, and only the live predicate authorizes removal.
+      -- Shop ownership is the gate; the live inventory re-checks Rarity.
+      local ok, isGod = pcall(IsGodTrait, traitName, { ForShop = true })
+      if not ok then error("Native sell predicate is unavailable") end
+      if not isGod then
+        error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
+      end
+      -- D00 section 6 admits a trait to the native sell set on BOTH shop-God
+      -- ownership AND a non-nil Rarity. Re-resolve the live trait so the gate
+      -- and the reported capability cannot disagree.
+      if type(CurrentRun.Hero.Traits) == "table" then
+        for _, trait in ipairs(CurrentRun.Hero.Traits) do
+          if type(trait) == "table" and trait.Name == traitName then
+            if trait.Rarity == nil then
+              error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
+            end
+            break
+          end
+        end
+      end
+      if type(HeroHasTrait) ~= "function" then
+        requireFunctions("native trait removal", { "HeroHasTrait" })
+      end
+      return action(command, params, function(record)
+        local ok, message = pcall(function()
+          -- One argument, matching every other call site: HeroHasTrait takes
+          -- a trait name. Passing the hero as well made this test a no-op.
+          if not HeroHasTrait(traitName) then
+            error("Trait is not present in the current run: " .. traitName)
+          end
+          -- Name-level, all-matching removal. This is the native teardown proven
+          -- safe in D00 section 6; it removes every instance of this name and
+          -- deliberately does not pretend to be single-instance deletion.
+          RemoveWeaponTrait(traitName, { Silent = true })
+        end)
+        if ok then
+          record.status = "completed"
+        else
+          record.status = "failed"
+          record.error = tostring(message)
+          if type(DebugPrint) == "function" then
+            DebugPrint({ Text = "MacGamingTrainer trait removal failed: " .. record.error })
+          end
+        end
+        publishActionReceipt(record)
       end)
     end
     if command == "open_sell_traits" then

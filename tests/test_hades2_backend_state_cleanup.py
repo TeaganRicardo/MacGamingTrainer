@@ -128,6 +128,13 @@ struct Main {
             "command": "open_special_choice",
             "outcome": "accepted",
         ]
+        // A failed receipt is the case that must not mask a later message.
+        let failedReceipt: [String: Any] = [
+            "requestId": "request-2",
+            "command": "open_special_choice",
+            "outcome": "failed",
+            "error": "synthetic failure",
+        ]
         model.apply(["lastAction": receipt])
         check(!model.noticeText.key.isEmpty, "action receipt was not presented before reset")
         check(model.noticeText.key == "hades2.receipt.accepted", "receipt did not present the accepted copy")
@@ -174,6 +181,20 @@ struct Main {
                 && model.runtimeIssueText.key.isEmpty,
               "Hades presentation tokens survived termination")
 
+        // A Hades-owned token must not outlive a newer Core-owned message.
+        // The banner prefers the Hades token, so a stale receipt error would
+        // otherwise mask a real Core failure -- and a real success notice.
+        model.apply(["lastAction": failedReceipt])
+        check(!model.errorText.key.isEmpty, "a failed receipt did not present an error")
+        model.error = "host.backend.error.operationFailed"
+        check(model.errorText.key.isEmpty,
+              "a stale Hades error token masked a newer Core-owned error")
+        model.notice = "host.backend.notice.completed"
+        check(model.errorText.key.isEmpty && model.noticeText.key.isEmpty,
+              "a failed receipt masked a later success notice")
+        model.clearPresentedNoticeForTest()
+        model.clearPresentedErrorForTest()
+
         // The receipt must be forgotten so an identical receipt from a new
         // backend lifetime is presented rather than deduplicated as stale.
         model.apply(["lastAction": receipt])
@@ -219,7 +240,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-state-cleanup-") as td:
     model_source = model_source.replace(
         "    @Published private var noticeToken: TrainerTextToken?",
         "    @Published var noticeToken: TrainerTextToken?\n"
-        "    func clearPresentedNoticeForTest() { noticeToken = nil }",
+        "    func clearPresentedNoticeForTest() { noticeToken = nil }\n"
+        "    func clearPresentedErrorForTest() { errorToken = nil }",
     )
     testable_model = td / "Hades2Model.swift"
     testable_model.write_text(model_source, encoding="utf-8")

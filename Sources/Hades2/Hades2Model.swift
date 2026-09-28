@@ -168,6 +168,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var manaRegenLocked = false
     @Published var enemyDamageLocked = false
     @Published var enemyHealthLocked = false
+    /// Current-run trait/buff inventory, projected from live runtime state.
+    @Published var currentRunTraits: [CurrentRunTrait] = []
+    /// The identity scope the runtime reported, so the UI never implies a
+    /// durable identifier the runtime has not proven.
+    @Published var currentRunTraitScope: CurrentRunTraitScope = .currentRun
     @Published var elements: [ElementCount] = []
     @Published var profiles: [TrainerProfile] = []
     @Published var diagnostics: [DiagnosticCheck] = []
@@ -399,6 +404,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         featureSupport = [:]
         statSupport = [:]
         statAvailable = [:]
+        // Observable state, so it cannot outlive the backend that produced it.
+        // The next payload repopulates it; until then an empty list means
+        // "not observed yet" rather than the previous run's traits.
+        currentRunTraits = []
         activationGraceWorkItems.values.forEach { $0.cancel() }
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
@@ -468,6 +477,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
         if let value = patch.version { version = value }
+        if let value = patch.currentRunTraits { currentRunTraits = value }
+        if let value = patch.currentRunTraitIdentityScope {
+            // The runtime states its own identity scope. Carry it verbatim so a
+            // future build that proves a stronger scope is not downgraded, and
+            // so the UI can only claim what the runtime claimed.
+            currentRunTraitScope = CurrentRunTraitScope(
+                identityScope: value,
+                isPersistent: patch.currentRunTraitIdentityPersistent ?? false
+            )
+        }
         if let value = patch.status { status = value }
         if let value = patch.scene { scene = value }
         if let value = patch.capabilities { capabilities = value }
@@ -573,6 +592,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch command {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
+        // Removal has no screen to open, so its subject is the trait itself. It
+        // must be listed here: `default: return` below would drop a `failed`
+        // receipt on the floor and leave the player with no outcome at all.
+        case .removeTrait: title = presentation("hades2.receipt.traitRemoved")
         default: return
         }
 
@@ -588,7 +611,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             noticeToken = nil
             errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
-            break
+            noticeToken = presentation("hades2.receipt.traitRemovalCompleted", arguments: [title.key])
         }
     }
 
@@ -853,6 +876,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
+    }
+
+    /// Remove a current-run trait through the only native teardown proven safe.
+    ///
+    /// The removal scope is name-level and removes every instance sharing that
+    /// name, so the guard requires a row the runtime marked removable. Removal
+    /// is non-idempotent: the session supplies the request id, and an
+    /// outcome-unknown request is never auto-replayed.
+    func removeTrait(_ trait: CurrentRunTrait) {
+        guard trait.canRemove, trait.removalScopeAllMatching else { return }
+        // Not `announceSuccess`. The resident work path swallows its own failure
+        // (it pcall-wraps the teardown and publishes a `failed` receipt), so the
+        // request itself succeeds and the default green "completed" notice would
+        // claim a removal that never happened. The receipt carries the real
+        // outcome, exactly as it does for the other one-shot actions.
+        send(
+            .removeTrait(trait.name),
+            title: "hades2.receipt.traitRemoved",
+            titleArguments: [trait.name],
+            announceSuccess: false
+        )
     }
 
     func performSpecialReward(_ reward: String) {

@@ -144,6 +144,12 @@ MESSAGE_KEYS = {
     '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。': 'hades2.error.preferenceWriteBlocked',
     '使用新的数据格式': 'hades2.error.preferenceNewerFormat',
 
+    # D01 current-run trait inventory / sell-safe removal
+    '请选择要移除的祝福。': 'hades2.error.selectTraitToRemove',
+    'Trait removal requires an active run room': 'hades2.error.traitRemovalNeedsRun',
+    'Trait removal requires a trait name': 'hades2.error.traitRemovalNeedsName',
+    'Native sell predicate is unavailable': 'hades2.error.sellPredicateUnavailable',
+
     # stat rules (schema.STAT_RULES)
     '悟性上限必须是 0–999 的整数。': 'hades2.error.graspRange',
     '概率必须为 0–100。': 'hades2.error.percentRange',
@@ -182,6 +188,10 @@ MESSAGE_KEYS = {
 # cannot match at all. The source-derived contract test replays every real raise
 # through this table, so a mismatched boundary fails there rather than in the UI.
 PREFIX_KEYS = {
+    'Trait is not sell-eligible, so no safe removal exists: ': 'hades2.error.traitNotSellEligible',
+    'Trait removal is not proven safe: ': 'hades2.error.traitRemovalNotProven',
+    'Trait is not present in the current run: ': 'hades2.error.traitNotPresent',
+    'Native trait removal failed: ': 'hades2.error.traitRemovalFailed',
     '请先启动 ': 'hades2.error.gameNotRunning',
     '查询 ': 'hades2.error.processQueryFailed',
     '连接被拒绝：': 'hades2.error.attachDenied',
@@ -283,6 +293,10 @@ SEGMENTED_KEYS = {
 
 # Keys whose template takes the interpolated value as its first argument.
 _ARGUMENT_KEYS = frozenset((
+    'hades2.error.traitNotSellEligible',
+    'hades2.error.traitRemovalNotProven',
+    'hades2.error.traitNotPresent',
+    'hades2.error.traitRemovalFailed',
     'hades2.error.missingSymbol',
     'hades2.error.symbolNotUnique',
     'hades2.error.symbolUnreadable',
