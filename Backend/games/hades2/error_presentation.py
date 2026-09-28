@@ -56,282 +56,420 @@ class Hades2PresentationError(AdapterError):
         super().__init__(code, key, diagnostic=diagnostic, arguments=arguments)
 
 
-# Raised message (pre-migration Chinese) -> presentation key.
+
+# ---------------------------------------------------------------------------
+# The registry
+# ---------------------------------------------------------------------------
 #
-# This is the migration record: it is the single place that knows which key
-# replaced which literal, and the test suite asserts the table stays in step
-# with the raised messages in the module. A message that is not listed here is
-# not player-facing Hades copy and keeps its own value.
-MESSAGE_KEYS = {
-    # transport / connection
-    '请先连接游戏。': 'hades2.error.notConnected',
-    '游戏已退出或连接已断开。': 'hades2.error.notAttached',
-    '游戏进程已结束。': 'hades2.error.processExited',
-    '游戏进程已退出。': 'hades2.error.processExitedSecond',
-    '游戏进程状态切换超时。': 'hades2.error.processTimeout',
-    '无法在时限内暂停游戏。': 'hades2.error.pauseFailed',
-    '游戏未能恢复运行。': 'hades2.error.resumeUnverified',
-    '后台暂停标志尚未恢复，请保持连接重试断开。': 'hades2.error.focusNotRestored',
-    '后台暂停标志恢复校验失败。': 'hades2.error.focusRestoreMismatch',
-    '后台运行标志无法验证。': 'hades2.error.runFlagUnverifiable',
-    '游戏发生非预期停顿，已停止当前操作。': 'hades2.error.unexpectedStop',
-    '等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。': 'hades2.error.worldUpdateTimeout',
-    '上次调用结果不明，请重启游戏后重新连接。': 'hades2.error.restartRequired',
-    '无法定位游戏镜像。': 'hades2.error.imageNotFound',
-    '游戏内操作失败，请查看日志。': 'hades2.error.runtimeActionFailed',
-    'runtime observation 仅允许 status。': 'hades2.error.runtimeObservationOnly',
-    '功能代码过长。': 'hades2.error.featureCodeTooLong',
-    'Lua 执行失败': 'hades2.error.luaFailed',
-    '游戏调用结果不明，未自动重试。': 'hades2.error.outcomeUnknownEmpty',
-    '游戏调用结果不明，未自动重试；请检查游戏并重启。': 'hades2.error.outcomeUnknownGeneric',
-    '无法读取操作结果；请检查游戏，不要重复资源操作。': 'hades2.error.outcomeUnknownUnreadable',
-
-    # request / schema validation
-    '未知命令。': 'hades2.error.invalidCommand',
-    'command 无效。': 'hades2.error.invalidCommandValue',
-    'params 必须是对象。': 'hades2.error.invalidParamsObject',
-    '参数类型不支持。': 'hades2.error.invalidParamsObject',
-    '请求 ID 无效。': 'hades2.error.invalidRequestId',
-    '请求包含不可序列化的 JSON 值。': 'hades2.error.unserializableRequest',
-    '同一请求 ID 的内容发生变化。': 'hades2.error.duplicateConflict',
-    '未知功能。': 'hades2.error.unknownFeature',
-    '开关值必须为布尔值。': 'hades2.error.featureToggleBoolean',
-    '锁定值必须为布尔值。': 'hades2.error.lockedBoolean',
-    '倍率必须为有限数值。': 'hades2.error.multiplierFinite',
-    '倍率范围为 1–100。': 'hades2.error.multiplierRange',
-    '游戏速度范围为 0–10。': 'hades2.error.gameSpeedRange',
-    '必须输入有限数值。': 'hades2.error.statFinite',
-    '属性值必须为有限数值。': 'hades2.error.statFinite',
-    'probeRuntime 必须为布尔值。': 'hades2.error.probeRuntimeBoolean',
-
-    # vitals / stats / elements
-    '局内数值字段无效。': 'hades2.error.vitalField',
-    '护甲仅提供当前值，不存在可编辑上限。': 'hades2.error.armorNoMaximum',
-    '局内数值必须为 0–': 'hades2.error.vitalRange',
-    '生命值必须至少为 1。': 'hades2.error.healthMinimum',
-    '未知局内计数器。': 'hades2.error.unknownCounter',
-    '巫咒充能必须为 0–': 'hades2.error.spellChargeRange',
-    '未知局内数值。': 'hades2.error.unknownVital',
-    '未知属性。': 'hades2.error.unknownStat',
-    '未知元素。': 'hades2.error.unknownElement',
-    '元素数量必须为 0–': 'hades2.error.elementRange',
-    '数量必须是 0–': 'hades2.error.amountRange',
-    '请选择资源。': 'hades2.error.selectResource',
-    '请选择掉落物或祝福。': 'hades2.error.selectReward',
-    '请选择支持原生奖励选择界面的角色。': 'hades2.error.selectChoiceSource',
-    '最低稀有度无效。': 'hades2.error.invalidRarityTarget',
-    '稀有度倍率必须为 0–1000%。': 'hades2.error.invalidRarityMultiplier',
-    'Legendary / Duo 设置无效。': 'hades2.error.invalidLegendaryDuo',
-    '下一房奖励无效。': 'hades2.error.invalidNextRoomReward',
-
-    # lifecycle / preparation / persistence
-    '请断开连接并退出游戏后操作。': 'hades2.error.disconnectBeforePrepare',
-    '无法安全写入本地配置。': 'hades2.error.localWriteFailed',
-    'desired-state schemaVersion 无效。': 'hades2.error.desiredSchemaInvalid',
-    '原始备份损坏或与记录不匹配；拒绝覆盖游戏。': 'hades2.error.backupCorrupt',
-    '备份 UUID 不匹配。': 'hades2.error.backupUUIDMismatch',
-    '无法读取原始权限；未修改游戏。': 'hades2.error.permissionsUnreadable',
-    '独立验证副本校验失败；未修改游戏。': 'hades2.error.verificationFailed',
-    '原始恢复副本 UUID 不匹配；未修改游戏。': 'hades2.error.restoreUUIDMismatch',
-    '暂存文件校验失败；未修改游戏。': 'hades2.error.stagedVerificationFailed',
-    '游戏文件在操作期间改变；拒绝覆盖。': 'hades2.error.fileChangedDuringOperation',
-    '调试签名校验失败；未修改游戏。': 'hades2.error.signingVerificationFailed',
-    '已准备文件缺少调试权限。': 'hades2.error.missingDebugPermission',
-    '当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。': 'hades2.error.noMatchingBackup',
-    '没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。': 'hades2.error.noOriginalBackup',
-
-    '现有 desired-state 无法安全隔离，已禁止覆盖原文件。': 'hades2.error.preferenceWriteBlocked',
-    '现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。': 'hades2.error.preferenceWriteBlocked',
-    '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。': 'hades2.error.preferenceWriteBlocked',
-    '使用新的数据格式': 'hades2.error.preferenceNewerFormat',
-
-    # D01 current-run trait inventory / sell-safe removal
-    '请选择要移除的祝福。': 'hades2.error.selectTraitToRemove',
-    'Trait removal requires an active run room': 'hades2.error.traitRemovalNeedsRun',
-    'Trait removal requires a trait name': 'hades2.error.traitRemovalNeedsName',
-    'Native sell predicate is unavailable': 'hades2.error.sellPredicateUnavailable',
-
-    # stat rules (schema.STAT_RULES)
-    '悟性上限必须是 0–999 的整数。': 'hades2.error.graspRange',
-    '概率必须为 0–100。': 'hades2.error.percentRange',
-    '速度倍率必须为 10–1000%。': 'hades2.error.speedMultiplierRange',
-    '额外魔力恢复必须为 0–1000/秒。': 'hades2.error.manaRegenRange',
-    '敌人伤害倍率必须为 0–1000%。': 'hades2.error.enemyDamageRange',
-    '敌人生命倍率必须为 10–1000%。': 'hades2.error.enemyHealthRange',
-
-    # profiles
-    'Profile schemaVersion 无效。': 'hades2.error.profileSchemaInvalid',
-    'Profile desiredSchemaVersion 无效。': 'hades2.error.profileDesiredSchemaInvalid',
-    'Profile 名称无效。': 'hades2.error.profileNameInvalid',
-    'Profile 名称必须为 1–64 个可见字符。': 'hades2.error.profileNameLength',
-    'Profile 名称不能包含路径分隔符。': 'hades2.error.profileNameSeparator',
-    'Profile 文件已损坏。': 'hades2.error.profileCorrupt',
-    'Profile 包含当前 schema 未定义的顶层字段。': 'hades2.error.profileUnknownFields',
-    'Profile 名称未规范化。': 'hades2.error.profileNameNotNormalized',
-    'Profile 名称与文件标识不一致。': 'hades2.error.profileNameIdentifierMismatch',
-    'Profile desired 字段无效。': 'hades2.error.profileDesiredInvalid',
-    'Profile updatedAt 字段无效。': 'hades2.error.profileUpdatedAtInvalid',
-    'Profile updatedAt 字段缺失。': 'hades2.error.profileUpdatedAtMissing',
-    'Profile shortcuts 字段无效。': 'hades2.error.profileShortcutsInvalid',
-    '未找到该 Profile。': 'hades2.error.profileNotFound',
-
-    # fallback
-    '未知错误': 'hades2.error.unknownDetail',
-}
-
-# Messages built by interpolation: the prefix selects the key and the remainder
-# becomes its runtime argument, so a tool error or process name is never baked
-# into a localized sentence.
+# One list of rules replaces what used to be seven separate tables
+# (`MESSAGE_KEYS`, `PREFIX_KEYS`, `REGEX_KEYS`, `ASSIGNED_KEYS`,
+# `DELIMITED_AFFIX_KEYS`, `SEGMENTED_KEYS`, `DELIMITED_KEYS`) plus the
+# `_ARGUMENT_KEYS` side-channel. That arrangement had a real cost: adding a
+# player-facing message meant finding which of the seven tables owned its
+# shape, adding a name to the list, and -- for prefix rules -- remembering a
+# second table that decided whether the remainder travelled as an argument. The
+# dispatch order was implicit in the table order and the argument convention was
+# implicit in a frozenset.
 #
-# A prefix must end exactly where the runtime value ends. A prefix that stops
-# early drags the sentence's own static tail into the argument, which then
-# renders as a hole-free but wrong value; a prefix that runs past the value
-# cannot match at all. The source-derived contract test replays every real raise
-# through this table, so a mismatched boundary fails there rather than in the UI.
-PREFIX_KEYS = {
-    'Trait is not sell-eligible, so no safe removal exists: ': 'hades2.error.traitNotSellEligible',
-    'Trait is not present in the current run: ': 'hades2.error.traitNotPresent',
-    '请先启动 ': 'hades2.error.gameNotRunning',
-    '查询 ': 'hades2.error.processQueryFailed',
-    '连接被拒绝：': 'hades2.error.attachDenied',
-    '缺少符号：': 'hades2.error.missingSymbol',
-    '新版本关键符号无法唯一定位：': 'hades2.error.symbolNotUnique',
-    '新版本关键符号不可读：': 'hades2.error.symbolUnreadable',
-    '运行中的游戏函数校验失败：': 'hades2.error.runtimeVerificationFailed',
-    '无法恢复游戏运行：': 'hades2.error.resumeFailed',
-    '后台暂停标志恢复失败：': 'hades2.error.focusRestoreFailed',
-    '请先退出 ': 'hades2.error.prepareWhileRunning',
-    '无法运行 ': 'hades2.error.commandLaunchFailed',
-    '游戏调用结果不明，未自动重试：': 'hades2.error.outcomeUnknownTransport',
-    '未经验证的游戏版本：': 'hades2.error.unverifiedBuildWarning',
-    '未从本机 ': 'hades2.error.missingOfficialNames',
-}
-
-# Messages whose interpolated value sits *inside* the sentence, so neither a
-# whole-message nor a prefix rule can isolate it.
+# A rule now states all of it in one place: the shape it matches, the key it
+# produces, and what becomes the argument. `shape` is declarative data, not a
+# strategy object, so the whole registry is greppable, diffable and reviewable
+# as one artefact.
 #
-# A leading-space prefix such as `' 适配器需要 '` looks correct in isolation but
-# never matches: `startswith` anchors at position 0, and the real message leads
-# with the game display name (`transport.py`). A value-leading prefix such as
-# `'使用了更新的数据格式'` fails the same way for the opposite reason. Both used
-# to fall through to a raw Chinese message on the wire.
+# ORDER IS SEMANTIC. Rules are tried top to bottom and the first match wins,
+# because a literal is more specific than a prefix, and a longer prefix is more
+# specific than a shorter one that contains it. The list is therefore ordered by
+# specificity, not grouped for readability: the `literal` rules come first, then
+# the shapes in the order the previous dispatch used. `check_registry` reports a
+# `prefix` rule that can never be reached because a longer `prefix` already
+# covers it. The other shapes are not checked for shadowing: as of this writing
+# no `affix`, `segmented` or `delimited` rule overlaps another of the same
+# shape, and a shadowed one would still be caught by the behaviour snapshot.
 #
-# Each entry is a pattern anchored to the whole message whose groups are the
-# arguments, in template order. Anchoring matters: a pattern that matches only
-# part of the sentence would again absorb the static tail into an argument.
-REGEX_KEYS = (
-    # `f'{GAME_SPEC.display_name} 适配器需要 {requirement} 原生游戏。'`
-    (re.compile(r'^(?P<game>.+?) 适配器需要 (?P<requirement>.+?) 原生游戏。$'),
-     'hades2.error.architectureRequired'),
-    # transport.py: `'连接被拒绝：' + detail + '。退出游戏后…'` — the OS error
-    # sits between the prefix and a second, static sentence, so a plain prefix
-    # rule handed the rest of the message to the template as the error detail.
-    (re.compile(r'^连接被拒绝：(?P<detail>.+?)。退出游戏后使用'),
-     'hades2.error.attachDenied'),
-    # `'找不到匹配架构的 Mach-O UUID' + suffix + '。'` — the sentence owns its
-    # own period, so it must not be handed to the template as an argument. The
-    # suffix may or may not carry its own parentheses, and may be absent
-    # entirely when the source-derived contract probe is the bare first literal.
-    (re.compile(r'^找不到匹配架构的 Mach-O UUID\s*(?P<suffix>[^\s，。]*)?。?$'),
-     'hades2.error.uuidLookupFailed'),
-    # catalog.py: `未从本机 {game} 中文语言文件解析到 {count} 项{term:…}的官方中文名称，…`
-    (re.compile(r'^未从本机 (?P<game>.+?) 中文语言文件解析到 (?P<count>.+?) 项'),
-     'hades2.error.missingOfficialNames'),
-    # preparation.py: `f'{args[0]} 失败（{rc}）：{detail}'`
-    (re.compile(r'^(?P<tool>.+?) 失败（(?P<returncode>.+?)）：(?P<detail>.+)$'),
-     'hades2.error.commandFailed'),
-    # preparation.py: `f'{args[0]} 超时（{TIMEOUT} 秒）；操作结果需重新检查。'`
-    (re.compile(r'^(?P<tool>.+?) 超时（(?P<timeout>.+?) 秒）；'),
-     'hades2.error.timeout'),
-    # preparation.py: `f'请先退出 {game}；运行中不能修改签名或恢复存档。'`
-    (re.compile(r'^请先退出 (?P<game>.+?)；'),
-     'hades2.error.prepareWhileRunning'),
-    # preparation.py: `f'未经验证的游戏版本：version={v}, build={b}, UUID={u}。'`
-    (re.compile(
-        r'^未经验证的游戏版本：version=(?P<version>.*?), '
-        r'build=(?P<build>.*?), UUID=(?P<uuid>.*?)。$'),
-     'hades2.error.unverifiedBuildWarning'),
-    # preparation.py: `f'无法运行 {args[0]}：{error}'` — the tool name and the
-    # OS error are two values, not one; joining them left `{1}` unfilled.
-    (re.compile(r'^无法运行 (?P<tool>[^：]+)：(?P<detail>.+)$'),
-     'hades2.error.commandLaunchFailed'),
-)
-
-# Messages composed into a local variable and only raised later, which a
-# `raise`-site scan cannot see at all. `persistence.py` builds its text with
-# `.format(...)` and calls `super().__init__(message)`, so a scan that
-# "replays every real raise" never looked at these — and the
-# `使用了更新的数据格式` rule shipped broken anyway because nothing probed it.
-ASSIGNED_KEYS = (
-    # '{} 使用了更新的数据格式（schemaVersion={}，当前支持 {}），本次读取已拒绝且原文件保持不变。'
-    (re.compile(
-        r'^(?P<kind>.+?) 使用了更新的数据格式'
-        r'（schemaVersion=(?P<found>[^，]*)，当前支持 (?P<supported>[^）]*)），'),
-     'hades2.error.preferenceNewerFormat'),
-    # '{} 使用了已不再支持的旧数据格式（…），本次读取已拒绝且原文件保持不变。'
-    (re.compile(
-        r'^(?P<kind>.+?) 使用了已不再支持的旧数据格式'
-        r'（schemaVersion=(?P<found>[^，]*)，当前支持 (?P<supported>[^）]*)），'),
-     'hades2.error.preferenceOlderFormat'),
-)
-
-# Messages whose interpolated value is delimited, with the sentence's own
-# leading and trailing text. These are matched before the plain prefix rules so
-# the runtime value is isolated and the static wording stays in the template,
-# where the module can translate it.
-DELIMITED_AFFIX_KEYS = {
-    '请先启动': (' 并进入存档。', 'hades2.error.gameNotRunning'),
-    '检测到多个': (' 进程，请保留一个。', 'hades2.error.multipleProcesses'),
-}
-
-# Messages shaped `lead + value + middle + code + tail + detail`, mapped to a
-# key whose template takes all three values positionally.
-SEGMENTED_KEYS = {
-    '查询': (' 进程失败（', '）：', 'hades2.error.processQueryFailed'),
-}
-
-# Keys whose template takes the interpolated value as its first argument.
-_ARGUMENT_KEYS = frozenset((
-    'hades2.error.traitNotSellEligible',
-    'hades2.error.traitNotPresent',
-    'hades2.error.missingSymbol',
-    'hades2.error.symbolNotUnique',
-    'hades2.error.symbolUnreadable',
-    'hades2.error.runtimeVerificationFailed',
-    'hades2.error.resumeFailed',
-    'hades2.error.focusRestoreFailed',
-    'hades2.error.uuidLookupFailed',
-    'hades2.error.outcomeUnknownTransport',
-    'hades2.error.commandLaunchFailed',
-    'hades2.error.gameNotRunning',
-    'hades2.error.multipleProcesses',
-    'hades2.error.processQueryFailed',
-    'hades2.error.attachDenied',
-    'hades2.error.architectureRequired',
-    'hades2.error.prepareWhileRunning',
-    'hades2.error.timeout',
-    'hades2.error.commandFailed',
-    'hades2.error.unverifiedBuildWarning',
-    'hades2.error.preferenceNewerFormat',
-    'hades2.error.preferenceOlderFormat',
-    'hades2.error.missingOfficialNames',
-))
-
-
-# Rendered shapes where the value is delimited inside the message.
+# `argument` is explicit and optional:
+#   "groups"    -> the regex capture groups, in order, absent ones kept as ''
+#                 so a later value never shifts into the wrong placeholder
+#   "remainder" -> whatever followed the matched prefix, kept whole, because
+#                 splitting a composed message further would bake structure into
+#                 a localized sentence
+#   absent      -> the key takes no argument, even if the message had a suffix
 #
-# A prefix rule cannot express these: the value sits in the middle, and
-# preparation.py even leads with a command name, as in
-# `f'{args[0]} 失败（{result.returncode}）：{detail}'`. Each entry is
-# `(opening, closing)`; everything between them becomes the argument.
-DELIMITED_KEYS = {
-    ('元素数量必须为 0–', ' 的整数。'): 'hades2.error.elementRange',
-    ('局内数值必须为 0–', '。'): 'hades2.error.vitalRange',
-    ('巫咒充能必须为 0–', '。'): 'hades2.error.spellChargeRange',
-    ('数量必须是 0–', ' 的整数。'): 'hades2.error.amountRange',
-    (' 失败（', '）'): 'hades2.error.commandFailed',
-    (' 超时（', ' 秒）'): 'hades2.error.timeout',
-}
+# `composed` is provenance, not behaviour: it marks rules whose message is
+# built into a local variable and only raised later, which a raise-site scan
+# cannot see. The dispatcher ignores it; it is kept so that knowledge does not
+# disappear with the tables.
+
+REGISTRY = [{'match': 'literal',
+  'message': 'Legendary / Duo 设置无效。',
+  'key': 'hades2.error.invalidLegendaryDuo'},
+ {'match': 'literal', 'message': 'Lua 执行失败', 'key': 'hades2.error.luaFailed'},
+ {'match': 'literal',
+  'message': 'Native sell predicate is unavailable',
+  'key': 'hades2.error.sellPredicateUnavailable'},
+ {'match': 'literal',
+  'message': 'Profile desired 字段无效。',
+  'key': 'hades2.error.profileDesiredInvalid'},
+ {'match': 'literal',
+  'message': 'Profile desiredSchemaVersion 无效。',
+  'key': 'hades2.error.profileDesiredSchemaInvalid'},
+ {'match': 'literal',
+  'message': 'Profile schemaVersion 无效。',
+  'key': 'hades2.error.profileSchemaInvalid'},
+ {'match': 'literal',
+  'message': 'Profile shortcuts 字段无效。',
+  'key': 'hades2.error.profileShortcutsInvalid'},
+ {'match': 'literal',
+  'message': 'Profile updatedAt 字段无效。',
+  'key': 'hades2.error.profileUpdatedAtInvalid'},
+ {'match': 'literal',
+  'message': 'Profile updatedAt 字段缺失。',
+  'key': 'hades2.error.profileUpdatedAtMissing'},
+ {'match': 'literal',
+  'message': 'Profile 包含当前 schema 未定义的顶层字段。',
+  'key': 'hades2.error.profileUnknownFields'},
+ {'match': 'literal',
+  'message': 'Profile 名称不能包含路径分隔符。',
+  'key': 'hades2.error.profileNameSeparator'},
+ {'match': 'literal',
+  'message': 'Profile 名称与文件标识不一致。',
+  'key': 'hades2.error.profileNameIdentifierMismatch'},
+ {'match': 'literal',
+  'message': 'Profile 名称必须为 1–64 个可见字符。',
+  'key': 'hades2.error.profileNameLength'},
+ {'match': 'literal', 'message': 'Profile 名称无效。', 'key': 'hades2.error.profileNameInvalid'},
+ {'match': 'literal',
+  'message': 'Profile 名称未规范化。',
+  'key': 'hades2.error.profileNameNotNormalized'},
+ {'match': 'literal', 'message': 'Profile 文件已损坏。', 'key': 'hades2.error.profileCorrupt'},
+ {'match': 'literal',
+  'message': 'Trait removal requires a trait name',
+  'key': 'hades2.error.traitRemovalNeedsName'},
+ {'match': 'literal',
+  'message': 'Trait removal requires an active run room',
+  'key': 'hades2.error.traitRemovalNeedsRun'},
+ {'match': 'literal', 'message': 'command 无效。', 'key': 'hades2.error.invalidCommandValue'},
+ {'match': 'literal',
+  'message': 'desired-state schemaVersion 无效。',
+  'key': 'hades2.error.desiredSchemaInvalid'},
+ {'match': 'literal', 'message': 'params 必须是对象。', 'key': 'hades2.error.invalidParamsObject'},
+ {'match': 'literal',
+  'message': 'probeRuntime 必须为布尔值。',
+  'key': 'hades2.error.probeRuntimeBoolean'},
+ {'match': 'literal',
+  'message': 'runtime observation 仅允许 status。',
+  'key': 'hades2.error.runtimeObservationOnly'},
+ {'match': 'literal', 'message': '上次调用结果不明，请重启游戏后重新连接。', 'key': 'hades2.error.restartRequired'},
+ {'match': 'literal', 'message': '下一房奖励无效。', 'key': 'hades2.error.invalidNextRoomReward'},
+ {'match': 'literal', 'message': '使用新的数据格式', 'key': 'hades2.error.preferenceNewerFormat'},
+ {'match': 'literal', 'message': '倍率必须为有限数值。', 'key': 'hades2.error.multiplierFinite'},
+ {'match': 'literal', 'message': '倍率范围为 1–100。', 'key': 'hades2.error.multiplierRange'},
+ {'match': 'literal', 'message': '元素数量必须为 0–', 'key': 'hades2.error.elementRange'},
+ {'match': 'literal', 'message': '功能代码过长。', 'key': 'hades2.error.featureCodeTooLong'},
+ {'match': 'literal', 'message': '原始备份损坏或与记录不匹配；拒绝覆盖游戏。', 'key': 'hades2.error.backupCorrupt'},
+ {'match': 'literal',
+  'message': '原始恢复副本 UUID 不匹配；未修改游戏。',
+  'key': 'hades2.error.restoreUUIDMismatch'},
+ {'match': 'literal', 'message': '参数类型不支持。', 'key': 'hades2.error.invalidParamsObject'},
+ {'match': 'literal', 'message': '同一请求 ID 的内容发生变化。', 'key': 'hades2.error.duplicateConflict'},
+ {'match': 'literal',
+  'message': '后台暂停标志尚未恢复，请保持连接重试断开。',
+  'key': 'hades2.error.focusNotRestored'},
+ {'match': 'literal', 'message': '后台暂停标志恢复校验失败。', 'key': 'hades2.error.focusRestoreMismatch'},
+ {'match': 'literal', 'message': '后台运行标志无法验证。', 'key': 'hades2.error.runFlagUnverifiable'},
+ {'match': 'literal', 'message': '备份 UUID 不匹配。', 'key': 'hades2.error.backupUUIDMismatch'},
+ {'match': 'literal', 'message': '局内数值字段无效。', 'key': 'hades2.error.vitalField'},
+ {'match': 'literal', 'message': '局内数值必须为 0–', 'key': 'hades2.error.vitalRange'},
+ {'match': 'literal', 'message': '属性值必须为有限数值。', 'key': 'hades2.error.statFinite'},
+ {'match': 'literal', 'message': '巫咒充能必须为 0–', 'key': 'hades2.error.spellChargeRange'},
+ {'match': 'literal', 'message': '已准备文件缺少调试权限。', 'key': 'hades2.error.missingDebugPermission'},
+ {'match': 'literal', 'message': '开关值必须为布尔值。', 'key': 'hades2.error.featureToggleBoolean'},
+ {'match': 'literal',
+  'message': '当前可执行文件已带调试权限，但没有匹配的原始备份；拒绝覆盖。',
+  'key': 'hades2.error.noMatchingBackup'},
+ {'match': 'literal', 'message': '必须输入有限数值。', 'key': 'hades2.error.statFinite'},
+ {'match': 'literal', 'message': '悟性上限必须是 0–999 的整数。', 'key': 'hades2.error.graspRange'},
+ {'match': 'literal', 'message': '护甲仅提供当前值，不存在可编辑上限。', 'key': 'hades2.error.armorNoMaximum'},
+ {'match': 'literal',
+  'message': '损坏的 desired-state 无法安全隔离，已禁止覆盖原文件。',
+  'key': 'hades2.error.preferenceWriteBlocked'},
+ {'match': 'literal', 'message': '敌人伤害倍率必须为 0–1000%。', 'key': 'hades2.error.enemyDamageRange'},
+ {'match': 'literal', 'message': '敌人生命倍率必须为 10–1000%。', 'key': 'hades2.error.enemyHealthRange'},
+ {'match': 'literal', 'message': '数量必须是 0–', 'key': 'hades2.error.amountRange'},
+ {'match': 'literal', 'message': '无法在时限内暂停游戏。', 'key': 'hades2.error.pauseFailed'},
+ {'match': 'literal', 'message': '无法安全写入本地配置。', 'key': 'hades2.error.localWriteFailed'},
+ {'match': 'literal', 'message': '无法定位游戏镜像。', 'key': 'hades2.error.imageNotFound'},
+ {'match': 'literal',
+  'message': '无法读取原始权限；未修改游戏。',
+  'key': 'hades2.error.permissionsUnreadable'},
+ {'match': 'literal',
+  'message': '无法读取操作结果；请检查游戏，不要重复资源操作。',
+  'key': 'hades2.error.outcomeUnknownUnreadable'},
+ {'match': 'literal',
+  'message': '暂存文件校验失败；未修改游戏。',
+  'key': 'hades2.error.stagedVerificationFailed'},
+ {'match': 'literal', 'message': '最低稀有度无效。', 'key': 'hades2.error.invalidRarityTarget'},
+ {'match': 'literal', 'message': '未找到该 Profile。', 'key': 'hades2.error.profileNotFound'},
+ {'match': 'literal', 'message': '未知元素。', 'key': 'hades2.error.unknownElement'},
+ {'match': 'literal', 'message': '未知功能。', 'key': 'hades2.error.unknownFeature'},
+ {'match': 'literal', 'message': '未知命令。', 'key': 'hades2.error.invalidCommand'},
+ {'match': 'literal', 'message': '未知局内数值。', 'key': 'hades2.error.unknownVital'},
+ {'match': 'literal', 'message': '未知局内计数器。', 'key': 'hades2.error.unknownCounter'},
+ {'match': 'literal', 'message': '未知属性。', 'key': 'hades2.error.unknownStat'},
+ {'match': 'literal', 'message': '未知错误', 'key': 'hades2.error.unknownDetail'},
+ {'match': 'literal', 'message': '概率必须为 0–100。', 'key': 'hades2.error.percentRange'},
+ {'match': 'literal',
+  'message': '没有与当前文件匹配的原始签名备份；游戏可能已更新，拒绝覆盖。',
+  'key': 'hades2.error.noOriginalBackup'},
+ {'match': 'literal', 'message': '游戏内操作失败，请查看日志。', 'key': 'hades2.error.runtimeActionFailed'},
+ {'match': 'literal', 'message': '游戏发生非预期停顿，已停止当前操作。', 'key': 'hades2.error.unexpectedStop'},
+ {'match': 'literal', 'message': '游戏已退出或连接已断开。', 'key': 'hades2.error.notAttached'},
+ {'match': 'literal',
+  'message': '游戏文件在操作期间改变；拒绝覆盖。',
+  'key': 'hades2.error.fileChangedDuringOperation'},
+ {'match': 'literal', 'message': '游戏未能恢复运行。', 'key': 'hades2.error.resumeUnverified'},
+ {'match': 'literal', 'message': '游戏调用结果不明，未自动重试。', 'key': 'hades2.error.outcomeUnknownEmpty'},
+ {'match': 'literal',
+  'message': '游戏调用结果不明，未自动重试；请检查游戏并重启。',
+  'key': 'hades2.error.outcomeUnknownGeneric'},
+ {'match': 'literal', 'message': '游戏进程已结束。', 'key': 'hades2.error.processExited'},
+ {'match': 'literal', 'message': '游戏进程已退出。', 'key': 'hades2.error.processExitedSecond'},
+ {'match': 'literal', 'message': '游戏进程状态切换超时。', 'key': 'hades2.error.processTimeout'},
+ {'match': 'literal', 'message': '游戏速度范围为 0–10。', 'key': 'hades2.error.gameSpeedRange'},
+ {'match': 'literal', 'message': '独立验证副本校验失败；未修改游戏。', 'key': 'hades2.error.verificationFailed'},
+ {'match': 'literal',
+  'message': '现有 desired-state 无法安全读取，已禁止本次进程覆盖原文件。',
+  'key': 'hades2.error.preferenceWriteBlocked'},
+ {'match': 'literal',
+  'message': '现有 desired-state 无法安全隔离，已禁止覆盖原文件。',
+  'key': 'hades2.error.preferenceWriteBlocked'},
+ {'match': 'literal', 'message': '生命值必须至少为 1。', 'key': 'hades2.error.healthMinimum'},
+ {'match': 'literal',
+  'message': '稀有度倍率必须为 0–1000%。',
+  'key': 'hades2.error.invalidRarityMultiplier'},
+ {'match': 'literal',
+  'message': '等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。',
+  'key': 'hades2.error.worldUpdateTimeout'},
+ {'match': 'literal', 'message': '请先连接游戏。', 'key': 'hades2.error.notConnected'},
+ {'match': 'literal',
+  'message': '请断开连接并退出游戏后操作。',
+  'key': 'hades2.error.disconnectBeforePrepare'},
+ {'match': 'literal', 'message': '请求 ID 无效。', 'key': 'hades2.error.invalidRequestId'},
+ {'match': 'literal',
+  'message': '请求包含不可序列化的 JSON 值。',
+  'key': 'hades2.error.unserializableRequest'},
+ {'match': 'literal', 'message': '请选择掉落物或祝福。', 'key': 'hades2.error.selectReward'},
+ {'match': 'literal', 'message': '请选择支持原生奖励选择界面的角色。', 'key': 'hades2.error.selectChoiceSource'},
+ {'match': 'literal', 'message': '请选择要移除的祝福。', 'key': 'hades2.error.selectTraitToRemove'},
+ {'match': 'literal', 'message': '请选择资源。', 'key': 'hades2.error.selectResource'},
+ {'match': 'literal',
+  'message': '调试签名校验失败；未修改游戏。',
+  'key': 'hades2.error.signingVerificationFailed'},
+ {'match': 'literal',
+  'message': '速度倍率必须为 10–1000%。',
+  'key': 'hades2.error.speedMultiplierRange'},
+ {'match': 'literal', 'message': '锁定值必须为布尔值。', 'key': 'hades2.error.lockedBoolean'},
+ {'match': 'literal', 'message': '额外魔力恢复必须为 0–1000/秒。', 'key': 'hades2.error.manaRegenRange'},
+ {'match': 'regex',
+  'pattern': '^(?P<game>.+?) 适配器需要 (?P<requirement>.+?) 原生游戏。$',
+  'key': 'hades2.error.architectureRequired',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^连接被拒绝：(?P<detail>.+?)。退出游戏后使用',
+  'key': 'hades2.error.attachDenied',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^找不到匹配架构的 Mach-O UUID\\s*(?P<suffix>[^\\s，。]*)?。?$',
+  'key': 'hades2.error.uuidLookupFailed',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^未从本机 (?P<game>.+?) 中文语言文件解析到 (?P<count>.+?) 项',
+  'key': 'hades2.error.missingOfficialNames',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^(?P<tool>.+?) 失败（(?P<returncode>.+?)）：(?P<detail>.+)$',
+  'key': 'hades2.error.commandFailed',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^(?P<tool>.+?) 超时（(?P<timeout>.+?) 秒）；',
+  'key': 'hades2.error.timeout',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^请先退出 (?P<game>.+?)；',
+  'key': 'hades2.error.prepareWhileRunning',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^未经验证的游戏版本：version=(?P<version>.*?), build=(?P<build>.*?), UUID=(?P<uuid>.*?)。$',
+  'key': 'hades2.error.unverifiedBuildWarning',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^无法运行 (?P<tool>[^：]+)：(?P<detail>.+)$',
+  'key': 'hades2.error.commandLaunchFailed',
+  'argument': 'groups'},
+ {'match': 'regex',
+  'pattern': '^(?P<kind>.+?) 使用了更新的数据格式（schemaVersion=(?P<found>[^，]*)，当前支持 '
+             '(?P<supported>[^）]*)），',
+  'key': 'hades2.error.preferenceNewerFormat',
+  'argument': 'groups',
+  'composed': 'raised_later'},
+ {'match': 'regex',
+  'pattern': '^(?P<kind>.+?) 使用了已不再支持的旧数据格式（schemaVersion=(?P<found>[^，]*)，当前支持 '
+             '(?P<supported>[^）]*)），',
+  'key': 'hades2.error.preferenceOlderFormat',
+  'argument': 'groups',
+  'composed': 'raised_later'},
+ {'match': 'affix',
+  'prefix': '请先启动',
+  'suffix': ' 并进入存档。',
+  'key': 'hades2.error.gameNotRunning'},
+ {'match': 'affix',
+  'prefix': '检测到多个',
+  'suffix': ' 进程，请保留一个。',
+  'key': 'hades2.error.multipleProcesses'},
+ {'match': 'segmented',
+  'prefix': '查询',
+  'separator': ' 进程失败（',
+  'terminator': '）：',
+  'key': 'hades2.error.processQueryFailed'},
+ {'match': 'prefix',
+  'prefix': 'Trait is not sell-eligible, so no safe removal exists: ',
+  'key': 'hades2.error.traitNotSellEligible',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': 'Trait is not present in the current run: ',
+  'key': 'hades2.error.traitNotPresent',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '请先启动 ',
+  'key': 'hades2.error.gameNotRunning',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '查询 ',
+  'key': 'hades2.error.processQueryFailed',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '连接被拒绝：',
+  'key': 'hades2.error.attachDenied',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '缺少符号：',
+  'key': 'hades2.error.missingSymbol',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '新版本关键符号无法唯一定位：',
+  'key': 'hades2.error.symbolNotUnique',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '新版本关键符号不可读：',
+  'key': 'hades2.error.symbolUnreadable',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '运行中的游戏函数校验失败：',
+  'key': 'hades2.error.runtimeVerificationFailed',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '无法恢复游戏运行：',
+  'key': 'hades2.error.resumeFailed',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '后台暂停标志恢复失败：',
+  'key': 'hades2.error.focusRestoreFailed',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '请先退出 ',
+  'key': 'hades2.error.prepareWhileRunning',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '无法运行 ',
+  'key': 'hades2.error.commandLaunchFailed',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '游戏调用结果不明，未自动重试：',
+  'key': 'hades2.error.outcomeUnknownTransport',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '未经验证的游戏版本：',
+  'key': 'hades2.error.unverifiedBuildWarning',
+  'argument': 'remainder'},
+ {'match': 'prefix',
+  'prefix': '未从本机 ',
+  'key': 'hades2.error.missingOfficialNames',
+  'argument': 'remainder'},
+ {'match': 'delimited',
+  'open': '元素数量必须为 0–',
+  'close': ' 的整数。',
+  'key': 'hades2.error.elementRange'},
+ {'match': 'delimited', 'open': '局内数值必须为 0–', 'close': '。', 'key': 'hades2.error.vitalRange'},
+ {'match': 'delimited',
+  'open': '巫咒充能必须为 0–',
+  'close': '。',
+  'key': 'hades2.error.spellChargeRange'},
+ {'match': 'delimited',
+  'open': '数量必须是 0–',
+  'close': ' 的整数。',
+  'key': 'hades2.error.amountRange'},
+ {'match': 'delimited', 'open': ' 失败（', 'close': '）', 'key': 'hades2.error.commandFailed'},
+ {'match': 'delimited', 'open': ' 超时（', 'close': ' 秒）', 'key': 'hades2.error.timeout'}]
+# Compile the regex rules once, at import, and keep the pattern text alongside
+# so a failure can name the rule that produced it.
+_COMPILED = [
+    (index, re.compile(rule["pattern"]), rule)
+    for index, rule in enumerate(REGISTRY)
+    if rule["match"] == "regex"
+]
+_LITERALS = {}
+for _rule in REGISTRY:
+    if _rule["match"] == "literal":
+        # A duplicate literal would make the first one unreachable. check_registry
+        # rejects it, and this keeps the last-wins behaviour impossible to rely
+        # on even if that check is bypassed.
+        _LITERALS[_rule["message"]] = _rule["key"]
+
+
+def check_registry(registry=None) -> list:
+    """Return the structural problems in the registry, if any.
+
+    An unreachable rule is a rule that can never fire: its shape is fully
+    shadowed by an earlier rule. That is almost always a mistake, and it would
+    be invisible in the dispatch code, which is exactly why it is checked here.
+    """
+    registry = REGISTRY if registry is None else registry
+    problems = []
+    seen_literals = {}
+    for index, rule in enumerate(registry):
+        shape = rule.get("match")
+        if shape == "literal":
+            message = rule["message"]
+            if message in seen_literals:
+                problems.append(
+                    f"rule {index} repeats the literal {message!r} from rule "
+                    f"{seen_literals[message]}; the first is unreachable")
+            seen_literals[message] = index
+        elif shape == "prefix":
+            if not rule["prefix"]:
+                problems.append(f"rule {index} has an empty prefix, which matches everything")
+        elif shape == "regex":
+            try:
+                re.compile(rule["pattern"])
+            except re.error as exc:
+                problems.append(f"rule {index} has an invalid pattern: {exc}")
+        for field_name in ("key",):
+            if not rule.get(field_name):
+                problems.append(f"rule {index} has no {field_name}")
+    return problems
+
+
+def _unreachable(registry) -> list:
+    """Rules shadowed by an earlier rule, reported with the rule that shadows."""
+    shadowed = []
+    for index, rule in enumerate(registry):
+        if rule["match"] != "prefix":
+            continue
+        for earlier in registry[:index]:
+            if earlier["match"] == "prefix" and rule["prefix"].startswith(earlier["prefix"]):
+                shadowed.append((index, earlier["prefix"]))
+                break
+    return shadowed
+
 
 def presentation_for(message, diagnostic: Optional[str] = None):
     """Return `(key, arguments)` for a raised message, or `(None, [])`.
@@ -341,10 +479,10 @@ def presentation_for(message, diagnostic: Optional[str] = None):
     """
     if not isinstance(message, str) or not message:
         return None, []
-    key = MESSAGE_KEYS.get(message)
+    key = _LITERALS.get(message)
     if key is not None:
         return key, []
-    for pattern, candidate in REGEX_KEYS + ASSIGNED_KEYS:
+    for _index, pattern, rule in _COMPILED:
         match = pattern.match(message)
         if match is None:
             continue
@@ -354,44 +492,56 @@ def presentation_for(message, diagnostic: Optional[str] = None):
         # value into the wrong placeholder. An absent optional value is kept as
         # an empty string so its position still holds.
         arguments = [group or '' for group in match.groups()]
-        return candidate, arguments
-    for lead, (tail, candidate) in DELIMITED_AFFIX_KEYS.items():
-        if not message.startswith(lead) or not message.endswith(tail):
-            continue
-        value = message[len(lead):len(message) - len(tail)].strip()
-        if not value:
-            continue
-        return candidate, [value]
-    for lead, (middle, tail, candidate) in SEGMENTED_KEYS.items():
-        if not message.startswith(lead):
-            continue
-        rest = message[len(lead):]
-        split = rest.find(middle)
-        if split < 0:
-            continue
-        value, remainder = rest[:split].strip(), rest[split + len(middle):]
-        split2 = remainder.find(tail)
-        if split2 < 0:
-            continue
-        code, detail = remainder[:split2], remainder[split2 + len(tail):]
-        if not value or not code:
-            continue
-        return candidate, [value, code, detail]
-    for prefix, candidate in PREFIX_KEYS.items():
-        if message.startswith(prefix):
+        # A regex rule declares `argument` like every other rule. Honouring it
+        # is what stops a rule from claiming one convention and being dispatched
+        # under another: with this check, changing a rule's argument to
+        # "absent" changes behaviour instead of being silently ignored.
+        if rule.get("argument") == "absent":
+            return rule["key"], []
+        return rule["key"], arguments
+    for rule in REGISTRY:
+        shape = rule["match"]
+        if shape == "prefix":
+            prefix = rule["prefix"]
+            if not message.startswith(prefix):
+                continue
             remainder = message[len(prefix):]
             # A composed message is kept whole as one argument: splitting it
             # further would bake structure into a localized sentence.
-            return candidate, [remainder] if candidate in _ARGUMENT_KEYS else []
-    # Delimited shape: the value is bracketed inside the message, so neither a
-    # whole-message nor a prefix rule can match it.
-    for (opening, closing), candidate in DELIMITED_KEYS.items():
-        start = message.find(opening)
-        if start < 0:
-            continue
-        begin = start + len(opening)
-        end = message.find(closing, begin)
-        if end <= begin:
-            continue
-        return candidate, [message[begin:end]]
+            return rule["key"], [remainder] if rule.get("argument") == "remainder" else []
+        if shape == "affix":
+            lead, tail = rule["prefix"], rule["suffix"]
+            if not message.startswith(lead) or not message.endswith(tail):
+                continue
+            value = message[len(lead):len(message) - len(tail)].strip()
+            if not value:
+                continue
+            return rule["key"], [value]
+        if shape == "segmented":
+            lead = rule["prefix"]
+            if not message.startswith(lead):
+                continue
+            middle, tail = rule["separator"], rule["terminator"]
+            rest = message[len(lead):]
+            split = rest.find(middle)
+            if split < 0:
+                continue
+            value, remainder = rest[:split].strip(), rest[split + len(middle):]
+            split2 = remainder.find(tail)
+            if split2 < 0:
+                continue
+            code, detail = remainder[:split2], remainder[split2 + len(tail):]
+            if not value or not code:
+                continue
+            return rule["key"], [value, code, detail]
+        if shape == "delimited":
+            opening, closing = rule["open"], rule["close"]
+            start = message.find(opening)
+            if start < 0:
+                continue
+            begin = start + len(opening)
+            end = message.find(closing, begin)
+            if end <= begin:
+                continue
+            return rule["key"], [message[begin:end]]
     return None, []
