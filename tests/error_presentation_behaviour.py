@@ -148,27 +148,37 @@ def _cross_shape_probes(rules) -> set[str]:
                 return r["prefix"]
         return None
 
+    # The value carries a LEADING SPACE, and that is the whole point.
+    #
+    # The affix and segmented openings are '请先启动' and '查询' with no trailing
+    # space, while the competing prefix rules are '请先启动 ' and '查询 ' WITH
+    # one. Concatenating a bare value produced '请先启动Hades II 并进入存档。',
+    # which does not start with '请先启动 ' -- so the probe was claimed by exactly
+    # one rule, and two versions of this guard counted that as a collision. The
+    # counter was incremented on `rival is not None` alone, which says only that
+    # some prefix rule extends this opening, never that this message starts with
+    # it. Round 2 fixed the lookup and left the concatenation wrong; round 3
+    # found the count still read 2 against an oracle that says 0.
+    #
+    # With the space the message is the affix rule's own canonical output AND a
+    # genuine prefix match, so dispatch order alone decides which shape claims
+    # it, with two different argument lists. That is what is being counted.
+    colliding_value = " Hades II"
     for rule in rules:
         shape = rule.get("match")
         if shape == "affix":
-            value = "Hades II"
-            message = rule["prefix"] + value + rule["suffix"]
+            message = rule["prefix"] + colliding_value + rule["suffix"]
             probes.add(message)
             rival = competing_prefix(rule["prefix"])
-            if rival is not None:
-                # rival is a prefix of this message, so it is a genuine
-                # collision: dispatch order alone decides which shape claims it,
-                # and the two produce different arguments. Count it.
+            if rival is not None and message.startswith(rival):
                 collisions += 1
-                probes.add(message)
         elif shape == "segmented":
-            message = (rule["prefix"] + "Hades II" + rule["separator"]
+            message = (rule["prefix"] + colliding_value + rule["separator"]
                        + "-9" + rule["terminator"] + "boom")
             probes.add(message)
             rival = competing_prefix(rule["prefix"])
-            if rival is not None:
+            if rival is not None and message.startswith(rival):
                 collisions += 1
-                probes.add(message)
 
     # For each prefix, find any regex that also matches a message starting with
     # it. Those are the pairs where dispatch order decides the arguments, so

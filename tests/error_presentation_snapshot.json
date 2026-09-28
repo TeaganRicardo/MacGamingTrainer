@@ -424,17 +424,17 @@
       ],
       "key": "hades2.error.unverifiedBuildWarning"
     },
-    "查询 sample-value": {
-      "arguments": [
-        "sample-value"
-      ],
-      "key": "hades2.error.processQueryFailed"
-    },
-    "查询Hades II 进程失败（-9）：boom": {
+    "查询 Hades II 进程失败（-9）：boom": {
       "arguments": [
         "Hades II",
         "-9",
         "boom"
+      ],
+      "key": "hades2.error.processQueryFailed"
+    },
+    "查询 sample-value": {
+      "arguments": [
+        "sample-value"
       ],
       "key": "hades2.error.processQueryFailed"
     },
@@ -446,7 +446,7 @@
       ],
       "key": "hades2.error.processQueryFailed"
     },
-    "检测到多个Hades II 进程，请保留一个。": {
+    "检测到多个 Hades II 进程，请保留一个。": {
       "arguments": [
         "Hades II"
       ],
@@ -546,15 +546,15 @@
       ],
       "key": "hades2.error.missingSymbol"
     },
-    "请先启动 sample-value": {
+    "请先启动 Hades II 并进入存档。": {
       "arguments": [
-        "sample-value"
+        "Hades II"
       ],
       "key": "hades2.error.gameNotRunning"
     },
-    "请先启动Hades II 并进入存档。": {
+    "请先启动 sample-value": {
       "arguments": [
-        "Hades II"
+        "sample-value"
       ],
       "key": "hades2.error.gameNotRunning"
     },
