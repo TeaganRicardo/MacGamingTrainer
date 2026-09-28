@@ -1744,16 +1744,6 @@ if __MacGamingTrainerV1 == nil then
   -- Every other owner-specific lifecycle is reported as not removable. That is
   -- the safe, truthful answer: no generic RemoveTraitData escape hatch is
   -- reachable from here.
-  local sellSafeOwners = {
-    Zeus = true, Hera = true, Poseidon = true, Demeter = true, Apollo = true,
-    Aphrodite = true, Hephaestus = true, Hestia = true, Ares = true, Hermes = true,
-  }
-  -- Owner-specific lifecycles D00 explicitly left outside the sell-safe subset.
-  local nonSellSafeOwners = {
-    Chaos = true, Selene = true, Artemis = true, Athena = true, Dionysus = true,
-    Echo = true, Hades = true, Narcissus = true, Circe = true, Icarus = true,
-    Medea = true, Arachne = true,
-  }
   local traitFamily = function(trait)
     if type(trait) ~= "table" then return "Unknown" end
     if type(trait.Slot) == "string" and trait.Slot ~= "" then return trait.Slot end
@@ -3203,12 +3193,27 @@ if __MacGamingTrainerV1 == nil then
       if not isGod then
         error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
       end
+      -- D00 section 6 admits a trait to the native sell set on BOTH shop-God
+      -- ownership AND a non-nil Rarity. Re-resolve the live trait so the gate
+      -- and the reported capability cannot disagree.
+      if type(CurrentRun.Hero.Traits) == "table" then
+        for _, trait in ipairs(CurrentRun.Hero.Traits) do
+          if type(trait) == "table" and trait.Name == traitName then
+            if trait.Rarity == nil then
+              error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
+            end
+            break
+          end
+        end
+      end
       if type(HeroHasTrait) ~= "function" then
         requireFunctions("native trait removal", { "HeroHasTrait" })
       end
       return action(command, params, function(record)
         local ok, message = pcall(function()
-          if not HeroHasTrait(CurrentRun.Hero, traitName) then
+          -- One argument, matching every other call site: HeroHasTrait takes
+          -- a trait name. Passing the hero as well made this test a no-op.
+          if not HeroHasTrait(traitName) then
             error("Trait is not present in the current run: " .. traitName)
           end
           -- Name-level, all-matching removal. This is the native teardown proven

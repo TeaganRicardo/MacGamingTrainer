@@ -40,6 +40,14 @@ assert "CurrentRun.Hero.Traits" in LUA, "inventory is not read from the live run
 projection = LUA[LUA.index("local currentRunTraits = function()"):LUA.index("local function state(")]
 assert "boons()" not in projection, "trait inventory is built from the boon catalog"
 assert "desiredFeatures" not in projection, "trait inventory is built from desired state"
+# The state() call site must invoke the projection, not a catalog. Checking the
+# function body alone is not enough: splicing a catalog into the call site
+# leaves the function itself untouched.
+assert "local traitList, traitListReason = currentRunTraits()" in LUA, (
+    "state() does not call the runtime trait projection")
+_call_site = LUA[LUA.index("local traitList, traitListReason ="):LUA.index("local traitList") + 120]
+assert "boons()" not in _call_site, "the inventory call site substitutes a catalog"
+assert "desiredFeatures" not in _call_site, "the inventory call site substitutes desired state"
 # The payload names the identity scope instead of implying durability.
 assert "currentRunTraitIdentityScope" in LUA
 assert "currentRunTraitIdentityPersistent = false" in LUA
@@ -67,9 +75,11 @@ assert 'if eligible then scope = "nameLevelAllMatching" end' in capability_block
 assert len(re.findall(r"^\s*if eligible then scope = ", capability_block, re.M)) == 1, (
     "the capability grant is not the single gated branch")
 assert "local scope = \"none\"" in capability_block, "the capability has no safe default"
-# The unproven families D00 listed must not be grantable removal.
-for family in ("Chaos", "Selene", "Weapon", "Spell", "Costume"):
-    assert family in SCHEMA, f"{family} is not classified as unproven"
+# A non-eligible row must be classified, not silently left blank: the UI reads
+# this reason to tell the player why removal is unavailable.
+assert "removalReason" in LUA
+for reason in ("noRarity", "notShopGodOwned", "predicateUnavailable", "predicateFailed"):
+    assert f'"{reason}"' in LUA, f"removal reason {reason} is never produced"
 
 
 # --- 3. No generic raw deletion escape hatch is exposed ---
@@ -89,13 +99,26 @@ assert "all-matching" in LUA or "all matching" in LUA
 
 
 # --- 4. The removal input is a NAME, never an instance identity ---
+removal_block = LUA[LUA.index('if command == "remove_trait" then'):LUA.index('if command == "open_sell_traits" then')]
 assert "params.trait" in LUA
 assert "traitName" in LUA
 # The client sends the name.
 assert 'return ["trait": name]' in API, "removal must send the trait name"
-# The instance identity is never an input.
-removal_block = LUA[LUA.index('if command == "remove_trait" then'):LUA.index('if command == "open_sell_traits" then')]
-assert "instanceId" not in removal_block, "removal must not accept instance identity"
+# HeroHasTrait takes a trait NAME. Every other call site in the resident source
+# is single-argument; the two-argument form compiles and runs, but Lua silently
+# ignores the extra argument, so the presence check becomes a no-op that passes.
+assert "HeroHasTrait(traitName)" in removal_block, (
+    "the presence check must pass the trait name only")
+assert "HeroHasTrait(CurrentRun.Hero" not in LUA, (
+    "HeroHasTrait is called with a hero argument somewhere")
+
+# The gate must re-check BOTH halves of the D00 section 6 predicate. Checking
+# shop ownership only would accept a shop-God-owned name that currently carries
+# no Rarity, so the executable gate and the reported capability would disagree.
+assert "trait.Rarity == nil" in removal_block, (
+    "the removal gate does not re-check Rarity live")
+assert "IsGodTrait, traitName, { ForShop = true }" in removal_block
+
 assert "trait.Id" not in removal_block, "removal must not key on the untrusted instance id"
 # The only input is the validated name; no other runtime identity is read.
 assert removal_block.count("params.trait") == 1, "removal reads an unexpected parameter"
@@ -205,6 +228,49 @@ for message, expected in (
     assert key == expected, (message, key)
     # The value stays on the diagnostic; the key is what the UI renders.
     assert not any("一" <= character <= "鿿" for character in key)
+
+
+# --- 11b. The errors must be reachable through the REAL runtime funnel, not
+# only through presentation_for(). A resident `error()` arrives with a Lua
+# source prefix and is translated by present_runtime_error, which is a separate
+# per-command table. Asserting the bare mapper was exactly the gap that let six
+# unreachable keys ship: they mapped fine but were never consulted.
+from games.hades2 import runtime_error_presentation as rep  # noqa: E402
+from core.adapter import AdapterError  # noqa: E402
+
+RUNTIME_CASES = (
+    ("Trait removal requires an active run room",
+     "hades2.error.traitRemovalNeedsRun", ()),
+    ("Trait removal requires a trait name",
+     "hades2.error.traitRemovalNeedsName", ()),
+    ("Native sell predicate is unavailable",
+     "hades2.error.sellPredicateUnavailable", ()),
+    ("Trait is not sell-eligible, so no safe removal exists: BoonX",
+     "hades2.error.traitNotSellEligible", ("BoonX",)),
+    ("Trait is not present in the current run: BoonY",
+     "hades2.error.traitNotPresent", ("BoonY",)),
+)
+for message, expected, expected_args in RUNTIME_CASES:
+    raw = f'[string "MacGamingTrainer"]:3200: {message}'
+    mapped = rep.present_runtime_error("remove_trait", AdapterError("lua_error", raw))
+    assert mapped.presentation == expected, (message, mapped.presentation)
+    assert tuple(mapped.arguments) == expected_args, (message, mapped.arguments)
+    # The technical text must remain on the diagnostic for the operator.
+    assert message in (mapped.diagnostic or ""), (message, mapped.diagnostic)
+
+# An unknown resident failure still falls back rather than inventing copy.
+unknown = rep.present_runtime_error(
+    "remove_trait", AdapterError("lua_error", '[string "MacGamingTrainer"]:1: something else'))
+assert unknown.presentation == "hades2.error.runtimeActionFailed", unknown.presentation
+
+# Every message the removal path raises must be covered by the runtime table,
+# so a new refusal cannot silently degrade to the generic key.
+_removal_block = LUA[LUA.index('if command == "remove_trait" then'):LUA.index('if command == "open_sell_traits" then')]
+_raised = set(re.findall(r'error\("([^"]+)"', _removal_block))
+_runtime_known = set(rep._RUNTIME_KEYS.get("remove_trait", {})) | {prefix for prefix, _ in rep._COMPOSED_PREFIXES["remove_trait"]}
+for message in _raised:
+    assert any(message.startswith(known) for known in _runtime_known), (
+        f"removal raises an unregistered message: {message!r}")
 
 
 # --- 12. The client validation rejects a missing name ---

@@ -121,5 +121,3 @@ TRAIT_REMOVAL_CAPABILITIES = (TRAIT_REMOVAL_NAME_LEVEL, TRAIT_REMOVAL_NONE)
 # GetTraitUniqueId and is NOT stable across run reload, restart or save
 # round-trip, so it must never be persisted or presented as durable.
 TRAIT_IDENTITY_SCOPE = 'currentRunInstance'
-# Families D00 explicitly left outside the sell-safe subset.
-TRAIT_UNPROVEN_FAMILIES = ('Chaos', 'Selene', 'Weapon', 'Spell', 'Costume', 'Unknown')
