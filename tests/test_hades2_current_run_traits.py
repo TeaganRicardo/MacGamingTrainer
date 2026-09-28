@@ -22,6 +22,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+# schema.py declares the trait-removal capability and identity-scope values.
+# It had no reader (issue #209), so this import is what gives that copy a
+# consumer: the cross-language parity assertions below compare it against
+# what the runtime emits and what Swift renders.
+import games.hades2.schema as schema
+
 LUA = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-8")
 TYPES = (ROOT / "Sources/Hades2/Hades2Types.swift").read_text(encoding="utf-8")
 MODEL = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
@@ -51,9 +57,25 @@ assert "desiredFeatures" not in _call_site, "the inventory call site substitutes
 # The payload names the identity scope instead of implying durability.
 assert "currentRunTraitIdentityScope" in LUA
 assert "currentRunTraitIdentityPersistent = false" in LUA
+# The scope is a cross-language contract, not a free string: schema.py declares
+# it, the runtime emits it, Swift renders it. All three must agree, or a player
+# can be shown a durability claim D00 disproved.
+assert schema.TRAIT_IDENTITY_SCOPE == "currentRunInstance", (
+    "schema.py no longer declares the current-run identity scope")
+assert f'currentRunTraitIdentityScope = "{schema.TRAIT_IDENTITY_SCOPE}"' in LUA, (
+    "the runtime emits a different identity scope than schema.py declares")
+assert f'identityScope: "{schema.TRAIT_IDENTITY_SCOPE}"' in TYPES, (
+    "Swift renders a different identity scope than schema.py declares")
 
 
 # --- 2. Removal capability is the narrow D00-proven value only ---
+# The capability and identity-scope values are a CONTRACT that spans three
+# languages: schema.py declares them, hades.lua emits them on the wire, and
+# Hades2Types.swift decodes them. schema.py had no reader at all, so its copy
+# could drift from the other two without anything failing (issue #209). These
+# assertions give the Python copy a consumer: it must agree with both.
+assert set(schema.TRAIT_REMOVAL_CAPABILITIES) == {"nameLevelAllMatching", "none"}, (
+    "schema.py declares a removal capability the runtime does not implement")
 for key, value in (("nameLevelAllMatching", ".nameLevelAllMatching"), ("none", ".none")):
     assert f"case {key}" in TYPES, f"missing removal capability {value}"
 assert "TraitRemovalCapability" in TYPES
@@ -75,6 +97,15 @@ assert 'if eligible then scope = "nameLevelAllMatching" end' in capability_block
 assert len(re.findall(r"^\s*if eligible then scope = ", capability_block, re.M)) == 1, (
     "the capability grant is not the single gated branch")
 assert "local scope = \"none\"" in capability_block, "the capability has no safe default"
+
+# schema.py's declared capabilities must be exactly what the runtime assigns
+# inside currentRunTraits. Comparing against the runtime BLOCK -- not the whole
+# file -- is what stops a comment mentioning the value from satisfying the check,
+# which is how the first version of this guard proved nothing.
+_emitted = set(re.findall(r'scope = "([A-Za-z]+)"', capability_block))
+assert _emitted == set(schema.TRAIT_REMOVAL_CAPABILITIES), (
+    f"schema.py declares {sorted(schema.TRAIT_REMOVAL_CAPABILITIES)} but the "
+    f"runtime assigns {sorted(_emitted)}")
 # A non-eligible row must be classified, not silently left blank: the UI reads
 # this reason to tell the player why removal is unavailable.
 assert "removalReason" in LUA
