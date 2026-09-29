@@ -105,7 +105,6 @@ Hades II Save Editor is not implicitly authorized by the current governance sequ
 
 - Some Core filesystem metadata updates do not parent-directory fsync after every atomic replace. This is an extreme sudden-power-loss durability ceiling, not a demonstrated normal-operation corruption bug.
 - Hades Profile storage does not mirror every Core Save subdirectory-symlink containment guard. It runs with the same user authority and has no demonstrated exploit/data-loss path.
-- #242 tracks unrelated MINI GT Cloudflare preview results on trainer PRs. The serving website and integration ownership require separate inspection; these results are not trainer compilation evidence or a new global governance gate.
 
 Promote these only when new evidence or a selected requirement justifies work.
 
