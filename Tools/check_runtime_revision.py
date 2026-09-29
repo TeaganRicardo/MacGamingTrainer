@@ -12,17 +12,17 @@ This tool deliberately knows nothing about any particular game. It reads the
 declaration, resolves it relative to the module directory, and compares
 revisions. A module with no `residentRuntime` is simply not gated.
 """
-import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import NoReturn
 
 from module_inventory import ModuleInventoryError, module_manifests_at_ref
-
-DECLARATION_KEY = 'residentRuntime'
-DEFAULT_PREVIOUS_RE = r'previousModule\.revision\s*~=\s*(\d+)'
-DEFAULT_MODULE_RE = r'version\s*=\s*1\s*,\s*revision\s*=\s*(\d+)'
+from resident_runtime import (
+    DECLARATION_KEY,
+    ResidentRuntimeDeclarationError,
+    parse_resident_runtime_declaration,
+)
 
 # Distinguishes 'key absent' from 'key present but null'.
 _ABSENT = object()
@@ -80,60 +80,27 @@ def runtimes_at(ref):
     except ModuleInventoryError as error:
         fail(str(error))
     for manifest_path, game_id, data in manifests:
-        # `.get()` returns None for an ABSENT key and for an explicit JSON
-        # `null`, so testing for None would make `"residentRuntime": null` a
-        # silent opt-out: a module that declares the key and then nulls it would
-        # be treated as one that never declared it. An explicit null is a
-        # malformed declaration, and a malformed declaration must fail.
+        # Distinguish an absent declaration from an explicit null: null is a
+        # malformed opt-out and therefore fails through the shared parser.
         declaration = data.get(DECLARATION_KEY, _ABSENT)
         if declaration is _ABSENT:
             continue
-        if not isinstance(declaration, dict):
-            fail(f'{manifest_path}: {DECLARATION_KEY} must be an object')
-        source = declaration.get('source')
-        if not isinstance(source, str) or not source.strip():
-            fail(f'{manifest_path}: {DECLARATION_KEY}.source must be a non-empty string')
-        # Strip, then use the STRIPPED value. Validating `.strip()` and then
-        # using the raw string is how one stray space un-gated a whole module:
-        # `"runtime/resident.lua "` passed the emptiness check and resolved to a
-        # file that does not exist. The tracked-file check below would now catch
-        # that anyway, but a declaration that must carry invisible characters to
-        # work is a declaration nobody can review.
-        source = source.strip()
-        # A NUL byte reaches subprocess and raises `ValueError: embedded null
-        # byte` -- a traceback rather than a named gate failure. It fails closed,
-        # but an unexplained traceback is not a diagnosis. An absolute path or a
-        # `..` segment cannot name a file inside the module directory at all, so
-        # both are refused by name rather than failing later and less clearly.
-        if '\x00' in source or source.startswith('/'):
-            fail(f'{manifest_path}: {DECLARATION_KEY}.source must name a file '
-                 'inside the module directory')
-        if any(segment == '..' for segment in source.split('/')):
-            fail(f'{manifest_path}: {DECLARATION_KEY}.source must not traverse '
-                 'out of the module directory')
-        module_dir = Path(manifest_path).parent
-        # The declared source must resolve to a file the module actually ships
-        # at this ref. Checking only that `source` is a non-empty string meant a
-        # one-character typo in the file name left every subsequent runtime
-        # change ungated, silently, forever. A declaration that names nothing is
-        # not a weak declaration, it is a broken one.
-        runtime = str(module_dir / source)
-        if not runtime_is_tracked(ref, runtime):
-            fail(f'{manifest_path}: {DECLARATION_KEY}.source {source!r} does not name a '
-                 f'file tracked at {ref} (resolved to {runtime})')
-        previous = declaration.get('previousRevisionPattern', DEFAULT_PREVIOUS_RE)
-        module = declaration.get('moduleRevisionPattern', DEFAULT_MODULE_RE)
-        for name, pattern in (('previousRevisionPattern', previous),
-                              ('moduleRevisionPattern', module)):
-            if not isinstance(pattern, str) or not pattern.strip():
-                fail(f'{manifest_path}: {DECLARATION_KEY}.{name} must be a non-empty string')
-            try:
-                re.compile(pattern)
-            except re.error as error:
-                fail(f'{manifest_path}: {DECLARATION_KEY}.{name} does not compile: {error}')
-        found.append((runtime, re.compile(previous), re.compile(module)))
+        try:
+            spec = parse_resident_runtime_declaration(
+                declaration,
+                manifest_path=manifest_path,
+                source_exists=lambda runtime_path: runtime_is_tracked(
+                    ref, str(runtime_path)
+                ),
+            )
+        except ResidentRuntimeDeclarationError as error:
+            fail(str(error))
+        found.append((
+            str(spec.runtime_path),
+            spec.previous_revision_pattern,
+            spec.module_revision_pattern,
+        ))
     return sorted(found)
-
 
 def _long_bracket_level(text, i):
     """The `=` count of a long bracket opening at `text[i]`, or None.
