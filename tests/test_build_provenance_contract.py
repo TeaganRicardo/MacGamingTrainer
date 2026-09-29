@@ -170,6 +170,25 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('differs', result.stderr)
 
+        decoy = packaged.replace('Test.app/', 'Decoy.app/')
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
+            archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
+                             (module / 'module.json').read_bytes())
+            archive.writestr(decoy, source.read_bytes())
+        missing_selected = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertNotEqual(missing_selected.returncode, 0)
+        self.assertIn('resident', missing_selected.stderr)
+
+        with zipfile.ZipFile(self.artifact, 'a') as archive:
+            archive.writestr(packaged, source.read_bytes())
+        selected = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertEqual(selected.returncode, 0, selected.stderr)
+        self.assertEqual(json.loads(self.provenance_path().read_text())['residentRuntime']['packagedPath'],
+                         packaged)
+
     def test_module_id_must_match_packaged_marker_and_manifest(self):
         modules = self.root / 'Backend/games'
         for game_id in ('hades2', 'reference_fixture'):
@@ -233,11 +252,10 @@ class BuildProvenanceContract(unittest.TestCase):
             'CFBundleIdentifier': 'com.example.hades2',
         })
 
-        def package(plist, executable=True):
+        def package(plist):
             with zipfile.ZipFile(self.artifact, 'w') as archive:
                 archive.writestr(f'{app}/Info.plist', plistlib.dumps(plist))
-                if executable:
-                    archive.writestr(f'{app}/MacOS/TestTrainer', b'binary')
+                archive.writestr(f'{app}/MacOS/TestTrainer', b'binary')
                 archive.writestr(f'{app}/Resources/ACTIVE_GAME_ID', 'hades2\n')
                 archive.writestr(f'{app}/Resources/Backend/games/hades2/module.json',
                                  (module / 'module.json').read_bytes())
@@ -253,11 +271,6 @@ class BuildProvenanceContract(unittest.TestCase):
                 result = self.run_tool('--local', '--module-id', 'hades2')
                 self.assertNotEqual(result.returncode, 0, result.stdout)
                 self.assertIn(field, result.stderr)
-
-        package(source_plist, executable=False)
-        missing_executable = self.run_tool('--local', '--module-id', 'hades2')
-        self.assertNotEqual(missing_executable.returncode, 0)
-        self.assertIn('executable', missing_executable.stderr)
 
         package(source_plist)
         valid = self.run_tool('--local', '--module-id', 'hades2')

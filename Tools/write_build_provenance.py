@@ -62,11 +62,16 @@ def artifact_name(repo_root: Path, product_version: str, bundle_build: str,
                   label: str = "") -> str:
     """One owner for artifact names; product identity comes from Info.plist."""
     plist = require_product_identity(repo_root, product_version, bundle_build)
+    return _artifact_name(plist, product_version, bundle_build, git_value(repo_root, "HEAD"), label)
+
+
+def _artifact_name(plist: dict[str, object], product_version: str, bundle_build: str,
+                   source_sha: str, label: str) -> str:
     if label and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", label):
         raise RuntimeError("artifact label must be a safe identifier")
     executable = plist["CFBundleExecutable"]
     stem = executable + (f"-{label}" if label else "")
-    return f"{stem}-{product_version}-b{bundle_build}-{git_value(repo_root, 'HEAD')[:8]}-rc.zip"
+    return f"{stem}-{product_version}-b{bundle_build}-{source_sha[:8]}-rc.zip"
 
 
 def _copy_files(path: Path) -> dict[str, str]:
@@ -135,10 +140,9 @@ def require_declared_inputs(repo_root: Path, copy_specs: tuple[str, ...]) -> lis
     return declared
 
 
-def resident_identity(repo_root: Path, artifact: Path, module_id: str) -> dict[str, str] | None:
+def resident_identity(repo_root: Path, artifact: Path, module_id: str,
+                      app_root: str) -> dict[str, str] | None:
     """Hash the resident file named by the selected module, in source and ZIP."""
-    if not re.fullmatch(r"[a-z][a-z0-9_]*", module_id):
-        raise RuntimeError(f"invalid module id: {module_id!r}")
     manifest_path = repo_root / "Backend/games" / module_id / "module.json"
     declaration = json.loads(manifest_path.read_text(encoding="utf-8")).get("residentRuntime")
     if declaration is None:
@@ -147,25 +151,24 @@ def resident_identity(repo_root: Path, artifact: Path, module_id: str) -> dict[s
         declaration, manifest_path=manifest_path,
         source_exists=lambda path: path.is_file() and not path.is_symlink(),
     )
-    suffix = f"/Contents/Resources/Backend/games/{module_id}/{spec.source}"
+    packaged_path = f"{app_root}/Contents/Resources/Backend/games/{module_id}/{spec.source}"
     with zipfile.ZipFile(artifact) as archive:
-        matches = [name for name in archive.namelist() if name.endswith(suffix)]
-        if len(matches) != 1:
-            raise RuntimeError(f"artifact must contain exactly one declared resident source: {suffix}")
-        packaged_digest = hashlib.sha256(archive.read(matches[0])).hexdigest()
+        if archive.namelist().count(packaged_path) != 1:
+            raise RuntimeError(f"selected app must contain exactly one declared resident source: {packaged_path}")
+        packaged_digest = hashlib.sha256(archive.read(packaged_path)).hexdigest()
     source_digest = sha256_file(spec.runtime_path)
     if source_digest != packaged_digest:
         raise RuntimeError("packaged resident source differs from declared source")
     return {
         "source": spec.runtime_path.relative_to(repo_root).as_posix(),
         "sourceSha256": source_digest,
-        "packagedPath": matches[0],
+        "packagedPath": packaged_path,
         "packagedSha256": packaged_digest,
     }
 
 
 def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id: str,
-                                     source_plist: dict[str, object]) -> None:
+                                     source_plist: dict[str, object]) -> str:
     """Bind the claimed module and product identity to the packaged app."""
     if not re.fullmatch(r"[a-z][a-z0-9_]*", module_id):
         raise RuntimeError(f"invalid module id: {module_id!r}")
@@ -205,9 +208,6 @@ def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id:
         for field, expected in expected_info.items():
             if packaged_info.get(field) != expected:
                 raise RuntimeError(f"packaged Info.plist {field} differs from declared source")
-        executable = f"{app_root}/Contents/MacOS/{app.executable}"
-        if names.count(executable) != 1 or not archive.getinfo(executable).file_size:
-            raise RuntimeError("artifact is missing its declared packaged executable")
         module_dir = f"{app_root}/Contents/Resources/Backend/games/"
         packaged_manifest = f"{module_dir}{module_id}/module.json"
         manifests = [name for name in names if name.startswith(module_dir)
@@ -219,6 +219,7 @@ def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id:
             raise RuntimeError("packaged module manifest ID differs from --module-id")
         if packaged_bytes != source_manifest:
             raise RuntimeError("packaged module manifest differs from declared source")
+    return app_root
 
 
 def build_manifest(
@@ -234,11 +235,11 @@ def build_manifest(
     name_label: str = "",
 ) -> dict[str, object]:
     source_plist = require_product_identity(repo_root, product_version, bundle_build)
-    expected_name = artifact_name(repo_root, product_version, bundle_build, name_label)
-    if artifact.name != expected_name:
-        raise RuntimeError(f"artifact name differs from declared source: expected {expected_name}")
     source_sha = git_value(repo_root, "HEAD")
     source_tree = git_value(repo_root, "HEAD^{tree}")
+    expected_name = _artifact_name(source_plist, product_version, bundle_build, source_sha, name_label)
+    if artifact.name != expected_name:
+        raise RuntimeError(f"artifact name differs from declared source: expected {expected_name}")
     copies = require_declared_inputs(repo_root, generated_copies)
     digest = sha256_file(artifact)
     if local and (env.get("GITHUB_ACTIONS") == "true" or env.get("GITHUB_EVENT_NAME")):
@@ -288,9 +289,9 @@ def build_manifest(
             raise RuntimeError("push event SHA differs from executing checkout")
 
     if module_id:
-        require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
+        app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
-        resident = resident_identity(repo_root, artifact, module_id)
+        resident = resident_identity(repo_root, artifact, module_id, app_root)
         if resident is not None:
             manifest["residentRuntime"] = resident
 
