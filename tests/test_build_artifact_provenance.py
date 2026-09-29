@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import plistlib
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,11 @@ with tempfile.TemporaryDirectory() as tmp:
     run("git", "config", "user.email", "ci@example.invalid", cwd=root)
     run("git", "config", "user.name", "CI", cwd=root)
     (root / "source.txt").write_text("source\n", encoding="utf-8")
+    (root / "Info.plist").write_bytes(plistlib.dumps({
+        "CFBundleExecutable": "MacGamingTrainer",
+        "CFBundleShortVersionString": "0.1.0",
+        "CFBundleVersion": "7",
+    }))
     run("git", "add", ".", cwd=root)
     run("git", "commit", "-qm", "base", cwd=root)
 

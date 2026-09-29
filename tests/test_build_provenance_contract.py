@@ -28,15 +28,20 @@ class BuildProvenanceContract(unittest.TestCase):
         subprocess.run(['git', 'config', 'user.email', 'ci@example.invalid'], cwd=self.root, check=True)
         subprocess.run(['git', 'config', 'user.name', 'CI'], cwd=self.root, check=True)
         (self.root / 'source.txt').write_text('source\n')
+        (self.root / 'Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleExecutable': 'TestTrainer',
+            'CFBundleShortVersionString': '0.1.0',
+            'CFBundleVersion': '7',
+        }))
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'base'], cwd=self.root, check=True)
         self.artifact = Path(self.temporary.name) / 'test.zip'
         self.artifact.write_bytes(b'zip fixture')
         self.env = {key: value for key, value in os.environ.items() if not key.startswith('GITHUB_')}
 
-    def run_tool(self, *extra, env=None):
+    def run_tool(self, *extra, env=None, version='0.1.0', build='7'):
         return subprocess.run([sys.executable, str(SCRIPT), '--artifact', str(self.artifact),
-                               '--product-version', '0.1.0', '--bundle-build', '7',
+                               '--product-version', version, '--bundle-build', build,
                                '--repo-root', str(self.root), *extra],
                               cwd=self.root, env=env or self.env, text=True, capture_output=True)
 
@@ -128,7 +133,11 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertIn('differs', result.stderr)
 
     def test_artifact_name_uses_root_executable_and_git_head(self):
-        (self.root / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'TestTrainer'}))
+        (self.root / 'Info.plist').write_bytes(plistlib.dumps({
+            'CFBundleExecutable': 'TestTrainer',
+            'CFBundleShortVersionString': '1.2.3',
+            'CFBundleVersion': '7',
+        }))
         subprocess.run(['git', 'add', 'Info.plist'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'identity'], cwd=self.root, check=True)
         result = subprocess.run([
@@ -139,6 +148,20 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(),
                          f'TestTrainer-reference_fixture-1.2.3-b7-{git(self.root, "rev-parse", "HEAD")[:8]}-rc.zip')
+
+    def test_caller_cannot_misstate_plist_product_identity(self):
+        for version, build in [('9.9.9', '7'), ('0.1.0', '999')]:
+            with self.subTest(version=version, build=build):
+                name = subprocess.run([
+                    sys.executable, str(SCRIPT), '--print-artifact-name',
+                    '--product-version', version, '--bundle-build', build,
+                    '--repo-root', str(self.root),
+                ], cwd=self.root, text=True, capture_output=True)
+                self.assertNotEqual(name.returncode, 0)
+                self.assertIn('Info.plist', name.stderr)
+                provenance = self.run_tool('--local', version=version, build=build)
+                self.assertNotEqual(provenance.returncode, 0)
+                self.assertIn('Info.plist', provenance.stderr)
 
 
 if __name__ == '__main__':

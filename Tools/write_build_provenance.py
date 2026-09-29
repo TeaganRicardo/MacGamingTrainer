@@ -37,16 +37,27 @@ def require_env(env: Mapping[str, str], name: str) -> str:
     return value
 
 
-def artifact_name(repo_root: Path, product_version: str, bundle_build: str,
-                  label: str = "") -> str:
-    """One owner for artifact names; product identity comes from Info.plist."""
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", product_version):
+def require_product_identity(repo_root: Path, product_version: str,
+                             bundle_build: str) -> dict[str, object]:
+    """Check caller values against the sole product-version source."""
+    if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", product_version):
         raise RuntimeError("product version must be three-part SemVer")
     if not re.fullmatch(r"[1-9][0-9]*", bundle_build):
         raise RuntimeError("bundle build must be a positive integer")
+    plist = plistlib.loads((repo_root / "Info.plist").read_bytes())
+    if plist.get("CFBundleShortVersionString") != product_version:
+        raise RuntimeError("product version differs from Info.plist CFBundleShortVersionString")
+    if plist.get("CFBundleVersion") != bundle_build:
+        raise RuntimeError("bundle build differs from Info.plist CFBundleVersion")
+    return plist
+
+
+def artifact_name(repo_root: Path, product_version: str, bundle_build: str,
+                  label: str = "") -> str:
+    """One owner for artifact names; product identity comes from Info.plist."""
+    plist = require_product_identity(repo_root, product_version, bundle_build)
     if label and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", label):
         raise RuntimeError("artifact label must be a safe identifier")
-    plist = plistlib.loads((repo_root / "Info.plist").read_bytes())
     executable = plist.get("CFBundleExecutable")
     if (not isinstance(executable, str) or not executable or executable in (".", "..")
             or any(character in executable for character in ("/", ":", "\\"))
@@ -162,6 +173,7 @@ def build_manifest(
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
 ) -> dict[str, object]:
+    require_product_identity(repo_root, product_version, bundle_build)
     source_sha = git_value(repo_root, "HEAD")
     source_tree = git_value(repo_root, "HEAD^{tree}")
     copies = require_declared_inputs(repo_root, generated_copies)
