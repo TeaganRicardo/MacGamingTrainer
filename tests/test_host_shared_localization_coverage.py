@@ -176,13 +176,101 @@ HADES_FORBIDDEN_HOST_TERMS = registry_values(HADES_FORBIDDEN_HOST_GROUPS)
 REGISTRY_COMPATIBILITY_ALIASES = registry_values(("compatibilityAliases",))
 
 
+def governed_term_occurs(term: str, text: str) -> bool:
+    """Match governed English terms lexically; CJK terms remain exact substrings."""
+    if re.search(r"[A-Za-z0-9]", term):
+        pattern = rf"(?<![A-Za-z0-9_]){re.escape(term)}(?![A-Za-z0-9_])"
+        return re.search(pattern, text) is not None
+    return term in text
+
+
 def find_hades_vocabulary_leaks(resources: dict[str, str]) -> dict[str, list[str]]:
     leaks: dict[str, list[str]] = {}
     for resource, text in resources.items():
-        found = sorted(term for term in HADES_FORBIDDEN_HOST_TERMS if term in text)
+        found = sorted(
+            term for term in HADES_FORBIDDEN_HOST_TERMS
+            if governed_term_occurs(term, text)
+        )
         if found:
             leaks[resource] = found
     return leaks
+
+
+def shell_string_literals(source: str) -> list[str]:
+    """Extract shell single/double-quoted strings while ignoring real comments."""
+    literals: list[str] = []
+    index = 0
+    at_word_start = True
+    control = set(";|&()<>" )
+    while index < len(source):
+        char = source[index]
+        if char.isspace():
+            at_word_start = True
+            index += 1
+            continue
+        if char == "#" and at_word_start:
+            newline = source.find("\n", index)
+            index = len(source) if newline < 0 else newline + 1
+            at_word_start = True
+            continue
+        if char in control:
+            at_word_start = True
+            index += 1
+            continue
+        if char == "\\":
+            index += 2
+            at_word_start = False
+            continue
+        if char not in {"'", '"'}:
+            at_word_start = False
+            index += 1
+            continue
+
+        quote = char
+        index += 1
+        value: list[str] = []
+        while index < len(source):
+            char = source[index]
+            if char == quote:
+                literals.append("".join(value))
+                index += 1
+                break
+            if quote == '"' and char == "\\" and index + 1 < len(source):
+                value.append(source[index + 1])
+                index += 2
+                continue
+            value.append(char)
+            index += 1
+        at_word_start = False
+    return literals
+
+
+def source_string_literals(path: Path) -> list[str]:
+    """Return player-copy candidates without treating identifiers/comments as copy."""
+    source = path.read_text(encoding="utf-8")
+    if path.suffix == ".py":
+        tree = ast.parse(source, filename=str(path))
+        return [
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        ]
+    if path.suffix == ".sh" or path.name == "build.sh":
+        return shell_string_literals(source)
+    # Swift shared surfaces use double-quoted string literals.
+    return re.findall(r'"((?:\\.|[^"\\])*)"', source)
+
+
+assert shell_string_literals("${#ARRAY[@]}; echo 'Boon build failed' # 'ignored comment'") == [
+    "Boon build failed"
+], (
+    "shell vocabulary scan must include single-quoted strings, preserve ${#...} "
+    "parameter syntax, and ignore real comments"
+)
+assert governed_term_occurs("Life", "Life refresh failed")
+assert not governed_term_occurs("Life", "Lifecycle refresh failed"), (
+    "English native terms must not match substrings inside ordinary identifiers/words"
+)
 
 
 shared_resource_root = ROOT / "Resources/Localization"
@@ -247,9 +335,57 @@ backend_client = (ROOT / "Sources/Core/Runtime/BackendClient.swift").read_text(e
 assert "struct TrainerTextToken" in backend_client, "modules need one language-neutral token type"
 assert "func registerModulePresentation(" in localization, "modules must be able to contribute their own keys"
 assert "func removeModulePresentation(" in localization, "a module namespace must be removable"
-for leak in ("hades2", "Boon", "祝福", "Hex", "Olympian"):
-    assert leak not in localization, f"Core localization leaked module vocabulary: {leak}"
-    assert leak not in backend_client, f"Core runtime leaked module vocabulary: {leak}"
+
+# Enforce game-agnostic shared ownership from production sources instead of a
+# hand-picked Hades word list. The module manifest owns structural identity;
+# the terminology registry owns native/alias/internal vocabulary.
+HADES_MANIFEST = json.loads((ROOT / "Backend/games/hades2/module.json").read_text(encoding="utf-8"))
+adapter_identity = HADES_MANIFEST["backend"]["adapter"]
+adapter_module, _, adapter_type = adapter_identity.partition(":")
+frontend = HADES_MANIFEST["frontend"]
+target = HADES_MANIFEST["targetApplication"]
+HADES_MODULE_IDENTITIES = {
+    HADES_MANIFEST["id"],
+    HADES_MANIFEST["displayName"],
+    str(HADES_MANIFEST["steamAppId"]),
+    Path(frontend["sourceDirectory"]).name,
+    frontend["moduleType"],
+    adapter_module,
+    adapter_type,
+    target["processName"],
+    target["bundleIdentifier"],
+}
+assert all(HADES_MODULE_IDENTITIES), "Hades module identity metadata is incomplete"
+
+shared_code_paths = [
+    ROOT / "Sources/App.swift",
+    ROOT / "build.sh",
+    ROOT / "Tools/module_support.py",
+    ROOT / "Tools/generate_game_binding.py",
+    ROOT / "Tools/validate_game_module.py",
+]
+shared_code_paths += sorted((ROOT / "Sources/Core").rglob("*.swift"))
+shared_code_paths += sorted((ROOT / "Backend/core").rglob("*.py"))
+shared_code_texts = {
+    str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
+    for path in shared_code_paths
+}
+
+identity_leaks = {
+    path: sorted(token for token in HADES_MODULE_IDENTITIES if token in source)
+    for path, source in shared_code_texts.items()
+}
+identity_leaks = {path: tokens for path, tokens in identity_leaks.items() if tokens}
+assert not identity_leaks, f"Hades module identity leaked into shared ownership: {identity_leaks}"
+
+shared_literal_texts = {
+    path: "\n".join(source_string_literals(ROOT / path))
+    for path in shared_code_texts
+}
+vocabulary_leaks = find_hades_vocabulary_leaks(shared_literal_texts)
+assert not vocabulary_leaks, (
+    f"Hades terminology registry vocabulary leaked into shared ownership: {vocabulary_leaks}"
+)
 
 message_banner = (ROOT / "Sources/Core/UI/Primitives/TrainerMessageBanner.swift").read_text(encoding="utf-8")
 assert "localization.presentation(text)" in message_banner, (
@@ -270,8 +406,13 @@ reference = (ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixture
 assert 'connected ? "host.connected" : "host.disconnected"' in reference
 assert "hostConnectionStatus" in reference, "reference fixture must exercise the shared status localization seam"
 assert "TrainerTextToken" in reference, "a second module must use the shared language-neutral token type"
-for leak in ("hades2", "Boon", "祝福"):
-    assert leak not in reference, f"reference fixture leaked Hades vocabulary: {leak}"
+fixture_identity_leaks = sorted(token for token in HADES_MODULE_IDENTITIES if token in reference)
+assert not fixture_identity_leaks, f"reference fixture leaked Hades module identity: {fixture_identity_leaks}"
+reference_path = ROOT / "ContractFixtures/reference_module/frontend/ReferenceFixtureModule.swift"
+fixture_vocabulary_leaks = find_hades_vocabulary_leaks({
+    "reference fixture": "\n".join(source_string_literals(reference_path))
+})
+assert not fixture_vocabulary_leaks, f"reference fixture leaked Hades vocabulary: {fixture_vocabulary_leaks}"
 
 # These files own shared product presentation. They may still contain stable
 # identifiers, symbols, diagnostics, or product branding, but the known

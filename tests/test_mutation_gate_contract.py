@@ -305,6 +305,19 @@ def test_manifest_covers_final_hardening_seams():
     assert required <= idents, sorted(required - idents)
 
 
+def test_manifest_covers_c05_drift_classes():
+    """C05 drift enforcement stays represented by executable mutations."""
+    idents = {m.ident for m in mutation_gate.manifest()}
+    required = {
+        "terminology-metadata-provenance",
+        "hades-internal-term-leak",
+        "hades-compatibility-alias-leak",
+        "runtime-error-code-identity",
+        "core-registry-vocabulary-leak",
+    }
+    assert required <= idents, sorted(required - idents)
+
+
 def test_every_invariant_records_its_incident():
     """A guard with no defect behind it is a rule, not evidence."""
     missing = sorted(m.ident for m in mutation_gate.manifest()
@@ -476,6 +489,7 @@ if __name__ == "__main__":
     test_only_a_reached_assertion_counts_as_a_catch()
     test_manifest_covers_the_shipped_defects()
     test_manifest_covers_final_hardening_seams()
+    test_manifest_covers_c05_drift_classes()
     test_every_invariant_records_its_incident()
     test_equivalent_excuses_must_be_backed_by_an_artifact()
     test_the_artifact_rule_rejects_evidence_outside_the_repository()
