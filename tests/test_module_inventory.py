@@ -1,0 +1,86 @@
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "Tools"))
+
+from module_inventory import (
+    ModuleInventoryError,
+    discover_module_ids,
+    executable_reference_prefixes,
+    module_ids_for_diff,
+)
+
+
+def git(root: Path, *args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+
+
+def commit(root: Path, message: str) -> str:
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", message], cwd=root, check=True)
+    return git(root, "rev-parse", "HEAD")
+
+
+def write_module(root: Path, game_id: str, *, declared_id: str | None = None) -> None:
+    module_dir = root / "Backend/games" / game_id
+    module_dir.mkdir(parents=True, exist_ok=True)
+    (module_dir / "module.json").write_text(
+        json.dumps({"id": declared_id or game_id}) + "\n",
+        encoding="utf-8",
+    )
+
+
+# Working-tree discovery is deterministic and game-agnostic.
+with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-") as temporary:
+    root = Path(temporary)
+    write_module(root, "beta")
+    write_module(root, "alpha")
+    assert discover_module_ids(root) == ("alpha", "beta")
+    assert executable_reference_prefixes(discover_module_ids(root)) == (
+        "docs/reference/alpha/",
+        "docs/reference/beta/",
+    )
+
+# A manifest cannot claim a different identity from its directory. Shared
+# tooling must fail closed rather than silently discover one name and build
+# another.
+with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-bad-id-") as temporary:
+    root = Path(temporary)
+    write_module(root, "alpha", declared_id="beta")
+    try:
+        discover_module_ids(root)
+    except ModuleInventoryError as error:
+        assert "must match directory" in str(error), error
+    else:
+        raise AssertionError("module id/directory mismatch was accepted")
+
+# Diff discovery deliberately takes the union of merge-base and head. Removing
+# a module cannot make executable reference data under docs/reference/<id> turn
+# into docs-only content in the same commit that removes its owner.
+with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-diff-") as temporary:
+    root = Path(temporary)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "ci@example.invalid"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "CI"], cwd=root, check=True)
+
+    write_module(root, "alpha")
+    write_module(root, "beta")
+    reference = root / "docs/reference/alpha/data.json"
+    reference.parent.mkdir(parents=True)
+    reference.write_text("{}\n", encoding="utf-8")
+    base = commit(root, "two modules")
+
+    # Delete alpha's module declaration and its executable reference data.
+    for path in (root / "Backend/games/alpha").iterdir():
+        path.unlink()
+    (root / "Backend/games/alpha").rmdir()
+    reference.unlink()
+    head = commit(root, "remove alpha")
+
+    assert module_ids_for_diff(base, head, root) == ("alpha", "beta")
+
+print("module_inventory_ok")
