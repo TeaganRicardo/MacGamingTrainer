@@ -61,6 +61,23 @@ class FakeDriver:
 
 
 helper = ROOT / "Backend/core/native/libMGTTimeWarp.dylib"
+
+# Presentation ownership is enforced by the error type itself, not by a CJK
+# grep. Both localized raw copy and neutral English copy are rejected at the
+# same seam, so a future call site cannot silently bypass Host.strings.
+for invalid_presentation in ("原始错误", "raw literal"):
+    try:
+        ProcessTimeWarpError("synthetic", invalid_presentation)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"non-Host Time Warp presentation accepted: {invalid_presentation!r}")
+
+install_error = ProcessTimeWarpController._install_error(-9)
+assert install_error.presentation == "host.timeWarp.error.installFailed"
+assert install_error.arguments == [-9]
+assert install_error.diagnostic == "Time Warp helper 安装失败（-9）。"
+
 driver = FakeDriver()
 controller = ProcessTimeWarpController(driver, helper, ["Hades II"])
 
@@ -112,6 +129,8 @@ try:
     unsupported.set_speed(2.0)
 except ProcessTimeWarpError as error:
     assert error.code == "time_warp_unsupported", error.code
+    assert error.presentation == "host.timeWarp.error.noClockBindings", error.presentation
+    assert error.arguments == []
 else:
     raise AssertionError("zero hook mask was accepted")
 
@@ -131,6 +150,7 @@ try:
     reuse.set_speed(2.0)
 except ProcessTimeWarpError as error:
     assert error.code == "disconnected"
+    assert error.presentation == "host.timeWarp.error.disconnected"
 else:
     raise AssertionError("dead target accepted")
 
