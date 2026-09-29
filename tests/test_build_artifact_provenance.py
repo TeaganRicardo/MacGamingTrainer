@@ -45,6 +45,21 @@ with tempfile.TemporaryDirectory() as tmp:
     artifact = artifacts / f"MacGamingTrainer-test-0.1.0-b7-{actual_commit[:8]}-rc.zip"
     artifact.write_bytes(b"zip bytes for provenance test")
 
+    # Product SemVer is owned by Info.plist. A caller cannot mint an artifact
+    # name for a different release identity even when the requested value is
+    # otherwise valid SemVer.
+    false_version = subprocess.run([
+        sys.executable,
+        str(SCRIPT),
+        "--print-artifact-name",
+        "--product-version", "9.9.9",
+        "--bundle-build", "7",
+        "--repo-root", str(root),
+        "--name-label", "test",
+    ], cwd=root, text=True, capture_output=True)
+    assert false_version.returncode != 0
+    assert "Info.plist" in false_version.stderr
+
     event_path = Path(tmp) / "event.json"
     event_path.write_text(json.dumps({
         "number": 84,
