@@ -253,6 +253,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     project = temp / "project"
     (project / "Backend/games").mkdir(parents=True)
     (project / "Sources").mkdir(parents=True)
+    shutil.copy2(ROOT / "Info.plist", project / "Info.plist")
 
     shutil.copytree(ROOT / "Backend/core", project / "Backend/core")
     shutil.copytree(FIXTURE / "backend", project / "Backend/games/reference_fixture")
