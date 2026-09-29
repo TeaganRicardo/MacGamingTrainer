@@ -92,6 +92,7 @@ def runtimes_at(ref):
                 source_exists=lambda runtime_path: runtime_is_tracked(
                     ref, str(runtime_path)
                 ),
+                source_description=f"a regular file tracked at {ref}",
             )
         except ResidentRuntimeDeclarationError as error:
             fail(str(error))
