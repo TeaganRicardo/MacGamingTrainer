@@ -31,11 +31,16 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     shutil.copytree(root / 'Backend/core', project / 'Backend/core')
     shutil.copytree(root / 'Sources/Core', project / 'Sources/Core')
     shutil.copy2(root / 'Sources/App.swift', project / 'Sources/App.swift')
-    for name in ('module_support.py', 'validate_game_module.py', 'generate_game_binding.py'):
+    for name in ('module_inventory.py', 'module_support.py', 'validate_game_module.py', 'generate_game_binding.py'):
         shutil.copy2(root / 'Tools' / name, tools / name)
 
     env = os.environ.copy()
     env['PYTHONDONTWRITEBYTECODE'] = '1'
+
+    all_output = subprocess.check_output([
+        'python3', str(tools / 'validate_game_module.py'), '--all'
+    ], text=True, cwd=project, env=env)
+    assert all_output.strip() == f'{game_id}: ok', all_output
 
     normalized = json.loads(subprocess.check_output([
         'python3', str(tools / 'validate_game_module.py'), game_id, '--json'
@@ -82,6 +87,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
         + (root / 'build.sh').read_text()
         + '\n'
         + (root / 'Tools/module_support.py').read_text()
+        + '\n'
+        + (root / 'Tools/module_inventory.py').read_text()
     )
     assert 'ReferenceFixture' not in generic
     assert 'reference_fixture' not in generic
