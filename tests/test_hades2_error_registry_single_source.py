@@ -26,7 +26,9 @@ assert getattr(error_presentation, "RUNTIME_FALLBACK_KEY", None) == "hades2.erro
 # reverse half of coverage: a dead registry entry must fail even if no caller
 # happens to probe it.
 def function_block(name):
-    marker = f"local function {name}"
+    # Match the function name exactly: "action" must not bind the earlier
+    # actionFingerprint/actionReceipt helpers.
+    marker = f"local function {name}("
     start = LUA.find(marker)
     assert start >= 0, f"missing Lua helper producer {name}"
     end = LUA.find("\n  local function ", start + len(marker))
