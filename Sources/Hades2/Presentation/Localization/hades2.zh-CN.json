@@ -98,6 +98,7 @@
     "hades2.error.profileUpdatedAtMissing": "Profile updatedAt 字段缺失。",
     "hades2.error.requestIdRequired": "此操作需要请求 ID 才能安全执行。",
     "hades2.error.requestIdReused": "该请求 ID 已用于另一个操作，请重试。",
+    "hades2.error.residentCleanupFailed": "旧版驻留运行时未能安全清理。请完全退出并重新启动游戏后再连接。",
     "hades2.error.restartRequired": "上次调用结果不明，请重启游戏后重新连接。",
     "hades2.error.restoreUUIDMismatch": "原始恢复副本 UUID 不匹配；未修改游戏。",
     "hades2.error.resumeFailed": "无法恢复游戏运行：{0}",
