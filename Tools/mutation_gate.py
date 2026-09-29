@@ -107,6 +107,11 @@ PROVENANCE = {
     "error-registry-producer": "#204: registered runtime refusals must name a live producer",
     "package-product-version-owner": "#179/#199: Info.plist is the sole product-version owner",
     "package-module-identity": "#179/#199: publish must not replace another module's app output",
+    "terminology-metadata-provenance": "#180: governed native terminology metadata must remain complete",
+    "hades-internal-term-leak": "#180: internal-domain vocabulary is forbidden in canonical Hades UI",
+    "hades-compatibility-alias-leak": "#180: compatibility aliases are forbidden in canonical Hades UI",
+    "runtime-error-code-identity": "#180: localized runtime copy must not replace the stable machine error code",
+    "core-registry-vocabulary-leak": "#180: generic Core must reject Hades vocabulary from the production registry",
 }
 
 
@@ -408,6 +413,52 @@ def manifest() -> list[Mutation]:
             new="                if False and previous_game != selected_game:",
             test="tests/test_module_publish_safety.py",
             note="#179/#199 selected-module output identity",
+        ),
+        # --- C05 terminology / presentation drift --------------------------
+        Mutation(
+            ident="terminology-metadata-provenance",
+            invariant="governed native terminology keeps its localization identity metadata",
+            path=ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json",
+            old='"id": "GodBoon",',
+            new='"id": "",',
+            test="tests/test_hades2_official_terminology.py",
+            note="#180 metadata drift must fail from the production registry",
+        ),
+        Mutation(
+            ident="hades-internal-term-leak",
+            invariant="internal-domain terms cannot appear in canonical Hades presentation",
+            path=ROOT / "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json",
+            old='"hades2.feature.godMode": "{term:productTerms.godMode}"',
+            new='"hades2.feature.godMode": "TalentDrop"',
+            test="tests/test_hades2_presentation_contract.py",
+            note="#180 registry-derived forbidden-surface enforcement",
+        ),
+        Mutation(
+            ident="hades-compatibility-alias-leak",
+            invariant="compatibility aliases cannot appear in canonical Hades presentation",
+            path=ROOT / "Sources/Hades2/Presentation/Localization/hades2.zh-CN.json",
+            old='"hades2.feature.godMode": "{term:productTerms.godMode}"',
+            new='"hades2.feature.godMode": "重骰"',
+            test="tests/test_hades2_presentation_contract.py",
+            note="#180 registry-derived canonical-surface enforcement",
+        ),
+        Mutation(
+            ident="runtime-error-code-identity",
+            invariant="runtime localization preserves the stable machine error code",
+            path=ROOT / "Backend/games/hades2/runtime_error_presentation.py",
+            old="    return Hades2PresentationError(error.code, key, arguments, diagnostic=diagnostic)",
+            new="    return Hades2PresentationError(raw, key, arguments, diagnostic=diagnostic)",
+            test="tests/test_hades2_error_registry_single_source.py",
+            note="#180 code/presentation identity separation",
+        ),
+        Mutation(
+            ident="core-registry-vocabulary-leak",
+            invariant="generic Core contains no Hades vocabulary owned by the production registry",
+            path=ROOT / "Backend/core/adapter.py",
+            old='            raise ValueError("Core presentation errors must use a host.* key.")',
+            new='            raise ValueError("Core presentation errors must use a host.* key; 卡俄斯祝福 is module-owned.")',
+            test="tests/test_host_shared_localization_coverage.py",
+            note="#180 replaces a hand-maintained Core vocabulary sample with registry-derived coverage",
         ),
         # --- protocol envelope ---------------------------------------------
         Mutation(

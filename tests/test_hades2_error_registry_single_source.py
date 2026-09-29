@@ -94,12 +94,14 @@ for command, detail, expected_key, expected_arguments in CASES:
     raw = f'[string "mgt"]:123: {detail}'
     error = AdapterError("lua_error", raw, diagnostic=raw)
     presented = runtime_error_presentation.present_runtime_error(command, error)
+    assert presented.code == "lua_error", (command, detail, presented.code)
     assert presented.presentation == expected_key, (command, detail, presented.presentation)
     assert tuple(presented.arguments) == expected_arguments, (command, detail, presented.arguments)
 
 # Unknown runtime detail remains the same generic fallback.
 unknown = AdapterError("lua_error", "totally unknown runtime failure")
 presented = runtime_error_presentation.present_runtime_error("remove_trait", unknown)
+assert presented.code == "lua_error"
 assert presented.presentation == error_presentation.RUNTIME_FALLBACK_KEY
 assert tuple(presented.arguments) == ()
 
