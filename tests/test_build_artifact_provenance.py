@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     artifacts = Path(tmp) / "artifacts"
     artifacts.mkdir()
-    artifact = artifacts / "MacGamingTrainer-test.zip"
+    artifact = artifacts / f"MacGamingTrainer-test-0.1.0-b7-{actual_commit[:8]}-rc.zip"
     artifact.write_bytes(b"zip bytes for provenance test")
 
     event_path = Path(tmp) / "event.json"
@@ -73,6 +73,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "--product-version", "0.1.0",
         "--bundle-build", "7",
         "--repo-root", str(root),
+        "--name-label", "test",
     ], cwd=root, env=env, text=True, capture_output=True)
     assert mismatched.returncode != 0
     assert "head" in mismatched.stderr.lower()
@@ -87,11 +88,12 @@ with tempfile.TemporaryDirectory() as tmp:
         "--product-version", "0.1.0",
         "--bundle-build", "7",
         "--repo-root", str(root),
+        "--name-label", "test",
         cwd=root, env=env,
     )
 
-    provenance = artifacts / "MacGamingTrainer-test.provenance.json"
-    sidecar = artifacts / "MacGamingTrainer-test.zip.sha256"
+    provenance = artifacts / f"{artifact.stem}.provenance.json"
+    sidecar = artifacts / f"{artifact.name}.sha256"
     manifest = json.loads(provenance.read_text(encoding="utf-8"))
     digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
 
@@ -116,7 +118,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert sidecar.read_text(encoding="utf-8") == f"{digest}  {artifact.name}\n"
 
     # Non-PR builds must not invent pull-request metadata.
-    push_artifact = artifacts / "MacGamingTrainer-push.zip"
+    push_artifact = artifacts / f"MacGamingTrainer-push-0.1.0-b7-{actual_commit[:8]}-rc.zip"
     push_artifact.write_bytes(b"push build")
     push_env = {
         **env,
@@ -130,11 +132,12 @@ with tempfile.TemporaryDirectory() as tmp:
         "--product-version", "0.1.0",
         "--bundle-build", "7",
         "--repo-root", str(root),
+        "--name-label", "push",
         cwd=root,
         env=push_env,
     )
     push_manifest = json.loads(
-        (artifacts / "MacGamingTrainer-push.provenance.json").read_text(encoding="utf-8")
+        (artifacts / f"{push_artifact.stem}.provenance.json").read_text(encoding="utf-8")
     )
     assert "pullRequest" not in push_manifest
 

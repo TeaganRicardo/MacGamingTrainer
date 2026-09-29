@@ -116,6 +116,7 @@ jobs:
           python3 Tools/write_build_provenance.py \
             --artifact "$artifact" --product-version "$version" --bundle-build "$build" \
             --repo-root "$GITHUB_WORKSPACE" --module-id "${{ matrix.game }}" \
+            --name-label "${{ matrix.game }}" \
             --generated-copy ContractFixtures/reference_module/backend:Backend/games/reference_fixture \
             --generated-copy ContractFixtures/reference_module/frontend:Sources/ReferenceFixture
 

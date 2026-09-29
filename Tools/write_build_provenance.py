@@ -231,8 +231,12 @@ def build_manifest(
     local: bool = False,
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
+    name_label: str = "",
 ) -> dict[str, object]:
     source_plist = require_product_identity(repo_root, product_version, bundle_build)
+    expected_name = artifact_name(repo_root, product_version, bundle_build, name_label)
+    if artifact.name != expected_name:
+        raise RuntimeError(f"artifact name differs from declared source: expected {expected_name}")
     source_sha = git_value(repo_root, "HEAD")
     source_tree = git_value(repo_root, "HEAD^{tree}")
     copies = require_declared_inputs(repo_root, generated_copies)
@@ -303,10 +307,12 @@ def write_metadata(
     local: bool = False,
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
+    name_label: str = "",
 ) -> tuple[Path, Path, dict[str, object]]:
     manifest = build_manifest(
         artifact, product_version, bundle_build, repo_root, env,
         local=local, generated_copies=generated_copies, module_id=module_id,
+        name_label=name_label,
     )
     sidecar = artifact.with_name(f"{artifact.name}.sha256")
     provenance = artifact.with_name(f"{artifact.stem}.provenance.json")
@@ -349,7 +355,8 @@ def main() -> int:
             raise RuntimeError(f"artifact does not exist: {artifact}")
         provenance, sidecar, manifest = write_metadata(
             artifact, args.product_version, args.bundle_build, repo_root, os.environ,
-            local=args.local, generated_copies=tuple(args.generated_copy), module_id=args.module_id,
+            local=args.local, generated_copies=tuple(args.generated_copy),
+            module_id=args.module_id, name_label=args.name_label,
         )
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
         print(f"Unable to write build provenance: {error}", file=sys.stderr)

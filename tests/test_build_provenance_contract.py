@@ -35,9 +35,20 @@ class BuildProvenanceContract(unittest.TestCase):
         }))
         subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'base'], cwd=self.root, check=True)
-        self.artifact = Path(self.temporary.name) / 'test.zip'
+        self.artifact = self.artifact_path()
         self.artifact.write_bytes(b'zip fixture')
         self.env = {key: value for key, value in os.environ.items() if not key.startswith('GITHUB_')}
+
+    def artifact_path(self):
+        return Path(self.temporary.name) / f'TestTrainer-0.1.0-b7-{git(self.root, "rev-parse", "HEAD")[:8]}-rc.zip'
+
+    def refresh_artifact_name(self):
+        new_path = self.artifact_path()
+        self.artifact.rename(new_path)
+        self.artifact = new_path
+
+    def provenance_path(self):
+        return self.artifact.with_name(f'{self.artifact.stem}.provenance.json')
 
     def run_tool(self, *extra, env=None, version='0.1.0', build='7'):
         return subprocess.run([sys.executable, str(SCRIPT), '--artifact', str(self.artifact),
@@ -55,17 +66,24 @@ class BuildProvenanceContract(unittest.TestCase):
         outputs = Path(self.temporary.name) / 'github-output'
         result = self.run_tool('--local', env={**self.env, 'GITHUB_OUTPUT': str(outputs)})
         self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads((self.artifact.with_name('test.provenance.json')).read_text())
+        manifest = json.loads(self.provenance_path().read_text())
         self.assertEqual(manifest['source']['commit'], git(self.root, 'rev-parse', 'HEAD'))
         self.assertEqual(manifest['source']['tree'], git(self.root, 'rev-parse', 'HEAD^{tree}'))
         self.assertEqual(manifest['artifact']['sha256'], hashlib.sha256(self.artifact.read_bytes()).hexdigest())
         self.assertEqual(manifest['origin'], 'local')
         self.assertNotIn('workflow', manifest)
         self.assertEqual(outputs.read_text().splitlines(), [
-            'artifact_name=test.zip',
-            'provenance_name=test.provenance.json',
-            'sidecar_name=test.zip.sha256',
+            f'artifact_name={self.artifact.name}',
+            f'provenance_name={self.artifact.stem}.provenance.json',
+            f'sidecar_name={self.artifact.name}.sha256',
         ])
+
+    def test_writer_rejects_artifact_name_with_false_version(self):
+        self.artifact = Path(self.temporary.name) / 'TestTrainer-9.9.9-b999.zip'
+        self.artifact.write_bytes(b'zip fixture')
+        result = self.run_tool('--local')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('artifact name', result.stderr)
 
     def test_dirty_and_untracked_inputs_refuse_clean_commit_attribution(self):
         (self.root / 'source.txt').write_text('changed\n')
@@ -99,13 +117,14 @@ class BuildProvenanceContract(unittest.TestCase):
         (source / 'module.json').write_text('{"id":"reference_fixture"}\n')
         subprocess.run(['git', 'add', 'ContractFixtures'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'fixture'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
         destination = self.root / 'Backend/games/reference_fixture'
         destination.mkdir(parents=True)
         (destination / 'module.json').write_bytes((source / 'module.json').read_bytes())
         declaration = 'ContractFixtures/reference_module/backend:Backend/games/reference_fixture'
         result = self.run_tool('--local', '--generated-copy', declaration)
         self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads(self.artifact.with_name('test.provenance.json').read_text())
+        manifest = json.loads(self.provenance_path().read_text())
         self.assertEqual(manifest['buildInputs']['checkout'], 'declared-generated')
         self.assertEqual(len(manifest['buildInputs']['generatedCopies']), 1)
         (destination / 'module.json').write_text('changed')
@@ -125,6 +144,7 @@ class BuildProvenanceContract(unittest.TestCase):
         source.write_bytes(b'resident fixture\n')
         subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'resident'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
         packaged = 'Test.app/Contents/Resources/Backend/games/hades2/runtime/hades.lua'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
             archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
@@ -135,7 +155,7 @@ class BuildProvenanceContract(unittest.TestCase):
             archive.writestr(packaged, source.read_bytes())
         result = self.run_tool('--local', '--module-id', 'hades2')
         self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads(self.artifact.with_name('test.provenance.json').read_text())
+        manifest = json.loads(self.provenance_path().read_text())
         expected = hashlib.sha256(source.read_bytes()).hexdigest()
         self.assertEqual(manifest['residentRuntime']['sourceSha256'], expected)
         self.assertEqual(manifest['residentRuntime']['packagedSha256'], expected)
@@ -161,6 +181,7 @@ class BuildProvenanceContract(unittest.TestCase):
             }))
         subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'modules'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
 
         resources = 'Test.app/Contents/Resources'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
@@ -191,7 +212,7 @@ class BuildProvenanceContract(unittest.TestCase):
                              (modules / 'reference_fixture/module.json').read_bytes())
         valid = self.run_tool('--local', '--module-id', 'reference_fixture')
         self.assertEqual(valid.returncode, 0, valid.stderr)
-        metadata = json.loads(self.artifact.with_name('test.provenance.json').read_text())
+        metadata = json.loads(self.provenance_path().read_text())
         self.assertEqual(metadata['moduleId'], 'reference_fixture')
 
     def test_packaged_app_identity_must_match_source_owners(self):
@@ -204,6 +225,7 @@ class BuildProvenanceContract(unittest.TestCase):
         (module / 'module.json').write_text(json.dumps(manifest))
         subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'module'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
         app = 'Test App.app/Contents'
         source_plist = plistlib.loads((self.root / 'Info.plist').read_bytes())
         source_plist.update({
