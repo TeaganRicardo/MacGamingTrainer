@@ -1,1 +1,82 @@
-"""Shared resident-runtime declaration validation for build and CI tooling."""\nimport re\nfrom dataclasses import dataclass\nfrom pathlib import Path, PurePosixPath\nfrom typing import Callable, Pattern\n\nDECLARATION_KEY = "residentRuntime"\nDEFAULT_PREVIOUS_RE = r"previousModule\\.revision\\s*~=\\s*(\\d+)"\nDEFAULT_MODULE_RE = r"version\\s*=\\s*1\\s*,\\s*revision\\s*=\\s*(\\d+)"\n\n\nclass ResidentRuntimeDeclarationError(ValueError):\n    pass\n\n\n@dataclass(frozen=True)\nclass ResidentRuntimeSpec:\n    source: str\n    runtime_path: Path\n    previous_revision_pattern: Pattern[str]\n    module_revision_pattern: Pattern[str]\n\n\ndef _error(manifest_path, message):\n    return ResidentRuntimeDeclarationError(\n        f"{manifest_path}: {DECLARATION_KEY}{message}"\n    )\n\n\ndef parse_resident_runtime_declaration(\n    declaration,\n    *,\n    manifest_path,\n    source_exists: Callable[[Path], bool],\n):\n    """Validate one residentRuntime declaration and return its parsed spec.\n\n    The declaration is build-tool metadata, not a Core runtime-manifest field.\n    source_exists is supplied by the caller because the ordinary validator\n    reads the checkout while the revision gate reads an arbitrary git ref.\n    """\n    manifest_path = Path(manifest_path)\n    if not isinstance(declaration, dict):\n        raise _error(manifest_path, " must be an object")\n\n    source = declaration.get("source")\n    if not isinstance(source, str) or not source:\n        raise _error(manifest_path, ".source must be a non-empty string")\n    if source != source.strip():\n        raise _error(manifest_path, ".source must not contain leading or trailing whitespace")\n    if "\\x00" in source:\n        raise _error(manifest_path, ".source must name a file inside the module directory")\n    posix_source = PurePosixPath(source)\n    if posix_source.is_absolute() or ".." in posix_source.parts:\n        raise _error(manifest_path, ".source must name a file inside the module directory")\n\n    runtime_path = manifest_path.parent / Path(*posix_source.parts)\n    if not source_exists(runtime_path):\n        raise _error(\n            manifest_path,\n            f".source {source!r} does not name a file inside the module directory",\n        )\n\n    patterns = {}\n    for field, default in (\n        ("previousRevisionPattern", DEFAULT_PREVIOUS_RE),\n        ("moduleRevisionPattern", DEFAULT_MODULE_RE),\n    ):\n        value = declaration.get(field, default)\n        if not isinstance(value, str) or not value.strip():\n            raise _error(manifest_path, f".{field} must be a non-empty string")\n        try:\n            patterns[field] = re.compile(value)\n        except re.error as exc:\n            raise _error(manifest_path, f".{field} does not compile: {exc}") from exc\n\n    return ResidentRuntimeSpec(\n        source=source,\n        runtime_path=runtime_path,\n        previous_revision_pattern=patterns["previousRevisionPattern"],\n        module_revision_pattern=patterns["moduleRevisionPattern"],\n    )\n
+"""Shared resident-runtime declaration validation for build and CI tooling."""
+import re
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import Callable, Pattern
+
+DECLARATION_KEY = "residentRuntime"
+DEFAULT_PREVIOUS_RE = r"previousModule\.revision\s*~=\s*(\d+)"
+DEFAULT_MODULE_RE = r"version\s*=\s*1\s*,\s*revision\s*=\s*(\d+)"
+
+
+class ResidentRuntimeDeclarationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class ResidentRuntimeSpec:
+    source: str
+    runtime_path: Path
+    previous_revision_pattern: Pattern[str]
+    module_revision_pattern: Pattern[str]
+
+
+def _error(manifest_path, message):
+    return ResidentRuntimeDeclarationError(
+        f"{manifest_path}: {DECLARATION_KEY}{message}"
+    )
+
+
+def parse_resident_runtime_declaration(
+    declaration,
+    *,
+    manifest_path,
+    source_exists: Callable[[Path], bool],
+):
+    """Validate one residentRuntime declaration and return its parsed spec.
+
+    The declaration is build-tool metadata, not a Core runtime-manifest field.
+    source_exists is supplied by the caller because the ordinary validator
+    reads the checkout while the revision gate reads an arbitrary git ref.
+    """
+    manifest_path = Path(manifest_path)
+    if not isinstance(declaration, dict):
+        raise _error(manifest_path, " must be an object")
+
+    source = declaration.get("source")
+    if not isinstance(source, str) or not source:
+        raise _error(manifest_path, ".source must be a non-empty string")
+    if source != source.strip():
+        raise _error(manifest_path, ".source must not contain leading or trailing whitespace")
+    if "\x00" in source:
+        raise _error(manifest_path, ".source must name a file inside the module directory")
+    posix_source = PurePosixPath(source)
+    if posix_source.is_absolute() or ".." in posix_source.parts:
+        raise _error(manifest_path, ".source must name a file inside the module directory")
+
+    runtime_path = manifest_path.parent / Path(*posix_source.parts)
+    if not source_exists(runtime_path):
+        raise _error(
+            manifest_path,
+            f".source {source!r} does not name a file inside the module directory",
+        )
+
+    patterns = {}
+    for field, default in (
+        ("previousRevisionPattern", DEFAULT_PREVIOUS_RE),
+        ("moduleRevisionPattern", DEFAULT_MODULE_RE),
+    ):
+        value = declaration.get(field, default)
+        if not isinstance(value, str) or not value.strip():
+            raise _error(manifest_path, f".{field} must be a non-empty string")
+        try:
+            patterns[field] = re.compile(value)
+        except re.error as exc:
+            raise _error(manifest_path, f".{field} does not compile: {exc}") from exc
+
+    return ResidentRuntimeSpec(
+        source=source,
+        runtime_path=runtime_path,
+        previous_revision_pattern=patterns["previousRevisionPattern"],
+        module_revision_pattern=patterns["moduleRevisionPattern"],
+    )
