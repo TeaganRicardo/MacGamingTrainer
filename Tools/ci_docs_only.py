@@ -12,6 +12,8 @@ if str(TOOLS) not in sys.path:
 
 from module_inventory import (
     ModuleInventoryError,
+    app_resource_sources_for_diff,
+    current_app_resource_sources,
     discover_module_ids,
     executable_reference_prefixes,
     module_ids_for_diff,
@@ -103,13 +105,14 @@ def is_linux_portable_only(
     path: str,
     macos_only_tests: set[str],
     reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] = (),
 ) -> bool:
     if path.startswith("Backend/"):
         return not path.endswith("/module.json") and not path.endswith(".plist")
     if path.startswith("tests/"):
         return Path(path).name not in macos_only_tests
     if is_executable_reference_data(path, reference_prefixes):
-        return not path.endswith("/ui_terminology.json")
+        return path not in app_resource_sources
     return path in PORTABLE_TOOL_PATHS
 
 
@@ -118,6 +121,7 @@ def classify_scope(
     *,
     macos_only_tests: set[str] | None = None,
     reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] = (),
 ) -> dict[str, bool]:
     normalized = [path.strip() for path in paths if path.strip()]
     if not normalized:
@@ -141,7 +145,12 @@ def classify_scope(
     macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
     needs_module = any(needs_module_build_for_path(path) for path in normalized)
     needs_macos = needs_module or any(
-        not is_linux_portable_only(path, macos_only, reference_prefixes)
+        not is_linux_portable_only(
+            path,
+            macos_only,
+            reference_prefixes,
+            app_resource_sources,
+        )
         for path in normalized
     )
     return {
@@ -182,12 +191,18 @@ def main(argv: list[str]) -> int:
         paths = changed_paths(base_sha, head_sha, ROOT)
         if paths:
             module_ids = module_ids_for_diff(base_sha, head_sha, ROOT)
+            packaged_resources = app_resource_sources_for_diff(base_sha, head_sha, ROOT)
         else:
             # Missing/unknown scope already routes every lane below; use the
             # checkout inventory only to keep reference classification defined.
             module_ids = discover_module_ids(ROOT)
+            packaged_resources = current_app_resource_sources(ROOT)
         prefixes = executable_reference_prefixes(module_ids)
-        scope = classify_scope(paths, reference_prefixes=prefixes)
+        scope = classify_scope(
+            paths,
+            reference_prefixes=prefixes,
+            app_resource_sources=packaged_resources,
+        )
     except (ModuleInventoryError, OSError, subprocess.SubprocessError) as error:
         print(f"ci scope: {error}", file=sys.stderr)
         return 2
