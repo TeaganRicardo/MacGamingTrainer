@@ -54,6 +54,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
             capture_output=True,
         )
         assert missing.returncode != 0
-        assert 'Mac Gaming Trainer.app' in missing.stderr
+        assert f"{MANIFEST['app']['displayName']}.app" in missing.stderr
 
 print('module_build_output_ok')
