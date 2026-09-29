@@ -197,20 +197,33 @@ def find_hades_vocabulary_leaks(resources: dict[str, str]) -> dict[str, list[str
 
 
 def shell_string_literals(source: str) -> list[str]:
-    """Extract shell single/double-quoted strings while ignoring comments."""
+    """Extract shell single/double-quoted strings while ignoring real comments."""
     literals: list[str] = []
     index = 0
+    at_word_start = True
+    control = set(";|&()<>" )
     while index < len(source):
         char = source[index]
-        if char == "#":
+        if char.isspace():
+            at_word_start = True
+            index += 1
+            continue
+        if char == "#" and at_word_start:
             newline = source.find("\n", index)
             index = len(source) if newline < 0 else newline + 1
+            at_word_start = True
+            continue
+        if char in control:
+            at_word_start = True
+            index += 1
+            continue
+        if char == "\\":
+            index += 2
+            at_word_start = False
             continue
         if char not in {"'", '"'}:
-            if char == "\\":
-                index += 2
-            else:
-                index += 1
+            at_word_start = False
+            index += 1
             continue
 
         quote = char
@@ -228,6 +241,7 @@ def shell_string_literals(source: str) -> list[str]:
                 continue
             value.append(char)
             index += 1
+        at_word_start = False
     return literals
 
 
@@ -247,9 +261,12 @@ def source_string_literals(path: Path) -> list[str]:
     return re.findall(r'"((?:\\.|[^"\\])*)"', source)
 
 
-assert shell_string_literals("echo 'Boon build failed' # 'ignored comment'") == [
+assert shell_string_literals("${#ARRAY[@]}; echo 'Boon build failed' # 'ignored comment'") == [
     "Boon build failed"
-], "shell vocabulary scan must include single-quoted strings and ignore comments"
+], (
+    "shell vocabulary scan must include single-quoted strings, preserve ${#...} "
+    "parameter syntax, and ignore real comments"
+)
 assert governed_term_occurs("Life", "Life refresh failed")
 assert not governed_term_occurs("Life", "Lifecycle refresh failed"), (
     "English native terms must not match substrings inside ordinary identifiers/words"
