@@ -272,9 +272,13 @@ def manifest() -> list[Mutation]:
         Mutation(
             ident="err-remove-trait-unreachable",
             invariant="every remove_trait refusal resolves to its own stable key",
-            path=ROOT / "Backend/games/hades2/runtime_error_presentation.py",
-            old="    'remove_trait': {",
-            new="    'remove_trait_DISABLED': {",
+            path=ROOT / "Backend/games/hades2/error_presentation.py",
+            old=("  'message': 'Trait removal requires an active run room',\n"
+                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
+                 "  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},"),
+            new=("  'message': 'Trait removal requires an active run room',\n"
+                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
+                 "  'runtime': {'commands': ['remove_trait_DISABLED'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},"),
             test="tests/test_hades2_current_run_traits.py",
             note=("shipped in #193: all six refusals fell to the generic fallback key, "
                   "so the player was never told why"),

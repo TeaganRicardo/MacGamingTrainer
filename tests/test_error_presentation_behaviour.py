@@ -72,18 +72,26 @@ def test_the_snapshot_covers_the_whole_registry():
 
     behaviour = _load_behaviour_module()
     live = behaviour.snapshot()
-    if live["direct"] != expected["direct"]:
-        missing = set(expected["direct"]) - set(live["direct"])
-        extra = set(live["direct"]) - set(expected["direct"])
-        changed = [m for m in set(live["direct"]) & set(expected["direct"])
-                   if live["direct"][m] != expected["direct"][m]]
+    for section in ("direct", "runtime"):
+        if live[section] == expected[section]:
+            continue
+        missing = set(expected[section]) - set(live[section])
+        extra = set(live[section]) - set(expected[section])
+        changed = [m for m in set(live[section]) & set(expected[section])
+                   if live[section][m] != expected[section][m]]
         raise AssertionError(
-            "the snapshot no longer describes the module. "
+            f"the snapshot no longer describes the module {section} behaviour. "
             f"missing={sorted(missing)[:4]} extra={sorted(extra)[:4]} "
             f"changed={sorted(changed)[:4]}. "
             "Regenerate with error_presentation_behaviour.py --out if the change "
             "is intended."
         )
+    for field in ("fallback_key", "runtime_commands"):
+        if live[field] != expected[field]:
+            raise AssertionError(
+                f"the snapshot no longer describes {field}: "
+                f"was {expected[field]!r}, now {live[field]!r}"
+            )
 
 
 def test_the_registry_has_no_unreachable_or_invalid_rules():
