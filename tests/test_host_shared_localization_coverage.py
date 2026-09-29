@@ -1,5 +1,6 @@
 from pathlib import Path
 import ast
+import json
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,11 +144,95 @@ required_keys = {
 missing = required_keys - zh.keys()
 assert not missing, f"shared Host presentation keys missing: {sorted(missing)}"
 
-# Core/shared resources must stay game-agnostic. Hades-native terms belong to
-# the module terminology registry and B03, not Host.strings.
-host_resource_text = ZH.read_text(encoding="utf-8") + "\n" + EN.read_text(encoding="utf-8")
-for forbidden in ("祝福", "巫咒", "卡戎", "Boon", "Hex", "Olympian", "Charon"):
-    assert forbidden not in host_resource_text, f"Hades-native terminology leaked into Host resources: {forbidden}"
+# Core/shared resources must stay game-agnostic. Hades-native terms,
+# compatibility aliases, and Hades internal vocabulary belong to the module,
+# not shared Host localization. Derive the values from the authoritative
+# terminology registry instead of sampling a hand-maintained token list.
+TERMINOLOGY_REGISTRY = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+REGISTRY = json.loads(TERMINOLOGY_REGISTRY.read_text(encoding="utf-8"))
+HADES_NATIVE_TERM_GROUPS = (
+    "officialTerms",
+    "nativeChoiceTitles",
+    "officialSourceNames",
+)
+HADES_FORBIDDEN_HOST_GROUPS = HADES_NATIVE_TERM_GROUPS + (
+    "compatibilityAliases",
+    "internalTerms",
+)
+
+
+def registry_values(groups: tuple[str, ...]) -> set[str]:
+    values: set[str] = set()
+    for group in groups:
+        for entry in REGISTRY[group].values():
+            for field in ("value", "englishValue"):
+                value = entry.get(field)
+                if isinstance(value, str) and value:
+                    values.add(value)
+    return values
+
+
+HADES_FORBIDDEN_HOST_TERMS = registry_values(HADES_FORBIDDEN_HOST_GROUPS)
+REGISTRY_COMPATIBILITY_ALIASES = registry_values(("compatibilityAliases",))
+
+
+def find_hades_vocabulary_leaks(resources: dict[str, str]) -> dict[str, list[str]]:
+    leaks: dict[str, list[str]] = {}
+    for resource, text in resources.items():
+        found = sorted(term for term in HADES_FORBIDDEN_HOST_TERMS if term in text)
+        if found:
+            leaks[resource] = found
+    return leaks
+
+
+shared_resource_root = ROOT / "Resources/Localization"
+shared_resource_texts = {
+    str(path.relative_to(ROOT)): path.read_text(encoding="utf-8")
+    for path in sorted(shared_resource_root.rglob("*"))
+    if path.is_file()
+}
+assert shared_resource_texts, "shared localization resources are missing"
+
+# Regression/control pair for #197. The old seven-token snapshot missed both
+# values below (M6); a neutral canary in the same resources must remain clean.
+assert REGISTRY["compatibilityAliases"]["rerollShort"]["value"] == "重骰"
+assert REGISTRY["officialSourceNames"]["Chaos"]["value"] == "卡俄斯"
+alias_probe = {
+    resource: text + "\n重骰\n卡俄斯"
+    for resource, text in shared_resource_texts.items()
+}
+alias_probe_leaks = find_hades_vocabulary_leaks(alias_probe)
+for resource in shared_resource_texts:
+    assert {"重骰", "卡俄斯"} <= set(alias_probe_leaks.get(resource, [])), (
+        f"registry-derived Host gate missed #197 alias/native mutation in {resource}"
+    )
+
+neutral_probe = {
+    resource: text + "\nNeutralHostCanary"
+    for resource, text in shared_resource_texts.items()
+}
+assert not find_hades_vocabulary_leaks(neutral_probe), (
+    "Host terminology gate rejected a neutral control; the check is not term-specific"
+)
+
+actual_leaks = find_hades_vocabulary_leaks(shared_resource_texts)
+assert not actual_leaks, f"Hades terminology leaked into shared Host resources: {actual_leaks}"
+
+# ENGINEERING_INVARIANTS.md mirrors the compatibility aliases for readers, but
+# the registry remains authoritative. Keep the prose mirror exact so a newly
+# added alias cannot be omitted from governance documentation again.
+invariants = (ROOT / "ENGINEERING_INVARIANTS.md").read_text(encoding="utf-8")
+alias_line = next(
+    (line for line in invariants.splitlines() if line.startswith("- **Compatibility Aliases:**")),
+    None,
+)
+assert alias_line is not None, "ENGINEERING_INVARIANTS.md is missing the Compatibility Aliases line"
+documented_aliases = set(re.findall(r"`([^`]+)`", alias_line))
+assert documented_aliases == REGISTRY_COMPATIBILITY_ALIASES, (
+    "ENGINEERING_INVARIANTS.md compatibility aliases drifted from registry: "
+    f"doc-only={sorted(documented_aliases - REGISTRY_COMPATIBILITY_ALIASES)}, "
+    f"registry-only={sorted(REGISTRY_COMPATIBILITY_ALIASES - documented_aliases)}"
+)
 
 localization = (ROOT / "Sources/Core/Host/TrainerLocalization.swift").read_text(encoding="utf-8")
 assert "func presentation(" in localization, "shared presentation values need one Host resolver"
