@@ -23,7 +23,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import error_presentation
-from games.hades2 import runtime_error_presentation
 
 LOCALIZATION = ROOT / "Sources/Hades2/Presentation/Localization"
 TABLES = {
@@ -75,11 +74,11 @@ for language, entries in TABLES.items():
         for term in FORBIDDEN:
             assert term not in value, f"{language} {key} leaks non-canonical term {term!r}"
 
-# 4. Every backend presentation key resolves in every language.
+# 4. Every backend presentation key resolves in every language. Runtime
+# refusals live in the same registry; only the generic fallback is separate
+# because it has no producer message of its own.
 BACKEND_KEYS = {rule["key"] for rule in error_presentation.REGISTRY}
-BACKEND_KEYS.add(runtime_error_presentation._FALLBACK_KEY)
-for per_command in runtime_error_presentation._RUNTIME_KEYS.values():
-    BACKEND_KEYS |= set(per_command.values())
+BACKEND_KEYS.add(error_presentation.RUNTIME_FALLBACK_KEY)
 for key in sorted(BACKEND_KEYS):
     for language, entries in TABLES.items():
         assert key in entries, f"{language} is missing backend key {key}"
