@@ -218,10 +218,9 @@ assert "hades2.traits.removalUnavailable" in row_block, (
 revision = int(re.search(r"version = 1, revision = (\d+)", LUA).group(1))
 previous = int(re.search(r"previousModule\.revision ~= (\d+)", LUA).group(1))
 assert revision == previous, "resident revision guard and declared revision disagree"
-# 50 was this feature's own bump (49 -> 50). 51 is the review fix, which only
-# deletes the no-op loop in `traitOwner` — still resident source, so still a
-# bump, and still exactly one.
-assert revision == 51, f"resident revision must be 50 -> 51, found {revision}"
+# 50 was this feature's own bump, 51 removed the no-op traitOwner loop,
+# and 52 makes Echo's Trainer-injected LastReward fallback transactional.
+assert revision == 52, f"resident revision must be 51 -> 52, found {revision}"
 
 
 # --- 10. Every new key exists in both shipped languages ---

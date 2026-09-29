@@ -6,13 +6,13 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 51 then
+if previousModule and previousModule.revision ~= 52 then
   previousModule.dispatch("cleanup")
   __MacGamingTrainerV1 = nil
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 51, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 52, damageMultiplier = 2, damageEnabled = false,
     godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3362,10 +3362,6 @@ if __MacGamingTrainerV1 == nil then
           end
           if #priorityOptions + #eligibleOptions == 0 then error("No eligible special blessings are available") end
 
-          if definition.echoLastReward and not CurrentRun.LastReward then
-            CurrentRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
-          end
-
           source.UpgradeOptions = {}
           for _ = 1, 3 do
             local option = nil
@@ -3440,9 +3436,15 @@ if __MacGamingTrainerV1 == nil then
         local ownerRun = CurrentRun
 
         local function runChoice()
+          local previousLastReward = ownerRun.LastReward
+          local injectedLastReward = definition.echoLastReward and previousLastReward == nil
+          if injectedLastReward then
+            ownerRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
+          end
           local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
           if ok and definition.post == "costume" then pcall(SetupCostume) end
           local cleanupOk, cleanupMessage = pcall(function()
+            if injectedLastReward then ownerRun.LastReward = previousLastReward end
             lootPickups[source.Name] = previousPickup
             if hadLootChoiceHistory then
               while #history > historyCount do table.remove(history) end
