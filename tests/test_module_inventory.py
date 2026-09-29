@@ -9,6 +9,8 @@ sys.path.insert(0, str(ROOT / "Tools"))
 
 from module_inventory import (
     ModuleInventoryError,
+    app_resource_sources_for_diff,
+    current_app_resource_sources,
     discover_module_ids,
     executable_reference_prefixes,
     module_ids_for_diff,
@@ -25,11 +27,23 @@ def commit(root: Path, message: str) -> str:
     return git(root, "rev-parse", "HEAD")
 
 
-def write_module(root: Path, game_id: str, *, declared_id: str | None = None) -> None:
+def write_module(
+    root: Path,
+    game_id: str,
+    *,
+    declared_id: str | None = None,
+    app_resources=(),
+) -> None:
     module_dir = root / "Backend/games" / game_id
     module_dir.mkdir(parents=True, exist_ok=True)
     (module_dir / "module.json").write_text(
-        json.dumps({"id": declared_id or game_id}) + "\n",
+        json.dumps({
+            "id": declared_id or game_id,
+            "appResources": [
+                {"source": source, "destination": Path(source).name}
+                for source in app_resources
+            ],
+        }) + "\n",
         encoding="utf-8",
     )
 
@@ -37,12 +51,16 @@ def write_module(root: Path, game_id: str, *, declared_id: str | None = None) ->
 # Working-tree discovery is deterministic and game-agnostic.
 with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-") as temporary:
     root = Path(temporary)
-    write_module(root, "beta")
-    write_module(root, "alpha")
+    write_module(root, "beta", app_resources=("docs/reference/beta/ui.json",))
+    write_module(root, "alpha", app_resources=("docs/reference/alpha/catalog.csv",))
     assert discover_module_ids(root) == ("alpha", "beta")
     assert executable_reference_prefixes(discover_module_ids(root)) == (
         "docs/reference/alpha/",
         "docs/reference/beta/",
+    )
+    assert current_app_resource_sources(root) == (
+        "docs/reference/alpha/catalog.csv",
+        "docs/reference/beta/ui.json",
     )
 
 # A manifest cannot claim a different identity from its directory. Shared
@@ -67,8 +85,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-diff-") as tempora
     subprocess.run(["git", "config", "user.email", "ci@example.invalid"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.name", "CI"], cwd=root, check=True)
 
-    write_module(root, "alpha")
-    write_module(root, "beta")
+    write_module(root, "alpha", app_resources=("docs/reference/alpha/data.json",))
+    write_module(root, "beta", app_resources=("Sources/Beta/table.json",))
     reference = root / "docs/reference/alpha/data.json"
     reference.parent.mkdir(parents=True)
     reference.write_text("{}\n", encoding="utf-8")
@@ -82,5 +100,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-diff-") as tempora
     head = commit(root, "remove alpha")
 
     assert module_ids_for_diff(base, head, root) == ("alpha", "beta")
+    assert app_resource_sources_for_diff(base, head, root) == (
+        "Sources/Beta/table.json",
+        "docs/reference/alpha/data.json",
+    )
 
 print("module_inventory_ok")
