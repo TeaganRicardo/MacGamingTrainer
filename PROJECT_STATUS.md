@@ -9,7 +9,7 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Baseline main used for this handoff: `73748f7a134ec422ce5b76787a833eb0be136885`.
+- Baseline main used for this handoff: `af7a9844ff4afb97bf24a19bbfb707edce4290a2`.
 - Hades II resident runtime revision: 51.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
@@ -47,7 +47,7 @@ Its accepted resident source is `Backend/games/hades2/runtime/hades.lua` at `sha
 
 Revision 51 is revision 50 plus one deletion — the no-op loop in `traitOwner` that computed nothing and was never read — so no observable behaviour changed between the two. Any prebuilt artifact whose resident digest is `sha256:63c1436b…` is revision 50 and predates that cleanup; it is not evidence for revision 51.
 
-Current `main` `73748f7a134ec422ce5b76787a833eb0be136885` contains no later resident-Lua semantic change, so this remains the latest real-game acceptance baseline.
+Current `main` `af7a9844ff4afb97bf24a19bbfb707edce4290a2` contains no later resident-Lua semantic change, so this remains the latest real-game acceptance baseline.
 
 Hades II 1.143476 / Steam 25481925 compatibility was previously accepted on PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` with exact-head Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run attach/status plus representative feature smoke checks.
 
@@ -59,7 +59,7 @@ PR #184 established the change-scope routing baseline. Pull-request change scope
 
 Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), B02 shared Host/Core presentation migration (PR #189), B03 Hades presentation migration (#177), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
-Post-B03 hardening now merged on the current baseline includes #196 (Core Time Warp presentation ownership), #198 (schema/protocol mirror cleanup), #200 (test naming governance), #201 (frozen-reference authority), #204 (single-source Hades error registry), #205 (module-driven shared CI discovery), #210 (reference-fixture handshake closeout), and #213 (normal resident-runtime declaration validation).
+Post-B03 hardening now merged on the current baseline includes #196 (Core Time Warp presentation ownership), #197 (registry-derived Host forbidden-term governance), #198 (schema/protocol mirror cleanup), #200 (test naming governance), #201 (frozen-reference authority), #204 (single-source Hades error registry), #205 (module-driven shared CI discovery), #210 (reference-fixture handshake closeout), and #213 (normal resident-runtime declaration validation).
 
 Planning issue #124 remains the sequencing authority. This status file records only the current operational gate and does not mirror the roadmap.
 
@@ -80,7 +80,7 @@ Do not stack new implementation on unmerged overlapping PR heads.
 
 The shared-presentation migration remains complete: B01 / #131 / PR #183, B02 / PR #189, and B03 / #177 all merged, with B02 and B03 accepted in the real game at `a6cf37b`; subsequent presentation hardening did not change resident Lua semantics.
 
-The two governance parent lanes #204 and #213 are now merged. Per #124, the next independently admissible tasks are #197 (registry-derived Host forbidden-term governance) and #199 (app identity / dist naming / provenance ownership); they may proceed in parallel from current `main`. #179 remains serialized behind #199. #220 follows completion of the two governance lanes before #203 -> #180 -> #214 convergence.
+The presentation/error lane is complete through #197. Per #124, #199 (app identity / dist naming / provenance ownership) is the remaining ready task; #179 remains serialized behind #199. #220 follows completion of the pre-existing governance lanes before #203 -> #180 -> #214 convergence.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
