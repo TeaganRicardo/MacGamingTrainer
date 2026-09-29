@@ -169,7 +169,9 @@ REGISTRY = [{'match': 'literal',
   'key': 'hades2.error.nativeFunctionMissing',
   'argument': 'groups',
   'runtime_only': True,
-  'runtime': {'commands': '*', 'producer': {'kind': 'helper', 'name': 'requireFunctions'}}},
+  'runtime': {'commands': '*',
+              'producer': {'kind': 'helper', 'name': 'requireFunctions'},
+              'sample': 'Unsupported sample-purpose: missing SampleFunction'}},
  {'match': 'literal',
   'message': 'Legendary / Duo 设置无效。',
   'key': 'hades2.error.invalidLegendaryDuo'},
@@ -547,6 +549,8 @@ def check_registry(registry=None) -> list:
                 producer = runtime.get("producer")
                 if not isinstance(producer, dict) or producer.get("kind") not in ("command", "helper") or not producer.get("name"):
                     problems.append(f"rule {index} has invalid runtime producer")
+                if shape == "regex" and not runtime.get("sample"):
+                    problems.append(f"rule {index} runtime regex has no concrete sample")
     return problems
 
 
