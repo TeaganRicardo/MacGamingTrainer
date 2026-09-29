@@ -35,6 +35,11 @@ struct Hades2ActionReceipt: Equatable {
     let error: String?
 }
 
+struct Hades2PresentationReference: Equatable {
+    let key: String
+    let arguments: [String]
+}
+
 /// Typed boundary between the untyped JSON transport envelope and Hades UI
 /// state. All backend field names are centralized here instead of being spread
 /// through the ObservableObject and Views.
@@ -49,7 +54,7 @@ struct Hades2StatePatch {
     let dormantFeatures: [String: Bool]?
     let featureSupport: [String: Bool]?
     let featureErrors: Hades2FieldPatch<[String: String]>
-    let featureErrorPresentations: Hades2FieldPatch<[String: TrainerTextToken]>
+    let featureErrorPresentations: Hades2FieldPatch<[String: Hades2PresentationReference]>
     let desiredFeatures: [Hades2FeatureKey: Bool]?
 
     let gameSpeed: Double?
@@ -213,10 +218,10 @@ struct Hades2StatePatch {
     private static func textTokenMapField(
         _ payload: [String: Any],
         _ key: String
-    ) -> Hades2FieldPatch<[String: TrainerTextToken]> {
+    ) -> Hades2FieldPatch<[String: Hades2PresentationReference]> {
         guard payload.keys.contains(key) else { return .absent }
         guard let values = payload[key] as? [String: Any] else { return .present(nil) }
-        let tokens = values.reduce(into: [String: TrainerTextToken]()) { result, entry in
+        let tokens = values.reduce(into: [String: Hades2PresentationReference]()) { result, entry in
             guard let row = entry.value as? [String: Any],
                   let presentation = row["presentation"] as? String,
                   !presentation.isEmpty else { return }
@@ -226,7 +231,7 @@ struct Hades2StatePatch {
                 if let value = value as? NSNumber { return value.stringValue }
                 return nil
             }
-            result[entry.key] = TrainerTextToken(key: presentation, arguments: arguments)
+            result[entry.key] = Hades2PresentationReference(key: presentation, arguments: arguments)
         }
         return .present(tokens)
     }
