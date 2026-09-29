@@ -21,6 +21,10 @@ class ModuleInventoryError(RuntimeError):
 
 
 def _module_id(manifest_path: Path, data) -> str:
+    if manifest_path.parent.parent != MODULES_RELATIVE or manifest_path.name != "module.json":
+        raise ModuleInventoryError(
+            f"{manifest_path}: module manifests must live directly under Backend/games/<id>/"
+        )
     if not isinstance(data, dict):
         raise ModuleInventoryError(f"{manifest_path}: module manifest must be a JSON object")
     game_id = data.get("id")
