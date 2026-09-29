@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Mapping
 
 from resident_runtime import parse_resident_runtime_declaration
+from module_support import app_spec_from_manifest
 
 
 def git_value(repo_root: Path, revision: str) -> str:
@@ -49,6 +50,11 @@ def require_product_identity(repo_root: Path, product_version: str,
         raise RuntimeError("product version differs from Info.plist CFBundleShortVersionString")
     if plist.get("CFBundleVersion") != bundle_build:
         raise RuntimeError("bundle build differs from Info.plist CFBundleVersion")
+    executable = plist.get("CFBundleExecutable")
+    if (not isinstance(executable, str) or not executable or executable in (".", "..")
+            or any(character in executable for character in ("/", ":", "\\"))
+            or any(ord(character) < 32 for character in executable)):
+        raise RuntimeError("Info.plist CFBundleExecutable is not a safe artifact stem")
     return plist
 
 
@@ -58,11 +64,7 @@ def artifact_name(repo_root: Path, product_version: str, bundle_build: str,
     plist = require_product_identity(repo_root, product_version, bundle_build)
     if label and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", label):
         raise RuntimeError("artifact label must be a safe identifier")
-    executable = plist.get("CFBundleExecutable")
-    if (not isinstance(executable, str) or not executable or executable in (".", "..")
-            or any(character in executable for character in ("/", ":", "\\"))
-            or any(ord(character) < 32 for character in executable)):
-        raise RuntimeError("Info.plist CFBundleExecutable is not a safe artifact stem")
+    executable = plist["CFBundleExecutable"]
     stem = executable + (f"-{label}" if label else "")
     return f"{stem}-{product_version}-b{bundle_build}-{git_value(repo_root, 'HEAD')[:8]}-rc.zip"
 
@@ -162,13 +164,21 @@ def resident_identity(repo_root: Path, artifact: Path, module_id: str) -> dict[s
     }
 
 
-def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id: str) -> None:
-    """Bind the claimed module to its packaged marker and source manifest."""
+def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id: str,
+                                     source_plist: dict[str, object]) -> None:
+    """Bind the claimed module and product identity to the packaged app."""
     if not re.fullmatch(r"[a-z][a-z0-9_]*", module_id):
         raise RuntimeError(f"invalid module id: {module_id!r}")
     source_manifest = (repo_root / "Backend/games" / module_id / "module.json").read_bytes()
-    if json.loads(source_manifest).get("id") != module_id:
+    source_data = json.loads(source_manifest)
+    if not isinstance(source_data, dict) or source_data.get("id") != module_id:
         raise RuntimeError("source module manifest ID differs from --module-id")
+    game_display_name = source_data.get("displayName")
+    if not isinstance(game_display_name, str) or not game_display_name.strip():
+        raise RuntimeError("source module manifest has no displayName")
+    app = app_spec_from_manifest(
+        source_data, module_id, game_display_name.strip(), source_plist["CFBundleExecutable"]
+    )
     marker_suffix = "/Contents/Resources/ACTIVE_GAME_ID"
     with zipfile.ZipFile(artifact) as archive:
         names = archive.namelist()
@@ -176,10 +186,28 @@ def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id:
         if len(markers) != 1:
             raise RuntimeError("artifact must contain exactly one selected-module marker")
         app_root = markers[0][:-len(marker_suffix)]
-        if not app_root.endswith(".app") or "/" in app_root:
-            raise RuntimeError("artifact selected-module marker is outside a single app")
+        if app_root != f"{app.display_name}.app":
+            raise RuntimeError("artifact app name differs from declared module identity")
         if archive.read(markers[0]).decode("utf-8").strip() != module_id:
             raise RuntimeError("packaged module marker differs from --module-id")
+        info_path = f"{app_root}/Contents/Info.plist"
+        if names.count(info_path) != 1:
+            raise RuntimeError("artifact must contain exactly one packaged Info.plist")
+        packaged_info = plistlib.loads(archive.read(info_path))
+        expected_info = {
+            "CFBundleShortVersionString": source_plist["CFBundleShortVersionString"],
+            "CFBundleVersion": source_plist["CFBundleVersion"],
+            "CFBundleExecutable": app.executable,
+            "CFBundleIdentifier": app.bundle_identifier,
+            "CFBundleName": app.display_name,
+            "CFBundleDisplayName": app.display_name,
+        }
+        for field, expected in expected_info.items():
+            if packaged_info.get(field) != expected:
+                raise RuntimeError(f"packaged Info.plist {field} differs from declared source")
+        executable = f"{app_root}/Contents/MacOS/{app.executable}"
+        if names.count(executable) != 1 or not archive.getinfo(executable).file_size:
+            raise RuntimeError("artifact is missing its declared packaged executable")
         module_dir = f"{app_root}/Contents/Resources/Backend/games/"
         packaged_manifest = f"{module_dir}{module_id}/module.json"
         manifests = [name for name in names if name.startswith(module_dir)
@@ -204,7 +232,7 @@ def build_manifest(
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
 ) -> dict[str, object]:
-    require_product_identity(repo_root, product_version, bundle_build)
+    source_plist = require_product_identity(repo_root, product_version, bundle_build)
     source_sha = git_value(repo_root, "HEAD")
     source_tree = git_value(repo_root, "HEAD^{tree}")
     copies = require_declared_inputs(repo_root, generated_copies)
@@ -256,7 +284,7 @@ def build_manifest(
             raise RuntimeError("push event SHA differs from executing checkout")
 
     if module_id:
-        require_packaged_module_identity(repo_root, artifact, module_id)
+        require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
         resident = resident_identity(repo_root, artifact, module_id)
         if resident is not None:

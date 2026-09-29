@@ -88,6 +88,26 @@ def _default_app_name(display_name, game_id):
     return 'Mac Gaming Trainer - ' + (safe[:80].strip() or game_id)
 
 
+def app_spec_from_manifest(raw, game_id, game_display_name, executable):
+    """Resolve module-owned app identity for builds and artifact verification."""
+    app = raw.get('app', {})
+    if not isinstance(app, dict):
+        raise ManifestError('app must be an object.')
+    if 'executable' in app:
+        raise ManifestError('app.executable is owned by Info.plist CFBundleExecutable.')
+    default_bundle = f"com.gao.macgamingtrainer.{game_id.replace('_', '-')}"
+    bundle_identifier = app.get('bundleIdentifier', default_bundle)
+    if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
+        raise ManifestError('app.bundleIdentifier must be a reverse-DNS identifier.')
+    display_name = app.get('displayName', _default_app_name(game_display_name, game_id))
+    if (not isinstance(display_name, str) or not display_name.strip()
+            or display_name.strip() in ('.', '..')
+            or any(character in display_name for character in ('/', ':', '\\'))
+            or any(ord(character) < 32 for character in display_name)):
+        raise ManifestError('app.displayName must be a safe non-empty app name.')
+    return AppBuildSpec(bundle_identifier, display_name.strip(), executable)
+
+
 def load_manifest(game_id: str) -> BuildManifest:
     path = manifest_path(game_id)
     runtime = GameModuleManifest.load(path)
@@ -148,22 +168,7 @@ def load_manifest(game_id: str) -> BuildManifest:
         raise ManifestError('frontend.minimumMacOS must look like 14.0 or 14.4.1.')
     frontend_spec = FrontendBuildSpec(source_directory, module_type, tuple(arches), minimum_macos)
 
-    app = raw.get('app', {})
-    if not isinstance(app, dict):
-        raise ManifestError('app must be an object.')
-    if 'executable' in app:
-        raise ManifestError('app.executable is owned by Info.plist CFBundleExecutable.')
-    default_bundle = f"com.gao.macgamingtrainer.{runtime.id.replace('_', '-')}"
-    bundle_identifier = app.get('bundleIdentifier', default_bundle)
-    if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
-        raise ManifestError('app.bundleIdentifier must be a reverse-DNS identifier.')
-    display_name = app.get('displayName', _default_app_name(runtime.display_name, runtime.id))
-    if (not isinstance(display_name, str) or not display_name.strip()
-            or display_name.strip() in ('.', '..')
-            or any(character in display_name for character in ('/', ':', '\\'))
-            or any(ord(character) < 32 for character in display_name)):
-        raise ManifestError('app.displayName must be a safe non-empty app name.')
-    app_spec = AppBuildSpec(bundle_identifier, display_name.strip(), executable)
+    app_spec = app_spec_from_manifest(raw, runtime.id, runtime.display_name, executable)
 
     req = raw.get('buildRequirements', {})
     if not isinstance(req, dict):

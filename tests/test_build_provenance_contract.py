@@ -45,6 +45,12 @@ class BuildProvenanceContract(unittest.TestCase):
                                '--repo-root', str(self.root), *extra],
                               cwd=self.root, env=env or self.env, text=True, capture_output=True)
 
+    def packaged_info(self, name='Test', bundle_id='com.example.test'):
+        info = plistlib.loads((self.root / 'Info.plist').read_bytes())
+        info.update({'CFBundleName': name, 'CFBundleDisplayName': name,
+                     'CFBundleIdentifier': bundle_id})
+        return plistlib.dumps(info)
+
     def test_local_exact_commit_without_github_metadata(self):
         outputs = Path(self.temporary.name) / 'github-output'
         result = self.run_tool('--local', env={**self.env, 'GITHUB_OUTPUT': str(outputs)})
@@ -111,7 +117,8 @@ class BuildProvenanceContract(unittest.TestCase):
         module = self.root / 'Backend/games/hades2'
         (module / 'runtime').mkdir(parents=True)
         (module / 'module.json').write_text(json.dumps({
-            'id': 'hades2',
+            'id': 'hades2', 'displayName': 'Hades II',
+            'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
             'residentRuntime': {'source': 'runtime/hades.lua'},
         }))
         source = module / 'runtime/hades.lua'
@@ -120,6 +127,8 @@ class BuildProvenanceContract(unittest.TestCase):
         subprocess.run(['git', 'commit', '-qm', 'resident'], cwd=self.root, check=True)
         packaged = 'Test.app/Contents/Resources/Backend/games/hades2/runtime/hades.lua'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
             archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
                              (module / 'module.json').read_bytes())
@@ -131,6 +140,8 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertEqual(manifest['residentRuntime']['sourceSha256'], expected)
         self.assertEqual(manifest['residentRuntime']['packagedSha256'], expected)
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
             archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
                              (module / 'module.json').read_bytes())
@@ -144,12 +155,17 @@ class BuildProvenanceContract(unittest.TestCase):
         for game_id in ('hades2', 'reference_fixture'):
             module = modules / game_id
             module.mkdir(parents=True)
-            (module / 'module.json').write_text(json.dumps({'id': game_id}))
+            (module / 'module.json').write_text(json.dumps({
+                'id': game_id, 'displayName': game_id,
+                'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
+            }))
         subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
         subprocess.run(['git', 'commit', '-qm', 'modules'], cwd=self.root, check=True)
 
         resources = 'Test.app/Contents/Resources'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'hades2\n')
             archive.writestr(f'{resources}/Backend/games/hades2/module.json',
                              (modules / 'hades2/module.json').read_bytes())
@@ -158,6 +174,8 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertIn('module', mismatch.stderr.lower())
 
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'reference_fixture\n')
             archive.writestr(f'{resources}/Backend/games/reference_fixture/module.json',
                              json.dumps({'id': 'hades2'}))
@@ -166,6 +184,8 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertIn('manifest', wrong_manifest.stderr.lower())
 
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+            archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
             archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'reference_fixture\n')
             archive.writestr(f'{resources}/Backend/games/reference_fixture/module.json',
                              (modules / 'reference_fixture/module.json').read_bytes())
@@ -173,6 +193,53 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertEqual(valid.returncode, 0, valid.stderr)
         metadata = json.loads(self.artifact.with_name('test.provenance.json').read_text())
         self.assertEqual(metadata['moduleId'], 'reference_fixture')
+
+    def test_packaged_app_identity_must_match_source_owners(self):
+        module = self.root / 'Backend/games/hades2'
+        module.mkdir(parents=True)
+        manifest = {
+            'id': 'hades2', 'displayName': 'Hades II',
+            'app': {'displayName': 'Test App', 'bundleIdentifier': 'com.example.hades2'},
+        }
+        (module / 'module.json').write_text(json.dumps(manifest))
+        subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'module'], cwd=self.root, check=True)
+        app = 'Test App.app/Contents'
+        source_plist = plistlib.loads((self.root / 'Info.plist').read_bytes())
+        source_plist.update({
+            'CFBundleName': 'Test App', 'CFBundleDisplayName': 'Test App',
+            'CFBundleIdentifier': 'com.example.hades2',
+        })
+
+        def package(plist, executable=True):
+            with zipfile.ZipFile(self.artifact, 'w') as archive:
+                archive.writestr(f'{app}/Info.plist', plistlib.dumps(plist))
+                if executable:
+                    archive.writestr(f'{app}/MacOS/TestTrainer', b'binary')
+                archive.writestr(f'{app}/Resources/ACTIVE_GAME_ID', 'hades2\n')
+                archive.writestr(f'{app}/Resources/Backend/games/hades2/module.json',
+                                 (module / 'module.json').read_bytes())
+
+        for field, wrong in [
+            ('CFBundleShortVersionString', '9.9.9'), ('CFBundleVersion', '999'),
+            ('CFBundleExecutable', 'WrongExecutable'),
+            ('CFBundleIdentifier', 'com.example.wrong'),
+            ('CFBundleDisplayName', 'Wrong App'), ('CFBundleName', 'Wrong App'),
+        ]:
+            with self.subTest(field=field):
+                package({**source_plist, field: wrong})
+                result = self.run_tool('--local', '--module-id', 'hades2')
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn(field, result.stderr)
+
+        package(source_plist, executable=False)
+        missing_executable = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertNotEqual(missing_executable.returncode, 0)
+        self.assertIn('executable', missing_executable.stderr)
+
+        package(source_plist)
+        valid = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertEqual(valid.returncode, 0, valid.stderr)
 
     def test_artifact_name_uses_root_executable_and_git_head(self):
         (self.root / 'Info.plist').write_bytes(plistlib.dumps({
