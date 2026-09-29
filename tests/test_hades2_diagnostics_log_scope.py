@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -56,6 +57,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         tail = archive.read("trainer.log.tail").decode("utf-8")
         assert "SCOPED LOG" in tail
         assert "LEGACY LOG MUST NOT EXPORT" not in tail
+        report = json.loads(archive.read("report.json"))
+        assert report["protocolVersion"] == 6
 
 if original_home is None:
     os.environ.pop("HOME", None)
