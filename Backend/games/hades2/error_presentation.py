@@ -591,7 +591,11 @@ def runtime_presentation_for(command, message):
                 return rule["key"], ()
             continue
         if shape == "prefix":
-            prefix = rule["prefix"]
+            # Resident detail is stripped before resolution. Generic raised
+            # messages keep the registry's authored trailing space, but the
+            # runtime boundary cannot: compare the same identity without
+            # requiring whitespace that normalization has already removed.
+            prefix = rule["prefix"].rstrip()
             if not message.startswith(prefix):
                 continue
             remainder = message[len(prefix):].strip()
