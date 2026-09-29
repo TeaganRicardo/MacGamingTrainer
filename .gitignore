@@ -8,3 +8,4 @@ DerivedData/
 *.zip
 *.patch
 *.log
+.workbuddy-ai/
