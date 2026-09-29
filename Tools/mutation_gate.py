@@ -450,8 +450,9 @@ def manifest() -> list[Mutation]:
 # Runner
 # --------------------------------------------------------------------------
 
-# Each owning test declares completion by printing one literal *_ok marker.
-# Discover it from that test instead of mirroring test->token ownership here.
+# Each owning test declares completion with one literal *_ok marker, either in
+# Python or in an embedded compiled harness. Discover it from that test instead
+# of mirroring test->token ownership here.
 def success_token_for(test: str) -> str:
     path = ROOT / test
     try:
@@ -460,16 +461,12 @@ def success_token_for(test: str) -> str:
         raise ValueError(f"cannot inspect owning test {test}: {error}") from error
     tokens = set()
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
             continue
-        if not isinstance(node.func, ast.Name) or node.func.id != "print" or not node.args:
-            continue
-        value = node.args[0]
-        if isinstance(value, ast.Constant) and isinstance(value.value, str) and value.value.endswith("_ok"):
-            tokens.add(value.value)
+        tokens.update(re.findall(r"\\b[A-Za-z][A-Za-z0-9_]*_ok\\b", node.value))
     if len(tokens) != 1:
         raise ValueError(
-            f"owning test {test} must print exactly one literal *_ok completion marker; "
+            f"owning test {test} must declare exactly one literal *_ok completion marker; "
             f"found {sorted(tokens)}"
         )
     return next(iter(tokens))
