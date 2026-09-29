@@ -10,7 +10,24 @@ from .adapter import AdapterError
 
 
 class ProcessTimeWarpError(AdapterError):
-    pass
+    """Core-owned Time Warp failure with a Host presentation identity.
+
+    The backend never knows the active UI language. Every player-facing Time
+    Warp failure therefore carries a `host.timeWarp.error.*` key plus optional
+    runtime arguments; detailed tool/runtime text stays diagnostic-only.
+    """
+
+    PRESENTATION_PREFIX = "host.timeWarp.error."
+
+    def __init__(self, code, presentation, *, diagnostic=None, arguments=()):
+        if not isinstance(presentation, str) or not presentation.startswith(self.PRESENTATION_PREFIX):
+            raise ValueError("Process Time Warp presentation must use a host.timeWarp.error.* key.")
+        super().__init__(
+            code,
+            presentation,
+            diagnostic=diagnostic,
+            arguments=arguments,
+        )
 
 
 class ProcessTimeWarpController:
@@ -47,13 +64,26 @@ class ProcessTimeWarpController:
 
     def _check_alive(self):
         if not self.driver.is_alive():
-            raise ProcessTimeWarpError("disconnected", "游戏进程已退出或调试连接已断开。")
+            raise ProcessTimeWarpError(
+                "disconnected",
+                "host.timeWarp.error.disconnected",
+                diagnostic="游戏进程已退出或调试连接已断开。",
+            )
 
     @staticmethod
     def _install_error(code):
         if code == -3:
-            return ProcessTimeWarpError("time_warp_unsupported", "所选游戏镜像未导入受支持的单调时钟函数。")
-        return ProcessTimeWarpError("time_warp_install_failed", f"Time Warp helper 安装失败（{code}）。")
+            return ProcessTimeWarpError(
+                "time_warp_unsupported",
+                "host.timeWarp.error.unsupportedImports",
+                diagnostic="所选游戏镜像未导入受支持的单调时钟函数。",
+            )
+        return ProcessTimeWarpError(
+            "time_warp_install_failed",
+            "host.timeWarp.error.installFailed",
+            arguments=(code,),
+            diagnostic=f"Time Warp helper 安装失败（{code}）。",
+        )
 
     def set_speed(self, value):
         speed = self._validate_speed(value)
@@ -69,7 +99,9 @@ class ProcessTimeWarpController:
             if abi != self.ABI_VERSION:
                 raise ProcessTimeWarpError(
                     "time_warp_abi_mismatch",
-                    f"Time Warp helper ABI 不兼容（需要 {self.ABI_VERSION}，当前 {abi}）。",
+                    "host.timeWarp.error.abiMismatchVersion",
+                    arguments=(self.ABI_VERSION, abi),
+                    diagnostic=f"Time Warp helper ABI 不兼容（需要 {self.ABI_VERSION}，当前 {abi}）。",
                 )
 
             if not self._installed:
@@ -77,18 +109,29 @@ class ProcessTimeWarpController:
                 if code != 0:
                     raise self._install_error(code)
                 if self.driver.hook_mask() == 0:
-                    raise ProcessTimeWarpError("time_warp_unsupported", "目标镜像没有可用的 Time Warp 时钟绑定。")
+                    raise ProcessTimeWarpError(
+                        "time_warp_unsupported",
+                        "host.timeWarp.error.noClockBindings",
+                        diagnostic="目标镜像没有可用的 Time Warp 时钟绑定。",
+                    )
                 self._installed = True
             else:
                 code = self.driver.set_speed(speed)
                 if code != 0:
-                    raise ProcessTimeWarpError("time_warp_set_failed", f"Time Warp 设置失败（{code}）。")
+                    raise ProcessTimeWarpError(
+                        "time_warp_set_failed",
+                        "host.timeWarp.error.setFailed",
+                        arguments=(code,),
+                        diagnostic=f"Time Warp 设置失败（{code}）。",
+                    )
 
             actual = self.driver.get_speed()
             if not math.isfinite(actual) or abs(actual - speed) > 0.000001:
                 raise ProcessTimeWarpError(
                     "time_warp_verify_failed",
-                    f"Time Warp 设置校验失败（目标 {speed:g}，实际 {actual:g}）。",
+                    "host.timeWarp.error.verifyFailed",
+                    arguments=(f"{speed:g}", f"{actual:g}"),
+                    diagnostic=f"Time Warp 设置校验失败（目标 {speed:g}，实际 {actual:g}）。",
                 )
             return actual
 
@@ -98,7 +141,11 @@ class ProcessTimeWarpController:
         self._refresh_pid()
         with self.driver.session():
             if self.driver.abi() != self.ABI_VERSION:
-                raise ProcessTimeWarpError("time_warp_abi_mismatch", "Time Warp helper ABI 不兼容。")
+                raise ProcessTimeWarpError(
+                    "time_warp_abi_mismatch",
+                    "host.timeWarp.error.abiMismatch",
+                    diagnostic="Time Warp helper ABI 不兼容。",
+                )
             return self.driver.get_speed()
 
     def reset(self):
@@ -140,11 +187,19 @@ class LLDBProcessTimeWarpDriver:
     @contextmanager
     def session(self):
         if getattr(self.transport, 'tainted', False):
-            raise ProcessTimeWarpError('restart_required', '调试连接状态不明；请先重启后端或重新连接游戏。')
+            raise ProcessTimeWarpError(
+                "restart_required",
+                "host.timeWarp.error.restartRequired",
+                diagnostic="调试连接状态不明；请先重启后端或重新连接游戏。",
+            )
         lldb = self._lldb()
         process = self.transport.process
         if process is None:
-            raise ProcessTimeWarpError("disconnected", "调试进程不存在。")
+            raise ProcessTimeWarpError(
+                "disconnected",
+                "host.timeWarp.error.disconnected",
+                diagnostic="调试进程不存在。",
+            )
         state = process.GetState()
         resume_after = state != lldb.eStateStopped
         self.transport.stop(time.monotonic() + 3)
@@ -159,7 +214,11 @@ class LLDBProcessTimeWarpDriver:
         target = self.transport.target
         if target is None:
             if required:
-                raise ProcessTimeWarpError("disconnected", "调试目标不存在。")
+                raise ProcessTimeWarpError(
+                    "disconnected",
+                    "host.timeWarp.error.disconnected",
+                    diagnostic="调试目标不存在。",
+                )
             return None
         addresses = set()
         for index in range(target.GetNumModules()):
@@ -175,7 +234,12 @@ class LLDBProcessTimeWarpDriver:
             return addresses.pop()
         if required:
             detail = "未找到" if not addresses else "匹配不唯一"
-            raise ProcessTimeWarpError("time_warp_symbol", f"Time Warp 导出符号 {name} {detail}。")
+            raise ProcessTimeWarpError(
+                "time_warp_symbol",
+                "host.timeWarp.error.symbolUnavailable",
+                arguments=(name, detail),
+                diagnostic=f"Time Warp 导出符号 {name} {detail}。",
+            )
         return None
 
     def helper_present(self):
@@ -186,14 +250,28 @@ class LLDBProcessTimeWarpDriver:
     def load_helper(self, path):
         path = Path(path)
         if not path.is_file():
-            raise ProcessTimeWarpError("time_warp_helper_missing", f"Time Warp helper 不存在：{path}")
+            raise ProcessTimeWarpError(
+                "time_warp_helper_missing",
+                "host.timeWarp.error.helperMissing",
+                arguments=(str(path),),
+                diagnostic=f"Time Warp helper 不存在：{path}",
+            )
         lldb = self._lldb()
         error = lldb.SBError()
         token = self.transport.process.LoadImage(lldb.SBFileSpec(str(path)), error)
         if error.Fail() or token == lldb.LLDB_INVALID_IMAGE_TOKEN:
-            raise ProcessTimeWarpError("time_warp_load_failed", "Time Warp helper 加载失败：" + str(error))
+            raise ProcessTimeWarpError(
+                "time_warp_load_failed",
+                "host.timeWarp.error.loadFailed",
+                arguments=(str(error),),
+                diagnostic="Time Warp helper 加载失败：" + str(error),
+            )
         if not self.helper_present():
-            raise ProcessTimeWarpError("time_warp_load_failed", "Time Warp helper 已加载但导出符号不可见。")
+            raise ProcessTimeWarpError(
+                "time_warp_load_failed",
+                "host.timeWarp.error.loadedSymbolsMissing",
+                diagnostic="Time Warp helper 已加载但导出符号不可见。",
+            )
 
     def _frame(self):
         process = self.transport.process
@@ -203,7 +281,11 @@ class LLDBProcessTimeWarpDriver:
         for thread in process:
             if thread.IsValid() and thread.GetNumFrames() > 0:
                 return thread.GetFrameAtIndex(0)
-        raise ProcessTimeWarpError("time_warp_call_failed", "暂停后找不到可执行 Time Warp 调用的线程。")
+        raise ProcessTimeWarpError(
+            "time_warp_call_failed",
+            "host.timeWarp.error.noCallableThread",
+            diagnostic="暂停后找不到可执行 Time Warp 调用的线程。",
+        )
 
     def _evaluate_int(self, expression, *, mutation=False):
         lldb = self._lldb()
@@ -218,9 +300,16 @@ class LLDBProcessTimeWarpDriver:
                 self.transport.tainted = True
                 raise ProcessTimeWarpError(
                     "outcome_unknown",
-                    "Time Warp 修改结果不明，未自动重试；请重启后端或重新连接游戏：" + str(result.GetError()),
+                    "host.timeWarp.error.outcomeUnknown",
+                    arguments=(str(result.GetError()),),
+                    diagnostic="Time Warp 修改结果不明，未自动重试；请重启后端或重新连接游戏：" + str(result.GetError()),
                 )
-            raise ProcessTimeWarpError("time_warp_call_failed", "Time Warp helper 调用失败：" + str(result.GetError()))
+            raise ProcessTimeWarpError(
+                "time_warp_call_failed",
+                "host.timeWarp.error.callFailed",
+                arguments=(str(result.GetError()),),
+                diagnostic="Time Warp helper 调用失败：" + str(result.GetError()),
+            )
         return result.GetValueAsSigned()
 
     def abi(self):
@@ -250,12 +339,20 @@ class LLDBProcessTimeWarpDriver:
             error,
         )
         if error.Fail() or not scratch:
-            raise ProcessTimeWarpError("time_warp_memory", "无法为 Time Warp image allowlist 分配目标内存。")
+            raise ProcessTimeWarpError(
+                "time_warp_memory",
+                "host.timeWarp.error.memoryAllocationFailed",
+                diagnostic="无法为 Time Warp image allowlist 分配目标内存。",
+            )
         try:
             payload = image_names + b"\0"
             count = process.WriteMemory(scratch, payload, error)
             if error.Fail() or count != len(payload):
-                raise ProcessTimeWarpError("time_warp_memory", "无法写入 Time Warp image allowlist。")
+                raise ProcessTimeWarpError(
+                    "time_warp_memory",
+                    "host.timeWarp.error.memoryWriteFailed",
+                    diagnostic="无法写入 Time Warp image allowlist。",
+                )
             address = self._export_address("MGTTimeWarpInstall")
             return self._evaluate_int(
                 f"((int(*)(const char*,unsigned long,double)){address})"
