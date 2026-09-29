@@ -11,11 +11,17 @@ if str(BACKEND) not in sys.path:
 
 from core.module_manifest import GameModuleManifest, ManifestError
 from core.protocol import HOST_PROTOCOL_VERSION
+from resident_runtime import (
+    DECLARATION_KEY,
+    ResidentRuntimeDeclarationError,
+    parse_resident_runtime_declaration,
+)
 
 _SWIFT_TYPE_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 _BUNDLE_ID_RE = re.compile(r'^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$')
 _MACOS_VERSION_RE = re.compile(r'^[0-9]{1,2}(?:\.[0-9]{1,2}){1,2}$')
 _SUPPORTED_SWIFT_ARCHES = frozenset({'arm64', 'x86_64'})
+_ABSENT = object()
 
 
 @dataclass(frozen=True)
@@ -85,6 +91,29 @@ def load_manifest(game_id: str) -> BuildManifest:
     runtime = GameModuleManifest.load(path)
     runtime.validate_backend_layout(ROOT / 'Backend')
     raw = json.loads(path.read_text(encoding='utf-8'))
+
+    declaration = raw.get(DECLARATION_KEY, _ABSENT)
+    if declaration is not _ABSENT:
+        module_dir = path.parent.resolve()
+
+        def resident_source_exists(runtime_path):
+            runtime_path = Path(runtime_path)
+            if runtime_path.is_symlink():
+                return False
+            try:
+                resolved = runtime_path.resolve()
+            except OSError:
+                return False
+            return resolved.is_file() and module_dir in resolved.parents
+
+        try:
+            parse_resident_runtime_declaration(
+                declaration,
+                manifest_path=path,
+                source_exists=resident_source_exists,
+            )
+        except ResidentRuntimeDeclarationError as error:
+            raise ManifestError(str(error)) from error
 
     frontend = raw.get('frontend')
     if not isinstance(frontend, dict):
