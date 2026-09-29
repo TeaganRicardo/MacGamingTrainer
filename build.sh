@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-EXECUTABLE="MacGamingTrainer"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
@@ -52,12 +51,17 @@ else:
 PY
 }
 
+SOURCE_SNAPSHOT="$GENERATED_DIR/source.json"
+"$PYTHON" "$ROOT/Tools/write_build_provenance.py" --capture-source "$SOURCE_SNAPSHOT" \
+    --game-id "$ACTIVE_GAME_ID" --repo-root "$ROOT"
+
 FRONTEND_DIR_REL="$(manifest_field frontend.sourceDirectory)"
 FRONTEND_MODULE_TYPE="$(manifest_field frontend.moduleType)"
 ARCHITECTURES_RAW="$(manifest_field frontend.architectures)"
 MIN_MACOS="$(manifest_field frontend.minimumMacOS)"
 APP_BUNDLE_ID="$(manifest_field app.bundleIdentifier)"
 APP_NAME="$(manifest_field app.displayName)"
+EXECUTABLE="$(manifest_field app.executable)"
 REQUIRES_LLDB="$(manifest_field buildRequirements.lldbPython)"
 REQUIRES_DEBUGGER_ENTITLEMENT="$(manifest_field buildRequirements.debuggerEntitlement)"
 ENTITLEMENTS_REL="$(manifest_field buildRequirements.entitlements)"
@@ -279,6 +283,8 @@ chmod 755 "${CONTENTS}/MacOS/${EXECUTABLE}"
 find "$BACKEND" -type f -exec chmod 644 {} +
 chmod 644 "${CONTENTS}/Info.plist"
 plutil -lint "${CONTENTS}/Info.plist" >/dev/null
+"$PYTHON" "$ROOT/Tools/write_build_provenance.py" --seal-app "$APP" \
+    --game-id "$ACTIVE_GAME_ID" --source-snapshot "$SOURCE_SNAPSHOT" --repo-root "$ROOT"
 
 # Remove only the two attached-data classes that codesign rejects. Keep
 # com.apple.provenance and file-provider provenance/fpfs attributes untouched.

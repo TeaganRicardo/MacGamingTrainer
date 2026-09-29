@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 MANIFEST_PATH = ROOT / 'Backend/games/hades2/module.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text())
+BASE_PLIST = plistlib.loads((ROOT / 'Info.plist').read_bytes())
 VERIFY = ROOT / 'Tools/verify_module_build.py'
 
 # A stale app alphabetically before the selected target must not win discovery.
@@ -28,8 +29,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     info = {
         'CFBundleIdentifier': MANIFEST['app']['bundleIdentifier'],
         'CFBundleName': MANIFEST['app']['displayName'],
+        'CFBundleDisplayName': MANIFEST['app']['displayName'],
+        'CFBundleExecutable': BASE_PLIST['CFBundleExecutable'],
     }
     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+    executable = app / 'Contents/MacOS' / BASE_PLIST['CFBundleExecutable']
+    executable.parent.mkdir()
+    executable.write_bytes(b'fixture executable')
+    executable.chmod(0o755)
 
     command = [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist), '--print-app']
     selected = subprocess.check_output(command, text=True).strip()
@@ -44,6 +51,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
             capture_output=True,
         )
         assert missing.returncode != 0
-        assert 'Mac Gaming Trainer.app' in missing.stderr
+        assert app.name in missing.stderr
 
 print('module_build_output_ok')

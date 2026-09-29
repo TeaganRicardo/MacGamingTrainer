@@ -1,4 +1,5 @@
 import json
+import plistlib
 import re
 import sys
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ class FrontendBuildSpec:
 class AppBuildSpec:
     bundle_identifier: str
     display_name: str
+    executable: str
 
 
 @dataclass(frozen=True)
@@ -68,8 +70,8 @@ class BuildManifest:
     def module_protocol_version(self): return self.runtime.module_protocol_version
 
 
-def manifest_path(game_id: str) -> Path:
-    return ROOT / 'Backend' / 'games' / game_id / 'module.json'
+def manifest_path(game_id: str, root=ROOT) -> Path:
+    return root / 'Backend' / 'games' / game_id / 'module.json'
 
 
 def _safe_relative_path(value, field):
@@ -86,10 +88,30 @@ def _default_app_name(display_name, game_id):
     return 'Mac Gaming Trainer - ' + (safe[:80].strip() or game_id)
 
 
-def load_manifest(game_id: str) -> BuildManifest:
-    path = manifest_path(game_id)
+def app_template(root=ROOT):
+    """Root owns the executable and release identity; modules own app identity."""
+    try:
+        info = plistlib.loads((root / 'Info.plist').read_bytes())
+    except (OSError, plistlib.InvalidFileException) as error:
+        raise ManifestError(f'Cannot read root Info.plist: {error}') from error
+    if not isinstance(info, dict):
+        raise ManifestError('Root Info.plist must be a dictionary.')
+    shadowed = sorted(set(info) & {'CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier'})
+    if shadowed:
+        raise ManifestError(
+            'Root Info.plist must not declare module-owned app identity: ' + ', '.join(shadowed))
+    executable = info.get('CFBundleExecutable')
+    if (not isinstance(executable, str) or not executable or executable != executable.strip()
+            or executable in ('.', '..') or any(ch in '/:' or ord(ch) < 32 for ch in executable)):
+        raise ManifestError('Root Info.plist CFBundleExecutable must be a safe non-empty executable name.')
+    return info
+
+
+def load_manifest(game_id: str, root=ROOT) -> BuildManifest:
+    template = app_template(root)
+    path = manifest_path(game_id, root)
     runtime = GameModuleManifest.load(path)
-    runtime.validate_backend_layout(ROOT / 'Backend')
+    runtime.validate_backend_layout(root / 'Backend')
     raw = json.loads(path.read_text(encoding='utf-8'))
 
     declaration = raw.get(DECLARATION_KEY, _ABSENT)
@@ -135,14 +157,16 @@ def load_manifest(game_id: str) -> BuildManifest:
     app = raw.get('app', {})
     if not isinstance(app, dict):
         raise ManifestError('app must be an object.')
+    if 'executable' in app:
+        raise ManifestError('app.executable is owned by root Info.plist CFBundleExecutable.')
     default_bundle = f"com.gao.macgamingtrainer.{runtime.id.replace('_', '-')}"
     bundle_identifier = app.get('bundleIdentifier', default_bundle)
     if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
         raise ManifestError('app.bundleIdentifier must be a reverse-DNS identifier.')
     display_name = app.get('displayName', _default_app_name(runtime.display_name, runtime.id))
-    if not isinstance(display_name, str) or not display_name.strip() or '/' in display_name or ':' in display_name:
+    if not isinstance(display_name, str) or not display_name.strip() or display_name.strip() in ('.', '..') or any(ch in '/:' or ord(ch) < 32 for ch in display_name):
         raise ManifestError('app.displayName must be a safe non-empty app name.')
-    app_spec = AppBuildSpec(bundle_identifier, display_name.strip())
+    app_spec = AppBuildSpec(bundle_identifier, display_name.strip(), template['CFBundleExecutable'])
 
     req = raw.get('buildRequirements', {})
     if not isinstance(req, dict):
@@ -169,19 +193,21 @@ def load_manifest(game_id: str) -> BuildManifest:
             raise ManifestError(f'{field} must contain exactly source and destination.')
         source = _safe_relative_path(item.get('source'), f'{field}.source')
         destination = _safe_relative_path(item.get('destination'), f'{field}.destination')
-        source_path = (ROOT / source).resolve()
-        if not source_path.is_file() or ROOT.resolve() not in source_path.parents:
+        source_path = (root / source).resolve()
+        if not source_path.is_file() or root.resolve() not in source_path.parents:
             raise ManifestError(f'{field}.source must exist inside the project root.')
+        if Path(destination).as_posix().casefold() == 'buildprovenance.json':
+            raise ManifestError('BuildProvenance.json is owned by build tooling, not appResources.')
         if destination in destinations:
             raise ManifestError(f'appResources has duplicate destination: {destination}.')
         destinations.add(destination)
         app_resources.append(AppResource(source, destination))
 
-    frontend_path = (ROOT / source_directory).resolve()
-    if not frontend_path.is_dir() or (ROOT / 'Sources').resolve() not in frontend_path.parents:
+    frontend_path = (root / source_directory).resolve()
+    if not frontend_path.is_dir() or (root / 'Sources').resolve() not in frontend_path.parents:
         raise ManifestError('frontend source directory must exist under Sources/.')
     if entitlements:
-        entitlement_path = (ROOT / entitlements).resolve()
+        entitlement_path = (root / entitlements).resolve()
         module_dir = path.parent.resolve()
         if not entitlement_path.is_file() or module_dir not in entitlement_path.parents:
             raise ManifestError('entitlements must exist inside the selected game module.')
@@ -203,6 +229,7 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         'app': {
             'bundleIdentifier': manifest.app.bundle_identifier,
             'displayName': manifest.app.display_name,
+            'executable': manifest.app.executable,
         },
         'buildRequirements': {
             'lldbPython': manifest.requirements.lldb_python,

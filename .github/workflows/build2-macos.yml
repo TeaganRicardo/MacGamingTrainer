@@ -31,6 +31,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Assert executing source identity
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Classify change scope
         id: scope
@@ -63,6 +67,11 @@ jobs:
         if: needs.scope.outputs.needs_macos == 'true'
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Assert executing source identity
+        if: needs.scope.outputs.needs_macos == 'true'
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Read release identity
         id: version
@@ -101,7 +110,7 @@ jobs:
       - name: Verify package
         if: needs.scope.outputs.needs_macos == 'true'
         run: |
-          app="dist/Mac Gaming Trainer.app"
+          app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
           expected_version="${{ steps.version.outputs.version }}"
           expected_build="${{ steps.version.outputs.build }}"
           test -d "$app"
@@ -120,41 +129,24 @@ jobs:
       - name: Package release candidate
         id: package
         if: needs.scope.outputs.needs_macos == 'true'
-        run: |
-          mkdir -p artifacts
-          artifact="artifacts/MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc.zip"
-          provenance="${artifact%.zip}.provenance.json"
-          sidecar="${artifact}.sha256"
-          ditto -c -k --sequesterRsrc --keepParent "dist/Mac Gaming Trainer.app" "$artifact"
-          python3 Tools/write_build_provenance.py \
-            --artifact "$artifact" \
-            --product-version "${{ steps.version.outputs.version }}" \
-            --bundle-build "${{ steps.version.outputs.build }}" \
-            --repo-root "$GITHUB_WORKSPACE"
-          test -f "$provenance"
-          test -f "$sidecar"
-          (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
-          python3 - "$provenance" "${{ steps.version.outputs.source_sha }}" "${{ steps.version.outputs.source_tree }}" <<'PY'
-          import json
-          import sys
+        run: >-
+          python3 Tools/write_build_provenance.py --package hades2
+          --repo-root "$GITHUB_WORKSPACE" --output-dir artifacts
+          --github-output "$GITHUB_OUTPUT"
 
-          manifest = json.load(open(sys.argv[1], encoding="utf-8"))
-          assert manifest["source"] == {
-              "commit": sys.argv[2],
-              "tree": sys.argv[3],
-          }, manifest["source"]
-          PY
-          echo "artifact_name=$(basename "$artifact")" >> "$GITHUB_OUTPUT"
-          echo "provenance_name=$(basename "$provenance")" >> "$GITHUB_OUTPUT"
-          echo "sidecar_name=$(basename "$sidecar")" >> "$GITHUB_OUTPUT"
+      - name: Verify artifact checksum
+        if: needs.scope.outputs.needs_macos == 'true'
+        env:
+          ARTIFACT_SIDECAR: ${{ steps.package.outputs.sidecar }}
+        run: (cd artifacts && shasum -a 256 -c "$(basename "$ARTIFACT_SIDECAR")")
 
       - uses: actions/upload-artifact@v4
         if: needs.scope.outputs.needs_macos == 'true'
         with:
-          name: MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc
+          name: ${{ steps.package.outputs.artifact_name }}
           path: |
-            artifacts/${{ steps.package.outputs.artifact_name }}
-            artifacts/${{ steps.package.outputs.provenance_name }}
-            artifacts/${{ steps.package.outputs.sidecar_name }}
+            ${{ steps.package.outputs.artifact }}
+            ${{ steps.package.outputs.provenance }}
+            ${{ steps.package.outputs.sidecar }}
           if-no-files-found: error
           retention-days: 14

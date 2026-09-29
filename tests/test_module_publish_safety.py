@@ -13,6 +13,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     staged = root / 'staging/Selected.app'
     staged.mkdir(parents=True)
     (staged / 'Info.plist').write_text('temporary fixture')
+    (staged / 'Contents/Resources').mkdir(parents=True)
+    (staged / 'Contents/Resources/ACTIVE_GAME_ID').write_text('selected_module\n')
     outside = root / 'outside'
     external_app = outside / 'Selected.app'
     external_app.mkdir(parents=True)
@@ -35,7 +37,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
 
     dist.mkdir()
     existing_app = dist / 'Selected.app'
-    existing_app.mkdir()
+    (existing_app / 'Contents/Resources').mkdir(parents=True)
+    (existing_app / 'Contents/Resources/ACTIVE_GAME_ID').write_text('selected_module\n')
     existing_marker = existing_app / 'keep.txt'
     existing_marker.write_text('existing app must survive')
     moved_dist = root / 'moved-dist'

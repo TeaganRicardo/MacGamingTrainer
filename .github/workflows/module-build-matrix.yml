@@ -29,6 +29,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Assert executing source identity
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Classify change scope
         id: scope
@@ -66,6 +70,11 @@ jobs:
         if: needs.scope.outputs.needs_module == 'true'
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Assert executing source identity
+        if: needs.scope.outputs.needs_module == 'true'
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Install reference fixture
         if: needs.scope.outputs.needs_module == 'true'
@@ -76,9 +85,11 @@ jobs:
 
       - name: Build selected module
         if: needs.scope.outputs.needs_module == 'true'
-        run: |
-          chmod +x build.sh Tools/*.py
-          ./build.sh "${{ matrix.game }}"
+        env:
+          MGT_BUILD_DERIVED_INPUTS: >-
+            {"Backend/games/reference_fixture":"ContractFixtures/reference_module/backend",
+             "Sources/ReferenceFixture":"ContractFixtures/reference_module/frontend"}
+        run: ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
         if: needs.scope.outputs.needs_module == 'true'
@@ -91,3 +102,28 @@ jobs:
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"
+
+      - name: Package selected module evidence
+        id: package
+        if: needs.scope.outputs.needs_module == 'true'
+        run: >-
+          python3 Tools/write_build_provenance.py --package "${{ matrix.game }}"
+          --repo-root "$GITHUB_WORKSPACE" --output-dir artifacts
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Verify artifact checksum
+        if: needs.scope.outputs.needs_module == 'true'
+        env:
+          ARTIFACT_SIDECAR: ${{ steps.package.outputs.sidecar }}
+        run: (cd artifacts && shasum -a 256 -c "$(basename "$ARTIFACT_SIDECAR")")
+
+      - uses: actions/upload-artifact@v4
+        if: needs.scope.outputs.needs_module == 'true'
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            ${{ steps.package.outputs.artifact }}
+            ${{ steps.package.outputs.provenance }}
+            ${{ steps.package.outputs.sidecar }}
+          if-no-files-found: error
+          retention-days: 14

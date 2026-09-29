@@ -7,7 +7,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "Tools/write_build_provenance.py"
+sys.path.insert(0, str(ROOT / "Tools"))
+from write_build_provenance import write_metadata
 
 
 def run(*args, cwd: Path, env=None):
@@ -19,7 +20,8 @@ def output(*args, cwd: Path) -> str:
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    root = Path(tmp)
+    root = Path(tmp) / 'source'
+    root.mkdir()
     run("git", "init", "-q", cwd=root)
     run("git", "config", "user.email", "ci@example.invalid", cwd=root)
     run("git", "config", "user.name", "CI", cwd=root)
@@ -33,12 +35,12 @@ with tempfile.TemporaryDirectory() as tmp:
     fake_base = "2" * 40
     assert actual_commit != fake_head
 
-    artifacts = root / "artifacts"
+    artifacts = Path(tmp) / "artifacts"
     artifacts.mkdir()
     artifact = artifacts / "MacGamingTrainer-test.zip"
     artifact.write_bytes(b"zip bytes for provenance test")
 
-    event_path = root / "event.json"
+    event_path = Path(tmp) / "event.json"
     event_path.write_text(json.dumps({
         "number": 84,
         "pull_request": {
@@ -59,16 +61,7 @@ with tempfile.TemporaryDirectory() as tmp:
         # Deliberately misleading; source identity must still come from git checkout.
         "GITHUB_SHA": fake_head,
     }
-    run(
-        sys.executable,
-        str(SCRIPT),
-        "--artifact", str(artifact),
-        "--product-version", "0.1.0",
-        "--bundle-build", "7",
-        "--repo-root", str(root),
-        cwd=root,
-        env=env,
-    )
+    write_metadata(artifact, "0.1.0", "7", root, env)
 
     provenance = artifacts / "MacGamingTrainer-test.provenance.json"
     sidecar = artifacts / "MacGamingTrainer-test.zip.sha256"
@@ -102,16 +95,7 @@ with tempfile.TemporaryDirectory() as tmp:
         **env,
         "GITHUB_EVENT_NAME": "push",
     }
-    run(
-        sys.executable,
-        str(SCRIPT),
-        "--artifact", str(push_artifact),
-        "--product-version", "0.1.0",
-        "--bundle-build", "7",
-        "--repo-root", str(root),
-        cwd=root,
-        env=push_env,
-    )
+    write_metadata(push_artifact, "0.1.0", "7", root, push_env)
     push_manifest = json.loads(
         (artifacts / "MacGamingTrainer-push.provenance.json").read_text(encoding="utf-8")
     )

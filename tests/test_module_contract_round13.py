@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     (project / 'Backend/games').mkdir(parents=True)
     (project / 'Sources').mkdir(parents=True)
     tools.mkdir(parents=True)
+    shutil.copy2(root / 'Info.plist', project / 'Info.plist')
 
     # Install the reference fixture and the minimum shared project surface into
     # an isolated temporary project. The repository checkout is never mutated.

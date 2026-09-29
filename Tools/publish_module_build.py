@@ -2,6 +2,7 @@
 """Publish a signed app without following a replaced dist directory."""
 import argparse
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -18,6 +19,17 @@ def _copy_app(source, destination):
     subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
 
 
+def _module_owner(app):
+    app = Path(app)
+    marker = app / 'Contents/Resources/ACTIVE_GAME_ID'
+    if marker.is_symlink() or not marker.is_file() or app.resolve() not in marker.resolve().parents:
+        raise ValueError(f'App has no safe module ownership marker: {app}')
+    owner = marker.read_text(encoding='utf-8').strip()
+    if not re.fullmatch(r'[a-z][a-z0-9_]*', owner):
+        raise ValueError(f'App has an invalid module ownership marker: {app}')
+    return owner
+
+
 def publish_app(source, dist, name):
     source = Path(source).absolute()
     dist = Path(dist).absolute()
@@ -25,6 +37,7 @@ def publish_app(source, dist, name):
         raise ValueError('Invalid app name for publication.')
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f'Signed staging app is missing or unsafe: {source}')
+    owner = _module_owner(source)
     dist.mkdir(parents=True, exist_ok=True)
     directory_fd = os.open(dist, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     previous_fd = os.open('.', os.O_RDONLY | os.O_DIRECTORY)
@@ -41,6 +54,8 @@ def publish_app(source, dist, name):
             candidate = Path(temporary) / f'{name}.app'
             _copy_app(source, candidate)
             _verify_signature(candidate)
+            if _module_owner(candidate) != owner:
+                raise ValueError('Staged app module changed during publication.')
             require_same_directory()
             destination = Path(f'{name}.app')
             if destination.is_symlink():
@@ -48,6 +63,8 @@ def publish_app(source, dist, name):
             elif destination.exists():
                 if not destination.is_dir():
                     raise ValueError(f'Build output app is not a directory: {destination}')
+                if _module_owner(destination) != owner:
+                    raise ValueError(f'App output belongs to another module: {destination}')
                 shutil.rmtree(destination)
             os.rename(candidate, destination)
             _verify_signature(destination)

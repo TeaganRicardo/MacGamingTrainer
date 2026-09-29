@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import plistlib
 import sys
 from pathlib import Path
@@ -15,13 +16,13 @@ from core.module_manifest import ManifestError
 from module_support import load_manifest
 
 
-def expected_app_path(game_id, dist_dir):
-    manifest = load_manifest(game_id)
+def expected_app_path(game_id, dist_dir, *, repo_root=ROOT):
+    manifest = load_manifest(game_id, root=repo_root)
     return Path(dist_dir).resolve() / f'{manifest.app.display_name}.app', manifest
 
 
-def verify_module_build(game_id, dist_dir):
-    app, manifest = expected_app_path(game_id, dist_dir)
+def verify_module_build(game_id, dist_dir, *, repo_root=ROOT):
+    app, manifest = expected_app_path(game_id, dist_dir, repo_root=repo_root)
     if app.is_symlink() or not app.is_dir():
         raise ValueError(f'Expected built app is missing or not a real app directory: {app}')
     contents = app / 'Contents'
@@ -38,6 +39,13 @@ def verify_module_build(game_id, dist_dir):
         raise ValueError(f'Bundle identifier mismatch in {info_path}')
     if info.get('CFBundleName') != manifest.app.display_name:
         raise ValueError(f'Bundle name mismatch in {info_path}')
+    if info.get('CFBundleDisplayName') != manifest.app.display_name:
+        raise ValueError(f'Bundle display name mismatch in {info_path}')
+    if info.get('CFBundleExecutable') != manifest.app.executable:
+        raise ValueError(f'Bundle executable identity mismatch in {info_path}')
+    executable = contents / 'MacOS' / manifest.app.executable
+    if executable.is_symlink() or not executable.is_file() or not os.access(executable, os.X_OK):
+        raise ValueError(f'Packaged executable is missing, unsafe or not executable: {executable}')
     if game_marker.read_text(encoding='utf-8').strip() != game_id:
         raise ValueError(f'Selected module marker mismatch in {game_marker}')
     with manifest_path.open(encoding='utf-8') as stream:

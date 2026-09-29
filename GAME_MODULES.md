@@ -28,6 +28,27 @@ The app has one product SemVer, owned by the root `Info.plist`. Game modules do 
 
 Do not introduce module SemVer until modules can actually be installed or updated independently. If that seam is introduced later, module SemVer must be paired with an explicit supported Host compatibility range.
 
+## App and artifact identity
+
+Build tooling owns interpretation of app identity. The selected module's `app.displayName` and `app.bundleIdentifier` own the application directory/display name and bundle identifier; omitted values use the existing module-derived defaults. The root `Info.plist` must not redeclare `CFBundleName`, `CFBundleDisplayName` or `CFBundleIdentifier`. Validation rejects those keys instead of silently replacing them. Legitimate alternate-module identities remain independent.
+
+The root `Info.plist` owns `CFBundleExecutable`, product SemVer and the bundle build number. The normalized build manifest derives its executable name from that template; a module cannot declare `app.executable`. Package verification requires that exact executable to exist and be executable. All installed modules must have distinct app output names under Unicode normalization and case folding. Publication also checks the existing app's module marker before replacing it, including when its owning module is no longer installed.
+
+`Tools/write_build_provenance.py` owns artifact, provenance and checksum naming. `build.sh` captures source inputs before compilation and seals a matching receipt as `Contents/Resources/BuildProvenance.json` before signing. That filename is reserved and cannot be declared by module resources. The receipt records the actual checkout commit/tree and input fingerprint, root release identity, selected app/module identity, and hashes of declared resident source and packaged bytes. A changed source tree during compilation aborts the build.
+
+Ordinary local builds may use dirty or unversioned source, but exact-source artifact publication requires a clean Git commit and the matching signed build receipt. Modified, untracked, ignored compiler/package inputs and source symlinks cannot silently receive a clean-commit claim. Local provenance has no fabricated workflow identity; a detected CI environment still requires complete CI metadata. Executing CI checkouts pin and assert the intended head, while change routing continues to compare merge-base to head.
+
+Build and package locally with:
+
+```sh
+./build.sh <game-id>
+python3 Tools/write_build_provenance.py --package <game-id>
+```
+
+The package command derives the selected app path, verifies signing and source binding, and writes the ZIP, provenance JSON and SHA256 sidecar under `artifacts/`. Its JSON output is also the CI upload contract. It uses the root product version for every module; fixture artifacts do not introduce module SemVer.
+
+A verification lane that installs committed fixture files into otherwise untracked build paths must declare `MGT_BUILD_DERIVED_INPUTS` as a JSON mapping from destination directory to committed source directory. Before and after the build, the same tooling verifies the complete copied inventory, contents and executable bits and records those derivations. Undeclared or altered generated inputs fail exact-source publication. The reference module lane retains its verified application and provenance alongside the production lane's evidence.
+
 ## Executable cross-game reference
 
 The permanent non-production reference module lives under `ContractFixtures/reference_module/` and is the canonical example of the module interface:
