@@ -1,4 +1,4 @@
-"""Pure Host-v5 parameter validation for Hades II commands.
+"""Pure Hades II command parameter validation.
 
 Routing and side effects stay in command_router.py / adapter.py. This module
 owns only game-local JSON-compatible parameter rules.
