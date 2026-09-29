@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-EXECUTABLE="MacGamingTrainer"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
@@ -58,6 +57,7 @@ ARCHITECTURES_RAW="$(manifest_field frontend.architectures)"
 MIN_MACOS="$(manifest_field frontend.minimumMacOS)"
 APP_BUNDLE_ID="$(manifest_field app.bundleIdentifier)"
 APP_NAME="$(manifest_field app.displayName)"
+EXECUTABLE="$(manifest_field app.executable)"
 REQUIRES_LLDB="$(manifest_field buildRequirements.lldbPython)"
 REQUIRES_DEBUGGER_ENTITLEMENT="$(manifest_field buildRequirements.debuggerEntitlement)"
 ENTITLEMENTS_REL="$(manifest_field buildRequirements.entitlements)"

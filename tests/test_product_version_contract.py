@@ -40,9 +40,11 @@ assert 'source_sha="$(git rev-parse HEAD)"' in workflow
 assert "source_tree=\"$(git rev-parse 'HEAD^{tree}')\"" in workflow
 assert 'source_sha="${{ github.event_name == \'pull_request\' && github.event.pull_request.head.sha || github.sha }}"' not in workflow
 assert 'Tools/write_build_provenance.py' in workflow
-assert '.provenance.json' in workflow
-assert 'sidecar="${artifact}.sha256"' in workflow
-assert '-b${{ steps.version.outputs.build }}-' in workflow
+assert '--print-artifact-name' in workflow
+assert 'steps.package.outputs.provenance_name' in workflow
+assert 'steps.package.outputs.sidecar_name' in workflow
+assert 'sidecar="${artifact}.sha256"' not in workflow
+assert 'steps.version.outputs.build' in workflow
 assert 'MacGamingTrainer-0.1-build2' not in workflow
 assert 'test "$version" = "0.1"' not in workflow
 assert 'test "$build" = "2"' not in workflow

@@ -24,6 +24,10 @@ Hades II is the reference implementation, not a requirement that other games cop
 
 The app has one product SemVer, owned by the root `Info.plist`. Game modules do not repeat that version in `module.json` while they are built and distributed as part of the same app.
 
+The selected module manifest owns `app.displayName` and `app.bundleIdentifier` for its output. Build tooling writes these into `CFBundleDisplayName`, `CFBundleName`, and `CFBundleIdentifier` in the packaged plist and derives `dist/<displayName>.app` from the same validated manifest. The root `Info.plist` must not declare those fields; validation rejects their reintroduction. This preserves the Hades II identity and permits a different module to have its own app identity. The root `Info.plist` owns `CFBundleExecutable`; build tooling uses that name for the binary and output verification requires the packaged executable at that path. Product SemVer and bundle build remain root-owned.
+
+`Tools/write_build_provenance.py` owns artifact and sidecar naming. Its local mode requires a clean source checkout; CI mode verifies the executing PR head or push commit. The reference fixture's temporary module copies must match their tracked `ContractFixtures/reference_module` sources and appear as declared generated inputs in provenance. For a module declaring `residentRuntime`, provenance hashes the declared source and packaged ZIP member rather than copying a digest from status prose.
+
 `protocolVersion` is a module-local compatibility revision between that module's frontend/backend surfaces. It is not product SemVer and does not need to match the Host protocol version or another module's protocol version.
 
 Do not introduce module SemVer until modules can actually be installed or updated independently. If that seam is introduced later, module SemVer must be paired with an explicit supported Host compatibility range.

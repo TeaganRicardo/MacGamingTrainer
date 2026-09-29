@@ -13,6 +13,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     staged = root / 'staging/Selected.app'
     staged.mkdir(parents=True)
     (staged / 'Info.plist').write_text('temporary fixture')
+    staged_marker = staged / 'Contents/Resources/ACTIVE_GAME_ID'
+    staged_marker.parent.mkdir(parents=True)
+    staged_marker.write_text('selected\n')
     outside = root / 'outside'
     external_app = outside / 'Selected.app'
     external_app.mkdir(parents=True)
@@ -38,6 +41,18 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-publish-safety-') as tempora
     existing_app.mkdir()
     existing_marker = existing_app / 'keep.txt'
     existing_marker.write_text('existing app must survive')
+    existing_game = existing_app / 'Contents/Resources/ACTIVE_GAME_ID'
+    existing_game.parent.mkdir(parents=True)
+    existing_game.write_text('other_module\n')
+    with patch.object(publisher, '_verify_signature'):
+        try:
+            publisher.publish_app(staged, dist, 'Selected')
+        except ValueError as error:
+            assert 'other_module' in str(error)
+        else:
+            raise AssertionError('different module was allowed to replace published app')
+    assert existing_marker.read_text() == 'existing app must survive'
+    existing_game.write_text('selected\n')
     moved_dist = root / 'moved-dist'
     original_copy = publisher._copy_app
 

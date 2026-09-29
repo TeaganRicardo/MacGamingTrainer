@@ -31,6 +31,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     shutil.copytree(root / 'Backend/core', project / 'Backend/core')
     shutil.copytree(root / 'Sources/Core', project / 'Sources/Core')
     shutil.copy2(root / 'Sources/App.swift', project / 'Sources/App.swift')
+    shutil.copy2(root / 'Info.plist', project / 'Info.plist')
     for name in (
         'module_inventory.py',
         'module_support.py',
