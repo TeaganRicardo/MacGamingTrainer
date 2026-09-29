@@ -484,7 +484,7 @@ def success_token_for(test: str) -> str:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
             continue
-        embedded_tokens.update(re.findall(r"\\b[A-Za-z][A-Za-z0-9_]*_ok\\b", node.value))
+        embedded_tokens.update(re.findall(r"\b[A-Za-z][A-Za-z0-9_]*_ok\b", node.value))
     if len(embedded_tokens) != 1:
         raise ValueError(
             f"owning test {test} must declare exactly one literal *_ok completion marker; "
