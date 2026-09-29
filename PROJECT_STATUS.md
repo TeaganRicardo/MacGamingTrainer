@@ -9,7 +9,7 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Implementation baseline used for this handoff: `db0683094fc009e32873092519c0eb07fd276ee1` (PR #241 merged).
+- Implementation baseline used for this handoff: `643e7a4a46e6151ea00ba7cb433209b579b2a828` (PR #245 / #199 merged). Resolve current remote `main` before starting work; later documentation commits may advance HEAD.
 - Hades II resident runtime revision: 51.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
@@ -62,7 +62,11 @@ PR #241 was independently reviewed and tested at head `20ffefe42a7e489511ef5a21c
 
 The [retained exact-head artifact](https://github.com/TeaganRicardo/MacGamingTrainer/actions/runs/36554460524/artifacts/11027680745) contains its application ZIP, provenance and checksum. Application ZIP SHA256: `cc5db9771f810bfb2380d1fe77df2e2bc3a6819330d4438498f7d055dcacdddf`. Its resident bytes were rehashed and match the accepted revision-51 digest above. This artifact is implementation evidence, not the final consolidated acceptance build.
 
-The ordinary PR workflow runs passed but checked out synthetic merge `e57688529f24193e1309c8b49c947b7ade1d96c9`; they must not be cited as exact-commit execution of `20ffefe...`. The permanent executable-checkout/provenance correction belongs to #199. The separate fixed-head run above closes that evidence gap for this repair without changing production workflows. Post-merge runs are separate evidence and must be inspected before claiming they passed.
+The ordinary PR workflow runs passed but checked out synthetic merge `e57688529f24193e1309c8b49c947b7ade1d96c9`; they must not be cited as exact-commit execution of `20ffefe...`. The permanent executable-checkout/provenance correction was delivered by #199. The separate fixed-head run above closes that evidence gap for this repair without changing production workflows. Post-merge runs are separate evidence and must be inspected before claiming they passed.
+
+### Package identity and provenance
+
+#199 merged through [PR #245](https://github.com/TeaganRicardo/MacGamingTrainer/pull/245) as `643e7a4a46e6151ea00ba7cb433209b579b2a828`. The reviewed head was `81db40df1118e75d8e9c5cdadebe9da5240fde3b`; its Linux, Build 2 macOS and reference-module jobs passed, as did local Linux/macOS contracts and the 21-case mutation gate. The selected app and module own package identity, artifact names and provenance; resident bytes are attributed only to the selected app. [Independent review](https://github.com/TeaganRicardo/MacGamingTrainer/pull/245#issuecomment-5892858814) found no major issue on that head. This changes packaging and verification contracts, not resident gameplay semantics. #179 owns only remaining package-contract gaps.
 
 ### Verification routing
 
@@ -93,11 +97,11 @@ Do not stack new implementation on unmerged overlapping PR heads.
 
 The shared-presentation migration remains complete: B01 / #131 / PR #183, B02 / PR #189, and B03 / #177 all merged, with B02 and B03 accepted in the real game at `a6cf37b`; subsequent presentation hardening did not change resident Lua semantics.
 
-#199 (app identity / dist naming / provenance ownership) is the next ready implementation task; #179 remains serialized behind it. #220 merged through its independent two-file repair lane under the explicit #124 scheduling decision. The remaining governance sequence is #199 -> #179 -> #203 -> #180 -> #214. Selected feature commitments, including expanded #221 and #227-#240, remain after #214 and are not completed by the Spawn-label fix.
+#199 (app identity / dist naming / provenance ownership) is merged. #179 is the next eligible implementation task. #220 merged through its independent two-file repair lane under the explicit #124 scheduling decision. The remaining governance sequence is #179 -> #203 -> #180 -> #214. Selected feature commitments, including expanded #221 and #227-#240, remain after #214 and are not completed by the Spawn-label fix.
 
 The user explicitly authorized independently reviewed, automated-green merges before ONE consolidated final manual acceptance after the selected index work is implemented. Missing gameplay/visual verification alone must not block unrelated eligible development, but all unexecuted checks remain pending and no merge is described as manual acceptance. No game launch or visual confirmation through RDC.
 
-At this handoff, no #199 development worker is confirmed running: the prior local Codex session was rejected by authentication, the remote device was offline at the continuation check, and the GitHub cloud-task request reported no usable repository environment. Independent GitHub PR review remains available. Recheck actual worker/remote outcomes before retrying dispatch; preserve unrelated local uncommitted changes. Current prompts and execution blockers are recorded on #124 and the individual tasks.
+At this handoff, #179 has not started. Use current main and its issue prompt to check remaining criteria before editing; do not repeat #199's package identity and provenance work. Preserve unrelated local uncommitted changes. The selected feature queue and one consolidated final manual acceptance remain pending.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
