@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-signing-metadata-') as temporary:
     }))
     resource = contents / 'Resources/data.txt'
     resource.parent.mkdir(parents=True)
+    (resource.parent / 'ACTIVE_GAME_ID').write_text('metadata_test\n')
     source = Path(temporary) / 'module-source/data.txt'
     source.parent.mkdir()
     source.write_text('temporary signing fixture\\n')
