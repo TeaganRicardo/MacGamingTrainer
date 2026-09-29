@@ -51,6 +51,7 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - Module/Core boundary changes: require the module build matrix/reference fixture.
 - `Backend/games/hades2/runtime/hades.lua` changes: resident revision must increase; automated tests are not final validation. Record real Hades II acceptance for changed runtime semantics.
 - Tests must use temporary fixtures and must never read/write the real user/game save tree.
+- New test files use descriptive subject names (`test_<subject>.py`), not historical epoch tokens such as `roundNN` or `v0xxx`. Existing epoch-named tests are grandfathered and should not be bulk-renamed; put release/round provenance in comments or evidence metadata instead of new filenames.
 - Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum.
 
 ## Product versioning
