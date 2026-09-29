@@ -12,14 +12,14 @@ This tool deliberately knows nothing about any particular game. It reads the
 declaration, resolves it relative to the module directory, and compares
 revisions. A module with no `residentRuntime` is simply not gated.
 """
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import NoReturn
 
-MODULES_DIR = Path('Backend/games')
+from module_inventory import ModuleInventoryError, module_manifests_at_ref
+
 DECLARATION_KEY = 'residentRuntime'
 DEFAULT_PREVIOUS_RE = r'previousModule\.revision\s*~=\s*(\d+)'
 DEFAULT_MODULE_RE = r'version\s*=\s*1\s*,\s*revision\s*=\s*(\d+)'
@@ -43,32 +43,6 @@ def git(*args):
     if result.returncode != 0:
         fail(result.stderr.strip() or result.stdout.strip() or 'git command failed')
     return result.stdout
-
-
-def manifests_at(ref):
-    """Every module manifest present at `ref`, as (path, parsed json) pairs."""
-    # core.quotePath is off deliberately: with it on, git quotes any path that is
-    # not pure ASCII, so a module directory such as `games/hades2` written with an
-    # accented character would not end with '/module.json' and would be silently
-    # ungated. Not reachable through the loader, which requires dir == id and an
-    # ASCII id -- but a discovery step that quietly depends on the filesystem
-    # being ASCII is a latent hole, and switching the quoting off costs one
-    # argument.
-    listing = git('-c', 'core.quotePath=false', 'ls-tree', '-r', '--name-only',
-                  ref, '--', MODULES_DIR.as_posix())
-    out = []
-    for line in listing.splitlines():
-        if not line.endswith('/module.json'):
-            continue
-        raw = git('show', f'{ref}:{line}')
-        try:
-            data = json.loads(raw)
-        except ValueError as error:
-            fail(f'{line} is not valid JSON: {error}')
-        if not isinstance(data, dict):
-            fail(f'{line} must be a JSON object, not {type(data).__name__}')
-        out.append((line, data))
-    return out
 
 
 def runtime_is_tracked(ref, runtime):
@@ -101,7 +75,12 @@ def runtimes_at(ref):
     """(repo-relative runtime path, previous regex, module regex) for each module
     that declares a resident runtime at `ref`, sorted for a stable report."""
     found = []
-    for manifest_path, data in manifests_at(ref):
+    try:
+        manifests = module_manifests_at_ref(ref, Path.cwd())
+    except ModuleInventoryError as error:
+        fail(str(error))
+    for game_id, data in manifests:
+        manifest_path = (Path("Backend/games") / game_id / "module.json").as_posix()
         # `.get()` returns None for an ABSENT key and for an explicit JSON
         # `null`, so testing for None would make `"residentRuntime": null` a
         # silent opt-out: a module that declares the key and then nulls it would
