@@ -54,6 +54,30 @@ struct Main {
         model.apply(["warnings": ["array wins"], "warning": "legacy value"])
         check(model.warning == "array wins", "warnings array did not take precedence")
 
+        // A Core-owned feature failure keeps its Host presentation identity and
+        // arguments across the untyped backend payload. Legacy runtime-owned
+        // featureErrors remain usable beside it rather than forcing either
+        // owner into the other's localization table.
+        model.apply([
+            "featureErrors": ["godMode": "native runtime refusal"],
+            "featureErrorPresentations": [
+                "gameSpeed": [
+                    "presentation": "host.timeWarp.error.setFailed",
+                    "arguments": [-7],
+                ],
+            ],
+        ])
+        check(model.runtimeIssuePresentations.count == 2,
+              "runtime issue owners were not merged")
+        let speedIssue = model.runtimeIssuePresentations.first { $0.featureID == "gameSpeed" }
+        check(speedIssue?.token.key == "host.timeWarp.error.setFailed",
+              "Host feature presentation key was flattened or lost")
+        check(speedIssue?.token.arguments == ["-7"],
+              "Host feature presentation arguments were lost")
+        model.apply(["status": "ready"])
+        check(model.runtimeIssuePresentations.count == 2,
+              "sparse state update erased runtime issue presentations")
+
         // Seed both runtime observations and durable desired intent.
         model.godMode = true
         model.gameSpeed = 2.5
@@ -178,8 +202,9 @@ struct Main {
         check(model.warning.isEmpty && model.runtimeIssue.isEmpty,
               "runtime messages survived termination")
         check(model.noticeText.key.isEmpty && model.errorText.key.isEmpty
-                && model.runtimeIssueText.key.isEmpty,
-              "Hades presentation tokens survived termination")
+                && model.runtimeIssueText.key.isEmpty
+                && model.runtimeIssuePresentations.isEmpty,
+              "presentation tokens survived termination")
 
         // A Hades-owned token must not outlive a newer Core-owned message.
         // The banner prefers the Hades token, so a stale receipt error would

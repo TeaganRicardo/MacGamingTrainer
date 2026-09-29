@@ -27,6 +27,11 @@ struct LocalizationBehaviorTest {
         precondition(missingValue.localized("host.language") == "语言", "zh-CN language menu must load from the bundled table")
         precondition(missingValue.localized("host.save.fileCount", arguments: ["3"]) == "3 个文件", "zh-CN argument substitution must use the shared table")
         precondition(missingValue.presentation("host.connected") == "已连接", "Host key presentation must resolve")
+        precondition(
+            missingValue.localized("host.timeWarp.error.verifyFailed", arguments: ["2", "1.5"])
+                == "Time Warp 设置校验失败（目标 2，实际 1.5）。",
+            "zh-CN Time Warp error must resolve through Host.strings with arguments"
+        )
         precondition(missingValue.presentation("module-owned copy") == "module-owned copy", "module presentation must remain opaque")
 
         // A module contributes its own namespace and resolver; Core stores only
@@ -71,6 +76,11 @@ struct LocalizationBehaviorTest {
         precondition(missingValue.localized("host.language") == "Language", "live language menu must update")
         precondition(missingValue.localized("host.save.fileCount", arguments: ["3"]) == "3 files", "English argument substitution must update live")
         precondition(missingValue.presentation("host.connected") == "Connected", "Host key presentation must update live")
+        precondition(
+            missingValue.localized("host.timeWarp.error.verifyFailed", arguments: ["2", "1.5"])
+                == "Time Warp verification failed (target 2, actual 1.5).",
+            "English Time Warp error must update live with arguments"
+        )
         precondition(
             missingValue.string(TrainerTextToken(key: "fixture.ready")) == "Fixture Ready",
             "a module token must re-resolve on a language switch"

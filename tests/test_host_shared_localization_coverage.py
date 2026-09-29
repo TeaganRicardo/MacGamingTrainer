@@ -1,4 +1,5 @@
 from pathlib import Path
+import ast
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -236,5 +237,37 @@ for key in (
     assert key in session, key
 
 assert '\\(reply.operation)完成' not in session, "generic completion notice must not hard-code one language"
+
+
+# Core-owned AdapterError presentation must cross the Host localization seam.
+# Keep this generic: a future Core error subclass must inherit the enforcing
+# HostPresentationError seam rather than introducing another raw presentation
+# convention beside Time Warp.
+core_dir = ROOT / "Backend/core"
+for source_path in sorted(core_dir.glob("*.py")):
+    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            direct_adapter_bases = [
+                base.id for base in node.bases
+                if isinstance(base, ast.Name) and base.id == "AdapterError"
+            ]
+            if direct_adapter_bases:
+                assert node.name == "HostPresentationError", (
+                    f"{source_path} defines Core AdapterError subclass {node.name} "
+                    "outside the Host presentation seam"
+                )
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            assert node.func.id != "AdapterError", (
+                f"{source_path} constructs AdapterError directly; Core player-facing "
+                "failures must use HostPresentationError"
+            )
+
+time_warp_source = (ROOT / "Backend/core/process_time_warp.py").read_text(encoding="utf-8")
+time_warp_keys = set(re.findall(r'"(host\.timeWarp\.error\.[^"]+)"', time_warp_source))
+assert time_warp_keys, "Time Warp exposes no Host presentation keys"
+for key in time_warp_keys:
+    assert key in zh and key in en, f"Time Warp Host key is not bilingual: {key}"
+    assert zh[key].strip() and en[key].strip(), f"Time Warp Host key is empty: {key}"
 
 print("host_shared_localization_coverage_ok")
