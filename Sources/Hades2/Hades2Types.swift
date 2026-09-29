@@ -106,6 +106,11 @@ struct TrainerProfile: Identifiable {
     let updatedAt: String
 }
 
+struct Hades2RuntimeIssuePresentation: Hashable {
+    let featureID: String
+    let token: TrainerTextToken
+}
+
 struct DiagnosticCheck: Identifiable {
     var id: String { name }
     let name: String
