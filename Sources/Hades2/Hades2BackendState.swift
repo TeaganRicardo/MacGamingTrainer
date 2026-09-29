@@ -49,6 +49,7 @@ struct Hades2StatePatch {
     let dormantFeatures: [String: Bool]?
     let featureSupport: [String: Bool]?
     let featureErrors: Hades2FieldPatch<[String: String]>
+    let featureErrorPresentations: Hades2FieldPatch<[String: TrainerTextToken]>
     let desiredFeatures: [Hades2FeatureKey: Bool]?
 
     let gameSpeed: Double?
@@ -103,6 +104,7 @@ struct Hades2StatePatch {
         dormantFeatures = Self.boolMap(payload["dormantFeatures"])
         featureSupport = Self.boolMap(payload["featureSupport"])
         featureErrors = Self.stringMapField(payload, "featureErrors")
+        featureErrorPresentations = Self.textTokenMapField(payload, "featureErrorPresentations")
         desiredFeatures = Self.featureMap(payload["desiredFeatures"])
         gameSpeed = Self.number(payload["gameSpeed"])
         damageMultiplier = Self.number(payload["damageMultiplier"])
@@ -206,6 +208,27 @@ struct Hades2StatePatch {
     private static func stringMapField(_ payload: [String: Any], _ key: String) -> Hades2FieldPatch<[String: String]> {
         guard payload.keys.contains(key) else { return .absent }
         return .present(stringMap(payload[key]))
+    }
+
+    private static func textTokenMapField(
+        _ payload: [String: Any],
+        _ key: String
+    ) -> Hades2FieldPatch<[String: TrainerTextToken]> {
+        guard payload.keys.contains(key) else { return .absent }
+        guard let values = payload[key] as? [String: Any] else { return .present(nil) }
+        let tokens = values.reduce(into: [String: TrainerTextToken]()) { result, entry in
+            guard let row = entry.value as? [String: Any],
+                  let presentation = row["presentation"] as? String,
+                  !presentation.isEmpty else { return }
+            let arguments = (row["arguments"] as? [Any] ?? []).compactMap { value -> String? in
+                if let value = value as? String { return value }
+                if let value = value as? Bool { return value ? "true" : "false" }
+                if let value = value as? NSNumber { return value.stringValue }
+                return nil
+            }
+            result[entry.key] = TrainerTextToken(key: presentation, arguments: arguments)
+        }
+        return .present(tokens)
     }
 
     private static func number(_ value: Any?) -> Double? {
