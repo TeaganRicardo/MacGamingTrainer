@@ -100,12 +100,86 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [{'match': 'literal',
+  'message': 'Cannot open boon sell screen while another screen is active',
+  'key': 'hades2.error.sellScreenBusy',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_sell_traits'], 'producer': {'kind': 'command', 'name': 'open_sell_traits'}}},
+ {'match': 'literal',
+  'message': 'Boon selling requires an active run room',
+  'key': 'hades2.error.sellNeedsRunRoom',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_sell_traits'], 'producer': {'kind': 'command', 'name': 'open_sell_traits'}}},
+ {'match': 'literal',
+  'message': 'Native boon sell screen data is unavailable',
+  'key': 'hades2.error.sellDataUnavailable',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_sell_traits'], 'producer': {'kind': 'command', 'name': 'open_sell_traits'}}},
+ {'match': 'literal',
+  'message': 'Action requires a requestId of 1..128 characters',
+  'key': 'hades2.error.requestIdRequired',
+  'runtime_only': True,
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'helper', 'name': 'action'}}},
+ {'match': 'literal',
+  'message': 'requestId reused for a different action',
+  'key': 'hades2.error.requestIdReused',
+  'runtime_only': True,
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'helper', 'name': 'action'}}},
+ {'match': 'literal',
+  'message': 'MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry',
+  'key': 'hades2.error.outcomeUnknownRuntime',
+  'runtime_only': True,
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'helper', 'name': 'action'}}},
+ {'match': 'literal',
+  'message': 'Cannot open special blessing choice while another screen is active',
+  'key': 'hades2.error.choiceScreenBusy',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'Cannot open special blessing choice during a transition',
+  'key': 'hades2.error.choiceDuringTransition',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'Special blessing choice requires an active run room',
+  'key': 'hades2.error.choiceNeedsRunRoom',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'Special blessing source has no audited native choice flow',
+  'key': 'hades2.error.choiceNoAuditedFlow',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'Special blessing source data is unavailable',
+  'key': 'hades2.error.choiceSourceUnavailable',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'Special blessing choice data is unavailable',
+  'key': 'hades2.error.choiceDataUnavailable',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'literal',
+  'message': 'No eligible special blessings are available',
+  'key': 'hades2.error.noEligibleSpecialRewards',
+  'runtime_only': True,
+  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+ {'match': 'regex',
+  'pattern': r'^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$',
+  'key': 'hades2.error.nativeFunctionMissing',
+  'argument': 'groups',
+  'runtime_only': True,
+  'runtime': {'commands': '*',
+              'producer': {'kind': 'helper', 'name': 'requireFunctions'},
+              'sample': 'Unsupported sample-purpose: missing SampleFunction'}},
+ {'match': 'literal',
   'message': 'Legendary / Duo 设置无效。',
   'key': 'hades2.error.invalidLegendaryDuo'},
  {'match': 'literal', 'message': 'Lua 执行失败', 'key': 'hades2.error.luaFailed'},
  {'match': 'literal',
   'message': 'Native sell predicate is unavailable',
-  'key': 'hades2.error.sellPredicateUnavailable'},
+  'key': 'hades2.error.sellPredicateUnavailable',
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},
  {'match': 'literal',
   'message': 'Profile desired 字段无效。',
   'key': 'hades2.error.profileDesiredInvalid'},
@@ -143,10 +217,12 @@ REGISTRY = [{'match': 'literal',
  {'match': 'literal', 'message': 'Profile 文件已损坏。', 'key': 'hades2.error.profileCorrupt'},
  {'match': 'literal',
   'message': 'Trait removal requires a trait name',
-  'key': 'hades2.error.traitRemovalNeedsName'},
+  'key': 'hades2.error.traitRemovalNeedsName',
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},
  {'match': 'literal',
   'message': 'Trait removal requires an active run room',
-  'key': 'hades2.error.traitRemovalNeedsRun'},
+  'key': 'hades2.error.traitRemovalNeedsRun',
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},
  {'match': 'literal', 'message': 'command 无效。', 'key': 'hades2.error.invalidCommandValue'},
  {'match': 'literal',
   'message': 'desired-state schemaVersion 无效。',
@@ -333,11 +409,13 @@ REGISTRY = [{'match': 'literal',
  {'match': 'prefix',
   'prefix': 'Trait is not sell-eligible, so no safe removal exists: ',
   'key': 'hades2.error.traitNotSellEligible',
-  'argument': 'remainder'},
+  'argument': 'remainder',
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},
  {'match': 'prefix',
   'prefix': 'Trait is not present in the current run: ',
   'key': 'hades2.error.traitNotPresent',
-  'argument': 'remainder'},
+  'argument': 'remainder',
+  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},
  {'match': 'prefix',
   'prefix': '请先启动 ',
   'key': 'hades2.error.gameNotRunning',
@@ -409,16 +487,18 @@ REGISTRY = [{'match': 'literal',
   'key': 'hades2.error.amountRange'},
  {'match': 'delimited', 'open': ' 失败（', 'close': '）', 'key': 'hades2.error.commandFailed'},
  {'match': 'delimited', 'open': ' 超时（', 'close': ' 秒）', 'key': 'hades2.error.timeout'}]
+RUNTIME_FALLBACK_KEY = 'hades2.error.runtimeActionFailed'
+
 # Compile the regex rules once, at import, and keep the pattern text alongside
 # so a failure can name the rule that produced it.
 _COMPILED = [
     (index, re.compile(rule["pattern"]), rule)
     for index, rule in enumerate(REGISTRY)
-    if rule["match"] == "regex"
+    if rule["match"] == "regex" and not rule.get("runtime_only")
 ]
 _LITERALS = {}
 for _rule in REGISTRY:
-    if _rule["match"] == "literal":
+    if _rule["match"] == "literal" and not _rule.get("runtime_only"):
         # A duplicate literal would make the first one unreachable. check_registry
         # rejects it, and this keeps the last-wins behaviour impossible to rely
         # on even if that check is bypassed.
@@ -455,6 +535,22 @@ def check_registry(registry=None) -> list:
         for field_name in ("key",):
             if not rule.get(field_name):
                 problems.append(f"rule {index} has no {field_name}")
+        runtime = rule.get("runtime")
+        if runtime is not None:
+            if not isinstance(runtime, dict):
+                problems.append(f"rule {index} runtime metadata must be an object")
+            else:
+                commands = runtime.get("commands")
+                if commands != "*" and not (
+                    isinstance(commands, (list, tuple)) and commands
+                    and all(isinstance(command, str) and command for command in commands)
+                ):
+                    problems.append(f"rule {index} has invalid runtime commands")
+                producer = runtime.get("producer")
+                if not isinstance(producer, dict) or producer.get("kind") not in ("command", "helper") or not producer.get("name"):
+                    problems.append(f"rule {index} has invalid runtime producer")
+                if shape == "regex" and not runtime.get("sample"):
+                    problems.append(f"rule {index} runtime regex has no concrete sample")
     return problems
 
 
@@ -470,6 +566,50 @@ def _unreachable(registry) -> list:
                 break
     return shadowed
 
+
+
+def _runtime_scope_matches(rule, command):
+    runtime = rule.get("runtime")
+    if not isinstance(runtime, dict):
+        return False
+    commands = runtime.get("commands")
+    return commands == "*" or (
+        isinstance(commands, (list, tuple)) and command in commands
+    )
+
+
+def runtime_presentation_for(command, message):
+    """Resolve one resident-runtime failure from the same declarative registry."""
+    if not isinstance(message, str) or not message:
+        return RUNTIME_FALLBACK_KEY, ()
+    for rule in REGISTRY:
+        if not _runtime_scope_matches(rule, command):
+            continue
+        shape = rule["match"]
+        if shape == "literal":
+            if message == rule["message"]:
+                return rule["key"], ()
+            continue
+        if shape == "prefix":
+            # Resident detail is stripped before resolution. Generic raised
+            # messages keep the registry's authored trailing space, but the
+            # runtime boundary cannot: compare the same identity without
+            # requiring whitespace that normalization has already removed.
+            prefix = rule["prefix"].rstrip()
+            if not message.startswith(prefix):
+                continue
+            remainder = message[len(prefix):].strip()
+            arguments = (remainder,) if rule.get("argument") == "remainder" else ()
+            return rule["key"], arguments
+        if shape == "regex":
+            match = re.match(rule["pattern"], message)
+            if match is None:
+                continue
+            arguments = tuple(group or "" for group in match.groups())
+            if rule.get("argument") == "absent":
+                arguments = ()
+            return rule["key"], arguments
+    return RUNTIME_FALLBACK_KEY, ()
 
 def presentation_for(message, diagnostic: Optional[str] = None):
     """Return `(key, arguments)` for a raised message, or `(None, [])`.
@@ -500,6 +640,8 @@ def presentation_for(message, diagnostic: Optional[str] = None):
             return rule["key"], []
         return rule["key"], arguments
     for rule in REGISTRY:
+        if rule.get("runtime_only"):
+            continue
         shape = rule["match"]
         if shape == "prefix":
             prefix = rule["prefix"]

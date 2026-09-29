@@ -1221,97 +1221,102 @@
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
   "runtime": {
-    "open_sell_traits::Boon selling requires an active run room": {
-      "arguments": [],
-      "key": "Boon selling requires an active run room"
+    "open_sell_traits::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "open_special_choice::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "remove_trait::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     },
     "open_sell_traits::Cannot open boon sell screen while another screen is active": {
       "arguments": [],
-      "key": "Cannot open boon sell screen while another screen is active"
+      "key": "hades2.error.sellScreenBusy"
+    },
+    "open_sell_traits::Boon selling requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.sellNeedsRunRoom"
     },
     "open_sell_traits::Native boon sell screen data is unavailable": {
       "arguments": [],
-      "key": "Native boon sell screen data is unavailable"
-    },
-    "open_sell_traits::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
-      "arguments": [],
-      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
-    },
-    "open_special_choice::Cannot open special blessing choice during a transition": {
-      "arguments": [],
-      "key": "Cannot open special blessing choice during a transition"
-    },
-    "open_special_choice::Cannot open special blessing choice while another screen is active": {
-      "arguments": [],
-      "key": "Cannot open special blessing choice while another screen is active"
-    },
-    "open_special_choice::No eligible special blessings are available": {
-      "arguments": [],
-      "key": "No eligible special blessings are available"
-    },
-    "open_special_choice::Special blessing choice data is unavailable": {
-      "arguments": [],
-      "key": "Special blessing choice data is unavailable"
-    },
-    "open_special_choice::Special blessing choice requires an active run room": {
-      "arguments": [],
-      "key": "Special blessing choice requires an active run room"
-    },
-    "open_special_choice::Special blessing source data is unavailable": {
-      "arguments": [],
-      "key": "Special blessing source data is unavailable"
-    },
-    "open_special_choice::Special blessing source has no audited native choice flow": {
-      "arguments": [],
-      "key": "Special blessing source has no audited native choice flow"
-    },
-    "open_special_choice::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
-      "arguments": [],
-      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
-    },
-    "remove_trait::Action requires a requestId of 1..128 characters": {
-      "arguments": [],
-      "key": "Action requires a requestId of 1..128 characters"
-    },
-    "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "arguments": [],
-      "key": "MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry"
-    },
-    "remove_trait::Native sell predicate is unavailable": {
-      "arguments": [],
-      "key": "Native sell predicate is unavailable"
-    },
-    "remove_trait::Trait is not present in the current run": {
-      "arguments": [],
-      "key": "Trait is not present in the current run"
-    },
-    "remove_trait::Trait is not present in the current run: TraitOfHermes": {
-      "arguments": [],
-      "key": "Trait is not present in the current run: TraitOfHermes"
-    },
-    "remove_trait::Trait is not sell-eligible, so no safe removal exists": {
-      "arguments": [],
-      "key": "Trait is not sell-eligible, so no safe removal exists"
-    },
-    "remove_trait::Trait is not sell-eligible, so no safe removal exists: TraitOfHermes": {
-      "arguments": [],
-      "key": "Trait is not sell-eligible, so no safe removal exists: TraitOfHermes"
-    },
-    "remove_trait::Trait removal requires a trait name": {
-      "arguments": [],
-      "key": "Trait removal requires a trait name"
+      "key": "hades2.error.sellDataUnavailable"
     },
     "remove_trait::Trait removal requires an active run room": {
       "arguments": [],
-      "key": "Trait removal requires an active run room"
+      "key": "hades2.error.traitRemovalNeedsRun"
     },
-    "remove_trait::re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes": {
+    "remove_trait::Trait removal requires a trait name": {
       "arguments": [],
-      "key": "re.compile('^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$') TraitOfHermes"
+      "key": "hades2.error.traitRemovalNeedsName"
+    },
+    "remove_trait::Native sell predicate is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.sellPredicateUnavailable"
+    },
+    "remove_trait::Trait is not sell-eligible, so no safe removal exists: TraitOfHermes": {
+      "arguments": [
+        "TraitOfHermes"
+      ],
+      "key": "hades2.error.traitNotSellEligible"
+    },
+    "remove_trait::Trait is not present in the current run: TraitOfHermes": {
+      "arguments": [
+        "TraitOfHermes"
+      ],
+      "key": "hades2.error.traitNotPresent"
+    },
+    "remove_trait::Action requires a requestId of 1..128 characters": {
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
     },
     "remove_trait::requestId reused for a different action": {
       "arguments": [],
-      "key": "requestId reused for a different action"
+      "key": "hades2.error.requestIdReused"
+    },
+    "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "open_special_choice::Cannot open special blessing choice while another screen is active": {
+      "arguments": [],
+      "key": "hades2.error.choiceScreenBusy"
+    },
+    "open_special_choice::Cannot open special blessing choice during a transition": {
+      "arguments": [],
+      "key": "hades2.error.choiceDuringTransition"
+    },
+    "open_special_choice::Special blessing choice requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.choiceNeedsRunRoom"
+    },
+    "open_special_choice::Special blessing source has no audited native choice flow": {
+      "arguments": [],
+      "key": "hades2.error.choiceNoAuditedFlow"
+    },
+    "open_special_choice::Special blessing source data is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.choiceSourceUnavailable"
+    },
+    "open_special_choice::Special blessing choice data is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.choiceDataUnavailable"
+    },
+    "open_special_choice::No eligible special blessings are available": {
+      "arguments": [],
+      "key": "hades2.error.noEligibleSpecialRewards"
     }
   },
   "runtime_commands": [

@@ -376,9 +376,16 @@ _TABLES = {
     language: json.loads((_LOCALIZATION / f"hades2.{language}.json").read_text(encoding="utf-8"))["entries"]
     for language in ("zh-CN", "en")
 }
-_removal_keys = set(rep._RUNTIME_KEYS["remove_trait"].values())
-_removal_keys |= {key for _, key in rep._COMPOSED_PREFIXES["remove_trait"]}
-_removal_keys |= {key for _, key in rep._SHARED_COMPOSED}
+_removal_keys = {
+    rule["key"]
+    for rule in ep.REGISTRY
+    if isinstance(rule.get("runtime"), dict)
+    and (
+        rule["runtime"].get("commands") == "*"
+        or "remove_trait" in rule["runtime"].get("commands", ())
+    )
+}
+_removal_keys.add(ep.RUNTIME_FALLBACK_KEY)
 for _key in _removal_keys:
     for _language, _entries in _TABLES.items():
         assert _key in _entries, f"{_language} is missing removal key {_key}"
