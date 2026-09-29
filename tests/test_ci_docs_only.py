@@ -149,6 +149,40 @@ assert_scope(
     module_build=True,
 )
 
+# Reference ownership comes from module identity, and macOS routing for a
+# reference file comes from appResources rather than a filename convention.
+synthetic_prefixes = module.executable_reference_prefixes(("alpha", "beta"))
+assert not module.is_docs_only(
+    ["docs/reference/alpha/catalog.csv"],
+    reference_prefixes=synthetic_prefixes,
+)
+assert module.is_docs_only(
+    ["docs/reference/gamma/catalog.csv"],
+    reference_prefixes=synthetic_prefixes,
+)
+assert module.classify_scope(
+    ["docs/reference/alpha/catalog.csv"],
+    macos_only_tests=MACOS_ONLY,
+    reference_prefixes=synthetic_prefixes,
+    app_resource_sources=(),
+) == {
+    "docs_only": False,
+    "needs_linux": True,
+    "needs_macos": False,
+    "needs_module": False,
+}
+assert module.classify_scope(
+    ["docs/reference/alpha/anything.json"],
+    macos_only_tests=MACOS_ONLY,
+    reference_prefixes=synthetic_prefixes,
+    app_resource_sources=("docs/reference/alpha/anything.json",),
+) == {
+    "docs_only": False,
+    "needs_linux": True,
+    "needs_macos": True,
+    "needs_module": False,
+}
+
 
 def git(root: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=root, check=True)

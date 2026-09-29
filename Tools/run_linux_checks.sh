@@ -13,7 +13,7 @@ while IFS= read -r name || [[ -n "$name" ]]; do
 done < "$MACOS_ONLY_LIST"
 
 python3 -m compileall -q Backend
-python3 Tools/validate_game_module.py hades2
+python3 Tools/validate_game_module.py --all
 
 # Linux collects paths recursively; the shared macOS-only list is the sole
 # exclusion source, so new portable tests cannot miss the gate.

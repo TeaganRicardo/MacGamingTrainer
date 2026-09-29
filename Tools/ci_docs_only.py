@@ -6,10 +6,22 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXECUTABLE_REFERENCE_PREFIXES = ("docs/reference/hades2/",)
+TOOLS = ROOT / "Tools"
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+
+from module_inventory import (
+    ModuleInventoryError,
+    app_resource_sources_for_diff,
+    current_app_resource_sources,
+    discover_module_ids,
+    executable_reference_prefixes,
+    module_ids_for_diff,
+)
 PORTABLE_TOOL_PATHS = {
     "Tools/check_runtime_revision.py",
     "Tools/discover_linux_tests.py",
+    "Tools/module_inventory.py",
     "Tools/run_linux_checks.sh",
 }
 BACKEND_MODULE_BOUNDARY_PATHS = {
@@ -30,6 +42,7 @@ MODULE_EXACT_PATHS = {
     "Tools/ci_docs_only.py",
     "Tools/clean_signing_metadata.py",
     "Tools/generate_game_binding.py",
+    "Tools/module_inventory.py",
     "Tools/module_support.py",
     "Tools/publish_module_build.py",
     "Tools/validate_game_module.py",
@@ -42,17 +55,29 @@ MODULE_PREFIXES = (
 )
 
 
-def is_executable_reference_data(path: str) -> bool:
-    return path.startswith(EXECUTABLE_REFERENCE_PREFIXES) and not path.endswith(".md")
+def current_reference_prefixes(root: Path = ROOT) -> tuple[str, ...]:
+    return executable_reference_prefixes(discover_module_ids(root))
 
 
-def is_docs_only(paths: list[str]) -> bool:
+def is_executable_reference_data(
+    path: str,
+    reference_prefixes: tuple[str, ...] | None = None,
+) -> bool:
+    prefixes = reference_prefixes if reference_prefixes is not None else current_reference_prefixes()
+    return path.startswith(prefixes) and not path.endswith(".md")
+
+
+def is_docs_only(
+    paths: list[str],
+    *,
+    reference_prefixes: tuple[str, ...] | None = None,
+) -> bool:
     normalized = [path.strip() for path in paths if path.strip()]
     if not normalized:
         return False
     return all(
         (path.startswith("docs/") or path.endswith(".md"))
-        and not is_executable_reference_data(path)
+        and not is_executable_reference_data(path, reference_prefixes)
         for path in normalized
     )
 
@@ -76,13 +101,18 @@ def needs_module_build_for_path(path: str) -> bool:
     return path.startswith("Backend/games/") and path.endswith("/module.json")
 
 
-def is_linux_portable_only(path: str, macos_only_tests: set[str]) -> bool:
+def is_linux_portable_only(
+    path: str,
+    macos_only_tests: set[str],
+    reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] = (),
+) -> bool:
     if path.startswith("Backend/"):
         return not path.endswith("/module.json") and not path.endswith(".plist")
     if path.startswith("tests/"):
         return Path(path).name not in macos_only_tests
-    if is_executable_reference_data(path):
-        return not path.endswith("/ui_terminology.json")
+    if is_executable_reference_data(path, reference_prefixes):
+        return path not in app_resource_sources
     return path in PORTABLE_TOOL_PATHS
 
 
@@ -90,6 +120,8 @@ def classify_scope(
     paths: list[str],
     *,
     macos_only_tests: set[str] | None = None,
+    reference_prefixes: tuple[str, ...] | None = None,
+    app_resource_sources: tuple[str, ...] | None = None,
 ) -> dict[str, bool]:
     normalized = [path.strip() for path in paths if path.strip()]
     if not normalized:
@@ -101,7 +133,7 @@ def classify_scope(
             "needs_module": True,
         }
 
-    docs_only = is_docs_only(normalized)
+    docs_only = is_docs_only(normalized, reference_prefixes=reference_prefixes)
     if docs_only:
         return {
             "docs_only": True,
@@ -111,9 +143,19 @@ def classify_scope(
         }
 
     macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
+    packaged_resources = (
+        app_resource_sources
+        if app_resource_sources is not None
+        else current_app_resource_sources()
+    )
     needs_module = any(needs_module_build_for_path(path) for path in normalized)
     needs_macos = needs_module or any(
-        not is_linux_portable_only(path, macos_only)
+        not is_linux_portable_only(
+            path,
+            macos_only,
+            reference_prefixes,
+            packaged_resources,
+        )
         for path in normalized
     )
     return {
@@ -149,7 +191,26 @@ def changed_paths(base_sha: str, head_sha: str, cwd: Path | None = None) -> list
 def main(argv: list[str]) -> int:
     if len(argv) != 3:
         raise SystemExit("usage: ci_docs_only.py BASE_SHA HEAD_SHA")
-    scope = classify_scope(changed_paths(argv[1], argv[2]))
+    base_sha, head_sha = argv[1:]
+    try:
+        paths = changed_paths(base_sha, head_sha, ROOT)
+        if paths:
+            module_ids = module_ids_for_diff(base_sha, head_sha, ROOT)
+            packaged_resources = app_resource_sources_for_diff(base_sha, head_sha, ROOT)
+        else:
+            # Missing/unknown scope already routes every lane below; use the
+            # checkout inventory only to keep reference classification defined.
+            module_ids = discover_module_ids(ROOT)
+            packaged_resources = current_app_resource_sources(ROOT)
+        prefixes = executable_reference_prefixes(module_ids)
+        scope = classify_scope(
+            paths,
+            reference_prefixes=prefixes,
+            app_resource_sources=packaged_resources,
+        )
+    except (ModuleInventoryError, OSError, subprocess.SubprocessError) as error:
+        print(f"ci scope: {error}", file=sys.stderr)
+        return 2
     for key in ("docs_only", "needs_linux", "needs_macos", "needs_module"):
         print(f"{key}={'true' if scope[key] else 'false'}")
     return 0

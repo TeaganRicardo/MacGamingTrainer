@@ -49,6 +49,18 @@ assert "steps.scope.outputs.needs_linux != 'true' && steps.scope.outputs.needs_l
 assert "steps.scope.outputs.needs_linux == 'false'" in linux
 runtime_line = [line for line in linux.splitlines() if 'check_runtime_revision.py' in line][0]
 assert '"$BASE_SHA"' in runtime_line and '"$HEAD_SHA"' in runtime_line
+runner = (ROOT / 'Tools/run_linux_checks.sh').read_text()
+assert 'python3 Tools/validate_game_module.py --all' in runner
+assert 'validate_game_module.py hades2' not in runner
+
+for shared_tool in (
+    ROOT / 'Tools/ci_docs_only.py',
+    ROOT / 'Tools/module_inventory.py',
+    ROOT / 'Tools/run_linux_checks.sh',
+):
+    assert 'hades2' not in shared_tool.read_text(), (
+        f'{shared_tool.name}: shared module discovery/routing must not name a game id'
+    )
 
 build2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in build2
