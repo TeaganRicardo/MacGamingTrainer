@@ -4,16 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
-	<key>CFBundleDisplayName</key>
-	<string>Mac Gaming Trainer</string>
 	<key>CFBundleExecutable</key>
 	<string>MacGamingTrainer</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.gao.macgamingtrainer</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>Mac Gaming Trainer</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

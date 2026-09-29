@@ -19,7 +19,8 @@ def output(*args, cwd: Path) -> str:
 
 
 with tempfile.TemporaryDirectory() as tmp:
-    root = Path(tmp)
+    root = Path(tmp) / "repo"
+    root.mkdir()
     run("git", "init", "-q", cwd=root)
     run("git", "config", "user.email", "ci@example.invalid", cwd=root)
     run("git", "config", "user.name", "CI", cwd=root)
@@ -33,12 +34,12 @@ with tempfile.TemporaryDirectory() as tmp:
     fake_base = "2" * 40
     assert actual_commit != fake_head
 
-    artifacts = root / "artifacts"
+    artifacts = Path(tmp) / "artifacts"
     artifacts.mkdir()
     artifact = artifacts / "MacGamingTrainer-test.zip"
     artifact.write_bytes(b"zip bytes for provenance test")
 
-    event_path = root / "event.json"
+    event_path = Path(tmp) / "event.json"
     event_path.write_text(json.dumps({
         "number": 84,
         "pull_request": {
@@ -59,15 +60,28 @@ with tempfile.TemporaryDirectory() as tmp:
         # Deliberately misleading; source identity must still come from git checkout.
         "GITHUB_SHA": fake_head,
     }
-    run(
+    mismatched = subprocess.run([
         sys.executable,
         str(SCRIPT),
         "--artifact", str(artifact),
         "--product-version", "0.1.0",
         "--bundle-build", "7",
         "--repo-root", str(root),
-        cwd=root,
-        env=env,
+    ], cwd=root, env=env, text=True, capture_output=True)
+    assert mismatched.returncode != 0
+    assert "head" in mismatched.stderr.lower()
+
+    # CI provenance is recorded only for an executable checkout of the PR head.
+    payload = json.loads(event_path.read_text(encoding="utf-8"))
+    payload["pull_request"]["head"]["sha"] = actual_commit
+    event_path.write_text(json.dumps(payload), encoding="utf-8")
+    run(
+        sys.executable, str(SCRIPT),
+        "--artifact", str(artifact),
+        "--product-version", "0.1.0",
+        "--bundle-build", "7",
+        "--repo-root", str(root),
+        cwd=root, env=env,
     )
 
     provenance = artifacts / "MacGamingTrainer-test.provenance.json"
@@ -78,7 +92,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert manifest["source"] == {"commit": actual_commit, "tree": actual_tree}
     assert manifest["pullRequest"] == {
         "number": 84,
-        "headSha": fake_head,
+        "headSha": actual_commit,
         "baseSha": fake_base,
     }
     assert manifest["workflow"] == {
@@ -101,6 +115,7 @@ with tempfile.TemporaryDirectory() as tmp:
     push_env = {
         **env,
         "GITHUB_EVENT_NAME": "push",
+        "GITHUB_SHA": actual_commit,
     }
     run(
         sys.executable,

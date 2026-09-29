@@ -14,6 +14,11 @@ VERIFY = ROOT / 'Tools/verify_module_build.py'
 # A stale app alphabetically before the selected target must not win discovery.
 assert 'Tools/verify_module_build.py' in WORKFLOW
 assert 'find dist' not in WORKFLOW
+BUILD2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
+assert 'dist/Mac Gaming Trainer.app' not in BUILD2
+assert 'Tools/verify_module_build.py hades2 --print-app' in BUILD2
+assert 'Tools/write_build_provenance.py' in WORKFLOW
+assert 'actions/upload-artifact@v4' in WORKFLOW
 
 with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     dist = Path(temporary)
@@ -28,8 +33,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     info = {
         'CFBundleIdentifier': MANIFEST['app']['bundleIdentifier'],
         'CFBundleName': MANIFEST['app']['displayName'],
+        'CFBundleDisplayName': MANIFEST['app']['displayName'],
+        'CFBundleExecutable': plistlib.loads((ROOT / 'Info.plist').read_bytes())['CFBundleExecutable'],
     }
     (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+    binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
+    binary.parent.mkdir()
+    binary.write_bytes(b'temporary executable fixture')
 
     command = [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist), '--print-app']
     selected = subprocess.check_output(command, text=True).strip()

@@ -38,6 +38,13 @@ def verify_module_build(game_id, dist_dir):
         raise ValueError(f'Bundle identifier mismatch in {info_path}')
     if info.get('CFBundleName') != manifest.app.display_name:
         raise ValueError(f'Bundle name mismatch in {info_path}')
+    if info.get('CFBundleDisplayName') != manifest.app.display_name:
+        raise ValueError(f'Bundle display name mismatch in {info_path}')
+    if info.get('CFBundleExecutable') != manifest.app.executable:
+        raise ValueError(f'Bundle executable mismatch in {info_path}')
+    executable = contents / 'MacOS' / manifest.app.executable
+    if not executable.is_file() or executable.is_symlink():
+        raise ValueError(f'Expected packaged executable is missing or unsafe: {executable}')
     if game_marker.read_text(encoding='utf-8').strip() != game_id:
         raise ValueError(f'Selected module marker mismatch in {game_marker}')
     with manifest_path.open(encoding='utf-8') as stream:

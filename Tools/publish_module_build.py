@@ -18,6 +18,16 @@ def _copy_app(source, destination):
     subprocess.run(['/bin/cp', '-R', str(source), str(destination)], check=True)
 
 
+def _module_id(app):
+    marker = app / 'Contents/Resources/ACTIVE_GAME_ID'
+    if marker.is_symlink() or not marker.is_file():
+        raise ValueError(f'App has no safe selected-module marker: {app}')
+    game_id = marker.read_text(encoding='utf-8').strip()
+    if not game_id or '/' in game_id or '\\' in game_id:
+        raise ValueError(f'App has invalid selected-module marker: {marker}')
+    return game_id
+
+
 def publish_app(source, dist, name):
     source = Path(source).absolute()
     dist = Path(dist).absolute()
@@ -25,6 +35,7 @@ def publish_app(source, dist, name):
         raise ValueError('Invalid app name for publication.')
     if source.is_symlink() or not source.is_dir():
         raise ValueError(f'Signed staging app is missing or unsafe: {source}')
+    selected_game = _module_id(source)
     dist.mkdir(parents=True, exist_ok=True)
     directory_fd = os.open(dist, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     previous_fd = os.open('.', os.O_RDONLY | os.O_DIRECTORY)
@@ -41,13 +52,21 @@ def publish_app(source, dist, name):
             candidate = Path(temporary) / f'{name}.app'
             _copy_app(source, candidate)
             _verify_signature(candidate)
+            if _module_id(candidate) != selected_game:
+                raise ValueError('Copied app selected-module identity changed during publication.')
             require_same_directory()
             destination = Path(f'{name}.app')
             if destination.is_symlink():
-                destination.unlink()
+                raise ValueError(f'Build output app must not be a symlink: {destination}')
             elif destination.exists():
                 if not destination.is_dir():
                     raise ValueError(f'Build output app is not a directory: {destination}')
+                previous_game = _module_id(destination)
+                if previous_game != selected_game:
+                    raise ValueError(
+                        f'Build output app {destination} belongs to {previous_game}; '
+                        f'cannot replace it with {selected_game}.'
+                    )
                 shutil.rmtree(destination)
             os.rename(candidate, destination)
             _verify_signature(destination)

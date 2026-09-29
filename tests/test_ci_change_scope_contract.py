@@ -42,6 +42,16 @@ for workflow in WORKFLOWS:
         f'{workflow.name}: cancel-in-progress must be declared'
     )
 
+    # The executable checkout must be the same HEAD_SHA used for diff scope.
+    # A scope-only HEAD_SHA with default PR merge checkout gives false
+    # exact-head provenance even when both trees happen to match.
+    checkouts = re.findall(r'^([ ]*)- uses: actions/checkout@v4\n((?:[ ]+[^\n]*\n)*)', text, re.M)
+    assert checkouts, f'{workflow.name}: no executable checkout found'
+    for _, block in checkouts:
+        assert re.search(r'^\s+ref: \$\{\{ env\.HEAD_SHA \}\}$', block, re.M), (
+            f'{workflow.name}: executable checkout must pin the intended HEAD_SHA'
+        )
+
 linux = (ROOT / '.github/workflows/linux-contracts.yml').read_text()
 assert 'python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA"' in linux
 assert "steps.scope.outputs.needs_linux == 'true'" in linux

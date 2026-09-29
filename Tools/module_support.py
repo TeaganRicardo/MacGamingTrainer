@@ -1,4 +1,5 @@
 import json
+import plistlib
 import re
 import sys
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ class FrontendBuildSpec:
 class AppBuildSpec:
     bundle_identifier: str
     display_name: str
+    executable: str
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,20 @@ def load_manifest(game_id: str) -> BuildManifest:
     runtime.validate_backend_layout(ROOT / 'Backend')
     raw = json.loads(path.read_text(encoding='utf-8'))
 
+    with (ROOT / 'Info.plist').open('rb') as stream:
+        root_plist = plistlib.load(stream)
+    duplicate_keys = sorted({'CFBundleDisplayName', 'CFBundleName', 'CFBundleIdentifier'} & root_plist.keys())
+    if duplicate_keys:
+        raise ManifestError(
+            'Info.plist declares module-owned app identity ' + ', '.join(duplicate_keys)
+            + '; remove these keys and edit module app.displayName/app.bundleIdentifier instead.'
+        )
+    executable = root_plist.get('CFBundleExecutable')
+    if (not isinstance(executable, str) or not executable or executable in ('.', '..')
+            or '/' in executable or ':' in executable or '\\' in executable
+            or any(ord(character) < 32 for character in executable)):
+        raise ManifestError('Info.plist CFBundleExecutable must be a safe executable filename.')
+
     declaration = raw.get(DECLARATION_KEY, _ABSENT)
     if declaration is not _ABSENT:
         module_dir = path.parent.resolve()
@@ -135,14 +151,19 @@ def load_manifest(game_id: str) -> BuildManifest:
     app = raw.get('app', {})
     if not isinstance(app, dict):
         raise ManifestError('app must be an object.')
+    if 'executable' in app:
+        raise ManifestError('app.executable is owned by Info.plist CFBundleExecutable.')
     default_bundle = f"com.gao.macgamingtrainer.{runtime.id.replace('_', '-')}"
     bundle_identifier = app.get('bundleIdentifier', default_bundle)
     if not isinstance(bundle_identifier, str) or not _BUNDLE_ID_RE.fullmatch(bundle_identifier):
         raise ManifestError('app.bundleIdentifier must be a reverse-DNS identifier.')
     display_name = app.get('displayName', _default_app_name(runtime.display_name, runtime.id))
-    if not isinstance(display_name, str) or not display_name.strip() or '/' in display_name or ':' in display_name:
+    if (not isinstance(display_name, str) or not display_name.strip()
+            or display_name.strip() in ('.', '..')
+            or any(character in display_name for character in ('/', ':', '\\'))
+            or any(ord(character) < 32 for character in display_name)):
         raise ManifestError('app.displayName must be a safe non-empty app name.')
-    app_spec = AppBuildSpec(bundle_identifier, display_name.strip())
+    app_spec = AppBuildSpec(bundle_identifier, display_name.strip(), executable)
 
     req = raw.get('buildRequirements', {})
     if not isinstance(req, dict):
@@ -203,6 +224,7 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         'app': {
             'bundleIdentifier': manifest.app.bundle_identifier,
             'displayName': manifest.app.display_name,
+            'executable': manifest.app.executable,
         },
         'buildRequirements': {
             'lldbPython': manifest.requirements.lldb_python,
