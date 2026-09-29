@@ -79,8 +79,7 @@ def runtimes_at(ref):
         manifests = module_manifests_at_ref(ref, Path.cwd())
     except ModuleInventoryError as error:
         fail(str(error))
-    for game_id, data in manifests:
-        manifest_path = (Path("Backend/games") / game_id / "module.json").as_posix()
+    for manifest_path, game_id, data in manifests:
         # `.get()` returns None for an ABSENT key and for an explicit JSON
         # `null`, so testing for None would make `"residentRuntime": null` a
         # silent opt-out: a module that declares the key and then nulls it would
