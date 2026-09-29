@@ -132,6 +132,20 @@ assert native_name_assignment > block.index('IsGameStateEligible(source, option.
 assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
 assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
 assert 'CurrentRun.LastReward' in block, "Echo choice must preserve last-reward semantics"
+
+# Echo's synthetic LastReward fallback is transaction-local. It is injected
+# only around the native menu call and restored through the same cleanup path,
+# so both native-menu success and failure leave the exact prior value intact.
+run_choice = block[block.index('local function runChoice()'):block.index('thread(runChoice)')]
+assert 'local previousLastReward = ownerRun.LastReward' in run_choice
+assert 'local injectedLastReward = definition.echoLastReward and previousLastReward == nil' in run_choice
+assert 'ownerRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }' in run_choice
+assert run_choice.index('local injectedLastReward = definition.echoLastReward and previousLastReward == nil') < run_choice.index('pcall(OpenUpgradeChoiceMenu')
+assert 'if injectedLastReward then ownerRun.LastReward = previousLastReward end' in run_choice
+assert run_choice.index('if injectedLastReward then ownerRun.LastReward = previousLastReward end') > run_choice.index('pcall(OpenUpgradeChoiceMenu')
+assert 'if definition.echoLastReward and not CurrentRun.LastReward then' not in block, (
+    "Echo fallback is still injected before the Trainer-owned transaction cleanup exists"
+)
 assert 'IsGameStateEligible' in block
 assert 'UpgradeOptions' in block
 assert 'if M.specialChoiceRun ~= CurrentRun then' in block
