@@ -459,17 +459,38 @@ def success_token_for(test: str) -> str:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError) as error:
         raise ValueError(f"cannot inspect owning test {test}: {error}") from error
-    tokens = set()
+    python_tokens = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "print" or not node.args:
+            continue
+        value = node.args[0]
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) and value.value.endswith("_ok"):
+            python_tokens.add(value.value)
+    if len(python_tokens) == 1:
+        return next(iter(python_tokens))
+    if len(python_tokens) > 1:
+        raise ValueError(
+            f"owning test {test} prints multiple *_ok completion markers: "
+            f"{sorted(python_tokens)}"
+        )
+
+    # Some macOS behavior tests are Python wrappers around a compiled Swift
+    # harness. Their completion marker is emitted by the embedded program, so
+    # there is no Python print() call to discover. In that case only, inspect
+    # string literals and require a single marker there.
+    embedded_tokens = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
             continue
-        tokens.update(re.findall(r"\\b[A-Za-z][A-Za-z0-9_]*_ok\\b", node.value))
-    if len(tokens) != 1:
+        embedded_tokens.update(re.findall(r"\\b[A-Za-z][A-Za-z0-9_]*_ok\\b", node.value))
+    if len(embedded_tokens) != 1:
         raise ValueError(
             f"owning test {test} must declare exactly one literal *_ok completion marker; "
-            f"found {sorted(tokens)}"
+            f"found {sorted(embedded_tokens)}"
         )
-    return next(iter(tokens))
+    return next(iter(embedded_tokens))
 
 def _run(test: str, timeout: int = 600) -> subprocess.CompletedProcess:
     return subprocess.run(
