@@ -66,7 +66,7 @@ def _git(root: Path, *args: str) -> str:
     return result.stdout
 
 
-def module_ids_at_ref(ref: str, root: Path = ROOT) -> tuple[str, ...]:
+def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, dict], ...]:
     listing = _git(
         root,
         "-c",
@@ -78,7 +78,7 @@ def module_ids_at_ref(ref: str, root: Path = ROOT) -> tuple[str, ...]:
         "--",
         MODULES_RELATIVE.as_posix(),
     )
-    ids = []
+    records = []
     for line in listing.splitlines():
         if not line.endswith("/module.json"):
             continue
@@ -86,10 +86,65 @@ def module_ids_at_ref(ref: str, root: Path = ROOT) -> tuple[str, ...]:
             data = json.loads(_git(root, "show", f"{ref}:{line}"))
         except ValueError as error:
             raise ModuleInventoryError(f"{line} at {ref}: invalid JSON: {error}") from error
-        ids.append(_module_id(Path(line), data))
+        game_id = _module_id(Path(line), data)
+        records.append((game_id, data))
+    ids = [game_id for game_id, _ in records]
     if len(ids) != len(set(ids)):
         raise ModuleInventoryError(f"duplicate game module id discovered at {ref}")
-    return tuple(sorted(ids))
+    return tuple(sorted(records, key=lambda item: item[0]))
+
+
+def module_ids_at_ref(ref: str, root: Path = ROOT) -> tuple[str, ...]:
+    return tuple(game_id for game_id, _ in module_manifests_at_ref(ref, root))
+
+
+def _app_resource_sources(records) -> tuple[str, ...]:
+    sources = set()
+    for game_id, data in records:
+        resources = data.get("appResources", [])
+        if not isinstance(resources, list):
+            raise ModuleInventoryError(
+                f"module {game_id}: appResources must be a list for CI routing"
+            )
+        for index, row in enumerate(resources):
+            if not isinstance(row, dict):
+                raise ModuleInventoryError(
+                    f"module {game_id}: appResources[{index}] must be an object"
+                )
+            source = row.get("source")
+            if not isinstance(source, str) or not source.strip():
+                raise ModuleInventoryError(
+                    f"module {game_id}: appResources[{index}].source must be a non-empty string"
+                )
+            sources.add(source.strip())
+    return tuple(sorted(sources))
+
+
+def current_app_resource_sources(root: Path = ROOT) -> tuple[str, ...]:
+    records = []
+    for game_id in discover_module_ids(root):
+        manifest = root / MODULES_RELATIVE / game_id / "module.json"
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise ModuleInventoryError(f"{manifest}: cannot read module manifest: {error}") from error
+        records.append((game_id, data))
+    return _app_resource_sources(records)
+
+
+def app_resource_sources_for_diff(
+    base_ref: str,
+    head_ref: str,
+    root: Path = ROOT,
+) -> tuple[str, ...]:
+    merge_base = _git(root, "merge-base", base_ref, head_ref).strip()
+    if not merge_base:
+        raise ModuleInventoryError("unable to resolve merge-base for module resources")
+    return tuple(sorted(set(
+        _app_resource_sources(module_manifests_at_ref(merge_base, root))
+    ) | set(
+        _app_resource_sources(module_manifests_at_ref(head_ref, root))
+    )))
 
 
 def module_ids_for_diff(base_ref: str, head_ref: str, root: Path = ROOT) -> tuple[str, ...]:
