@@ -91,7 +91,7 @@ def export_diagnostics(adapter):
     stamp=time.strftime('%Y%m%d-%H%M%S')+f'-{time.time_ns()%1000000:06d}'
     zip_path=export_root/f'MacGamingTrainer-Diagnostics-{stamp}.zip'
     report={
-        'generatedAt':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'protocolVersion':PROTOCOL_VERSION,
+        'generatedAt':time.strftime('%Y-%m-%dT%H:%M:%S%z'),'protocolVersion':HOST_PROTOCOL_VERSION,
         'moduleProtocolVersion':adapter.module_protocol_version,'backendVersion':APP_BACKEND_VERSION,
         'python':sys.version,'platform':platform.platform(),'passed':result['passed'],'total':result['total'],
         'checks':result['checks'],'state':result['state'],
