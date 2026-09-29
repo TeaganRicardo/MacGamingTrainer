@@ -9,7 +9,7 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Implementation baseline used for this handoff: `db0683094fc009e32873092519c0eb07fd276ee1` (PR #241 merged).
+- Implementation baseline used for this handoff: `643e7a4a46e6151ea00ba7cb433209b579b2a828` (PR #245 / #199 merged). Resolve current remote `main` before starting work; later documentation commits may advance HEAD.
 - Hades II resident runtime revision: 51.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
