@@ -7,9 +7,9 @@ import zipfile
 from pathlib import Path
 
 from core.log_paths import trainer_log_path
-from core.protocol import APP_BACKEND_VERSION, PROTOCOL_VERSION
+from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION
 
-from . import localization, preparation
+from . import localization, preparation, schema
 from .config import GAME_SPEC
 from .operation_budgets import LLDB_DISCOVERY_TIMEOUT_SECONDS, LLDB_PYTHON_TIMEOUT_SECONDS
 from .schema import STAT_RULES
@@ -30,7 +30,7 @@ def build_diagnostics(adapter):
             add('运行时状态刷新',False,str(error))
     else:
         add('运行时状态刷新',False,'transport disconnected; runtime status unknown')
-    add('协议版本',True,f'host {PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
+    add('协议版本',True,f'host {HOST_PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
     add('后端进程',True,sys.executable)
     add('Python',True,sys.version.split()[0]+' · '+platform.platform())
     add(GAME_SPEC.display_name+' 安装',preparation.GAME.exists(),preparation.GAME)
@@ -63,7 +63,13 @@ def build_diagnostics(adapter):
     add('Hero ObjectId',diag.get('heroObjectId') is not None,diag.get('heroObjectId','不可用'))
     add('Run Count',state.get('runCount') is not None,state.get('runCount','不可用'))
     fs=state.get('featureSupport',{}) if isinstance(state.get('featureSupport'),dict) else {}
-    for key in ('godMode','infiniteHealth','infiniteMana','instantCastCooldown','hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled','gameSpeed'):
+    # schema.TOGGLES owns Hades durable toggle identity. gameSpeed is the one
+    # explicit Core-owned capability projected into the same runtime-support
+    # report, so it is appended here rather than copied into another Hades list.
+    diagnostic_features=list(schema.TOGGLES)
+    if 'gameSpeed' not in diagnostic_features:
+        diagnostic_features.append('gameSpeed')
+    for key in diagnostic_features:
         add('功能支持 · '+key,fs.get(key) is True,'支持' if fs.get(key) else '当前 runtime 不支持 / 未连接')
     ss=state.get('statSupport',{}) if isinstance(state.get('statSupport'),dict) else {}
     for key in (k for k in STAT_RULES if k!='grasp'):
@@ -75,7 +81,7 @@ def build_diagnostics(adapter):
     return {
         'checks':checks,'passed':sum(1 for item in checks if item['ok']),'total':len(checks),
         'state':dict(state),'profiles':adapter.list_profiles(),
-        'protocolVersion':PROTOCOL_VERSION,'moduleProtocolVersion':adapter.module_protocol_version,'backendVersion':APP_BACKEND_VERSION,
+        'protocolVersion':HOST_PROTOCOL_VERSION,'moduleProtocolVersion':adapter.module_protocol_version,'backendVersion':APP_BACKEND_VERSION,
     }
 
 
