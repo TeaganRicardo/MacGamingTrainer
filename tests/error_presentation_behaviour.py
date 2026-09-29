@@ -9,7 +9,7 @@ Re-run it with `--compare` after the refactor and diff. A single changed key
 means a player's error message silently became a different sentence.
 
 IMPORTANT: this script probes the PUBLIC surface only -- `presentation_for`,
-`present_runtime_error`, and the module's own `_FALLBACK_KEY`. An earlier
+`present_runtime_error`, and the module's own `RUNTIME_FALLBACK_KEY`. An earlier
 version enumerated `MESSAGE_KEYS`/`PREFIX_KEYS`/... by name, so the moment the
 registry replaced those tables it reported "0 direct mappings" and would have
 passed a refactor that broke every single one. A behaviour baseline that reads
@@ -31,18 +31,7 @@ from games.hades2 import error_presentation as ep  # noqa: E402
 from games.hades2 import runtime_error_presentation as rep  # noqa: E402
 
 
-class _AdapterError(Exception):
-    """Stands in for the Core error type the funnel expects."""
-
-    code = "operation_failed"
-    presentation = ""
-    diagnostic = None
-
-    def __init__(self, code, raw):
-        super().__init__(raw)
-        self.code = code
-        self.presentation = raw
-        self.diagnostic = raw
+from core.adapter import AdapterError as _AdapterError  # noqa: E402
 
 
 #: Per-family floors on GENUINE shape contests -- messages that two different
@@ -404,20 +393,42 @@ def _regex_probes() -> list[str]:
     return out
 
 
-def _runtime_messages() -> list[tuple[str, str]]:
-    """(command, message) pairs from the per-command runtime tables."""
-    pairs: list[tuple[str, str]] = []
-    for command, mapping in rep._RUNTIME_KEYS.items():
-        for message in mapping:
-            pairs.append((command, message))
-    for command, composed in getattr(rep, "_COMPOSED_PREFIXES", {}).items():
-        for prefix, _ in composed:
-            pairs.append((command, f"{prefix} TraitOfHermes"))
-    for prefix, _ in getattr(rep, "_SHARED_COMPOSED", ()):
-        for command in rep._RUNTIME_KEYS:
-            pairs.append((command, f"{prefix} TraitOfHermes"))
-    return pairs
+def _runtime_commands() -> list[str]:
+    commands = set()
+    for rule in ep.REGISTRY:
+        runtime = rule.get("runtime")
+        if not isinstance(runtime, dict):
+            continue
+        scoped = runtime.get("commands")
+        if isinstance(scoped, (list, tuple)):
+            commands.update(scoped)
+    return sorted(commands)
 
+
+def _runtime_messages() -> list[tuple[str, str]]:
+    """Concrete (command, message) probes derived from runtime registry entries."""
+    all_commands = _runtime_commands()
+    pairs: list[tuple[str, str]] = []
+    for rule in ep.REGISTRY:
+        runtime = rule.get("runtime")
+        if not isinstance(runtime, dict):
+            continue
+        scoped = runtime.get("commands")
+        commands = all_commands if scoped == "*" else list(scoped or ())
+        shape = rule.get("match")
+        if shape == "literal":
+            message = rule["message"]
+        elif shape == "prefix":
+            message = rule["prefix"] + "TraitOfHermes"
+        elif shape == "regex":
+            message = runtime.get("sample")
+            if not isinstance(message, str) or not message:
+                raise AssertionError(f"runtime regex has no concrete sample: {rule}")
+        else:
+            raise AssertionError(f"unsupported runtime registry shape: {shape}")
+        for command in commands:
+            pairs.append((command, message))
+    return sorted(set(pairs))
 
 def snapshot() -> dict:
     direct = {}
@@ -445,8 +456,8 @@ def snapshot() -> dict:
     return {
         "direct": direct,
         "runtime": runtime,
-        "fallback_key": rep._FALLBACK_KEY,
-        "runtime_commands": sorted(rep._RUNTIME_KEYS),
+        "fallback_key": ep.RUNTIME_FALLBACK_KEY,
+        "runtime_commands": _runtime_commands(),
     }
 
 
