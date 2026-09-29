@@ -131,7 +131,7 @@ assert native_name_assignment > block.index('SetTraitsOnLoot(source)'), "loot-st
 assert native_name_assignment > block.index('IsGameStateEligible(source, option.GameStateRequirements)'), "fixed choices must evaluate requirements against the native source name"
 assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
 assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
-assert 'CurrentRun.LastReward' in block, "Echo choice must preserve last-reward semantics"
+assert 'ownerRun.LastReward' in block, "Echo choice must preserve transaction-owned last-reward semantics"
 
 # Echo's synthetic LastReward fallback is transaction-local. It is injected
 # only around the native menu call and restored through the same cleanup path,
