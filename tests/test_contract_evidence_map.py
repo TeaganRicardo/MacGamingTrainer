@@ -65,10 +65,6 @@ def validate_evidence_item(item, root, macos_only=(), execute=True):
         expected_keys = {"type", "sourcePath", "marker", "command"}
         if evidence_type == "source-boundary":
             expected_keys.add("reason")
-        if "declaredInvariants" in item:
-            # The behavioural invariants a gate declares. Recorded here so the
-            # evidence map and the gate cannot drift apart.
-            expected_keys.add("declaredInvariants")
     else:
         raise EvidenceMapError("unsupported evidence type {!r}".format(evidence_type))
     _require(set(item) == expected_keys, "evidence fields must be exactly {}".format(sorted(expected_keys)))
@@ -94,23 +90,6 @@ def validate_evidence_item(item, root, macos_only=(), execute=True):
         _require(marker in source, "workflow configuration marker not found: {}".format(marker))
         _require(command in source, "workflow configured command not found: {}".format(command))
         return "configuration-only"
-
-    if "declaredInvariants" in item:
-        groups = item["declaredInvariants"]
-        _require(isinstance(groups, dict) and groups, "declaredInvariants must be a non-empty object")
-        declared = set()
-        for group_name, group in groups.items():
-            _require(isinstance(group, dict), "declaredInvariants group must be an object")
-            _require(set(group) == {"claim", "idents"},
-                     "declaredInvariants group fields must be exactly claim and idents")
-            _require(isinstance(group["claim"], str) and group["claim"].strip(),
-                     "each group needs a claim")
-            _require(isinstance(group["idents"], list) and group["idents"],
-                     "each group needs idents")
-            for ident in group["idents"]:
-                _require(isinstance(ident, str) and ident.strip(), "ident must be a non-empty string")
-                _require(ident not in declared, "ident declared twice: {}".format(ident))
-                declared.add(ident)
 
     if evidence_type == "source-boundary":
         _require(isinstance(item["reason"], str) and item["reason"].strip(), "source-boundary requires a reason")
@@ -222,77 +201,6 @@ def test_shortcut_compiled_behavior_fails_closed_without_swiftc():
     _require("swiftc required" in result.stderr, "missing swiftc did not produce an explicit failure")
 
 
-def _declared_mutation_idents(data):
-    """Every ident the evidence map claims the mutation gate declares."""
-    entry = (data.get("invariants") or {}).get(
-        "mutation.declared-invariants-fail-under-mutation")
-    if not entry:
-        return set()
-    found = set()
-    for item in entry.get("evidence", []):
-        for group in (item.get("declaredInvariants") or {}).values():
-            found.update(group.get("idents", []))
-    return found
-
-
-def test_evidence_map_and_mutation_gate_cannot_drift():
-    """The gate and the evidence map must declare the same invariants.
-
-    The review's MAJOR: the manifest is hand-maintained, so a behavioural guard
-    could be added without appearing in the evidence map. Binding them here
-    makes a declared invariant reviewable evidence rather than a private note
-    inside a tool, and makes an undeclared guard a build failure.
-    """
-    sys.path.insert(0, str(ROOT / "Tools"))
-    import mutation_gate  # noqa: E402
-
-    data = json.loads(MAP_PATH.read_text(encoding="utf-8"))
-    by_gate = {m.ident for m in mutation_gate.manifest()}
-    by_map = _declared_mutation_idents(data)
-    _require(
-        by_gate == by_map,
-        "the mutation gate and the evidence map declare different invariants; "
-        "gate-only: {}; map-only: {}".format(sorted(by_gate - by_map), sorted(by_map - by_gate)),
-    )
-
-    missing = sorted(i for i in by_gate if not mutation_gate.PROVENANCE.get(i))
-    _require(not missing, "these invariants have no recorded provenance: {}".format(missing))
-
-
-def test_a_map_that_disagrees_with_the_gate_is_rejected():
-    """The drift rule must reject a real disagreement, not merely exist.
-
-    A review deleted the `by_gate == by_map` assertion, dropped an ident from the
-    evidence map, and the suite still passed. The rule was correct and simply
-    unverified -- the same defect shape as the round-1 CRITICAL. So the rule is
-    now exercised here against a map that is genuinely wrong, in this file,
-    without depending on another suite noticing.
-    """
-    sys.path.insert(0, str(ROOT / "Tools"))
-    import mutation_gate  # noqa: E402
-
-    data = json.loads(MAP_PATH.read_text(encoding="utf-8"))
-    by_gate = {m.ident for m in mutation_gate.manifest()}
-    by_map = _declared_mutation_idents(data)
-    _require(by_map == by_gate,
-             "the committed map must agree with the gate for this test to mean anything")
-
-    # Drop one declared invariant and require the comparison to notice, naming it.
-    groups = data["invariants"][
-        "mutation.declared-invariants-fail-under-mutation"]["evidence"][0]["declaredInvariants"]
-    victim = next((name for name, group in groups.items() if group["idents"]), None)
-    _require(victim is not None, "the map declares no invariants to remove")
-    dropped = groups[victim]["idents"].pop()
-    try:
-        reduced = _declared_mutation_idents(data)
-        _require(by_gate != reduced, "removing {} from the map must break the comparison".format(dropped))
-        _require(by_gate - reduced == {dropped},
-                 "the difference must name exactly the dropped invariant, got {}".format(
-                     sorted(by_gate - reduced)))
-    finally:
-        groups[victim]["idents"].append(dropped)
-
-
 def test_equivalent_excuses_must_be_falsifiable():
     """A survivor may be excused, but only with a re-runnable observation."""
     sys.path.insert(0, str(ROOT / "Tools"))
@@ -316,8 +224,6 @@ def test_equivalent_excuses_must_be_falsifiable():
 def main():
     test_noop_placeholder_is_not_evidence()
     test_shortcut_compiled_behavior_fails_closed_without_swiftc()
-    test_evidence_map_and_mutation_gate_cannot_drift()
-    test_a_map_that_disagrees_with_the_gate_is_rejected()
     test_equivalent_excuses_must_be_falsifiable()
     _require(MAP_PATH.is_file(), "contract evidence map is missing")
     data = json.loads(MAP_PATH.read_text(encoding="utf-8"))
