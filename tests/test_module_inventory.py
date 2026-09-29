@@ -63,6 +63,21 @@ with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-") as temporary:
         "docs/reference/beta/ui.json",
     )
 
+# A nested manifest is not a production module layout. Discovery and the
+# build loader must agree on the same Backend/games/<id>/module.json boundary.
+with tempfile.TemporaryDirectory(prefix="mgt-module-inventory-nested-") as temporary:
+    root = Path(temporary)
+    nested = root / "Backend/games/group/alpha"
+    nested.mkdir(parents=True)
+    (nested / "module.json").write_text('{"id":"alpha"}\n', encoding="utf-8")
+    try:
+        discover_module_ids(root)
+    except ModuleInventoryError as error:
+        assert "directly under Backend/games" in str(error), error
+    else:
+        raise AssertionError("nested module manifest was accepted")
+
+
 # A manifest cannot claim a different identity from its directory. Shared
 # tooling must fail closed rather than silently discover one name and build
 # another.
