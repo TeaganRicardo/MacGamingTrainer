@@ -1,6 +1,9 @@
 # Hades II buff operation matrix
 
-Target: Hades II **1.139672** / Steam build **24556151**
+> **Frozen reference evidence — not current planning authority.**  
+> Target build: Hades II **1.139672** / Steam build **24556151**.  
+> Repository capture: **2026-09-22**, commit `8d7a3918d71089571730c9da14b0ae9f4f5ecf16`.  
+> Historical `P17`–`P22` / `F14` identifiers below are traceability labels only. Current sequencing authority is GitHub planning issue **#124**. The body is intentionally retained as captured evidence; current implementation terminology and contracts come from production code, `ENGINEERING_INVARIANTS.md`, and the authoritative terminology registry.
 
 This document is the operation-safety handoff for planning package P17 / F14. It does not create a second legality catalog. The existing snapshot remains authoritative for identifiers and trainer-facing exposure decisions; this matrix answers a different question: **which native owner and lifecycle must a future add, replace, level, or remove operation preserve?**
 

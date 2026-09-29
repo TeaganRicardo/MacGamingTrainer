@@ -14,7 +14,7 @@ Start every development thread at `AGENTS.md`.
 - Hades II desired-state schema: 4.
 - Host protocol: 6. Hades II module protocol: 5.
 - Verified Hades II compatibility target: 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
-- The retained target-build census/reference data remains under `docs/reference/hades2/1.139672-24556151/`. Static compatibility work for 1.143476 confirmed that the currently consumed native terminology identities/values and curated reward/runtime dependencies remain valid; do not treat the directory name as the current executable identity.
+- The retained `docs/reference/hades2/1.139672-24556151/` tree is a **frozen census/research snapshot**, not live planning authority; historical P-identifiers inside it are traceability only. Static compatibility work for 1.143476 confirmed that the currently consumed native terminology identities/values and curated reward/runtime dependencies remain valid. The packaged `ui_terminology.json` remains an explicit executable-governance exception; do not treat the snapshot directory name as the current executable identity.
 - The Hades terminology registry is the executable governance source for stable term identity, ownership, bilingual presentation, lifecycle, alias targets, provenance, and allowed/forbidden surfaces.
 - Runtime observation is explicit: `observe_runtime()` performs fresh resident status observation with resident synchronization maintenance while suppressing Host adoption/replay/persistence and desired-state projection.
 - Host protocol failures use stable machine `code`, user-facing `presentation`, optional developer `diagnostic`, and optional structured `recoveryPath`; module protocol revisions remain independent.
