@@ -7,7 +7,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2 import diagnostics
+from games.hades2 import diagnostics, schema
 from games.hades2.config import GAME_SPEC
 
 
@@ -91,6 +91,37 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
     assert adapter.calls == ["observe_runtime"]
 
 
+def test_feature_support_inventory_tracks_schema_without_a_mirror():
+    synthetic = "syntheticDiagnosticToggle"
+    assert synthetic not in schema.TOGGLES
+    fresh_state = {
+        "connected": True,
+        "pid": 7331,
+        "status": "ready",
+        "scene": "run",
+        "runtimeDiagnostics": {"revision": 51, "heroObjectId": 123},
+        "runCount": 7,
+        "featureSupport": {synthetic: True, "gameSpeed": True},
+        "statSupport": {},
+    }
+    adapter = FakeAdapter(refresh_result=fresh_state)
+    with patch.object(schema, "TOGGLES", schema.TOGGLES + (synthetic,)):
+        result = build(adapter, {
+            "version": "143476",
+            "steam_build": "25481925",
+            "compatible": True,
+            "warnings": [],
+        })
+
+    feature_checks = [
+        item for item in result["checks"]
+        if item["name"].startswith("功能支持 · ")
+    ]
+    feature_ids = [item["name"].removeprefix("功能支持 · ") for item in feature_checks]
+    assert feature_ids == [*schema.TOGGLES, synthetic, "gameSpeed"], feature_ids
+    assert next(item for item in feature_checks if item["name"].endswith(synthetic))["ok"] is True
+
+
 def test_incompatible_game_identity_fails_check_and_reports_warnings():
     fresh_state = {"connected": False, "pid": None, "status": "not_running"}
     adapter = FakeAdapter(refresh_result=fresh_state)
@@ -112,5 +143,6 @@ def test_incompatible_game_identity_fails_check_and_reports_warnings():
 
 if __name__ == "__main__":
     test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok()
+    test_feature_support_inventory_tracks_schema_without_a_mirror()
     test_incompatible_game_identity_fails_check_and_reports_warnings()
     print("diagnostics_live_status_ok")
