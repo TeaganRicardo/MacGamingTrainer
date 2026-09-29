@@ -121,7 +121,7 @@ def classify_scope(
     *,
     macos_only_tests: set[str] | None = None,
     reference_prefixes: tuple[str, ...] | None = None,
-    app_resource_sources: tuple[str, ...] = (),
+    app_resource_sources: tuple[str, ...] | None = None,
 ) -> dict[str, bool]:
     normalized = [path.strip() for path in paths if path.strip()]
     if not normalized:
@@ -143,13 +143,18 @@ def classify_scope(
         }
 
     macos_only = macos_only_tests if macos_only_tests is not None else load_macos_only_tests()
+    packaged_resources = (
+        app_resource_sources
+        if app_resource_sources is not None
+        else current_app_resource_sources()
+    )
     needs_module = any(needs_module_build_for_path(path) for path in normalized)
     needs_macos = needs_module or any(
         not is_linux_portable_only(
             path,
             macos_only,
             reference_prefixes,
-            app_resource_sources,
+            packaged_resources,
         )
         for path in normalized
     )
