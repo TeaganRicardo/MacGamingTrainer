@@ -1,13 +1,15 @@
 # Hades II reference data
 
-This directory stores versioned research/reference snapshots extracted from an installed Hades II build. The curated `ui_terminology.json` is an intentional exception: Hades II production code consumes it as a bundled app resource, with a source-tree fallback for development. Other reference snapshots, including generated inventories and research ledgers, are documentation data only and must not become production dependencies.
+This directory stores versioned research/reference snapshots extracted from installed Hades II builds. A snapshot being retained here means **evidence is preserved**, not that every document inside it is current planning authority or current executable truth.
 
-Current snapshot:
-- Hades II 1.139672
-- Steam build 24556151
-- Path: `1.139672-24556151/`
+Status rules:
 
-The snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
+- `1.139672-24556151/` is the retained **frozen census/research snapshot**. Historical roadmap identifiers inside its research notes are traceability only; current planning authority is GitHub issue #124.
+- `1.143476-25481925/` contains target-build compatibility revalidation evidence for the currently verified game build.
+- The curated `1.139672-24556151/ui_terminology.json` is an intentional production exception: Hades II packages it through module `appResources` as the terminology-governance source. Its executable role does not make the other files in that snapshot production dependencies.
+- Generated inventories, matrices, and research ledgers are evidence. They do not override current production code, `ENGINEERING_INVARIANTS.md`, or current issue sequencing.
+
+The frozen 1.139672 snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
 
 ## Private raw-source evidence bundle
 
