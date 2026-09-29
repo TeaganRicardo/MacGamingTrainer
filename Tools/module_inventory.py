@@ -42,7 +42,11 @@ def discover_module_ids(root: Path = ROOT) -> tuple[str, ...]:
     if not modules.is_dir():
         raise ModuleInventoryError(f"module directory is missing: {modules}")
     ids = []
-    for manifest in sorted(modules.glob("*/module.json")):
+    # Scan recursively, then reject layouts outside Backend/games/<id>/ below.
+    # A one-level glob would silently ignore a stray nested module manifest
+    # while ref-based discovery (git ls-tree -r) sees it, giving local and CI
+    # consumers different module sets.
+    for manifest in sorted(modules.rglob("module.json")):
         try:
             data = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
