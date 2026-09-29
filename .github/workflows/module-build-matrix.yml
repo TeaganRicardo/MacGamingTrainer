@@ -86,7 +86,6 @@ jobs:
       - name: Build selected module
         if: needs.scope.outputs.needs_module == 'true'
         run: |
-          chmod +x build.sh Tools/*.py
           ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
