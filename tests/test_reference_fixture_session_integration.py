@@ -264,6 +264,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
             project / f"{language}.lproj",
         )
     shutil.copytree(ROOT / "Tools", project / "Tools")
+    shutil.copy2(ROOT / "Info.plist", project / "Info.plist")
 
     generated = project / "Generated/ActiveGameModule.swift"
     subprocess.run(
