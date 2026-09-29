@@ -258,13 +258,28 @@ final class TrainerBackendSession {
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
                     configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
+                    let recoveryOwned = self.client.isStarted
+                        || self.recoveryWorkItem != nil
+                        || self.restartPending
                     self.updateStatus {
-                        $0.busy = true
-                        $0.operation = TrainerTextToken(key: "host.backend.operation.recover")
-                        $0.errorCode = nil
-                        $0.error = ""
-                        $0.errorArguments = []
-                        $0.notice = "host.backend.notice.recovering"
+                        if recoveryOwned {
+                            $0.busy = true
+                            $0.operation = TrainerTextToken(key: "host.backend.operation.recover")
+                            $0.errorCode = nil
+                            $0.error = ""
+                            $0.errorArguments = []
+                            $0.notice = "host.backend.notice.recovering"
+                        } else {
+                            $0.backendAvailable = false
+                            $0.backendProtocolVersion = nil
+                            $0.backendModuleProtocolVersion = nil
+                            $0.busy = false
+                            $0.operation = TrainerTextToken(key: "")
+                            $0.errorCode = failure.code
+                            $0.error = self.hostClientFailurePresentation(failure)
+                            $0.errorArguments = []
+                            $0.notice = ""
+                        }
                     }
                 } else {
                     configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")

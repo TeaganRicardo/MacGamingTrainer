@@ -136,6 +136,38 @@ do {
 
 session.stop()
 _ = waitUntil(2.0) { !session.isStarted }
+
+// Sending after the worker is already unavailable has no termination event
+// left to own a recovery transition. It must settle as a terminal unavailable
+// failure instead of latching the Host in a recovering/busy presentation.
+do {
+    var unavailableCompletion: Bool? = nil
+    session.send(
+        "ping-after-stop",
+        operation: "ping",
+        timeout: 1.0,
+        completion: { unavailableCompletion = $0 }
+    )
+    if !waitUntil(1.0, { unavailableCompletion != nil }) || unavailableCompletion != false {
+        fail("unavailable send must fail exactly once")
+    }
+    let unavailable = session.currentStatus
+    if unavailable.backendAvailable { fail("stopped backend reported available after terminal send") }
+    if unavailable.busy { fail("unavailable send latched busy without a recovery owner") }
+    if unavailable.errorCode != "backend_unavailable" {
+        fail("unavailable send lost stable error code: \(String(describing: unavailable.errorCode))")
+    }
+    if unavailable.error != "host.backend.error.unavailable" {
+        fail("unavailable send lost Host presentation key: \(unavailable.error)")
+    }
+    if !unavailable.operation.key.isEmpty {
+        fail("unavailable send retained a recovery operation: \(unavailable.operation.key)")
+    }
+    if unavailable.notice == "host.backend.notice.recovering" {
+        fail("unavailable send advertised recovery with no scheduled transition")
+    }
+}
+
 print("backend_session_recovery_dev8_ok")
 '''
 
@@ -168,6 +200,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-dev8-session-') as td:
         raise AssertionError(f'outcome-unknown timeout request was replayed: {commands!r}')
     if commands.count('crash') != 1:
         raise AssertionError(f'crash request was replayed: {commands!r}')
+    if 'ping-after-stop' in commands:
+        raise AssertionError(f'unavailable request reached a stopped worker: {commands!r}')
     for required in ('ping-after-crash', 'ping-after-timeout', 'ping-after-manual'):
         if commands.count(required) != 1:
             raise AssertionError(f'missing/duplicate post-recovery request {required}: {commands!r}')
