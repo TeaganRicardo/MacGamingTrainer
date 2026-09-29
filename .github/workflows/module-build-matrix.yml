@@ -29,6 +29,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Require intended scope checkout
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Classify change scope
         id: scope
@@ -66,6 +70,11 @@ jobs:
         if: needs.scope.outputs.needs_module == 'true'
         with:
           fetch-depth: 0
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Require intended executable checkout
+        if: needs.scope.outputs.needs_module == 'true'
+        run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
       - name: Install reference fixture
         if: needs.scope.outputs.needs_module == 'true'
@@ -77,7 +86,6 @@ jobs:
       - name: Build selected module
         if: needs.scope.outputs.needs_module == 'true'
         run: |
-          chmod +x build.sh Tools/*.py
           ./build.sh "${{ matrix.game }}"
 
       - name: Verify packaged module isolation
@@ -91,3 +99,49 @@ jobs:
           count="$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')"
           test "$count" = "1"
           codesign --verify --deep --strict "$app"
+
+      - name: Retain reference module artifact and source provenance
+        id: package
+        if: needs.scope.outputs.needs_module == 'true'
+        run: |
+          app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
+          mkdir -p artifacts
+          artifact="artifacts/$(python3 Tools/write_build_provenance.py \
+            --print-artifact-name --name-label "${{ matrix.game }}" \
+            --product-version "$version" --bundle-build "$build" \
+            --repo-root "$GITHUB_WORKSPACE")"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$artifact"
+          python3 Tools/write_build_provenance.py \
+            --artifact "$artifact" --product-version "$version" --bundle-build "$build" \
+            --repo-root "$GITHUB_WORKSPACE" --module-id "${{ matrix.game }}" \
+            --name-label "${{ matrix.game }}" \
+            --generated-copy ContractFixtures/reference_module/backend:Backend/games/reference_fixture \
+            --generated-copy ContractFixtures/reference_module/frontend:Sources/ReferenceFixture
+
+      - name: Verify reference artifact checksum and declared inputs
+        if: needs.scope.outputs.needs_module == 'true'
+        run: |
+          (cd artifacts && shasum -a 256 -c "${{ steps.package.outputs.sidecar_name }}")
+          python3 - "artifacts/${{ steps.package.outputs.provenance_name }}" "$HEAD_SHA" <<'PY'
+          import json
+          import sys
+
+          manifest = json.load(open(sys.argv[1], encoding='utf-8'))
+          assert manifest['source']['commit'] == sys.argv[2]
+          assert manifest['moduleId'] == 'reference_fixture'
+          assert manifest['buildInputs']['checkout'] == 'declared-generated'
+          assert len(manifest['buildInputs']['generatedCopies']) == 2
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: needs.scope.outputs.needs_module == 'true'
+        with:
+          name: ${{ matrix.game }}-${{ env.HEAD_SHA }}
+          path: |
+            artifacts/${{ steps.package.outputs.artifact_name }}
+            artifacts/${{ steps.package.outputs.provenance_name }}
+            artifacts/${{ steps.package.outputs.sidecar_name }}
+          if-no-files-found: error
+          retention-days: 14
