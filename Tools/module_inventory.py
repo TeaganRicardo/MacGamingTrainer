@@ -79,7 +79,14 @@ def _git(root: Path, *args: str) -> str:
     return result.stdout
 
 
-def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, dict], ...]:
+def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, str, dict], ...]:
+    """Return (manifest_path, game_id, data) for every manifest under Backend/games.
+
+    The actual path is retained because the runtime-revision gate deliberately
+    protects recursively discovered manifests, including adversarial nested
+    layouts that are not valid build modules. Reconstructing a path from the id
+    would move that manifest and point at the wrong resident runtime.
+    """
     listing = _git(
         root,
         "-c",
@@ -100,20 +107,20 @@ def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, dic
         except ValueError as error:
             raise ModuleInventoryError(f"{line} at {ref}: invalid JSON: {error}") from error
         game_id = _module_id(Path(line), data, require_build_layout=False)
-        records.append((game_id, data))
-    ids = [game_id for game_id, _ in records]
+        records.append((line, game_id, data))
+    ids = [game_id for _, game_id, _ in records]
     if len(ids) != len(set(ids)):
         raise ModuleInventoryError(f"duplicate game module id discovered at {ref}")
-    return tuple(sorted(records, key=lambda item: item[0]))
+    return tuple(sorted(records, key=lambda item: (item[1], item[0])))
 
 
 def module_ids_at_ref(ref: str, root: Path = ROOT) -> tuple[str, ...]:
-    return tuple(game_id for game_id, _ in module_manifests_at_ref(ref, root))
+    return tuple(game_id for _, game_id, _ in module_manifests_at_ref(ref, root))
 
 
 def _app_resource_sources(records) -> tuple[str, ...]:
     sources = set()
-    for game_id, data in records:
+    for _, game_id, data in records:
         resources = data.get("appResources", [])
         if not isinstance(resources, list):
             raise ModuleInventoryError(
@@ -141,7 +148,7 @@ def current_app_resource_sources(root: Path = ROOT) -> tuple[str, ...]:
             data = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise ModuleInventoryError(f"{manifest}: cannot read module manifest: {error}") from error
-        records.append((game_id, data))
+        records.append((manifest.relative_to(root).as_posix(), game_id, data))
     return _app_resource_sources(records)
 
 
