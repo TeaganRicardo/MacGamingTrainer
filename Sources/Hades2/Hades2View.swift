@@ -913,7 +913,6 @@ struct Hades2TrainerView: View {
                 selection: $model.selectedSpecialReward,
                 shortcut: .spawnSpecial,
                 enabled: model.canPerformSelectedSpecialReward,
-                actionTitle: text("hades2.spawn.generate"),
                 onAction: model.performSpecialReward
             )
             Divider()
@@ -933,7 +932,6 @@ struct Hades2TrainerView: View {
         selection: Binding<String>,
         shortcut: ShortcutAction,
         enabled: Bool,
-        actionTitle: String = "",
         onAction: @escaping (String) -> Void
     ) -> some View {
         TrainerGroupedOptionPicker(
@@ -944,7 +942,7 @@ struct Hades2TrainerView: View {
             sections: boonGroups(options),
             enabled: enabled,
             emptyLabel: text("hades2.spawn.noItems"),
-            actionTitle: actionTitle,
+            actionTitle: text("hades2.spawn.generate"),
             shortcutText: model.shortcutText(shortcut),
             itemLabel: { option in
                 option.englishName.isEmpty ? option.name : "\(option.name) · \(option.englishName)"
