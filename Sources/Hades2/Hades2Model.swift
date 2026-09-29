@@ -7,6 +7,11 @@ enum Hades2ShortcutIssue: Equatable {
     case registration(TrainerHotkeyRegistrationFailure)
 }
 
+struct Hades2RuntimeIssuePresentation: Hashable {
+    let featureID: String
+    let token: TrainerTextToken
+}
+
 final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private static let expectedHostProtocolVersion = Hades2GameModule.descriptor.expectedHostProtocolVersion
     private static let expectedModuleProtocolVersion = Hades2GameModule.descriptor.expectedModuleProtocolVersion
@@ -59,6 +64,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private var noticeToken: TrainerTextToken?
     @Published private var errorToken: TrainerTextToken?
     @Published private var runtimeIssueToken: TrainerTextToken?
+    @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
+    private var runtimeFeatureErrors: [String: String] = [:]
+    private var runtimeFeaturePresentationTokens: [String: TrainerTextToken] = [:]
 
     /// Core-owned error text (for example a protocol failure raised by the Host).
     var error: String {
@@ -423,6 +431,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // outlive this reset.
         runtimeIssue = ""
         runtimeIssueToken = nil
+        runtimeIssuePresentations = []
+        runtimeFeatureErrors = [:]
+        runtimeFeaturePresentationTokens = [:]
         noticeToken = nil
         errorToken = nil
         presentedActionReceipt = nil
@@ -494,11 +505,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.dormantFeatures { dormantFeatures = value }
         if let value = patch.featureSupport { featureSupport = value }
         if patch.featureErrors.isPresent {
-            let values = patch.featureErrors.value ?? [:]
-            let issues = values.compactMap { key, message in message.isEmpty ? nil : "\(key): \(message)" }.sorted()
-            runtimeIssueToken = issues.isEmpty
-                ? nil
-                : presentation("hades2.status.runtimeInactive", arguments: [issues.joined(separator: "; ")])
+            runtimeFeatureErrors = patch.featureErrors.value ?? [:]
+        }
+        if patch.featureErrorPresentations.isPresent {
+            runtimeFeaturePresentationTokens = (patch.featureErrorPresentations.value ?? [:]).reduce(
+                into: [String: TrainerTextToken]()
+            ) { result, entry in
+                result[entry.key] = TrainerTextToken(
+                    key: entry.value.key,
+                    arguments: entry.value.arguments
+                )
+            }
+        }
+        if patch.featureErrors.isPresent || patch.featureErrorPresentations.isPresent {
+            rebuildRuntimeIssuePresentations()
         }
 
         if let desired = patch.desiredFeatures {
@@ -579,6 +599,34 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let issue = patch.error, !issue.isEmpty { error = issue }
 
 
+    }
+
+    private func rebuildRuntimeIssuePresentations() {
+        // Keep legacy runtime-owned text working, but let structured
+        // presentations override the same feature so a Core-owned Host key
+        // never becomes an opaque argument inside a Hades sentence.
+        var entries = runtimeFeatureErrors.compactMap { featureID, message -> Hades2RuntimeIssuePresentation? in
+            guard !message.isEmpty else { return nil }
+            return Hades2RuntimeIssuePresentation(
+                featureID: featureID,
+                token: TrainerTextToken(key: message)
+            )
+        }
+        for (featureID, token) in runtimeFeaturePresentationTokens where !token.key.isEmpty {
+            entries.removeAll { $0.featureID == featureID }
+            entries.append(Hades2RuntimeIssuePresentation(featureID: featureID, token: token))
+        }
+        runtimeIssuePresentations = entries.sorted { $0.featureID < $1.featureID }
+
+        // Preserve the old single-token seam for callers that only know about
+        // legacy string featureErrors. The view uses the owner-aware entries
+        // above so Host presentation arguments are never flattened into text.
+        let legacy = runtimeFeatureErrors.compactMap { featureID, message in
+            message.isEmpty ? nil : "\(featureID): \(message)"
+        }.sorted()
+        runtimeIssueToken = legacy.isEmpty
+            ? nil
+            : presentation("hades2.status.runtimeInactive", arguments: [legacy.joined(separator: "; ")])
     }
 
     private func presentActionReceipt(_ receipt: Hades2ActionReceipt) {

@@ -10,6 +10,7 @@ from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
+from core.process_time_warp import ProcessTimeWarpError
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
 prep.DATA = base
@@ -138,5 +139,36 @@ state = adapter.execute("disable_all", {})
 assert adapter.time_warp.speed == 1.0
 assert state["gameSpeed"] == 1.0
 assert state["activeFeatures"]["gameSpeed"] is False
+
+
+class FailingTimeWarp:
+    def set_speed(self, speed):
+        raise ProcessTimeWarpError(
+            "time_warp_set_failed",
+            "host.timeWarp.error.setFailed",
+            arguments=(-7,),
+            diagnostic="synthetic driver failure",
+        )
+
+    def reset(self):
+        return 1.0
+
+
+# Drive the real Hades desired-state path. The adapter deliberately keeps the
+# failed desired value pending, but the observable failure is now a structured
+# Host presentation token rather than raw localized copy in featureErrors.
+failing = Hades2Adapter(transport=FakeTransport())
+failing.time_warp = FailingTimeWarp()
+failing.preference_initialized = True
+failing.preference_dirty = False
+failing._runtime_bootstrapped = True
+failing.state.update(connected=True, status="ready", scene="run", capabilities={"setFeature": True})
+failed_state = failing.dispatch("set_desired", {"feature": "gameSpeed", "value": 2.0}, "speed-fails")
+assert "gameSpeed" not in failed_state.get("featureErrors", {}), failed_state.get("featureErrors")
+presentation = failed_state["featureErrorPresentations"]["gameSpeed"]
+assert presentation == {
+    "presentation": "host.timeWarp.error.setFailed",
+    "arguments": [-7],
+}, presentation
 
 print("process_time_warp_hades_integration_ok")

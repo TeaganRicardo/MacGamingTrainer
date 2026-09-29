@@ -21,6 +21,23 @@ class AdapterError(RuntimeError):
         self.arguments = list(arguments)
 
 
+class HostPresentationError(AdapterError):
+    """Core-owned failure whose player-facing identity resolves in Host.strings."""
+
+    PRESENTATION_PREFIX = "host."
+
+    def __init__(self, code: str, presentation: str, *, diagnostic: Optional[str] = None,
+                 arguments: Sequence[Any] = ()):
+        if not isinstance(presentation, str) or not presentation.startswith(self.PRESENTATION_PREFIX):
+            raise ValueError("Core presentation errors must use a host.* key.")
+        super().__init__(
+            code,
+            presentation,
+            diagnostic=diagnostic,
+            arguments=arguments,
+        )
+
+
 @dataclass(frozen=True)
 class GameAdapterContext:
     game_id: str

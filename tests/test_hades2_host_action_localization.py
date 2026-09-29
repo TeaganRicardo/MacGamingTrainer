@@ -159,6 +159,23 @@ assert "localization.string(key, arguments: arguments)" in resolver, (
 # A Hades key must still resolve through the module tables, not the Host one.
 assert "Hades2Presentation.shared.string(" in resolver
 
+# Backend and runtime-issue tokens may be Host- or Hades-owned. The shared
+# token resolver in the main view must therefore route through the same
+# owner-aware module seam; calling Hades2Presentation directly would drop Host
+# arguments or render the raw Host key.
+resolved_helper = re.search(
+    r"private func resolved\(_ token: TrainerTextToken\) -> String \{(.*?)\n    \}",
+    hades_view,
+    re.S,
+)
+assert resolved_helper, "main Hades view lost its presentation-token resolver"
+assert "Hades2GameModule.resolveText" in resolved_helper.group(1), (
+    "presentation tokens bypass owner-aware Host/module resolution"
+)
+assert "Hades2Presentation.shared" not in resolved_helper.group(1), (
+    "Host presentation tokens are still being forced through the Hades catalogue"
+)
+
 # Every single-key `text()` helper must route through that one resolver, so the
 # fallback cannot be present in one view and missing from another. The
 # `arguments:` overload is a different thing — it resolves an already-owned

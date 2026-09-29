@@ -70,6 +70,7 @@ def mark_disconnected(state):
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
+    state['featureErrorPresentations']={}
     state['capabilities']=disconnected_capabilities()
 
 
@@ -109,7 +110,7 @@ class Hades2Adapter(GameAdapter):
         self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
         helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
         self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(self.transport),helper_path,[GAME_SPEC.executable_name])
-        self._time_warp_speed=1.0;self._time_warp_error=''
+        self._time_warp_speed=1.0;self._time_warp_error=None
         self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
@@ -119,6 +120,7 @@ class Hades2Adapter(GameAdapter):
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
+                    'featureErrorPresentations':{},
                     'capabilities':disconnected_capabilities()}
         self.preference_store=Hades2PreferenceStore(preparation.DATA/'desired-state.json')
         self.preferences,self.preference_initialized=self.preference_store.load()
@@ -245,11 +247,19 @@ class Hades2Adapter(GameAdapter):
         support=dict(support) if isinstance(support,dict) else {}
         support['gameSpeed']=True
         self.state['featureSupport']=support
+        # Runtime-native feature errors remain in the legacy string map. A
+        # Core-owned Time Warp failure carries a presentation token instead so
+        # the frontend can resolve the Host key in the live language without
+        # embedding localized copy in module state.
         errors=self.state.get('featureErrors')
         errors=dict(errors) if isinstance(errors,dict) else {}
-        if self._time_warp_error:errors['gameSpeed']=self._time_warp_error
-        else:errors.pop('gameSpeed',None)
+        errors.pop('gameSpeed',None)
         self.state['featureErrors']=errors
+        presentations=self.state.get('featureErrorPresentations')
+        presentations=dict(presentations) if isinstance(presentations,dict) else {}
+        if self._time_warp_error:presentations['gameSpeed']=dict(self._time_warp_error)
+        else:presentations.pop('gameSpeed',None)
+        self.state['featureErrorPresentations']=presentations
         diagnostics=self.state.get('runtimeDiagnostics')
         if isinstance(diagnostics,dict):
             diagnostics=dict(diagnostics)
@@ -261,8 +271,12 @@ class Hades2Adapter(GameAdapter):
         try:
             actual=self.time_warp.reset() if abs(float(value)-1.0)<1e-9 else self.time_warp.set_speed(float(value))
         except AdapterError as error:
-            self._time_warp_error=str(error);self._project_time_warp();raise
-        self._time_warp_speed=float(actual);self._time_warp_error='';self._project_time_warp()
+            self._time_warp_error={
+                'presentation':error.presentation,
+                'arguments':list(getattr(error,'arguments',()) or ()),
+            }
+            self._project_time_warp();raise
+        self._time_warp_speed=float(actual);self._time_warp_error=None;self._project_time_warp()
         return self._time_warp_speed
 
     def _reset_preferences(self):
@@ -587,7 +601,7 @@ class Hades2Adapter(GameAdapter):
         if pid!=previous_pid:
             self._runtime_bootstrapped=False
             self._catalog_initialized=False
-            self._time_warp_speed=1.0;self._time_warp_error='';self._project_time_warp()
+            self._time_warp_speed=1.0;self._time_warp_error=None;self._project_time_warp()
         if not pid:self.state['status']='not_running'
         elif not self.state['connected']:self.state['status']='disconnected'
         if not self.state['connected']:

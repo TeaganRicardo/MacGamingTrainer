@@ -124,12 +124,15 @@ struct Hades2TrainerView: View {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
 
-    /// Resolve a Hades-owned message token, including its nested key arguments.
+    /// Resolve a presentation token through the owner of its namespace.
+    ///
+    /// Hades tokens stay module-owned; Host tokens (including Core Time Warp
+    /// failures) resolve through Host.strings with the same argument channel.
     private func resolved(_ token: TrainerTextToken) -> String {
-        Hades2GameModule.presentationText(
+        Hades2GameModule.resolveText(
             key: token.key,
             arguments: token.arguments,
-            language: localization.language
+            localization: localization
         )
     }
 
@@ -1020,13 +1023,23 @@ struct Hades2TrainerView: View {
             if !model.errorText.key.isEmpty {
                 TrainerMessageBanner(text: resolved(model.errorText), icon: "exclamationmark.triangle.fill", color: theme.warning)
             } else if !model.error.isEmpty {
-                // A Hades error arrives as a key plus its arguments, so render it
-                // through the Hades tables. A Core-owned error is not a Hades key
-                // and is passed through for the Host banner to resolve.
-                let copy = model.backendErrorText.key.hasPrefix("hades2.")
-                    ? resolved(model.backendErrorText)
-                    : model.error
-                TrainerMessageBanner(text: copy, icon: "exclamationmark.triangle.fill", color: theme.warning)
+                // The backend error envelope already carries the stable key and
+                // arguments. Resolve by namespace here instead of dropping Host
+                // arguments or treating a Host key as literal copy.
+                TrainerMessageBanner(
+                    text: resolved(model.backendErrorText),
+                    icon: "exclamationmark.triangle.fill",
+                    color: theme.warning
+                )
+            } else if !model.runtimeIssuePresentations.isEmpty {
+                let issues = model.runtimeIssuePresentations.map {
+                    "\($0.featureID): \(resolved($0.token))"
+                }.joined(separator: "; ")
+                TrainerMessageBanner(
+                    text: text("hades2.status.runtimeInactive", arguments: [issues]),
+                    icon: "exclamationmark.triangle.fill",
+                    color: theme.warning
+                )
             } else if !model.runtimeIssueText.key.isEmpty {
                 TrainerMessageBanner(text: resolved(model.runtimeIssueText), icon: "exclamationmark.triangle.fill", color: theme.warning)
             } else if !model.runtimeIssue.isEmpty {
