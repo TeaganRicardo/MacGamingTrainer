@@ -6,10 +6,10 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from .adapter import AdapterError
+from .adapter import HostPresentationError
 
 
-class ProcessTimeWarpError(AdapterError):
+class ProcessTimeWarpError(HostPresentationError):
     """Core-owned Time Warp failure with a Host presentation identity.
 
     The backend never knows the active UI language. Every player-facing Time
@@ -18,16 +18,6 @@ class ProcessTimeWarpError(AdapterError):
     """
 
     PRESENTATION_PREFIX = "host.timeWarp.error."
-
-    def __init__(self, code, presentation, *, diagnostic=None, arguments=()):
-        if not isinstance(presentation, str) or not presentation.startswith(self.PRESENTATION_PREFIX):
-            raise ValueError("Process Time Warp presentation must use a host.timeWarp.error.* key.")
-        super().__init__(
-            code,
-            presentation,
-            diagnostic=diagnostic,
-            arguments=arguments,
-        )
 
 
 class ProcessTimeWarpController:
