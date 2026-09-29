@@ -11,10 +11,10 @@ sys.path.insert(0, str(root/'Backend'))
 from core.adapter import GameAdapter, GameAdapterContext
 from core.game_spec import GameSpec
 from core.module_manifest import GameModuleManifest, ManifestError
+import core.protocol as core_protocol
 from core.protocol import (
     APP_BACKEND_VERSION,
     HOST_PROTOCOL_VERSION,
-    PROTOCOL_VERSION,
     JsonlRequestRouter,
 )
 from core.registry import available_games, create_adapter
@@ -48,7 +48,8 @@ class FakeAdapter(GameAdapter):
 
 
 product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShortVersionString']
-assert HOST_PROTOCOL_VERSION == PROTOCOL_VERSION == 6
+assert HOST_PROTOCOL_VERSION == 6
+assert not hasattr(core_protocol, 'PROTOCOL_VERSION'), 'obsolete protocol alias was restored'
 assert APP_BACKEND_VERSION == product_version
 assert any(row['id'] == 'hades2' and row['protocolVersion'] == 5 for row in available_games())
 
