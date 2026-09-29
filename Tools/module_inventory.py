@@ -20,20 +20,25 @@ class ModuleInventoryError(RuntimeError):
     pass
 
 
-def _module_id(manifest_path: Path, data) -> str:
-    if manifest_path.parent.parent != MODULES_RELATIVE or manifest_path.name != "module.json":
+def _module_id(manifest_path: Path, data, *, require_build_layout: bool) -> str:
+    if manifest_path.name != "module.json" or tuple(manifest_path.parts[:2]) != ("Backend", "games"):
         raise ModuleInventoryError(
-            f"{manifest_path}: module manifests must live directly under Backend/games/<id>/"
+            f"{manifest_path}: module manifest must live under Backend/games/"
         )
     if not isinstance(data, dict):
         raise ModuleInventoryError(f"{manifest_path}: module manifest must be a JSON object")
     game_id = data.get("id")
     if not isinstance(game_id, str) or not game_id:
         raise ModuleInventoryError(f"{manifest_path}: module id must be a non-empty string")
-    if manifest_path.parent.name != game_id:
-        raise ModuleInventoryError(
-            f"{manifest_path}: module id {game_id!r} must match directory {manifest_path.parent.name!r}"
-        )
+    if require_build_layout:
+        if manifest_path.parent.parent != MODULES_RELATIVE:
+            raise ModuleInventoryError(
+                f"{manifest_path}: buildable module manifests must live directly under Backend/games/<id>/"
+            )
+        if manifest_path.parent.name != game_id:
+            raise ModuleInventoryError(
+                f"{manifest_path}: module id {game_id!r} must match directory {manifest_path.parent.name!r}"
+            )
     return game_id
 
 
@@ -51,7 +56,7 @@ def discover_module_ids(root: Path = ROOT) -> tuple[str, ...]:
             data = json.loads(manifest.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise ModuleInventoryError(f"{manifest}: cannot read module manifest: {error}") from error
-        ids.append(_module_id(manifest.relative_to(root), data))
+        ids.append(_module_id(manifest.relative_to(root), data, require_build_layout=True))
     if not ids:
         raise ModuleInventoryError("no game module manifests found")
     if len(ids) != len(set(ids)):
@@ -94,7 +99,7 @@ def module_manifests_at_ref(ref: str, root: Path = ROOT) -> tuple[tuple[str, dic
             data = json.loads(_git(root, "show", f"{ref}:{line}"))
         except ValueError as error:
             raise ModuleInventoryError(f"{line} at {ref}: invalid JSON: {error}") from error
-        game_id = _module_id(Path(line), data)
+        game_id = _module_id(Path(line), data, require_build_layout=False)
         records.append((game_id, data))
     ids = [game_id for game_id, _ in records]
     if len(ids) != len(set(ids)):
