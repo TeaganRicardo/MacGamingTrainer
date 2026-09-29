@@ -94,6 +94,26 @@ def test_gate_prefers_the_tree_check_over_the_toolchain():
         f"{manifest_only.stdout!r}")
 
 
+def test_git_status_failure_is_not_a_clean_tree():
+    """A failed git inspection must fail closed with actionable diagnostics."""
+    original_run = mutation_gate.subprocess.run
+
+    def failing_git(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args[0], 128, stdout="", stderr="fatal: not a git repository"
+        )
+
+    mutation_gate.subprocess.run = failing_git
+    try:
+        failure = mutation_gate.verify_clean_tree()
+    finally:
+        mutation_gate.subprocess.run = original_run
+
+    assert failure, "failed git status was interpreted as a clean worktree"
+    assert "128" in failure, failure
+    assert "fatal: not a git repository" in failure, failure
+
+
 def test_gate_requires_a_toolchain_only_after_the_tree_is_clean():
     """The swiftc check must come after the tree check, not before it."""
     source = (ROOT / "Tools/mutation_gate.py").read_text(encoding="utf-8")
@@ -483,6 +503,7 @@ if __name__ == "__main__":
     test_success_tokens_come_from_owning_tests()
     test_gate_refuses_a_dirty_tree()
     test_gate_prefers_the_tree_check_over_the_toolchain()
+    test_git_status_failure_is_not_a_clean_tree()
     test_gate_requires_a_toolchain_only_after_the_tree_is_clean()
     test_gate_restores_what_it_mutates()
     test_gate_requires_a_green_baseline()
