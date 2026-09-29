@@ -111,6 +111,7 @@ class BuildProvenanceContract(unittest.TestCase):
         module = self.root / 'Backend/games/hades2'
         (module / 'runtime').mkdir(parents=True)
         (module / 'module.json').write_text(json.dumps({
+            'id': 'hades2',
             'residentRuntime': {'source': 'runtime/hades.lua'},
         }))
         source = module / 'runtime/hades.lua'
@@ -119,6 +120,9 @@ class BuildProvenanceContract(unittest.TestCase):
         subprocess.run(['git', 'commit', '-qm', 'resident'], cwd=self.root, check=True)
         packaged = 'Test.app/Contents/Resources/Backend/games/hades2/runtime/hades.lua'
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
+                             (module / 'module.json').read_bytes())
             archive.writestr(packaged, source.read_bytes())
         result = self.run_tool('--local', '--module-id', 'hades2')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -127,10 +131,48 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertEqual(manifest['residentRuntime']['sourceSha256'], expected)
         self.assertEqual(manifest['residentRuntime']['packagedSha256'], expected)
         with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr('Test.app/Contents/Resources/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr('Test.app/Contents/Resources/Backend/games/hades2/module.json',
+                             (module / 'module.json').read_bytes())
             archive.writestr(packaged, b'wrong bytes')
         result = self.run_tool('--local', '--module-id', 'hades2')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('differs', result.stderr)
+
+    def test_module_id_must_match_packaged_marker_and_manifest(self):
+        modules = self.root / 'Backend/games'
+        for game_id in ('hades2', 'reference_fixture'):
+            module = modules / game_id
+            module.mkdir(parents=True)
+            (module / 'module.json').write_text(json.dumps({'id': game_id}))
+        subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'modules'], cwd=self.root, check=True)
+
+        resources = 'Test.app/Contents/Resources'
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'hades2\n')
+            archive.writestr(f'{resources}/Backend/games/hades2/module.json',
+                             (modules / 'hades2/module.json').read_bytes())
+        mismatch = self.run_tool('--local', '--module-id', 'reference_fixture')
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn('module', mismatch.stderr.lower())
+
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'reference_fixture\n')
+            archive.writestr(f'{resources}/Backend/games/reference_fixture/module.json',
+                             json.dumps({'id': 'hades2'}))
+        wrong_manifest = self.run_tool('--local', '--module-id', 'reference_fixture')
+        self.assertNotEqual(wrong_manifest.returncode, 0)
+        self.assertIn('manifest', wrong_manifest.stderr.lower())
+
+        with zipfile.ZipFile(self.artifact, 'w') as archive:
+            archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'reference_fixture\n')
+            archive.writestr(f'{resources}/Backend/games/reference_fixture/module.json',
+                             (modules / 'reference_fixture/module.json').read_bytes())
+        valid = self.run_tool('--local', '--module-id', 'reference_fixture')
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+        metadata = json.loads(self.artifact.with_name('test.provenance.json').read_text())
+        self.assertEqual(metadata['moduleId'], 'reference_fixture')
 
     def test_artifact_name_uses_root_executable_and_git_head(self):
         (self.root / 'Info.plist').write_bytes(plistlib.dumps({

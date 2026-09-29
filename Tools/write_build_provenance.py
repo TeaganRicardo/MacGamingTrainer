@@ -162,6 +162,37 @@ def resident_identity(repo_root: Path, artifact: Path, module_id: str) -> dict[s
     }
 
 
+def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id: str) -> None:
+    """Bind the claimed module to its packaged marker and source manifest."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", module_id):
+        raise RuntimeError(f"invalid module id: {module_id!r}")
+    source_manifest = (repo_root / "Backend/games" / module_id / "module.json").read_bytes()
+    if json.loads(source_manifest).get("id") != module_id:
+        raise RuntimeError("source module manifest ID differs from --module-id")
+    marker_suffix = "/Contents/Resources/ACTIVE_GAME_ID"
+    with zipfile.ZipFile(artifact) as archive:
+        names = archive.namelist()
+        markers = [name for name in names if name.endswith(marker_suffix)]
+        if len(markers) != 1:
+            raise RuntimeError("artifact must contain exactly one selected-module marker")
+        app_root = markers[0][:-len(marker_suffix)]
+        if not app_root.endswith(".app") or "/" in app_root:
+            raise RuntimeError("artifact selected-module marker is outside a single app")
+        if archive.read(markers[0]).decode("utf-8").strip() != module_id:
+            raise RuntimeError("packaged module marker differs from --module-id")
+        module_dir = f"{app_root}/Contents/Resources/Backend/games/"
+        packaged_manifest = f"{module_dir}{module_id}/module.json"
+        manifests = [name for name in names if name.startswith(module_dir)
+                     and name.endswith("/module.json")]
+        if manifests != [packaged_manifest]:
+            raise RuntimeError("artifact must contain exactly one selected module manifest")
+        packaged_bytes = archive.read(packaged_manifest)
+        if json.loads(packaged_bytes).get("id") != module_id:
+            raise RuntimeError("packaged module manifest ID differs from --module-id")
+        if packaged_bytes != source_manifest:
+            raise RuntimeError("packaged module manifest differs from declared source")
+
+
 def build_manifest(
     artifact: Path,
     product_version: str,
@@ -225,6 +256,7 @@ def build_manifest(
             raise RuntimeError("push event SHA differs from executing checkout")
 
     if module_id:
+        require_packaged_module_identity(repo_root, artifact, module_id)
         manifest["moduleId"] = module_id
         resident = resident_identity(repo_root, artifact, module_id)
         if resident is not None:
