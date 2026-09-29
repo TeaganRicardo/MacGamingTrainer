@@ -116,54 +116,6 @@
       "evidence": [
         {
           "command": "python3 tests/test_mutation_gate_contract.py",
-          "declaredInvariants": {
-            "d01": {
-              "claim": "D01 current-run trait removal is gated on the proven native predicate",
-              "idents": [
-                "d01-unconditional-grant",
-                "d01-escape-hatch",
-                "d01-instance-identity",
-                "d01-hero-has-trait-arity",
-                "d01-drop-rarity-recheck",
-                "d01-drop-request-id",
-                "d01-durable-identity-claim",
-                "d01-catalog-at-callsite",
-                "d01-permissive-decoder",
-                "d01-model-guard",
-                "d01-hide-unremovable-rows",
-                "err-remove-trait-unreachable"
-              ]
-            },
-            "fixture": {
-              "claim": "A module's emitted key resolves in that module's own table",
-              "idents": [
-                "fixture-key-outside-namespace",
-                "fixture-key-unresolvable"
-              ]
-            },
-            "protocol": {
-              "claim": "The host error envelope carries a module's presentation arguments",
-              "idents": [
-                "protocol-error-arguments",
-                "protocol-read-arguments"
-              ]
-            },
-            "receipt": {
-              "claim": "A failed non-idempotent action never presents as success",
-              "idents": [
-                "receipt-drop-remove-trait",
-                "receipt-failed-as-success"
-              ]
-            },
-            "seam": {
-              "claim": "The bilingual presentation seam is actually traversed",
-              "idents": [
-                "seam-empty-prefix",
-                "seam-literal-feature-title",
-                "seam-hardcoded-label"
-              ]
-            }
-          },
           "marker": "mutation_gate_contract_ok",
           "sourcePath": "tests/test_mutation_gate_contract.py",
           "type": "behavior"

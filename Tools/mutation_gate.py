@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import shutil
@@ -53,10 +54,6 @@ class Mutation:
     test: str
     note: str = ""
     equivalent_reason: Optional[str] = None
-    # The token the owning test prints when it runs to completion. A run that
-    # fails without printing it died before judging the invariant.
-    success_token: str = ""
-
     def label(self) -> str:
         return f"{self.path.relative_to(ROOT)}: {self.invariant}"
 
@@ -103,6 +100,13 @@ PROVENANCE = {
     "protocol-read-arguments": "#202: the protocol funnel did not forward the module's arguments",
     "fixture-key-outside-namespace": "#202: the fixture emitted a key in a namespace it does not own",
     "fixture-key-unresolvable": "#202: the fixture emitted a key that resolved nowhere",
+    "core-time-warp-presentation": "#196: Core Time Warp presentation must stay on the Host-owned key seam",
+    "host-registry-forbidden-term": "#197: shared Host resources must reject registry-owned Hades vocabulary",
+    "diagnostics-toggle-source": "#198: diagnostics feature inventory must follow schema.TOGGLES automatically",
+    "diagnostics-host-protocol-symbol": "#198: diagnostics protocol identity must come from HOST_PROTOCOL_VERSION",
+    "error-registry-producer": "#204: registered runtime refusals must name a live producer",
+    "package-product-version-owner": "#179/#199: Info.plist is the sole product-version owner",
+    "package-module-identity": "#179/#199: publish must not replace another module's app output",
 }
 
 
@@ -332,6 +336,79 @@ def manifest() -> list[Mutation]:
             new='"hades2.feature.godMode": "无敌模式"',
             test="tests/test_hades2_presentation_contract.py",
         ),
+        # --- final post-#177 hardening seams ------------------------------
+        Mutation(
+            ident="core-time-warp-presentation",
+            invariant="Core presentation errors reject literal player-facing copy",
+            path=ROOT / "Backend/core/adapter.py",
+            old=("        if not isinstance(presentation, str) or "
+                 "not presentation.startswith(self.PRESENTATION_PREFIX):"),
+            new="        if not isinstance(presentation, str):",
+            test="tests/test_process_time_warp_controller.py",
+            note="#196 alias-agnostic Host presentation seam",
+        ),
+        Mutation(
+            ident="host-registry-forbidden-term",
+            invariant="shared Host localization contains no Hades registry vocabulary",
+            path=ROOT / "Resources/Localization/zh-CN.lproj/Host.strings",
+            old='"host.gameLibrary" = "游戏库";',
+            new='"host.gameLibrary" = "重骰";',
+            test="tests/test_host_shared_localization_coverage.py",
+            note="#197 registry-derived compatibility-alias guard",
+        ),
+        Mutation(
+            ident="diagnostics-toggle-source",
+            invariant="diagnostics feature inventory derives from schema.TOGGLES",
+            path=ROOT / "Backend/games/hades2/diagnostics.py",
+            old="    diagnostic_features=list(schema.TOGGLES)",
+            new="    diagnostic_features=list(schema.TOGGLES[:-1])",
+            test="tests/test_diagnostics_live_status.py",
+            note="#198 schema single-source cleanup",
+        ),
+        Mutation(
+            ident="diagnostics-host-protocol-symbol",
+            invariant="diagnostic bundles report the Host protocol from its canonical owner",
+            path=ROOT / "Backend/games/hades2/diagnostics.py",
+            old=("        'generatedAt':time.strftime('%Y-%m-%dT%H:%M:%S%z'),"
+                 "'protocolVersion':HOST_PROTOCOL_VERSION,"),
+            new=("        'generatedAt':time.strftime('%Y-%m-%dT%H:%M:%S%z'),"
+                 "'protocolVersion':APP_BACKEND_VERSION,"),
+            test="tests/test_hades2_diagnostics_log_scope.py",
+            note="#198 protocol single-source cleanup",
+        ),
+        Mutation(
+            ident="error-registry-producer",
+            invariant="a registered runtime refusal must point at a live producer",
+            path=ROOT / "Backend/games/hades2/error_presentation.py",
+            old=("  'message': 'Trait removal requires an active run room',\n"
+                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
+                 "  'runtime': {'commands': ['remove_trait'], 'producer': "
+                 "{'kind': 'command', 'name': 'remove_trait'}}},"),
+            new=("  'message': 'Trait removal requires an active run room',\n"
+                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
+                 "  'runtime': {'commands': ['remove_trait'], 'producer': "
+                 "{'kind': 'command', 'name': 'remove_trait_missing'}}},"),
+            test="tests/test_hades2_error_registry_single_source.py",
+            note="#204 dead-entry reverse coverage",
+        ),
+        Mutation(
+            ident="package-product-version-owner",
+            invariant="artifact identity cannot override Info.plist product SemVer",
+            path=ROOT / "Tools/write_build_provenance.py",
+            old='    if plist.get("CFBundleShortVersionString") != product_version:',
+            new='    if False and plist.get("CFBundleShortVersionString") != product_version:',
+            test="tests/test_build_artifact_provenance.py",
+            note="#179/#199 root-only product identity",
+        ),
+        Mutation(
+            ident="package-module-identity",
+            invariant="publishing cannot replace an app owned by another module",
+            path=ROOT / "Tools/publish_module_build.py",
+            old="                if previous_game != selected_game:",
+            new="                if False and previous_game != selected_game:",
+            test="tests/test_module_publish_safety.py",
+            note="#179/#199 selected-module output identity",
+        ),
         # --- protocol envelope ---------------------------------------------
         Mutation(
             ident="protocol-error-arguments",
@@ -373,18 +450,47 @@ def manifest() -> list[Mutation]:
 # Runner
 # --------------------------------------------------------------------------
 
-# Each declared test prints a unique token as its last line when it runs to
-# completion. Captured from the tests themselves, so it cannot drift.
-_SUCCESS_TOKENS = {
-    "tests/test_hades2_current_run_traits.py": "hades2_current_run_traits_ok",
-    "tests/test_hades2_backend_state_cleanup.py": "hades2_backend_state_cleanup_ok",
-    "tests/test_host_localization_behavior.py": "host_localization_runtime_behavior_ok",
-    "tests/test_hades2_presentation_contract.py": "hades2_presentation_contract_ok",
-    "tests/test_protocol_fixtures_v0180.py": "protocol_fixtures_v0180_ok",
-    "tests/test_reference_fixture_session_integration.py":
-        "reference_fixture_session_integration_test_ok",
-}
+# Each owning test declares completion with one literal *_ok marker, either in
+# Python or in an embedded compiled harness. Discover it from that test instead
+# of mirroring test->token ownership here.
+def success_token_for(test: str) -> str:
+    path = ROOT / test
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as error:
+        raise ValueError(f"cannot inspect owning test {test}: {error}") from error
+    python_tokens = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "print" or not node.args:
+            continue
+        value = node.args[0]
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) and value.value.endswith("_ok"):
+            python_tokens.add(value.value)
+    if len(python_tokens) == 1:
+        return next(iter(python_tokens))
+    if len(python_tokens) > 1:
+        raise ValueError(
+            f"owning test {test} prints multiple *_ok completion markers: "
+            f"{sorted(python_tokens)}"
+        )
 
+    # Some macOS behavior tests are Python wrappers around a compiled Swift
+    # harness. Their completion marker is emitted by the embedded program, so
+    # there is no Python print() call to discover. In that case only, inspect
+    # string literals and require a single marker there.
+    embedded_tokens = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        embedded_tokens.update(re.findall(r"\b[A-Za-z][A-Za-z0-9_]*_ok\b", node.value))
+    if len(embedded_tokens) != 1:
+        raise ValueError(
+            f"owning test {test} must declare exactly one literal *_ok completion marker; "
+            f"found {sorted(embedded_tokens)}"
+        )
+    return next(iter(embedded_tokens))
 
 def _run(test: str, timeout: int = 600) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -561,10 +667,11 @@ def check_manifest(mutations: list[Mutation]) -> list[str]:
             problems.append(f"{m.ident}: test must be a tests/ path, got {m.test}")
         if not (ROOT / m.test).is_file():
             problems.append(f"{m.ident}: test does not exist: {m.test}")
-        elif m.test not in _SUCCESS_TOKENS and not m.success_token:
-            problems.append(
-                f"{m.ident}: no success token declared for {m.test}; without one a "
-                "crashed run cannot be told apart from a real catch")
+        else:
+            try:
+                success_token_for(m.test)
+            except ValueError as error:
+                problems.append(f"{m.ident}: {error}")
         if not PROVENANCE.get(m.ident):
             problems.append(
                 f"{m.ident}: no provenance recorded. Every declared invariant must name "
@@ -609,7 +716,10 @@ def run_mutation(m: Mutation) -> Result:
     if m.old not in original:
         return Result(m, "skipped", "anchor disappeared between check and run")
 
-    token = m.success_token or _SUCCESS_TOKENS.get(m.test, "")
+    try:
+        token = success_token_for(m.test)
+    except ValueError as error:
+        return Result(m, "error", str(error))
     clean = _run(m.test)
     if clean.returncode != 0:
         return Result(
@@ -653,6 +763,14 @@ def verify_clean_tree() -> Optional[str]:
     if status.strip():
         return status
     return None
+
+
+def exit_code_for(results: list[Result]) -> int:
+    """Return the gate verdict for completed mutation results."""
+    return 1 if any(
+        result.outcome in {"survived", "skipped", "error"}
+        for result in results
+    ) else 0
 
 
 def main() -> int:
@@ -746,15 +864,15 @@ def main() -> int:
         print(after, file=sys.stderr)
         return 1
 
-    if errored or skipped:
-        return 1
+    verdict = exit_code_for(results)
     if survivors:
         print(
             f"\n{survivors[0].mutation.ident} stayed green with its invariant broken. "
             "Either the guard is missing or the mutation is behaviourally equivalent — "
             "prove which, then record an equivalent_reason or fix the guard.",
             file=sys.stderr)
-        return 1
+    if verdict:
+        return verdict
     print("mutation_gate_ok")
     return 0
 

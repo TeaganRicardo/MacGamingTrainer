@@ -29,6 +29,22 @@ def test_manifest_is_valid():
     assert not problems, problems
 
 
+def test_success_tokens_come_from_owning_tests():
+    """The owning behavior test is the source of its completion marker.
+
+    Keeping a second test->token dictionary in the mutation harness lets the
+    harness drift from the test it claims to execute. Discover the marker from
+    the owning test itself and require one unambiguous *_ok marker.
+    """
+    assert not hasattr(mutation_gate, "_SUCCESS_TOKENS"), (
+        "success-token ownership is still mirrored inside the mutation harness")
+    for mutation in mutation_gate.manifest():
+        token = mutation_gate.success_token_for(mutation.test)
+        assert token.endswith("_ok"), (mutation.ident, token)
+        source = (ROOT / mutation.test).read_text(encoding="utf-8")
+        assert token in source, (mutation.ident, mutation.test, token)
+
+
 def _run_gate(*args):
     return subprocess.run(
         [sys.executable, str(ROOT / "Tools/mutation_gate.py"), *args],
@@ -72,7 +88,8 @@ def test_gate_prefers_the_tree_check_over_the_toolchain():
     """
     manifest_only = _run_gate("--list")
     assert manifest_only.returncode == 0, "listing the manifest needs no toolchain"
-    assert "21 declared invariants" in manifest_only.stdout, (
+    expected = f"{len(mutation_gate.manifest())} declared invariants"
+    assert expected in manifest_only.stdout, (
         "the listing must actually enumerate the manifest: "
         f"{manifest_only.stdout!r}")
 
@@ -273,6 +290,21 @@ def test_manifest_covers_the_shipped_defects():
     assert required <= idents, sorted(required - idents)
 
 
+def test_manifest_covers_final_hardening_seams():
+    """The final #203 gate must protect the completed hardening seams."""
+    idents = {m.ident for m in mutation_gate.manifest()}
+    required = {
+        "core-time-warp-presentation",
+        "host-registry-forbidden-term",
+        "diagnostics-toggle-source",
+        "diagnostics-host-protocol-symbol",
+        "error-registry-producer",
+        "package-product-version-owner",
+        "package-module-identity",
+    }
+    assert required <= idents, sorted(required - idents)
+
+
 def test_every_invariant_records_its_incident():
     """A guard with no defect behind it is a rule, not evidence."""
     missing = sorted(m.ident for m in mutation_gate.manifest()
@@ -392,18 +424,31 @@ def test_the_artifact_rule_rejects_evidence_outside_the_repository():
         subprocess.run(["rm", "-rf", str(outside)], capture_output=True)
 
 
-def test_gate_reports_a_surviving_mutant_as_failure():
-    """The gate's own verdict logic must fail on a survivor."""
+def test_gate_reports_a_real_surviving_mutant_as_failure():
+    """An uncaught non-equivalent production mutation must fail the gate.
+
+    This drives the real mutation runner rather than constructing a Result by
+    hand. The selected owning test is intentionally unrelated to AdapterError
+    argument propagation, so breaking that behavior must survive that test; the
+    gate must then turn the survivor into a failing exit status and restore the
+    source file.
+    """
+    path = ROOT / "Backend/core/adapter.py"
+    before = path.read_text(encoding="utf-8")
     m = mutation_gate.Mutation(
-        ident="probe", invariant="probe", path=ROOT / "README.md",
-        old="Mutation", new="Mutation__nope", test="tests/test_module_contract_round13.py",
+        ident="probe-real-survivor",
+        invariant="AdapterError arguments are preserved",
+        path=path,
+        old="        self.arguments = list(arguments)",
+        new="        self.arguments = []",
+        test="tests/test_module_build_output.py",
     )
-    result = mutation_gate.Result(m, "survived", "probe")
-    assert result.outcome == "survived"
-    # A skip must never be silently folded into a pass.
-    assert not hasattr(mutation_gate, "SKIP_IS_A_HOLE"), (
-        "the skip-is-a-hole constant is a policy statement; enforce it in the "
-        "exit path instead of as a flag")
+    result = mutation_gate.run_mutation(m)
+    assert result.outcome == "survived", result
+    assert mutation_gate.exit_code_for([result]) != 0, (
+        "a real surviving non-equivalent mutant must fail the gate")
+    assert path.read_text(encoding="utf-8") == before, (
+        "the real survivor probe left production code mutated")
 
 
 def test_list_and_manifest_are_consistent():
@@ -422,6 +467,7 @@ def test_list_and_manifest_are_consistent():
 
 if __name__ == "__main__":
     test_manifest_is_valid()
+    test_success_tokens_come_from_owning_tests()
     test_gate_refuses_a_dirty_tree()
     test_gate_prefers_the_tree_check_over_the_toolchain()
     test_gate_requires_a_toolchain_only_after_the_tree_is_clean()
@@ -429,10 +475,11 @@ if __name__ == "__main__":
     test_gate_requires_a_green_baseline()
     test_only_a_reached_assertion_counts_as_a_catch()
     test_manifest_covers_the_shipped_defects()
+    test_manifest_covers_final_hardening_seams()
     test_every_invariant_records_its_incident()
     test_equivalent_excuses_must_be_backed_by_an_artifact()
     test_the_artifact_rule_rejects_evidence_outside_the_repository()
-    test_gate_reports_a_surviving_mutant_as_failure()
+    test_gate_reports_a_real_surviving_mutant_as_failure()
     test_list_and_manifest_are_consistent()
 
     # Every test in this file must actually be called. A test that is defined but
