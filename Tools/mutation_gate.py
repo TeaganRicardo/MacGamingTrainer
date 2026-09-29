@@ -809,10 +809,17 @@ def run_mutation(m: Mutation) -> Result:
 
 
 def verify_clean_tree() -> Optional[str]:
-    status = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                            capture_output=True, text=True).stdout
-    if status.strip():
-        return status
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        diagnostic = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        return f"git status failed (exit {result.returncode}): {diagnostic}"
+    if result.stdout.strip():
+        return result.stdout
     return None
 
 
