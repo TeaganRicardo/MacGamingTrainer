@@ -7,6 +7,11 @@ enum Hades2ShortcutIssue: Equatable {
     case registration(TrainerHotkeyRegistrationFailure)
 }
 
+struct Hades2RuntimeIssuePresentation: Hashable {
+    let featureID: String
+    let token: TrainerTextToken
+}
+
 final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private static let expectedHostProtocolVersion = Hades2GameModule.descriptor.expectedHostProtocolVersion
     private static let expectedModuleProtocolVersion = Hades2GameModule.descriptor.expectedModuleProtocolVersion
@@ -503,7 +508,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             runtimeFeatureErrors = patch.featureErrors.value ?? [:]
         }
         if patch.featureErrorPresentations.isPresent {
-            runtimeFeaturePresentationTokens = patch.featureErrorPresentations.value ?? [:]
+            runtimeFeaturePresentationTokens = (patch.featureErrorPresentations.value ?? [:]).reduce(
+                into: [String: TrainerTextToken]()
+            ) { result, entry in
+                result[entry.key] = TrainerTextToken(
+                    key: entry.value.key,
+                    arguments: entry.value.arguments
+                )
+            }
         }
         if patch.featureErrors.isPresent || patch.featureErrorPresentations.isPresent {
             rebuildRuntimeIssuePresentations()
