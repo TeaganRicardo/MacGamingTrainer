@@ -32,6 +32,7 @@ def parse_resident_runtime_declaration(
     *,
     manifest_path,
     source_exists: Callable[[Path], bool],
+    source_description: str = "a file inside the module directory",
 ):
     """Validate one residentRuntime declaration and return its parsed spec.
 
@@ -58,7 +59,7 @@ def parse_resident_runtime_declaration(
     if not source_exists(runtime_path):
         raise _error(
             manifest_path,
-            f".source {source!r} does not name a file inside the module directory",
+            f".source {source!r} does not name {source_description}",
         )
 
     patterns = {}
