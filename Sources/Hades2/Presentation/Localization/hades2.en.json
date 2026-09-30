@@ -307,7 +307,7 @@
     "hades2.status.unverifiedBanner": "The current game build is not verified; you can still try connecting.",
     "hades2.status.versionDetail": "Version {0}",
     "hades2.traits.count": "{0} total",
-    "hades2.traits.deferredIssue": "This effect uses an owner-specific lifecycle; management continues in #{0}.",
+    "hades2.traits.deferredIssue": "Additional owner-specific operations for this effect continue in #{0}.",
     "hades2.traits.empty": "No traits to show in the current run.",
     "hades2.traits.family.chaos": "Chaos",
     "hades2.traits.family.costume": "Costumes",
