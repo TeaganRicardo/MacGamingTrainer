@@ -294,7 +294,7 @@ struct Hades2TrainerView: View {
     private func traitLimitationReason(_ reason: String) -> String {
         let key = "hades2.traits.reason." + (reason.isEmpty ? "ownerSpecificLifecycle" : reason)
         let localized = text(key)
-        return localized == key ? reason : localized
+        return localized == key ? text("hades2.traits.reason.unknown") : localized
     }
 
     private func traitLimitationRows(_ trait: CurrentRunTrait) -> [String] {
