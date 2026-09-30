@@ -90,7 +90,16 @@ The ordinary PR workflow runs passed but checked out synthetic merge `e57688529f
 
 ### Verification routing
 
-PR #184 established the change-scope routing baseline. Pull-request change scope and runtime-revision enforcement use merge-base -> PR head, and missing/invalid scope decisions fail closed. PR #216 then made shared module/reference routing and `validate_game_module.py --all` derive from module metadata rather than a Hades-specific list; PR #223 made normal module validation and the diff revision gate share one `residentRuntime` declaration parser. Ordinary documentation keeps the existing required check names but takes lightweight Ubuntu fast paths. Linux-portable Backend/tests/reference data run Linux contracts only. Paths that are not Linux-portable, including Swift/AppKit/native/build/package/macOS-only work and packaged module resources, also run Build 2 macOS. Module/Core/build-boundary paths additionally run the reference-fixture module build. The explicit shared Backend/Core seams `__init__.py`, `adapter.py`, `game_spec.py`, `module_manifest.py`, `protocol.py`, `registry.py`, and `server.py` are conservatively routed through macOS + reference-fixture verification, while ordinary portable Core Python such as `save_service.py` remains Linux-only. In the standing CI routing, Build 2 is the production Hades build/package/signing lane; the module matrix builds only `reference_fixture`.
+Pull requests use merge-base -> exact PR head for scope classification and fail closed when scope cannot be resolved. Documentation takes the existing fast paths. Linux-portable Backend/tests/reference data run the broad Linux contracts; Swift/AppKit/native/build/package/macOS-only work and packaged module resources also run Build 2 macOS; module/Core/build-boundary paths additionally build the reference fixture.
+
+Recurring CI is task verification only:
+
+- the three stable workflow/check names run on `pull_request`, not again automatically on `push(main)`;
+- Build 2 PR mode runs macOS contracts plus an actual Hades build and package/sign verification, but not the mutation audit or retained RC artifact/provenance pipeline;
+- the module matrix PR mode builds and verifies reference-module isolation but does not retain a reference artifact/provenance package;
+- Linux continues to run all portable tests when its lane is selected, including the resident-runtime revision gate.
+
+For convergence, release or a manual QA artifact, explicitly dispatch the same three workflows on the selected SHA. Manual dispatch has no diff base and therefore fails closed to the full applicable lanes. Build 2 then adds the mutation audit and exact-SHA RC/provenance/checksum artifact; the module matrix adds retained reference provenance/artifact evidence.
 
 ## Architecture/governance state
 
