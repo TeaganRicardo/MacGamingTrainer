@@ -46,6 +46,14 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 
 ## Verification routing
 
+Verification **scope** and evidence **identity** are separate. Every check claimed as evidence must have run against the exact SHA named by the claim; exact-head evidence does not mean every task runs the full release matrix.
+
+- **Task verification:** run the minimum gates owned by the changed seams.
+- **Integration verification:** after rebasing onto overlapping work or after a dependency affecting the changed seam moves, rerun the gates whose inputs or semantics may have changed. Unrelated main movement does not by itself expand a task to the full release matrix.
+- **Convergence/release verification:** run the full applicable Linux/macOS/module/mutation/build/package/provenance matrix only when the selected convergence, release, or acceptance task requires it.
+
+Routing by changed seam:
+
 - Linux-portable backend/contract work: `bash Tools/run_linux_checks.sh`.
 - Swift/AppKit/build/package changes: also require `Build 2 macOS`.
 - Module/Core boundary changes: require the module build matrix/reference fixture.
