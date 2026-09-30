@@ -50,7 +50,7 @@ jobs:
           python-version: '3.12'
 
       - name: Enforce diff-based invariants
-        if: steps.scope.outputs.needs_linux == 'true'
+        if: steps.scope.outputs.needs_linux == 'true' && github.event_name == 'pull_request'
         run: python3 Tools/check_runtime_revision.py "$BASE_SHA" "$HEAD_SHA"
 
       - name: Run Linux contract checks
