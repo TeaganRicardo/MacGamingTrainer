@@ -1794,14 +1794,36 @@ if __MacGamingTrainerV1 == nil then
     return true
   end
 
+  local function specialTraitSourceId(name)
+    if type(name) ~= "string" or name == "" then return "" end
+    for sourceId, definition in pairs(nativeSpecialChoiceDefinitions) do
+      local npcData = type(EnemyData) == "table" and EnemyData[definition.npc] or nil
+      if type(npcData) == "table" and type(npcData.Traits) == "table" then
+        for _, traitName in pairs(npcData.Traits) do
+          if traitName == name then return sourceId end
+        end
+      end
+      local choiceData = definition.choices ~= nil and type(PresetEventArgs) == "table"
+        and PresetEventArgs[definition.choices] or nil
+      if type(choiceData) == "table" and type(choiceData.UpgradeOptions) == "table" then
+        for _, option in pairs(choiceData.UpgradeOptions) do
+          if type(option) == "table" and option.ItemName == name then return sourceId end
+        end
+      end
+    end
+    return ""
+  end
+
   local function traitSourceId(trait)
     if type(trait) ~= "table" then return "" end
     local strategy = directTraitStrategies[trait.Name]
     if strategy then return strategy.sourceId end
+    local specialSource = specialTraitSourceId(trait.Name)
+    if specialSource ~= "" then return specialSource end
     if type(trait.LootDataName) == "string" and trait.LootDataName ~= "" then return trait.LootDataName end
     if type(trait.SourceId) == "string" and trait.SourceId ~= "" then return trait.SourceId end
     if type(GetLootSourceName) == "function" and type(trait.Name) == "string" then
-      local ok, source = pcall(GetLootSourceName, trait.Name, { ForBoonInfo = true })
+      local ok, source = pcall(GetLootSourceName, trait.Name, { ForBoonInfo = true, CheckEnemyData = true })
       if ok and type(source) == "string" then return source end
     end
     return ""
