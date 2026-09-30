@@ -19,12 +19,15 @@ def build_diagnostics(adapter):
     checks=[]
     def add(name,ok,detail=''): checks.append({'name':name,'ok':bool(ok),'detail':str(detail)})
     state={}
+    last_known_state=adapter.state if isinstance(getattr(adapter,'state',None),dict) else {}
+    runtime_observation_available=False
     if adapter.transport.alive():
         try:
             refreshed=adapter.observe_runtime()
             if not isinstance(refreshed,dict):
                 raise RuntimeError('status refresh returned no runtime state')
             state=refreshed
+            runtime_observation_available=True
             add('运行时状态刷新',True,'已获取实时 runtime status')
         except Exception as error:
             add('运行时状态刷新',False,str(error))
@@ -55,8 +58,14 @@ def build_diagnostics(adapter):
         result=subprocess.run(['/usr/bin/xcrun','python3','-c',probe],capture_output=True,text=True,timeout=LLDB_PYTHON_TIMEOUT_SECONDS);add('LLDB Python',result.returncode==0,result.stdout.strip() or result.stderr.strip())
     except Exception as error:add('LLDB Python',False,error)
 
-    add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
-    add('Lua 连接',bool(state.get('connected')),state.get('status','unknown'))
+    if runtime_observation_available:
+        add(GAME_SPEC.display_name+' 进程',bool(state.get('pid')),state.get('pid') or '未运行')
+    else:
+        last_pid=last_known_state.get('pid')
+        detail='状态暂不可得'
+        if last_pid:detail+=f' · 最后已知 PID {last_pid}'
+        add(GAME_SPEC.display_name+' 进程',False,detail)
+    add('Lua 连接',bool(state.get('connected')),state.get('status','unknown') if runtime_observation_available else '状态暂不可得')
     diag=state.get('runtimeDiagnostics',{}) if isinstance(state.get('runtimeDiagnostics'),dict) else {}
     add('Lua runtime revision',diag.get('revision') is not None,diag.get('revision','未连接'))
     add('当前场景',state.get('scene') in ('run','crossroads'),state.get('scene','unknown'))
