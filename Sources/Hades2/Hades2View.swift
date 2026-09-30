@@ -291,6 +291,26 @@ struct Hades2TrainerView: View {
         return localized == key ? rarity : localized
     }
 
+    private func traitLimitationReason(_ reason: String) -> String {
+        let key = "hades2.traits.reason." + (reason.isEmpty ? "ownerSpecificLifecycle" : reason)
+        let localized = text(key)
+        return localized == key ? reason : localized
+    }
+
+    private func traitLimitationRows(_ trait: CurrentRunTrait) -> [String] {
+        var rows: [String] = []
+        if !trait.canIncreaseLevel {
+            rows.append(text("hades2.traits.limit.level", arguments: [traitLimitationReason(trait.levelReason)]))
+        }
+        if !trait.canSetRarity {
+            rows.append(text("hades2.traits.limit.rarity", arguments: [traitLimitationReason(trait.rarityReason)]))
+        }
+        if !trait.canRemove {
+            rows.append(text("hades2.traits.limit.remove", arguments: [traitLimitationReason(trait.removalReason)]))
+        }
+        return rows
+    }
+
     private func traitFamilyLabel(_ key: String) -> String {
         guard let trait = filteredCurrentRunTraits.first(where: { traitGroupKey($0) == key }) else {
             return key
@@ -340,6 +360,11 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(currentRunTraitName(trait))
                     .font(.body)
+                if trait.name != currentRunTraitName(trait) {
+                    Text(trait.name)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(theme.mutedFill)
+                }
 
                 HStack(spacing: 8) {
                     Text(text("hades2.traits.level", arguments: [String(trait.level)]))
@@ -353,6 +378,11 @@ struct Hades2TrainerView: View {
                 .font(.caption)
                 .foregroundStyle(theme.mutedFill)
 
+                ForEach(traitLimitationRows(trait), id: \.self) { limitation in
+                    Text(limitation)
+                        .font(.caption2)
+                        .foregroundStyle(theme.mutedFill)
+                }
                 if let issue = trait.deferredIssue {
                     Text(text("hades2.traits.deferredIssue", arguments: [String(issue)]))
                         .font(.caption)
