@@ -1,11 +1,24 @@
 import Foundation
 
+struct TrainerSaveSnapshotPresentation: Equatable {
+    let name: String
+    let details: [String]
+
+    init?(row: [String: Any]) {
+        guard let name = row["name"] as? String, !name.isEmpty else { return nil }
+        self.name = name
+        self.details = row["details"] as? [String] ?? []
+    }
+}
+
 struct TrainerSaveSnapshot: Identifiable, Equatable {
     let id: String
     let name: String
     let createdAt: String
     let fileCount: Int
     let nameDetails: [String]
+    let automaticName: Bool
+    let localizedPresentation: [String: TrainerSaveSnapshotPresentation]
     let hot: Bool
     let path: String
     let valid: Bool
@@ -19,10 +32,29 @@ struct TrainerSaveSnapshot: Identifiable, Equatable {
         self.createdAt = row["createdAt"] as? String ?? ""
         self.fileCount = row["fileCount"] as? Int ?? 0
         self.nameDetails = row["nameDetails"] as? [String] ?? []
+        self.automaticName = row["automaticName"] as? Bool ?? false
+        let localizedRows = row["localizedPresentation"] as? [String: Any] ?? [:]
+        self.localizedPresentation = localizedRows.reduce(into: [:]) { result, entry in
+            guard let value = entry.value as? [String: Any],
+                  let presentation = TrainerSaveSnapshotPresentation(row: value) else { return }
+            result[entry.key] = presentation
+        }
         self.hot = row["hot"] as? Bool ?? false
         self.path = row["path"] as? String ?? ""
         self.valid = row["valid"] as? Bool ?? false
         self.error = row["error"] as? String ?? ""
+    }
+
+    func displayName(for languageCode: String) -> String {
+        guard automaticName,
+              let localized = localizedPresentation[languageCode] else {
+            return name
+        }
+        return localized.name
+    }
+
+    func displayDetails(for languageCode: String) -> [String] {
+        localizedPresentation[languageCode]?.details ?? nameDetails
     }
 }
 

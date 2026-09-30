@@ -32,6 +32,8 @@ for token in (
     'localization.localized("host.save.fileCount", arguments:',
     'localization.presentation(model.error, arguments: model.errorArguments)',
     'localization.presentation(model.notice, arguments: model.noticeArguments)',
+    'snapshot.displayName(for: localization.language.rawValue)',
+    'snapshot.displayDetails(for: localization.language.rawValue)',
 ):
     assert token in view, token
 
