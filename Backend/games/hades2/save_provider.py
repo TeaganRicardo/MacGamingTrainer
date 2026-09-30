@@ -113,16 +113,33 @@ class Hades2SaveProvider:
             return {'defaultName': None, 'nameDetails': []}
 
         header = max(headers, key=lambda item: item.timestamp)
-        names = official_display_names(
-            {header.location},
-            'zh-CN',
-            game_path=self.game_path,
-        )
-        location = names.get(header.location) or header.current_map or header.location
         time_label = created_at.replace('T', ' ')[:16]
-        night = f'第{header.runs}夜'
-        details = [night, location, f'悟性 {header.grasp}', f'恐惧 {header.fear}']
+
+        def presentation(language):
+            names = official_display_names(
+                {header.location},
+                language,
+                game_path=self.game_path,
+            )
+            location = names.get(header.location) or header.current_map or header.location
+            if language == 'en':
+                night = f'Night {header.runs}'
+                details = [night, location, f'Grasp {header.grasp}', f'Fear {header.fear}']
+            else:
+                night = f'第{header.runs}夜'
+                details = [night, location, f'悟性 {header.grasp}', f'恐惧 {header.fear}']
+            return {
+                'name': f'{time_label} · {night} · {location}',
+                'details': details,
+            }
+
+        localized = {
+            language: presentation(language)
+            for language in ('zh-CN', 'en')
+        }
+        default = localized['zh-CN']
         return {
-            'defaultName': f'{time_label} · {night} · {location}',
-            'nameDetails': details,
+            'defaultName': default['name'],
+            'nameDetails': default['details'],
+            'localizedPresentation': localized,
         }

@@ -198,8 +198,9 @@ struct TrainerSaveManagerView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    if !snapshot.nameDetails.isEmpty {
-                        Text(snapshot.nameDetails.joined(separator: " · "))
+                    let localizedDetails = snapshot.displayDetails(for: localization.language.rawValue)
+                    if !localizedDetails.isEmpty {
+                        Text(localizedDetails.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(2)
@@ -253,7 +254,8 @@ struct TrainerSaveManagerView: View {
         if pending.indeterminate {
             return localization.localized("host.save.pendingIndeterminate")
         }
-        let name = model.snapshots.first(where: { $0.id == pending.snapshotID })?.name ?? pending.snapshotID
+        let name = model.snapshots.first(where: { $0.id == pending.snapshotID })?
+            .displayName(for: localization.language.rawValue) ?? pending.snapshotID
         return localization.localized("host.save.pendingWaiting", arguments: [name])
     }
 
@@ -266,7 +268,7 @@ struct TrainerSaveManagerView: View {
     }
 
     private func displayName(for snapshot: TrainerSaveSnapshot) -> String {
-        pendingRenameNames[snapshot.id] ?? snapshot.name
+        pendingRenameNames[snapshot.id] ?? snapshot.displayName(for: localization.language.rawValue)
     }
 
     private func beginRename(_ snapshot: TrainerSaveSnapshot) {
@@ -280,7 +282,8 @@ struct TrainerSaveManagerView: View {
         let current = model.snapshots.first(where: { $0.id == id })
         editingID = nil
         renameText = ""
-        guard !clean.isEmpty, clean != current?.name else { return }
+        guard !clean.isEmpty,
+              clean != current.map({ displayName(for: $0) }) else { return }
 
         pendingRenameNames[id] = clean
         model.rename(id: id, name: clean) { _ in
@@ -309,7 +312,7 @@ private struct TrainerSaveRestoreConfirmationView: View {
                 VStack(spacing: 1) {
                     TrainerRow {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(snapshot.name)
+                            Text(snapshot.displayName(for: localization.language.rawValue))
                                 .font(.headline.weight(.semibold))
                             Text(localization.localized("host.save.restoreExplanation"))
                                 .font(.caption)
