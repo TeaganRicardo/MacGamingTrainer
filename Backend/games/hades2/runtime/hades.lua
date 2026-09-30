@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 54 then
+if previousModule and previousModule.revision ~= 55 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 54 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 54, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 55, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -34,6 +34,9 @@ if __MacGamingTrainerV1 == nil then
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
     lastActionReceipt = nil,
+    -- Ephemeral install identity used only to reject stale UI selections. It is
+    -- intentionally neither saved nor carried across a resident replacement.
+    traitInventoryGeneration = tostring({}),
   }
   __MacGamingTrainerV1 = M
 
@@ -1728,45 +1731,83 @@ if __MacGamingTrainerV1 == nil then
     end
     return supportMap, activeMap, dormantMap
   end
-  -- Current-run trait/buff inventory, projected from live runtime state only.
+  -- Current-run trait/buff inventory and management capability projection.
   --
-  -- D00 established that a runtime trait's `Id` is a current-run instance
-  -- identity assigned by GetTraitUniqueId, and that it is NOT proven stable
-  -- across run reload, game restart or a save round trip. So `instanceId` here
-  -- is current-run identity and is never presented as durable.
-  --
-  -- Removal capability is derived from the native SellTraits predicate proven in
-  -- D00 section 6: GenerateSellTraitValues admits a trait only when
-  -- IsGodTrait(name, { ForShop = true }) holds and the trait has a Rarity, and
-  -- the native teardown is name-level and all-matching
-  -- (HandleSellChoiceSelection -> RemoveWeaponTrait(name, { Silent = true }),
-  -- which loops while the hero still owns that name). Therefore the only
-  -- capability exposed here is `nameLevelAllMatching`, and it is reported with
-  -- that scope rather than as a single-instance delete.
-  --
-  -- Every other owner-specific lifecycle is reported as not removable. That is
-  -- the safe, truthful answer: no generic RemoveTraitData escape hatch is
-  -- reachable from here.
-  local traitFamily = function(trait)
-    if type(trait) ~= "table" then return "Unknown" end
-    if type(trait.Slot) == "string" and trait.Slot ~= "" then return trait.Slot end
-    local name = trait.Name
-    if type(name) == "string" then
-      if name:match("^WeaponUpgrade") or trait.Slot == "Weapon" then return "Weapon" end
-      if name:match("^TrialUpgrade") then return "Chaos" end
-    end
-    return "Boon"
+  -- The inventory remains live runtime observation. The ids below are only a
+  -- target snapshot: resident generation + CurrentRun table identity + trait.Id.
+  -- None is persisted, and every mutation re-resolves the selection immediately
+  -- before it calls a game-owned operation.
+  local directTraitStrategies = {
+    -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
+    -- boon proves an intentional direct level path without replaying acquisition.
+    CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
+    -- Icarus' OmegaExplodeBoon is not native SellTraits / rarity-menu eligible.
+    -- Its mounted state is declarative (mana modifier + damage callback), with no
+    -- acquire/setup/expire reward lifecycle, so it is the bounded direct example
+    -- for exact rarity recompute and single-instance teardown in #227.
+    OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
+  }
+  local deferredTraitIssues = {
+    chaos = 236,
+    hex = 237,
+    hammer = 238,
+    costume = 239,
+    temporary = 239,
+    directSpecial = 239,
+    familiar = 240,
+  }
+  local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
+  local directUnsafeLifecycleKeys = {
+    "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
+    "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
+  }
+
+  local function traitLevel(trait)
+    if type(trait) ~= "table" then return 1 end
+    local value = trait.StackNum
+    if not finite(value) or value < 1 then return 1 end
+    return math.floor(value)
   end
-  local traitOwner = function(trait)
+
+  local function traitRarity(trait)
+    return type(trait) == "table" and type(trait.Rarity) == "string" and trait.Rarity or ""
+  end
+
+  local function sameNameCount(name)
+    local count = 0
+    if type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
+        and type(CurrentRun.Hero.Traits) == "table" then
+      for _, trait in ipairs(CurrentRun.Hero.Traits) do
+        if type(trait) == "table" and trait.Name == name then count = count + 1 end
+      end
+    end
+    return count
+  end
+
+  local function directStrategySafe(trait)
+    if type(trait) ~= "table" or directTraitStrategies[trait.Name] == nil then return false end
+    for _, key in ipairs(directUnsafeLifecycleKeys) do
+      if trait[key] ~= nil then return false end
+    end
+    if trait.RemainingUses ~= nil then return false end
+    return true
+  end
+
+  local function traitSourceId(trait)
     if type(trait) ~= "table" then return "" end
-    if type(trait.LootDataName) == "string" then return trait.LootDataName end
-    if type(trait.SourceId) == "string" then return trait.SourceId end
+    local strategy = directTraitStrategies[trait.Name]
+    if strategy then return strategy.sourceId end
+    if type(trait.LootDataName) == "string" and trait.LootDataName ~= "" then return trait.LootDataName end
+    if type(trait.SourceId) == "string" and trait.SourceId ~= "" then return trait.SourceId end
+    if type(GetLootSourceName) == "function" and type(trait.Name) == "string" then
+      local ok, source = pcall(GetLootSourceName, trait.Name, { ForBoonInfo = true })
+      if ok and type(source) == "string" then return source end
+    end
     return ""
   end
-  -- Is this trait admitted by the native sell-screen predicate? D00 section 6:
-  -- IsGodTrait(name, { ForShop = true }) and a non-nil Rarity.
-  local sellScreenEligible = function(trait)
-    if type(trait) ~= "table" then return false, "" end
+
+  local function sellScreenEligible(trait)
+    if type(trait) ~= "table" then return false, "missingTarget" end
     if type(trait.Name) ~= "string" or trait.Name == "" then return false, "noTraitName" end
     if trait.Rarity == nil then return false, "noRarity" end
     if type(IsGodTrait) ~= "function" then return false, "predicateUnavailable" end
@@ -1775,42 +1816,178 @@ if __MacGamingTrainerV1 == nil then
     if not isGod then return false, "notShopGodOwned" end
     return true, ""
   end
+
+  local function traitFamily(trait, sellEligible)
+    if type(trait) ~= "table" then return "other" end
+    local name = trait.Name or ""
+    if directTraitStrategies[name] ~= nil then return "directSpecial" end
+    if trait.LastCurseName ~= nil or trait.LastBlessingName ~= nil
+        or string.find(name, "Chaos", 1, true) ~= nil then return "chaos" end
+    if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
+        or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
+    if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
+        or string.find(name, "Hammer", 1, true) ~= nil then return "hammer" end
+    if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
+    if trait.RemainingUses ~= nil then return "temporary" end
+    if type(trait.InheritFrom) == "table" then
+      for _, parent in ipairs(trait.InheritFrom) do
+        if parent == "CostumeTrait" then return "costume" end
+      end
+    end
+    if sellEligible then return "olympianHermes" end
+    return "other"
+  end
+
+  local function availableRarities(trait)
+    local result = setmetatable({}, arrayMeta)
+    if type(trait) ~= "table" then return result end
+    local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+    local levels = type(definition) == "table" and definition.RarityLevels or trait.RarityLevels
+    if type(levels) ~= "table" then return result end
+    for _, rarity in ipairs(rarityOrder) do
+      if levels[rarity] ~= nil then result[#result + 1] = rarity end
+    end
+    return result
+  end
+
+  local function nativeLevelEligible(trait)
+    if type(trait) ~= "table" or type(IsGodTrait) ~= "function" then return false end
+    local ok, value = pcall(IsGodTrait, trait.Name)
+    return ok and value and trait.RemainingUses == nil and not trait.BlockStacking
+  end
+
+  local function operationCapabilities(trait, family, sellEligible, sameCount)
+    local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
+    local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
+    local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
+    local strategy = directTraitStrategies[trait.Name]
+    local directSafe = strategy ~= nil and directStrategySafe(trait)
+    local hasIdentity = trait.Id ~= nil
+
+    if not hasIdentity then
+      levelReason, rarityReason, removalReason = "missingInstanceIdentity", "missingInstanceIdentity", "missingInstanceIdentity"
+    else
+      if sameCount > 1 then
+        levelReason = "multipleMatchingInstances"
+      elseif type(IncreaseTraitLevel) ~= "function" then
+        levelReason = "nativePathUnavailable"
+      elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
+        levelCapability, levelReason = "increaseOne", ""
+      elseif nativeLevelEligible(trait) then
+        levelCapability, levelReason = "increaseOne", ""
+      else
+        levelReason = family == "olympianHermes" and "notMeaningful" or "ownerSpecificLifecycle"
+      end
+
+      local rarities = availableRarities(trait)
+      if sameCount > 1 then
+        rarityReason = "multipleMatchingInstances"
+      elseif trait.Rarity == nil or #rarities < 2 then
+        rarityReason = "notMeaningful"
+      elseif type(AddRarityToTraits) ~= "function" then
+        rarityReason = "nativePathUnavailable"
+      elseif strategy and strategy.rarity == "setExact" and directSafe then
+        rarityCapability, rarityReason = "setExact", ""
+      elseif sellEligible then
+        rarityCapability, rarityReason = "setExact", ""
+      else
+        rarityReason = "ownerSpecificLifecycle"
+      end
+
+      if sellEligible then
+        removalCapability, removalReason = "nameLevelAllMatching", ""
+      elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
+          and type(RemoveTraitData) == "function" then
+        removalCapability, removalReason = "singleInstanceForce", ""
+      elseif strategy and not directSafe then
+        removalReason = "directSafetyFailed"
+      end
+    end
+
+    return levelCapability, levelReason, rarityCapability, rarityReason,
+      removalCapability, removalReason
+  end
+
   local currentRunTraits = function()
     local result = setmetatable({}, arrayMeta)
-    if not ready() or type(CurrentRun) ~= "table" or type(CurrentRun.Hero) ~= "table"
-        or type(CurrentRun.Hero.Traits) ~= "table" then return result, "noActiveRun" end
+    if not ready() or sceneName() ~= "run" or type(CurrentRun) ~= "table"
+        or type(CurrentRun.Hero) ~= "table" or type(CurrentRun.Hero.Traits) ~= "table" then
+      return result, "noActiveRun"
+    end
+    local runId = tostring(CurrentRun)
     for index, trait in ipairs(CurrentRun.Hero.Traits) do
       if type(trait) == "table" and type(trait.Name) == "string" and trait.Name ~= "" then
-        local eligible, reason = sellScreenEligible(trait)
-        local owner = traitOwner(trait)
-        local family = traitFamily(trait)
-        -- The capability is name-level and removes every matching instance, so
-        -- the row says so explicitly instead of implying one row, one delete.
-        local scope = "none"
-        if eligible then scope = "nameLevelAllMatching" end
-        local capabilityReason = reason
-        if eligible then capabilityReason = "" end
-        if not eligible and family ~= "Boon" and family ~= "Weapon" then
-          capabilityReason = reason ~= "" and reason or "ownerSpecificLifecycle"
-        elseif not eligible and reason == "" then
-          capabilityReason = "notShopGodOwned"
+        local sellEligible, sellReason = sellScreenEligible(trait)
+        local family = traitFamily(trait, sellEligible)
+        local count = sameNameCount(trait.Name)
+        local levelCapability, levelReason, rarityCapability, rarityReason,
+          removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count)
+        if removalCapability == "none" and removalReason == "ownerSpecificLifecycle"
+            and sellReason ~= "" and family == "olympianHermes" then
+          removalReason = sellReason
         end
         result[#result + 1] = {
-          -- Current-run instance identity only; never durable across runs.
-          instanceId = tostring(trait.Id or index),
+          generationId = M.traitInventoryGeneration,
+          runId = runId,
+          -- A row without the game-owned Id remains observable but cannot mutate.
+          instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
           name = trait.Name,
           family = family,
-          owner = owner,
-          rarity = trait.Rarity,
+          sourceId = traitSourceId(trait),
+          owner = traitSourceId(trait),
+          level = traitLevel(trait),
+          rarity = traitRarity(trait),
           hasRarity = trait.Rarity ~= nil,
+          availableRarities = availableRarities(trait),
+          sameNameCount = count,
           remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
-          removalCapability = scope,
-          removalReason = capabilityReason,
-          removalScopeAllMatching = (scope == "nameLevelAllMatching"),
+          levelCapability = levelCapability,
+          levelReason = levelReason,
+          rarityCapability = rarityCapability,
+          rarityReason = rarityReason,
+          removalCapability = removalCapability,
+          removalReason = removalReason,
+          removalScopeAllMatching = (removalCapability == "nameLevelAllMatching"),
+          deferredIssue = deferredTraitIssues[family],
         }
       end
     end
     return result, nil
+  end
+
+  local function resolveTraitTarget(params)
+    if not ready() or sceneName() ~= "run" then error("Trait mutation requires an active run room") end
+    if params.generationId ~= M.traitInventoryGeneration then
+      error("Trait selection belongs to a stale runtime generation")
+    end
+    if params.runId ~= tostring(CurrentRun) then error("Trait selection belongs to a stale run") end
+    if type(params.instanceId) ~= "string" or params.instanceId == ""
+        or string.find(params.instanceId, "missing:", 1, true) == 1 then
+      error("Trait instance is no longer present")
+    end
+    local target = nil
+    for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+      if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
+        target = trait
+        break
+      end
+    end
+    if target == nil then error("Trait instance is no longer present") end
+    local sellEligible = sellScreenEligible(target)
+    local family = traitFamily(target, sellEligible)
+    local count = sameNameCount(target.Name)
+    local expectedRarity = type(params.expectedRarity) == "string" and params.expectedRarity or ""
+    if target.Name ~= params.trait or family ~= params.family
+        or traitLevel(target) ~= params.expectedLevel or traitRarity(target) ~= expectedRarity
+        or count ~= params.expectedSameNameCount then
+      error("Trait target changed since selection")
+    end
+    return target, family, sellEligible, count
+  end
+
+  local function targetHasRarity(rarities, rarity)
+    for _, value in ipairs(rarities) do if value == rarity then return true end end
+    return false
   end
 
   local function state(includeCatalogs)
@@ -2816,7 +2993,9 @@ if __MacGamingTrainerV1 == nil then
     set_resource = { "resource", "amount" },
     set_rerolls = { "amount" },
     open_sell_traits = {},
-    remove_trait = { "trait" },
+    set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+    set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
+    remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
     open_special_choice = { "source" },
     spawn_reward = { "reward" },
   }
@@ -3175,62 +3354,94 @@ if __MacGamingTrainerV1 == nil then
         UpdateRerollUI(params.amount)
       end)
     end
+    if command == "set_trait_level" then
+      local target, family, sellEligible, count = resolveTraitTarget(params)
+      local levelCapability = operationCapabilities(target, family, sellEligible, count)
+      if levelCapability ~= "increaseOne" then error("Trait level editing is unavailable for the selected target") end
+      -- Ordinary God boons are re-checked against the game's real Pom
+      -- eligibility immediately before the mutation. The explicit direct
+      -- strategy is the only bypass and remains a bounded whitelist.
+      if directTraitStrategies[target.Name] == nil then
+        requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
+        local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
+        if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
+          error("Trait is no longer eligible for a meaningful level increase")
+        end
+      else
+        requireFunctions("trait level editing", { "IncreaseTraitLevel" })
+      end
+      return action(command, params, function()
+        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
+        local liveLevelCapability = operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
+        if liveLevelCapability ~= "increaseOne" then error("Trait target changed since selection") end
+        local before = traitLevel(live)
+        local upgraded = IncreaseTraitLevel(live, 1)
+        if type(upgraded) ~= "table" or traitLevel(upgraded) <= before then
+          error("Trait level increase did not produce an observed higher level")
+        end
+      end)
+    end
+    if command == "set_trait_rarity" then
+      local target, family, sellEligible, count = resolveTraitTarget(params)
+      local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
+      local rarities = availableRarities(target)
+      if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
+          or params.rarity == traitRarity(target) then
+        error("Trait rarity editing is unavailable for the selected target")
+      end
+      requireFunctions("trait rarity editing", { "AddRarityToTraits" })
+      return action(command, params, function()
+        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
+        local _, _, liveRarityCapability = operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
+        if liveRarityCapability ~= "setExact" then error("Trait target changed since selection") end
+        local upgraded = AddRarityToTraits({}, {
+          NumTraits = 1,
+          ForceUpgrade = { live },
+          TargetRarityName = params.rarity,
+          Silent = true,
+        })
+        if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+      end)
+    end
     if command == "remove_trait" then
-      -- Removal is non-idempotent: it changes the run and cannot be replayed
-      -- safely, so it goes through action() and requires a requestId. An
-      -- outcome-unknown request is never auto-retried.
-      if not ready() or sceneName() ~= "run" then error("Trait removal requires an active run room") end
-      local traitName = params.trait
-      if type(traitName) ~= "string" or traitName == "" then
-        error("Trait removal requires a trait name")
+      local target, family, sellEligible, count = resolveTraitTarget(params)
+      local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
+      if removalCapability == "none" then
+        error("Trait removal is unavailable for the selected target")
       end
-      requireFunctions("native trait removal", { "IsGodTrait", "RemoveWeaponTrait" })
-      -- The capability is re-checked here, not trusted from the caller: the
-      -- inventory is a report, and only the live predicate authorizes removal.
-      -- Shop ownership is the gate; the live inventory re-checks Rarity.
-      local ok, isGod = pcall(IsGodTrait, traitName, { ForShop = true })
-      if not ok then error("Native sell predicate is unavailable") end
-      if not isGod then
-        error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
+      if removalCapability == "nameLevelAllMatching" then
+        requireFunctions("native trait removal", { "RemoveWeaponTrait" })
+      elseif removalCapability == "singleInstanceForce" then
+        requireFunctions("direct trait removal", { "RemoveTraitData" })
+      else
+        error("Trait removal capability is unknown")
       end
-      -- D00 section 6 admits a trait to the native sell set on BOTH shop-God
-      -- ownership AND a non-nil Rarity. Re-resolve the live trait so the gate
-      -- and the reported capability cannot disagree.
-      if type(CurrentRun.Hero.Traits) == "table" then
-        for _, trait in ipairs(CurrentRun.Hero.Traits) do
-          if type(trait) == "table" and trait.Name == traitName then
-            if trait.Rarity == nil then
-              error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)
+      return action(command, params, function()
+        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
+        local _, _, _, _, liveRemovalCapability =
+          operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
+        if liveRemovalCapability ~= removalCapability then error("Trait target changed since selection") end
+        if removalCapability == "nameLevelAllMatching" then
+          -- Native SellTraits teardown: deliberately name-level/all-matching.
+          RemoveWeaponTrait(live.Name, { Silent = true })
+          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+            if type(trait) == "table" and trait.Name == live.Name then
+              error("Native trait removal left a matching instance mounted")
             end
-            break
           end
-        end
-      end
-      if type(HeroHasTrait) ~= "function" then
-        requireFunctions("native trait removal", { "HeroHasTrait" })
-      end
-      return action(command, params, function(record)
-        local ok, message = pcall(function()
-          -- One argument, matching every other call site: HeroHasTrait takes
-          -- a trait name. Passing the hero as well made this test a no-op.
-          if not HeroHasTrait(traitName) then
-            error("Trait is not present in the current run: " .. traitName)
-          end
-          -- Name-level, all-matching removal. This is the native teardown proven
-          -- safe in D00 section 6; it removes every instance of this name and
-          -- deliberately does not pretend to be single-instance deletion.
-          RemoveWeaponTrait(traitName, { Silent = true })
-        end)
-        if ok then
-          record.status = "completed"
         else
-          record.status = "failed"
-          record.error = tostring(message)
-          if type(DebugPrint) == "function" then
-            DebugPrint({ Text = "MacGamingTrainer trait removal failed: " .. record.error })
+          -- Bounded object-level force removal for an audited declarative trait.
+          -- SkipExpire prevents a one-shot/reward expiration path from firing;
+          -- directStrategySafe() refuses traits with such a lifecycle anyway.
+          RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
+          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+            if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
+              error("Direct trait removal left the selected instance mounted")
+            end
           end
         end
-        publishActionReceipt(record)
       end)
     end
     if command == "open_sell_traits" then
