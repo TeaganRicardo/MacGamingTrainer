@@ -104,6 +104,7 @@ local calls = {
 }
 local eligibleTarget = nil
 local replacementTarget = nil
+local failAddAfterMutation = false
 local nextId = 100
 
 local function hasTrait(name)
@@ -214,6 +215,10 @@ AddTraitToHero = function(args)
   data.FromLootObserved = args.FromLoot == true
   data.PreProcessedObserved = args.PreProcessedForDisplay == true
   CurrentRun.Hero.Traits[#CurrentRun.Hero.Traits + 1] = data
+  if failAddAfterMutation then
+    failAddAfterMutation = false
+    error("synthetic exact post-mutation acknowledgement failure")
+  end
   return data
 end
 
@@ -307,6 +312,34 @@ do
     })
   end)
   eq(calls.add, beforeAdd + 1, "already-owned target mutated")
+end
+
+-- If the mutation applies and the acknowledgement path faults, the shared
+-- one-shot ledger records outcome-unknown. The same request id is never replayed
+-- even though live ownership has already changed.
+do
+  resetTraits()
+  eligibleTarget = "HermesWeaponBoon"
+  replacementTarget = nil
+  failAddAfterMutation = true
+  local beforeAdd = calls.add
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("spawn_reward", {
+      reward = "exact:HermesUpgrade:HermesWeaponBoon",
+      requestId = "ordinary-outcome-unknown",
+      includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeAdd + 1, "outcome-unknown exact mutation did not execute once")
+  check(hasTrait("HermesWeaponBoon"), "outcome-unknown exact mutation did not alter live state")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("spawn_reward", {
+      reward = "exact:HermesUpgrade:HermesWeaponBoon",
+      requestId = "ordinary-outcome-unknown",
+      includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeAdd + 1, "outcome-unknown exact request auto-replayed")
 end
 
 -- Slot replacement follows the native replacement descriptor and removes the
