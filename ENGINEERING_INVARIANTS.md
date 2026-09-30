@@ -156,7 +156,7 @@ File size alone is not a refactor reason.
 Prefer these protections over prose or implementation-shape tests:
 
 - `test_host_connection_policy_dev8.py`: real pure-state lifecycle transitions;
-- `test_backend_session.py`: request callback/routing plus worker crash/timeout/restart behavior and no request replay;
+- `test_backend_session_recovery_dev8.py`: worker crash/timeout/restart behavior and no request replay;
 - `test_hades2_run_log_watcher.py`: real file-event lifecycle decoding on macOS;
 - `test_hades2_transport_outcome_unknown_taint.py`: unknown Lua result taints transport;
 - Core Save behavior suites: resolution, snapshots, restore, service and protocol;
