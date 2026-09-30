@@ -19,6 +19,12 @@ for name, path in WORKFLOWS.items():
 
 linux = WORKFLOWS["linux"].read_text(encoding="utf-8")
 assert 'python3 Tools/check_runtime_revision.py "$BASE_SHA" "$HEAD_SHA"' in linux
+revision_pos = linux.index("Enforce diff-based invariants")
+revision_window = linux[revision_pos:revision_pos + 500]
+assert "github.event_name == 'pull_request'" in revision_window, (
+    "diff-based runtime revision enforcement must stay a PR task gate; "
+    "manual convergence has no semantic diff base"
+)
 assert "bash Tools/run_linux_checks.sh" in linux
 
 macos = WORKFLOWS["macos"].read_text(encoding="utf-8")
