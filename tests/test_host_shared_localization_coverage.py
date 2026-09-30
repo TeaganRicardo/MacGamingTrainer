@@ -57,6 +57,7 @@ required_keys = {
     "host.backend.error.sendFailed",
     "host.backend.error.protocolMismatch",
     "host.backend.error.operationFailed",
+    "host.backend.error.invalidRequest",
     "host.backend.error.timeout",
     "host.backend.error.protocolError",
     "host.backend.notice.recovering",
@@ -488,6 +489,20 @@ for source_path in sorted(core_dir.glob("*.py")):
                 f"{source_path} constructs AdapterError directly; Core player-facing "
                 "failures must use HostPresentationError"
             )
+
+# Core protocol/server failures have their own generic keyed funnel. Raw
+# parser/server sentences may remain as diagnostics, but must never be assigned
+# to canonical presentation or passed directly as an error_reply presentation.
+protocol_source = (ROOT / "Backend/core/protocol.py").read_text(encoding="utf-8")
+server_source = (ROOT / "Backend/core/server.py").read_text(encoding="utf-8")
+assert "def core_error_reply(" in protocol_source
+assert "presentation = str(error)" not in protocol_source
+assert "presentation = '操作失败，请查看日志。'" not in protocol_source
+assert "router.error_reply(" not in server_source, (
+    "Core server framing bypasses the Host-owned core_error_reply presentation seam"
+)
+for raw in ("请求 ID 无效。", "同一请求 ID 的内容发生变化。", "请求包含不可序列化的 JSON 值。"):
+    assert raw not in protocol_source, f"Core protocol still exposes raw localized presentation: {raw}"
 
 time_warp_source = (ROOT / "Backend/core/process_time_warp.py").read_text(encoding="utf-8")
 time_warp_keys = set(re.findall(r'"(host\.timeWarp\.error\.[^"]+)"', time_warp_source))

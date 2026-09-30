@@ -106,6 +106,21 @@ class JsonlRequestRouter:
                 reply['state'] = candidate
         return reply
 
+    def core_error_reply(self, request_id, code, diagnostic, state=None):
+        if code in {'invalid_request', 'duplicate_conflict'}:
+            presentation = 'host.backend.error.invalidRequest'
+        elif code == 'protocol_error':
+            presentation = 'host.backend.error.protocolError'
+        else:
+            presentation = 'host.backend.error.operationFailed'
+        return self.error_reply(
+            request_id,
+            code,
+            presentation,
+            state,
+            diagnostic=diagnostic,
+        )
+
     @staticmethod
     def _json_safe(value):
         try:
@@ -173,21 +188,38 @@ class JsonlRequestRouter:
     def handle(self, request):
         request_id = request.get('id') if isinstance(request, dict) else None
         if not isinstance(request_id, str) or not request_id or len(request_id) > 128:
-            return self.error_reply(None, 'invalid_request', '请求 ID 无效。')
+            return self.core_error_reply(
+                None, 'invalid_request',
+                'request id must be a non-empty string of at most 128 characters',
+            )
         try:
             fingerprint = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError):
-            return self.error_reply(request_id, 'invalid_request', '请求包含不可序列化的 JSON 值。')
+            return self.core_error_reply(
+                request_id, 'invalid_request',
+                'request contains a value that cannot be serialized as strict JSON',
+            )
         if request_id in self.cache:
             old, reply_json = self.cache[request_id]
-            return json.loads(reply_json) if old == fingerprint else self.error_reply(request_id, 'duplicate_conflict', '同一请求 ID 的内容发生变化。')
+            return json.loads(reply_json) if old == fingerprint else self.core_error_reply(
+                request_id, 'duplicate_conflict',
+                'request id was reused with different content',
+            )
         try:
             command = request.get('command')
             params = request.get('params', {})
             if not isinstance(command, str) or not command or len(command) > 128:
-                raise ValueError('command 无效。')
+                return self.core_error_reply(
+                    request_id, 'invalid_request',
+                    'command must be a non-empty string of at most 128 characters',
+                    getattr(self.adapter, 'state', None),
+                )
             if not isinstance(params, dict):
-                raise ValueError('params 必须是对象。')
+                return self.core_error_reply(
+                    request_id, 'invalid_request',
+                    'params must be a JSON object',
+                    getattr(self.adapter, 'state', None),
+                )
             if command == 'hello':
                 result = {
                     'backendVersion': APP_BACKEND_VERSION,
@@ -213,16 +245,15 @@ class JsonlRequestRouter:
                 presentation = error.presentation
                 diagnostic = getattr(error, 'diagnostic', None)
                 arguments = error.arguments
-            elif isinstance(error, ValueError) or hasattr(error, 'code'):
-                presentation = str(error)
-                diagnostic = getattr(error, 'diagnostic', None)
+                reply = self.error_reply(
+                    request_id, code, presentation, state, diagnostic=diagnostic,
+                    arguments=arguments,
+                )
             else:
-                presentation = '操作失败，请查看日志。'
-                diagnostic = str(error)
-            reply = self.error_reply(
-                request_id, code, presentation, state, diagnostic=diagnostic,
-                arguments=arguments,
-            )
+                diagnostic = getattr(error, 'diagnostic', None) or str(error)
+                reply = self.core_error_reply(
+                    request_id, code, diagnostic, state,
+                )
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path
