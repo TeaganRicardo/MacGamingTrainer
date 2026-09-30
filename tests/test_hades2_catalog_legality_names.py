@@ -1,4 +1,5 @@
 import csv
+import json
 import re
 from pathlib import Path
 
@@ -14,6 +15,7 @@ def read_csv(path):
 ledger = {row["id"]: row for row in read_csv(SNAPSHOT / "catalog_legality.csv")}
 loot = {row["id"]: row for row in read_csv(SNAPSHOT / "generated/loot.csv")}
 consumables = {row["id"]: row for row in read_csv(SNAPSHOT / "generated/consumables.csv")}
+terminology = json.loads((SNAPSHOT / "ui_terminology.json").read_text(encoding="utf-8"))
 
 # Curated official names are presentation-ready facts. Raw SJSON markup must
 # not leak into the ledger even when generated extraction intentionally keeps it.
@@ -31,8 +33,15 @@ assert (
     == consumables["ShopHermesUpgrade"]["display_name_zh_cn"]
 )
 
-# SpellDrop is an intentional player-facing linked identity: the internal loot
-# object resolves as Selene, while the curated reward label remains Gift of the Moon.
-assert ledger["SpellDrop"]["official_name_zh_cn"] == "月之礼赠"
+# Selene and Chaos LootData names identify their source character. The curated
+# reward labels deliberately follow the registered native choice titles instead.
+assert (
+    ledger["SpellDrop"]["official_name_zh_cn"]
+    == terminology["nativeChoiceTitles"]["Selene"]["value"]
+)
+assert (
+    ledger["TrialUpgrade"]["official_name_zh_cn"]
+    == terminology["nativeChoiceTitles"]["Chaos"]["value"]
+)
 
 print("hades2_catalog_legality_names_ok")
