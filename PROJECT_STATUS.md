@@ -72,7 +72,7 @@ On the target macOS machine, the exact source passed `Tools/run_linux_checks.sh`
 
 The retained Hades convergence artifact is `MacGamingTrainer-0.1.0-b3-e5605549-rc.zip`, SHA256 `b58a9dd138c40cd6eedaf5ee31022c3fca6928c9f00e5d9ae696a29a15f3537b`. Its resident source/package SHA256 is `680c1f7daabce9947dad2306023301272ad23dc5f1729c998489d148adbb1634`. The retained reference-fixture artifact is `MacGamingTrainer-reference_fixture-0.1.0-b3-e5605549-rc.zip`, SHA256 `cd98638ef7f12a275532256739b1d636cc8c87c27265d68974025ea364883f66`. Both artifacts, provenance files and checksum sidecars are retained in the draft GitHub verification release `convergence-e5605549`; this is evidence storage, not a product release or manual acceptance.
 
-The resident comparison from accepted revision 51 to current revision 53 contains the revision-52 Echo `LastReward` transaction cleanup and revision-53 fail-closed resident-cleanup transition. Revision discipline passed; both semantic changes remain pending the consolidated user-run real-game acceptance.
+The resident comparison from accepted revision 51 to the revision-53 #214 convergence source contains the revision-52 Echo `LastReward` transaction cleanup and revision-53 fail-closed resident-cleanup transition. Revision discipline passed; both semantic changes were carried forward into the consolidated user-run acceptance backlog; current-main revision 54 is described in the current-state section above.
 
 ### Retained manual-acceptance evidence: Spawn labels
 
