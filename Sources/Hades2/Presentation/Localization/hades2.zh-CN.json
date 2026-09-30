@@ -28,6 +28,8 @@
     "hades2.error.disconnectBeforePrepare": "请断开连接并退出游戏后操作。",
     "hades2.error.duplicateConflict": "同一请求 ID 的内容发生变化。",
     "hades2.error.elementRange": "元素数量必须为 0–{0} 的整数。",
+    "hades2.error.exactAlreadyOwned": "该祝福已经生效，请在当前局祝福管理中修改等级或稀有度。",
+    "hades2.error.exactNotEligible": "该祝福与当前局状态不兼容，目前无法获取。",
     "hades2.error.enemyDamageRange": "敌人伤害倍率必须为 0–1000%。",
     "hades2.error.enemyHealthRange": "敌人生命倍率必须为 10–1000%。",
     "hades2.error.featureCodeTooLong": "功能代码过长。",

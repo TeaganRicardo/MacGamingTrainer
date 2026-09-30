@@ -28,6 +28,8 @@
     "hades2.error.disconnectBeforePrepare": "Disconnect and quit the game before this operation.",
     "hades2.error.duplicateConflict": "The same request ID was reused with different content.",
     "hades2.error.elementRange": "The element count must be an integer between 0 and {0}.",
+    "hades2.error.exactAlreadyOwned": "This boon is already active. Use Current Run Boons to change its level or rarity.",
+    "hades2.error.exactNotEligible": "This boon is not compatible with the current run state and cannot be acquired now.",
     "hades2.error.enemyDamageRange": "Enemy damage multiplier must be from 0 to 1000%.",
     "hades2.error.enemyHealthRange": "Enemy health multiplier must be from 10 to 1000%.",
     "hades2.error.featureCodeTooLong": "The feature code is too long.",
