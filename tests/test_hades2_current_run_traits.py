@@ -220,8 +220,9 @@ previous = int(re.search(r"previousModule\.revision ~= (\d+)", LUA).group(1))
 assert revision == previous, "resident revision guard and declared revision disagree"
 # 50 was this feature's own bump, 51 removed the no-op traitOwner loop,
 # 52 made Echo's Trainer-injected LastReward fallback transactional, and 53
-# makes resident replacement fail closed when old cleanup is indeterminate.
-assert revision == 53, f"resident revision must be 52 -> 53, found {revision}"
+# makes resident replacement fail closed when old cleanup is indeterminate. #262 then bumps
+# the resident identity from 53 -> 54 without changing current-run trait semantics.
+assert revision == 54, f"resident revision must be 53 -> 54, found {revision}"
 
 
 # --- 10. Every new key exists in both shipped languages ---
