@@ -45,6 +45,13 @@ assert_scope(
     module_build=False,
 )
 assert_scope(
+    [],
+    docs_only=False,
+    linux=True,
+    macos=True,
+    module_build=True,
+)
+assert_scope(
     ["Backend/games/hades2/adapter.py"],
     docs_only=False,
     linux=True,
