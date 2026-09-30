@@ -1,12 +1,9 @@
 import csv
-import sys
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "docs/reference/hades2/1.139672-24556151"
-sys.path.insert(0, str(ROOT / "Backend"))
-
-from games.hades2.localization import _clean_display_name
 
 
 def read_csv(path):
@@ -23,16 +20,15 @@ consumables = {row["id"]: row for row in read_csv(SNAPSHOT / "generated/consumab
 for identifier, row in ledger.items():
     name = row["official_name_zh_cn"]
     if name:
-        assert name == _clean_display_name(name), (identifier, name)
+        assert re.search(r"\{[^{}]*\}", name) is None, (identifier, name)
 
 # Hermes loot and its shop wrapper are distinct catalog identities. Compare the
 # curated ledger to independently generated rows so the `_Store` presentation
 # name cannot drift onto the base LootData identity again.
-assert ledger["HermesUpgrade"]["official_name_zh_cn"] == _clean_display_name(
-    loot["HermesUpgrade"]["display_name_zh_cn"]
-)
-assert ledger["ShopHermesUpgrade"]["official_name_zh_cn"] == _clean_display_name(
-    consumables["ShopHermesUpgrade"]["display_name_zh_cn"]
+assert ledger["HermesUpgrade"]["official_name_zh_cn"] == loot["HermesUpgrade"]["display_name_zh_cn"]
+assert (
+    ledger["ShopHermesUpgrade"]["official_name_zh_cn"]
+    == consumables["ShopHermesUpgrade"]["display_name_zh_cn"]
 )
 
 # SpellDrop is an intentional player-facing linked identity: the internal loot
