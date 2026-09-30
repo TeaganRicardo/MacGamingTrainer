@@ -8,6 +8,8 @@ from runtime_revision_support import runtime_revision
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+from games.hades2 import preparation
+from games.hades2.adapter import Hades2Adapter
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
     Hades2PreferenceStore,
@@ -15,6 +17,14 @@ from games.hades2.preferences import (
 )
 
 assert DESIRED_STATE_SCHEMA_VERSION == 5
+
+# Early-access reward ids migrate to current identities or are retired.
+for old, expected in (
+    ('RoomRewardMoney', 'RoomMoneyDrop'),
+    ('RoomRewardPom', 'StackUpgrade'),
+    ('RoomRewardMixerFabric', None),
+):
+    assert Hades2PreferenceStore.normalize({'nextRoomReward': old})['nextRoomReward'] == expected
 
 # Schema-3 desired state has no token. Migration must derive a stable token so
 # repeated backend restarts can correlate a resident consumption with the same
@@ -84,5 +94,54 @@ assert 'M.nextRoomRewardToken = nil' in lua
 assert 'lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken' in lua
 assert 'nextRoomRewardToken = M.nextRoomRewardToken' in lua
 assert 'params.token' in lua
+
+# Once a delivered one-shot disappears from a clean status response, the
+# adapter clears persistence instead of resurrecting it from desired state.
+class StatusTransport:
+    pid = 4242
+    last_duration = 0.0
+
+    def alive(self):
+        return True
+
+    def execute(self, code):
+        return json.dumps({
+            'connected': True,
+            'status': 'ready',
+            'scene': 'run',
+            'capabilities': {},
+            'desiredFeatures': {},
+            'activeFeatures': {},
+            'dormantFeatures': {},
+            'featureErrors': {},
+            'resources': [],
+            'rewards': [],
+            'stats': {},
+            'statSupport': {},
+            'statAvailable': {},
+            'elements': [],
+        })
+
+    def detach(self):
+        pass
+
+    def close(self):
+        pass
+
+
+old_data = preparation.DATA
+try:
+    preparation.DATA = Path(tempfile.mkdtemp(prefix='mgt-next-room-consumed-'))
+    live = Hades2Adapter(transport=StatusTransport())
+    live.preferences = live._default_preferences()
+    live.preferences['nextRoomReward'] = 'MaxHealthDrop'
+    live.preference_initialized = True
+    live.preference_dirty = False
+    live.state.update(connected=True, status='ready', nextRoomReward='MaxHealthDrop')
+    state = live.execute('status', {})
+    assert live.preferences['nextRoomReward'] is None
+    assert state['nextRoomReward'] is None
+finally:
+    preparation.DATA = old_data
 
 print('next_room_reward_restart_semantics_ok')
