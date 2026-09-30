@@ -44,6 +44,7 @@ The current hardening baseline also includes:
 - #253 / PR #263 makes resident replacement fail closed when prior cleanup fails, preserves the old ownership reference, surfaces a stable restart-required path, and bumps the resident runtime to revision 53.
 - #258 / PR #264 routes Core-owned protocol/server failures through Host-owned presentation identities while preserving stable codes, diagnostics, Core Save mapping, and module-owned presentation.
 - #260 / PR #265 makes automatic Hades Save snapshot naming bilingual through generic localized snapshot presentation while preserving literal user renames and legacy manifest readability.
+- #214 exact-head convergence verified current implementation commit `e560554917af8b03f161dfe166fbba62becd97e6` / tree `63e8a2c498b346ffbac02b749a20ce829c3f5026` across full portable contracts, macOS contracts, 33 declared mutations, Hades build/package/provenance, and the reference-fixture module build. Revision 51 remains the latest real-game accepted resident baseline; revision 52/53 gameplay acceptance remains deferred.
 
 ## Verification baseline
 
@@ -60,6 +61,16 @@ The latest real-game accepted resident source remains revision 51 at `a6cf37b416
 Hades II 1.143476 / Steam 25481925 compatibility was previously accepted on PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` with exact-head Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run attach/status plus representative feature smoke checks.
 
 Automated tests are not substitutes for real-game acceptance when a future change modifies resident Lua semantics.
+
+### Exact-head convergence · #214
+
+The post-hardening convergence source tested in full is commit `e560554917af8b03f161dfe166fbba62becd97e6`, tree `63e8a2c498b346ffbac02b749a20ce829c3f5026`. A later docs-only bookkeeping commit may advance `main`; it must not be described as the source that received this full execution.
+
+On the target macOS machine, the exact source passed `Tools/run_linux_checks.sh` under Python 3.12, `Tools/run_macos_checks.sh`, and `Tools/mutation_gate.py` with 33 caught / 0 survived / 0 equivalent / 0 skipped / 0 error. Hades II and `reference_fixture` both built, passed strict signing/module-isolation verification, and produced local provenance bound to the exact commit/tree.
+
+The retained Hades convergence artifact is `MacGamingTrainer-0.1.0-b3-e5605549-rc.zip`, SHA256 `b58a9dd138c40cd6eedaf5ee31022c3fca6928c9f00e5d9ae696a29a15f3537b`. Its resident source/package SHA256 is `680c1f7daabce9947dad2306023301272ad23dc5f1729c998489d148adbb1634`. The retained reference-fixture artifact is `MacGamingTrainer-reference_fixture-0.1.0-b3-e5605549-rc.zip`, SHA256 `cd98638ef7f12a275532256739b1d636cc8c87c27265d68974025ea364883f66`. Both artifacts, provenance files and checksum sidecars are retained in the draft GitHub verification release `convergence-e5605549`; this is evidence storage, not a product release or manual acceptance.
+
+The resident comparison from accepted revision 51 to current revision 53 contains the revision-52 Echo `LastReward` transaction cleanup and revision-53 fail-closed resident-cleanup transition. Revision discipline passed; both semantic changes remain pending the consolidated user-run real-game acceptance.
 
 ### Retained manual-acceptance evidence: Spawn labels
 
@@ -104,11 +115,11 @@ Do not stack new implementation on unmerged overlapping PR heads.
 
 The shared-presentation migration remains complete: B01 / #131 / PR #183, B02 / PR #189, and B03 / #177 all merged, with B02 and B03 accepted in the real game at `a6cf37b`; subsequent presentation hardening did not change resident Lua semantics.
 
-#253, #258 and #260 are merged. This docs-only reconciliation closes #261 and leaves #214 as the next technical gate: run exact-head convergence on one then-current main SHA, retain the revision-51 real-game acceptance baseline, and carry the pending revision-52/53 resident checks into the consolidated final user run. Planning detail and post-convergence ordering remain authoritative in #124 rather than being duplicated here.
+#214 exact-head convergence is complete on tested source `e560554917af8b03f161dfe166fbba62becd97e6`. The revision-51 real-game acceptance baseline is retained and revision-52/53 gameplay checks remain pending for the consolidated final user run. The next selected implementation task is #262, the full Trainer-owned `godMode` → `invincibility` / 无敌模式 / Invincibility identity migration. Planning detail and later feature ordering remain authoritative in #124 rather than being duplicated here.
 
 The user explicitly authorized independently reviewed, automated-green merges before ONE consolidated final manual acceptance after the selected index work is implemented. Missing gameplay/visual verification alone must not block unrelated eligible development, but all unexecuted checks remain pending and no merge is described as manual acceptance. No game launch or visual confirmation through RDC.
 
-Post-convergence, #262 is the selected identity migration from the Trainer-owned legacy `godMode` identity to `invincibility` / 无敌模式 / Invincibility before the restored feature queue. It is not a #214 blocker. Preserve unrelated local uncommitted changes and keep selected feature work blocked until the current convergence gate is complete.
+With convergence complete, #262 is now the selected next task: migrate the Trainer-owned legacy `godMode` identity to `invincibility` / 无敌模式 / Invincibility before the restored feature queue. Preserve unrelated local uncommitted changes; do not use this migration to implement Hades II's distinct native 神力模式 / God Mode.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
