@@ -104,6 +104,19 @@ def test_mutations_re_resolve_the_exact_live_selection_before_apply():
     assert "target.Rarity = params.rarity" not in LUA
 
 
+def test_special_npc_ownership_comes_from_native_source_data():
+    source_block = LUA[LUA.index("local function specialTraitSourceId"):LUA.index("local function sellScreenEligible")]
+    assert "nativeSpecialChoiceDefinitions" in source_block
+    assert "EnemyData[definition.npc]" in source_block
+    assert "PresetEventArgs[definition.choices]" in source_block
+    assert "option.ItemName == name" in source_block
+    assert "specialTraitSourceId(trait.Name)" in source_block
+    assert "CheckEnemyData = true" in source_block
+
+    family_block = LUA[LUA.index("local function traitFamily"):LUA.index("local function availableRarities")]
+    assert 'nativeSpecialChoiceDefinitions[source] ~= nil' in family_block
+
+
 def test_owner_family_controls_default_native_paths():
     family_block = LUA[LUA.index("local function traitFamily"):LUA.index("local function availableRarities")]
     capability_block = LUA[LUA.index("local function operationCapabilities"):LUA.index("local currentRunTraits = function()")]
@@ -197,6 +210,7 @@ if __name__ == "__main__":
     test_level_rarity_and_removal_are_non_idempotent_targeted_commands()
     test_request_dedup_precedes_live_trait_preflight()
     test_mutations_re_resolve_the_exact_live_selection_before_apply()
+    test_special_npc_ownership_comes_from_native_source_data()
     test_owner_family_controls_default_native_paths()
     test_force_removal_is_bounded_and_native_sell_scope_stays_explicit()
     test_swift_contract_carries_snapshot_not_just_trait_name()
