@@ -112,6 +112,9 @@ def validate_command_params(command, params):
         level=params.get('expectedLevel')
         if type(level) is not int or level < 1:
             raise ValueError('请选择要移除的祝福。')
+        same_count=params.get('expectedSameNameCount')
+        if type(same_count) is not int or same_count < 1:
+            raise ValueError('请选择要移除的祝福。')
         rarity=params.get('expectedRarity')
         if not isinstance(rarity,str):
             raise ValueError('请选择要移除的祝福。')
