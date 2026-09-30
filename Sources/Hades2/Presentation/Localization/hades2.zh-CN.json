@@ -307,7 +307,7 @@
     "hades2.status.unverifiedBanner": "当前版本尚未验证，可继续尝试连接。",
     "hades2.status.versionDetail": "版本 {0}",
     "hades2.traits.count": "共 {0} 项",
-    "hades2.traits.deferredIssue": "该效果具有独立生命周期，后续管理由 #{0} 继续处理。",
+    "hades2.traits.deferredIssue": "该效果的其他独立生命周期操作由 #{0} 继续处理。",
     "hades2.traits.empty": "当前局没有可显示的祝福。",
     "hades2.traits.family.chaos": "卡俄斯",
     "hades2.traits.family.costume": "服装效果",
