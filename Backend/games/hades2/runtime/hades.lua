@@ -3040,7 +3040,7 @@ if __MacGamingTrainerV1 == nil then
   latestActionReceipt = function()
     return M.lastActionReceipt
   end
-  local function action(command, params, work)
+  local function action(command, params, work, preflight)
     local requestId = params.requestId
     if type(requestId) ~= "string" or #requestId == 0 or #requestId > 128 then
       error("Action requires a requestId of 1..128 characters")
@@ -3063,6 +3063,10 @@ if __MacGamingTrainerV1 == nil then
       if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
       return result
     end
+    -- Deterministic validation belongs after request-id deduplication. A
+    -- duplicate successful mutation must return its prior receipt even though
+    -- the live target has since changed or disappeared.
+    if preflight ~= nil then preflight() end
     local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
     M.requests[requestId] = record
     M.requestOrder[#M.requestOrder + 1] = requestId
@@ -3367,45 +3371,50 @@ if __MacGamingTrainerV1 == nil then
       end)
     end
     if command == "set_trait_level" then
-      local target, family, sellEligible, count = resolveTraitTarget(params)
-      local levelCapability = operationCapabilities(target, family, sellEligible, count)
-      if levelCapability ~= "increaseOne" then error("Trait level editing is unavailable for the selected target") end
-      -- Ordinary God boons are re-checked against the game's real Pom
-      -- eligibility immediately before the mutation. The explicit direct
-      -- strategy is the only bypass and remains a bounded whitelist.
-      if directTraitStrategies[target.Name] == nil then
-        requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
-        local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
-        if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
-          error("Trait is no longer eligible for a meaningful level increase")
+      local function validateLevelTarget()
+        local target, family, sellEligible, count = resolveTraitTarget(params)
+        local levelCapability = operationCapabilities(target, family, sellEligible, count)
+        if levelCapability ~= "increaseOne" then
+          error("Trait level editing is unavailable for the selected target")
         end
-      else
-        requireFunctions("trait level editing", { "IncreaseTraitLevel" })
+        -- Ordinary God boons are re-checked against the game's real Pom
+        -- eligibility. The explicit direct strategy is the only bypass.
+        if directTraitStrategies[target.Name] == nil then
+          requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
+          local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
+          if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
+            error("Trait is no longer eligible for a meaningful level increase")
+          end
+        else
+          requireFunctions("trait level editing", { "IncreaseTraitLevel" })
+        end
+        return target
       end
       return action(command, params, function()
-        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
-        local liveLevelCapability = operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
-        if liveLevelCapability ~= "increaseOne" then error("Trait target changed since selection") end
+        -- Resolve again immediately before the mutation, after the deterministic
+        -- preflight and after action() has ruled out a duplicate request.
+        local live = validateLevelTarget()
         local before = traitLevel(live)
         local upgraded = IncreaseTraitLevel(live, 1)
         if type(upgraded) ~= "table" or traitLevel(upgraded) <= before then
           error("Trait level increase did not produce an observed higher level")
         end
-      end)
+      end, validateLevelTarget)
     end
     if command == "set_trait_rarity" then
-      local target, family, sellEligible, count = resolveTraitTarget(params)
-      local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
-      local rarities = availableRarities(target)
-      if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
-          or params.rarity == traitRarity(target) then
-        error("Trait rarity editing is unavailable for the selected target")
+      local function validateRarityTarget()
+        local target, family, sellEligible, count = resolveTraitTarget(params)
+        local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
+        local rarities = availableRarities(target)
+        if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
+            or params.rarity == traitRarity(target) then
+          error("Trait rarity editing is unavailable for the selected target")
+        end
+        requireFunctions("trait rarity editing", { "AddRarityToTraits" })
+        return target
       end
-      requireFunctions("trait rarity editing", { "AddRarityToTraits" })
       return action(command, params, function()
-        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
-        local _, _, liveRarityCapability = operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
-        if liveRarityCapability ~= "setExact" then error("Trait target changed since selection") end
+        local live = validateRarityTarget()
         local upgraded = AddRarityToTraits({}, {
           NumTraits = 1,
           ForceUpgrade = { live },
@@ -3415,26 +3424,26 @@ if __MacGamingTrainerV1 == nil then
         if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
           error("Trait rarity recompute did not reach the requested rarity")
         end
-      end)
+      end, validateRarityTarget)
     end
     if command == "remove_trait" then
-      local target, family, sellEligible, count = resolveTraitTarget(params)
-      local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
-      if removalCapability == "none" then
-        error("Trait removal is unavailable for the selected target")
-      end
-      if removalCapability == "nameLevelAllMatching" then
-        requireFunctions("native trait removal", { "RemoveWeaponTrait" })
-      elseif removalCapability == "singleInstanceForce" then
-        requireFunctions("direct trait removal", { "RemoveTraitData" })
-      else
-        error("Trait removal capability is unknown")
+      local function validateRemovalTarget()
+        local target, family, sellEligible, count = resolveTraitTarget(params)
+        local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
+        if removalCapability == "none" then
+          error("Trait removal is unavailable for the selected target")
+        end
+        if removalCapability == "nameLevelAllMatching" then
+          requireFunctions("native trait removal", { "RemoveWeaponTrait" })
+        elseif removalCapability == "singleInstanceForce" then
+          requireFunctions("direct trait removal", { "RemoveTraitData" })
+        else
+          error("Trait removal capability is unknown")
+        end
+        return target, removalCapability
       end
       return action(command, params, function()
-        local live, liveFamily, liveSellEligible, liveCount = resolveTraitTarget(params)
-        local _, _, _, _, liveRemovalCapability =
-          operationCapabilities(live, liveFamily, liveSellEligible, liveCount)
-        if liveRemovalCapability ~= removalCapability then error("Trait target changed since selection") end
+        local live, removalCapability = validateRemovalTarget()
         if removalCapability == "nameLevelAllMatching" then
           -- Native SellTraits teardown: deliberately name-level/all-matching.
           RemoveWeaponTrait(live.Name, { Silent = true })
@@ -3454,7 +3463,7 @@ if __MacGamingTrainerV1 == nil then
             end
           end
         end
-      end)
+      end, validateRemovalTarget)
     end
     if command == "open_sell_traits" then
       if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
