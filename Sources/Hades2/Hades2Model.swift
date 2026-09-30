@@ -640,10 +640,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch command {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
-        // Removal has no screen to open, so its subject is the trait itself. It
-        // must be listed here: `default: return` below would drop a `failed`
-        // receipt on the floor and leave the player with no outcome at all.
-        case .removeTrait: title = presentation("hades2.receipt.traitRemoved")
+        case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
+        case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
+        case .removeTrait: title = presentation("hades2.receipt.traitRemoveAction")
         default: return
         }
 
@@ -659,7 +658,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             noticeToken = nil
             errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
-            noticeToken = presentation("hades2.receipt.traitRemovalCompleted", arguments: [title.key])
+            noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }
     }
 
@@ -926,23 +925,37 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
     }
 
-    /// Remove a current-run trait through the only native teardown proven safe.
-    ///
-    /// The removal scope is name-level and removes every instance sharing that
-    /// name, so the guard requires a row the runtime marked removable. Removal
-    /// is non-idempotent: the session supplies the request id, and an
-    /// outcome-unknown request is never auto-replayed.
-    func removeTrait(_ trait: CurrentRunTrait) {
-        guard trait.canRemove, trait.removalScopeAllMatching else { return }
-        // Not `announceSuccess`. The resident work path swallows its own failure
-        // (it pcall-wraps the teardown and publishes a `failed` receipt), so the
-        // request itself succeeds and the default green "completed" notice would
-        // claim a removal that never happened. The receipt carries the real
-        // outcome, exactly as it does for the other one-shot actions.
+    func increaseTraitLevel(_ trait: CurrentRunTrait) {
+        guard canOpenNativeBoonScreen, trait.canIncreaseLevel else { return }
         send(
-            .removeTrait(trait.name),
+            .setTraitLevel(trait),
+            title: "hades2.receipt.traitLevelAction",
+            titleArguments: [trait.displayName],
+            announceSuccess: false
+        )
+    }
+
+    func setTraitRarity(_ trait: CurrentRunTrait, rarity: String) {
+        guard canOpenNativeBoonScreen, trait.canSetRarity,
+              trait.availableRarities.contains(rarity), rarity != trait.rarity else { return }
+        send(
+            .setTraitRarity(trait, rarity: rarity),
+            title: "hades2.receipt.traitRarityAction",
+            titleArguments: [trait.displayName],
+            announceSuccess: false
+        )
+    }
+
+    /// Remove the observed live target through the capability selected by the
+    /// Hades runtime. Native sell removal remains name-level/all-matching;
+    /// bounded force removal is single-instance and only exists for an audited
+    /// direct strategy.
+    func removeTrait(_ trait: CurrentRunTrait) {
+        guard canOpenNativeBoonScreen, trait.canRemove else { return }
+        send(
+            .removeTrait(trait),
             title: "hades2.receipt.traitRemoved",
-            titleArguments: [trait.name],
+            titleArguments: [trait.displayName],
             announceSuccess: false
         )
     }
