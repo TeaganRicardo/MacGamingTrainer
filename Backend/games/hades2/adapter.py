@@ -672,6 +672,10 @@ class Hades2Adapter(GameAdapter):
         message=str(error)
         return error.code=='lua_error' and '__MacGamingTrainerV1' in message and 'nil value' in message
 
+    @staticmethod
+    def _resident_cleanup_failed(error):
+        return error.code=='lua_error' and 'MGT_RESIDENT_RESTART_REQUIRED:' in str(error)
+
     def _invalidate_runtime_generation(self):
         self._runtime_bootstrapped=False
         self._catalog_initialized=False
@@ -777,6 +781,12 @@ class Hades2Adapter(GameAdapter):
                         )
                         break
                     except TransportError as error:
+                        if self._resident_cleanup_failed(error):
+                            raise TransportError(
+                                'restart_required',
+                                'hades2.error.residentCleanupFailed',
+                                diagnostic=str(error),
+                            ) from error
                         if not self._runtime_generation_missing(error):
                             raise
                         self._invalidate_runtime_generation()
