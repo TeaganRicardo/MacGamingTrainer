@@ -159,6 +159,12 @@ def render() -> str:
     steam_build = manifest.get("steam_build")
     if not isinstance(game_version, str) or not isinstance(steam_build, str):
         raise ValueError("Frozen manifest is missing target version/build")
+    declared_rows = manifest.get("outputs", {}).get("catalog_legality.csv")
+    if declared_rows != len(policy_rows):
+        raise ValueError(
+            "Catalog legality policy row count does not match frozen manifest: "
+            f"{len(policy_rows)} != {declared_rows!r}"
+        )
 
     direct_names = {
         kind: _index_names(path, table)
