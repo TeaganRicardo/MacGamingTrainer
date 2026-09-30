@@ -99,7 +99,7 @@ Recurring CI is task verification only:
 - the module matrix PR mode builds and verifies reference-module isolation but does not retain a reference artifact/provenance package;
 - Linux continues to run all portable tests when its lane is selected, including the resident-runtime revision gate.
 
-For convergence, release or a manual QA artifact, explicitly dispatch the same three workflows on the selected SHA. Manual dispatch has no diff base and therefore fails closed to the full applicable lanes. Build 2 then adds the mutation audit and exact-SHA RC/provenance/checksum artifact; the module matrix adds retained reference provenance/artifact evidence.
+For convergence, release or a manual QA artifact, explicitly dispatch the same three workflows on the selected SHA. Manual dispatch has no diff base and therefore fails closed to the full behavior/build lanes. The resident-runtime revision comparison remains PR-only because it requires a semantic diff base. Build 2 then adds the mutation audit and exact-SHA RC/provenance/checksum artifact; the module matrix adds retained reference provenance/artifact evidence.
 
 ## Architecture/governance state
 
