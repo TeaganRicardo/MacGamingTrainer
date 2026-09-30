@@ -182,6 +182,7 @@ def localize_catalog(decoded):
     if not isinstance(entries,list):entries=decoded.get('boons')
     if not isinstance(entries,list):entries=[]
     resources=decoded.get('resources') if isinstance(decoded.get('resources'),list) else []
+    current_run_traits=decoded.get('currentRunTraits') if isinstance(decoded.get('currentRunTraits'),list) else []
     lookup=[]
     for item in entries:
         if not isinstance(item,dict):continue
@@ -189,6 +190,13 @@ def localize_catalog(decoded):
         if isinstance(identifier,str) and identifier:lookup.append(identifier)
     for item in resources:
         if isinstance(item,dict) and isinstance(item.get('id'),str):lookup.append(item['id'])
+    for item in current_run_traits:
+        if not isinstance(item,dict):continue
+        trait_id=item.get('name')
+        source_id=item.get('sourceId')
+        if isinstance(trait_id,str) and trait_id:lookup.append(trait_id)
+        if isinstance(source_id,str) and source_id:
+            lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
     if not lookup:return decoded
     unique=set(lookup)
     linked_ids=set(_LINKED_OFFICIAL_NAME_IDS.values())
@@ -279,6 +287,25 @@ def localize_catalog(decoded):
         else:
             item['officialName']=False
             item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
+
+    # Live trait rows keep their runtime identity in `name`, but presentation
+    # reuses the same official language source as the acquisition catalog.
+    for item in current_run_traits:
+        if not isinstance(item,dict):continue
+        identifier=item.get('name')
+        if not isinstance(identifier,str) or not identifier:continue
+        official_zh=_clean(zh.get(identifier)) if identifier in zh else None
+        official_en=_clean(en.get(identifier)) if identifier in en else None
+        item['displayName']=official_zh or official_en or identifier
+        item['englishName']=official_en or identifier
+        source_id=item.get('sourceId')
+        if isinstance(source_id,str) and source_id:
+            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            item['sourceName']=_clean(zh.get(source_text_id)) or source_id
+            item['sourceEnglishName']=_clean(en.get(source_text_id)) or source_id
+        else:
+            item['sourceName']=''
+            item['sourceEnglishName']=''
     if fallback_special:
         missing=set(fallback_special)
         warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
