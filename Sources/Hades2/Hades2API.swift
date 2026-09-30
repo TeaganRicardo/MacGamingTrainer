@@ -20,6 +20,8 @@ enum Hades2Command: String {
     case setNextRoomRewardDesired = "set_next_room_reward_desired"
     case spawnReward = "spawn_reward"
     case openSellTraits = "open_sell_traits"
+    case setTraitLevel = "set_trait_level"
+    case setTraitRarity = "set_trait_rarity"
     case removeTrait = "remove_trait"
     case openSpecialChoice = "open_special_choice"
     case listProfiles = "list_profiles"
@@ -52,7 +54,9 @@ enum Hades2Request {
     case setNextRoomReward(String?)
     case spawnReward(String)
     case openSellTraits
-    case removeTrait(String)
+    case setTraitLevel(CurrentRunTrait)
+    case setTraitRarity(CurrentRunTrait, rarity: String)
+    case removeTrait(CurrentRunTrait)
     case openSpecialChoice(source: String)
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
@@ -86,6 +90,8 @@ enum Hades2Request {
         case .setNextRoomReward: return .setNextRoomRewardDesired
         case .spawnReward: return .spawnReward
         case .openSellTraits: return .openSellTraits
+        case .setTraitLevel: return .setTraitLevel
+        case .setTraitRarity: return .setTraitRarity
         case .removeTrait: return .removeTrait
         case .openSpecialChoice: return .openSpecialChoice
         case .listProfiles: return .listProfiles
@@ -141,6 +147,19 @@ enum Hades2Request {
         }
     }
 
+    private static func traitTargetParams(_ trait: CurrentRunTrait) -> [String: Any] {
+        [
+            "generationId": trait.generationID,
+            "runId": trait.runID,
+            "instanceId": trait.instanceID,
+            "trait": trait.name,
+            "family": trait.family,
+            "expectedLevel": trait.level,
+            "expectedRarity": trait.rarity,
+            "expectedSameNameCount": trait.sameNameCount,
+        ]
+    }
+
     var params: [String: Any] {
         switch self {
         case .connect(let probeRuntime):
@@ -177,10 +196,14 @@ enum Hades2Request {
             return ["reward": reward]
         case .openSellTraits:
             return [:]
-        case .removeTrait(let name):
-            // The name is the removal input: the proven native teardown is
-            // name-level and removes every matching instance.
-            return ["trait": name]
+        case .setTraitLevel(let trait):
+            return Self.traitTargetParams(trait)
+        case .setTraitRarity(let trait, let rarity):
+            var params = Self.traitTargetParams(trait)
+            params["rarity"] = rarity
+            return params
+        case .removeTrait(let trait):
+            return Self.traitTargetParams(trait)
         case .openSpecialChoice(let source):
             return ["source": source]
         case .saveProfile(let name, let shortcuts):
