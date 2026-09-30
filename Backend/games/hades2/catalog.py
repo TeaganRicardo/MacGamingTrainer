@@ -54,14 +54,16 @@ _PRODUCT_LABEL_EN_BY_ZH = {
 
 
 _LINKED_OFFICIAL_NAME_IDS = {
-    # These runtime reward identifiers intentionally do not carry their own
-    # DisplayName. Resolve the player-facing object/resource that the game uses
-    # for presentation instead of treating the internal reward id as a name.
+    # These runtime reward identifiers resolve through another official
+    # presentation identity. Most have no standalone DisplayName; SpellDrop and
+    # TrialUpgrade are deliberate exceptions whose direct names identify the
+    # source character while the linked identity names the reward presentation.
     'GiftDrop': 'GiftPoints',
     'MetaCurrencyDrop': 'MetaCurrency',
     'MetaCardPointsCommonDrop': 'MetaCardPointsCommon',
     'MemPointsCommonDrop': 'MemPointsCommon',
     'SpellDrop': 'SpellDrop_Store',
+    'TrialUpgrade': 'UpgradeChoiceMenu_Chaos',
     'ArmorBoost': 'ArmorBoost_Store',
     'RoomRewardHealDrop': 'RoomRewardHealDrop_Store',
     'HealBigDrop': 'RoomRewardBigHealDrop_Store',
@@ -92,6 +94,14 @@ _LINKED_OFFICIAL_NAME_IDS = {
     'WeaponUpgradeDrop': 'WeaponUpgrade',
     'ShopHermesUpgrade': 'HermesUpgrade_Store',
     'RerollDrop': 'ReRollAlt',
+}
+
+_PREFERRED_LINKED_OFFICIAL_NAME_IDS = {
+    # The direct LootData DisplayName is the source character, not the reward
+    # label shown by the Trainer. Keep sourceName/sectionTitle on the character
+    # identity and resolve the item label through the official linked title.
+    'SpellDrop',
+    'TrialUpgrade',
 }
 
 _LINKED_PROVISIONAL_RULES = {
@@ -195,6 +205,9 @@ def localize_catalog(decoded):
         section_title=item.get('sectionTitle')
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
+        if identifier in _PREFERRED_LINKED_OFFICIAL_NAME_IDS:
+            official_zh=None
+            official_en=None
         variant_rule=_LINKED_PROVISIONAL_RULES.get(identifier)
         if variant_rule and isinstance(official_zh,str) and official_zh:
             base_zh=_clean(zh.get(variant_rule[0]))
