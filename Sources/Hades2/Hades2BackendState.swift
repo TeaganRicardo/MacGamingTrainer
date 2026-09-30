@@ -261,6 +261,8 @@ struct Hades2StatePatch {
             category: row["category"] as? String ?? "",
             englishCategory: row["englishCategory"] as? String ?? "",
             kind: row["kind"] as? String ?? "loot", group: row["group"] as? String ?? "pickup",
+            targetID: row["trait"] as? String ?? id,
+            officialName: row["officialName"] as? Bool ?? false,
             sectionTitle: row["sectionTitle"] as? String ?? "",
             englishSectionTitle: row["englishSectionTitle"] as? String ?? "",
             sourceId: row["sourceId"] as? String ?? "",

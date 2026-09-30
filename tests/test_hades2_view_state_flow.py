@@ -270,6 +270,8 @@ func makeBoon(
         englishCategory: "Character Rewards",
         kind: kind,
         group: group,
+        targetID: id.hasPrefix("trait:") ? String(id.dropFirst("trait:".count)) : id,
+        officialName: true,
         sectionTitle: sourceID,
         englishSectionTitle: sourceID,
         sourceId: sourceID,

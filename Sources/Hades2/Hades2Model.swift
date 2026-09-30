@@ -151,6 +151,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
     @Published var selectedSpecialReward = ""
+    @Published var selectedExactBoon = ""
     @Published var selectedNextRoomReward = ""
     @Published var statSupport: [String: Bool] = [:]
     @Published var statAvailable: [String: Bool] = [:]
@@ -230,6 +231,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 englishCategory: option.englishCategory,
                 kind: "native_choice",
                 group: "special",
+                targetID: "",
+                officialName: true,
                 sectionTitle: option.sectionTitle,
                 englishSectionTitle: option.englishSectionTitle,
                 sourceId: option.sourceId,
