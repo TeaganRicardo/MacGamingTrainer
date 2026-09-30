@@ -173,7 +173,7 @@ Verification depth is selected by risk and changed seam; evidence identity is al
 
 1. **Task verification** proves the focused change on the actual final PR head. PR workflows are the recurring gate.
 2. **Integration verification** reruns task gates after a PR-head rewrite/rebase and adds only affected gates when an overlapping dependency changes the relevant seam.
-3. **Convergence/release verification** is an explicit `workflow_dispatch` on the selected SHA. Missing diff scope intentionally fails closed, so Linux, macOS and reference-module lanes execute. Mutation testing and retained RC/reference artifacts with provenance/checksums run here.
+3. **Convergence/release verification** is an explicit `workflow_dispatch` on the selected SHA. Missing diff scope intentionally fails closed, so Linux, macOS and reference-module behavior/build lanes execute. Diff-only gates such as resident revision comparison remain PR-owned; mutation testing and retained RC/reference artifacts with provenance/checksums run here.
 
 There is no automatic post-merge `push(main)` rerun. A merged PR's head evidence remains evidence for that head; when exact current-main convergence evidence is required, dispatch it deliberately.
 
