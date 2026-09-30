@@ -353,12 +353,12 @@ struct Hades2TrainerView: View {
                 .font(.caption)
                 .foregroundStyle(theme.mutedFill)
 
-                if let issue = trait.deferredIssue,
-                   !trait.canIncreaseLevel && !trait.canSetRarity && !trait.canRemove {
+                if let issue = trait.deferredIssue {
                     Text(text("hades2.traits.deferredIssue", arguments: [String(issue)]))
                         .font(.caption)
                         .foregroundStyle(theme.mutedFill)
-                } else if trait.removalScopeAllMatching {
+                }
+                if trait.removalScopeAllMatching {
                     Text(text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)]))
                         .font(.caption)
                         .foregroundStyle(theme.mutedFill)
