@@ -402,7 +402,7 @@ def manifest() -> list[Mutation]:
             path=ROOT / "Tools/write_build_provenance.py",
             old='    if plist.get("CFBundleShortVersionString") != product_version:',
             new='    if False and plist.get("CFBundleShortVersionString") != product_version:',
-            test="tests/test_build_artifact_provenance.py",
+            test="tests/test_build_provenance_contract.py",
             note="#179/#199 root-only product identity",
         ),
         Mutation(

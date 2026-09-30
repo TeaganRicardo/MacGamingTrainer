@@ -93,4 +93,53 @@ assert '- reference_fixture' in module_matrix
 assert '- hades2' not in module_matrix, 'Hades II build is already owned by Build 2 macOS'
 assert './build.sh "${{ matrix.game }}"' in module_matrix
 
-print('change_scope_contract_ok')
+
+# Recurring verification is PR-owned; expensive convergence work is explicit.
+for name, path in {
+    "linux": ROOT / ".github/workflows/linux-contracts.yml",
+    "macos": ROOT / ".github/workflows/build2-macos.yml",
+    "module": ROOT / ".github/workflows/module-build-matrix.yml",
+}.items():
+    workflow_text = path.read_text(encoding="utf-8")
+    trigger = workflow_text.split("\npermissions:", 1)[0]
+    assert "pull_request:" in trigger, f"{name}: PR task verification trigger missing"
+    assert "workflow_dispatch:" in trigger, f"{name}: explicit convergence trigger missing"
+    assert not re.search(r"^  push:\s*$", trigger, re.M), (
+        f"{name}: merged main must not automatically rerun task verification"
+    )
+
+revision_pos = linux.index("Enforce diff-based invariants")
+revision_window = linux[revision_pos:revision_pos + 500]
+assert "github.event_name == 'pull_request'" in revision_window, (
+    "diff-based runtime revision enforcement must stay a PR task gate"
+)
+
+for step in (
+    "Verify declared invariants fail under mutation",
+    "Package release candidate",
+    "Verify release provenance and checksum",
+    "actions/upload-artifact@v4",
+):
+    pos = build2.index(step)
+    window = build2[pos:pos + 700]
+    assert "github.event_name == 'workflow_dispatch'" in window, (
+        f"Build 2 heavy convergence step is not dispatch-only: {step}"
+    )
+assert "Run macOS-only contract suite" in build2
+assert "Build Hades II trainer" in build2
+assert "Verify package" in build2
+
+for step in (
+    "Retain reference module artifact and source provenance",
+    "Verify reference artifact checksum and declared inputs",
+    "actions/upload-artifact@v4",
+):
+    pos = module_matrix.index(step)
+    window = module_matrix[pos:pos + 700]
+    assert "github.event_name == 'workflow_dispatch'" in window, (
+        f"reference convergence artifact step is not dispatch-only: {step}"
+    )
+assert "Build selected module" in module_matrix
+assert "Verify packaged module isolation" in module_matrix
+
+print("ci_workflow_contract_ok")
