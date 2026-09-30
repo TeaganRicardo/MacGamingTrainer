@@ -65,6 +65,23 @@ def test_level_rarity_and_removal_are_non_idempotent_targeted_commands():
     assert "MGT_OUTCOME_UNKNOWN" in LUA
 
 
+def test_request_dedup_precedes_live_trait_preflight():
+    action_block = LUA[LUA.index("local function action(command, params, work, preflight)"):LUA.index("local function editResource")]
+    assert action_block.index("if prior then") < action_block.index("if preflight ~= nil then preflight() end")
+    assert "return result\n    end\n    -- Deterministic validation belongs after request-id deduplication." in action_block
+
+    for command, validator in (
+        ("set_trait_level", "validateLevelTarget"),
+        ("set_trait_rarity", "validateRarityTarget"),
+        ("remove_trait", "validateRemovalTarget"),
+    ):
+        start = LUA.index(f'if command == "{command}" then')
+        end = LUA.find('\n    if command == "', start + 1)
+        block = LUA[start:] if end < 0 else LUA[start:end]
+        assert f"end, {validator})" in block
+        assert block.count(f"{validator}()") >= 1
+
+
 def test_mutations_re_resolve_the_exact_live_selection_before_apply():
     assert "resolveTraitTarget" in LUA
     assert "Trait selection belongs to a stale runtime generation" in LUA
@@ -173,6 +190,7 @@ if __name__ == "__main__":
     test_live_trait_inventory_carries_target_snapshot_and_operation_capabilities()
     test_current_run_traits_reuse_official_bilingual_localization_seam()
     test_level_rarity_and_removal_are_non_idempotent_targeted_commands()
+    test_request_dedup_precedes_live_trait_preflight()
     test_mutations_re_resolve_the_exact_live_selection_before_apply()
     test_owner_family_controls_default_native_paths()
     test_force_removal_is_bounded_and_native_sell_scope_stays_explicit()
