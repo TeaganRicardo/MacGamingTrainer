@@ -84,6 +84,15 @@ adapter.preference_dirty = False
 adapter._runtime_bootstrapped = True
 adapter.state.update(connected=True, status="waiting", scene="loading", capabilities={"setFeature": False})
 
+# A status-only runtime observation must retain the Core-owned Time Warp
+# capability/active projection even though it deliberately skips durable
+# Hades desired-state projection.
+adapter._time_warp_speed = 2.0
+observed = adapter.observe_runtime()
+assert observed["featureSupport"]["gameSpeed"] is True
+assert observed["activeFeatures"]["gameSpeed"] is True
+adapter._time_warp_speed = 1.0
+
 state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze")
 assert state["gameSpeed"] == 0.0
 assert state["activeFeatures"]["gameSpeed"] is True
