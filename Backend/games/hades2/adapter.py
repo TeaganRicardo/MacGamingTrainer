@@ -824,6 +824,10 @@ class Hades2Adapter(GameAdapter):
                 self.state.pop(key,None)
             self.state.update(decoded,connected=True,pid=self.transport.pid)
             self.state.pop('error',None)
+            # Runtime observation skips durable Hades desired-state projection,
+            # but Core-owned Process Time Warp remains observable Host state and
+            # must stay present in diagnostics/status snapshots.
+            if host_observation_only:self._project_time_warp()
             # nextRoomReward is a one-shot runtime request. A clean status in
             # the same backend confirms consumption once the armed runtime value
             # disappears. Across a backend restart, require Lua's persisted
