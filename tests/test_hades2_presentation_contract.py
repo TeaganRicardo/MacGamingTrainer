@@ -360,17 +360,17 @@ assert not _literal_titles, (
 # records its provenance only in a comment.
 _reg = json.loads(
     (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8"))
-_god = (_reg.get("productTerms") or {}).get("godMode")
-assert _god, "the god-mode Trainer Product Term is not declared in the registry"
+_god = (_reg.get("productTerms") or {}).get("invincibility")
+assert _god, "the invincibility Trainer Product Term is not declared in the registry"
 assert _god["value"] != _god["englishValue"], "a product term pair must differ by language"
 for _language, _entries in TABLES.items():
-    assert _entries.get("hades2.feature.godMode") == "{term:productTerms.godMode}", (
-        f"{_language} spells the god-mode label out instead of using the registry")
+    assert _entries.get("hades2.feature.invincibility") == "{term:productTerms.invincibility}", (
+        f"{_language} spells the invincibility label out instead of using the registry")
 
 # 12. No player-facing entry may ship as the same string in both languages.
 # A zh-CN table entry that is byte-identical to its en counterpart means the
 # Chinese user is reading untranslated English. God mode was the only such
-# entry: the pre-B03 Chinese literal "无敌" was replaced by "God Mode" when
+# entry: the pre-B03 Chinese literal "无敌" was replaced by "Invincibility" when
 # the tables were authored, and nothing flagged it.
 # A registry-backed entry is language-neutral BY DESIGN: both tables hold the
 # same {term:...} token and the resolver picks the language. Only flag a

@@ -37,7 +37,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 4
+DESIRED_STATE_SCHEMA_VERSION = 5
 
 
 def _finite_number(value):
@@ -123,6 +123,16 @@ def migrate_legacy_next_room_reward(raw):
     return result
 
 
+def migrate_legacy_invincibility_identity(raw):
+    """Rename the retired Trainer invulnerability key at persistence boundaries only."""
+    if not isinstance(raw,dict):return raw
+    result=dict(raw)
+    if type(result.get('godMode')) is bool:
+        result['invincibility']=result['godMode']
+    result.pop('godMode',None)
+    return result
+
+
 def next_room_reward_consumed(preferences, decoded, preference_dirty):
     if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
     reward=preferences.get('nextRoomReward')
@@ -171,6 +181,8 @@ def normalize_persisted_desired(raw, schema_version):
         migrated=migrate_legacy_boon_semantics(migrated,schema_version)
     if schema_version < 4:
         migrated=migrate_legacy_next_room_reward(migrated)
+    if schema_version < 5:
+        migrated=migrate_legacy_invincibility_identity(migrated)
     return Hades2PreferenceStore.normalize(migrated)
 
 

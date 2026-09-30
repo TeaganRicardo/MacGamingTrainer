@@ -29,12 +29,12 @@ assert localization.official_display_names({'TraitY'}, 'zh-CN', game_path=dir_ga
 
 # Preference/profile services are usable without constructing a transport adapter.
 store = Hades2PreferenceStore(base/'desired.json')
-prefs = store.defaults(); prefs['godMode'] = True; store.save(prefs)
+prefs = store.defaults(); prefs['invincibility'] = True; store.save(prefs)
 loaded, initialized = store.load()
-assert initialized and loaded['godMode'] is True
+assert initialized and loaded['invincibility'] is True
 profiles = Hades2ProfileService(base/'profiles')
-profiles.save('test', loaded, {'godMode':1})
-assert profiles.load('test')['desired']['godMode'] is True
+profiles.save('test', loaded, {'invincibility':1})
+assert profiles.load('test')['desired']['invincibility'] is True
 assert profiles.delete('test')['deleted'] is True
 
 print('hades2_services_round16_ok')

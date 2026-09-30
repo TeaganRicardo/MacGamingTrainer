@@ -31,8 +31,8 @@ class FakeTransport:
             'status':'ready',
             'scene':'run',
             'capabilities':{},
-            'desiredFeatures':{'godMode':False},
-            'activeFeatures':{'godMode':False},
+            'desiredFeatures':{'invincibility':False},
+            'activeFeatures':{'invincibility':False},
             'nextRoomReward':None,
         })
     def detach(self): pass
@@ -45,7 +45,7 @@ preparation.DATA.mkdir(parents=True)
 pref_path = preparation.DATA/'desired-state.json'
 store = Hades2PreferenceStore(pref_path)
 prefs = store.defaults()
-prefs['godMode'] = True
+prefs['invincibility'] = True
 prefs['nextRoomReward'] = 'WeaponUpgrade'
 store.save(prefs)
 file_before = pref_path.read_bytes()
@@ -59,7 +59,7 @@ preferences_before = json.loads(json.dumps(adapter.preferences))
 # dirty desired state or persist/capture runtime state.
 adapter.observe_runtime()
 assert transport.calls == 1
-assert adapter.state['desiredFeatures']['godMode'] is False
+assert adapter.state['desiredFeatures']['invincibility'] is False
 assert adapter.preference_dirty is True
 assert adapter.preferences == preferences_before
 assert pref_path.read_bytes() == file_before
@@ -87,7 +87,7 @@ assert not (preparation.DATA/'desired-state.json').exists()
 # Runtime observation is a dedicated status-only API rather than a flag that
 # mutation callers can opt into.
 try:
-    adapter2.execute('set_feature', {'feature':'godMode','value':True}, read_only=True)
+    adapter2.execute('set_feature', {'feature':'invincibility','value':True}, read_only=True)
 except TypeError:
     pass
 else:

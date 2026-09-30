@@ -35,7 +35,7 @@ for name in required:
 
 assert 'struct TrainerSelectableListRow' not in core_ui
 
-for token in ('Hades2','godMode','boonRarity','rerollsLocked','statAvailable','dormantFeatures','WeaponCast','CurrentRun'):
+for token in ('Hades2','invincibility','boonRarity','rerollsLocked','statAvailable','dormantFeatures','WeaponCast','CurrentRun'):
     assert token not in core_ui, token
 
 management_view = (HADES / 'Views/Hades2ManagementViews.swift').read_text()

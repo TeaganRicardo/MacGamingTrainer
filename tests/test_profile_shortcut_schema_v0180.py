@@ -13,7 +13,7 @@ from games.hades2.profile_service import (
     _normalize_shortcuts,
 )
 
-assert PROFILE_SCHEMA_VERSION == 5
+assert PROFILE_SCHEMA_VERSION == 6
 
 def chord(code, modifiers, label):
     return {'keyCode':code, 'modifiers':modifiers, 'keyLabel':label}
@@ -22,12 +22,12 @@ def chord(code, modifiers, label):
 # objects only. Legacy integer digit layouts are deliberately not Profile-compatible.
 assert _normalize_shortcuts(None) == {}
 assert _normalize_shortcuts({}) == {}
-assert _normalize_shortcuts({'godMode': 1, 'disableAll': 0}) == {}
+assert _normalize_shortcuts({'invincibility': 1, 'disableAll': 0}) == {}
 future = {'futureFeature': chord(18,6144,'1')}
 assert _normalize_shortcuts(future) == future
 future_collision = {
     'aaaFutureFeature': chord(18,6144,'1'),
-    'godMode': chord(18,6144,'1'),
+    'invincibility': chord(18,6144,'1'),
 }
 assert _normalize_shortcuts(future_collision) == future_collision, (
     'backend must preserve unknown/known collisions for the Swift uiOrder owner to resolve'
@@ -43,7 +43,7 @@ assert _normalize_shortcuts({'bad action': chord(18,6144,'1')}) == {}
 assert _normalize_shortcuts({'../escape': chord(18,6144,'1')}) == {}
 
 valid = {
-    'godMode': chord(18,6144,'1'),
+    'invincibility': chord(18,6144,'1'),
     'infiniteHealth': chord(19,6144,'2'),
     'gardenQoL': chord(5,6144,'G'),
 }
@@ -54,7 +54,7 @@ assert _normalize_shortcuts(valid) == valid
 # The current Swift shortcut store owns conflict resolution for action IDs it knows;
 # this also prevents an unknown future action from deleting a current assignment.
 duplicated = {
-    'godMode': chord(18, 6144, '1'),
+    'invincibility': chord(18, 6144, '1'),
     'infiniteHealth': chord(18, 6144, '1'),
     'disableAll': chord(29, 6144, '0'),
 }
@@ -64,7 +64,7 @@ assert _normalize_shortcuts(duplicated) == duplicated
 # bits, booleans masquerading as ints, control characters and out-of-range
 # values are not persisted.
 invalid = {
-    'godMode': {'keyCode': True, 'modifiers': 6144, 'keyLabel': '1'},
+    'invincibility': {'keyCode': True, 'modifiers': 6144, 'keyLabel': '1'},
     'infiniteHealth': {'keyCode': 19, 'modifiers': -1, 'keyLabel': '2'},
     'forceDuo': {'keyCode': 8, 'modifiers': 1, 'keyLabel': 'C'},
     'infiniteMana': {'keyCode': 20, 'modifiers': 6144, 'keyLabel': '\n'},
@@ -75,10 +75,10 @@ assert _normalize_shortcuts(invalid) == {}
 
 base = Path(tempfile.mkdtemp(prefix='mgt-profile-shortcuts-v4-'))
 service = Hades2ProfileService(base/'profiles')
-desired = {'godMode': False}
+desired = {'invincibility': False}
 service.save('chords', desired, valid)
 on_disk = json.loads(service.path('chords').read_text(encoding='utf-8'))
-assert on_disk['schemaVersion'] == 5
+assert on_disk['schemaVersion'] == PROFILE_SCHEMA_VERSION
 assert on_disk['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
 assert on_disk['shortcuts'] == valid
 assert service.load('chords')['shortcuts'] == valid

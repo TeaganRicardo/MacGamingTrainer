@@ -65,7 +65,7 @@ class PendingTransport:
             if 'dispatch("set_feature"' not in source or marker not in source:
                 continue
             value = '["value"]=true' in source[source.index(marker):]
-            if feature == 'godMode' and value and self.fail_god_mode_once:
+            if feature == 'invincibility' and value and self.fail_god_mode_once:
                 self.fail_god_mode_once = False
                 raise TransportError('lua_error', 'simulated durable feature failure')
             self.state['desiredFeatures'][feature] = value
@@ -125,15 +125,15 @@ adapter.preference_dirty = False
 # Durable A is persisted first, then its runtime application fails.
 first = adapter.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a',
 )
-assert first['desiredFeatures']['godMode'] is True
-assert adapter.preferences['godMode'] is True
+assert first['desiredFeatures']['invincibility'] is True
+assert adapter.preferences['invincibility'] is True
 assert adapter.preference_dirty is True
-assert transport.state['desiredFeatures']['godMode'] is False
+assert transport.state['desiredFeatures']['invincibility'] is False
 persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
-assert persisted['godMode'] is True
+assert persisted['invincibility'] is True
 
 # An unrelated successful one-shot must not adopt the stale runtime projection
 # over durable desired state or clear the pending reconciliation.
@@ -143,19 +143,19 @@ adapter.dispatch(
     'spawn-1',
 )
 assert transport.spawn_count == 1
-assert adapter.preferences['godMode'] is True
+assert adapter.preferences['invincibility'] is True
 assert adapter.preference_dirty is True
 persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
-assert persisted['godMode'] is True
+assert persisted['invincibility'] is True
 
 # A later status reconciliation must still apply A. The one-shot is never replayed.
 adapter.dispatch('status', {}, 'status-1')
-assert transport.state['desiredFeatures']['godMode'] is True
-assert adapter.preferences['godMode'] is True
+assert transport.state['desiredFeatures']['invincibility'] is True
+assert adapter.preferences['invincibility'] is True
 assert adapter.preference_dirty is False
 assert transport.spawn_count == 1
 persisted = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
-assert persisted['godMode'] is True
+assert persisted['invincibility'] is True
 
 print('pending_preference_confirmation_spawn_ok')
 
@@ -174,11 +174,11 @@ adapter_b.preference_dirty = False
 
 adapter_b.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a-b',
 )
 assert adapter_b.preference_dirty is True
-assert transport_b.state['desiredFeatures']['godMode'] is False
+assert transport_b.state['desiredFeatures']['invincibility'] is False
 
 adapter_b.dispatch(
     'set_desired',
@@ -187,16 +187,16 @@ adapter_b.dispatch(
 )
 assert transport_b.state['desiredFeatures']['gardenQoL'] is True
 assert adapter_b.preferences['gardenQoL'] is True
-assert adapter_b.preferences['godMode'] is True
+assert adapter_b.preferences['invincibility'] is True
 assert adapter_b.preference_dirty is True, (
     'successful feature B must not confirm failed feature A'
 )
 persisted_b = json.loads((base_b / 'desired-state.json').read_text(encoding='utf-8'))
-assert persisted_b['godMode'] is True
+assert persisted_b['invincibility'] is True
 assert persisted_b['gardenQoL'] is True
 
 adapter_b.dispatch('status', {}, 'status-b')
-assert transport_b.state['desiredFeatures']['godMode'] is True
+assert transport_b.state['desiredFeatures']['invincibility'] is True
 assert adapter_b.preference_dirty is False
 
 print('pending_preference_confirmation_feature_b_ok')
@@ -221,7 +221,7 @@ adapter_rarity.preference_dirty = False
 
 adapter_rarity.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a-rarity',
 )
 assert adapter_rarity.preference_dirty is True
@@ -238,7 +238,7 @@ adapter_rarity.dispatch(
     'desired-rarity',
 )
 assert transport_rarity.state['boonRarity']['target'] == 'Heroic'
-assert adapter_rarity.preferences['godMode'] is True
+assert adapter_rarity.preferences['invincibility'] is True
 assert adapter_rarity.preferences['boonRarity']['target'] == 'Heroic'
 assert adapter_rarity.preference_dirty is True, (
     'successful boon rarity B must not confirm failed feature A'
@@ -246,11 +246,11 @@ assert adapter_rarity.preference_dirty is True, (
 persisted_rarity = json.loads(
     (base_rarity / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_rarity['godMode'] is True
+assert persisted_rarity['invincibility'] is True
 assert persisted_rarity['boonRarity']['target'] == 'Heroic'
 
 adapter_rarity.dispatch('status', {}, 'status-rarity')
-assert transport_rarity.state['desiredFeatures']['godMode'] is True
+assert transport_rarity.state['desiredFeatures']['invincibility'] is True
 assert adapter_rarity.preference_dirty is False
 
 print('pending_preference_confirmation_rarity_ok')
@@ -277,7 +277,7 @@ adapter_reward.preference_dirty = False
 
 adapter_reward.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a-reward',
 )
 assert adapter_reward.preference_dirty is True
@@ -291,7 +291,7 @@ armed_token = adapter_reward.preferences['nextRoomRewardToken']
 assert isinstance(armed_token, str) and armed_token
 assert transport_reward.state['nextRoomReward'] == 'WeaponUpgrade'
 assert transport_reward.state['runtimeDiagnostics']['nextRoomRewardToken'] == armed_token
-assert adapter_reward.preferences['godMode'] is True
+assert adapter_reward.preferences['invincibility'] is True
 assert adapter_reward.preference_dirty is True, (
     'successful next-room arm must not confirm failed feature A'
 )
@@ -300,7 +300,7 @@ persisted_reward = json.loads(
 )
 assert persisted_reward['nextRoomReward'] == 'WeaponUpgrade'
 assert persisted_reward['nextRoomRewardToken'] == armed_token
-assert persisted_reward['godMode'] is True
+assert persisted_reward['invincibility'] is True
 
 # Simulate resident consumption before the next status. The exact receipt proves
 # that this one-shot ran even though another durable field remains pending.
@@ -311,7 +311,7 @@ transport_reward.state['runtimeDiagnostics'][
 ] = armed_token
 
 adapter_reward.dispatch('status', {}, 'status-reward')
-assert transport_reward.state['desiredFeatures']['godMode'] is True
+assert transport_reward.state['desiredFeatures']['invincibility'] is True
 assert transport_reward.state['nextRoomReward'] is None
 assert adapter_reward.preferences['nextRoomReward'] is None
 assert adapter_reward.preferences['nextRoomRewardToken'] is None
@@ -321,7 +321,7 @@ persisted_reward = json.loads(
 )
 assert persisted_reward['nextRoomReward'] is None
 assert persisted_reward['nextRoomRewardToken'] is None
-assert persisted_reward['godMode'] is True
+assert persisted_reward['invincibility'] is True
 
 print('pending_preference_confirmation_next_room_ok')
 
@@ -347,14 +347,14 @@ adapter_persist.preference_dirty = False
 
 adapter_persist.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a-persist',
 )
 assert adapter_persist.preference_dirty is True
 persisted_before = json.loads(
     (base_persist / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_before['godMode'] is True
+assert persisted_before['invincibility'] is True
 
 original_persist_save = adapter_persist.preference_store.save
 fail_confirmation_once = True
@@ -376,15 +376,15 @@ except PersistenceError as error:
 else:
     raise AssertionError('confirmation persistence failure was hidden')
 
-assert transport_persist.state['desiredFeatures']['godMode'] is True
-assert adapter_persist.preferences['godMode'] is True
+assert transport_persist.state['desiredFeatures']['invincibility'] is True
+assert adapter_persist.preferences['invincibility'] is True
 assert adapter_persist.preference_dirty is True, (
     'failed confirmation persistence must remain pending'
 )
 persisted_after_failure = json.loads(
     (base_persist / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_after_failure['godMode'] is True
+assert persisted_after_failure['invincibility'] is True
 
 # Once persistence recovers, a later status may confirm the already-applied
 # durable state without replaying any one-shot operation.
@@ -393,7 +393,7 @@ assert adapter_persist.preference_dirty is False
 persisted_after_retry = json.loads(
     (base_persist / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_after_retry['godMode'] is True
+assert persisted_after_retry['invincibility'] is True
 
 print('pending_preference_confirmation_persistence_ok')
 
@@ -418,7 +418,7 @@ adapter_lock.preference_dirty = False
 
 adapter_lock.dispatch(
     'set_desired',
-    {'feature': 'godMode', 'value': True},
+    {'feature': 'invincibility', 'value': True},
     'desired-a-lock',
 )
 assert adapter_lock.preference_dirty is True
@@ -429,7 +429,7 @@ adapter_lock.dispatch(
     'lock-b',
 )
 assert transport_lock.state['stats']['enemyHealth']['locked'] is True
-assert adapter_lock.preferences['godMode'] is True
+assert adapter_lock.preferences['invincibility'] is True
 assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}, (
     'successful stat lock B must persist its own durable field while A is pending'
 )
@@ -437,11 +437,11 @@ assert adapter_lock.preference_dirty is True
 persisted_lock = json.loads(
     (base_lock / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_lock['godMode'] is True
+assert persisted_lock['invincibility'] is True
 assert persisted_lock['statLocks'] == {'enemyHealth': 175.0}
 
 adapter_lock.dispatch('status', {}, 'status-lock')
-assert transport_lock.state['desiredFeatures']['godMode'] is True
+assert transport_lock.state['desiredFeatures']['invincibility'] is True
 assert transport_lock.state['stats']['enemyHealth']['locked'] is True
 assert adapter_lock.preferences['statLocks'] == {'enemyHealth': 175.0}
 assert adapter_lock.preference_dirty is False

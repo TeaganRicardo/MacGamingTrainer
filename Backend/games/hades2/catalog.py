@@ -49,7 +49,7 @@ _PRODUCT_LABEL_EN_BY_ZH = {
     '其他房间奖励': 'Other Room Rewards',
     '商店商品': 'Shop Items',
     '资源': 'Resources',
-    '无敌模式': 'God Mode',
+    '无敌模式': 'Invincibility',
 }
 
 

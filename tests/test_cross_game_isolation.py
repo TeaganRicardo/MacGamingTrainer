@@ -22,7 +22,7 @@ for token in (
     'games.hades2',
     'Hades2Adapter',
     'CurrentRun',
-    'godMode',
+    'invincibility',
     'boonRarity',
     'SpellDrop',
     'TalentDrop',

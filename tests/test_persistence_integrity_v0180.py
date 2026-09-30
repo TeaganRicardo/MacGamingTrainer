@@ -21,9 +21,9 @@ base = Path(tempfile.mkdtemp(prefix='mgt-persistence-v0180-'))
 # debris behind.
 pref_path = base/'desired-state.json'
 store = Hades2PreferenceStore(pref_path)
-prefs = store.defaults(); prefs['godMode'] = True
+prefs = store.defaults(); prefs['invincibility'] = True
 store.save(prefs)
-assert json.loads(pref_path.read_text(encoding='utf-8'))['godMode'] is True
+assert json.loads(pref_path.read_text(encoding='utf-8'))['invincibility'] is True
 assert list(base.glob('.desired-state.json.*.tmp')) == []
 
 # A replace failure must preserve the previous durable file, clean the staged
@@ -34,7 +34,7 @@ try:
     def fail_replace(source, destination):
         raise OSError('simulated replace failure')
     persistence.os.replace = fail_replace
-    changed = dict(prefs); changed['godMode'] = False
+    changed = dict(prefs); changed['invincibility'] = False
     try:
         store.save(changed)
     except PersistenceError as error:
@@ -44,19 +44,19 @@ try:
 finally:
     logging.disable(logging.NOTSET)
     persistence.os.replace = original_replace
-assert json.loads(pref_path.read_text(encoding='utf-8'))['godMode'] is True
+assert json.loads(pref_path.read_text(encoding='utf-8'))['invincibility'] is True
 assert list(base.glob('.desired-state.json.*.tmp')) == []
 
 # Profile writes use the same durable primitive.  A failed replacement must not
 # destroy the previous profile either.
 profiles = Hades2ProfileService(base/'profiles')
-profiles.save('stable', prefs, {'godMode': 1})
+profiles.save('stable', prefs, {'invincibility': 1})
 profile_path = profiles.path('stable')
 profile_before = profile_path.read_bytes()
 try:
     persistence.os.replace = fail_replace
     try:
-        profiles.save('stable', changed, {'godMode': 1})
+        profiles.save('stable', changed, {'invincibility': 1})
     except PersistenceError:
         pass
     else:
@@ -84,16 +84,16 @@ adapter.state['capabilities'] = dict(adapter.state.get('capabilities', {}), setF
 transport_calls = []
 adapter.execute = lambda *args, **kwargs: transport_calls.append((args, kwargs)) or dict(adapter.state)
 old_preferences = dict(adapter.preferences)
-old_state_value = adapter.state['godMode']
+old_state_value = adapter.state['invincibility']
 adapter.preference_store.save = lambda preferences: (_ for _ in ()).throw(PersistenceError('simulated'))
 try:
-    adapter.set_desired('godMode', True)
+    adapter.set_desired('invincibility', True)
 except PersistenceError:
     pass
 else:
     raise AssertionError('set_desired hid a persistence failure')
 assert adapter.preferences == old_preferences
-assert adapter.state['godMode'] == old_state_value
+assert adapter.state['invincibility'] == old_state_value
 assert transport_calls == []
 
 # The generic router must preserve typed module error codes so the Swift client

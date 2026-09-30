@@ -11,7 +11,7 @@ from .persistence import (
 )
 from .preferences import DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 
-PROFILE_SCHEMA_VERSION = 5
+PROFILE_SCHEMA_VERSION = 6
 PROFILE_COMPATIBILITY_FLOOR = 3
 _PROFILE_FIELDS = frozenset((
     'schemaVersion','desiredSchemaVersion','name','updatedAt','desired','shortcuts',
@@ -23,6 +23,7 @@ _LEGACY_V3_DIGIT_KEYCODES = {
 }
 
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
+_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode',))
 
 
 def _profile_schema_version(payload):
@@ -45,6 +46,7 @@ def _normalize_shortcuts(raw):
     actions=sorted(
         action for action in raw
         if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)
+        and action not in _RETIRED_SHORTCUT_ACTIONS
     )
     for action in actions:
         row=raw.get(action)
@@ -73,6 +75,16 @@ def _migrate_v3_shortcuts(raw):
     return migrated
 
 
+def _migrate_legacy_shortcut_identity(raw):
+    """Rename legacy shortcut action IDs only while upgrading historical Profiles."""
+    if not isinstance(raw,dict):return raw
+    migrated=dict(raw)
+    if 'invincibility' not in migrated and 'godMode' in migrated:
+        migrated['invincibility']=migrated['godMode']
+    migrated.pop('godMode',None)
+    return migrated
+
+
 def _migrate_profile_payload(payload, version):
     """Upgrade supported historical envelopes in memory without rewriting them."""
     result=dict(payload)
@@ -87,6 +99,8 @@ def _migrate_profile_payload(payload, version):
         result['desiredSchemaVersion']=(
             4 if isinstance(desired,dict) and 'nextRoomRewardToken' in desired else 3
         )
+    if version<PROFILE_SCHEMA_VERSION and 'shortcuts' in result:
+        result['shortcuts']=_migrate_legacy_shortcut_identity(result.get('shortcuts'))
     result['schemaVersion']=PROFILE_SCHEMA_VERSION
     return result
 

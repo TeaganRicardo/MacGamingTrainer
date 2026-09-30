@@ -14,7 +14,7 @@ from games.hades2.preferences import (
     next_room_reward_consumed,
 )
 
-assert DESIRED_STATE_SCHEMA_VERSION == 4
+assert DESIRED_STATE_SCHEMA_VERSION == 5
 
 # Schema-3 desired state has no token. Migration must derive a stable token so
 # repeated backend restarts can correlate a resident consumption with the same

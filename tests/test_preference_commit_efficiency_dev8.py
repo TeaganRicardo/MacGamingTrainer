@@ -41,9 +41,9 @@ adapter.preference_store.save = counted_save
 # These three commands are internal applications of already-durable desired
 # state. Each user edit must fsync exactly once before it crosses the Lua boundary.
 save_count = 0
-adapter.set_desired('godMode', True)
+adapter.set_desired('invincibility', True)
 assert save_count == 1, save_count
-assert json.loads((base/'desired-state.json').read_text())['godMode'] is True
+assert json.loads((base/'desired-state.json').read_text())['invincibility'] is True
 
 save_count = 0
 adapter.set_boon_rarity_desired({'target':'Epic','multiplier':100,'forceLegendary':True,'forceDuo':False})
