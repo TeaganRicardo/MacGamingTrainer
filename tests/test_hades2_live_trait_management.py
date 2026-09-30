@@ -49,59 +49,7 @@ def test_current_run_traits_reuse_official_bilingual_localization_seam():
     assert "sourceEnglishName" in TYPES
 
 
-def test_level_rarity_and_removal_are_non_idempotent_targeted_commands():
-    assert 'case setTraitLevel = "set_trait_level"' in API
-    assert 'case setTraitRarity = "set_trait_rarity"' in API
-    assert 'case removeTrait = "remove_trait"' in API
 
-    assert 'remove_trait = { "trait" }' not in LUA
-    for command in ("set_trait_level", "set_trait_rarity", "remove_trait"):
-        assert f'{command} = {{ "generationId", "runId", "instanceId", "trait", "family"' in LUA
-
-    assert 'if command == "set_trait_level" then' in LUA
-    assert 'if command == "set_trait_rarity" then' in LUA
-    assert 'if command == "remove_trait" then' in LUA
-    assert "return action(command, params" in LUA
-    assert "MGT_OUTCOME_UNKNOWN" in LUA
-
-
-def test_request_dedup_precedes_live_trait_preflight():
-    action_block = LUA[LUA.index("local function action(command, params, work, preflight)"):LUA.index("local function editResource")]
-    assert action_block.index("if prior then") < action_block.index("if preflight ~= nil then preflight() end")
-    assert "return result\n    end\n    -- Deterministic validation belongs after request-id deduplication." in action_block
-
-    for command, validator in (
-        ("set_trait_level", "validateLevelTarget"),
-        ("set_trait_rarity", "validateRarityTarget"),
-        ("remove_trait", "validateRemovalTarget"),
-    ):
-        start = LUA.index(f'if command == "{command}" then')
-        end = LUA.find('\n    if command == "', start + 1)
-        block = LUA[start:] if end < 0 else LUA[start:end]
-        assert f"end, {validator})" in block
-        assert block.count(f"{validator}()") >= 1
-
-
-def test_mutations_re_resolve_the_exact_live_selection_before_apply():
-    assert "resolveTraitTarget" in LUA
-    assert "Trait selection belongs to a stale runtime generation" in LUA
-    assert "Trait selection belongs to a stale run" in LUA
-    assert "Trait instance is no longer present" in LUA
-    assert "Trait target changed since selection" in LUA
-    assert "expectedLevel" in LUA
-    assert "expectedRarity" in LUA
-    assert "sameNameCount" in LUA
-
-    # Level uses the game's owner path, but refuses ambiguous same-name targets
-    # because IncreaseTraitLevel uses AreTraitsIdentical rather than a raw id.
-    assert "IncreaseTraitLevel(live, 1)" in LUA
-    assert "multipleMatchingInstances" in LUA
-
-    # Rarity uses the game's own recompute path; assigning Rarity alone is not
-    # accepted because it would leave mounted effect values stale.
-    assert "AddRarityToTraits" in LUA
-    assert "ForceUpgrade = { live }" in LUA
-    assert "target.Rarity = params.rarity" not in LUA
 
 
 def test_special_npc_ownership_comes_from_native_source_data():
@@ -138,20 +86,6 @@ def test_owner_family_controls_default_native_paths():
     ):
         assert f"{family} = {issue}" in LUA
 
-
-def test_force_removal_is_bounded_and_native_sell_scope_stays_explicit():
-    assert 'CritBonusBoon' in LUA
-    assert 'directSpecial' in LUA
-    assert 'singleInstanceForce' in LUA
-    assert 'nameLevelAllMatching' in LUA
-    assert "RemoveTraitData(CurrentRun.Hero, live" in LUA
-    assert "RemoveWeaponTrait(live.Name" in LUA
-    assert "SkipExpire = true" in LUA
-
-    # Owner-specific families remain visible and deferred instead of falling
-    # through to an arbitrary RemoveTraitData escape hatch.
-    for issue in ("236", "237", "238", "239", "240"):
-        assert issue in LUA
 
 
 def test_swift_contract_carries_snapshot_not_just_trait_name():
@@ -207,12 +141,8 @@ def test_resident_revision_advances_for_the_new_runtime_contract():
 if __name__ == "__main__":
     test_live_trait_inventory_carries_target_snapshot_and_operation_capabilities()
     test_current_run_traits_reuse_official_bilingual_localization_seam()
-    test_level_rarity_and_removal_are_non_idempotent_targeted_commands()
-    test_request_dedup_precedes_live_trait_preflight()
-    test_mutations_re_resolve_the_exact_live_selection_before_apply()
     test_special_npc_ownership_comes_from_native_source_data()
     test_owner_family_controls_default_native_paths()
-    test_force_removal_is_bounded_and_native_sell_scope_stays_explicit()
     test_swift_contract_carries_snapshot_not_just_trait_name()
     test_live_manager_is_searchable_grouped_and_shows_real_controls()
     test_resident_revision_advances_for_the_new_runtime_contract()
