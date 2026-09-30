@@ -62,6 +62,16 @@ text.write_text(
     encoding="utf-8",
 )
 
+en_text = game / "Contents/Resources/Content/Game/Text/en/HelpText.en.sjson"
+en_text.parent.mkdir(parents=True)
+en_text.write_text(
+    """
+    { Id = "Location_Home" DisplayName = "The Crossroads" }
+    { Id = "Location_BiomeF" DisplayName = "Erebus" }
+    """,
+    encoding="utf-8",
+)
+
 saves = base / "saves"
 saves.mkdir()
 write_active_profile(saves / "activeProfile", "Profile1")
@@ -103,6 +113,16 @@ description = provider.describe_snapshot(tuple(rows), "2026-09-20T14:37:51")
 assert description == {
     "defaultName": "2026-09-20 14:37 · 第11夜 · 厄瑞玻斯",
     "nameDetails": ["第11夜", "厄瑞玻斯", "悟性 29", "恐惧 19"],
+    "localizedPresentation": {
+        "zh-CN": {
+            "name": "2026-09-20 14:37 · 第11夜 · 厄瑞玻斯",
+            "details": ["第11夜", "厄瑞玻斯", "悟性 29", "恐惧 19"],
+        },
+        "en": {
+            "name": "2026-09-20 14:37 · Night 11 · Erebus",
+            "details": ["Night 11", "Erebus", "Grasp 29", "Fear 19"],
+        },
+    },
 }
 
 # Once the base save is newer, the provider describes the hub save and its
@@ -120,6 +140,16 @@ description = provider.describe_snapshot(tuple(rows), "2026-09-20T15:02:09")
 assert description == {
     "defaultName": "2026-09-20 15:02 · 第11夜 · 三岔路口",
     "nameDetails": ["第11夜", "三岔路口", "悟性 30", "恐惧 7"],
+    "localizedPresentation": {
+        "zh-CN": {
+            "name": "2026-09-20 15:02 · 第11夜 · 三岔路口",
+            "details": ["第11夜", "三岔路口", "悟性 30", "恐惧 7"],
+        },
+        "en": {
+            "name": "2026-09-20 15:02 · Night 11 · The Crossroads",
+            "details": ["Night 11", "The Crossroads", "Grasp 30", "Fear 7"],
+        },
+    },
 }
 
 # Unknown official location falls back to the current map instead of inventing
@@ -136,6 +166,8 @@ write_save(
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T15:15:00")
 assert description["defaultName"] == "2026-09-20 15:15 · 第12夜 · F_Combat99"
 assert description["nameDetails"][:2] == ["第12夜", "F_Combat99"]
+assert description["localizedPresentation"]["en"]["name"] == "2026-09-20 15:15 · Night 12 · F_Combat99"
+assert description["localizedPresentation"]["en"]["details"] == ["Night 12", "F_Combat99", "Grasp 30", "Fear 7"]
 
 # Never guess another profile when activeProfile is corrupt.
 (saves / "activeProfile").write_bytes(b"broken")

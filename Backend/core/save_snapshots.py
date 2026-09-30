@@ -77,6 +77,26 @@ def _validate_name_details(value):
     return details
 
 
+def _validate_localized_presentation(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or len(value) > 8:
+        raise ValueError('Snapshot localizedPresentation must be a small language map.')
+    presentations = {}
+    for language, row in value.items():
+        if (
+            not isinstance(language, str)
+            or re.fullmatch(r'[A-Za-z0-9-]{1,16}', language) is None
+            or not isinstance(row, dict)
+        ):
+            raise ValueError('Snapshot localizedPresentation entry is invalid.')
+        presentations[language] = {
+            'name': _validate_display_name(row.get('name')),
+            'details': _validate_name_details(row.get('details', [])),
+        }
+    return presentations
+
+
 def _local_timestamp():
     return datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
@@ -232,18 +252,22 @@ class SaveSnapshotStore:
 
         for attempt in range(attempts):
             current = self._normalize_sources(resolver())
-            described_name, described_details = (None, [])
+            described_name, described_details, described_localized = (None, [], {})
             if describe is not None:
                 if not callable(describe):
                     raise ValueError('Snapshot describe callback must be callable.')
                 description = describe(tuple(current), created_at)
-                if not isinstance(description, (tuple, list)) or len(description) != 2:
-                    raise ValueError('Snapshot describe callback must return (name, details).')
-                described_name, described_details = description
+                if not isinstance(description, (tuple, list)) or len(description) not in (2, 3):
+                    raise ValueError('Snapshot describe callback must return (name, details[, localizedPresentation]).')
+                described_name, described_details = description[:2]
+                if len(description) == 3:
+                    described_localized = description[2]
             name = explicit_name
             if name is None:
                 name = _validate_display_name(described_name) if described_name is not None else created_at.replace('T', ' ').replace(':', '-')
             details = explicit_details if explicit_details is not None else _validate_name_details(described_details)
+            localized_presentation = _validate_localized_presentation(described_localized)
+            automatic_name = explicit_name is None and bool(localized_presentation)
             stage = Path(tempfile.mkdtemp(prefix='.snapshot-', dir=str(self.snapshots)))
             try:
                 manifest_files = []
@@ -283,6 +307,8 @@ class SaveSnapshotStore:
                     'createdAt': created_at,
                     'displayName': name,
                     'nameDetails': details,
+                    'automaticName': automatic_name,
+                    'localizedPresentation': localized_presentation,
                     'hot': hot,
                     'files': manifest_files,
                 }
@@ -326,6 +352,14 @@ class SaveSnapshotStore:
             raise SaveSnapshotError('Snapshot createdAt is invalid.')
         _validate_display_name(manifest.get('displayName'))
         manifest['nameDetails'] = _validate_name_details(manifest.get('nameDetails', []))
+        manifest['localizedPresentation'] = _validate_localized_presentation(
+            manifest.get('localizedPresentation', {})
+        )
+        manifest['automaticName'] = manifest.get('automaticName', False)
+        if type(manifest['automaticName']) is not bool:
+            raise SaveSnapshotError('Snapshot automaticName flag is invalid.')
+        if manifest['automaticName'] and not manifest['localizedPresentation']:
+            raise SaveSnapshotError('Snapshot automatic name has no localized presentation.')
         if type(manifest.get('hot')) is not bool:
             raise SaveSnapshotError('Snapshot hot flag is invalid.')
         files = manifest.get('files')
@@ -386,6 +420,8 @@ class SaveSnapshotStore:
         created_at = ''
         file_count = 0
         name_details = []
+        localized_presentation = {}
+        automatic_name = False
         hot = False
 
         if isinstance(manifest, dict):
@@ -409,6 +445,10 @@ class SaveSnapshotStore:
 
             if valid:
                 name_details = _validate_name_details(manifest.get('nameDetails', []))
+                localized_presentation = _validate_localized_presentation(
+                    manifest.get('localizedPresentation', {})
+                )
+                automatic_name = manifest.get('automaticName', False) is True
 
         return {
             'id': root.name,
@@ -416,6 +456,8 @@ class SaveSnapshotStore:
             'createdAt': created_at,
             'fileCount': file_count,
             'nameDetails': name_details,
+            'automaticName': automatic_name,
+            'localizedPresentation': localized_presentation,
             'hot': hot,
             'path': str(root.resolve()),
             'valid': valid,
@@ -449,6 +491,7 @@ class SaveSnapshotStore:
         root = verified['root']
         manifest = dict(verified['manifest'])
         manifest['displayName'] = name
+        manifest['automaticName'] = False
         fd, temp_name = tempfile.mkstemp(prefix='.manifest-', suffix='.json', dir=str(root))
         try:
             with os.fdopen(fd, 'w', encoding='utf-8', newline='') as handle:

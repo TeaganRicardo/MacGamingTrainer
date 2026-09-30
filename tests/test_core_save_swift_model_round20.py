@@ -53,6 +53,14 @@ assert "Hades" not in combined
 assert "Timer.scheduledTimer" not in combined
 assert "SaveBackup" not in combined
 assert 'nameDetails' in types_text
+assert 'let automaticName: Bool' in types_text
+assert 'let localizedPresentation: [String: TrainerSaveSnapshotPresentation]' in types_text
+assert 'self.automaticName = row["automaticName"] as? Bool ?? false' in types_text
+assert 'row["localizedPresentation"] as? [String: Any] ?? [:]' in types_text
+assert 'func displayName(for languageCode: String)' in types_text
+assert 'func displayDetails(for languageCode: String)' in types_text
+assert 'guard automaticName' in types_text
+assert 'TrainerPresentationLanguage' not in types_text
 assert 'hot' in types_text
 assert 'valid' in types_text
 assert 'let indeterminate: Bool' in types_text

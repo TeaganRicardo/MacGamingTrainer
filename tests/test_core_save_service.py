@@ -347,7 +347,14 @@ class Provider:
         self.describe_calls += 1
         assert '+' not in created_at and not created_at.endswith('Z')
         assert any(row.relative_path == 'Profile1.sav' for row in files)
-        return {'defaultName': 'Run 42 · Crossroads', 'nameDetails': ['Run 42', 'Crossroads']}
+        return {
+            'defaultName': 'Run 42 · Crossroads',
+            'nameDetails': ['Run 42', 'Crossroads'],
+            'localizedPresentation': {
+                'zh-CN': {'name': '第42夜 · 三岔路口', 'details': ['第42夜', '三岔路口']},
+                'en': {'name': 'Night 42 · Crossroads', 'details': ['Night 42', 'Crossroads']},
+            },
+        }
 provider = Provider()
 provider_spec = SaveManagementSpec(
     roots=(SaveRootSpec('main', str(saves), ('*.sav',)),),
@@ -360,11 +367,24 @@ provider_service = CoreSaveService('provider', provider_spec, data, is_running, 
 provider_target = provider_service.backup()
 assert provider_target['name'] == 'Run 42 · Crossroads'
 assert provider_target['nameDetails'] == ['Run 42', 'Crossroads']
+assert provider_target['automaticName'] is True
+assert provider_target['localizedPresentation']['en']['name'] == 'Night 42 · Crossroads'
+assert provider_target['localizedPresentation']['zh-CN']['details'] == ['第42夜', '三岔路口']
 assert provider.describe_calls == 1
 explicit_provider_target = provider_service.backup(display_name='My manual name')
 assert explicit_provider_target['name'] == 'My manual name'
 assert explicit_provider_target['nameDetails'] == ['Run 42', 'Crossroads']
+assert explicit_provider_target['automaticName'] is False
+assert explicit_provider_target['localizedPresentation']['en']['details'] == ['Night 42', 'Crossroads']
 assert provider.describe_calls == 2
+
+# A user rename turns only the name into durable literal data. Generated
+# details may still resolve per language, but the automatic name can no longer
+# replace what the user authored.
+renamed_provider_target = provider_service.rename(provider_target['id'], 'Keep This Literal')
+assert renamed_provider_target['name'] == 'Keep This Literal'
+assert renamed_provider_target['automaticName'] is False
+assert renamed_provider_target['localizedPresentation']['en']['name'] == 'Night 42 · Crossroads'
 (saves / 'Profile1.sav').write_bytes(b'provider-current')
 provider.busy = True
 running = True

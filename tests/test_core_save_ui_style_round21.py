@@ -13,7 +13,7 @@ assert 'TrainerSection(title: localization.localized("host.save.history")' in sa
 
 # Snapshot name is the visual primary text; timestamp/details remain muted
 # secondary information.
-assert "Text(snapshot.name)" in save_view
+assert "Text(displayName(for: snapshot))" in save_view
 assert ".font(.headline.weight(.semibold))" in save_view
 assert 'TrainerPillBadge(text: localization.localized("host.save.hotBackup")' in save_view
 assert ".font(.caption)" in save_view

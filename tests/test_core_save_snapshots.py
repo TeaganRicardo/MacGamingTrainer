@@ -66,6 +66,8 @@ assert created['name'] == 'Before boss'
 assert created['fileCount'] == 2
 assert created['hot'] is False
 assert created['nameDetails'] == ['Run 12', 'Crossroads']
+assert created['automaticName'] is False
+assert created['localizedPresentation'] == {}
 snapshot = Path(created['path'])
 assert snapshot.parent.resolve() == (base / 'data' / 'example' / 'saves' / 'snapshots').resolve()
 assert (snapshot / 'files/main/Profile1.sav').read_bytes() == b'profile-one'
@@ -78,6 +80,8 @@ assert manifest['snapshotId'] == created['id']
 assert manifest['gameId'] == 'example'
 assert manifest['displayName'] == 'Before boss'
 assert manifest['nameDetails'] == ['Run 12', 'Crossroads']
+assert manifest['automaticName'] is False
+assert manifest['localizedPresentation'] == {}
 assert '+' not in manifest['createdAt'] and not manifest['createdAt'].endswith('Z')
 assert manifest['hot'] is False
 assert [(item['rootId'], item['relativePath'], item['size']) for item in manifest['files']] == [
@@ -93,6 +97,22 @@ assert verified['root'] == snapshot
 renamed = store.rename_snapshot(created['id'], 'After rename')
 assert renamed['name'] == 'After rename'
 assert store.list_snapshots()[0]['name'] == 'After rename'
+
+# Optional localization metadata does not create a schema fork. A snapshot from
+# the pre-localization schema remains readable and its stored literal name is
+# authoritative because no automatic-name marker exists.
+legacy_manifest_path = snapshot / 'manifest.json'
+legacy_manifest = json.loads(legacy_manifest_path.read_text(encoding='utf-8'))
+legacy_manifest.pop('automaticName', None)
+legacy_manifest.pop('localizedPresentation', None)
+legacy_manifest_path.write_text(json.dumps(legacy_manifest), encoding='utf-8')
+legacy = store.load_verified_snapshot(created['id'])
+assert legacy['manifest']['automaticName'] is False
+assert legacy['manifest']['localizedPresentation'] == {}
+legacy_row = store.list_snapshots()[0]
+assert legacy_row['name'] == 'After rename'
+assert legacy_row['automaticName'] is False
+assert legacy_row['localizedPresentation'] == {}
 try:
     store.rename_snapshot(created['id'], '../bad')
 except (ValueError, SaveSnapshotError):

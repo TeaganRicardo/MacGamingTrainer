@@ -65,21 +65,24 @@ class CoreSaveService:
 
     def _snapshot_naming(self, files, created_at):
         if self.provider is None:
-            return None, []
+            return None, [], {}
         describe = getattr(self.provider, 'describe_snapshot', None)
         if describe is None:
-            return None, []
+            return None, [], {}
         if not callable(describe):
             raise RuntimeError('Save Provider describe_snapshot must be callable.')
         value = describe(tuple(files), created_at)
         if value is None:
-            return None, []
+            return None, [], {}
         if not isinstance(value, dict):
             raise RuntimeError('Save Provider describe_snapshot must return an object.')
         default_name = value.get('defaultName')
         if default_name is not None and not isinstance(default_name, str):
             raise RuntimeError('Save Provider defaultName must be a string or null.')
-        return default_name, value.get('nameDetails', [])
+        localized = value.get('localizedPresentation', {})
+        if not isinstance(localized, dict):
+            raise RuntimeError('Save Provider localizedPresentation must be an object.')
+        return default_name, value.get('nameDetails', []), localized
 
     def _running(self):
         return bool(self.target_running_probe())
