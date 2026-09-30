@@ -1153,9 +1153,9 @@ if __MacGamingTrainerV1 == nil then
       M.session, M.run, M.hero = SessionState, CurrentRun, hero
       M.featureErrors = {}
     end
-    local godFlagActive = M.invincibilityHero == hero and type(hero) == "table"
+    local invincibilityFlagActive = M.invincibilityHero == hero and type(hero) == "table"
       and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
-    if M.invincibility and (not owns("Damage") or not godFlagActive) then releaseInvincibility() end
+    if M.invincibility and (not owns("Damage") or not invincibilityFlagActive) then releaseInvincibility() end
     if M.infiniteHealth and (not owns("Damage") or not owns("SacrificeHealth")) then releaseHealth() end
     if M.infiniteMana and not owns("ManaDelta") then releaseMana() end
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
