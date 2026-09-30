@@ -175,10 +175,6 @@
       "arguments": [],
       "key": "hades2.error.traitRemovalNeedsRun"
     },
-    "command 无效。": {
-      "arguments": [],
-      "key": "hades2.error.invalidCommandValue"
-    },
     "desired-state schemaVersion 无效。": {
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
@@ -198,10 +194,6 @@
         "8"
       ],
       "key": "hades2.error.preferenceNewerFormat"
-    },
-    "params 必须是对象。": {
-      "arguments": [],
-      "key": "hades2.error.invalidParamsObject"
     },
     "probeRuntime 必须为布尔值。": {
       "arguments": [],
@@ -271,10 +263,6 @@
     "参数类型不支持。": {
       "arguments": [],
       "key": "hades2.error.invalidParamsObject"
-    },
-    "同一请求 ID 的内容发生变化。": {
-      "arguments": [],
-      "key": "hades2.error.duplicateConflict"
     },
     "后台暂停标志尚未恢复，请保持连接重试断开。": {
       "arguments": [],
@@ -1087,14 +1075,6 @@
     "请断开连接并退出游戏后操作。": {
       "arguments": [],
       "key": "hades2.error.disconnectBeforePrepare"
-    },
-    "请求 ID 无效。": {
-      "arguments": [],
-      "key": "hades2.error.invalidRequestId"
-    },
-    "请求包含不可序列化的 JSON 值。": {
-      "arguments": [],
-      "key": "hades2.error.unserializableRequest"
     },
     "请选择掉落物或祝福。": {
       "arguments": [],

@@ -70,20 +70,23 @@ assert len(adapter.calls) == 1
 assert router.handle({'id':'a','command':'poke','params':{'x':2}})['error']['code'] == 'duplicate_conflict'
 logging.disable(logging.CRITICAL)
 try:
-    assert router.handle({'id':'b','command':'fail','params':{}})['error']['code'] == 'invalid_request'
+    failed = router.handle({'id':'b','command':'fail','params':{}})
+    assert failed['error']['code'] == 'invalid_request'
+    assert failed['error']['presentation'] == 'host.backend.error.invalidRequest'
+    assert failed['error']['diagnostic'] == 'bad fake request'
     scalar = router.handle({'id':'c','command':'scalar','params':{}})
     assert scalar['error']['code'] == 'operation_failed'
-    assert scalar['error']['presentation'] == '操作失败，请查看日志。'
+    assert scalar['error']['presentation'] == 'host.backend.error.operationFailed'
     assert 'JSON object' in scalar['error']['diagnostic']
     for request_id, command in (('d','nan'),('e','bytes')):
         unsafe = router.handle({'id':request_id,'command':command,'params':{}})
         assert unsafe['ok'] is False and unsafe['error']['code'] == 'operation_failed'
-        assert unsafe['error']['presentation'] == '操作失败，请查看日志。'
+        assert unsafe['error']['presentation'] == 'host.backend.error.operationFailed'
         assert 'non-JSON-safe' in unsafe['error']['diagnostic']
         json.dumps(unsafe, ensure_ascii=False, allow_nan=False)
     bad_state = router.handle({'id':'f','command':'bad-state','params':{}})
     assert bad_state['ok'] is False and 'state' not in bad_state
-    assert bad_state['error']['presentation'] == '操作失败，请查看日志。'
+    assert bad_state['error']['presentation'] == 'host.backend.error.operationFailed'
     assert bad_state['error']['diagnostic'] == 'bad state'
     json.dumps(bad_state, ensure_ascii=False, allow_nan=False)
 finally:
@@ -95,6 +98,8 @@ try:
 finally:
     logging.disable(logging.NOTSET)
 assert fallback['ok'] is False and fallback['error']['code'] == 'protocol_error'
+assert fallback['error']['presentation'] == 'host.backend.error.protocolError'
+assert fallback['error']['diagnostic'] == 'backend reply could not be serialized as strict JSON'
 router.close(); assert adapter.closed
 
 # GameSpec stays distribution/layout agnostic until a game opts into a bundle.

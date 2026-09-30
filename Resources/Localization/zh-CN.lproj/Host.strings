@@ -31,6 +31,7 @@
 "host.backend.error.sendFailed" = "发送失败；为避免未知执行结果，已停止后端。";
 "host.backend.error.protocolMismatch" = "Backend 协议不兼容，请使用同一发布包重新构建 App。";
 "host.backend.error.operationFailed" = "操作失败，请查看日志。";
+"host.backend.error.invalidRequest" = "请求无效；请重试或查看日志。";
 "host.backend.error.timeout" = "后端请求超时；为避免未知执行结果，已停止后端。";
 "host.backend.error.protocolError" = "后端通信协议错误，已停止后端。";
 "host.backend.notice.recovering" = "后端通信异常，正在自动恢复";
