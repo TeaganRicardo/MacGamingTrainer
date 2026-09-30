@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 53 then
+if previousModule and previousModule.revision ~= 54 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,8 +15,8 @@ if previousModule and previousModule.revision ~= 53 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 53, damageMultiplier = 2, damageEnabled = false,
-    godMode = false, godModeHitHero = nil, godModeHitBaseline = nil, godModeHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
+    version = 1, revision = 54, damageMultiplier = 2, damageEnabled = false,
+    invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
     resourceMultiplier = 2, resourceMultiplierEnabled = false,
@@ -25,7 +25,7 @@ if __MacGamingTrainerV1 == nil then
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
     nextRoomRewardOriginRoom = nil, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     desiredFeatures = {
-      godMode = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
+      invincibility = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
       instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
       moneyMultiplierEnabled = false, resourceMultiplierEnabled = false,
     },
@@ -343,8 +343,8 @@ if __MacGamingTrainerV1 == nil then
     specialTraitSourceOrder[source.id] = source.order
   end
   local trainerSource = "MacGamingTrainer"
-  local trainerGodFlag = "MacGamingTrainerGodMode"
-  local godModeBlockedEffects = {
+  local trainerInvincibilityFlag = "MacGamingTrainerInvincibility"
+  local invincibilityBlockedEffects = {
     "HecatePolymorphStun",
     "MiasmaSlow",
   }
@@ -486,35 +486,35 @@ if __MacGamingTrainerV1 == nil then
     if type(UpdateMoneyUI) == "function" then UpdateMoneyUI(true) end
   end
   local function releaseHeroDamageRouterIfUnused()
-    if not M.godMode and not M.infiniteHealth and M.statTargets.enemyDamage == nil then releaseHook("Damage") end
+    if not M.invincibility and not M.infiniteHealth and M.statTargets.enemyDamage == nil then releaseHook("Damage") end
   end
-  local function restoreGodModeHitCount(hero)
-    if M.godModeHitBaselineKnown and M.godModeHitHero == hero and type(hero) == "table" then
-      hero.Hits = M.godModeHitBaseline
+  local function restoreInvincibilityHitCount(hero)
+    if M.invincibilityHitBaselineKnown and M.invincibilityHitHero == hero and type(hero) == "table" then
+      hero.Hits = M.invincibilityHitBaseline
     end
   end
-  local function releaseGodMode()
-    restoreGodModeHitCount(M.godModeHitHero)
-    M.godModeHitHero = nil
-    M.godModeHitBaseline = nil
-    M.godModeHitBaselineKnown = false
-    M.godMode = false
-    local effectHero = M.godEffectBlockHero
+  local function releaseInvincibility()
+    restoreInvincibilityHitCount(M.invincibilityHitHero)
+    M.invincibilityHitHero = nil
+    M.invincibilityHitBaseline = nil
+    M.invincibilityHitBaselineKnown = false
+    M.invincibility = false
+    local effectHero = M.invincibilityEffectBlockHero
     if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
-      for _, effectName in ipairs(godModeBlockedEffects) do
+      for _, effectName in ipairs(invincibilityBlockedEffects) do
         pcall(RemoveEffectBlock, { Id = effectHero.ObjectId, Name = effectName })
       end
     end
-    M.godEffectBlockHero = nil
-    local hero = M.godHero
-    if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag] then
+    M.invincibilityEffectBlockHero = nil
+    local hero = M.invincibilityHero
+    if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag] then
       if type(SetUnitVulnerable) == "function" then
-        pcall(SetUnitVulnerable, hero, trainerGodFlag)
+        pcall(SetUnitVulnerable, hero, trainerInvincibilityFlag)
       else
-        hero.InvulnerableFlags[trainerGodFlag] = nil
+        hero.InvulnerableFlags[trainerInvincibilityFlag] = nil
       end
     end
-    M.godHero = nil
+    M.invincibilityHero = nil
     releaseHeroDamageRouterIfUnused()
   end
   local function releaseHealth()
@@ -1100,7 +1100,7 @@ if __MacGamingTrainerV1 == nil then
     M.guardWrapper, M.originalUpdateTimers = nil, nil
   end
   local function deactivateRuntime()
-    releaseGodMode()
+    releaseInvincibility()
     releaseHealth()
     releaseMana()
     releaseDamage()
@@ -1136,7 +1136,7 @@ if __MacGamingTrainerV1 == nil then
       or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil
   end
   local function anyRuntimeActive()
-    return M.godMode or M.infiniteHealth or M.infiniteMana or M.damageEnabled
+    return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
       or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
@@ -1153,9 +1153,9 @@ if __MacGamingTrainerV1 == nil then
       M.session, M.run, M.hero = SessionState, CurrentRun, hero
       M.featureErrors = {}
     end
-    local godFlagActive = M.godHero == hero and type(hero) == "table"
-      and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag]
-    if M.godMode and (not owns("Damage") or not godFlagActive) then releaseGodMode() end
+    local godFlagActive = M.invincibilityHero == hero and type(hero) == "table"
+      and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
+    if M.invincibility and (not owns("Damage") or not godFlagActive) then releaseInvincibility() end
     if M.infiniteHealth and (not owns("Damage") or not owns("SacrificeHealth")) then releaseHealth() end
     if M.infiniteMana and not owns("ManaDelta") then releaseMana() end
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
@@ -1267,7 +1267,7 @@ if __MacGamingTrainerV1 == nil then
       for id in pairs(M.resourceLocks) do enforceResource(id) end
     end
     if not ready() then return end
-    if M.godMode then restoreGodModeHitCount(CurrentRun.Hero) end
+    if M.invincibility then restoreInvincibilityHitCount(CurrentRun.Hero) end
     for vital in pairs(M.vitalLocks) do enforceVital(vital) end
     enforceElements()
     if M.instantCastCooldown then
@@ -1870,7 +1870,7 @@ if __MacGamingTrainerV1 == nil then
       },
       featureSupport = featureSupportMap,
       desiredFeatures = {
-        godMode = M.desiredFeatures.godMode, infiniteHealth = M.desiredFeatures.infiniteHealth,
+        invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
         infiniteMana = M.desiredFeatures.infiniteMana, damageEnabled = M.desiredFeatures.damageEnabled,
         instantCastCooldown = M.desiredFeatures.instantCastCooldown,
         hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
@@ -1881,7 +1881,7 @@ if __MacGamingTrainerV1 == nil then
       },
       activeFeatures = activeFeatureMap,
       dormantFeatures = dormantFeatureMap,
-      godMode = M.desiredFeatures.godMode, infiniteHealth = M.desiredFeatures.infiniteHealth,
+      invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
       infiniteMana = M.desiredFeatures.infiniteMana, damageEnabled = M.desiredFeatures.damageEnabled,
       instantCastCooldown = M.desiredFeatures.instantCastCooldown,
       hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
@@ -1932,10 +1932,10 @@ if __MacGamingTrainerV1 == nil then
     if owns("Damage") then return end
     installHook("Damage", function(original, victim, triggerArgs)
       if victim == CurrentRun.Hero then
-        if M.godMode then
+        if M.invincibility then
           -- OnHit increments Hero.Hits before it reaches Damage(). Restore the
-          -- pre-God-Mode baseline before skipping the vanilla damage pipeline.
-          restoreGodModeHitCount(victim)
+          -- pre-Invincibility baseline before skipping the vanilla damage pipeline.
+          restoreInvincibilityHitCount(victim)
           -- Stop at the outer Lua damage entry. This skips armor loss, hit-stun,
           -- knockback and normal hostile on-hit processing inside Damage().
           return nil
@@ -1968,30 +1968,30 @@ if __MacGamingTrainerV1 == nil then
       return original(victim, triggerArgs)
     end)
   end
-  local function installGodMode()
-    requireFunctions("god mode", {
+  local function installInvincibility()
+    requireFunctions("invincibility", {
       "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
       "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
     })
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
-    if M.godModeHitHero ~= hero or not M.godModeHitBaselineKnown then
-      M.godModeHitHero = hero
-      M.godModeHitBaseline = hero.Hits
-      M.godModeHitBaselineKnown = true
+    if M.invincibilityHitHero ~= hero or not M.invincibilityHitBaselineKnown then
+      M.invincibilityHitHero = hero
+      M.invincibilityHitBaseline = hero.Hits
+      M.invincibilityHitBaselineKnown = true
     end
-    if M.godEffectBlockHero ~= hero then
-      for _, effectName in ipairs(godModeBlockedEffects) do
+    if M.invincibilityEffectBlockHero ~= hero then
+      for _, effectName in ipairs(invincibilityBlockedEffects) do
         AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
         ClearEffect({ Id = hero.ObjectId, Name = effectName })
       end
-      M.godEffectBlockHero = hero
+      M.invincibilityEffectBlockHero = hero
     end
-    if M.godHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag]) then
-      SetUnitInvulnerable(hero, trainerGodFlag, { Silent = true })
-      M.godHero = hero
+    if M.invincibilityHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]) then
+      SetUnitInvulnerable(hero, trainerInvincibilityFlag, { Silent = true })
+      M.invincibilityHero = hero
     end
-    M.godMode = true
+    M.invincibility = true
   end
   local function installHealth()
     requireFunctions("infinite health", { "SacrificeHealth", "Damage" })
@@ -2580,14 +2580,14 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   featureOrder = {
-    "godMode", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
+    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
     "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
   }
   featureRegistry = {
-    godMode = {
-      install = installGodMode, release = releaseGodMode,
+    invincibility = {
+      install = installInvincibility, release = releaseInvincibility,
       support = function() return type(Damage) == "function" and type(SetUnitInvulnerable) == "function" and type(SetUnitVulnerable) == "function" end,
-      active = function(hero) return M.godMode and owns("Damage") and M.godHero == hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerGodFlag] end,
+      active = function(hero) return M.invincibility and owns("Damage") and M.invincibilityHero == hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag] end,
     },
     infiniteHealth = {
       install = installHealth, release = releaseHealth,

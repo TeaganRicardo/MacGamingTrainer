@@ -21,8 +21,8 @@ assert validate_command_params("connect", {"probeRuntime": False}) == {"probeRun
 expect_error("connect", {"probeRuntime": 1}, "probeRuntime 必须为布尔值。")
 
 assert validate_command_params(
-    "set_desired", {"feature": "godMode", "value": True}
-) == {"feature": "godMode", "value": True}
+    "set_desired", {"feature": "invincibility", "value": True}
+) == {"feature": "invincibility", "value": True}
 assert validate_command_params(
     "set_desired", {"feature": "gameSpeed", "value": 2}
 ) == {"feature": "gameSpeed", "value": 2.0}

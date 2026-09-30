@@ -12,13 +12,13 @@ harness = r'''
 import Foundation
 
 let expected = Set([
-    "godMode", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
+    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
     "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
     "moneyMultiplierEnabled", "resourceMultiplierEnabled",
 ])
 precondition(Set(Hades2FeatureKey.allCases.map(\.rawValue)) == expected)
 
-precondition(ShortcutAction.godMode.featureKey == .godMode)
+precondition(ShortcutAction.invincibility.featureKey == .invincibility)
 precondition(ShortcutAction.infiniteHealth.featureKey == .infiniteHealth)
 precondition(ShortcutAction.boonRarityEnabled.featureKey == .boonRarityEnabled)
 precondition(ShortcutAction.moneyMultiplierEnabled.featureKey == .moneyMultiplierEnabled)
@@ -29,26 +29,26 @@ precondition(ShortcutAction.disableAll.featureKey == nil)
 
 let patch = Hades2StatePatch([
     "desiredFeatures": [
-        "godMode": true,
+        "invincibility": true,
         "gardenQoL": false,
         "unknownFeature": true,
     ],
     "activeFeatures": [
-        "godMode": true,
+        "invincibility": true,
         "gameSpeed": true,
     ],
 ])
-precondition(patch.desiredFeatures?[.godMode] == true)
+precondition(patch.desiredFeatures?[.invincibility] == true)
 precondition(patch.desiredFeatures?[.gardenQoL] == false)
 precondition(patch.desiredFeatures?.count == 2)
-precondition(patch.activeFeatures?["godMode"] == true)
+precondition(patch.activeFeatures?["invincibility"] == true)
 precondition(patch.activeFeatures?["gameSpeed"] == true)
 
 let featureErrorPatch = Hades2StatePatch([
-    "featureErrors": ["godMode": "runtime failed"],
+    "featureErrors": ["invincibility": "runtime failed"],
 ])
 precondition(featureErrorPatch.featureErrors.isPresent)
-precondition(featureErrorPatch.featureErrors.value?["godMode"] == "runtime failed")
+precondition(featureErrorPatch.featureErrors.value?["invincibility"] == "runtime failed")
 
 let sparsePatch = Hades2StatePatch([:])
 precondition(!sparsePatch.featureErrors.isPresent)
