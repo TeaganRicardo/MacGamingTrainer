@@ -54,10 +54,11 @@ _PRODUCT_LABEL_EN_BY_ZH = {
 
 
 _LINKED_OFFICIAL_NAME_IDS = {
-    # These runtime reward identifiers resolve through another official
-    # presentation identity. Most have no standalone DisplayName; SpellDrop and
-    # TrialUpgrade are deliberate exceptions whose direct names identify the
-    # source character while the linked identity names the reward presentation.
+    # These runtime reward identifiers may resolve through another official
+    # presentation identity. Some direct ids duplicate the same player-facing
+    # text; SpellDrop and TrialUpgrade are deliberate collisions whose direct
+    # names identify the source character while the linked identity names the
+    # reward presentation.
     'GiftDrop': 'GiftPoints',
     'MetaCurrencyDrop': 'MetaCurrency',
     'MetaCardPointsCommonDrop': 'MetaCardPointsCommon',
