@@ -171,8 +171,8 @@ Source-text contracts remain acceptable where they enforce a structural boundary
 
 Verification depth is selected by risk and changed seam; evidence identity is always exact.
 
-1. **Task verification** proves the focused change against the minimum gates below.
-2. **Integration verification** reruns affected gates when overlapping work, a rebase, or a dependency changes inputs or semantics at the changed seam. Unrelated main movement does not automatically require the release matrix.
+1. **Task verification** proves the focused change against the minimum gates below on the actual final PR head.
+2. **Integration verification** reruns task gates after any PR-head rewrite/rebase, then adds only the gates whose inputs or semantics changed because of overlapping work or a moved dependency. Unrelated movement of the base branch while the PR head is unchanged does not automatically require the release matrix.
 3. **Convergence/release verification** deliberately recombines the full applicable Linux, macOS, module/reference, mutation, build/package and provenance evidence on one selected source SHA.
 
 | Change | Minimum automated gate | Additional requirement |
@@ -185,7 +185,7 @@ Verification depth is selected by risk and changed seam; evidence identity is al
 | `runtime/hades.lua` | Linux contracts + runtime revision gate | real Hades II acceptance; automated tests are not final verification |
 | release/manual QA artifact | all relevant CI | exact tested HEAD, prebuilt artifact and SHA256 |
 
-A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built. A rebase or later merge invalidates only the claims whose tested source or relevant inputs changed; it is not a standing requirement to rerun unrelated full-matrix evidence.
+A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built. Evidence from an old head is never re-attributed to a rewritten/rebased head: rerun the task gates on the new SHA. Unaffected full-matrix results may remain historical evidence at their original SHA and need not be recomputed unless a convergence/release task requires one combined exact-head matrix.
 
 ## 9. Terminology governance
 
