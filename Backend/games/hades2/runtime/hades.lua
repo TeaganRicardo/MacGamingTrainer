@@ -1755,6 +1755,7 @@ if __MacGamingTrainerV1 == nil then
     temporary = 239,
     directSpecial = 239,
     familiar = 240,
+    other = 221,
   }
   local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
   local directUnsafeLifecycleKeys = {
