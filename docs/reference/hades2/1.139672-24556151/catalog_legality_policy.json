@@ -1,0 +1,1356 @@
+{
+  "schemaVersion": 1,
+  "description": "Curated legality/evidence policy for the frozen Hades II catalog. Presentation names and target version/build are derived by Tools/generate_hades2_catalog_legality.py.",
+  "rows": [
+    {
+      "id": "AgilityCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "AirBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "AphroditeUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "ApolloUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "ArcanaRarityTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "AresUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "ArmorBigBoost",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "ArmorBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "ArmorBoostStore",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "ArmorPenaltyCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "AthenaProjectileBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "BankBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "BlindBoxLoot",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct",
+      "reason": "Concrete ConsumableData; direct spawning is sufficient because native use handles ReplaceWithRandomLoot/UnwrapRandomLoot."
+    },
+    {
+      "id": "BloodDrop",
+      "kind": "consumable",
+      "sources": "TraitProducedComment+PowersLogic(CreateBloodDrop)+TraitData_Ares",
+      "classification": "exclude",
+      "reason": "Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "Boon",
+      "kind": "alias",
+      "sources": "RewardStoreData",
+      "classification": "alias",
+      "reason": "Abstract reward selector represented by concrete Olympian loot entries."
+    },
+    {
+      "id": "BoostedRandomLoot",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Store wrapper that must resolve to an eligible Olympian boon and preserve the native rarity override."
+    },
+    {
+      "id": "BreakExplosiveArmorBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "BreakInvincibleArmorBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "CardUpgradePointsDrop",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "CastDamageCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "CastHazardBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "CastLobBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "ChaosWeaponUpgrade",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct",
+      "reason": "Concrete ConsumableData; direct spawning is sufficient because native use invokes ChaosHammerUpgrade."
+    },
+    {
+      "id": "CharonPointsDrop",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "CirceEnlargeTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "CirceShrinkTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "CirceSorceryDamageBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "CombatEncounterHealBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "CritBonusBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "DamageSelfDrop",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "DashOmegaBuffBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "DeathDefianceRefillBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "DeathDefianceRetaliateCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "DemeterUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "Devotion",
+      "kind": "alias",
+      "sources": "RewardStoreData",
+      "classification": "alias",
+      "reason": "Room-event selector/alias rather than a concrete standalone reward target."
+    },
+    {
+      "id": "DiminishingDodgeBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "DiminishingHealthAndManaBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "DoubleFamiliarTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "DreamPointsDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+RewardLogic(DreamRun)+DreamRunLogic",
+      "classification": "direct"
+    },
+    {
+      "id": "EarthBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "EchoDeathDefianceRefill",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "EchoDoubleLevelBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "EchoDoubleShop",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "EchoLastReward",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "EchoLastRunBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "special",
+      "reason": "AcquireFunction waits on the active boon-menu signal and opens the previous-run boon choice; keep this target on the native Echo choice flow instead of raw trait injection."
+    },
+    {
+      "id": "EchoRepeatKeepsakeBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Echo_01.Traits+PresetEventArgs.EchoBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "ElementalBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "EmptyMaxHealthDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+NPCData(Nemesis)",
+      "classification": "direct"
+    },
+    {
+      "id": "EmptyMaxHealthShopItem",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "EmptyMaxHealthSmallDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables+LootData(SubRoomRewards)+RoomDataN",
+      "classification": "direct"
+    },
+    {
+      "id": "EscalatingCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "ExPolymorphBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "ExtendedShopTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "FamiliarPointsDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+LootData(MetaRewardStandAnimationOnly)",
+      "classification": "direct",
+      "reason": "Functional FamiliarPoints pickup definition; normal MetaRewardStand grants FamiliarPoints directly and only reuses FamiliarPointsDrop as its animation. No normal pickup instantiation found."
+    },
+    {
+      "id": "FireBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "FirstHangoverBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "FirstHitHealTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "FocusAttackDamageTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "FocusCritBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "FocusLastStandBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "FocusSpecialDamageTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "FogDamageBonusBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "GemPointsBigDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "GemPointsDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+RoomLogic(UnusedWeaponBonusDropGems)",
+      "classification": "direct"
+    },
+    {
+      "id": "GiftDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "HadesCastProjectileBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesChronosDebuffBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesDashSweepBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesDeathDefianceDamageBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesInvisibilityRetaliateBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesLifestealBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesManaUrnBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HadesPreDamageBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Hades_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HealAmplifyTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "HealBigDrop",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "HealDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+NPCData(Nemesis)",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "HealDropMajor",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct"
+    },
+    {
+      "id": "HealDropMinor",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+EnemyAILogic(Artemis)+FamiliarData+HarvestData+TraitData_Icarus+TraitData_Medea+TraitData_Poseidon",
+      "classification": "direct"
+    },
+    {
+      "id": "HealDropRange",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "HealDropSuperMinor",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "exclude",
+      "reason": "Functional 1-HP healing variant; current build only references it from ConsumableData and test/debug content, with no normal gameplay instantiation found."
+    },
+    {
+      "id": "HealingOnDeathCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "HephaestusUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "HeraUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "HermesUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "HestiaUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "HiddenMaxHealthBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "HighArmorCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "HighHealthCritBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "IncomeCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "InsideCastCritBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "InvulnerabilityCastBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "InvulnerabilityDashBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "LastStandDrop",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "LastStandShopItem",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "LimitedManaRegenDrop",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "LimitedSwapTraitDrop",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "LobAmmoPack",
+      "kind": "consumable",
+      "sources": "WeaponData_Lob+WeaponLogic",
+      "classification": "exclude",
+      "reason": "Weapon-owned ammo pickup with volley/magnetism/session state; valid gameplay object but not a standalone Trainer reward target."
+    },
+    {
+      "id": "ManaCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "ManaDropMinor",
+      "kind": "consumable",
+      "sources": "TraitProducedComment",
+      "classification": "exclude",
+      "reason": "Defined base mana consumable; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target.",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "ManaDropMinorHound",
+      "kind": "consumable",
+      "sources": "TraitProducedComment+FamiliarData",
+      "classification": "exclude",
+      "reason": "Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target."
+    },
+    {
+      "id": "ManaDropMinorPoseidon",
+      "kind": "consumable",
+      "sources": "TraitProducedComment",
+      "classification": "exclude",
+      "reason": "Defined Poseidon mana variant; no normal gameplay instantiation found in the current build. Excluded as a standalone Trainer target."
+    },
+    {
+      "id": "ManaDropZeus",
+      "kind": "consumable",
+      "sources": "TraitProducedComment+PowersLogic+TraitData_Zeus",
+      "classification": "exclude",
+      "reason": "Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "ManaOverTimeCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "ManaSpearBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxHealthDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxHealthDropBig",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxHealthDropSmall",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxManaDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxManaDropBig",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MaxManaDropSmall",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MedeaMoneyTinyDrop",
+      "kind": "consumable",
+      "sources": "TraitProducedComment+TraitData_Medea",
+      "classification": "exclude",
+      "reason": "Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target."
+    },
+    {
+      "id": "MemPointsCommonBigDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+WeaponData(RewardNames)",
+      "classification": "direct",
+      "reason": "Functional +20 Psyche pickup definition; no normal pickup instantiation found. Tablet/exorcism rewards grant MemPointsCommon directly through HarvestData AddResources.",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MemPointsCommonDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MemPointsCommonRange",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "MetaCardPointsCommonBigDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MetaCardPointsCommonDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MetaCardPointsCommonRange",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "MetaCurrencyBigDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MetaCurrencyDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct",
+      "officialName": {
+        "mode": "none"
+      }
+    },
+    {
+      "id": "MetaCurrencyRange",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "MetaFabricDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus+TraitData_Arachne",
+      "classification": "direct"
+    },
+    {
+      "id": "MinorTalentDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "Mixer5CommonDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus+BountyData",
+      "classification": "direct"
+    },
+    {
+      "id": "Mixer6CommonDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+HarvestData(ConsumableName)",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerFBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerGBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerHBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerIBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerMythicDrop",
+      "kind": "consumable",
+      "sources": "RoomDataQ(CheckTyphonReward)",
+      "classification": "direct",
+      "officialName": {
+        "mode": "generated",
+        "dataset": "resources",
+        "id": "MixerMythic"
+      }
+    },
+    {
+      "id": "MixerNBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerOBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerPBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MixerQBossDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "MoneyOnDeathCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusA",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusB",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusC",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusD",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusE",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusF",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusG",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusH",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NarcissusI",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Narcissus_01.Traits+PresetEventArgs.NarcissusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "NewStatusDamage",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "OlympianSpellCountBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "OmegaCastVolleyBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "OmegaExplodeBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "OreFSilverDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct"
+    },
+    {
+      "id": "PlantFMolyDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct"
+    },
+    {
+      "id": "PlantFNightshadeDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct"
+    },
+    {
+      "id": "PlantGLotusDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct"
+    },
+    {
+      "id": "PoseidonUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    },
+    {
+      "id": "PowerDrinkBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "PowerDrinkDrop",
+      "kind": "consumable",
+      "sources": "TraitProducedComment+TraitData_Dionysus",
+      "classification": "exclude",
+      "reason": "Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target."
+    },
+    {
+      "id": "RandomArcanaTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "RandomBaseDamageBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Dionysus_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "RandomLoot",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Abstract store wrapper that must resolve to an eligible Olympian boon before spawning."
+    },
+    {
+      "id": "RandomStoreItem",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct",
+      "reason": "Concrete Well consumable; direct spawning is sufficient because native use handles AwardRandomStoreItem."
+    },
+    {
+      "id": "RemoveShrineTrait",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Circe_01.Traits+PresetEventArgs.CirceBlessingChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "RerollDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Narcissus",
+      "classification": "direct",
+      "officialName": {
+        "mode": "terminology",
+        "path": [
+          "officialTerms",
+          "reroll"
+        ]
+      }
+    },
+    {
+      "id": "RetaliateInvulnerabilityBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Athena_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomMoneyBigDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables",
+      "classification": "direct",
+      "reason": "Functional money pickup definition; no normal gameplay instantiation found in the current build."
+    },
+    {
+      "id": "RoomMoneyDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomMoneySmallDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+TraitData_Poseidon",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomMoneyTinyDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomMoneyTripleDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomRewardConsolationPrize",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+EventLogic+RewardLogic+ShrineLogic",
+      "classification": "direct"
+    },
+    {
+      "id": "RoomRewardHealDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "SeedMysteryDrop",
+      "kind": "consumable",
+      "sources": "TraitData_Narcissus",
+      "classification": "direct",
+      "officialName": {
+        "mode": "generated",
+        "dataset": "resources",
+        "id": "SeedMystery"
+      }
+    },
+    {
+      "id": "SeedMysteryRange",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "ShopHermesUpgrade",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning."
+    },
+    {
+      "id": "SlowProjectileCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "SorceryCritBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "SpawnDamageCurse",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "SpellCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "SpellDrop",
+      "kind": "loot",
+      "sources": "RewardStoreData+StoreData",
+      "classification": "special",
+      "reason": "Concrete Selene reward, but Trainer use must preserve the native SpawnRoomReward spell/hex choice flow.",
+      "officialName": {
+        "mode": "terminology",
+        "path": [
+          "nativeChoiceTitles",
+          "Selene"
+        ]
+      }
+    },
+    {
+      "id": "StackUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData+StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "StackUpgradeBig",
+      "kind": "loot",
+      "sources": "StoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "StackUpgradeTriple",
+      "kind": "loot",
+      "sources": "RewardStoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "StoreRewardRandomStack",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "SupplyDropBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "SupportingFireBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "TalentBigDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "TalentDrop",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "TemporaryBoonRarityTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryDiscountTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryDoorHealTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryEmptySlotDamageTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryForcedSecretDoorTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryHealExpirationTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryImprovedCastTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryImprovedDefenseTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryImprovedExTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryImprovedSecondaryTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TemporaryMoveSpeedTrait",
+      "kind": "trait",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero."
+    },
+    {
+      "id": "TimedCritVulnerabilityBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Artemis_Field_01.Traits",
+      "classification": "direct"
+    },
+    {
+      "id": "TrashPointsDrop",
+      "kind": "consumable",
+      "sources": "DebugSpawnConsumables+NPCData_Eris",
+      "classification": "direct"
+    },
+    {
+      "id": "TrialUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData",
+      "classification": "direct",
+      "officialName": {
+        "mode": "terminology",
+        "path": [
+          "nativeChoiceTitles",
+          "Chaos"
+        ]
+      }
+    },
+    {
+      "id": "UpgradeHammerBoon",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices",
+      "classification": "direct"
+    },
+    {
+      "id": "VitalityCostume",
+      "kind": "trait",
+      "sources": "UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices",
+      "classification": "special",
+      "reason": "Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition."
+    },
+    {
+      "id": "WaterBoost",
+      "kind": "consumable",
+      "sources": "RewardStoreData+StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "WeaponPointsRareDrop",
+      "kind": "consumable",
+      "sources": "StoreData+DebugSpawnConsumables",
+      "classification": "direct"
+    },
+    {
+      "id": "WeaponUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData",
+      "classification": "direct"
+    },
+    {
+      "id": "WeaponUpgradeDrop",
+      "kind": "consumable",
+      "sources": "StoreData",
+      "classification": "special",
+      "reason": "Store wrapper; use the native CreateWeaponLoot semantics rather than generic consumable spawning."
+    },
+    {
+      "id": "ZeusUpgrade",
+      "kind": "loot",
+      "sources": "RewardStoreData(Boon)+RewardLogic(ChooseLoot)",
+      "classification": "direct",
+      "reason": "Concrete GodLoot selected by the native Boon reward flow."
+    }
+  ]
+}
