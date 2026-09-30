@@ -87,6 +87,28 @@ def test_mutations_re_resolve_the_exact_live_selection_before_apply():
     assert "target.Rarity = params.rarity" not in LUA
 
 
+def test_owner_family_controls_default_native_paths():
+    family_block = LUA[LUA.index("local function traitFamily"):LUA.index("local function availableRarities")]
+    capability_block = LUA[LUA.index("local function operationCapabilities"):LUA.index("local currentRunTraits = function()")]
+
+    assert 'string.find(source, "NPC_", 1, true) == 1' in family_block
+    assert 'return "directSpecial"' in family_block
+    assert 'family == "olympianHermes" and nativeLevelEligible(trait)' in capability_block
+    assert 'family == "olympianHermes" and sellEligible' in capability_block
+    assert 'GetAllUpgradeableGodTraits, 1' in LUA
+
+    # Only the audited direct examples may bypass ordinary menu eligibility in
+    # this task. Other owner-specific families remain delegated to #236-#240.
+    assert 'CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" }' in LUA
+    assert 'OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" }' in LUA
+    for family, issue in (
+        ("chaos", "236"), ("hex", "237"), ("hammer", "238"),
+        ("costume", "239"), ("temporary", "239"), ("directSpecial", "239"),
+        ("familiar", "240"),
+    ):
+        assert f"{family} = {issue}" in LUA
+
+
 def test_force_removal_is_bounded_and_native_sell_scope_stays_explicit():
     assert 'CritBonusBoon' in LUA
     assert 'directSpecial' in LUA
@@ -152,6 +174,7 @@ if __name__ == "__main__":
     test_current_run_traits_reuse_official_bilingual_localization_seam()
     test_level_rarity_and_removal_are_non_idempotent_targeted_commands()
     test_mutations_re_resolve_the_exact_live_selection_before_apply()
+    test_owner_family_controls_default_native_paths()
     test_force_removal_is_bounded_and_native_sell_scope_stays_explicit()
     test_swift_contract_carries_snapshot_not_just_trait_name()
     test_live_manager_is_searchable_grouped_and_shows_real_controls()
