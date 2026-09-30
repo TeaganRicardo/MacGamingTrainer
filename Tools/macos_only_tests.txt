@@ -11,4 +11,3 @@ test_hades2_backend_state_cleanup.py
 test_build_signing_metadata_macos.py
 test_reference_fixture_session_integration.py
 test_invincibility_shortcut_migration.py
-test_hades2_live_trait_model_flow.py
