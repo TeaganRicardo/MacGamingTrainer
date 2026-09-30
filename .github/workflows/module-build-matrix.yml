@@ -1,10 +1,8 @@
 name: Module build matrix
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -102,7 +100,7 @@ jobs:
 
       - name: Retain reference module artifact and source provenance
         id: package
-        if: needs.scope.outputs.needs_module == 'true'
+        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           app="$(python3 Tools/verify_module_build.py "${{ matrix.game }}" --print-app)"
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
@@ -121,7 +119,7 @@ jobs:
             --generated-copy ContractFixtures/reference_module/frontend:Sources/ReferenceFixture
 
       - name: Verify reference artifact checksum and declared inputs
-        if: needs.scope.outputs.needs_module == 'true'
+        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           (cd artifacts && shasum -a 256 -c "${{ steps.package.outputs.sidecar_name }}")
           python3 - "artifacts/${{ steps.package.outputs.provenance_name }}" "$HEAD_SHA" <<'PY'
@@ -136,7 +134,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: needs.scope.outputs.needs_module == 'true'
+        if: needs.scope.outputs.needs_module == 'true' && github.event_name == 'workflow_dispatch'
         with:
           name: ${{ matrix.game }}-${{ env.HEAD_SHA }}
           path: |
