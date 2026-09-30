@@ -1834,6 +1834,18 @@ if __MacGamingTrainerV1 == nil then
         if parent == "CostumeTrait" then return "costume" end
       end
     end
+
+    -- TreatAsGodLootByShops makes several field/special NPC rewards sellable,
+    -- but that does not make their lifecycle an ordinary Olympian/Hermes one.
+    -- Ownership wins over menu eligibility; #239 handles those families unless
+    -- an explicit direct strategy above opts in one audited operation.
+    local source = traitSourceId(trait)
+    if type(source) == "string" and source ~= "" then
+      if string.find(source, "NPC_", 1, true) == 1
+          or nativeSpecialChoiceDefinitions[source] ~= nil then
+        return "directSpecial"
+      end
+    end
     if sellEligible then return "olympianHermes" end
     return "other"
   end
@@ -1851,9 +1863,9 @@ if __MacGamingTrainerV1 == nil then
   end
 
   local function nativeLevelEligible(trait)
-    if type(trait) ~= "table" or type(IsGodTrait) ~= "function" then return false end
-    local ok, value = pcall(IsGodTrait, trait.Name)
-    return ok and value and trait.RemainingUses == nil and not trait.BlockStacking
+    if type(trait) ~= "table" or type(GetAllUpgradeableGodTraits) ~= "function" then return false end
+    local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
+    return ok and type(eligible) == "table" and eligible[trait.Name] == true
   end
 
   local function operationCapabilities(trait, family, sellEligible, sameCount)
@@ -1873,7 +1885,7 @@ if __MacGamingTrainerV1 == nil then
         levelReason = "nativePathUnavailable"
       elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
         levelCapability, levelReason = "increaseOne", ""
-      elseif nativeLevelEligible(trait) then
+      elseif family == "olympianHermes" and nativeLevelEligible(trait) then
         levelCapability, levelReason = "increaseOne", ""
       else
         levelReason = family == "olympianHermes" and "notMeaningful" or "ownerSpecificLifecycle"
@@ -1888,17 +1900,17 @@ if __MacGamingTrainerV1 == nil then
         rarityReason = "nativePathUnavailable"
       elseif strategy and strategy.rarity == "setExact" and directSafe then
         rarityCapability, rarityReason = "setExact", ""
-      elseif sellEligible then
+      elseif family == "olympianHermes" and sellEligible then
         rarityCapability, rarityReason = "setExact", ""
       else
         rarityReason = "ownerSpecificLifecycle"
       end
 
-      if sellEligible then
-        removalCapability, removalReason = "nameLevelAllMatching", ""
-      elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
+      if strategy and strategy.removal == "singleInstanceForce" and directSafe
           and type(RemoveTraitData) == "function" then
         removalCapability, removalReason = "singleInstanceForce", ""
+      elseif family == "olympianHermes" and sellEligible then
+        removalCapability, removalReason = "nameLevelAllMatching", ""
       elseif strategy and not directSafe then
         removalReason = "directSafetyFailed"
       end
