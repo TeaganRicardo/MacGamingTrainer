@@ -198,6 +198,7 @@ The verification system must stay shallower than the product system it protects.
 - Do not build a test-to-source routing database for ordinary Linux tests; broad portable execution is simpler and cheap enough.
 - Release packaging/provenance and mutation sensitivity are convergence concerns unless a task directly changes those mechanisms.
 - When a new mechanism subsumes an older one, remove the older mechanism rather than preserving both “for safety.”
+- Status documentation is operational state, not a merge ledger. Ordinary feature merges do not require a dedicated reconciliation PR unless they materially change the operational gate/version/acceptance baseline.
 
 ## 9. Terminology governance
 
