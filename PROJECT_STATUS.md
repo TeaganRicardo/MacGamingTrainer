@@ -9,10 +9,10 @@ Start every development thread at `AGENTS.md`.
 ## Current state
 
 - Default branch: `main`.
-- Implementation baseline used for this handoff: `4aaacc7bf21fe218357174d5878c169a58dbe535` (PR #265 / #260 merged). Resolve current remote `main` before starting work; later documentation commits may advance HEAD.
-- Hades II resident runtime revision: 53. Revision 52 from #251 / PR #255 and revision 53 from #253 / PR #263 are merged automated implementation state; real-game acceptance for both later resident semantic changes remains pending in the consolidated final user run.
-- Hades II desired-state schema: 4.
-- Host protocol: 6. Hades II module protocol: 5.
+- Implementation baseline used for this handoff: `dc48923acc9bb5c44a4df6c7cead98b03701a1a1` (PR #271 / #262 merged on top of PR #270). Resolve current remote `main` before starting work; later documentation commits may advance HEAD.
+- Hades II resident runtime revision: 54. Revisions 52 (#251 / PR #255), 53 (#253 / PR #263), and 54 (#262 / PR #271) are merged automated implementation state; real-game acceptance for revisions 52–54 remains pending in the consolidated final user run.
+- Hades II desired-state schema: 5.
+- Host protocol: 6. Hades II module protocol: 6.
 - Verified Hades II compatibility target: 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - The retained `docs/reference/hades2/1.139672-24556151/` tree is a **frozen census/research snapshot**, not live planning authority; historical P-identifiers inside it are traceability only. Static compatibility work for 1.143476 confirmed that the currently consumed native terminology identities/values and curated reward/runtime dependencies remain valid. The packaged `ui_terminology.json` remains an explicit executable-governance exception; do not treat the snapshot directory name as the current executable identity.
 - The Hades terminology registry is the executable governance source for stable term identity, ownership, bilingual presentation, lifecycle, alias targets, provenance, and allowed/forbidden surfaces.
@@ -44,7 +44,9 @@ The current hardening baseline also includes:
 - #253 / PR #263 makes resident replacement fail closed when prior cleanup fails, preserves the old ownership reference, surfaces a stable restart-required path, and bumps the resident runtime to revision 53.
 - #258 / PR #264 routes Core-owned protocol/server failures through Host-owned presentation identities while preserving stable codes, diagnostics, Core Save mapping, and module-owned presentation.
 - #260 / PR #265 makes automatic Hades Save snapshot naming bilingual through generic localized snapshot presentation while preserving literal user renames and legacy manifest readability.
-- #214 exact-head convergence verified current implementation commit `e560554917af8b03f161dfe166fbba62becd97e6` / tree `63e8a2c498b346ffbac02b749a20ce829c3f5026` across full portable contracts, macOS contracts, 33 declared mutations, Hades build/package/provenance, and the reference-fixture module build. Revision 51 remains the latest real-game accepted resident baseline; revision 52/53 gameplay acceptance remains deferred.
+- PR #270 corrects catalog official-name resolution, including linked source-named rewards, without changing catalog identity or runtime semantics.
+- #262 / PR #271 migrates the Trainer-owned invulnerability feature from live identity `godMode` to `invincibility` / 无敌模式 / Invincibility across desired state, Profiles, shortcuts, Swift/backend routing and resident state; legacy `godMode` remains only at versioned migration boundaries. Hades module protocol is 6, desired-state schema is 5, Profile schema is 6, and resident revision is 54.
+- #214 exact-head convergence verified implementation commit `e560554917af8b03f161dfe166fbba62becd97e6` / tree `63e8a2c498b346ffbac02b749a20ce829c3f5026` across full portable contracts, macOS contracts, 33 declared mutations, Hades build/package/provenance, and the reference-fixture module build. Revision 51 remains the latest real-game accepted resident baseline; revision 52–54 gameplay acceptance remains deferred.
 
 ## Verification baseline
 
@@ -56,7 +58,7 @@ Its accepted resident source is `Backend/games/hades2/runtime/hades.lua` at `sha
 
 Revision 51 is revision 50 plus one deletion — the no-op loop in `traitOwner` that computed nothing and was never read — so no observable behaviour changed between the two. Any prebuilt artifact whose resident digest is `sha256:63c1436b…` is revision 50 and predates that cleanup; it is not evidence for revision 51.
 
-The latest real-game accepted resident source remains revision 51 at `a6cf37b41639229bd64938d9587a9735fb16dd91`. Current main contains revision 53: revision 52 from #251 / PR #255 changed Echo transaction cleanup semantics, and revision 53 from #253 / PR #263 changed resident-replacement cleanup failure semantics. Both later semantic changes remain explicitly pending consolidated real-game acceptance. Automated evidence for revisions 52–53 does not replace that user-run acceptance baseline.
+The latest real-game accepted resident source remains revision 51 at `a6cf37b41639229bd64938d9587a9735fb16dd91`. Current main contains revision 54: revision 52 from #251 / PR #255 changed Echo transaction cleanup semantics, revision 53 from #253 / PR #263 changed resident-replacement cleanup failure semantics, and revision 54 from #262 / PR #271 migrated the Trainer-owned invulnerability runtime identity to `invincibility`. Revisions 52–54 remain explicitly pending consolidated real-game acceptance. Automated evidence for revisions 52–54 does not replace that user-run acceptance baseline.
 
 Hades II 1.143476 / Steam 25481925 compatibility was previously accepted on PR #172 head `03e31b6963f888becc4e8027019a94fc48647645` with exact-head Linux contracts, module build matrix, Build 2 macOS, target-machine static compatibility checks, and user-run attach/status plus representative feature smoke checks.
 
@@ -94,7 +96,7 @@ PR #184 established the change-scope routing baseline. Pull-request change scope
 
 Completed foundations include A01 terminology governance, A02 authoritative terminology registry (#168), A03 runtime/protocol boundary, A04 runtime observation/synchronization semantics (#181), B01 Host bilingual localization foundation (#131 / PR #183), B02 shared Host/Core presentation migration (PR #189), B03 Hades presentation migration (#177), C01 durable feature-identity parity (#132 / PR #159), C02 user-presentation/stable-error/diagnostic separation (#182), planning-authority reference cleanup (#133), and Profile versioning/migration compatibility (#108 / PR #109).
 
-Post-B03 hardening now merged on the current baseline includes #196 (Core Time Warp presentation ownership), #197 (registry-derived Host forbidden-term governance), #198 (schema/protocol mirror cleanup), #200 (test naming governance), #201 (frozen-reference authority), #204 (single-source Hades error registry), #205 (module-driven shared CI discovery), #210 (reference-fixture handshake closeout), #213 (normal resident-runtime declaration validation), #220 (non-empty localized Spawn actions), #179 (package/resource/artifact closeout), #203 (final mutation protection), #180 (terminology/presentation drift enforcement), #251 (Echo LastReward rollback), #252 (Core unavailable-send recovery latch), #254 (mutation-gate git inspection fail-closed), #253 (resident cleanup fail-closed transition), #258 (Core protocol presentation ownership), and #260 (bilingual automatic Hades Save naming).
+Post-B03 hardening now merged on the current baseline includes #196 (Core Time Warp presentation ownership), #197 (registry-derived Host forbidden-term governance), #198 (schema/protocol mirror cleanup), #200 (test naming governance), #201 (frozen-reference authority), #204 (single-source Hades error registry), #205 (module-driven shared CI discovery), #210 (reference-fixture handshake closeout), #213 (normal resident-runtime declaration validation), #220 (non-empty localized Spawn actions), #179 (package/resource/artifact closeout), #203 (final mutation protection), #180 (terminology/presentation drift enforcement), #251 (Echo LastReward rollback), #252 (Core unavailable-send recovery latch), #254 (mutation-gate git inspection fail-closed), #253 (resident cleanup fail-closed transition), #258 (Core protocol presentation ownership), #260 (bilingual automatic Hades Save naming), the catalog-name correction merged through PR #270, and #262 (Trainer invulnerability identity migration).
 
 Planning issue #124 remains the sequencing authority. This status file records only the current operational gate and does not mirror the roadmap.
 
@@ -115,11 +117,11 @@ Do not stack new implementation on unmerged overlapping PR heads.
 
 The shared-presentation migration remains complete: B01 / #131 / PR #183, B02 / PR #189, and B03 / #177 all merged, with B02 and B03 accepted in the real game at `a6cf37b`; subsequent presentation hardening did not change resident Lua semantics.
 
-#214 exact-head convergence is complete on tested source `e560554917af8b03f161dfe166fbba62becd97e6`. The revision-51 real-game acceptance baseline is retained and revision-52/53 gameplay checks remain pending for the consolidated final user run. The next selected implementation task is #262, the full Trainer-owned `godMode` → `invincibility` / 无敌模式 / Invincibility identity migration. Planning detail and later feature ordering remain authoritative in #124 rather than being duplicated here.
+#214 exact-head convergence is complete on tested source `e560554917af8b03f161dfe166fbba62becd97e6`. #262 / PR #271 is also merged on current main. The revision-51 real-game acceptance baseline is retained and revision-52–54 gameplay checks remain pending for the consolidated final user run. The next selected feature implementation task is #227, the first bounded slice of complete current-run mounted boon management. Planning detail and later feature ordering remain authoritative in #124 rather than being duplicated here.
 
 The user explicitly authorized independently reviewed, automated-green merges before ONE consolidated final manual acceptance after the selected index work is implemented. Missing gameplay/visual verification alone must not block unrelated eligible development, but all unexecuted checks remain pending and no merge is described as manual acceptance. No game launch or visual confirmation through RDC.
 
-With convergence complete, #262 is now the selected next task: migrate the Trainer-owned legacy `godMode` identity to `invincibility` / 无敌模式 / Invincibility before the restored feature queue. Preserve unrelated local uncommitted changes; do not use this migration to implement Hades II's distinct native 神力模式 / God Mode.
+With convergence and the #262 identity migration complete, #227 is now the selected next feature task. Preserve unrelated local uncommitted changes and keep later family coverage linked to #221/#228/#236–#240 rather than collapsing it into a raw-trait bucket.
 
 Hades II Save Editor is not implicitly authorized by the current governance sequence. If selected later, its binary mutation design still requires separate explicit design/safety approval.
 
