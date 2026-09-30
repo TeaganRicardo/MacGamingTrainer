@@ -57,6 +57,7 @@ The three standing workflow names are stable required checks. They run on `pull_
 Routing by changed seam:
 
 - Linux-portable backend/contract work: `bash Tools/run_linux_checks.sh`. This remains the broad portable behavior suite; do not create a per-file test routing database.
+- The resident-runtime revision gate is diff-based and therefore PR-only. Explicit convergence dispatch has no semantic base ref; it reruns behavior/build evidence rather than inventing a revision comparison.
 - Swift/AppKit/build/package changes: also require `Build 2 macOS`, which runs macOS contracts plus an actual Hades build/package/signing verification in PR task mode.
 - Module/Core boundary changes: require the module build matrix/reference fixture.
 - Mutation testing is a convergence/release audit of test sensitivity, not an always-on correctness gate for ordinary PRs.
