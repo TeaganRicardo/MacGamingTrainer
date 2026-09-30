@@ -12,6 +12,7 @@ features = (CORE_UI / 'Components/TrainerFeatureControls.swift').read_text()
 stats = (CORE_UI / 'Components/TrainerStatControls.swift').read_text()
 resource = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
 row = (CORE_UI / 'Primitives/TrainerRow.swift').read_text()
+card = (CORE_UI / 'Primitives/TrainerCard.swift').read_text()
 
 # v0.17.5 keeps v0.11 visuals but the implementation now lives in Core.
 assert not (HADES / 'Views/Controls').exists()
@@ -51,6 +52,19 @@ assert '.background(theme.panel)' in row
 assert features.count('TrainerShortcutBadgeSlot(text: shortcutText)') >= 3
 assert features.count('TrainerToggleControl(') >= 3
 assert 'Text(shortcutText)' not in features
+
+# Compact metric-card and stat geometry stays on the old baseline.
+metric_block = card[card.index('struct TrainerMetricCard'):]
+assert '.padding(.top, 6)' in metric_block
+assert '.padding(.bottom, 8)' in metric_block
+assert 'minHeight: 82' not in metric_block
+assert '.frame(maxWidth: .infinity, alignment: .leading)' in metric_block
+assert 'HStack(spacing: 2)' in stats
+assert stats.count('.frame(width: 54)') >= 2
+assert 'HStack(spacing: 3)' in stats
+assert '.frame(width: 58)' in stats
+assert 'HStack(spacing: 5)' in view
+assert '.contentShape(Rectangle())' in view
 
 # Stat/resource geometry stays on the old baseline.
 assert '.frame(width: 58)' in stats
