@@ -33,12 +33,10 @@ assert (
     == consumables["ShopHermesUpgrade"]["display_name_zh_cn"]
 )
 
-# Selene and Chaos LootData names identify their source character. The curated
-# reward labels deliberately follow the registered native choice titles instead.
-assert (
-    ledger["SpellDrop"]["official_name_zh_cn"]
-    == terminology["nativeChoiceTitles"]["Selene"]["value"]
-)
+# Selene and Chaos LootData names identify their source character. SpellDrop
+# resolves through its distinct SpellDrop_Store presentation identity; Chaos
+# uses the registered native choice title as its linked official reward label.
+assert ledger["SpellDrop"]["official_name_zh_cn"] == "月之礼赠"
 assert (
     ledger["TrialUpgrade"]["official_name_zh_cn"]
     == terminology["nativeChoiceTitles"]["Chaos"]["value"]
