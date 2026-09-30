@@ -19,6 +19,9 @@ assert '"\\(resource.name) · \\(resource.englishName)"' in view
 # view names a key per reward id instead of embedding either language.
 for reward in (
     'RoomMoneyDrop',
+    'MetaCurrencyDrop',
+    'MetaCardPointsCommonDrop',
+    'MemPointsCommonDrop',
     'MaxHealthDrop',
     'MaxManaDrop',
     'StackUpgrade',
@@ -26,6 +29,13 @@ for reward in (
     'SpellDrop',
 ):
     assert f'rewardLabel("{reward}")' in view
+for retired in (
+    'RoomRewardMoney', 'RoomRewardMetaPoint', 'RoomRewardPsyche',
+    'RoomRewardMixerFabric', 'RoomRewardMaxHealth', 'RoomRewardPom',
+):
+    assert retired not in view, retired
+assert 'room.ChosenRewardType = rewardType' in lua
+assert 'return "Boon", wanted' in lua
 
 # Selene has two distinct native reward paths. SpellDrop chooses a Hex; TalentDrop
 # is the official Path of Stars consumable used to add points to the current Hex.
@@ -35,6 +45,9 @@ spawn = lua[lua.index('if command == "spawn_reward" then'):lua.index('requireFun
 assert spawn.index('if entry.kind == "consumable" then') < spawn.index('if rewardId == "SpellDrop" then')
 assert 'CreateConsumableItem(objectId, rewardId, 0' in spawn
 assert 'if rewardId == "TalentDrop"' not in spawn
+assert 'if rewardId == "SpellDrop" then' in lua
+assert 'requireFunctions("Selene room reward spawning", { "SpawnRoomReward" })' in lua
+assert 'RewardOverride = "SpellDrop"' in lua
 
 # Shortcut defaults follow the visible action order: 1...9, then A...J. All
 # static toggle/apply/spawn actions are represented, and nil slots do not reserve
