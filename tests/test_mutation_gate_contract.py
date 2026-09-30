@@ -298,9 +298,9 @@ def test_manifest_covers_the_shipped_defects():
     """
     idents = {m.ident for m in mutation_gate.manifest()}
     required = {
-        "d01-hero-has-trait-arity",       # Lua silently ignored the extra argument
-        "d01-drop-rarity-recheck",       # gate and capability model disagreed
-        "err-remove-trait-unreachable",  # six dead error keys shipped
+        # #227 replaced the old D01 SellTraits-only mutation model with the
+        # live target/capability/replay contract. Do not require retired
+        # mutation anchors to survive after the owning behavior seam changes.
         "receipt-drop-remove-trait",     # failed receipt was dropped entirely
         "receipt-failed-as-success",     # failure reported as a green success
         "seam-empty-prefix",             # a module could claim all Host chrome

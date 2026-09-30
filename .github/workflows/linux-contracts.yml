@@ -49,6 +49,10 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Lua 5.2 runtime test dependency
+        if: steps.scope.outputs.needs_linux == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends lua5.2
+
       - name: Enforce diff-based invariants
         if: steps.scope.outputs.needs_linux == 'true' && github.event_name == 'pull_request'
         run: python3 Tools/check_runtime_revision.py "$BASE_SHA" "$HEAD_SHA"

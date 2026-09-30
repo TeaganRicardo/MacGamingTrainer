@@ -116,40 +116,61 @@ struct DiagnosticCheck: Identifiable {
 
 // MARK: - Current-run trait/buff inventory
 //
-// A row projected from live runtime state, never from the boon catalog and
-// never from desired state.
-//
-// `instanceID` is the game's own current-run trait identity. D00 proved it is
-// assigned per instance and is NOT stable across run reload, game restart or a
-// save round trip, so it is presented as current-run identity only and is never
-// persisted or compared across runs.
-//
-// `removalCapability` is machine-readable. `.nameLevelAllMatching` is the only
-// proven-safe teardown: the native sell screen removes every instance sharing a
-// name, so the scope is stated rather than implied. `.none` means no safe
-// teardown has been proven for that entry.
+// A row projected from live runtime state, never from the acquisition catalog
+// and never from desired state. generation/run/instance identifiers form one
+// ephemeral target snapshot; every mutation is re-resolved by the resident
+// runtime before applying any game-owned operation.
+
+enum TraitLevelCapability: String, Codable, Equatable, Sendable {
+    case none
+    case increaseOne
+}
+
+enum TraitRarityCapability: String, Codable, Equatable, Sendable {
+    case none
+    case setExact
+}
+
 enum TraitRemovalCapability: String, Codable, Equatable, Sendable {
     case none
     case nameLevelAllMatching
+    case singleInstanceForce
 }
 
 struct CurrentRunTrait: Identifiable, Equatable, Sendable {
-    /// Current-run instance identity. Not durable.
+    /// Ephemeral resident/run identity. None of these values are durable.
+    let generationID: String
+    let runID: String
     let instanceID: String
+
+    /// Language-neutral runtime identity plus official localized presentation.
     let name: String
+    let displayName: String
+    let englishName: String
     let family: String
-    let owner: String
-    let hasRarity: Bool
+    let sourceID: String
+    let sourceName: String
+    let sourceEnglishName: String
+
+    let level: Int
+    let rarity: String
+    let availableRarities: [String]
+    let sameNameCount: Int
     let remainingUses: Double?
 
+    let levelCapability: TraitLevelCapability
+    let levelReason: String
+    let rarityCapability: TraitRarityCapability
+    let rarityReason: String
     let removalCapability: TraitRemovalCapability
-    /// Why removal is unavailable, when it is. Empty when removal is available.
     let removalReason: String
-    /// Explicitly states that the removal scope is every matching instance.
     let removalScopeAllMatching: Bool
+    let deferredIssue: Int?
 
-    var id: String { instanceID }
-    var canRemove: Bool { removalCapability == .nameLevelAllMatching }
+    var id: String { "\(generationID):\(runID):\(instanceID)" }
+    var canIncreaseLevel: Bool { levelCapability == .increaseOne }
+    var canSetRarity: Bool { rarityCapability == .setExact }
+    var canRemove: Bool { removalCapability != .none }
 }
 
 /// The identity scope the runtime reported, carried so the UI cannot imply more

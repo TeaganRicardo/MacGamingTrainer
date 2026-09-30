@@ -104,19 +104,29 @@ def disconnected_capabilities():
     }
 
 
-# Current-run trait/buff inventory. This is an OBSERVATION surface projected
-# from live runtime state, not a desired-state or catalog surface.
-#
-# Removal capability values are machine-readable and deliberately narrow:
-#   'nameLevelAllMatching' - the only proven-safe teardown (D00 section 6:
-#     native SellTraits -> RemoveWeaponTrait(name), which removes every
-#     instance of that name);
-#   'none'                 - no safe teardown has been proven for this entry.
-#
-# Nothing here exposes a generic per-instance or RemoveTraitData escape hatch.
+# Current-run trait/buff management capabilities. These values describe
+# operations the Hades-owned runtime can prove for one observed live target;
+# they are not acquisition eligibility and never authorize a raw generic edit.
+TRAIT_LEVEL_INCREASE_ONE = 'increaseOne'
+TRAIT_LEVEL_NONE = 'none'
+TRAIT_LEVEL_CAPABILITIES = (TRAIT_LEVEL_INCREASE_ONE, TRAIT_LEVEL_NONE)
+
+TRAIT_RARITY_SET_EXACT = 'setExact'
+TRAIT_RARITY_NONE = 'none'
+TRAIT_RARITY_CAPABILITIES = (TRAIT_RARITY_SET_EXACT, TRAIT_RARITY_NONE)
+
+# Native SellTraits is name-level/all-matching. #227 also admits one bounded
+# direct-trait strategy whose lifecycle has been audited for object-level
+# teardown; every other owner-specific lifecycle remains deferred.
 TRAIT_REMOVAL_NAME_LEVEL = 'nameLevelAllMatching'
+TRAIT_REMOVAL_SINGLE_INSTANCE_FORCE = 'singleInstanceForce'
 TRAIT_REMOVAL_NONE = 'none'
-TRAIT_REMOVAL_CAPABILITIES = (TRAIT_REMOVAL_NAME_LEVEL, TRAIT_REMOVAL_NONE)
+TRAIT_REMOVAL_CAPABILITIES = (
+    TRAIT_REMOVAL_NAME_LEVEL,
+    TRAIT_REMOVAL_SINGLE_INSTANCE_FORCE,
+    TRAIT_REMOVAL_NONE,
+)
+
 # The identity scope is current-run only. D00 proved `trait.Id` is assigned by
 # GetTraitUniqueId and is NOT stable across run reload, restart or save
 # round-trip, so it must never be persisted or presented as durable.
