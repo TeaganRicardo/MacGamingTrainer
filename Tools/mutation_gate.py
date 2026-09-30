@@ -187,7 +187,7 @@ def manifest() -> list[Mutation]:
                  '            noticeToken = nil\n'
                  '            errorToken = presentation("hades2.receipt.failed", arguments: [title.key])'),
             new=('        case .failed:\n'
-                 '            noticeToken = presentation("hades2.receipt.traitRemovalCompleted", arguments: [title.key])\n'
+                 '            noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])\n'
                  '            errorToken = nil'),
             test="tests/test_hades2_backend_state_cleanup.py",
         ),
