@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 55 then
+if previousModule and previousModule.revision ~= 56 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 55 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 55, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 56, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1495,13 +1495,15 @@ if __MacGamingTrainerV1 == nil then
         or (entry.kind == "consumable" and type(ConsumableData) == "table" and type(ConsumableData[entry.id]) == "table")
         or (entry.kind == "trait" and type(TraitData) == "table" and type(TraitData[traitId]) == "table")
       if exists then
-        local section = entry.group == "pickup" and 10 or 30
+        local section = entry.group == "pickup" and 10 or (entry.group == "exact" and 25 or 30)
         allowed[entry.id] = {
           id = entry.id, name = entry.name, category = entry.category, group = entry.group or "pickup", kind = entry.kind,
-          family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode, sortSection = section,
-          sortGroup = entry.group == "special" and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
+          family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode,
+          acquisitionMode = entry.acquisitionMode, sortSection = section,
+          sortGroup = (entry.group == "special" or entry.group == "exact")
+            and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
           sortOrder = entry.itemOrder or 0, sourceId = entry.sourceId, sourceName = entry.sourceName,
-          sectionTitle = entry.group == "special" and entry.sourceName or familyTitles[entry.family],
+          sectionTitle = (entry.group == "special" or entry.group == "exact") and entry.sourceName or familyTitles[entry.family],
         }
         result[#result + 1] = allowed[entry.id]
       end
@@ -1548,6 +1550,40 @@ if __MacGamingTrainerV1 == nil then
       local item = { id = entry.id, name = entry.name, category = "奥林匹斯的祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
       if type(LootData) == "table" and type(LootData[entry.id]) == "table" then allowed[entry.id] = item; result[#result + 1] = item end
     end
+    -- Exact ordinary acquisition is projected from the same native GodLoot
+    -- sources that own eligibility/replacement. These rows are catalog targets,
+    -- not authorization to bypass the source's operation-time rules.
+    for _, entry in ipairs(boonDefinitions) do
+      local source = type(LootData) == "table" and LootData[entry.id] or nil
+      if type(source) == "table" then
+        local seen, ordered = {}, {}
+        local function collectExact(pool)
+          for _, traitName in ipairs(orderedTraitIds(pool)) do
+            if not seen[traitName] then
+              seen[traitName] = true
+              ordered[#ordered + 1] = traitName
+            end
+          end
+        end
+        collectExact(source.PriorityUpgrades)
+        collectExact(source.WeaponUpgrades)
+        collectExact(source.Traits)
+        for index, traitName in ipairs(ordered) do
+          local id = "exact:" .. entry.id .. ":" .. traitName
+          if not allowed[id] then
+            local item = {
+              id = id, name = traitName, category = "奥林匹斯的祝福", group = "exact", kind = "trait",
+              trait = traitName, family = "olympianHermes", sourceId = entry.id, sourceName = entry.name,
+              sectionTitle = entry.name, acquisitionMode = "ordinaryNative",
+              sortSection = 25, sortGroup = officialGodOrder[entry.id] or entry.order or 999, sortOrder = index,
+            }
+            allowed[id] = item
+            result[#result + 1] = item
+          end
+        end
+      end
+    end
+
     local buckets = {}
     for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
@@ -1586,10 +1622,11 @@ if __MacGamingTrainerV1 == nil then
         local id = "trait:" .. traitName
         if not allowed[id] and not nativeChoiceOnlyTraits[traitName] then
           local item = {
-            id = id, name = traitName, category = "角色奖励", group = "special", kind = "trait", trait = traitName,
+            id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
             nativeChoice = nativeSpecialChoiceSources[source.id] == true,
-            sortSection = 30, sortGroup = officialSourceOrder[source.id] or specialTraitSourceOrder[source.id] or 999, sortOrder = index,
+            acquisitionMode = source.id == "Arachne" and "costume" or "direct",
+            sortSection = 25, sortGroup = officialSourceOrder[source.id] or specialTraitSourceOrder[source.id] or 999, sortOrder = index,
           }
           allowed[id] = item; result[#result + 1] = item
         end
@@ -3734,6 +3771,113 @@ if __MacGamingTrainerV1 == nil then
       local entry = type(rewardId) == "string" and allowed[rewardId] or nil
       if not entry then error("Unknown or unsupported reward") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot spawn a reward during a transition") end
+
+      local exactPlan = nil
+      local function listContains(list, wanted)
+        if type(list) ~= "table" then return false end
+        for _, value in pairs(list) do
+          local name = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
+          if name == wanted then return true end
+        end
+        return false
+      end
+      local function singleTargetList(list, wanted)
+        return listContains(list, wanted) and { wanted } or {}
+      end
+      local function findTargetOption(options, wanted)
+        if type(options) ~= "table" then return nil end
+        for _, option in pairs(options) do
+          if type(option) == "table" and option.ItemName == wanted then return option end
+        end
+        return nil
+      end
+      local function prepareExactReward()
+        if entry.kind ~= "trait" or entry.group ~= "exact" then return end
+        if type(entry.trait) ~= "string" or type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then
+          error("Exact boon target is unavailable")
+        end
+        requireFunctions("exact boon ownership", { "HeroHasTrait" })
+        if HeroHasTrait(entry.trait) then error("Selected boon is already owned") end
+
+        if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
+          requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
+          if entry.acquisitionMode == "costume" then
+            requireFunctions("exact costume acquisition", { "SetupCostume" })
+          end
+          exactPlan = { mode = entry.acquisitionMode }
+          return
+        end
+        if entry.acquisitionMode ~= "ordinaryNative" then
+          error("Exact boon acquisition strategy is unavailable")
+        end
+
+        requireFunctions("exact Olympian boon acquisition", {
+          "DeepCopyTable", "GetReplacementTraits", "GetEligibleUpgrades",
+          "GetProcessedTraitData", "GetTraitCount", "GetTotalHeroTraitValue",
+          "RemoveWeaponTrait", "AddTraitToHero", "SetTraitsOnLoot",
+        })
+        local source = type(LootData) == "table" and LootData[entry.sourceId] or nil
+        if type(source) ~= "table" then error("Exact boon source is unavailable") end
+        source = DeepCopyTable(source)
+        source.PriorityUpgrades = singleTargetList(source.PriorityUpgrades, entry.trait)
+        source.WeaponUpgrades = singleTargetList(source.WeaponUpgrades, entry.trait)
+        source.Traits = singleTargetList(source.Traits, entry.trait)
+        source.UpgradeOptions = nil
+        source.Rarity = nil
+
+        local replacement = findTargetOption(GetReplacementTraits({ entry.trait }), entry.trait)
+        if replacement and replacement.TraitToReplace then
+          exactPlan = { mode = "ordinaryReplacement", source = source, option = replacement }
+          return
+        end
+
+        local eligible = GetEligibleUpgrades({}, source, source)
+        if findTargetOption(eligible, entry.trait) == nil then
+          error("Selected boon is not currently eligible")
+        end
+        exactPlan = { mode = "ordinaryNative", source = source }
+      end
+      local function addOrdinaryExact()
+        local source = exactPlan.source
+        local option
+        if exactPlan.mode == "ordinaryReplacement" then
+          option = exactPlan.option
+        else
+          SetTraitsOnLoot(source)
+          option = findTargetOption(source.UpgradeOptions, entry.trait)
+          if option == nil then error("Selected boon became unavailable before acquisition") end
+        end
+
+        local rarity = option.Rarity or "Common"
+        local stackNum = nil
+        if option.TraitToReplace then
+          local existingNum = GetTraitCount(CurrentRun.Hero, { Name = option.TraitToReplace })
+          stackNum = existingNum + GetTotalHeroTraitValue("ExchangeLevelBonus")
+        end
+        local processed = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = entry.trait, Rarity = rarity, StackNum = stackNum,
+        })
+        if type(processed) ~= "table" then error("Exact boon processing failed") end
+        if option.TraitToReplace then
+          processed.TraitToReplace = option.TraitToReplace
+          processed.OldRarity = option.OldRarity
+          RemoveWeaponTrait(option.TraitToReplace)
+        end
+        local added = AddTraitToHero({
+          TraitData = processed,
+          PreProcessedForDisplay = option.TraitToReplace == nil,
+          FromLoot = true,
+        })
+        if type(added) ~= "table" then error("Exact boon acquisition did not return a trait") end
+        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[entry.trait] = true end
+        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = entry.trait end
+        if type(CheckNewTraitManaReserveShrineUpgrade) == "function" then
+          CheckNewTraitManaReserveShrineUpgrade(added, { IsGodLoot = true })
+        end
+        if type(CheckAndAddOlympianDuo) == "function" then CheckAndAddOlympianDuo(source) end
+        return nil
+      end
+
       return action(command, params, function()
         if entry.spawnMode == "weapon_loot" then
           requireFunctions("shop hammer spawning", { "CreateWeaponLoot" })
@@ -3774,6 +3918,9 @@ if __MacGamingTrainerV1 == nil then
         end
         if entry.kind == "trait" then
           if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
+          if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
+            return addOrdinaryExact()
+          end
           if entry.storeTrait then
             requireFunctions("store trait spawning", { "GetProcessedTraitData", "AddTraitToHero" })
             local traitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = entry.trait })
@@ -3912,7 +4059,7 @@ if __MacGamingTrainerV1 == nil then
           OffsetX = 100, AutoLoadPackages = true, DoesNotBlockExit = true })
         if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Loot spawn did not return an object ID") end
         return loot.ObjectId
-      end)
+      end, prepareExactReward)
     end
     error("Unknown command")
   end

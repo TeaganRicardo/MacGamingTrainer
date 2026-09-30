@@ -150,6 +150,18 @@ GetReplacementTraits = function(priority)
   return {}
 end
 
+GetEligibleUpgrades = function(_, loot)
+  local result = {}
+  for _, pool in ipairs({ loot.PriorityUpgrades, loot.WeaponUpgrades, loot.Traits }) do
+    for _, name in ipairs(pool or {}) do
+      if name == eligibleTarget then
+        result[#result + 1] = { ItemName = name, Type = "Trait" }
+      end
+    end
+  end
+  return result
+end
+
 SetTraitsOnLoot = function(loot)
   calls.setTraits = calls.setTraits + 1
   loot.UpgradeOptions = {}
