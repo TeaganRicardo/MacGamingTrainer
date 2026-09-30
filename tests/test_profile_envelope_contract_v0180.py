@@ -13,11 +13,11 @@ from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileSe
 
 base = Path(tempfile.mkdtemp(prefix='mgt-profile-envelope-v0180-'))
 service = Hades2ProfileService(base/'profiles')
-desired = {'godMode': False}
+desired = {'invincibility': False}
 normalized_desired = Hades2PreferenceStore.normalize(desired)
 
 # Current-version writes have the complete envelope and remain loadable.
-service.save('stable', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+service.save('stable', desired, {'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
 stable_path = service.path('stable')
 stable_doc = json.loads(stable_path.read_text(encoding='utf-8'))
 assert set(stable_doc) == {'schemaVersion','desiredSchemaVersion','name','updatedAt','desired','shortcuts'}
@@ -41,7 +41,7 @@ else:
 assert legacy_path.read_bytes() == legacy_bytes
 
 # An explicit save is a replacement operation and writes the current schema.
-service.save('legacy', desired, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+service.save('legacy', desired, {'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
 assert service.load('legacy')['desired'] == normalized_desired
 assert json.loads(legacy_path.read_text())['schemaVersion'] == PROFILE_SCHEMA_VERSION
 
@@ -67,7 +67,7 @@ try:
         'schemaVersion':PROFILE_SCHEMA_VERSION,
         'desiredSchemaVersion':DESIRED_STATE_SCHEMA_VERSION,
         'name':'bad-shortcuts','updatedAt':'2026-09-18T00:00:00+0000',
-        'desired':desired,'shortcuts':['godMode'],
+        'desired':desired,'shortcuts':['invincibility'],
     }), encoding='utf-8')
     try:
         service.load('bad-shortcuts')
