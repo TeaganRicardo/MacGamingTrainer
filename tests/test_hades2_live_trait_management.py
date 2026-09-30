@@ -77,13 +77,13 @@ def test_mutations_re_resolve_the_exact_live_selection_before_apply():
 
     # Level uses the game's owner path, but refuses ambiguous same-name targets
     # because IncreaseTraitLevel uses AreTraitsIdentical rather than a raw id.
-    assert "IncreaseTraitLevel(target, 1)" in LUA
-    assert "multiple matching instances" in LUA
+    assert "IncreaseTraitLevel(live, 1)" in LUA
+    assert "multipleMatchingInstances" in LUA
 
     # Rarity uses the game's own recompute path; assigning Rarity alone is not
     # accepted because it would leave mounted effect values stale.
     assert "AddRarityToTraits" in LUA
-    assert "ForceUpgrade = { target }" in LUA
+    assert "ForceUpgrade = { live }" in LUA
     assert "target.Rarity = params.rarity" not in LUA
 
 
@@ -92,8 +92,8 @@ def test_force_removal_is_bounded_and_native_sell_scope_stays_explicit():
     assert 'directSpecial' in LUA
     assert 'singleInstanceForce' in LUA
     assert 'nameLevelAllMatching' in LUA
-    assert "RemoveTraitData(CurrentRun.Hero, target" in LUA
-    assert "RemoveWeaponTrait(target.Name" in LUA
+    assert "RemoveTraitData(CurrentRun.Hero, live" in LUA
+    assert "RemoveWeaponTrait(live.Name" in LUA
     assert "SkipExpire = true" in LUA
 
     # Owner-specific families remain visible and deferred instead of falling
@@ -120,7 +120,7 @@ def test_swift_contract_carries_snapshot_not_just_trait_name():
     assert "setTraitLevel(CurrentRunTrait)" in API
     assert "setTraitRarity(CurrentRunTrait, rarity: String)" in API
     assert "removeTrait(CurrentRunTrait)" in API
-    for token in ("generationId", "runId", "instanceId", "expectedLevel", "expectedRarity"):
+    for token in ("generationId", "runId", "instanceId", "expectedLevel", "expectedRarity", "expectedSameNameCount"):
         assert token in API
 
 
@@ -131,7 +131,7 @@ def test_live_manager_is_searchable_grouped_and_shows_real_controls():
     assert "traitFamilyLabel" in VIEW
     assert "displayName" in VIEW
     assert "englishName" in VIEW
-    assert "trait.level" in VIEW
+    assert "hades2.traits.level" in VIEW
     assert "trait.rarity" in VIEW
     assert "availableRarities" in VIEW
     assert "model.increaseTraitLevel(trait)" in VIEW
@@ -145,3 +145,15 @@ def test_live_manager_is_searchable_grouped_and_shows_real_controls():
 
 def test_resident_revision_advances_for_the_new_runtime_contract():
     assert "revision = 55" in LUA
+
+
+if __name__ == "__main__":
+    test_live_trait_inventory_carries_target_snapshot_and_operation_capabilities()
+    test_current_run_traits_reuse_official_bilingual_localization_seam()
+    test_level_rarity_and_removal_are_non_idempotent_targeted_commands()
+    test_mutations_re_resolve_the_exact_live_selection_before_apply()
+    test_force_removal_is_bounded_and_native_sell_scope_stays_explicit()
+    test_swift_contract_carries_snapshot_not_just_trait_name()
+    test_live_manager_is_searchable_grouped_and_shows_real_controls()
+    test_resident_revision_advances_for_the_new_runtime_contract()
+    print("hades2_live_trait_management_ok")
