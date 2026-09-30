@@ -82,7 +82,7 @@ HealDropSuperMinor,consumable,DebugSpawnConsumables,,exclude,"Functional 1-HP he
 HealingOnDeathCurse,trait,UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices,亡者之血,direct,,1.139672,24556151
 HephaestusUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫菲斯托斯,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 HeraUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫拉,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
-HermesUpgrade,loot,RewardStoreData,赫尔墨斯的祝福,direct,,1.139672,24556151
+HermesUpgrade,loot,RewardStoreData,赫尔墨斯,direct,,1.139672,24556151
 HestiaUpgrade,loot,RewardStoreData(Boon)+RewardLogic(ChooseLoot),赫斯提亚,direct,Concrete GodLoot selected by the native Boon reward flow.,1.139672,24556151
 HiddenMaxHealthBoon,trait,UnitSetData.NPC_Dionysus_01.Traits,纵情忘忧,direct,,1.139672,24556151
 HighArmorCostume,trait,UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices,玛瑙裙装,special,Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition.,1.139672,24556151
@@ -106,9 +106,9 @@ ManaSpearBoon,trait,UnitSetData.NPC_Athena_01.Traits,天降正义,direct,,1.1396
 MaxHealthDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,半人马之心,direct,,1.139672,24556151
 MaxHealthDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级半人马之心,direct,,1.139672,24556151
 MaxHealthDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,半人马之心,direct,,1.139672,24556151
-MaxManaDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,direct,,1.139672,24556151
+MaxManaDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,灵魂之水,direct,,1.139672,24556151
 MaxManaDropBig,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,超级灵魂之水,direct,,1.139672,24556151
-MaxManaDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,{!Icons.MaxManaDrop} 灵魂之水,direct,,1.139672,24556151
+MaxManaDropSmall,consumable,RewardStoreData+DebugSpawnConsumables,灵魂之水,direct,,1.139672,24556151
 MedeaMoneyTinyDrop,consumable,TraitProducedComment+TraitData_Medea,,exclude,Context-owned transient pickup; valid in gameplay but not exposed as a standalone Trainer target.,1.139672,24556151
 MemPointsCommonBigDrop,consumable,DebugSpawnConsumables+WeaponData(RewardNames),,direct,Functional +20 Psyche pickup definition; no normal pickup instantiation found. Tablet/exorcism rewards grant MemPointsCommon directly through HarvestData AddResources.,1.139672,24556151
 MemPointsCommonDrop,consumable,DebugSpawnConsumables,,direct,,1.139672,24556151
@@ -169,7 +169,7 @@ RoomRewardConsolationPrize,consumable,DebugSpawnConsumables+EventLogic+RewardLog
 RoomRewardHealDrop,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,新鲜食粮,direct,,1.139672,24556151
 SeedMysteryDrop,consumable,TraitData_Narcissus,神秘种子,direct,,1.139672,24556151
 SeedMysteryRange,consumable,StoreData,盖亚的礼赠,direct,,1.139672,24556151
-ShopHermesUpgrade,consumable,StoreData,,special,Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning.,1.139672,24556151
+ShopHermesUpgrade,consumable,StoreData,赫尔墨斯的祝福,special,Store wrapper; use the native CreateHermesLoot semantics rather than generic consumable spawning.,1.139672,24556151
 SlowProjectileCurse,trait,UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices,弱者无能,direct,,1.139672,24556151
 SorceryCritBoon,trait,UnitSetData.NPC_Artemis_Field_01.Traits,祝祷呢喃,direct,,1.139672,24556151
 SpawnDamageCurse,trait,UnitSetData.NPC_Medea_01.Traits+PresetEventArgs.MedeaCurseChoices,所见皆苦,direct,,1.139672,24556151
@@ -196,7 +196,7 @@ TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,special,Native W
 TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
 TimedCritVulnerabilityBoon,trait,UnitSetData.NPC_Artemis_Field_01.Traits,索命追猎,direct,,1.139672,24556151
 TrashPointsDrop,consumable,DebugSpawnConsumables+NPCData_Eris,,direct,,1.139672,24556151
-TrialUpgrade,loot,RewardStoreData,,direct,,1.139672,24556151
+TrialUpgrade,loot,RewardStoreData,卡俄斯的祝福,direct,,1.139672,24556151
 UpgradeHammerBoon,trait,UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices,最新型号,direct,,1.139672,24556151
 VitalityCostume,trait,UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices,苍翠裙装,special,Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition.,1.139672,24556151
 WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
