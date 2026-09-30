@@ -377,4 +377,7 @@ class BuildProvenanceContract(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    program = unittest.main(exit=False)
+    if not program.result.wasSuccessful():
+        raise SystemExit(1)
+    print('build_provenance_contract_ok')
