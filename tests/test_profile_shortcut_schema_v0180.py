@@ -78,7 +78,7 @@ service = Hades2ProfileService(base/'profiles')
 desired = {'invincibility': False}
 service.save('chords', desired, valid)
 on_disk = json.loads(service.path('chords').read_text(encoding='utf-8'))
-assert on_disk['schemaVersion'] == 5
+assert on_disk['schemaVersion'] == PROFILE_SCHEMA_VERSION
 assert on_disk['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
 assert on_disk['shortcuts'] == valid
 assert service.load('chords')['shortcuts'] == valid
