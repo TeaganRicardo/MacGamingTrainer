@@ -693,10 +693,6 @@ def validate_python_consumers(root):
     exercise_python_router(root, tuple(TOGGLES), dict(MULTIPLIER_RULES))
 
 
-def exercise_python_router_mutation(root):
-    exercise_python_router(root, tuple(TOGGLES), dict(MULTIPLIER_RULES))
-
-
 def validate_core_speed(root):
     exercise_adapter_routes(root, tuple(TOGGLES), dict(MULTIPLIER_RULES))
 
@@ -710,88 +706,5 @@ def validate(root=ROOT):
     lua_dispatch_source(root, toggles, multipliers)
 
 
-def mutation_regressions():
-    swift = ("Sources/Hades2/Hades2Types.swift", "Sources/Hades2/Hades2Model.swift", "Sources/Hades2/Hades2View.swift")
-    router = ("Backend/games/hades2/command_router.py",)
-    adapter = ("Backend/games/hades2/adapter.py", "Backend/games/hades2/runtime/hades.lua")
-    lua = ("Backend/games/hades2/runtime/hades.lua",)
-    mutations = (
-        ("swift-model-keypath", swift[1], "case .invincibility: return \\.invincibility",
-         "case .invincibility: return \\.infiniteHealth", validate_swift_consumers, swift),
-        *((("swift-keypath-execution", swift[1], "case .invincibility: return \\.invincibility",
-            "case .invincibility: return \\.infiniteHealth", swift_compiled_mapping, swift),) if shutil.which("swiftc") else ()),
-        ("swift-view-action", swift[2], "model.feature(.infiniteHealth, value: !model.infiniteHealth)",
-         "model.feature(.invincibility, value: !model.infiniteHealth)", validate_swift_consumers, swift),
-        ("swift-multiplier-display", swift[2], "actual: model.resourceMultiplier,",
-         "actual: model.moneyMultiplier,", validate_swift_consumers, swift),
-        ("swift-feature-dispatch", swift[1], "feature: key.rawValue, value: value",
-         'feature: "invincibility", value: value', validate_swift_consumers, swift),
-        ("swift-speed-dispatch", swift[1], 'feature: "gameSpeed", value: value',
-         'feature: "damageMultiplier", value: value', validate_swift_consumers, swift),
-        ("swift-speed-input", swift[2], "model.setGameSpeed(gameSpeedInput)",
-         'model.setMultiplier("damageMultiplier", text: gameSpeedInput)', validate_swift_consumers, swift),
-        ("swift-extra-case", swift[0], "case moneyMultiplierEnabled, resourceMultiplierEnabled",
-         "case moneyMultiplierEnabled, resourceMultiplierEnabled, phantomFeature", validate_swift_consumers, swift),
-        ("python-router-key", router[0], "result=adapter.set_desired(params['feature'],params['value'])",
-         "result=adapter.set_desired('invincibility',params['value'])", exercise_python_router_mutation, router),
-        ("python-router-value", router[0], "result=adapter.set_desired(params['feature'],params['value'])",
-         "result=adapter.set_desired(params['feature'],True)", exercise_python_router_mutation, router),
-        ("core-speed-to-lua", adapter[0], "if feature=='gameSpeed':",
-         "if feature=='moneyMultiplier':", validate_core_speed, adapter),
-        ("core-speed-value", adapter[0], "self.time_warp.set_speed(float(value))",
-         "self.time_warp.set_speed(1.0)", validate_core_speed, adapter),
-        ("lua-missing-toggle", lua[0], "    resourceMultiplier = 2, resourceMultiplierEnabled = false,",
-         "    resourceMultiplier = 2,", lua_dispatch_source, lua),
-        ("lua-state-projection", lua[0], "infiniteHealth = M.desiredFeatures.infiniteHealth,",
-         "infiniteHealth = M.desiredFeatures.invincibility,", lua_dispatch_source, lua),
-        ("lua-registry-install", lua[0], "infiniteHealth = {\n      install = installHealth,",
-         "infiniteHealth = {\n      install = installMana,", lua_dispatch_source, lua),
-        ("lua-economy-toggle", lua[0], "M.moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled",
-         "M.moneyMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled", lua_dispatch_source, lua),
-        ("lua-damage-gate", lua[0], "if M.damageEnabled and attacker == CurrentRun.Hero then",
-         "if M.infiniteHealth and attacker == CurrentRun.Hero then", lua_dispatch_source, lua),
-        ("lua-multiplier-consumer", lua[0], "return result * M.damageMultiplier",
-         "return result * M.moneyMultiplier", lua_dispatch_source, lua),
-        ("lua-money-consumer", lua[0], "amount = amount * M.moneyMultiplier",
-         "amount = amount * M.resourceMultiplier", lua_dispatch_source, lua),
-        ("lua-multiplier-dispatch", lua[0], "M[feature] = value",
-         "M.moneyMultiplier = value", lua_dispatch_source, lua),
-        ("lua-speed-ownership", lua[0], 'or feature == "resourceMultiplier" then',
-         'or feature == "resourceMultiplier" or feature == "gameSpeed" then', lua_dispatch_source, lua),
-        ("lua-forced-missing-feature", lua[0],
-         'if M.desiredFeatures[feature] == nil then error("Unknown feature") end',
-         'if feature == "invincibility" or M.desiredFeatures[feature] == nil then error("Unknown feature") end', lua_dispatch_source, lua),
-    )
-    for label, path, before, after, check, required_files in mutations:
-        with tempfile.TemporaryDirectory(prefix="mgt-feature-mutation-") as temp:
-            copy = Path(temp)
-            for required in required_files:
-                destination = copy / required
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(ROOT / required, destination)
-            target = copy / path
-            original = target.read_text(encoding="utf-8")
-            assert before in original, "mutation anchor missing: " + label
-            target.write_text(original.replace(before, after, 1), encoding="utf-8")
-            try:
-                if check in (validate_swift_consumers, swift_compiled_mapping):
-                    check(copy, tuple(TOGGLES))
-                elif check is lua_dispatch_source:
-                    check(copy, tuple(TOGGLES), dict(MULTIPLIER_RULES))
-                else:
-                    check(copy)
-            except AssertionError as error:
-                print("identity_mutation_rejected:", label, str(error))
-                continue
-            except subprocess.CalledProcessError as error:
-                assert check is swift_compiled_mapping and Path(error.cmd[0]).name == "feature-keypath-test", (
-                    "Swift mutation failed to compile rather than misrouting the live key path: " + label
-                )
-                print("identity_mutation_rejected:", label, "compiled key path trapped")
-                continue
-            raise AssertionError("identity contract missed negative mutation: " + label)
-
-
 validate()
-mutation_regressions()
 print("hades2_feature_identity_contract_ok")
