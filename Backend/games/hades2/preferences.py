@@ -127,7 +127,7 @@ def migrate_legacy_invincibility_identity(raw):
     """Rename the retired Trainer invulnerability key at persistence boundaries only."""
     if not isinstance(raw,dict):return raw
     result=dict(raw)
-    if 'invincibility' not in result and type(result.get('godMode')) is bool:
+    if type(result.get('godMode')) is bool:
         result['invincibility']=result['godMode']
     result.pop('godMode',None)
     return result
