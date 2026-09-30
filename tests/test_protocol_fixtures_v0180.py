@@ -67,6 +67,20 @@ finally:
 # cache, and duplicate-conflict is rejected before dispatch.
 assert adapter.dispatch_count == 2
 
+# Core owns framing failures even when the requested command would belong to a
+# game module. Canonical presentation therefore stays on the Host key seam and
+# concrete parser detail stays diagnostic.
+for request in (
+    {"id": "", "command": "echo", "params": {}},
+    {"id": "non-json", "command": "echo", "params": {"value": float("nan")}},
+):
+    failure = router.handle(request)
+    assert failure["ok"] is False
+    assert failure["error"]["code"] == "invalid_request"
+    assert failure["error"]["presentation"] == "host.backend.error.invalidRequest"
+    assert failure["error"].get("diagnostic"), failure
+    assert not any("\u4e00" <= ch <= "\u9fff" for ch in failure["error"]["presentation"])
+
 # The fixture is intentionally language-neutral. Keep the current Swift host
 # decoder bound to these envelope keys so later XCTest can consume this same
 # file rather than inventing a second protocol sample set.

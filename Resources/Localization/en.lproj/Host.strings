@@ -31,6 +31,7 @@
 "host.backend.error.sendFailed" = "Sending failed. The backend was stopped to avoid an unknown execution result.";
 "host.backend.error.protocolMismatch" = "The backend protocol is incompatible. Rebuild the app from the same release package.";
 "host.backend.error.operationFailed" = "The operation failed. Check the log.";
+"host.backend.error.invalidRequest" = "The request is invalid. Try again or check the log.";
 "host.backend.error.timeout" = "The backend request timed out. The backend was stopped to avoid an unknown execution result.";
 "host.backend.error.protocolError" = "A backend communication protocol error occurred. The backend was stopped.";
 "host.backend.notice.recovering" = "Backend communication failed. Recovering automatically.";

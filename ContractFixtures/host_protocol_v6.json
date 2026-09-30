@@ -105,7 +105,8 @@
         "moduleProtocolVersion": 7,
         "error": {
           "code": "duplicate_conflict",
-          "presentation": "同一请求 ID 的内容发生变化。"
+          "presentation": "host.backend.error.invalidRequest",
+          "diagnostic": "request id was reused with different content"
         }
       }
     },
@@ -154,7 +155,8 @@
         "moduleProtocolVersion": 7,
         "error": {
           "code": "invalid_request",
-          "presentation": "params 必须是对象。"
+          "presentation": "host.backend.error.invalidRequest",
+          "diagnostic": "params must be a JSON object"
         },
         "state": {
           "connected": false,

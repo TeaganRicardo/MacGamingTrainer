@@ -79,7 +79,11 @@ def encode_reply(router, reply):
         return json.dumps(reply, ensure_ascii=False, allow_nan=False)
     except Exception:
         logging.exception('Backend reply serialization failed')
-        fallback = router.error_reply(None, 'protocol_error', '后端响应无法安全序列化。')
+        fallback = router.core_error_reply(
+            None,
+            'protocol_error',
+            'backend reply could not be serialized as strict JSON',
+        )
         return json.dumps(fallback, ensure_ascii=False, allow_nan=False)
 
 
@@ -127,7 +131,7 @@ def main(argv=None):
                     request = json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError('非有限 JSON 数值：' + value)))
                     reply = router.handle(request)
                 except Exception as error:
-                    reply = router.error_reply(None, 'invalid_request', str(error))
+                    reply = router.core_error_reply(None, 'invalid_request', str(error))
                 print(encode_reply(router, reply), flush=True)
                 if line_bytes > 65536:
                     # Stay in sync with the next JSONL record without holding
