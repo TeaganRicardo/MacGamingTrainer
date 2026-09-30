@@ -48,8 +48,8 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 
 Verification **scope** and evidence **identity** are separate. Every check claimed as evidence must have run against the exact SHA named by the claim; exact-head evidence does not mean every task runs the full release matrix.
 
-- **Task verification:** run the minimum gates owned by the changed seams.
-- **Integration verification:** after rebasing onto overlapping work or after a dependency affecting the changed seam moves, rerun the gates whose inputs or semantics may have changed. Unrelated main movement does not by itself expand a task to the full release matrix.
+- **Task verification:** run the minimum gates owned by the changed seams on the actual final PR head.
+- **Integration verification:** any PR-head rewrite/rebase requires the task gates again so evidence binds to the new SHA. If overlapping work or a dependency changes inputs/semantics at the changed seam, also rerun those affected integration gates. Movement of unrelated base `main` while the PR head itself is unchanged does not invalidate exact-head evidence or expand the task to the full release matrix.
 - **Convergence/release verification:** run the full applicable Linux/macOS/module/mutation/build/package/provenance matrix only when the selected convergence, release, or acceptance task requires it.
 
 Routing by changed seam:
