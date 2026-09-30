@@ -89,9 +89,15 @@ def _official_name(
     override_names: dict[str, dict[str, str]],
     terminology: dict,
 ) -> str:
+    identifier = row["id"]
+    kind_names = direct_names[row["kind"]]
+    if identifier not in kind_names:
+        raise ValueError(f"{identifier}: missing from authoritative {row['kind']} dataset")
+    direct_name = kind_names[identifier]
+
     directive = row.get("officialName")
     if directive is None:
-        return direct_names[row["kind"]].get(row["id"], "")
+        return direct_name
     if not isinstance(directive, dict):
         raise ValueError(f"{row['id']}: officialName must be an object")
 
@@ -103,7 +109,12 @@ def _official_name(
         identifier = directive.get("id")
         if dataset not in override_names or not isinstance(identifier, str):
             raise ValueError(f"{row['id']}: invalid generated officialName reference")
-        return override_names[dataset].get(identifier, "")
+        if identifier not in override_names[dataset]:
+            raise ValueError(
+                f"{row['id']}: missing generated officialName identity "
+                f"{dataset}:{identifier}"
+            )
+        return override_names[dataset][identifier]
     if mode == "terminology":
         path = directive.get("path")
         if not isinstance(path, list) or not all(isinstance(item, str) for item in path):
