@@ -54,8 +54,8 @@ def test_level_rarity_and_removal_are_non_idempotent_targeted_commands():
     assert 'case setTraitRarity = "set_trait_rarity"' in API
     assert 'case removeTrait = "remove_trait"' in API
 
+    assert 'remove_trait = { "trait" }' not in LUA
     for command in ("set_trait_level", "set_trait_rarity", "remove_trait"):
-        assert f'{command} = {{' not in LUA
         assert f'{command} = {{ "generationId", "runId", "instanceId", "trait", "family"' in LUA
 
     assert 'if command == "set_trait_level" then' in LUA
