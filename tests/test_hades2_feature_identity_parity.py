@@ -716,16 +716,16 @@ def mutation_regressions():
     adapter = ("Backend/games/hades2/adapter.py", "Backend/games/hades2/runtime/hades.lua")
     lua = ("Backend/games/hades2/runtime/hades.lua",)
     mutations = (
-        ("swift-model-keypath", swift[1], "case .godMode: return \\.godMode",
-         "case .godMode: return \\.infiniteHealth", validate_swift_consumers, swift),
-        *((("swift-keypath-execution", swift[1], "case .godMode: return \\.godMode",
-            "case .godMode: return \\.infiniteHealth", swift_compiled_mapping, swift),) if shutil.which("swiftc") else ()),
+        ("swift-model-keypath", swift[1], "case .invincibility: return \\.invincibility",
+         "case .invincibility: return \\.infiniteHealth", validate_swift_consumers, swift),
+        *((("swift-keypath-execution", swift[1], "case .invincibility: return \\.invincibility",
+            "case .invincibility: return \\.infiniteHealth", swift_compiled_mapping, swift),) if shutil.which("swiftc") else ()),
         ("swift-view-action", swift[2], "model.feature(.infiniteHealth, value: !model.infiniteHealth)",
-         "model.feature(.godMode, value: !model.infiniteHealth)", validate_swift_consumers, swift),
+         "model.feature(.invincibility, value: !model.infiniteHealth)", validate_swift_consumers, swift),
         ("swift-multiplier-display", swift[2], "actual: model.resourceMultiplier,",
          "actual: model.moneyMultiplier,", validate_swift_consumers, swift),
         ("swift-feature-dispatch", swift[1], "feature: key.rawValue, value: value",
-         'feature: "godMode", value: value', validate_swift_consumers, swift),
+         'feature: "invincibility", value: value', validate_swift_consumers, swift),
         ("swift-speed-dispatch", swift[1], 'feature: "gameSpeed", value: value',
          'feature: "damageMultiplier", value: value', validate_swift_consumers, swift),
         ("swift-speed-input", swift[2], "model.setGameSpeed(gameSpeedInput)",
@@ -733,7 +733,7 @@ def mutation_regressions():
         ("swift-extra-case", swift[0], "case moneyMultiplierEnabled, resourceMultiplierEnabled",
          "case moneyMultiplierEnabled, resourceMultiplierEnabled, phantomFeature", validate_swift_consumers, swift),
         ("python-router-key", router[0], "result=adapter.set_desired(params['feature'],params['value'])",
-         "result=adapter.set_desired('godMode',params['value'])", exercise_python_router_mutation, router),
+         "result=adapter.set_desired('invincibility',params['value'])", exercise_python_router_mutation, router),
         ("python-router-value", router[0], "result=adapter.set_desired(params['feature'],params['value'])",
          "result=adapter.set_desired(params['feature'],True)", exercise_python_router_mutation, router),
         ("core-speed-to-lua", adapter[0], "if feature=='gameSpeed':",
@@ -743,7 +743,7 @@ def mutation_regressions():
         ("lua-missing-toggle", lua[0], "    resourceMultiplier = 2, resourceMultiplierEnabled = false,",
          "    resourceMultiplier = 2,", lua_dispatch_source, lua),
         ("lua-state-projection", lua[0], "infiniteHealth = M.desiredFeatures.infiniteHealth,",
-         "infiniteHealth = M.desiredFeatures.godMode,", lua_dispatch_source, lua),
+         "infiniteHealth = M.desiredFeatures.invincibility,", lua_dispatch_source, lua),
         ("lua-registry-install", lua[0], "infiniteHealth = {\n      install = installHealth,",
          "infiniteHealth = {\n      install = installMana,", lua_dispatch_source, lua),
         ("lua-economy-toggle", lua[0], "M.moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled",
@@ -760,7 +760,7 @@ def mutation_regressions():
          'or feature == "resourceMultiplier" or feature == "gameSpeed" then', lua_dispatch_source, lua),
         ("lua-forced-missing-feature", lua[0],
          'if M.desiredFeatures[feature] == nil then error("Unknown feature") end',
-         'if feature == "godMode" or M.desiredFeatures[feature] == nil then error("Unknown feature") end', lua_dispatch_source, lua),
+         'if feature == "invincibility" or M.desiredFeatures[feature] == nil then error("Unknown feature") end', lua_dispatch_source, lua),
     )
     for label, path, before, after, check, required_files in mutations:
         with tempfile.TemporaryDirectory(prefix="mgt-feature-mutation-") as temp:

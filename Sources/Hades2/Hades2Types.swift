@@ -33,13 +33,13 @@ struct BoonOption: Identifiable {
 }
 
 enum Hades2FeatureKey: String, CaseIterable, Hashable {
-    case godMode, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
+    case invincibility, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
     case hexAlwaysReady, infiniteAmmo, autoMiniGames, gardenQoL, boonRarityEnabled
     case moneyMultiplierEnabled, resourceMultiplierEnabled
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
-    case godMode, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
+    case invincibility, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
     case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
     case boonRarityEnabled, forceLegendary, forceDuo
     case moneyMultiplierEnabled, resourceMultiplierEnabled
@@ -50,7 +50,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
 
     static let uiOrder: [ShortcutAction] = [
-        .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+        .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL,
         .boonRarityEnabled, .forceLegendary, .forceDuo,
         .moneyMultiplierEnabled, .resourceMultiplierEnabled,
@@ -59,7 +59,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     ]
 
     static let legacyDigitActions: [ShortcutAction] = [
-        .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+        .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
     ]
 
@@ -68,7 +68,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     /// re-renders the shortcut sheet and its conflict diagnostics live.
     var presentationKey: String {
         switch self {
-        case .godMode: return "hades2.feature.godMode"
+        case .invincibility: return "hades2.feature.invincibility"
         case .infiniteHealth: return "hades2.feature.infiniteHealth"
         case .infiniteMana: return "hades2.feature.infiniteMana"
         case .instantCastCooldown: return "hades2.feature.instantCastCooldown"

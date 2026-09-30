@@ -74,9 +74,16 @@ struct Hades2ShortcutStore {
     private mutating func loadAndMigrate() {
         let layoutVersion = defaults.integer(forKey: "shortcut.layoutVersion")
 
-        if layoutVersion >= 5 {
+        if layoutVersion >= 6 {
             loadPersistedOverrides()
             rebuildResolvedLayout()
+            return
+        }
+
+        if layoutVersion == 5 {
+            migrateV5Identity()
+            rebuildResolvedLayout()
+            persistOverrides()
             return
         }
 
@@ -114,16 +121,29 @@ struct Hades2ShortcutStore {
         }
     }
 
+    private mutating func migrateV5Identity() {
+        overrides.removeAll()
+        var used = Set<String>()
+        for action in ShortcutAction.uiOrder {
+            guard let value = defaults.object(forKey: legacyKey(action)),
+                  let parsed = HotkeyChord(payload: value) else { continue }
+            let token = Self.token(parsed)
+            guard !used.contains(token) else { continue }
+            overrides[action] = parsed
+            used.insert(token)
+        }
+    }
+
     private mutating func migrateV3Digits() {
         overrides.removeAll()
         let legacyDefaults: [ShortcutAction: Int] = [
-            .godMode: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
+            .invincibility: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
             .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
             .moneyMultiplierEnabled: 9, .disableAll: 0,
         ]
         var used = Set<String>()
         for action in ShortcutAction.legacyDigitActions {
-            guard let digit = defaults.object(forKey: key(action)) as? Int,
+            guard let digit = defaults.object(forKey: legacyKey(action)) as? Int,
                   digit != legacyDefaults[action],
                   let chord = HotkeyChord.controlOptionDigit(digit) else { continue }
             let token = Self.token(chord)
@@ -140,7 +160,7 @@ struct Hades2ShortcutStore {
         var used = Set<String>()
 
         for action in ShortcutAction.uiOrder {
-            guard let value = defaults.object(forKey: key(action)),
+            guard let value = defaults.object(forKey: legacyKey(action)),
                   let parsed = HotkeyChord(payload: value) else { continue }
 
             // v4 wrote every computed default to disk. It also produced one
@@ -160,7 +180,7 @@ struct Hades2ShortcutStore {
     private static func knownBrokenV4MigratedLayout() -> [ShortcutAction: HotkeyChord] {
         var layout = defaultLayout()
         let legacyDefaults: [ShortcutAction: Int] = [
-            .godMode: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
+            .invincibility: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
             .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
             .moneyMultiplierEnabled: 9, .disableAll: 0,
         ]
@@ -212,6 +232,10 @@ struct Hades2ShortcutStore {
         "shortcut.action.\(action.rawValue)"
     }
 
+    private func legacyKey(_ action: ShortcutAction) -> String {
+        action == .invincibility ? "shortcut.action.godMode" : key(action)
+    }
+
     private func persistOverrides() {
         for action in ShortcutAction.uiOrder {
             if let explicit = overrides[action] {
@@ -220,6 +244,7 @@ struct Hades2ShortcutStore {
                 defaults.removeObject(forKey: key(action))
             }
         }
-        defaults.set(5, forKey: "shortcut.layoutVersion")
+        defaults.removeObject(forKey: "shortcut.action.godMode")
+        defaults.set(6, forKey: "shortcut.layoutVersion")
     }
 }

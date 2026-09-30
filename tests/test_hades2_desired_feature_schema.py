@@ -15,7 +15,7 @@ from games.hades2.schema import (
 )
 
 EXPECTED_DEFAULTS = {
-    "godMode": False,
+    "invincibility": False,
     "infiniteHealth": False,
     "infiniteMana": False,
     "damageEnabled": False,
@@ -39,10 +39,10 @@ assert set(defaults) == set(TOGGLES) | set(MULTIPLIERS)
 
 # Toggle values are exact booleans. Numeric truthy values must not silently
 # become durable feature intent.
-assert normalize_desired_feature_value("godMode", True) is True
-assert normalize_desired_feature_value("godMode", False) is False
+assert normalize_desired_feature_value("invincibility", True) is True
+assert normalize_desired_feature_value("invincibility", False) is False
 for value in (1, 0, "true", None):
-    assert normalize_desired_feature_value("godMode", value) is None
+    assert normalize_desired_feature_value("invincibility", value) is None
 
 # Canonical schema predicates are total over arbitrary JSON-compatible keys.
 for malformed_feature in ([], {}):
@@ -73,14 +73,14 @@ for feature, value in (
 ):
     assert normalize_desired_feature_value(feature, value) is None
 
-assert validate_desired_feature_value("godMode", True) is True
+assert validate_desired_feature_value("invincibility", True) is True
 validated_damage = validate_desired_feature_value("damageMultiplier", 3)
 assert validated_damage == 3 and type(validated_damage) is int
 assert validate_desired_feature_value("gameSpeed", 1.5) == 1.5
 
 cases = (
     ("unknown", True, "未知功能。"),
-    ("godMode", 1, "开关值必须为布尔值。"),
+    ("invincibility", 1, "开关值必须为布尔值。"),
     ("damageMultiplier", float("nan"), "倍率必须为有限数值。"),
     ("gameSpeed", 11, "游戏速度范围为 0–10。"),
     ("resourceMultiplier", 0, "倍率范围为 1–100。"),
@@ -99,11 +99,11 @@ stored_defaults = Hades2PreferenceStore.defaults()
 assert {key: stored_defaults[key] for key in EXPECTED_DEFAULTS} == EXPECTED_DEFAULTS
 
 normalized = Hades2PreferenceStore.normalize({
-    "godMode": True,
+    "invincibility": True,
     "damageMultiplier": 4,
     "gameSpeed": 2,
 })
-assert normalized["godMode"] is True
+assert normalized["invincibility"] is True
 assert normalized["damageMultiplier"] == 4.0
 assert normalized["gameSpeed"] == 2.0
 

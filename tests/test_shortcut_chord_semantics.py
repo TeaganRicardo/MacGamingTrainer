@@ -35,15 +35,19 @@ func shortcutKey(_ action: ShortcutAction) -> String {
     "shortcut.action.\(action.rawValue)"
 }
 
-func seedV3Defaults(_ defaults: UserDefaults, godModeOverride: Int? = nil) {
+func legacyShortcutKey(_ action: ShortcutAction) -> String {
+    action == .invincibility ? "shortcut.action.godMode" : shortcutKey(action)
+}
+
+func seedV3Defaults(_ defaults: UserDefaults, invincibilityOverride: Int? = nil) {
     defaults.set(3, forKey: "shortcut.layoutVersion")
     let legacy: [ShortcutAction: Int] = [
-        .godMode: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
+        .invincibility: 1, .infiniteHealth: 2, .infiniteMana: 3, .instantCastCooldown: 4,
         .hexAlwaysReady: 5, .infiniteAmmo: 6, .damageEnabled: 7, .autoMiniGames: 8,
         .moneyMultiplierEnabled: 9, .disableAll: 0,
     ]
     for (action, digit) in legacy {
-        defaults.set(action == .godMode ? (godModeOverride ?? digit) : digit, forKey: shortcutKey(action))
+        defaults.set(action == .invincibility ? (invincibilityOverride ?? digit) : digit, forKey: legacyShortcutKey(action))
     }
 }
 
@@ -51,11 +55,11 @@ func seedKnownBrokenV4Defaults(_ defaults: UserDefaults) {
     defaults.set(4, forKey: "shortcut.layoutVersion")
     let clean = Hades2ShortcutStore.defaultLayout()
     for action in ShortcutAction.uiOrder {
-        defaults.set(clean[action]!.payload, forKey: shortcutKey(action))
+        defaults.set(clean[action]!.payload, forKey: legacyShortcutKey(action))
     }
-    defaults.set(clean[.moneyMultiplierEnabled]!.payload, forKey: shortcutKey(.gardenQoL))
-    defaults.set(HotkeyChord.controlOptionDigit(9)!.payload, forKey: shortcutKey(.moneyMultiplierEnabled))
-    defaults.set(HotkeyChord.controlOptionDigit(0)!.payload, forKey: shortcutKey(.disableAll))
+    defaults.set(clean[.moneyMultiplierEnabled]!.payload, forKey: legacyShortcutKey(.gardenQoL))
+    defaults.set(HotkeyChord.controlOptionDigit(9)!.payload, forKey: legacyShortcutKey(.moneyMultiplierEnabled))
+    defaults.set(HotkeyChord.controlOptionDigit(0)!.payload, forKey: legacyShortcutKey(.disableAll))
 }
 
 let migratedV3DefaultsStore = makeDefaults("migrated-v3-defaults")
@@ -65,9 +69,9 @@ precondition(ShortcutAction.uiOrder.map { migratedV3Defaults.chord($0).keyLabel 
     ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J"])
 
 let migratedV3CustomStore = makeDefaults("migrated-v3-custom")
-seedV3Defaults(migratedV3CustomStore, godModeOverride: 0)
+seedV3Defaults(migratedV3CustomStore, invincibilityOverride: 0)
 let migratedV3Custom = Hades2ShortcutStore(defaults: migratedV3CustomStore)
-precondition(migratedV3Custom.chord(.godMode).keyLabel == "0")
+precondition(migratedV3Custom.chord(.invincibility).keyLabel == "0")
 precondition(migratedV3Custom.chord(.infiniteHealth).keyLabel == "2")
 precondition(migratedV3Custom.chord(.gardenQoL).keyLabel == "9")
 precondition(migratedV3Custom.chord(.moneyMultiplierEnabled).keyLabel == "D")
@@ -92,23 +96,23 @@ precondition(defaults.chord(.disableAll).keyLabel == "J")
 
 var full = Hades2ShortcutStore(defaults: makeDefaults("full"))
 var profile = full.payload()
-profile[ShortcutAction.godMode.rawValue] = full.chord(.infiniteHealth).payload
-profile[ShortcutAction.infiniteHealth.rawValue] = full.chord(.godMode).payload
+profile[ShortcutAction.invincibility.rawValue] = full.chord(.infiniteHealth).payload
+profile[ShortcutAction.infiniteHealth.rawValue] = full.chord(.invincibility).payload
 full.applyProfile(profile)
-precondition(full.chord(.godMode).keyLabel == "2" && full.chord(.infiniteHealth).keyLabel == "1")
+precondition(full.chord(.invincibility).keyLabel == "2" && full.chord(.infiniteHealth).keyLabel == "1")
 precondition(unique(full))
 
 var partial = Hades2ShortcutStore(defaults: makeDefaults("partial"))
 let wanted = partial.chord(.infiniteHealth)
-partial.applyProfile([ShortcutAction.godMode.rawValue: wanted.payload])
-precondition(partial.chord(.godMode) == wanted && partial.chord(.infiniteHealth) != wanted)
+partial.applyProfile([ShortcutAction.invincibility.rawValue: wanted.payload])
+precondition(partial.chord(.invincibility) == wanted && partial.chord(.infiniteHealth) != wanted)
 precondition(unique(partial))
 
 var partialWithExistingOverride = Hades2ShortcutStore(defaults: makeDefaults("partial-existing-override"))
 let custom = HotkeyChord(keyCode: 18, modifiers: HotkeyChord.commandModifier, keyLabel: "1")
 precondition(partialWithExistingOverride.set(.infiniteHealth, chord: custom) == nil)
-partialWithExistingOverride.applyProfile([ShortcutAction.godMode.rawValue: custom.payload])
-precondition(partialWithExistingOverride.chord(.godMode) == custom)
+partialWithExistingOverride.applyProfile([ShortcutAction.invincibility.rawValue: custom.payload])
+precondition(partialWithExistingOverride.chord(.invincibility) == custom)
 precondition(partialWithExistingOverride.chord(.infiniteHealth) != custom)
 precondition(unique(partialWithExistingOverride))
 

@@ -107,7 +107,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var activeFeatures: [String: Bool] = [:]
     @Published var dormantFeatures: [String: Bool] = [:]
     @Published var featureSupport: [String: Bool] = [:]
-    @Published var godMode = false
+    @Published var invincibility = false
     @Published var infiniteHealth = false
     @Published var infiniteMana = false
     @Published var instantCastCooldown = false
@@ -1056,7 +1056,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
         guard !busy && !exiting else { return }
         switch action {
-        case .godMode, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+        case .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
              .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
              .moneyMultiplierEnabled, .resourceMultiplierEnabled:
             guard canEditDesired, let key = action.featureKey else { return }
@@ -1183,7 +1183,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 private extension Hades2FeatureKey {
     var modelKeyPath: ReferenceWritableKeyPath<Hades2TrainerModel, Bool> {
         switch self {
-        case .godMode: return \.godMode
+        case .invincibility: return \.invincibility
         case .infiniteHealth: return \.infiniteHealth
         case .infiniteMana: return \.infiniteMana
         case .damageEnabled: return \.damageEnabled

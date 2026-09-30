@@ -16,9 +16,9 @@ from games.hades2.profile_service import (
 )
 
 FIXTURES = ROOT / "tests/fixtures/hades2/profiles"
-assert PROFILE_SCHEMA_VERSION == 5
+assert PROFILE_SCHEMA_VERSION == 6
 assert PROFILE_COMPATIBILITY_FLOOR == 3
-assert DESIRED_STATE_SCHEMA_VERSION == 4
+assert DESIRED_STATE_SCHEMA_VERSION == 5
 
 fixture_paths = sorted(FIXTURES.glob("profile-v*.json"))
 fixture_versions = {
@@ -58,6 +58,8 @@ for fixture_path in fixture_paths:
         source_desired_schema = 3
     elif payload["schemaVersion"] == 4:
         source_desired_schema = 4 if "nextRoomRewardToken" in payload["desired"] else 3
+    elif payload["schemaVersion"] == 5:
+        source_desired_schema = payload["desiredSchemaVersion"]
     else:
         raise AssertionError(f"unexpected historical fixture version: {payload['schemaVersion']}")
 
@@ -67,10 +69,10 @@ for fixture_path in fixture_paths:
     )
 
 rows = {row["name"]: row for row in service.list()}
-assert {"release-0.1-v3", "profile-v4-desired-v3", "profile-v4-desired-v4"} <= set(rows)
+assert {"release-0.1-v3", "profile-v4-desired-v3", "profile-v4-desired-v4", "profile-v5-desired-v4"} <= set(rows)
 
 v3_shortcuts = loaded_by_name["release-0.1-v3"]["shortcuts"]
-assert v3_shortcuts["godMode"] == {"keyCode": 18, "modifiers": 6144, "keyLabel": "1"}
+assert v3_shortcuts["invincibility"] == {"keyCode": 18, "modifiers": 6144, "keyLabel": "1"}
 assert v3_shortcuts["infiniteHealth"] == {"keyCode": 19, "modifiers": 6144, "keyLabel": "2"}
 assert v3_shortcuts["disableAll"] == {"keyCode": 29, "modifiers": 6144, "keyLabel": "0"}
 
@@ -79,16 +81,20 @@ assert (
     loaded_by_name["profile-v4-desired-v4"]["desired"]["nextRoomRewardToken"]
     == "profile-existing-v4-token"
 )
+assert loaded_by_name["profile-v5-desired-v4"]["desired"]["invincibility"] is True
+assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["desired"]
+assert loaded_by_name["profile-v5-desired-v4"]["shortcuts"]["invincibility"]["keyLabel"] == "X"
+assert "godMode" not in loaded_by_name["profile-v5-desired-v4"]["shortcuts"]
 
-service.save("current-v5", {"godMode": True}, {})
-current_path = service.path("current-v5")
+service.save("current-v6", {"invincibility": True}, {})
+current_path = service.path("current-v6")
 current_doc = json.loads(current_path.read_text(encoding="utf-8"))
 assert current_doc["schemaVersion"] == PROFILE_SCHEMA_VERSION
 assert current_doc["desiredSchemaVersion"] == DESIRED_STATE_SCHEMA_VERSION
 assert set(current_doc) == {
     "schemaVersion", "desiredSchemaVersion", "name", "updatedAt", "desired", "shortcuts"
 }
-assert service.load("current-v5")["desired"] == canonical_desired(
+assert service.load("current-v6")["desired"] == canonical_desired(
     current_doc["desired"], DESIRED_STATE_SCHEMA_VERSION, base
 )
 
@@ -122,7 +128,7 @@ else:
     raise AssertionError("future embedded desired schema was accepted")
 assert future_desired_path.read_bytes() == future_desired_bytes
 try:
-    service.save("future-desired", {"godMode": False}, {})
+    service.save("future-desired", {"invincibility": False}, {})
 except UnsupportedSchemaVersionError as error:
     assert error.kind == "Profile desired-state"
 else:
@@ -141,7 +147,7 @@ future_bytes = json.dumps(future_doc, sort_keys=True).encode("utf-8")
 future_path.write_bytes(future_bytes)
 for operation in (
     lambda: service.load("future-profile"),
-    lambda: service.save("future-profile", {"godMode": False}, {}),
+    lambda: service.save("future-profile", {"invincibility": False}, {}),
 ):
     try:
         operation()

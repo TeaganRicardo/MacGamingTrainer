@@ -18,7 +18,7 @@ STALE_STATE = {
     "scene": "run",
     "runtimeDiagnostics": {"revision": 49, "heroObjectId": 123},
     "runCount": 7,
-    "featureSupport": {"godMode": True},
+    "featureSupport": {"invincibility": True},
     "statSupport": {"health": True},
 }
 

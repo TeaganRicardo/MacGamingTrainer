@@ -33,7 +33,7 @@ try:
     store = Hades2PreferenceStore(desired_path)
     loaded, initialized = store.load()
     assert initialized is True
-    assert loaded['godMode'] is True
+    assert loaded['invincibility'] is True
     assert loaded['nextRoomReward'] == 'RoomMoneyDrop'
     assert loaded['boonRarity']['forceLegendary'] is False
     assert loaded['boonRarity']['forceDuo'] is False
@@ -58,7 +58,8 @@ try:
     store.save(loaded)
     upgraded = json.loads(desired_path.read_text(encoding='utf-8'))
     assert upgraded['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
-    assert upgraded['godMode'] is True
+    assert upgraded['invincibility'] is True
+    assert 'godMode' not in upgraded
     assert upgraded['nextRoomReward'] == 'RoomMoneyDrop'
 
     # A file produced by a newer Trainer must never be quarantined or silently
@@ -71,12 +72,12 @@ try:
     future_bytes = future_path.read_bytes()
     future_store = Hades2PreferenceStore(future_path)
     safe, initialized = future_store.load()
-    assert initialized is False and safe['godMode'] is False
+    assert initialized is False and safe['invincibility'] is False
     assert future_store.unsupported_schema_version == DESIRED_STATE_SCHEMA_VERSION + 1
     assert future_path.read_bytes() == future_bytes
     assert list(base.glob('future-desired.json.corrupt-*')) == []
     try:
-        future_store.save(dict(safe, godMode=True))
+        future_store.save(dict(safe, invincibility=True))
     except UnsupportedSchemaVersionError as error:
         assert error.code == 'unsupported_schema'
     else:
@@ -104,8 +105,8 @@ try:
             self.execute_calls += 1
             return json.dumps({
                 'status':'ready','scene':'run','capabilities':{},
-                'desiredFeatures':{'godMode':True},
-                'activeFeatures':{'godMode':True},
+                'desiredFeatures':{'invincibility':True},
+                'activeFeatures':{'invincibility':True},
             })
         def detach(self): pass
         def close(self): pass
@@ -157,7 +158,7 @@ try:
     profiles = Hades2ProfileService(base/'profiles')
 
     # New profile writes are explicitly versioned.
-    profiles.save('current', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+    profiles.save('current', loaded, {'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     current_path = profiles.path('current')
     current_doc = json.loads(current_path.read_text(encoding='utf-8'))
     assert current_doc['schemaVersion'] == PROFILE_SCHEMA_VERSION
@@ -180,10 +181,10 @@ try:
 
     # Saving an explicitly named profile is a user-requested replacement, not a
     # migration. It atomically writes the current envelope over any old version.
-    profiles.save('legacy', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+    profiles.save('legacy', loaded, {'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     replaced_profile = json.loads(legacy_profile_path.read_text(encoding='utf-8'))
     assert replaced_profile['schemaVersion'] == PROFILE_SCHEMA_VERSION
-    assert profiles.load('legacy')['desired']['godMode'] is True
+    assert profiles.load('legacy')['desired']['invincibility'] is True
 
     # Future Profile schemas are neither read/listed nor overwritten by save.
     # Explicit delete remains the only destructive operation that ignores schema.
@@ -192,7 +193,7 @@ try:
         'schemaVersion': PROFILE_SCHEMA_VERSION + 1,
         'name': 'future',
         'updatedAt': '2026-09-18T00:00:00+0000',
-        'desired': {'godMode': True},
+        'desired': {'invincibility': True},
     }
     future_profile_path.write_text(json.dumps(future_profile, sort_keys=True), encoding='utf-8')
     future_profile_bytes = future_profile_path.read_bytes()
@@ -206,7 +207,7 @@ try:
     assert future_profile_path.read_bytes() == future_profile_bytes
 
     try:
-        profiles.save('future', loaded, {'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
+        profiles.save('future', loaded, {'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'}})
     except UnsupportedSchemaVersionError as error:
         assert error.code == 'unsupported_schema'
     else:

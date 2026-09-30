@@ -28,7 +28,7 @@ for component in (
     assert component in all_hades, component
 
 # Core components must remain game-agnostic.
-for semantic in ('Hades2', 'godMode', 'boonRarity', 'dormantFeatures', 'CurrentRun', 'WeaponCast'):
+for semantic in ('Hades2', 'invincibility', 'boonRarity', 'dormantFeatures', 'CurrentRun', 'WeaponCast'):
     assert semantic not in all_core_ui, semantic
 
 # Shared switch baseline: old purple native regular switch, one implementation.
