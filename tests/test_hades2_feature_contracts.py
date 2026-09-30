@@ -41,7 +41,7 @@ assert 'if rewardId == "TalentDrop"' not in spawn
 # a phantom column.
 order = types[types.index('static let uiOrder'):types.index('static let legacyDigitActions')]
 for token in (
-    '.godMode', '.infiniteHealth', '.infiniteMana', '.instantCastCooldown',
+    '.invincibility', '.infiniteHealth', '.infiniteMana', '.instantCastCooldown',
     '.hexAlwaysReady', '.infiniteAmmo', '.damageEnabled', '.autoMiniGames',
     '.gardenQoL', '.boonRarityEnabled', '.forceLegendary', '.forceDuo',
     '.moneyMultiplierEnabled', '.resourceMultiplierEnabled',

@@ -61,7 +61,7 @@ cases = (
         '[string "MacGamingTrainer"]:3131: Cannot open special blessing choice while another screen is active',
     ),
     (
-        {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "godMode", "value": True}},
+        {"id": "generic-lua-error", "command": "set_desired", "params": {"feature": "invincibility", "value": True}},
         "hades2.error.runtimeActionFailed",
         '[string "MacGamingTrainer"]:2999: Feature unavailable: synthetic runtime failure',
     ),

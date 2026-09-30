@@ -59,7 +59,7 @@ struct Main {
         // featureErrors remain usable beside it rather than forcing either
         // owner into the other's localization table.
         model.apply([
-            "featureErrors": ["godMode": "native runtime refusal"],
+            "featureErrors": ["invincibility": "native runtime refusal"],
             "featureErrorPresentations": [
                 "gameSpeed": [
                     "presentation": "host.timeWarp.error.setFailed",
@@ -79,7 +79,7 @@ struct Main {
               "sparse state update erased runtime issue presentations")
 
         // Seed both runtime observations and durable desired intent.
-        model.godMode = true
+        model.invincibility = true
         model.gameSpeed = 2.5
         model.damageMultiplier = 3.0
         model.moneyMultiplier = 4.0
@@ -97,9 +97,9 @@ struct Main {
         model.version = "1.139672"
         model.scene = "run"
         model.capabilities = ["setVitals": true]
-        model.activeFeatures = ["godMode": true]
+        model.activeFeatures = ["invincibility": true]
         model.dormantFeatures = ["infiniteMana": true]
-        model.featureSupport = ["godMode": true]
+        model.featureSupport = ["invincibility": true]
         model.statSupport = ["grasp": true]
         model.statAvailable = ["grasp": true]
         model.health = 99
@@ -255,7 +255,7 @@ struct Main {
         check(!model.noticeText.key.isEmpty, "last action receipt deduplication survived backend termination")
 
         // Durable desired intent remains available for replay.
-        check(model.godMode && model.gameSpeed == 2.5 && model.damageMultiplier == 3.0,
+        check(model.invincibility && model.gameSpeed == 2.5 && model.damageMultiplier == 3.0,
               "durable feature intent was cleared")
         check(model.moneyMultiplier == 4.0 && model.resourceMultiplier == 5.0,
               "durable multiplier intent was cleared")
