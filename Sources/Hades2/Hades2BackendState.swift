@@ -287,25 +287,47 @@ struct Hades2StatePatch {
 
 
     private static func decodeCurrentRunTrait(_ row: [String: Any]) -> CurrentRunTrait? {
-        // `name` is the only required field: it is the removal input, and a row
-        // without one cannot be acted on truthfully.
-        guard let name = row["name"] as? String, !name.isEmpty else { return nil }
-        let instanceID = row["instanceId"] as? String ?? name
-        let capabilityRaw = row["removalCapability"] as? String ?? TraitRemovalCapability.none.rawValue
-        // An unrecognised capability must read as "no removal", never as a
-        // guess that grants one.
-        let capability = TraitRemovalCapability(rawValue: capabilityRaw) ?? .none
+        guard
+            let generationID = row["generationId"] as? String, !generationID.isEmpty,
+            let runID = row["runId"] as? String, !runID.isEmpty,
+            let instanceID = row["instanceId"] as? String, !instanceID.isEmpty,
+            let name = row["name"] as? String, !name.isEmpty
+        else { return nil }
+
+        let levelCapability = TraitLevelCapability(
+            rawValue: row["levelCapability"] as? String ?? TraitLevelCapability.none.rawValue
+        ) ?? .none
+        let rarityCapability = TraitRarityCapability(
+            rawValue: row["rarityCapability"] as? String ?? TraitRarityCapability.none.rawValue
+        ) ?? .none
+        let removalCapability = TraitRemovalCapability(
+            rawValue: row["removalCapability"] as? String ?? TraitRemovalCapability.none.rawValue
+        ) ?? .none
+
         return CurrentRunTrait(
+            generationID: generationID,
+            runID: runID,
             instanceID: instanceID,
             name: name,
+            displayName: row["displayName"] as? String ?? name,
+            englishName: row["englishName"] as? String ?? name,
             family: row["family"] as? String ?? "",
-            owner: row["owner"] as? String ?? "",
-            hasRarity: row["hasRarity"] as? Bool ?? false,
+            sourceID: row["sourceId"] as? String ?? "",
+            sourceName: row["sourceName"] as? String ?? "",
+            sourceEnglishName: row["sourceEnglishName"] as? String ?? "",
+            level: row["level"] as? Int ?? 1,
+            rarity: row["rarity"] as? String ?? "",
+            availableRarities: row["availableRarities"] as? [String] ?? [],
+            sameNameCount: row["sameNameCount"] as? Int ?? 1,
             remainingUses: number(row["remainingUses"]),
-            removalCapability: capability,
+            levelCapability: levelCapability,
+            levelReason: row["levelReason"] as? String ?? "",
+            rarityCapability: rarityCapability,
+            rarityReason: row["rarityReason"] as? String ?? "",
+            removalCapability: removalCapability,
             removalReason: row["removalReason"] as? String ?? "",
-            // Only assert all-matching scope when the runtime said so.
-            removalScopeAllMatching: row["removalScopeAllMatching"] as? Bool ?? false
+            removalScopeAllMatching: row["removalScopeAllMatching"] as? Bool ?? false,
+            deferredIssue: row["deferredIssue"] as? Int
         )
     }
 

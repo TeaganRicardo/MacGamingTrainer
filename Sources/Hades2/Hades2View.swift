@@ -42,6 +42,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
+    @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var graspLimit = ""
     @ViewState<String> private var dodgeChance = ""
     @ViewState<String> private var critChance = ""
@@ -248,13 +249,8 @@ struct Hades2TrainerView: View {
         }
     }
 
-    /// Live current-run inventory. Every row is observation only; removal is
-    /// offered exactly where the runtime proved a safe teardown, and the button
-    /// names the scope so a name-level, all-matching delete is never presented
-    /// as a single-instance removal.
     /// Resolve a Hades key with runtime arguments against the live Host
-    /// language. An argument is normally runtime text (a display name); it is
-    /// resolved as a key only when this catalogue owns that key.
+    /// language. An argument is runtime text unless it is another owned key.
     private func text(_ key: String, arguments: [String]) -> String {
         Hades2GameModule.presentationText(
             key: key,
@@ -263,19 +259,93 @@ struct Hades2TrainerView: View {
         )
     }
 
+    private func currentRunTraitName(_ trait: CurrentRunTrait) -> String {
+        localization.language == .en ? trait.englishName : trait.displayName
+    }
+
+    private func traitGroupKey(_ trait: CurrentRunTrait) -> String {
+        trait.sourceID.isEmpty ? "family:\(trait.family)" : "source:\(trait.sourceID)"
+    }
+
+    private var filteredCurrentRunTraits: [CurrentRunTrait] {
+        guard !traitSearch.isEmpty else { return model.currentRunTraits }
+        return model.currentRunTraits.filter { trait in
+            [
+                trait.displayName, trait.englishName, trait.name,
+                trait.sourceName, trait.sourceEnglishName, trait.sourceID, trait.family,
+            ].contains { $0.localizedCaseInsensitiveContains(traitSearch) }
+        }
+    }
+
+    private var currentRunTraitFamilies: [String] {
+        var seen = Set<String>()
+        return filteredCurrentRunTraits.compactMap { trait in
+            let key = traitGroupKey(trait)
+            return seen.insert(key).inserted ? key : nil
+        }
+    }
+
+    private func traitRarityLabel(_ rarity: String) -> String {
+        let key = "hades2.rarity." + rarity
+        let localized = text(key)
+        return localized == key ? rarity : localized
+    }
+
+    private func traitLimitationReason(_ reason: String) -> String {
+        let key = "hades2.traits.reason." + (reason.isEmpty ? "ownerSpecificLifecycle" : reason)
+        let localized = text(key)
+        return localized == key ? text("hades2.traits.reason.unknown") : localized
+    }
+
+    private func traitLimitationRows(_ trait: CurrentRunTrait) -> [String] {
+        var rows: [String] = []
+        if !trait.canIncreaseLevel {
+            rows.append(text("hades2.traits.limit.level", arguments: [traitLimitationReason(trait.levelReason)]))
+        }
+        if !trait.canSetRarity {
+            rows.append(text("hades2.traits.limit.rarity", arguments: [traitLimitationReason(trait.rarityReason)]))
+        }
+        if !trait.canRemove {
+            rows.append(text("hades2.traits.limit.remove", arguments: [traitLimitationReason(trait.removalReason)]))
+        }
+        return rows
+    }
+
+    private func traitFamilyLabel(_ key: String) -> String {
+        guard let trait = filteredCurrentRunTraits.first(where: { traitGroupKey($0) == key }) else {
+            return key
+        }
+        if !trait.sourceID.isEmpty {
+            let label = localization.language == .en ? trait.sourceEnglishName : trait.sourceName
+            if !label.isEmpty { return label }
+        }
+        let presentationKey = "hades2.traits.family.\(trait.family)"
+        let localized = text(presentationKey)
+        return localized == presentationKey ? trait.family : localized
+    }
+
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: theme.sectionSpacing) {
-            if model.currentRunTraits.isEmpty {
+            TextField(text("hades2.traits.search"), text: $traitSearch)
+                .textFieldStyle(.roundedBorder)
+
+            if filteredCurrentRunTraits.isEmpty {
                 Text(text("hades2.traits.empty"))
                     .font(.callout)
                     .foregroundStyle(theme.mutedFill)
             } else {
-                ForEach(model.currentRunTraits) { trait in
-                    currentRunTraitRow(trait)
+                ForEach(currentRunTraitFamilies, id: \.self) { family in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(traitFamilyLabel(family))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(theme.mutedFill)
+                        ForEach(filteredCurrentRunTraits.filter { traitGroupKey($0) == family }) { trait in
+                            currentRunTraitRow(trait)
+                        }
+                    }
                 }
             }
-            // The runtime states its own identity scope. Showing it verbatim
-            // keeps the UI from implying a durable identifier.
+
             if !model.currentRunTraitScope.isPersistent {
                 Text(text("hades2.traits.identityScope"))
                     .font(.caption)
@@ -284,38 +354,83 @@ struct Hades2TrainerView: View {
         }
     }
 
+    @ViewBuilder
     private func currentRunTraitRow(_ trait: CurrentRunTrait) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: theme.sectionSpacing) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(trait.name)
+        HStack(alignment: .center, spacing: theme.sectionSpacing) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(currentRunTraitName(trait))
                     .font(.body)
-                if trait.canRemove {
-                    // State the real scope rather than implying one row, one delete.
-                    Text(text("hades2.traits.removeAllMatching", arguments: [trait.name]))
+                if trait.name != currentRunTraitName(trait) {
+                    Text(trait.name)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(theme.mutedFill)
+                }
+
+                HStack(spacing: 8) {
+                    Text(text("hades2.traits.level", arguments: [String(trait.level)]))
+                    if !trait.rarity.isEmpty {
+                        Text(traitRarityLabel(trait.rarity))
+                    }
+                    if trait.sameNameCount > 1 {
+                        Text(text("hades2.traits.instances", arguments: [String(trait.sameNameCount)]))
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(theme.mutedFill)
+
+                ForEach(traitLimitationRows(trait), id: \.self) { limitation in
+                    Text(limitation)
+                        .font(.caption2)
+                        .foregroundStyle(theme.mutedFill)
+                }
+                if let issue = trait.deferredIssue {
+                    Text(text("hades2.traits.deferredIssue", arguments: [String(issue)]))
                         .font(.caption)
                         .foregroundStyle(theme.mutedFill)
-                } else {
-                    Text(text("hades2.traits.removalReason.\(trait.removalReason.isEmpty ? "ownerSpecificLifecycle" : trait.removalReason)"))
+                }
+                if trait.removalScopeAllMatching {
+                    Text(text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)]))
                         .font(.caption)
                         .foregroundStyle(theme.mutedFill)
                 }
             }
+
             Spacer(minLength: theme.sectionSpacing)
-            if trait.canRemove {
-                Button {
-                    model.removeTrait(trait)
-                } label: {
-                    Text(text("hades2.traits.remove"))
+
+            HStack(spacing: 6) {
+                if trait.canIncreaseLevel {
+                    Button {
+                        model.increaseTraitLevel(trait)
+                    } label: {
+                        Text(text("hades2.traits.levelUp"))
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-            } else {
-                // Unsupported categories stay visible and disabled, with a
-                // truthful reason instead of a hidden control.
-                Text(text("hades2.traits.removalUnavailable"))
-                    .font(.caption)
-                    .foregroundStyle(theme.mutedFill)
+
+                if trait.canSetRarity {
+                    Menu {
+                        ForEach(trait.availableRarities.filter { $0 != trait.rarity }, id: \.self) { rarity in
+                            Button(traitRarityLabel(rarity)) {
+                                model.setTraitRarity(trait, rarity: rarity)
+                            }
+                        }
+                    } label: {
+                        Text(text("hades2.traits.rarity"))
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if trait.canRemove {
+                    Button(role: .destructive) {
+                        model.removeTrait(trait)
+                    } label: {
+                        Text(text("hades2.traits.remove"))
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
+        .padding(.vertical, 3)
     }
 
     private var resourceSection: some View {

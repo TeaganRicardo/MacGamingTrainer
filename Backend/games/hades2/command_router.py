@@ -19,7 +19,7 @@ _RUNTIME_COMMANDS = frozenset((
     'status','disable_all','set_desired','set_vital','set_counter','lock_vital',
     'set_stat','set_element','lock_element','set_resource','lock_resource',
     'set_rerolls','lock_rerolls','spawn_reward','open_sell_traits',
-    'open_special_choice','remove_trait',
+    'open_special_choice','set_trait_level','set_trait_rarity','remove_trait',
 ))
 
 
@@ -28,7 +28,8 @@ _RUNTIME_COMMANDS = frozenset((
 # outcome-unknown request is never auto-retried.
 _REQUEST_ID_COMMANDS = frozenset((
     'set_resource','set_rerolls','spawn_reward','open_sell_traits',
-    'open_special_choice','lock_resource','lock_rerolls','remove_trait',
+    'open_special_choice','lock_resource','lock_rerolls',
+    'set_trait_level','set_trait_rarity','remove_trait',
 ))
 
 

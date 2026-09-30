@@ -79,18 +79,6 @@ class Result:
 # incident behind it is a rule added to make a number look better, so the gate
 # refuses to run without one.
 PROVENANCE = {
-    "d01-unconditional-grant": "#193 shipped it; review caught an unconditional capability grant",
-    "d01-escape-hatch": "#193: the forbidden generic RemoveTraitData teardown must stay unreachable",
-    "d01-instance-identity": "D01: removal input is a name, never a run-local instance id",
-    "d01-hero-has-trait-arity": "#193 CRITICAL: Lua ignored the extra argument, so the guard passed instead of refusing",
-    "d01-drop-rarity-recheck": "#193 MAJOR: D00 section 6 requires shop ownership AND a non-nil Rarity",
-    "d01-drop-request-id": "D01: a non-idempotent action must ride the request-id path",
-    "d01-durable-identity-claim": "D01: trait identity is current-run only and must never be persisted",
-    "d01-catalog-at-callsite": "D01: the inventory is projected from runtime state, not the catalog",
-    "d01-permissive-decoder": "an unrecognised capability must default to no removal",
-    "d01-model-guard": "the model must require the proven capability and scope",
-    "d01-hide-unremovable-rows": "D01: unproven families stay visible but disabled",
-    "err-remove-trait-unreachable": "#193 CRITICAL: all six remove_trait refusals fell to the generic key",
     "receipt-drop-remove-trait": "#193 CRITICAL: default: return dropped the failed receipt entirely",
     "receipt-failed-as-success": "#193 CRITICAL: a failed removal presented a green success",
     "seam-empty-prefix": "#202: an empty module prefix claimed every Host-owned key",
@@ -177,127 +165,16 @@ def _hades_lua() -> Path:
 def manifest() -> list[Mutation]:
     lua = _hades_lua()
     return [
-        # --- D01 removal safety -------------------------------------------
-        Mutation(
-            ident="d01-unconditional-grant",
-            invariant="removal capability is granted only on the proven native predicate",
-            path=lua,
-            old='if eligible then scope = "nameLevelAllMatching" end',
-            new='scope = "nameLevelAllMatching"',
-            test="tests/test_hades2_current_run_traits.py",
-            note="shipped in #193, caught by review",
-        ),
-        Mutation(
-            ident="d01-escape-hatch",
-            invariant="no generic RemoveTraitData escape hatch is reachable",
-            path=lua,
-            old="RemoveWeaponTrait(traitName, { Silent = true })",
-            new="RemoveTraitData(CurrentRun.Hero, { Name = traitName })",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-instance-identity",
-            invariant="removal input is a name, never an instance identity",
-            path=lua,
-            old="local traitName = params.trait",
-            new=("local traitName = params.trait\n"
-                 "      local peek = CurrentRun.Hero.Traits[1] and CurrentRun.Hero.Traits[1].Id"),
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-hero-has-trait-arity",
-            invariant="the presence check passes a trait name, so it can actually refuse",
-            path=lua,
-            old="if not HeroHasTrait(traitName) then",
-            new="if not HeroHasTrait(CurrentRun.Hero, traitName) then",
-            test="tests/test_hades2_current_run_traits.py",
-            note=("Lua ignores extra arguments, so this made the guard a no-op that "
-                  "passes; found in #193 review as a CRITICAL"),
-        ),
-        Mutation(
-            ident="d01-drop-rarity-recheck",
-            invariant="the live gate re-checks both halves of the D00 sell predicate",
-            path=lua,
-            old=('            if trait.Rarity == nil then\n'
-                 '              error("Trait is not sell-eligible, so no safe removal exists: " .. traitName)\n'
-                 '            end\n'),
-            new="",
-            test="tests/test_hades2_current_run_traits.py",
-            note="#193 review MAJOR: capability model and executable gate disagreed",
-        ),
-        Mutation(
-            ident="d01-drop-request-id",
-            invariant="removal is treated as a non-idempotent action requiring a request id",
-            path=ROOT / "Backend/games/hades2/command_router.py",
-            old="'open_special_choice','lock_resource','lock_rerolls','remove_trait',",
-            new="'open_special_choice','lock_resource','lock_rerolls',",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-durable-identity-claim",
-            invariant="trait identity is presented as current-run only",
-            path=lua,
-            old="currentRunTraitIdentityPersistent = false",
-            new="currentRunTraitIdentityPersistent = true",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-catalog-at-callsite",
-            invariant="state() projects the inventory from the runtime, not the catalog",
-            path=lua,
-            old="local traitList, traitListReason = currentRunTraits()",
-            new="local traitList, traitListReason = boons() and {list = boons()} or {list = {}}",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-permissive-decoder",
-            invariant="an unrecognised capability defaults to no removal",
-            path=ROOT / "Sources/Hades2/Hades2BackendState.swift",
-            old="?? .none",
-            new="?? .nameLevelAllMatching",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-model-guard",
-            invariant="the model requires the proven capability and scope before removing",
-            path=ROOT / "Sources/Hades2/Hades2Model.swift",
-            old="guard trait.canRemove, trait.removalScopeAllMatching else { return }",
-            new="guard false else { return }",
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        Mutation(
-            ident="d01-hide-unremovable-rows",
-            invariant="the remove control is shown only for a removable row",
-            path=ROOT / "Sources/Hades2/Hades2View.swift",
-            old=("            if trait.canRemove {\n"
-                 "                Button {\n"
-                 "                    model.removeTrait(trait)"),
-            new=("            if true {\n"
-                 "                Button {\n"
-                 "                    model.removeTrait(trait)"),
-            test="tests/test_hades2_current_run_traits.py",
-        ),
-        # --- unreachable error copy (#193 review CRITICAL) -------------------
-        Mutation(
-            ident="err-remove-trait-unreachable",
-            invariant="every remove_trait refusal resolves to its own stable key",
-            path=ROOT / "Backend/games/hades2/error_presentation.py",
-            old=("  'message': 'Trait removal requires an active run room',\n"
-                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
-                 "  'runtime': {'commands': ['remove_trait'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},"),
-            new=("  'message': 'Trait removal requires an active run room',\n"
-                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
-                 "  'runtime': {'commands': ['remove_trait_DISABLED'], 'producer': {'kind': 'command', 'name': 'remove_trait'}}},"),
-            test="tests/test_hades2_current_run_traits.py",
-            note=("shipped in #193: all six refusals fell to the generic fallback key, "
-                  "so the player was never told why"),
-        ),
+        # #227 supersedes the D01 SellTraits-only mutation model. Its live
+        # target/capability/replay invariants are owned by
+        # test_hades2_live_trait_management.py instead of preserving stale
+        # mutation anchors for the retired remove_trait(name) design.
         # --- failed removal reported as success ----------------------------
         Mutation(
             ident="receipt-drop-remove-trait",
             invariant="a failed removal presents an error, not silence",
             path=ROOT / "Sources/Hades2/Hades2Model.swift",
-            old='        case .removeTrait: title = presentation("hades2.receipt.traitRemoved")\n',
+            old='        case .removeTrait: title = presentation("hades2.receipt.traitRemoveAction")\n',
             new="",
             test="tests/test_hades2_backend_state_cleanup.py",
             note="#193 review CRITICAL: default: return dropped the failed receipt entirely",
@@ -310,7 +187,7 @@ def manifest() -> list[Mutation]:
                  '            noticeToken = nil\n'
                  '            errorToken = presentation("hades2.receipt.failed", arguments: [title.key])'),
             new=('        case .failed:\n'
-                 '            noticeToken = presentation("hades2.receipt.traitRemovalCompleted", arguments: [title.key])\n'
+                 '            noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])\n'
                  '            errorToken = nil'),
             test="tests/test_hades2_backend_state_cleanup.py",
         ),
@@ -385,14 +262,16 @@ def manifest() -> list[Mutation]:
             ident="error-registry-producer",
             invariant="a registered runtime refusal must point at a live producer",
             path=ROOT / "Backend/games/hades2/error_presentation.py",
-            old=("  'message': 'Trait removal requires an active run room',\n"
-                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
-                 "  'runtime': {'commands': ['remove_trait'], 'producer': "
-                 "{'kind': 'command', 'name': 'remove_trait'}}},"),
-            new=("  'message': 'Trait removal requires an active run room',\n"
-                 "  'key': 'hades2.error.traitRemovalNeedsRun',\n"
-                 "  'runtime': {'commands': ['remove_trait'], 'producer': "
-                 "{'kind': 'command', 'name': 'remove_trait_missing'}}},"),
+            old=("  'message': 'Trait mutation requires an active run room',\n"
+                 "  'key': 'hades2.error.traitMutationNeedsRun',\n"
+                 "  'runtime_only': True,\n"
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait'], "
+                 "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget'}}},"),
+            new=("  'message': 'Trait mutation requires an active run room',\n"
+                 "  'key': 'hades2.error.traitMutationNeedsRun',\n"
+                 "  'runtime_only': True,\n"
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait'], "
+                 "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget_missing'}}},"),
             test="tests/test_hades2_error_registry_single_source.py",
             note="#204 dead-entry reverse coverage",
         ),

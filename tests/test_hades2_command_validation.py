@@ -109,6 +109,37 @@ expect_error(
     "open_special_choice", {"source": ""}, "请选择支持原生奖励选择界面的角色。"
 )
 
+trait_target = {
+    "generationId": "generation-55",
+    "runId": "run-1",
+    "instanceId": "trait-42",
+    "trait": "ZeusWeaponBoon",
+    "family": "olympianHermes",
+    "expectedLevel": 1,
+    "expectedRarity": "Rare",
+    "expectedSameNameCount": 1,
+}
+assert validate_command_params("set_trait_level", trait_target) == trait_target
+assert validate_command_params(
+    "set_trait_rarity", dict(trait_target, rarity="Epic")
+) == dict(trait_target, rarity="Epic")
+assert validate_command_params("remove_trait", trait_target) == trait_target
+expect_error(
+    "set_trait_level",
+    {key: value for key, value in trait_target.items() if key != "instanceId"},
+    "请选择当前局祝福。",
+)
+expect_error(
+    "remove_trait",
+    dict(trait_target, expectedSameNameCount=0),
+    "请选择当前局祝福。",
+)
+expect_error(
+    "set_trait_rarity",
+    dict(trait_target, rarity="Mythic"),
+    "最低稀有度无效。",
+)
+
 assert validate_command_params(
     "set_boon_rarity_desired",
     {

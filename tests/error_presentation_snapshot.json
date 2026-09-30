@@ -20,10 +20,6 @@
       "arguments": [],
       "key": "hades2.error.luaFailed"
     },
-    "Native sell predicate is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.sellPredicateUnavailable"
-    },
     "Profile desired 字段无效。": {
       "arguments": [],
       "key": "hades2.error.profileDesiredInvalid"
@@ -82,98 +78,6 @@
         "arm64"
       ],
       "key": "hades2.error.architectureRequired"
-    },
-    "Trait is not present in the current run:  失败（5）": {
-      "arguments": [
-        " 失败（5）"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run:  超时（5 秒）": {
-      "arguments": [
-        " 超时（5 秒）"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run: sample-value": {
-      "arguments": [
-        "sample-value"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run: 元素数量必须为 0–5 的整数。": {
-      "arguments": [
-        "元素数量必须为 0–5 的整数。"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run: 局内数值必须为 0–5。": {
-      "arguments": [
-        "局内数值必须为 0–5。"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run: 巫咒充能必须为 0–5。": {
-      "arguments": [
-        "巫咒充能必须为 0–5。"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not present in the current run: 数量必须是 0–5 的整数。": {
-      "arguments": [
-        "数量必须是 0–5 的整数。"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "Trait is not sell-eligible, so no safe removal exists:  失败（5）": {
-      "arguments": [
-        " 失败（5）"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists:  超时（5 秒）": {
-      "arguments": [
-        " 超时（5 秒）"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists: sample-value": {
-      "arguments": [
-        "sample-value"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists: 元素数量必须为 0–5 的整数。": {
-      "arguments": [
-        "元素数量必须为 0–5 的整数。"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists: 局内数值必须为 0–5。": {
-      "arguments": [
-        "局内数值必须为 0–5。"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists: 巫咒充能必须为 0–5。": {
-      "arguments": [
-        "巫咒充能必须为 0–5。"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait is not sell-eligible, so no safe removal exists: 数量必须是 0–5 的整数。": {
-      "arguments": [
-        "数量必须是 0–5 的整数。"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "Trait removal requires a trait name": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNeedsName"
-    },
-    "Trait removal requires an active run room": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNeedsRun"
     },
     "desired-state schemaVersion 无效。": {
       "arguments": [],
@@ -1076,6 +980,10 @@
       "arguments": [],
       "key": "hades2.error.disconnectBeforePrepare"
     },
+    "请选择当前局祝福。": {
+      "key": "hades2.error.selectCurrentTrait",
+      "arguments": []
+    },
     "请选择掉落物或祝福。": {
       "arguments": [],
       "key": "hades2.error.selectReward"
@@ -1083,10 +991,6 @@
     "请选择支持原生奖励选择界面的角色。": {
       "arguments": [],
       "key": "hades2.error.selectChoiceSource"
-    },
-    "请选择要移除的祝福。": {
-      "arguments": [],
-      "key": "hades2.error.selectTraitToRemove"
     },
     "请选择资源。": {
       "arguments": [],
@@ -1201,12 +1105,52 @@
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
   "runtime": {
+    "open_sell_traits::Boon selling requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.sellNeedsRunRoom"
+    },
+    "open_sell_traits::Cannot open boon sell screen while another screen is active": {
+      "arguments": [],
+      "key": "hades2.error.sellScreenBusy"
+    },
+    "open_sell_traits::Native boon sell screen data is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.sellDataUnavailable"
+    },
     "open_sell_traits::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
         "sample-purpose",
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "open_special_choice::Cannot open special blessing choice during a transition": {
+      "arguments": [],
+      "key": "hades2.error.choiceDuringTransition"
+    },
+    "open_special_choice::Cannot open special blessing choice while another screen is active": {
+      "arguments": [],
+      "key": "hades2.error.choiceScreenBusy"
+    },
+    "open_special_choice::No eligible special blessings are available": {
+      "arguments": [],
+      "key": "hades2.error.noEligibleSpecialRewards"
+    },
+    "open_special_choice::Special blessing choice data is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.choiceDataUnavailable"
+    },
+    "open_special_choice::Special blessing choice requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.choiceNeedsRunRoom"
+    },
+    "open_special_choice::Special blessing source data is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.choiceSourceUnavailable"
+    },
+    "open_special_choice::Special blessing source has no audited native choice flow": {
+      "arguments": [],
+      "key": "hades2.error.choiceNoAuditedFlow"
     },
     "open_special_choice::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
@@ -1215,6 +1159,50 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
+    "remove_trait::Action requires a requestId of 1..128 characters": {
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
+    },
+    "remove_trait::Direct trait removal left the selected instance mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "remove_trait::Native trait removal left a matching instance mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "remove_trait::Trait instance is no longer present": {
+      "key": "hades2.error.traitTargetMissing",
+      "arguments": []
+    },
+    "remove_trait::Trait mutation requires an active run room": {
+      "key": "hades2.error.traitMutationNeedsRun",
+      "arguments": []
+    },
+    "remove_trait::Trait removal capability is unknown": {
+      "key": "hades2.error.traitRemovalCapabilityUnknown",
+      "arguments": []
+    },
+    "remove_trait::Trait removal is unavailable for the selected target": {
+      "key": "hades2.error.traitRemovalUnavailable",
+      "arguments": []
+    },
+    "remove_trait::Trait selection belongs to a stale run": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "remove_trait::Trait selection belongs to a stale runtime generation": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "remove_trait::Trait target changed since selection": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
+    },
     "remove_trait::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
         "sample-purpose",
@@ -1222,86 +1210,114 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
-    "open_sell_traits::Cannot open boon sell screen while another screen is active": {
-      "arguments": [],
-      "key": "hades2.error.sellScreenBusy"
-    },
-    "open_sell_traits::Boon selling requires an active run room": {
-      "arguments": [],
-      "key": "hades2.error.sellNeedsRunRoom"
-    },
-    "open_sell_traits::Native boon sell screen data is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.sellDataUnavailable"
-    },
-    "remove_trait::Trait removal requires an active run room": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNeedsRun"
-    },
-    "remove_trait::Trait removal requires a trait name": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNeedsName"
-    },
-    "remove_trait::Native sell predicate is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.sellPredicateUnavailable"
-    },
-    "remove_trait::Trait is not sell-eligible, so no safe removal exists: TraitOfHermes": {
-      "arguments": [
-        "TraitOfHermes"
-      ],
-      "key": "hades2.error.traitNotSellEligible"
-    },
-    "remove_trait::Trait is not present in the current run: TraitOfHermes": {
-      "arguments": [
-        "TraitOfHermes"
-      ],
-      "key": "hades2.error.traitNotPresent"
-    },
-    "remove_trait::Action requires a requestId of 1..128 characters": {
-      "arguments": [],
-      "key": "hades2.error.requestIdRequired"
-    },
     "remove_trait::requestId reused for a different action": {
       "arguments": [],
       "key": "hades2.error.requestIdReused"
     },
-    "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "arguments": [],
-      "key": "hades2.error.outcomeUnknownRuntime"
+    "set_trait_level::Action requires a requestId of 1..128 characters": {
+      "key": "hades2.error.requestIdRequired",
+      "arguments": []
     },
-    "open_special_choice::Cannot open special blessing choice while another screen is active": {
-      "arguments": [],
-      "key": "hades2.error.choiceScreenBusy"
+    "set_trait_level::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "key": "hades2.error.outcomeUnknownRuntime",
+      "arguments": []
     },
-    "open_special_choice::Cannot open special blessing choice during a transition": {
-      "arguments": [],
-      "key": "hades2.error.choiceDuringTransition"
+    "set_trait_level::Trait instance is no longer present": {
+      "key": "hades2.error.traitTargetMissing",
+      "arguments": []
     },
-    "open_special_choice::Special blessing choice requires an active run room": {
-      "arguments": [],
-      "key": "hades2.error.choiceNeedsRunRoom"
+    "set_trait_level::Trait is no longer eligible for a meaningful level increase": {
+      "key": "hades2.error.traitLevelNoLongerEligible",
+      "arguments": []
     },
-    "open_special_choice::Special blessing source has no audited native choice flow": {
-      "arguments": [],
-      "key": "hades2.error.choiceNoAuditedFlow"
+    "set_trait_level::Trait level editing is unavailable for the selected target": {
+      "key": "hades2.error.traitLevelUnavailable",
+      "arguments": []
     },
-    "open_special_choice::Special blessing source data is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.choiceSourceUnavailable"
+    "set_trait_level::Trait level increase did not produce an observed higher level": {
+      "key": "hades2.error.traitLevelNoEffect",
+      "arguments": []
     },
-    "open_special_choice::Special blessing choice data is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.choiceDataUnavailable"
+    "set_trait_level::Trait mutation requires an active run room": {
+      "key": "hades2.error.traitMutationNeedsRun",
+      "arguments": []
     },
-    "open_special_choice::No eligible special blessings are available": {
-      "arguments": [],
-      "key": "hades2.error.noEligibleSpecialRewards"
+    "set_trait_level::Trait selection belongs to a stale run": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_level::Trait selection belongs to a stale runtime generation": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_level::Trait target changed since selection": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
+    },
+    "set_trait_level::Unsupported sample-purpose: missing SampleFunction": {
+      "key": "hades2.error.nativeFunctionMissing",
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ]
+    },
+    "set_trait_level::requestId reused for a different action": {
+      "key": "hades2.error.requestIdReused",
+      "arguments": []
+    },
+    "set_trait_rarity::Action requires a requestId of 1..128 characters": {
+      "key": "hades2.error.requestIdRequired",
+      "arguments": []
+    },
+    "set_trait_rarity::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "key": "hades2.error.outcomeUnknownRuntime",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait instance is no longer present": {
+      "key": "hades2.error.traitTargetMissing",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait mutation requires an active run room": {
+      "key": "hades2.error.traitMutationNeedsRun",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait rarity editing is unavailable for the selected target": {
+      "key": "hades2.error.traitRarityUnavailable",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait rarity recompute did not reach the requested rarity": {
+      "key": "hades2.error.traitRarityNoEffect",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait selection belongs to a stale run": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait selection belongs to a stale runtime generation": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_rarity::Trait target changed since selection": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
+    },
+    "set_trait_rarity::Unsupported sample-purpose: missing SampleFunction": {
+      "key": "hades2.error.nativeFunctionMissing",
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ]
+    },
+    "set_trait_rarity::requestId reused for a different action": {
+      "key": "hades2.error.requestIdReused",
+      "arguments": []
     }
   },
   "runtime_commands": [
     "open_sell_traits",
     "open_special_choice",
-    "remove_trait"
+    "remove_trait",
+    "set_trait_level",
+    "set_trait_rarity"
   ]
 }
