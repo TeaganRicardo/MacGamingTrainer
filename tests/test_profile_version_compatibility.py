@@ -94,7 +94,7 @@ assert current_doc["desiredSchemaVersion"] == DESIRED_STATE_SCHEMA_VERSION
 assert set(current_doc) == {
     "schemaVersion", "desiredSchemaVersion", "name", "updatedAt", "desired", "shortcuts"
 }
-assert service.load("current-v5")["desired"] == canonical_desired(
+assert service.load("current-v6")["desired"] == canonical_desired(
     current_doc["desired"], DESIRED_STATE_SCHEMA_VERSION, base
 )
 
