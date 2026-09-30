@@ -121,7 +121,7 @@ def test_owner_family_controls_default_native_paths():
     for family, issue in (
         ("chaos", "236"), ("hex", "237"), ("hammer", "238"),
         ("costume", "239"), ("temporary", "239"), ("directSpecial", "239"),
-        ("familiar", "240"),
+        ("familiar", "240"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
 
@@ -176,6 +176,11 @@ def test_live_manager_is_searchable_grouped_and_shows_real_controls():
     assert "model.increaseTraitLevel(trait)" in VIEW
     assert "model.setTraitRarity(trait" in VIEW
     assert "model.removeTrait(trait)" in VIEW
+    assert "Text(trait.name)" in VIEW
+    assert "traitLimitationRows" in VIEW
+    assert "trait.levelReason" in VIEW
+    assert "trait.rarityReason" in VIEW
+    assert "trait.removalReason" in VIEW
 
     assert "func increaseTraitLevel(_ trait: CurrentRunTrait)" in MODEL
     assert "func setTraitRarity(_ trait: CurrentRunTrait, rarity: String)" in MODEL
