@@ -113,37 +113,38 @@ struct Main {
         let python = URL(fileURLWithPath: args[1])
         let worker = URL(fileURLWithPath: args[2])
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
-
-        let process = BackendProcess(
-            executableURL: python,
-            argumentsPrefix: ["-u"],
-            forceKillDelay: 0.10
-        )
-        let session = TrainerBackendSession(client: BackendClient(process: process))
-        try session.start(
-            descriptor: Hades2GameModule.descriptor,
-            backendScriptURL: worker,
-            applyPayload: { _ in },
-            resetGameState: {},
-            log: { _ in },
-            onStatusChange: { _ in }
-        )
-
-        let model = Hades2GameModule.makeModel(session: session)
-        pump(0.10)
         try? FileManager.default.removeItem(at: commandLog)
 
-        model.connected = true
-        model.status = "ready"
-        model.scene = "run"
+        func withModel(_ body: (Hades2TrainerModel) -> Void) throws {
+            let process = BackendProcess(
+                executableURL: python,
+                argumentsPrefix: ["-u"],
+                forceKillDelay: 0.10
+            )
+            let session = TrainerBackendSession(client: BackendClient(process: process))
+            try session.start(
+                descriptor: Hades2GameModule.descriptor,
+                backendScriptURL: worker,
+                applyPayload: { _ in },
+                resetGameState: {},
+                log: { _ in },
+                onStatusChange: { _ in }
+            )
+            let model = Hades2GameModule.makeModel(session: session)
+            pump(0.10)
+            model.connected = true
+            model.status = "ready"
+            model.scene = "run"
+            body(model)
+            pump(0.35)
+            session.stop()
+            pump(0.15)
+        }
 
         let trait = makeTrait()
-        model.increaseTraitLevel(trait)
-        pump(0.20)
-        model.setTraitRarity(trait, rarity: "Epic")
-        pump(0.20)
-        model.removeTrait(trait)
-        pump(0.35)
+        try withModel { $0.increaseTraitLevel(trait) }
+        try withModel { $0.setTraitRarity(trait, rarity: "Epic") }
+        try withModel { $0.removeTrait(trait) }
 
         let sent = commands(at: commandLog)
         check(sent.count == 3, "expected exactly three live-trait commands, got \(sent)")
@@ -154,28 +155,24 @@ struct Main {
         requireTargetParams(sent[1], expectedRarity: "Epic")
         requireTargetParams(sent[2])
 
-        // Model capability guards must fail closed before the transport seam.
-        let blocked = makeTrait(
-            levelCapability: .none,
-            rarityCapability: .none,
-            removalCapability: .none
-        )
-        model.increaseTraitLevel(blocked)
-        model.setTraitRarity(blocked, rarity: "Epic")
-        model.removeTrait(blocked)
-        pump(0.25)
-        check(commands(at: commandLog).count == 3, "unsupported trait operation reached backend transport")
+        // Model capability guards and non-run state fail closed before the
+        // backend transport boundary.
+        try withModel { model in
+            let blocked = makeTrait(
+                levelCapability: .none,
+                rarityCapability: .none,
+                removalCapability: .none
+            )
+            model.increaseTraitLevel(blocked)
+            model.setTraitRarity(blocked, rarity: "Epic")
+            model.removeTrait(blocked)
+            model.scene = "loading"
+            model.increaseTraitLevel(trait)
+            model.setTraitRarity(trait, rarity: "Heroic")
+            model.removeTrait(trait)
+        }
+        check(commands(at: commandLog).count == 3, "guarded trait operation reached backend transport")
 
-        // Run/scene state also gates the public model actions before transport.
-        model.scene = "loading"
-        model.increaseTraitLevel(trait)
-        model.setTraitRarity(trait, rarity: "Heroic")
-        model.removeTrait(trait)
-        pump(0.25)
-        check(commands(at: commandLog).count == 3, "non-run trait operation reached backend transport")
-
-        session.stop()
-        pump(0.15)
         print("hades2_live_trait_model_flow_ok")
     }
 }
