@@ -102,13 +102,23 @@ def validate_command_params(command, params):
         if not isinstance(source,str) or not source:
             raise ValueError('请选择支持原生奖励选择界面的角色。')
 
-    if command=='remove_trait':
-        # Only a trait NAME is accepted. Instance identity is current-run only
-        # and is not a removal input, because the proven native teardown is
-        # name-level and removes every matching instance.
-        name=params.get('trait')
-        if not isinstance(name,str) or not name:
+    if command in ('set_trait_level','set_trait_rarity','remove_trait'):
+        # A mutation always carries the exact observed target snapshot. The
+        # resident runtime re-resolves these values immediately before applying
+        # the operation; none of them are durable identities.
+        required_strings=('generationId','runId','instanceId','trait','family')
+        if any(not isinstance(params.get(key),str) or not params[key] for key in required_strings):
             raise ValueError('请选择要移除的祝福。')
+        level=params.get('expectedLevel')
+        if type(level) is not int or level < 1:
+            raise ValueError('请选择要移除的祝福。')
+        rarity=params.get('expectedRarity')
+        if not isinstance(rarity,str):
+            raise ValueError('请选择要移除的祝福。')
+        if command=='set_trait_rarity':
+            target=params.get('rarity')
+            if target not in BOON_RARITY_TARGETS:
+                raise ValueError('最低稀有度无效。')
 
     if command=='set_boon_rarity_desired':
         config={
