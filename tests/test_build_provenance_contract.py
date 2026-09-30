@@ -111,6 +111,74 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('head', result.stderr.lower())
 
+    def test_ci_pr_metadata_records_exact_checkout(self):
+        actual = git(self.root, 'rev-parse', 'HEAD')
+        tree = git(self.root, 'rev-parse', 'HEAD^{tree}')
+        base = '2' * 40
+        event_path = Path(self.temporary.name) / 'event.json'
+        event_path.write_text(json.dumps({
+            'number': 84,
+            'pull_request': {'head': {'sha': actual}, 'base': {'sha': base}},
+        }))
+        env = {
+            **self.env,
+            'GITHUB_EVENT_NAME': 'pull_request',
+            'GITHUB_EVENT_PATH': str(event_path),
+            'GITHUB_WORKFLOW': 'Build 2 macOS',
+            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
+            'GITHUB_RUN_ID': '12345',
+            'GITHUB_RUN_ATTEMPT': '2',
+            'GITHUB_RUN_NUMBER': '99',
+            'GITHUB_SHA': '1' * 40,
+        }
+        result = self.run_tool(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['source'], {'commit': actual, 'tree': tree})
+        self.assertEqual(manifest['pullRequest'], {
+            'number': 84,
+            'headSha': actual,
+            'baseSha': base,
+        })
+        self.assertEqual(manifest['workflow'], {
+            'eventName': 'pull_request',
+            'name': 'Build 2 macOS',
+            'repository': 'TeaganRicardo/MacGamingTrainer',
+            'runId': '12345',
+            'runAttempt': '2',
+            'runNumber': '99',
+        })
+        self.assertEqual(manifest['artifact'], {
+            'file': self.artifact.name,
+            'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
+        })
+        sidecar = self.artifact.with_name(self.artifact.name + '.sha256')
+        self.assertEqual(
+            sidecar.read_text(),
+            f"{manifest['artifact']['sha256']}  {self.artifact.name}\n",
+        )
+
+    def test_workflow_dispatch_does_not_invent_pull_request(self):
+        event_path = Path(self.temporary.name) / 'dispatch.json'
+        event_path.write_text('{}')
+        env = {
+            **self.env,
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+            'GITHUB_EVENT_PATH': str(event_path),
+            'GITHUB_WORKFLOW': 'Build 2 macOS',
+            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
+            'GITHUB_RUN_ID': '456',
+            'GITHUB_RUN_ATTEMPT': '1',
+            'GITHUB_RUN_NUMBER': '11',
+            'GITHUB_SHA': git(self.root, 'rev-parse', 'HEAD'),
+        }
+        result = self.run_tool(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertNotIn('pullRequest', manifest)
+        self.assertEqual(manifest['workflow']['eventName'], 'workflow_dispatch')
+        self.assertEqual(manifest['workflow']['runId'], '456')
+
     def test_declared_fixture_copy_is_recorded_and_must_match_tracked_source(self):
         source = self.root / 'ContractFixtures/reference_module/backend'
         source.mkdir(parents=True)
@@ -309,4 +377,7 @@ class BuildProvenanceContract(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    program = unittest.main(exit=False)
+    if not program.result.wasSuccessful():
+        raise SystemExit(1)
+    print('build_provenance_contract_ok')
