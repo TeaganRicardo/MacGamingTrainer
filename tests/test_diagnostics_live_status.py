@@ -87,6 +87,9 @@ def test_failed_live_refresh_does_not_report_stale_runtime_state_as_ok():
         "Run Count",
     ):
         assert checks[name]["ok"] is False, name
+    process_check = checks[GAME_SPEC.display_name + " 进程"]
+    assert "未运行" not in process_check["detail"]
+    assert str(STALE_STATE["pid"]) in process_check["detail"]
     assert result["state"] == {}
     assert adapter.calls == ["observe_runtime"]
 
