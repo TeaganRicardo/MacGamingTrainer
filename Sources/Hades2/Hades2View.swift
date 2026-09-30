@@ -285,6 +285,12 @@ struct Hades2TrainerView: View {
         }
     }
 
+    private func traitRarityLabel(_ rarity: String) -> String {
+        let key = "hades2.rarity." + rarity
+        let localized = text(key)
+        return localized == key ? rarity : localized
+    }
+
     private func traitFamilyLabel(_ key: String) -> String {
         guard let trait = filteredCurrentRunTraits.first(where: { traitGroupKey($0) == key }) else {
             return key
@@ -338,7 +344,7 @@ struct Hades2TrainerView: View {
                 HStack(spacing: 8) {
                     Text(text("hades2.traits.level", arguments: [String(trait.level)]))
                     if !trait.rarity.isEmpty {
-                        Text(text("hades2.rarity.\(trait.rarity)"))
+                        Text(traitRarityLabel(trait.rarity))
                     }
                     if trait.sameNameCount > 1 {
                         Text(text("hades2.traits.instances", arguments: [String(trait.sameNameCount)]))
@@ -374,7 +380,7 @@ struct Hades2TrainerView: View {
                 if trait.canSetRarity {
                     Menu {
                         ForEach(trait.availableRarities.filter { $0 != trait.rarity }, id: \.self) { rarity in
-                            Button(text("hades2.rarity.\(rarity)")) {
+                            Button(traitRarityLabel(rarity)) {
                                 model.setTraitRarity(trait, rarity: rarity)
                             }
                         }
