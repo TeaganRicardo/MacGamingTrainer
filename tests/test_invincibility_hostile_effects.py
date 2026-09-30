@@ -25,10 +25,10 @@ assert 'AddEffectBlock({ Id = hero.ObjectId, Name = effectName })' in install
 assert 'ClearEffect({ Id = hero.ObjectId, Name = effectName })' in install
 
 damage_router = lua[lua.index('local function ensureHeroDamageRouter()'):lua.index('local function installInvincibility()')]
-god_branch_start = damage_router.index('if M.invincibility then')
-god_branch = damage_router[god_branch_start:damage_router.index('end', god_branch_start) + len('end')]
-assert 'restoreInvincibilityHitCount(victim)' in god_branch
-assert god_branch.index('restoreInvincibilityHitCount(victim)') < god_branch.index('return nil')
+invincibility_branch_start = damage_router.index('if M.invincibility then')
+invincibility_branch = damage_router[invincibility_branch_start:damage_router.index('end', invincibility_branch_start) + len('end')]
+assert 'restoreInvincibilityHitCount(victim)' in invincibility_branch
+assert invincibility_branch.index('restoreInvincibilityHitCount(victim)') < invincibility_branch.index('return nil')
 
 assert 'M.invincibilityHitBaseline = hero.Hits' in install
 assert 'M.invincibilityHitBaselineKnown = true' in install
@@ -47,4 +47,4 @@ assert 'restoreInvincibilityHitCount(CurrentRun.Hero)' in enforce
 # installing a broad global ApplyEffect hook that could suppress player buffs.
 assert 'installHook("ApplyEffect"' not in lua
 
-print("god_mode_hostile_effects_ok")
+print("invincibility_hostile_effects_ok")
