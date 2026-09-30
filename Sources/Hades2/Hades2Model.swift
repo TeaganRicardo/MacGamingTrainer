@@ -954,8 +954,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard canOpenNativeBoonScreen, trait.canRemove else { return }
         send(
             .removeTrait(trait),
-            title: "hades2.receipt.traitRemoved",
-            titleArguments: [trait.displayName],
+            title: "hades2.receipt.traitRemoveAction",
             announceSuccess: false
         )
     }
