@@ -73,6 +73,7 @@ Routing by changed seam:
 - Prefer one behavior test at the owning interface over several implementation-shape/parity tests across callers.
 - A new cross-cutting gate should normally replace or subsume an older mechanism instead of accumulating beside it.
 - Current readiness belongs in planning issue #124. Task issues own stable scope, dependencies and acceptance criteria; do not copy transient frontier/status prose into every issue.
+- Do not open a status-reconciliation PR after every ordinary merge. Update `PROJECT_STATUS.md` only when the operational baseline, active gate, protocol/version state, compatibility target or manual-acceptance baseline materially changes; include that update in the owning PR when practical.
 
 ## Product versioning
 
