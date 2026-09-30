@@ -196,7 +196,7 @@ TemporaryImprovedSecondaryTrait,trait,StoreData,奇美拉肉干,special,Native W
 TemporaryMoveSpeedTrait,trait,StoreData,燃烧的灵液,special,Native Well trait semantics require processed duration/stacking and related store-state handling; use a dedicated handler rather than plain AddTraitToHero.,1.139672,24556151
 TimedCritVulnerabilityBoon,trait,UnitSetData.NPC_Artemis_Field_01.Traits,索命追猎,direct,,1.139672,24556151
 TrashPointsDrop,consumable,DebugSpawnConsumables+NPCData_Eris,,direct,,1.139672,24556151
-TrialUpgrade,loot,RewardStoreData,,direct,,1.139672,24556151
+TrialUpgrade,loot,RewardStoreData,卡俄斯的祝福,direct,,1.139672,24556151
 UpgradeHammerBoon,trait,UnitSetData.NPC_Icarus_01.Traits+PresetEventArgs.IcarusBenefitChoices,最新型号,direct,,1.139672,24556151
 VitalityCostume,trait,UnitSetData.NPC_Arachne_01.Traits+PresetEventArgs.ArachneCostumeChoices,苍翠裙装,special,Exact Trainer apply must refresh the native costume presentation with SetupCostume after trait acquisition.,1.139672,24556151
 WaterBoost,consumable,RewardStoreData+StoreData+DebugSpawnConsumables,,direct,,1.139672,24556151
