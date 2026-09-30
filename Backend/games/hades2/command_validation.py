@@ -108,16 +108,16 @@ def validate_command_params(command, params):
         # the operation; none of them are durable identities.
         required_strings=('generationId','runId','instanceId','trait','family')
         if any(not isinstance(params.get(key),str) or not params[key] for key in required_strings):
-            raise ValueError('请选择要移除的祝福。')
+            raise ValueError('请选择当前局祝福。')
         level=params.get('expectedLevel')
         if type(level) is not int or level < 1:
-            raise ValueError('请选择要移除的祝福。')
+            raise ValueError('请选择当前局祝福。')
         same_count=params.get('expectedSameNameCount')
         if type(same_count) is not int or same_count < 1:
-            raise ValueError('请选择要移除的祝福。')
+            raise ValueError('请选择当前局祝福。')
         rarity=params.get('expectedRarity')
         if not isinstance(rarity,str):
-            raise ValueError('请选择要移除的祝福。')
+            raise ValueError('请选择当前局祝福。')
         if command=='set_trait_rarity':
             target=params.get('rarity')
             if target not in BOON_RARITY_TARGETS:
