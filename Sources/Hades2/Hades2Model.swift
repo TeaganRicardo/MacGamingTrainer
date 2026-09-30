@@ -208,11 +208,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
+    var exactBoonOptions: [BoonOption] {
+        boons.filter { $0.group == "exact" }
+    }
+
     var specialRewardOptions: [BoonOption] {
         let specials = boons.filter { $0.group == "special" }
         var seenSources = Set<String>()
         var nativeActions: [BoonOption] = []
-        for option in specials where option.nativeChoice && !option.sourceId.isEmpty {
+        // Individual exact traits have moved out of Character Rewards, but the
+        // same source rows still carry the authoritative native-choice support
+        // bit. Synthesize each source entry once without reintroducing the
+        // individual exact targets into the mixed list.
+        for option in boons where option.nativeChoice && !option.sourceId.isEmpty {
             guard seenSources.insert(option.sourceId).inserted else { continue }
             nativeActions.append(BoonOption(
                 id: "native-choice:\(option.sourceId)",
@@ -230,6 +238,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 nativeChoice: true,
                 nativeChoiceTitle: option.nativeChoiceTitle,
                 nativeChoiceEnglishTitle: option.nativeChoiceEnglishTitle,
+                acquisitionMode: "",
                 sortSection: option.sortSection,
                 sortGroup: option.sortGroup,
                 sortOrder: Int.min
@@ -918,6 +927,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
         send(.spawnReward(loot), title: "hades2.op.spawnReward")
+    }
+
+    func acquireExactBoon(_ reward: String) {
+        guard canSpawnReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return }
+        send(.spawnReward(reward), title: "hades2.op.acquireExactBoon")
     }
 
     func openSellTraits() {

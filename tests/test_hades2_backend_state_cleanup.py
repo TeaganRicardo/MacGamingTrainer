@@ -139,7 +139,7 @@ struct Main {
             id: "boon", name: "祝福", englishName: "Boon", category: "祝福", englishCategory: "Boon",
             kind: "loot", group: "pickup", sectionTitle: "", englishSectionTitle: "", sourceId: "",
             sourceName: "", sourceEnglishName: "", nativeChoice: false, nativeChoiceTitle: "",
-            nativeChoiceEnglishTitle: "", sortSection: 0, sortGroup: 0, sortOrder: 0
+            nativeChoiceEnglishTitle: "", acquisitionMode: "", sortSection: 0, sortGroup: 0, sortOrder: 0
         )]
         model.diagnostics = [DiagnosticCheck(name: "check", ok: false, detail: "detail")]
         model.diagnosticsPassed = 0

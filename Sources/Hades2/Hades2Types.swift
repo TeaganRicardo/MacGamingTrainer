@@ -27,6 +27,9 @@ struct BoonOption: Identifiable {
     let nativeChoice: Bool
     let nativeChoiceTitle: String
     let nativeChoiceEnglishTitle: String
+    /// Language-neutral resident strategy identity for exact acquisition.
+    /// Empty for ordinary reward rows and synthetic native-choice actions.
+    let acquisitionMode: String
     let sortSection: Int
     let sortGroup: Int
     let sortOrder: Int

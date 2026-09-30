@@ -254,6 +254,37 @@ func commands(at url: URL) -> [[String: Any]] {
     }
 }
 
+func makeBoon(
+    id: String,
+    group: String,
+    kind: String = "trait",
+    sourceID: String = "Artemis",
+    nativeChoice: Bool = false,
+    acquisitionMode: String = ""
+) -> BoonOption {
+    BoonOption(
+        id: id,
+        name: id,
+        englishName: id,
+        category: group == "exact" ? "角色奖励" : "Character Rewards",
+        englishCategory: "Character Rewards",
+        kind: kind,
+        group: group,
+        sectionTitle: sourceID,
+        englishSectionTitle: sourceID,
+        sourceId: sourceID,
+        sourceName: sourceID,
+        sourceEnglishName: sourceID,
+        nativeChoice: nativeChoice,
+        nativeChoiceTitle: nativeChoice ? "奖励选择" : "",
+        nativeChoiceEnglishTitle: nativeChoice ? "Reward Choice" : "",
+        acquisitionMode: acquisitionMode,
+        sortSection: group == "exact" ? 25 : 30,
+        sortGroup: 1,
+        sortOrder: 1
+    )
+}
+
 func makeTrait(
     levelCapability: TraitLevelCapability = .increaseOne,
     rarityCapability: TraitRarityCapability = .setExact,
@@ -373,6 +404,31 @@ struct Main {
             model.removeTrait(trait)
         }
         check(commands(at: commandLog).count == 3, "guarded trait operation reached backend transport")
+
+        // Exact acquisition is a separate catalog surface. Individual exact
+        // targets do not leak back into Character Rewards, but their source can
+        // still synthesize the native choice entry point.
+        let exact = makeBoon(
+            id: "trait:CritBonusBoon",
+            group: "exact",
+            nativeChoice: true,
+            acquisitionMode: "direct"
+        )
+        let special = makeBoon(id: "TalentDrop", group: "special", kind: "consumable", sourceID: "Selene")
+        try withModel { model in
+            model.capabilities["spawnReward"] = true
+            model.boons = [exact, special]
+            check(model.exactBoonOptions.map(\.id) == [exact.id], "exact catalog projection is wrong")
+            check(!model.specialRewardOptions.contains { $0.id == exact.id }, "exact trait leaked into Character Rewards")
+            check(model.specialRewardOptions.contains { $0.id == special.id }, "non-boon character reward disappeared")
+            check(model.specialRewardOptions.contains { $0.id == "native-choice:Artemis" }, "native character choice entry disappeared")
+            model.acquireExactBoon(exact.id)
+        }
+        let afterExact = commands(at: commandLog)
+        check(afterExact.count == 4, "exact acquisition did not emit one command: \(afterExact)")
+        check(afterExact[3]["command"] as? String == "spawn_reward", "exact acquisition used the wrong command")
+        guard let exactParams = afterExact[3]["params"] as? [String: Any] else { fail("exact acquisition params missing") }
+        check(exactParams["reward"] as? String == exact.id, "exact acquisition lost reward identity")
 
         print("hades2_live_trait_model_flow_ok")
     }

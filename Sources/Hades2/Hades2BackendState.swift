@@ -269,6 +269,7 @@ struct Hades2StatePatch {
             nativeChoice: row["nativeChoice"] as? Bool ?? false,
             nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? "",
             nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? "",
+            acquisitionMode: row["acquisitionMode"] as? String ?? "",
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max
