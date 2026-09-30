@@ -48,19 +48,33 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 
 Verification **scope** and evidence **identity** are separate. Every check claimed as evidence must have run against the exact SHA named by the claim; exact-head evidence does not mean every task runs the full release matrix.
 
-- **Task verification:** run the minimum gates owned by the changed seams on the actual final PR head.
-- **Integration verification:** any PR-head rewrite/rebase requires the task gates again so evidence binds to the new SHA. If overlapping work or a dependency changes inputs/semantics at the changed seam, also rerun those affected integration gates. Movement of unrelated base `main` while the PR head itself is unchanged does not invalidate exact-head evidence or expand the task to the full release matrix.
-- **Convergence/release verification:** run the full applicable Linux/macOS/module/mutation/build/package/provenance matrix only when the selected convergence, release, or acceptance task requires it.
+- **Task verification:** pull requests run only the minimum gates owned by the changed seams on the actual final PR head.
+- **Integration verification:** any PR-head rewrite/rebase requires the task gates again so evidence binds to the new SHA. If overlapping work or a dependency changes inputs/semantics at the changed seam, also rerun those affected integration gates.
+- **Convergence/release verification:** explicitly dispatch the existing workflows on one selected SHA. This is where mutation testing, retained release/reference artifacts, provenance and checksums belong.
+
+The three standing workflow names are stable required checks. They run on `pull_request` plus explicit `workflow_dispatch`; merged `main` does not automatically repeat the same task verification.
 
 Routing by changed seam:
 
-- Linux-portable backend/contract work: `bash Tools/run_linux_checks.sh`.
-- Swift/AppKit/build/package changes: also require `Build 2 macOS`.
+- Linux-portable backend/contract work: `bash Tools/run_linux_checks.sh`. This remains the broad portable behavior suite; do not create a per-file test routing database.
+- The resident-runtime revision gate is diff-based and therefore PR-only. Explicit convergence dispatch has no semantic base ref; it reruns behavior/build evidence rather than inventing a revision comparison.
+- Swift/AppKit/build/package changes: also require `Build 2 macOS`, which runs macOS contracts plus an actual Hades build/package/signing verification in PR task mode.
 - Module/Core boundary changes: require the module build matrix/reference fixture.
+- Mutation testing is a convergence/release audit of test sensitivity, not an always-on correctness gate for ordinary PRs.
+- RC ZIP/provenance/checksum creation and retained QA artifacts are convergence/release outputs, not ordinary PR requirements.
 - `Backend/games/hades2/runtime/hades.lua` changes: resident revision must increase; automated tests are not final validation. Record real Hades II acceptance for changed runtime semantics.
 - Tests must use temporary fixtures and must never read/write the real user/game save tree.
-- New test files use descriptive subject names (`test_<subject>.py`), not historical epoch tokens such as `roundNN` or `v0xxx`. Existing epoch-named tests are grandfathered and should not be bulk-renamed; put release/round provenance in comments or evidence metadata instead of new filenames.
-- Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum.
+- New test files use descriptive subject names (`test_<subject>.py`), not historical epoch tokens such as `roundNN` or `v0xxx`. Existing epoch-named tests are grandfathered and should not be bulk-renamed.
+- Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum produced by explicit convergence/QA dispatch.
+
+## Governance budget
+
+- Do not add another always-on workflow, required check, global mutation class, parity scan or source-text gate merely because a new invariant can be written down.
+- New recurring gates need a concrete defect that escaped the existing owning behavior tests, or an independently proven cross-cutting seam that cannot be protected locally.
+- Prefer one behavior test at the owning interface over several implementation-shape/parity tests across callers.
+- A new cross-cutting gate should normally replace or subsume an older mechanism instead of accumulating beside it.
+- Current readiness belongs in planning issue #124. Task issues own stable scope, dependencies and acceptance criteria; do not copy transient frontier/status prose into every issue.
+- Do not open a status-reconciliation PR after every ordinary merge. Update `PROJECT_STATUS.md` only when the operational baseline, active gate, protocol/version state, compatibility target or manual-acceptance baseline materially changes; include that update in the owning PR when practical.
 
 ## Product versioning
 

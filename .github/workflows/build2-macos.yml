@@ -3,10 +3,8 @@
 name: Build 2 macOS
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -100,7 +98,7 @@ jobs:
       # the real presentation and protocol paths, so this belongs in the
       # macOS lane rather than the portable one.
       - name: Verify declared invariants fail under mutation
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: python3 Tools/mutation_gate.py
 
       - name: Build Hades II trainer
@@ -128,7 +126,7 @@ jobs:
 
       - name: Package release candidate
         id: package
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           mkdir -p artifacts
           app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
@@ -146,7 +144,7 @@ jobs:
             --module-id hades2
 
       - name: Verify release provenance and checksum
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           provenance="artifacts/${{ steps.package.outputs.provenance_name }}"
           sidecar="${{ steps.package.outputs.sidecar_name }}"
@@ -168,7 +166,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: needs.scope.outputs.needs_macos == 'true'
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         with:
           name: MacGamingTrainer-${{ steps.version.outputs.version }}-b${{ steps.version.outputs.build }}-${{ steps.version.outputs.sha_short }}-rc
           path: |
