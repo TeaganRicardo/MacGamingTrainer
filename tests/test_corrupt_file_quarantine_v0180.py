@@ -19,20 +19,20 @@ try:
     # startup falls back to clean defaults.  A later save creates a fresh owner
     # without touching the quarantined bytes.
     desired_path = base/'desired-state.json'
-    corrupt_bytes = b'{"godMode": true, broken'
+    corrupt_bytes = b'{"invincibility": true, broken'
     desired_path.write_bytes(corrupt_bytes)
     store = Hades2PreferenceStore(desired_path)
     desired, initialized = store.load()
     assert initialized is False
-    assert desired['godMode'] is False
+    assert desired['invincibility'] is False
     assert not desired_path.exists()
     quarantined = list(base.glob('desired-state.json.corrupt-*'))
     assert len(quarantined) == 1
     assert quarantined[0].read_bytes() == corrupt_bytes
 
-    replacement = store.defaults(); replacement['godMode'] = True
+    replacement = store.defaults(); replacement['invincibility'] = True
     store.save(replacement)
-    assert json.loads(desired_path.read_text(encoding='utf-8'))['godMode'] is True
+    assert json.loads(desired_path.read_text(encoding='utf-8'))['invincibility'] is True
     assert quarantined[0].read_bytes() == corrupt_bytes
 
     # A valid JSON value with the wrong top-level shape is equally unusable as
@@ -56,12 +56,12 @@ try:
         safe, initialized = stuck_store.load()
     finally:
         persistence.os.replace = original_replace
-    assert initialized is False and safe['godMode'] is False
+    assert initialized is False and safe['invincibility'] is False
     assert isinstance(stuck_store.write_blocked_error, PersistenceError)
     assert stuck.read_text(encoding='utf-8') == '{broken'
     assert list(base.glob('stuck.json.corrupt-*')) == []
     try:
-        stuck_store.save(dict(safe, godMode=True))
+        stuck_store.save(dict(safe, invincibility=True))
     except PersistenceError:
         pass
     else:
@@ -72,7 +72,7 @@ try:
     # file in place and write-protect the store for this backend lifetime rather
     # than treating it as a missing first-run preference file.
     unreadable = base/'unreadable.json'
-    unreadable.write_text(json.dumps({'godMode': True}), encoding='utf-8')
+    unreadable.write_text(json.dumps({'invincibility': True}), encoding='utf-8')
     unreadable_bytes = unreadable.read_bytes()
     original_read_text = Path.read_text
     def failing_read_text(path, *args, **kwargs):
@@ -84,10 +84,10 @@ try:
         safe, initialized = unreadable_store.load()
     finally:
         Path.read_text = original_read_text
-    assert initialized is False and safe['godMode'] is False
+    assert initialized is False and safe['invincibility'] is False
     assert isinstance(unreadable_store.write_blocked_error, PersistenceError)
     try:
-        unreadable_store.save(dict(safe, godMode=True))
+        unreadable_store.save(dict(safe, invincibility=True))
     except PersistenceError:
         pass
     else:
@@ -98,7 +98,7 @@ try:
     # the file vanishes after the initial existence check, the store may safely
     # behave like first run and remain writable.
     vanished = base/'vanished.json'
-    vanished.write_text(json.dumps({'godMode': True}), encoding='utf-8')
+    vanished.write_text(json.dumps({'invincibility': True}), encoding='utf-8')
     original_read_text = Path.read_text
     def vanished_read_text(path, *args, **kwargs):
         if path == vanished:
@@ -111,10 +111,10 @@ try:
         safe, initialized = vanished_store.load()
     finally:
         Path.read_text = original_read_text
-    assert initialized is False and safe['godMode'] is False
+    assert initialized is False and safe['invincibility'] is False
     assert vanished_store.write_blocked_error is None
-    vanished_store.save(dict(safe, godMode=True))
-    assert json.loads(vanished.read_text(encoding='utf-8'))['godMode'] is True
+    vanished_store.save(dict(safe, invincibility=True))
+    assert json.loads(vanished.read_text(encoding='utf-8'))['invincibility'] is True
 
 
     # Adapter integration: a write-protected existing desired-state is distinct
@@ -137,7 +137,7 @@ try:
         def execute(self, source):
             return json.dumps({
                 'status':'ready','scene':'run','capabilities':{},
-                'desiredFeatures':{'godMode':True},'activeFeatures':{'godMode':True},
+                'desiredFeatures':{'invincibility':True},'activeFeatures':{'invincibility':True},
             })
         def detach(self): pass
         def close(self): pass
@@ -152,7 +152,7 @@ try:
     assert blocked_adapter.preference_initialized is False
     blocked_adapter.execute('status', {})
     assert blocked_adapter.preference_initialized is False
-    assert blocked_adapter.preferences['godMode'] is False
+    assert blocked_adapter.preferences['invincibility'] is False
     assert blocked_path.read_bytes() == blocked_bytes
 
     # Profile discovery may otherwise leave a permanently invisible .json file
@@ -160,7 +160,7 @@ try:
     # of the *.json set, while healthy profiles remain available.
     profiles = Hades2ProfileService(base/'profiles')
     good = store.defaults(); good['gardenQoL'] = True
-    profiles.save('healthy', good, {'godMode': 1})
+    profiles.save('healthy', good, {'invincibility': 1})
 
     bad_json = profiles.root/'bad-json.json'
     bad_json.write_text('{broken', encoding='utf-8')

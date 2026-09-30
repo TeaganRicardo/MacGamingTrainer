@@ -71,7 +71,7 @@ assert 'Lua spawn_reward' in log_output
 assert 'reward=EmptyMaxHealthDrop' in log_output
 
 def reset_payload(god_mode=False):
-    desired={key:(key=='godMode' and god_mode) for key in TOGGLES}
+    desired={key:(key=='invincibility' and god_mode) for key in TOGGLES}
     active=dict(desired)
     return {
         'status':'ready','scene':'run','capabilities':{'setFeature':True},
@@ -90,7 +90,7 @@ class ResetTransport(FakeTransport):
         if self.fail_once:
             self.fail_once=False
             raise AdapterError('lua_error', '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)')
-        if '__MacGamingTrainerV1.dispatch("set_feature",' in source and 'godMode' in source:
+        if '__MacGamingTrainerV1.dispatch("set_feature",' in source and 'invincibility' in source:
             self.god_mode=True
         return json.dumps(reset_payload(self.god_mode))
 
@@ -103,15 +103,15 @@ reset_adapter=Hades2Adapter(transport=reset_transport)
 reset_adapter._runtime_bootstrapped=True
 reset_adapter._catalog_initialized=True
 reset_adapter.preferences=reset_adapter._default_preferences()
-reset_adapter.preferences['godMode']=True
+reset_adapter.preferences['invincibility']=True
 reset_adapter.preference_initialized=True
 reset_adapter.preference_dirty=False
 recovered=reset_adapter.execute('status', {})
 assert len(reset_transport.sources) == 3
 assert 'local previousModule' not in reset_transport.sources[0]
 assert 'local previousModule' in reset_transport.sources[1]
-assert any('"set_feature"' in source and 'godMode' in source for source in reset_transport.sources[2:])
-assert recovered['activeFeatures']['godMode'] is True
+assert any('"set_feature"' in source and 'invincibility' in source for source in reset_transport.sources[2:])
+assert recovered['activeFeatures']['invincibility'] is True
 assert reset_adapter._runtime_bootstrapped is True
 assert reset_adapter._catalog_initialized is True
 assert reset_adapter.preference_dirty is False
@@ -127,7 +127,7 @@ proactive_adapter.state.update(connected=True,pid=4242,status='ready',scene='run
 proactive_adapter._runtime_bootstrapped=True
 proactive_adapter._catalog_initialized=True
 proactive_adapter.preferences=proactive_adapter._default_preferences()
-proactive_adapter.preferences['godMode']=True
+proactive_adapter.preferences['invincibility']=True
 proactive_adapter.preference_initialized=True
 proactive_adapter.preference_dirty=False
 invalidated=proactive_adapter.dispatch('runtime_reset', {}, 'runtime-reset-signal')
@@ -140,8 +140,8 @@ assert proactive_adapter.preference_dirty is True
 proactive_recovered=proactive_adapter.execute('status', {})
 assert len(proactive_transport.sources) == 2
 assert 'local previousModule' in proactive_transport.sources[0]
-assert '"set_feature"' in proactive_transport.sources[1] and 'godMode' in proactive_transport.sources[1]
-assert proactive_recovered['activeFeatures']['godMode'] is True
+assert '"set_feature"' in proactive_transport.sources[1] and 'invincibility' in proactive_transport.sources[1]
+assert proactive_recovered['activeFeatures']['invincibility'] is True
 assert proactive_adapter.preference_dirty is False
 
 # Non-idempotent mutations are never replayed after an outcome error. Mark the
@@ -164,7 +164,7 @@ assert mutation_adapter.preference_dirty is True
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 5
 assert a.state['version'] == '1.143476'
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
-assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 5
+assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 6
 
 # A process-query failure is not evidence that Hades stopped. Preserve the
 # existing debugger/session state and surface the query error instead of
@@ -206,14 +206,14 @@ state = a.set_next_room_reward_desired('WeaponUpgrade')
 assert state['nextRoomReward'] == 'WeaponUpgrade'
 
 saved = a.save_profile('模块化测试', {
-    'godMode': {'keyCode':18,'modifiers':6144,'keyLabel':'1'},
+    'invincibility': {'keyCode':18,'modifiers':6144,'keyLabel':'1'},
     'disableAll': {'keyCode':29,'modifiers':6144,'keyLabel':'0'},
 })
 assert saved['saved'] and saved['profiles'][0]['name'] == '模块化测试'
 a.preferences['gardenQoL'] = False; a._save_preferences()
 loaded = a.load_profile('模块化测试')
 assert loaded['loadedProfile'] == '模块化测试' and a.preferences['gardenQoL'] is True
-assert loaded['shortcuts']['godMode'] == {'keyCode':18,'modifiers':6144,'keyLabel':'1'}
+assert loaded['shortcuts']['invincibility'] == {'keyCode':18,'modifiers':6144,'keyLabel':'1'}
 assert a.delete_profile('模块化测试')['deleted']
 
 # Game-specific validation now lives behind the Hades adapter, not core server.
@@ -229,7 +229,7 @@ for bad in (
     ('add_resource', {'resource':'Money','amount':1}),
     ('spawn_boon', {'loot':'ZeusUpgrade'}),
     # Internal adapter->Lua replay commands are deliberately not public Host-v5 requests.
-    ('set_feature', {'feature':'godMode','value':True}),
+    ('set_feature', {'feature':'invincibility','value':True}),
     ('set_boon_rarity', {'target':'Epic','multiplier':100,'forceLegendary':False,'forceDuo':False}),
     ('set_next_room_reward', {'reward':'WeaponUpgrade'}),
     ('set_stat', {'stat':'enemyHealth','locked':True,'value':9}),
