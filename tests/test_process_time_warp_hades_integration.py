@@ -92,6 +92,7 @@ observed = adapter.observe_runtime()
 assert observed["featureSupport"]["gameSpeed"] is True
 assert observed["activeFeatures"]["gameSpeed"] is True
 adapter._time_warp_speed = 1.0
+transport.sources.clear()
 
 state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze")
 assert state["gameSpeed"] == 0.0
