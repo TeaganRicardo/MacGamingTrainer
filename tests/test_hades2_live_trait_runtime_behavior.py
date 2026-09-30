@@ -452,10 +452,20 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-runtime-") as td:
     # lexical binding keyword, so the test executes the production behavior
     # instead of reimplementing it.
     source = RUNTIME.read_text(encoding="utf-8")
-    lowered = "\n".join(
-        ("  " + line[len("  local "):]) if line.startswith("  local ") else line
-        for line in source.splitlines()
-    ) + "\n"
+
+    def lower_chunk_local(line: str) -> str:
+        if not line.startswith("  local "):
+            return line
+        body = line[len("  local "):]
+        if body.startswith("function ") or "=" in body:
+            return "  " + body
+        # A bare Lua local declaration is a statement; removing only the
+        # keyword would leave invalid syntax. Initialize the equivalent globals
+        # explicitly so forward declarations keep their original nil state.
+        names = [name.strip() for name in body.split(",")]
+        return "  " + ", ".join(names) + " = " + ", ".join("nil" for _ in names)
+
+    lowered = "\n".join(lower_chunk_local(line) for line in source.splitlines()) + "\n"
     runtime_copy.write_text(lowered, encoding="utf-8")
 
     proc = subprocess.run(
