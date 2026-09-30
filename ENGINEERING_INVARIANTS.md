@@ -162,30 +162,42 @@ Prefer these protections over prose or implementation-shape tests:
 - Core Save behavior suites: resolution, snapshots, restore, service and protocol;
 - `test_shortcut_chord_semantics.py`: resolved shortcut collision/reflow behavior;
 - `test_cross_game_isolation.py` + module build matrix/reference fixture: Core/module boundary;
-- `Tools/check_runtime_revision.py`: diff-based runtime revision discipline in Linux CI;
+- `Tools/check_runtime_revision.py`: diff-based runtime revision discipline in Linux PR CI;
 - `Tools/run_linux_checks.sh`: exhaustive Linux-portable test discovery; new portable `test_*.py` files run by default.
 
-Source-text contracts remain acceptable where they enforce a structural boundary that cannot reasonably be compiled/observed without the real game. Prefer compile/type/behavior tests whenever the same invariant can be expressed there.
+Source-text contracts remain acceptable where they enforce a structural boundary that cannot reasonably be compiled/observed without the real game. Prefer compile/type/behavior tests whenever the same invariant can be expressed there. Mutation testing verifies that selected high-value tests are sensitive to known defect classes; it is a periodic/convergence audit, not evidence that must be regenerated for every ordinary feature PR.
 
 ## 8. Verification matrix
 
 Verification depth is selected by risk and changed seam; evidence identity is always exact.
 
-1. **Task verification** proves the focused change against the minimum gates below on the actual final PR head.
-2. **Integration verification** reruns task gates after any PR-head rewrite/rebase, then adds only the gates whose inputs or semantics changed because of overlapping work or a moved dependency. Unrelated movement of the base branch while the PR head is unchanged does not automatically require the release matrix.
-3. **Convergence/release verification** deliberately recombines the full applicable Linux, macOS, module/reference, mutation, build/package and provenance evidence on one selected source SHA.
+1. **Task verification** proves the focused change on the actual final PR head. PR workflows are the recurring gate.
+2. **Integration verification** reruns task gates after a PR-head rewrite/rebase and adds only affected gates when an overlapping dependency changes the relevant seam.
+3. **Convergence/release verification** is an explicit `workflow_dispatch` on the selected SHA. Missing diff scope intentionally fails closed, so Linux, macOS and reference-module lanes execute. Mutation testing and retained RC/reference artifacts with provenance/checksums run here.
 
-| Change | Minimum automated gate | Additional requirement |
+There is no automatic post-merge `push(main)` rerun. A merged PR's head evidence remains evidence for that head; when exact current-main convergence evidence is required, dispatch it deliberately.
+
+| Change | PR task gate | Additional requirement |
 | --- | --- | --- |
 | Backend/Core Python | `Tools/run_linux_checks.sh` | macOS only if packaging/platform behavior touched |
-| Host/Swift lifecycle or AppKit UI | Linux portable contracts where applicable | `Build 2 macOS` |
-| module/Core boundary/build graph | Linux contracts | module build matrix/reference fixture + macOS build |
+| Host/Swift lifecycle or AppKit UI | Linux portable contracts where applicable | `Build 2 macOS`: macOS contracts + Hades build/package/sign verification |
+| module/Core boundary/build graph | Linux contracts | reference-fixture build/isolation + macOS build |
 | Core Save transaction semantics | full Linux portable Save behavior suite | macOS for Swift Save UI/model integration |
 | Hades transport/adapter only | Linux contracts | real game only when target-runtime semantics cannot be simulated |
 | `runtime/hades.lua` | Linux contracts + runtime revision gate | real Hades II acceptance; automated tests are not final verification |
-| release/manual QA artifact | all relevant CI | exact tested HEAD, prebuilt artifact and SHA256 |
+| convergence/release/manual QA artifact | explicit dispatch of all relevant workflows | mutation audit + exact tested SHA + retained artifact/provenance/SHA256 |
 
-A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built. Evidence from an old head is never re-attributed to a rewritten/rebased head: rerun the task gates on the new SHA. Unaffected full-matrix results may remain historical evidence at their original SHA and need not be recomputed unless a convergence/release task requires one combined exact-head matrix.
+A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built. Evidence from an old head is never re-attributed to a rewritten/rebased head.
+
+### Verification/governance budget
+
+The verification system must stay shallower than the product system it protects.
+
+- The default is an owning behavior test, not a new global gate.
+- A new always-on workflow/check, global source-text/parity scan or mutation class requires a concrete escaped defect or a real cross-cutting seam that local behavior tests cannot protect.
+- Do not build a test-to-source routing database for ordinary Linux tests; broad portable execution is simpler and cheap enough.
+- Release packaging/provenance and mutation sensitivity are convergence concerns unless a task directly changes those mechanisms.
+- When a new mechanism subsumes an older one, remove the older mechanism rather than preserving both “for safety.”
 
 ## 9. Terminology governance
 
