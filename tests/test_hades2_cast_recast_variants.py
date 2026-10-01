@@ -118,9 +118,17 @@ local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
 -- Production LLDB calls serialize dispatch results before returning them to the
 -- backend. Exercise that boundary explicitly so diagnostics cannot hide values
 -- that are valid Lua tables but invalid under the resident JSON contract.
-local encodedStatus = M.json(M.dispatch("status", {}))
-if type(encodedStatus) ~= "string" or encodedStatus == "" then
-  error("ASSERTION FAILED: status JSON boundary did not produce encoded output", 0)
+local function jsonDispatch(command, params)
+  local encoded = M.json(M.dispatch(command, params))
+  if type(encoded) ~= "string" or encoded == "" then
+    error("ASSERTION FAILED: JSON boundary did not produce encoded output", 0)
+  end
+  return encoded
+end
+
+local encodedStatus = jsonDispatch("status", {})
+if not string.find(encodedStatus, '"castVariantWeapons":["WeaponCastProjectile"', 1, true) then
+  error("ASSERTION FAILED: castVariantWeapons was not encoded as a JSON array", 0)
 end
 
 local function fail(message) error("ASSERTION FAILED: " .. message, 0) end
@@ -177,7 +185,10 @@ end
 -- delivery weapon and only WeaponCast is gated.
 do
   setTraits()
-  M.dispatch("set_feature", { feature = "instantCastCooldown", value = true })
+  local encodedFeature = jsonDispatch("set_feature", { feature = "instantCastCooldown", value = true })
+  if not string.find(encodedFeature, '"effectiveWeapons":["WeaponCast"', 1, true) then
+    fail("effectiveWeapons was not encoded as a JSON array after enabling Cast recast")
+  end
   assertGated("WeaponCast", "base gate")
   assertNative("WeaponCastProjectile", "unowned variant must stay native")
 end
@@ -188,7 +199,10 @@ end
 -- for the defect: before the fix only WeaponCast was gated.
 do
   setTraits(modifier("CastProjectileBoon", "WeaponCastProjectile"))
-  M.dispatch("status", {})
+  local encodedThrown = jsonDispatch("status", {})
+  if not string.find(encodedThrown, '"effectiveWeapons":["WeaponCast","WeaponCastProjectile"]', 1, true) then
+    fail("thrown Cast effectiveWeapons JSON did not preserve the resolved delivery set")
+  end
   assertGated("WeaponCast", "thrown cast base gate")
   assertGated("WeaponCastProjectile", "thrown cast delivery gate")
 end
