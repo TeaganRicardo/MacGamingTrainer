@@ -20,8 +20,7 @@ proc = subprocess.run(
     [
         LUA,
         "-e",
-        "local f,e=loadfile(arg[1]); if not f then error(e) end",
-        str(RUNTIME),
+        "local f,e=loadfile('Backend/games/hades2/runtime/hades.lua'); if not f then error(e) end",
     ],
     cwd=ROOT,
     text=True,
