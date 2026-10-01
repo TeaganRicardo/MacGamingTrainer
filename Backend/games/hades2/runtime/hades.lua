@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 58 then
+if previousModule and previousModule.revision ~= 59 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 58 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 58, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 59, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -560,9 +560,9 @@ if __MacGamingTrainerV1 == nil then
   -- in force and the recast stays blocked for those shapes.
   local castModel = {
     baseWeapon = "WeaponCast",
-    variantWeapons = {
+    variantWeapons = setmetatable({
       "WeaponCastProjectile", "WeaponCastProjectileHades", "WeaponAnywhereCast", "WeaponCastLob",
-    },
+    }, arrayMeta),
     variantSet = {},
     overrides = {
       IgnoreOwnerAttackDisabled = true,
@@ -602,7 +602,7 @@ if __MacGamingTrainerV1 == nil then
         end
       end
     end
-    local resolved = { castModel.baseWeapon }
+    local resolved = setmetatable({ castModel.baseWeapon }, arrayMeta)
     for _, weaponName in ipairs(castModel.variantWeapons) do
       if active[weaponName] then resolved[#resolved + 1] = weaponName end
     end
@@ -1818,7 +1818,7 @@ if __MacGamingTrainerV1 == nil then
       method = "nativeMultiCastControlSet",
       effectHook = owns("SetEffectProperty"), weaponHook = owns("SetWeaponProperty"),
       effectOverrides = { WeaponCastAttackDisable = false, WeaponCastSelfSlow = false, WeaponCastSelfSlow2 = false },
-      castVariantWeapons = { "WeaponCastProjectile", "WeaponCastProjectileHades", "WeaponAnywhereCast", "WeaponCastLob" },
+      castVariantWeapons = castModel.variantWeapons,
     }
     if type(runtime) ~= "table" then return diagnostics end
     diagnostics.heroBound = ready() and runtime.hero == CurrentRun.Hero or false
