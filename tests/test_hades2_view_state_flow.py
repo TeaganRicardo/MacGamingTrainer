@@ -77,19 +77,9 @@ struct Main {
         )
 
         let model = Hades2GameModule.makeModel(session: session)
-        // A real suite here materializes a plist in ~/Library/Preferences that
-        // removePersistentDomain empties but never unlinks, so each run would
-        // leave another domain behind. The store only needs the UserDefaults
-        // surface, so the harness injects an in-memory implementation instead.
-        final class InMemoryDefaults: UserDefaults {
-            private var storage: [String: Any] = [:]
-            override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-            override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-            override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
-            override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
-            override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
-        }
-
+        // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
+        // real preferences directory; a real suite there cannot be cleaned up
+        // afterwards.
         let localizationDefaults = InMemoryDefaults()
         let localization = TrainerLocalizationStore(defaults: localizationDefaults)
         let host = NSHostingView(
@@ -185,7 +175,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [generated, main_path]
+        + [
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            generated,
+            main_path,
+        ]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
@@ -467,7 +461,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [generated, main_path]
+        + [
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            generated,
+            main_path,
+        ]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],

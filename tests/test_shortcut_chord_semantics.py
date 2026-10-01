@@ -16,20 +16,8 @@ precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)) == Set(ShortcutAction.a
 precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)).count == ShortcutAction.uiOrder.count)
 precondition(ShortcutAction.uiOrder.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
 
-// The store only needs the UserDefaults surface, so the harness injects an
-// in-memory implementation. A real `UserDefaults(suiteName:)` here would
-// materialize an `mgt.shortcut.tests.*` plist in the user's
-// ~/Library/Preferences on every run: cfprefsd keeps an empty domain file
-// behind even after removePersistentDomain, so cleanup cannot undo it.
-final class InMemoryDefaults: UserDefaults {
-    private var storage: [String: Any] = [:]
-    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-    override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-    override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
-    override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
-    override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
-}
-
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
 func makeDefaults() -> UserDefaults { InMemoryDefaults() }
 
 func unique(_ store: Hades2ShortcutStore) -> Bool {
@@ -139,6 +127,7 @@ with tempfile.TemporaryDirectory() as td:
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
         str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
         str(ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift'),
+        str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'),
         str(main), '-o', str(binary),
     ], check=True)
     subprocess.run([str(binary)], check=True)

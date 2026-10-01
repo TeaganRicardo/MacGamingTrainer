@@ -16,19 +16,9 @@ import Combine
 @main
 struct LocalizationBehaviorTest {
     static func main() {
-        // A real suite here materializes a plist in ~/Library/Preferences that
-        // removePersistentDomain empties but never unlinks, so each run would
-        // leave another domain behind. The store only needs the UserDefaults
-        // surface, so the harness injects an in-memory implementation instead.
-        final class InMemoryDefaults: UserDefaults {
-            private var storage: [String: Any] = [:]
-            override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-            override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-            override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
-            override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
-            override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
-        }
-
+        // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
+        // real preferences directory; a real suite there cannot be cleaned up
+        // afterwards.
         let defaults = InMemoryDefaults()
 
         let missingValue = TrainerLocalizationStore(defaults: defaults)
@@ -154,6 +144,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
             str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
             str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
             str(ROOT / "Sources/Core/Host/TrainerLocalization.swift"),
+            str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
             str(harness_path),
             "-o", str(executable),
         ],

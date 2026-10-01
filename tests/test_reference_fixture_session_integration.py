@@ -72,19 +72,8 @@ if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
     fail("startup diagnostic detail did not reach logging")
 }
 
-// A real suite here materializes a plist in ~/Library/Preferences that
-// removePersistentDomain empties but never unlinks, so each run would leave
-// another domain behind. The store only needs the UserDefaults surface, so the
-// harness injects an in-memory implementation instead.
-final class InMemoryDefaults: UserDefaults {
-    private var storage: [String: Any] = [:]
-    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-    override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-    override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
-    override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
-    override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
-}
-
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
 let localizationDefaults = InMemoryDefaults()
 
 let session = TrainerBackendSession()
@@ -293,6 +282,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
             SWIFTC,
             *map(str, core_sources),
             str(project / "Sources/ReferenceFixture/ReferenceFixtureModule.swift"),
+            str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
             str(generated),
             str(main_swift),
             "-o",

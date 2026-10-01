@@ -11,20 +11,8 @@ if not swiftc:
 harness = r"""
 import Foundation
 
-// The store only needs the UserDefaults surface, so the harness injects an
-// in-memory implementation. A real `UserDefaults(suiteName:)` here would
-// materialize an `mgt.invincibility.shortcut.*` plist in the user's
-// ~/Library/Preferences on every run: cfprefsd keeps an empty domain file
-// behind even after removePersistentDomain, so cleanup cannot undo it.
-final class InMemoryDefaults: UserDefaults {
-    private var storage: [String: Any] = [:]
-    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
-    override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
-    override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
-    override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
-    override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
-}
-
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
 let defaults = InMemoryDefaults()
 defaults.set(5, forKey: "shortcut.layoutVersion")
 
@@ -55,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-invincibility-shortcut-") as td:
         str(ROOT / "Sources/Core/Input/HotkeyChord.swift"),
         str(ROOT / "Sources/Hades2/Hades2Types.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2ShortcutStore.swift"),
+        str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
         str(main),
         "-o", str(binary),
     ], check=True)
