@@ -11,9 +11,20 @@ if not swiftc:
 harness = r"""
 import Foundation
 
-let suite = "mgt.invincibility.shortcut.\(UUID().uuidString)"
-let defaults = UserDefaults(suiteName: suite)!
-defaults.removePersistentDomain(forName: suite)
+// The store only needs the UserDefaults surface, so the harness injects an
+// in-memory implementation. A real `UserDefaults(suiteName:)` here would
+// materialize an `mgt.invincibility.shortcut.*` plist in the user's
+// ~/Library/Preferences on every run: cfprefsd keeps an empty domain file
+// behind even after removePersistentDomain, so cleanup cannot undo it.
+final class InMemoryDefaults: UserDefaults {
+    private var storage: [String: Any] = [:]
+    override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
+    override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
+    override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
+    override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
+}
+
+let defaults = InMemoryDefaults()
 defaults.set(5, forKey: "shortcut.layoutVersion")
 
 let legacy = HotkeyChord(
