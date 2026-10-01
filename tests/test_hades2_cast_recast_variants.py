@@ -115,6 +115,14 @@ end
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
 
+-- Production LLDB calls serialize dispatch results before returning them to the
+-- backend. Exercise that boundary explicitly so diagnostics cannot hide values
+-- that are valid Lua tables but invalid under the resident JSON contract.
+local encodedStatus = M.json(M.dispatch("status", {}))
+if type(encodedStatus) ~= "string" or encodedStatus == "" then
+  error("ASSERTION FAILED: status JSON boundary did not produce encoded output", 0)
+end
+
 local function fail(message) error("ASSERTION FAILED: " .. message, 0) end
 local function check(value, message) if not value then fail(message) end end
 local function eq(actual, expected, message)
