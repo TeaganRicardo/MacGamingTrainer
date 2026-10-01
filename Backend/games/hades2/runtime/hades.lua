@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 57 then
+if previousModule and previousModule.revision ~= 58 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 57 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 57, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 58, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1251,7 +1251,7 @@ if __MacGamingTrainerV1 == nil then
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
   end
   local reconcileDesired
-  local forceCastAvailable, refillHex, currentSpellRuntime, latestActionReceipt
+  local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger
   local function synchronize()
     local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
     if M.session ~= SessionState or M.run ~= CurrentRun or M.hero ~= hero then
@@ -1892,293 +1892,306 @@ if __MacGamingTrainerV1 == nil then
   -- target snapshot: resident generation + CurrentRun table identity + trait.Id.
   -- None is persisted, and every mutation re-resolves the selection immediately
   -- before it calls a game-owned operation.
-  local directTraitStrategies = {
-    -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
-    -- boon proves an intentional direct level path without replaying acquisition.
-    CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
-    -- Icarus' OmegaExplodeBoon is not native SellTraits / rarity-menu eligible.
-    -- Its mounted state is declarative (mana modifier + damage callback), with no
-    -- acquire/setup/expire reward lifecycle, so it is the bounded direct example
-    -- for exact rarity recompute and single-instance teardown in #227.
-    OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
-  }
-  local deferredTraitIssues = {
-    chaos = 236,
-    hex = 237,
-    hammer = 238,
-    costume = 239,
-    temporary = 239,
-    directSpecial = 239,
-    familiar = 240,
-    other = 221,
-  }
-  local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
-  local directUnsafeLifecycleKeys = {
-    "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
-    "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
-  }
+  local traitManagement = (function()
+    local directTraitStrategies = {
+      -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
+      -- boon proves an intentional direct level path without replaying acquisition.
+      CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
+      -- Icarus' OmegaExplodeBoon is not native SellTraits / rarity-menu eligible.
+      -- Its mounted state is declarative (mana modifier + damage callback), with no
+      -- acquire/setup/expire reward lifecycle, so it is the bounded direct example
+      -- for exact rarity recompute and single-instance teardown in #227.
+      OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
+    }
+    local deferredTraitIssues = {
+      chaos = 236,
+      hex = 237,
+      hammer = 238,
+      costume = 239,
+      temporary = 239,
+      directSpecial = 239,
+      familiar = 240,
+      other = 221,
+    }
+    local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
+    local directUnsafeLifecycleKeys = {
+      "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
+      "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
+    }
 
-  local function traitLevel(trait)
-    if type(trait) ~= "table" then return 1 end
-    local value = trait.StackNum
-    if not finite(value) or value < 1 then return 1 end
-    return math.floor(value)
-  end
-
-  local function traitRarity(trait)
-    return type(trait) == "table" and type(trait.Rarity) == "string" and trait.Rarity or ""
-  end
-
-  local function sameNameCount(name)
-    local count = 0
-    if type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
-        and type(CurrentRun.Hero.Traits) == "table" then
-      for _, trait in ipairs(CurrentRun.Hero.Traits) do
-        if type(trait) == "table" and trait.Name == name then count = count + 1 end
-      end
+    local function traitLevel(trait)
+      if type(trait) ~= "table" then return 1 end
+      local value = trait.StackNum
+      if not finite(value) or value < 1 then return 1 end
+      return math.floor(value)
     end
-    return count
-  end
 
-  local function directStrategySafe(trait)
-    if type(trait) ~= "table" or directTraitStrategies[trait.Name] == nil then return false end
-    for _, key in ipairs(directUnsafeLifecycleKeys) do
-      if trait[key] ~= nil then return false end
+    local function traitRarity(trait)
+      return type(trait) == "table" and type(trait.Rarity) == "string" and trait.Rarity or ""
     end
-    if trait.RemainingUses ~= nil then return false end
-    return true
-  end
 
-  local function specialTraitSourceId(name)
-    if type(name) ~= "string" or name == "" then return "" end
-    for sourceId, definition in pairs(nativeSpecialChoiceDefinitions) do
-      local npcData = type(EnemyData) == "table" and EnemyData[definition.npc] or nil
-      if type(npcData) == "table" and type(npcData.Traits) == "table" then
-        for _, traitName in pairs(npcData.Traits) do
-          if traitName == name then return sourceId end
+    local function sameNameCount(name)
+      local count = 0
+      if type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
+          and type(CurrentRun.Hero.Traits) == "table" then
+        for _, trait in ipairs(CurrentRun.Hero.Traits) do
+          if type(trait) == "table" and trait.Name == name then count = count + 1 end
         end
       end
-      local choiceData = definition.choices ~= nil and type(PresetEventArgs) == "table"
-        and PresetEventArgs[definition.choices] or nil
-      if type(choiceData) == "table" and type(choiceData.UpgradeOptions) == "table" then
-        for _, option in pairs(choiceData.UpgradeOptions) do
-          if type(option) == "table" and option.ItemName == name then return sourceId end
+      return count
+    end
+
+    local function directStrategySafe(trait)
+      if type(trait) ~= "table" or directTraitStrategies[trait.Name] == nil then return false end
+      for _, key in ipairs(directUnsafeLifecycleKeys) do
+        if trait[key] ~= nil then return false end
+      end
+      if trait.RemainingUses ~= nil then return false end
+      return true
+    end
+
+    local function specialTraitSourceId(name)
+      if type(name) ~= "string" or name == "" then return "" end
+      for sourceId, definition in pairs(nativeSpecialChoiceDefinitions) do
+        local npcData = type(EnemyData) == "table" and EnemyData[definition.npc] or nil
+        if type(npcData) == "table" and type(npcData.Traits) == "table" then
+          for _, traitName in pairs(npcData.Traits) do
+            if traitName == name then return sourceId end
+          end
+        end
+        local choiceData = definition.choices ~= nil and type(PresetEventArgs) == "table"
+          and PresetEventArgs[definition.choices] or nil
+        if type(choiceData) == "table" and type(choiceData.UpgradeOptions) == "table" then
+          for _, option in pairs(choiceData.UpgradeOptions) do
+            if type(option) == "table" and option.ItemName == name then return sourceId end
+          end
         end
       end
+      return ""
     end
-    return ""
-  end
 
-  local function traitSourceId(trait)
-    if type(trait) ~= "table" then return "" end
-    local strategy = directTraitStrategies[trait.Name]
-    if strategy then return strategy.sourceId end
-    local specialSource = specialTraitSourceId(trait.Name)
-    if specialSource ~= "" then return specialSource end
-    if type(trait.LootDataName) == "string" and trait.LootDataName ~= "" then return trait.LootDataName end
-    if type(trait.SourceId) == "string" and trait.SourceId ~= "" then return trait.SourceId end
-    if type(GetLootSourceName) == "function" and type(trait.Name) == "string" then
-      local ok, source = pcall(GetLootSourceName, trait.Name, { ForBoonInfo = true, CheckEnemyData = true })
-      if ok and type(source) == "string" then return source end
-    end
-    return ""
-  end
-
-  local function sellScreenEligible(trait)
-    if type(trait) ~= "table" then return false, "missingTarget" end
-    if type(trait.Name) ~= "string" or trait.Name == "" then return false, "noTraitName" end
-    if trait.Rarity == nil then return false, "noRarity" end
-    if type(IsGodTrait) ~= "function" then return false, "predicateUnavailable" end
-    local ok, isGod = pcall(IsGodTrait, trait.Name, { ForShop = true })
-    if not ok then return false, "predicateFailed" end
-    if not isGod then return false, "notShopGodOwned" end
-    return true, ""
-  end
-
-  local function traitFamily(trait, sellEligible)
-    if type(trait) ~= "table" then return "other" end
-    local name = trait.Name or ""
-    if directTraitStrategies[name] ~= nil then return "directSpecial" end
-    if trait.LastCurseName ~= nil or trait.LastBlessingName ~= nil
-        or string.find(name, "Chaos", 1, true) ~= nil then return "chaos" end
-    if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
-        or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
-    if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
-        or string.find(name, "Hammer", 1, true) ~= nil then return "hammer" end
-    if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
-    if trait.RemainingUses ~= nil then return "temporary" end
-    if type(trait.InheritFrom) == "table" then
-      for _, parent in ipairs(trait.InheritFrom) do
-        if parent == "CostumeTrait" then return "costume" end
+    local function traitSourceId(trait)
+      if type(trait) ~= "table" then return "" end
+      local strategy = directTraitStrategies[trait.Name]
+      if strategy then return strategy.sourceId end
+      local specialSource = specialTraitSourceId(trait.Name)
+      if specialSource ~= "" then return specialSource end
+      if type(trait.LootDataName) == "string" and trait.LootDataName ~= "" then return trait.LootDataName end
+      if type(trait.SourceId) == "string" and trait.SourceId ~= "" then return trait.SourceId end
+      if type(GetLootSourceName) == "function" and type(trait.Name) == "string" then
+        local ok, source = pcall(GetLootSourceName, trait.Name, { ForBoonInfo = true, CheckEnemyData = true })
+        if ok and type(source) == "string" then return source end
       end
+      return ""
     end
 
-    -- TreatAsGodLootByShops makes several field/special NPC rewards sellable,
-    -- but that does not make their lifecycle an ordinary Olympian/Hermes one.
-    -- Ownership wins over menu eligibility; #239 handles those families unless
-    -- an explicit direct strategy above opts in one audited operation.
-    local source = traitSourceId(trait)
-    if type(source) == "string" and source ~= "" then
-      if string.find(source, "NPC_", 1, true) == 1
-          or nativeSpecialChoiceDefinitions[source] ~= nil then
-        return "directSpecial"
+    local function sellScreenEligible(trait)
+      if type(trait) ~= "table" then return false, "missingTarget" end
+      if type(trait.Name) ~= "string" or trait.Name == "" then return false, "noTraitName" end
+      if trait.Rarity == nil then return false, "noRarity" end
+      if type(IsGodTrait) ~= "function" then return false, "predicateUnavailable" end
+      local ok, isGod = pcall(IsGodTrait, trait.Name, { ForShop = true })
+      if not ok then return false, "predicateFailed" end
+      if not isGod then return false, "notShopGodOwned" end
+      return true, ""
+    end
+
+    local function traitFamily(trait, sellEligible)
+      if type(trait) ~= "table" then return "other" end
+      local name = trait.Name or ""
+      if directTraitStrategies[name] ~= nil then return "directSpecial" end
+      if trait.LastCurseName ~= nil or trait.LastBlessingName ~= nil
+          or string.find(name, "Chaos", 1, true) ~= nil then return "chaos" end
+      if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
+          or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
+      if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
+          or string.find(name, "Hammer", 1, true) ~= nil then return "hammer" end
+      if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
+      if trait.RemainingUses ~= nil then return "temporary" end
+      if type(trait.InheritFrom) == "table" then
+        for _, parent in ipairs(trait.InheritFrom) do
+          if parent == "CostumeTrait" then return "costume" end
+        end
       end
+
+      -- TreatAsGodLootByShops makes several field/special NPC rewards sellable,
+      -- but that does not make their lifecycle an ordinary Olympian/Hermes one.
+      -- Ownership wins over menu eligibility; #239 handles those families unless
+      -- an explicit direct strategy above opts in one audited operation.
+      local source = traitSourceId(trait)
+      if type(source) == "string" and source ~= "" then
+        if string.find(source, "NPC_", 1, true) == 1
+            or nativeSpecialChoiceDefinitions[source] ~= nil then
+          return "directSpecial"
+        end
+      end
+      if sellEligible then return "olympianHermes" end
+      return "other"
     end
-    if sellEligible then return "olympianHermes" end
-    return "other"
-  end
 
-  local function availableRarities(trait)
-    local result = setmetatable({}, arrayMeta)
-    if type(trait) ~= "table" then return result end
-    local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
-    local levels = type(definition) == "table" and definition.RarityLevels or trait.RarityLevels
-    if type(levels) ~= "table" then return result end
-    for _, rarity in ipairs(rarityOrder) do
-      if levels[rarity] ~= nil then result[#result + 1] = rarity end
+    local function availableRarities(trait)
+      local result = setmetatable({}, arrayMeta)
+      if type(trait) ~= "table" then return result end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      local levels = type(definition) == "table" and definition.RarityLevels or trait.RarityLevels
+      if type(levels) ~= "table" then return result end
+      for _, rarity in ipairs(rarityOrder) do
+        if levels[rarity] ~= nil then result[#result + 1] = rarity end
+      end
+      return result
     end
-    return result
-  end
 
-  local function nativeLevelEligible(trait)
-    if type(trait) ~= "table" or type(GetAllUpgradeableGodTraits) ~= "function" then return false end
-    local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
-    return ok and type(eligible) == "table" and eligible[trait.Name] == true
-  end
+    local function nativeLevelEligible(trait)
+      if type(trait) ~= "table" or type(GetAllUpgradeableGodTraits) ~= "function" then return false end
+      local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
+      return ok and type(eligible) == "table" and eligible[trait.Name] == true
+    end
 
-  local function operationCapabilities(trait, family, sellEligible, sameCount)
-    local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
-    local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
-    local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
-    local strategy = directTraitStrategies[trait.Name]
-    local directSafe = strategy ~= nil and directStrategySafe(trait)
-    local hasIdentity = trait.Id ~= nil
+    local function operationCapabilities(trait, family, sellEligible, sameCount)
+      local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
+      local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
+      local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
+      local strategy = directTraitStrategies[trait.Name]
+      local directSafe = strategy ~= nil and directStrategySafe(trait)
+      local hasIdentity = trait.Id ~= nil
 
-    if not hasIdentity then
-      levelReason, rarityReason, removalReason = "missingInstanceIdentity", "missingInstanceIdentity", "missingInstanceIdentity"
-    else
-      if sameCount > 1 then
-        levelReason = "multipleMatchingInstances"
-      elseif type(IncreaseTraitLevel) ~= "function" then
-        levelReason = "nativePathUnavailable"
-      elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
-        levelCapability, levelReason = "increaseOne", ""
-      elseif family == "olympianHermes" and nativeLevelEligible(trait) then
-        levelCapability, levelReason = "increaseOne", ""
+      if not hasIdentity then
+        levelReason, rarityReason, removalReason = "missingInstanceIdentity", "missingInstanceIdentity", "missingInstanceIdentity"
       else
-        levelReason = family == "olympianHermes" and "notMeaningful" or "ownerSpecificLifecycle"
-      end
-
-      local rarities = availableRarities(trait)
-      if sameCount > 1 then
-        rarityReason = "multipleMatchingInstances"
-      elseif trait.Rarity == nil or #rarities < 2 then
-        rarityReason = "notMeaningful"
-      elseif type(AddRarityToTraits) ~= "function" then
-        rarityReason = "nativePathUnavailable"
-      elseif strategy and strategy.rarity == "setExact" and directSafe then
-        rarityCapability, rarityReason = "setExact", ""
-      elseif family == "olympianHermes" and sellEligible then
-        rarityCapability, rarityReason = "setExact", ""
-      else
-        rarityReason = "ownerSpecificLifecycle"
-      end
-
-      if strategy and strategy.removal == "singleInstanceForce" and directSafe
-          and type(RemoveTraitData) == "function" then
-        removalCapability, removalReason = "singleInstanceForce", ""
-      elseif family == "olympianHermes" and sellEligible then
-        removalCapability, removalReason = "nameLevelAllMatching", ""
-      elseif strategy and not directSafe then
-        removalReason = "directSafetyFailed"
-      end
-    end
-
-    return levelCapability, levelReason, rarityCapability, rarityReason,
-      removalCapability, removalReason
-  end
-
-  local currentRunTraits = function()
-    local result = setmetatable({}, arrayMeta)
-    if not ready() or sceneName() ~= "run" or type(CurrentRun) ~= "table"
-        or type(CurrentRun.Hero) ~= "table" or type(CurrentRun.Hero.Traits) ~= "table" then
-      return result, "noActiveRun"
-    end
-    local runId = tostring(CurrentRun)
-    for index, trait in ipairs(CurrentRun.Hero.Traits) do
-      if type(trait) == "table" and type(trait.Name) == "string" and trait.Name ~= "" then
-        local sellEligible, sellReason = sellScreenEligible(trait)
-        local family = traitFamily(trait, sellEligible)
-        local count = sameNameCount(trait.Name)
-        local levelCapability, levelReason, rarityCapability, rarityReason,
-          removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count)
-        if removalCapability == "none" and removalReason == "ownerSpecificLifecycle"
-            and sellReason ~= "" and family == "olympianHermes" then
-          removalReason = sellReason
+        if sameCount > 1 then
+          levelReason = "multipleMatchingInstances"
+        elseif type(IncreaseTraitLevel) ~= "function" then
+          levelReason = "nativePathUnavailable"
+        elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
+          levelCapability, levelReason = "increaseOne", ""
+        elseif family == "olympianHermes" and nativeLevelEligible(trait) then
+          levelCapability, levelReason = "increaseOne", ""
+        else
+          levelReason = family == "olympianHermes" and "notMeaningful" or "ownerSpecificLifecycle"
         end
-        result[#result + 1] = {
-          generationId = M.traitInventoryGeneration,
-          runId = runId,
-          -- A row without the game-owned Id remains observable but cannot mutate.
-          instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
-          name = trait.Name,
-          family = family,
-          sourceId = traitSourceId(trait),
-          owner = traitSourceId(trait),
-          level = traitLevel(trait),
-          rarity = traitRarity(trait),
-          hasRarity = trait.Rarity ~= nil,
-          availableRarities = availableRarities(trait),
-          sameNameCount = count,
-          remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
-          levelCapability = levelCapability,
-          levelReason = levelReason,
-          rarityCapability = rarityCapability,
-          rarityReason = rarityReason,
-          removalCapability = removalCapability,
-          removalReason = removalReason,
-          removalScopeAllMatching = (removalCapability == "nameLevelAllMatching"),
-          deferredIssue = deferredTraitIssues[family],
-        }
-      end
-    end
-    return result, nil
-  end
 
-  local function resolveTraitTarget(params)
-    if not ready() or sceneName() ~= "run" then error("Trait mutation requires an active run room") end
-    if params.generationId ~= M.traitInventoryGeneration then
-      error("Trait selection belongs to a stale runtime generation")
-    end
-    if params.runId ~= tostring(CurrentRun) then error("Trait selection belongs to a stale run") end
-    if type(params.instanceId) ~= "string" or params.instanceId == ""
-        or string.find(params.instanceId, "missing:", 1, true) == 1 then
-      error("Trait instance is no longer present")
-    end
-    local target = nil
-    for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-      if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
-        target = trait
-        break
-      end
-    end
-    if target == nil then error("Trait instance is no longer present") end
-    local sellEligible = sellScreenEligible(target)
-    local family = traitFamily(target, sellEligible)
-    local count = sameNameCount(target.Name)
-    local expectedRarity = type(params.expectedRarity) == "string" and params.expectedRarity or ""
-    if target.Name ~= params.trait or family ~= params.family
-        or traitLevel(target) ~= params.expectedLevel or traitRarity(target) ~= expectedRarity
-        or count ~= params.expectedSameNameCount then
-      error("Trait target changed since selection")
-    end
-    return target, family, sellEligible, count
-  end
+        local rarities = availableRarities(trait)
+        if sameCount > 1 then
+          rarityReason = "multipleMatchingInstances"
+        elseif trait.Rarity == nil or #rarities < 2 then
+          rarityReason = "notMeaningful"
+        elseif type(AddRarityToTraits) ~= "function" then
+          rarityReason = "nativePathUnavailable"
+        elseif strategy and strategy.rarity == "setExact" and directSafe then
+          rarityCapability, rarityReason = "setExact", ""
+        elseif family == "olympianHermes" and sellEligible then
+          rarityCapability, rarityReason = "setExact", ""
+        else
+          rarityReason = "ownerSpecificLifecycle"
+        end
 
-  local function targetHasRarity(rarities, rarity)
-    for _, value in ipairs(rarities) do if value == rarity then return true end end
-    return false
-  end
+        if strategy and strategy.removal == "singleInstanceForce" and directSafe
+            and type(RemoveTraitData) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "olympianHermes" and sellEligible then
+          removalCapability, removalReason = "nameLevelAllMatching", ""
+        elseif strategy and not directSafe then
+          removalReason = "directSafetyFailed"
+        end
+      end
+
+      return levelCapability, levelReason, rarityCapability, rarityReason,
+        removalCapability, removalReason
+    end
+
+    local currentRunTraits = function()
+      local result = setmetatable({}, arrayMeta)
+      if not ready() or sceneName() ~= "run" or type(CurrentRun) ~= "table"
+          or type(CurrentRun.Hero) ~= "table" or type(CurrentRun.Hero.Traits) ~= "table" then
+        return result, "noActiveRun"
+      end
+      local runId = tostring(CurrentRun)
+      for index, trait in ipairs(CurrentRun.Hero.Traits) do
+        if type(trait) == "table" and type(trait.Name) == "string" and trait.Name ~= "" then
+          local sellEligible, sellReason = sellScreenEligible(trait)
+          local family = traitFamily(trait, sellEligible)
+          local count = sameNameCount(trait.Name)
+          local levelCapability, levelReason, rarityCapability, rarityReason,
+            removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count)
+          if removalCapability == "none" and removalReason == "ownerSpecificLifecycle"
+              and sellReason ~= "" and family == "olympianHermes" then
+            removalReason = sellReason
+          end
+          result[#result + 1] = {
+            generationId = M.traitInventoryGeneration,
+            runId = runId,
+            -- A row without the game-owned Id remains observable but cannot mutate.
+            instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
+            name = trait.Name,
+            family = family,
+            sourceId = traitSourceId(trait),
+            owner = traitSourceId(trait),
+            level = traitLevel(trait),
+            rarity = traitRarity(trait),
+            hasRarity = trait.Rarity ~= nil,
+            availableRarities = availableRarities(trait),
+            sameNameCount = count,
+            remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
+            levelCapability = levelCapability,
+            levelReason = levelReason,
+            rarityCapability = rarityCapability,
+            rarityReason = rarityReason,
+            removalCapability = removalCapability,
+            removalReason = removalReason,
+            removalScopeAllMatching = (removalCapability == "nameLevelAllMatching"),
+            deferredIssue = deferredTraitIssues[family],
+          }
+        end
+      end
+      return result, nil
+    end
+
+    local function resolveTraitTarget(params)
+      if not ready() or sceneName() ~= "run" then error("Trait mutation requires an active run room") end
+      if params.generationId ~= M.traitInventoryGeneration then
+        error("Trait selection belongs to a stale runtime generation")
+      end
+      if params.runId ~= tostring(CurrentRun) then error("Trait selection belongs to a stale run") end
+      if type(params.instanceId) ~= "string" or params.instanceId == ""
+          or string.find(params.instanceId, "missing:", 1, true) == 1 then
+        error("Trait instance is no longer present")
+      end
+      local target = nil
+      for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
+          target = trait
+          break
+        end
+      end
+      if target == nil then error("Trait instance is no longer present") end
+      local sellEligible = sellScreenEligible(target)
+      local family = traitFamily(target, sellEligible)
+      local count = sameNameCount(target.Name)
+      local expectedRarity = type(params.expectedRarity) == "string" and params.expectedRarity or ""
+      if target.Name ~= params.trait or family ~= params.family
+          or traitLevel(target) ~= params.expectedLevel or traitRarity(target) ~= expectedRarity
+          or count ~= params.expectedSameNameCount then
+        error("Trait target changed since selection")
+      end
+      return target, family, sellEligible, count
+    end
+
+    local function targetHasRarity(rarities, rarity)
+      for _, value in ipairs(rarities) do if value == rarity then return true end end
+      return false
+    end
+
+    return {
+      currentRunTraits = currentRunTraits,
+      resolveTarget = resolveTraitTarget,
+      capabilities = operationCapabilities,
+      availableRarities = availableRarities,
+      targetHasRarity = targetHasRarity,
+      level = traitLevel,
+      rarity = traitRarity,
+      hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
+    }
+  end)()
 
   local function state(includeCatalogs)
     local hero = CurrentRun and CurrentRun.Hero or {}
@@ -2212,7 +2225,7 @@ if __MacGamingTrainerV1 == nil then
       and type(MapState.RoomRequiredObjects) == "table" and type(LootObjects) == "table"
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
     -- and never desired state.
-    local traitList, traitListReason = currentRunTraits()
+    local traitList, traitListReason = traitManagement.currentRunTraits()
     local elementList = setmetatable({}, arrayMeta)
     local heroElements = type(hero.Elements) == "table" and hero.Elements or {}
     local orderedElements = { "Fire", "Water", "Earth", "Air", "Aether" }
@@ -2277,7 +2290,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
-      lastAction = latestActionReceipt(),
+      lastAction = actionLedger.latestReceipt(),
       featureErrors = M.featureErrors,
       runtimeDiagnostics = {
         revision = M.revision, heroObjectId = hero.ObjectId, runCount = runCount,
@@ -3180,95 +3193,100 @@ if __MacGamingTrainerV1 == nil then
       error("Amount must be an integer " .. minimum .. "..999999")
     end
   end
-  local actionSemanticKeys = {
-    set_resource = { "resource", "amount" },
-    set_rerolls = { "amount" },
-    open_sell_traits = {},
-    set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
-    set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
-    remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
-    open_special_choice = { "source" },
-    spawn_reward = { "reward" },
-  }
-  local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
-  local function actionFingerprint(command, params)
-    local keys = actionSemanticKeys[command]
-    if type(keys) ~= "table" then error("Action fingerprint is undefined for " .. tostring(command)) end
-    local fingerprint = { command = command }
-    for _, key in ipairs(keys) do fingerprint[key] = params[key] end
-    return fingerprint
-  end
-  local function sameActionFingerprint(left, right)
-    if type(left) ~= "table" or type(right) ~= "table" then return false end
-    for key, value in pairs(left) do if right[key] ~= value then return false end end
-    for key, value in pairs(right) do if left[key] ~= value then return false end end
-    return true
-  end
-  local function actionReceipt(record, requestId, duplicate)
-    return {
-      requestId = requestId,
-      command = record.command,
-      outcome = record.status,
-      duplicate = not not duplicate,
-      error = record.error,
+  actionLedger = (function()
+    local actionSemanticKeys = {
+      set_resource = { "resource", "amount" },
+      set_rerolls = { "amount" },
+      open_sell_traits = {},
+      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
+      remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      open_special_choice = { "source" },
+      spawn_reward = { "reward" },
     }
-  end
-  local function publishActionReceipt(record)
-    M.lastActionReceipt = actionReceipt(record, record.requestId, false)
-  end
-  latestActionReceipt = function()
-    return M.lastActionReceipt
-  end
-  local function action(command, params, work, preflight)
-    local requestId = params.requestId
-    if type(requestId) ~= "string" or #requestId == 0 or #requestId > 128 then
-      error("Action requires a requestId of 1..128 characters")
+    local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
+    local function actionFingerprint(command, params)
+      local keys = actionSemanticKeys[command]
+      if type(keys) ~= "table" then error("Action fingerprint is undefined for " .. tostring(command)) end
+      local fingerprint = { command = command }
+      for _, key in ipairs(keys) do fingerprint[key] = params[key] end
+      return fingerprint
     end
-    local fingerprint = actionFingerprint(command, params)
-    local prior = M.requests[requestId]
-    if prior then
-      if not sameActionFingerprint(prior.fingerprint, fingerprint) then
-        error("requestId reused for a different action")
+    local function sameActionFingerprint(left, right)
+      if type(left) ~= "table" or type(right) ~= "table" then return false end
+      for key, value in pairs(left) do if right[key] ~= value then return false end end
+      for key, value in pairs(right) do if left[key] ~= value then return false end end
+      return true
+    end
+    local function actionReceipt(record, requestId, duplicate)
+      return {
+        requestId = requestId,
+        command = record.command,
+        outcome = record.status,
+        duplicate = not not duplicate,
+        error = record.error,
+      }
+    end
+    local function publishActionReceipt(record)
+      M.lastActionReceipt = actionReceipt(record, record.requestId, false)
+    end
+    local function action(command, params, work, preflight)
+      local requestId = params.requestId
+      if type(requestId) ~= "string" or #requestId == 0 or #requestId > 128 then
+        error("Action requires a requestId of 1..128 characters")
       end
-      if not knownActionStatuses[prior.status] then
-        error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+      local fingerprint = actionFingerprint(command, params)
+      local prior = M.requests[requestId]
+      if prior then
+        if not sameActionFingerprint(prior.fingerprint, fingerprint) then
+          error("requestId reused for a different action")
+        end
+        if not knownActionStatuses[prior.status] then
+          error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+        end
+        local result = state(params.includeCatalogs)
+        local receipt = actionReceipt(prior, requestId, true)
+        result.requestId, result.duplicate = requestId, true
+        result.actionOutcome = receipt.outcome
+        result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
+        if receipt.error then result.actionError = receipt.error end
+        if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
+        return result
       end
+      -- Deterministic validation belongs after request-id deduplication. A
+      -- duplicate successful mutation must return its prior receipt even though
+      -- the live target has since changed or disappeared.
+      if preflight ~= nil then preflight() end
+      local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
+      M.requests[requestId] = record
+      M.requestOrder[#M.requestOrder + 1] = requestId
+      if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
+      local ok, value, outcome = pcall(work, record)
+      if not ok then
+        record.status = "outcome_unknown"
+        record.error = tostring(value)
+        publishActionReceipt(record)
+        error("MGT_OUTCOME_UNKNOWN: " .. record.error)
+      end
+      if record.status == "outcome_unknown" then record.status = outcome or "completed" end
+      record.lootObjectId = value
+      publishActionReceipt(record)
       local result = state(params.includeCatalogs)
-      local receipt = actionReceipt(prior, requestId, true)
-      result.requestId, result.duplicate = requestId, true
+      local receipt = actionReceipt(record, requestId, false)
+      result.requestId, result.duplicate = requestId, false
       result.actionOutcome = receipt.outcome
       result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
       if receipt.error then result.actionError = receipt.error end
-      if prior.lootObjectId then result.lootObjectId = prior.lootObjectId end
+      if record.lootObjectId then result.lootObjectId = record.lootObjectId end
       return result
     end
-    -- Deterministic validation belongs after request-id deduplication. A
-    -- duplicate successful mutation must return its prior receipt even though
-    -- the live target has since changed or disappeared.
-    if preflight ~= nil then preflight() end
-    local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
-    M.requests[requestId] = record
-    M.requestOrder[#M.requestOrder + 1] = requestId
-    if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
-    local ok, value, outcome = pcall(work, record)
-    if not ok then
-      record.status = "outcome_unknown"
-      record.error = tostring(value)
-      publishActionReceipt(record)
-      error("MGT_OUTCOME_UNKNOWN: " .. record.error)
-    end
-    if record.status == "outcome_unknown" then record.status = outcome or "completed" end
-    record.lootObjectId = value
-    publishActionReceipt(record)
-    local result = state(params.includeCatalogs)
-    local receipt = actionReceipt(record, requestId, false)
-    result.requestId, result.duplicate = requestId, false
-    result.actionOutcome = receipt.outcome
-    result.applied = receipt.outcome == "completed" or receipt.outcome == "opened"
-    if receipt.error then result.actionError = receipt.error end
-    if record.lootObjectId then result.lootObjectId = record.lootObjectId end
-    return result
-  end
+    return {
+      run = action,
+      publish = publishActionReceipt,
+      latestReceipt = function() return M.lastActionReceipt end,
+    }
+  end)()
+
   local function editResource(id, target)
     local current = number(GameState.Resources[id])
     if M.resourceLocks[id] ~= nil then M.resourceLocks[id] = target end
@@ -3535,14 +3553,14 @@ if __MacGamingTrainerV1 == nil then
       validateResource(params.resource)
       integer(params.amount, 0)
       if params.resource == "Money" and type(UpdateMoneyUI) ~= "function" then error("Unsupported money editing: missing UpdateMoneyUI") end
-      return action(command, params, function() editResource(params.resource, params.amount) end)
+      return actionLedger.run(command, params, function() editResource(params.resource, params.amount) end)
     end
     if command == "set_rerolls" then
       if not ready() then error("Game scene does not expose rerolls") end
       integer(params.amount, 0)
       requireFunctions("reroll editing", { "UpdateRerollUI", "ShowRerollUI" })
       if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
-      return action(command, params, function()
+      return actionLedger.run(command, params, function()
         if M.rerollsLock ~= nil then M.rerollsLock = params.amount end
         CurrentRun.NumRerolls = params.amount
         ShowRerollUI()
@@ -3551,14 +3569,14 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_trait_level" then
       local function validateLevelTarget()
-        local target, family, sellEligible, count = resolveTraitTarget(params)
-        local levelCapability = operationCapabilities(target, family, sellEligible, count)
+        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
+        local levelCapability = traitManagement.capabilities(target, family, sellEligible, count)
         if levelCapability ~= "increaseOne" then
           error("Trait level editing is unavailable for the selected target")
         end
         -- Ordinary God boons are re-checked against the game's real Pom
         -- eligibility. The explicit direct strategy is the only bypass.
-        if directTraitStrategies[target.Name] == nil then
+        if not traitManagement.hasDirectStrategy(target.Name) then
           requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
           local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
           if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
@@ -3569,30 +3587,30 @@ if __MacGamingTrainerV1 == nil then
         end
         return target
       end
-      return action(command, params, function()
+      return actionLedger.run(command, params, function()
         -- Resolve again immediately before the mutation, after the deterministic
         -- preflight and after action() has ruled out a duplicate request.
         local live = validateLevelTarget()
-        local before = traitLevel(live)
+        local before = traitManagement.level(live)
         local upgraded = IncreaseTraitLevel(live, 1)
-        if type(upgraded) ~= "table" or traitLevel(upgraded) <= before then
+        if type(upgraded) ~= "table" or traitManagement.level(upgraded) <= before then
           error("Trait level increase did not produce an observed higher level")
         end
       end, validateLevelTarget)
     end
     if command == "set_trait_rarity" then
       local function validateRarityTarget()
-        local target, family, sellEligible, count = resolveTraitTarget(params)
-        local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
-        local rarities = availableRarities(target)
-        if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
-            or params.rarity == traitRarity(target) then
+        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
+        local _, _, rarityCapability = traitManagement.capabilities(target, family, sellEligible, count)
+        local rarities = traitManagement.availableRarities(target)
+        if rarityCapability ~= "setExact" or not traitManagement.targetHasRarity(rarities, params.rarity)
+            or params.rarity == traitManagement.rarity(target) then
           error("Trait rarity editing is unavailable for the selected target")
         end
         requireFunctions("trait rarity editing", { "AddRarityToTraits" })
         return target
       end
-      return action(command, params, function()
+      return actionLedger.run(command, params, function()
         local live = validateRarityTarget()
         local upgraded = AddRarityToTraits({}, {
           NumTraits = 1,
@@ -3607,8 +3625,8 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "remove_trait" then
       local function validateRemovalTarget()
-        local target, family, sellEligible, count = resolveTraitTarget(params)
-        local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
+        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
+        local _, _, _, _, removalCapability = traitManagement.capabilities(target, family, sellEligible, count)
         if removalCapability == "none" then
           error("Trait removal is unavailable for the selected target")
         end
@@ -3621,7 +3639,7 @@ if __MacGamingTrainerV1 == nil then
         end
         return target, removalCapability
       end
-      return action(command, params, function()
+      return actionLedger.run(command, params, function()
         local live, removalCapability = validateRemovalTarget()
         if removalCapability == "nameLevelAllMatching" then
           -- Native SellTraits teardown: deliberately name-level/all-matching.
@@ -3655,7 +3673,7 @@ if __MacGamingTrainerV1 == nil then
         error("Native boon sell screen data is unavailable")
       end
       if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
-      return action(command, params, function(record)
+      return actionLedger.run(command, params, function(record)
         local function runSell()
           local originalScreen = ScreenData.SellTraits
           local trainerScreen = nil
@@ -3684,7 +3702,7 @@ if __MacGamingTrainerV1 == nil then
               DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. record.error })
             end
           end
-          publishActionReceipt(record)
+          actionLedger.publish(record)
         end
         thread(runSell)
         return nil, "accepted"
@@ -3722,7 +3740,7 @@ if __MacGamingTrainerV1 == nil then
         requireFunctions("Circe familiar choice", { "GetProcessedTraitData", "SetTraitTextData" })
       end
 
-      return action(command, params, function(record)
+      return actionLedger.run(command, params, function(record)
         local source = DeepCopyTable(npcData)
         local syntheticName = "MacGamingTrainerSpecial_" .. params.source
         source.ObjectId = -1
@@ -3877,7 +3895,7 @@ if __MacGamingTrainerV1 == nil then
               DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. record.error })
             end
           end
-          publishActionReceipt(record)
+          actionLedger.publish(record)
         end
         thread(runChoice)
         return nil, "accepted"
@@ -3997,7 +4015,7 @@ if __MacGamingTrainerV1 == nil then
         return nil
       end
 
-      return action(command, params, function()
+      return actionLedger.run(command, params, function()
         if entry.spawnMode == "weapon_loot" then
           requireFunctions("shop hammer spawning", { "CreateWeaponLoot" })
           local loot = CreateWeaponLoot({

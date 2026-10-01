@@ -135,7 +135,7 @@ def test_live_manager_is_searchable_grouped_and_shows_real_controls():
 
 
 def test_resident_revision_advances_for_the_new_runtime_contract():
-    assert "revision = 57" in LUA
+    assert "revision = 58" in LUA
 
 
 if __name__ == "__main__":
@@ -593,34 +593,10 @@ print("hades2_live_trait_runtime_behavior_ok")
 with tempfile.TemporaryDirectory(prefix="mgt-live-trait-runtime-") as td:
     td = Path(td)
     harness = td / "live_trait_runtime_behavior.lua"
-    runtime_copy = td / "hades.runtime-under-test.lua"
     harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
 
-    # Hades embeds Lua 5.2 with a resident chunk larger than stock Lua's
-    # compile-time 200-local limit. For this host-side behavior harness only,
-    # lower top-level chunk-local bindings to globals. Function bodies and all
-    # command/mutation logic remain byte-for-byte identical apart from that
-    # lexical binding keyword, so the test executes the production behavior
-    # instead of reimplementing it.
-    source = RUNTIME.read_text(encoding="utf-8")
-
-    def lower_chunk_local(line: str) -> str:
-        if not line.startswith("  local "):
-            return line
-        body = line[len("  local "):]
-        if body.startswith("function ") or "=" in body:
-            return "  " + body
-        # A bare Lua local declaration is a statement; removing only the
-        # keyword would leave invalid syntax. Initialize the equivalent globals
-        # explicitly so forward declarations keep their original nil state.
-        names = [name.strip() for name in body.split(",")]
-        return "  " + ", ".join(names) + " = " + ", ".join("nil" for _ in names)
-
-    lowered = "\n".join(lower_chunk_local(line) for line in source.splitlines()) + "\n"
-    runtime_copy.write_text(lowered, encoding="utf-8")
-
     proc = subprocess.run(
-        [LUA, str(harness), str(runtime_copy)],
+        [LUA, str(harness), str(RUNTIME)],
         cwd=ROOT,
         text=True,
         capture_output=True,
