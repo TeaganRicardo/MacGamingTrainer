@@ -1892,7 +1892,8 @@ if __MacGamingTrainerV1 == nil then
   -- target snapshot: resident generation + CurrentRun table identity + trait.Id.
   -- None is persisted, and every mutation re-resolves the selection immediately
   -- before it calls a game-owned operation.
-  local traitManagement = (function()\n    local directTraitStrategies = {
+  local traitManagement = (function()
+    local directTraitStrategies = {
       -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
       -- boon proves an intentional direct level path without replaying acquisition.
       CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
@@ -2180,7 +2181,19 @@ if __MacGamingTrainerV1 == nil then
       return false
     end
 
-    return {\n      currentRunTraits = currentRunTraits,\n      resolveTarget = resolveTraitTarget,\n      capabilities = operationCapabilities,\n      availableRarities = availableRarities,\n      targetHasRarity = targetHasRarity,\n      level = traitLevel,\n      rarity = traitRarity,\n      hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,\n    }\n  end)()\n\n  local function state(includeCatalogs)
+    return {
+      currentRunTraits = currentRunTraits,
+      resolveTarget = resolveTraitTarget,
+      capabilities = operationCapabilities,
+      availableRarities = availableRarities,
+      targetHasRarity = targetHasRarity,
+      level = traitLevel,
+      rarity = traitRarity,
+      hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
+    }
+  end)()
+
+  local function state(includeCatalogs)
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
     local boonList, rewardList = nil, nil
@@ -3180,7 +3193,8 @@ if __MacGamingTrainerV1 == nil then
       error("Amount must be an integer " .. minimum .. "..999999")
     end
   end
-  actionLedger = (function()\n    local actionSemanticKeys = {
+  actionLedger = (function()
+    local actionSemanticKeys = {
       set_resource = { "resource", "amount" },
       set_rerolls = { "amount" },
       open_sell_traits = {},
@@ -3266,7 +3280,14 @@ if __MacGamingTrainerV1 == nil then
       if record.lootObjectId then result.lootObjectId = record.lootObjectId end
       return result
     end
-    return {\n      run = action,\n      publish = publishActionReceipt,\n      latestReceipt = function() return M.lastActionReceipt end,\n    }\n  end)()\n\n  local function editResource(id, target)
+    return {
+      run = action,
+      publish = publishActionReceipt,
+      latestReceipt = function() return M.lastActionReceipt end,
+    }
+  end)()
+
+  local function editResource(id, target)
     local current = number(GameState.Resources[id])
     if M.resourceLocks[id] ~= nil then M.resourceLocks[id] = target end
     local delta = target - current
