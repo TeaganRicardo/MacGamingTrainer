@@ -23,7 +23,7 @@ for block in (sell, special):
     assert 'record.status = "failed"' in block
 
 assert "result.actionOutcome" in action
-assert "lastAction = latestActionReceipt()" in lua
+assert "lastAction = actionLedger.latestReceipt()" in lua
 
 # The dedup ledger and the projected latest receipt are distinct concerns.
 # Sequence contract: modal A accepted -> action B completed -> modal A terminal.
@@ -35,7 +35,7 @@ assert "local function publishActionReceipt(record)" in receipt_projection
 assert "requestId = requestId" in action
 assert "publishActionReceipt(record)" in action
 for block in (sell, special):
-    assert "publishActionReceipt(record)" in block
+    assert "actionLedger.publish(record)" in block
 
 # Hades owns the presentation vocabulary through its typed state boundary.
 # Core's generic successful-reply text must be suppressed for modal acknowledgements.

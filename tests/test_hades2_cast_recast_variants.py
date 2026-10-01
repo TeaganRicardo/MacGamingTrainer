@@ -20,10 +20,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
-LUA = shutil.which("lua5.2") or shutil.which("lua")
+LUA = shutil.which("lua5.2")
 
 if not LUA:
-    raise SystemExit("a Lua runtime is required for cast recast runtime behavior tests")
+    raise SystemExit("lua5.2 is required for cast recast runtime behavior tests")
 
 HARNESS = r'''
 local runtimePath = assert(arg[1], "runtime path required")
@@ -253,33 +253,10 @@ print("hades2_cast_recast_variants_runtime_ok")
 with tempfile.TemporaryDirectory(prefix="mgt-cast-recast-runtime-") as td:
     td = Path(td)
     harness = td / "cast_recast_runtime.lua"
-    runtime_copy = td / "hades.runtime-under-test.lua"
     harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
 
-    source = RUNTIME.read_text(encoding="utf-8")
-    # The target game embeds Lua 5.2. Local developer machines may only have a
-    # newer stock Lua; CI still executes this test under lua5.2 and therefore
-    # retains the production ABI guard. Only a non-5.2 local harness copy skips it.
-    version = subprocess.run([LUA, "-v"], text=True, capture_output=True, check=True)
-    if "Lua 5.2" not in (version.stdout + version.stderr):
-        source = source.replace('if _VERSION ~= "Lua 5.2" then error("Unsupported Lua ABI: " .. tostring(_VERSION) .. "; Lua 5.2 required") end', '')
-
-    def lower_chunk_local(line: str) -> str:
-        if not line.startswith("  local "):
-            return line
-        body = line[len("  local "):]
-        if body.startswith("function ") or "=" in body:
-            return "  " + body
-        names = [name.strip() for name in body.split(",")]
-        return "  " + ", ".join(names) + " = " + ", ".join("nil" for _ in names)
-
-    runtime_copy.write_text(
-        "\n".join(lower_chunk_local(line) for line in source.splitlines()) + "\n",
-        encoding="utf-8",
-    )
-
     proc = subprocess.run(
-        [LUA, str(harness), str(runtime_copy)],
+        [LUA, str(harness), str(RUNTIME)],
         cwd=ROOT,
         text=True,
         capture_output=True,
