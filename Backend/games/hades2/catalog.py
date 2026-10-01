@@ -188,6 +188,9 @@ def localize_catalog(decoded):
         if not isinstance(item,dict):continue
         identifier=item.get('trait') if item.get('kind')=='trait' else item.get('id')
         if isinstance(identifier,str) and identifier:lookup.append(identifier)
+        source_id=item.get('sourceId')
+        if isinstance(source_id,str) and source_id:
+            lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
     for item in resources:
         if isinstance(item,dict) and isinstance(item.get('id'),str):lookup.append(item['id'])
     for item in current_run_traits:
@@ -249,10 +252,11 @@ def localize_catalog(decoded):
             item['englishCategory']=_clean(en.get(_OLYMPIAN_BOON_TITLE_ID)) or 'Boon of Olympus'
             item['sectionTitle']=_OLYMPIAN_GROUP_TITLE
             item['englishSectionTitle']=_OLYMPIAN_GROUP_TITLE_EN
-        elif group=='special':
-            item['category']=_CHARACTER_REWARD_CATEGORY
-            item['englishCategory']=_CHARACTER_REWARD_CATEGORY_EN
-            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id)
+        elif group in ('special','exact'):
+            if group=='special':
+                item['category']=_CHARACTER_REWARD_CATEGORY
+                item['englishCategory']=_CHARACTER_REWARD_CATEGORY_EN
+            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
             official_source=_clean(zh.get(source_text_id)) if source_text_id else None
             official_source_en=_clean(en.get(source_text_id)) if source_text_id else None
             if isinstance(official_source,str) and official_source:
@@ -261,13 +265,14 @@ def localize_catalog(decoded):
             if isinstance(official_source_en,str) and official_source_en:
                 item['sourceEnglishName']=official_source_en
                 item['englishSectionTitle']=official_source_en
-            title_text_id=_NATIVE_CHOICE_TITLE_IDS.get(source_id)
-            official_title=_clean(zh.get(title_text_id)) if title_text_id else None
-            official_title_en=_clean(en.get(title_text_id)) if title_text_id else None
-            if isinstance(official_title,str) and official_title:
-                item['nativeChoiceTitle']=official_title
-            if isinstance(official_title_en,str) and official_title_en:
-                item['nativeChoiceEnglishTitle']=official_title_en
+            if group=='special' or item.get('nativeChoice'):
+                title_text_id=_NATIVE_CHOICE_TITLE_IDS.get(source_id)
+                official_title=_clean(zh.get(title_text_id)) if title_text_id else None
+                official_title_en=_clean(en.get(title_text_id)) if title_text_id else None
+                if isinstance(official_title,str) and official_title:
+                    item['nativeChoiceTitle']=official_title
+                if isinstance(official_title_en,str) and official_title_en:
+                    item['nativeChoiceEnglishTitle']=official_title_en
     for item in resources:
         if not isinstance(item,dict) or not isinstance(item.get('id'),str):continue
         identifier=item['id']

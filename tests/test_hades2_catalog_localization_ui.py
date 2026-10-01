@@ -7,10 +7,11 @@ from runtime_revision_support import runtime_revision
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
-from games.hades2 import localization
+from games.hades2 import catalog, localization
 
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
+view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
 
 # Known full-release room rewards that were missing from the curated spawn list.
 for token in (
@@ -60,6 +61,71 @@ Mana = { Id = "MaxManaDrop" DisplayName = "{#Emph}灵魂滋补剂" }
     names = localization.official_display_names({'EchoMockTrait', 'MaxManaDrop'}, 'zh-CN', game_path=root)
     assert names['EchoMockTrait'] == '回声之赐'
     assert names['MaxManaDrop'] == '灵魂滋补剂'
+
+# Exact acquisition rows keep the trait's official name while grouping by the
+# official source identity in both languages. The group is product structure;
+# it must not cause raw source IDs or one-language fallback headings.
+original_display_names = localization.official_display_names
+def fake_display_names(identifiers, language='zh-CN', game_path=None):
+    zh = {
+        'ZeusWeaponBoon': '雷霆打击',
+        'ZeusUpgrade': '宙斯',
+        'CritBonusBoon': '致命一击',
+        'NPC_Artemis_Field_01': '阿耳忒弥斯',
+        'Boon': '祝福',
+    }
+    en = {
+        'ZeusWeaponBoon': 'Heaven Strike',
+        'ZeusUpgrade': 'Zeus',
+        'CritBonusBoon': 'Deadly Strike',
+        'NPC_Artemis_Field_01': 'Artemis',
+        'Boon': 'Boon',
+    }
+    source = zh if language == 'zh-CN' else en
+    return {key: source[key] for key in identifiers if key in source}
+
+localization.official_display_names = fake_display_names
+try:
+    payload = {
+        'rewards': [
+            {
+                'id': 'exact:ZeusUpgrade:ZeusWeaponBoon', 'trait': 'ZeusWeaponBoon',
+                'kind': 'trait', 'group': 'exact', 'sourceId': 'ZeusUpgrade',
+                'sourceName': '宙斯', 'sectionTitle': '宙斯',
+                'category': '奥林匹斯的祝福', 'acquisitionMode': 'ordinaryNative',
+            },
+            {
+                'id': 'trait:CritBonusBoon', 'trait': 'CritBonusBoon',
+                'kind': 'trait', 'group': 'exact', 'sourceId': 'Artemis',
+                'sourceName': 'Artemis', 'sectionTitle': 'Artemis',
+                'category': '角色奖励', 'acquisitionMode': 'direct',
+            },
+        ]
+    }
+    catalog.localize_catalog(payload)
+finally:
+    localization.official_display_names = original_display_names
+
+ordinary, direct = payload['rewards']
+assert ordinary['name'] == '雷霆打击' and ordinary['englishName'] == 'Heaven Strike'
+assert ordinary['sourceName'] == '宙斯' and ordinary['sourceEnglishName'] == 'Zeus'
+assert ordinary['sectionTitle'] == '宙斯' and ordinary['englishSectionTitle'] == 'Zeus'
+assert direct['name'] == '致命一击' and direct['englishName'] == 'Deadly Strike'
+assert direct['sourceName'] == '阿耳忒弥斯' and direct['sourceEnglishName'] == 'Artemis'
+assert direct['sectionTitle'] == '阿耳忒弥斯' and direct['englishSectionTitle'] == 'Artemis'
+assert direct['englishCategory'] == 'Character Rewards'
+
+# The exact-acquisition picker is its own user-visible surface directly below
+# Character Rewards and above the mounted-management affordance. Individual
+# exact targets have their own search/selection and show strategy + raw ID.
+boon_panel = view[view.index('private var boonPanel: some View'):view.index('private func spawnRow', view.index('private var boonPanel: some View'))]
+character_index = boon_panel.index('hades2.spawn.characterRewards')
+exact_index = boon_panel.index('hades2.spawn.exactBoons')
+purging_index = boon_panel.index('hades2.spawn.purgingPool')
+assert character_index < exact_index < purging_index
+assert '$model.selectedExactBoon' in boon_panel
+assert '$exactSearch' in boon_panel
+assert 'exactItemLabel' in boon_panel
 
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.

@@ -261,6 +261,8 @@ struct Hades2StatePatch {
             category: row["category"] as? String ?? "",
             englishCategory: row["englishCategory"] as? String ?? "",
             kind: row["kind"] as? String ?? "loot", group: row["group"] as? String ?? "pickup",
+            targetID: row["trait"] as? String ?? id,
+            officialName: row["officialName"] as? Bool ?? false,
             sectionTitle: row["sectionTitle"] as? String ?? "",
             englishSectionTitle: row["englishSectionTitle"] as? String ?? "",
             sourceId: row["sourceId"] as? String ?? "",
@@ -269,6 +271,7 @@ struct Hades2StatePatch {
             nativeChoice: row["nativeChoice"] as? Bool ?? false,
             nativeChoiceTitle: row["nativeChoiceTitle"] as? String ?? "",
             nativeChoiceEnglishTitle: row["nativeChoiceEnglishTitle"] as? String ?? "",
+            acquisitionMode: row["acquisitionMode"] as? String ?? "",
             sortSection: row["sortSection"] as? Int ?? Int.max,
             sortGroup: row["sortGroup"] as? Int ?? Int.max,
             sortOrder: row["sortOrder"] as? Int ?? Int.max

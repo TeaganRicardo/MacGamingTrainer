@@ -19,6 +19,11 @@ struct BoonOption: Identifiable {
     let englishCategory: String
     let kind: String
     let group: String
+    /// Stable language-neutral target identity. For exact trait acquisition this
+    /// is the TraitData id; otherwise it falls back to the catalog row id.
+    let targetID: String
+    /// Whether `name` came from the supported build's official localization.
+    let officialName: Bool
     let sectionTitle: String
     let englishSectionTitle: String
     let sourceId: String
@@ -27,6 +32,9 @@ struct BoonOption: Identifiable {
     let nativeChoice: Bool
     let nativeChoiceTitle: String
     let nativeChoiceEnglishTitle: String
+    /// Language-neutral resident strategy identity for exact acquisition.
+    /// Empty for ordinary reward rows and synthetic native-choice actions.
+    let acquisitionMode: String
     let sortSection: Int
     let sortGroup: Int
     let sortOrder: Int

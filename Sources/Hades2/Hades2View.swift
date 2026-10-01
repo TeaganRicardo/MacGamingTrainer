@@ -42,6 +42,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
+    @ViewState<String> private var exactSearch = ""
     @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var graspLimit = ""
     @ViewState<String> private var dodgeChance = ""
@@ -79,6 +80,20 @@ struct Hades2TrainerView: View {
     private var specialBoons: [BoonOption] {
         sortedBoons(model.specialRewardOptions.filter { specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch) || $0.englishCategory.localizedCaseInsensitiveContains(specialSearch) || $0.englishSectionTitle.localizedCaseInsensitiveContains(specialSearch) })
     }
+    private var exactBoons: [BoonOption] {
+        sortedBoons(model.exactBoonOptions.filter {
+            exactSearch.isEmpty
+                || $0.name.localizedCaseInsensitiveContains(exactSearch)
+                || $0.englishName.localizedCaseInsensitiveContains(exactSearch)
+                || $0.targetID.localizedCaseInsensitiveContains(exactSearch)
+                || $0.id.localizedCaseInsensitiveContains(exactSearch)
+                || $0.sourceId.localizedCaseInsensitiveContains(exactSearch)
+                || $0.sourceName.localizedCaseInsensitiveContains(exactSearch)
+                || $0.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
+                || $0.category.localizedCaseInsensitiveContains(exactSearch)
+                || $0.englishCategory.localizedCaseInsensitiveContains(exactSearch)
+        })
+    }
     private var material: MaterialResource? { filtered.first { $0.id == selectedMaterial } }
 
     private func resourceGroups(_ options: [MaterialResource]) -> [TrainerPickerSection<MaterialResource>] {
@@ -102,10 +117,12 @@ struct Hades2TrainerView: View {
             // so fall back to the module's table rather than showing a blank
             // heading; the raw category is the last resort.
             let title: String
-            if !item.sectionTitle.isEmpty {
-                title = item.sectionTitle
-            } else if !item.category.isEmpty {
-                title = item.category
+            let localizedSection = localization.language == .en ? item.englishSectionTitle : item.sectionTitle
+            let localizedCategory = localization.language == .en ? item.englishCategory : item.category
+            if !localizedSection.isEmpty {
+                title = localizedSection
+            } else if !localizedCategory.isEmpty {
+                title = localizedCategory
             } else {
                 title = text("hades2.spawn.characterRewards")
             }
@@ -584,6 +601,7 @@ struct Hades2TrainerView: View {
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
             specialIDs: specialBoons.map(\.id),
+            exactIDs: exactBoons.map(\.id),
             filteredResourceIDs: filtered.map(\.id)
         )
     }
@@ -733,6 +751,7 @@ struct Hades2TrainerView: View {
         if !newValue.olympianIDs.contains(model.selectedOlympianReward) { model.selectedOlympianReward = newValue.olympianIDs.first ?? "" }
         if !newValue.pickupIDs.contains(model.selectedPickupReward) { model.selectedPickupReward = newValue.pickupIDs.first ?? "" }
         if !newValue.specialIDs.contains(model.selectedSpecialReward) { model.selectedSpecialReward = newValue.specialIDs.first ?? "" }
+        if !newValue.exactIDs.contains(model.selectedExactBoon) { model.selectedExactBoon = newValue.exactIDs.first ?? "" }
         if !newValue.filteredResourceIDs.contains(selectedMaterial) {
             selectedMaterial = search.isEmpty && newValue.filteredResourceIDs.contains("MetaCurrency")
                 ? "MetaCurrency"
@@ -1032,12 +1051,46 @@ struct Hades2TrainerView: View {
             )
             Divider()
             HStack {
+                Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
+                Spacer()
+                TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+            }
+            TrainerGroupedOptionPicker(
+                title: nil,
+                icon: nil,
+                pickerLabel: text("hades2.spawn.exactBoons"),
+                selection: $model.selectedExactBoon,
+                sections: boonGroups(exactBoons),
+                enabled: model.canSpawnReward,
+                emptyLabel: text("hades2.spawn.noItems"),
+                actionTitle: text("hades2.spawn.acquire"),
+                shortcutText: nil,
+                itemLabel: exactItemLabel,
+                onAction: model.acquireExactBoon
+            )
+            Divider()
+            HStack {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
                 Button(text("hades2.spawn.open")) { model.openSellTraits() }
                     .disabled(!model.canOpenNativeBoonScreen)
             }
         }.trainerPanel()
+    }
+
+    private func exactItemLabel(_ option: BoonOption) -> String {
+        let localizedName = localization.language == .en ? option.englishName : option.name
+        let fallbackName = localizedName.isEmpty
+            ? (option.englishName.isEmpty ? option.targetID : option.englishName)
+            : localizedName
+        let strategyKey = option.acquisitionMode == "ordinaryNative"
+            ? "hades2.spawn.exactModeNative"
+            : "hades2.spawn.exactModeForced"
+        var parts = [fallbackName]
+        if !option.officialName { parts.append(text("hades2.spawn.nameFallback")) }
+        parts.append(text(strategyKey))
+        if !option.targetID.isEmpty { parts.append(option.targetID) }
+        return parts.joined(separator: " · ")
     }
 
     private func spawnRow(
