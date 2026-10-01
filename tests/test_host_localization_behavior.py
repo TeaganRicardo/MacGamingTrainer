@@ -16,10 +16,20 @@ import Combine
 @main
 struct LocalizationBehaviorTest {
     static func main() {
-        let domain = "HostLocalizationTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: domain)!
-        defaults.removePersistentDomain(forName: domain)
-        defer { defaults.removePersistentDomain(forName: domain) }
+        // A real suite here materializes a plist in ~/Library/Preferences that
+        // removePersistentDomain empties but never unlinks, so each run would
+        // leave another domain behind. The store only needs the UserDefaults
+        // surface, so the harness injects an in-memory implementation instead.
+        final class InMemoryDefaults: UserDefaults {
+            private var storage: [String: Any] = [:]
+            override func object(forKey defaultName: String) -> Any? { storage[defaultName] }
+            override func string(forKey defaultName: String) -> String? { storage[defaultName] as? String }
+            override func set(_ value: Any?, forKey defaultName: String) { storage[defaultName] = value }
+            override func removeObject(forKey defaultName: String) { storage.removeValue(forKey: defaultName) }
+            override func integer(forKey defaultName: String) -> Int { storage[defaultName] as? Int ?? 0 }
+        }
+
+        let defaults = InMemoryDefaults()
 
         let missingValue = TrainerLocalizationStore(defaults: defaults)
         precondition(missingValue.language == .zhCN, "missing preference must default to zh-CN")
