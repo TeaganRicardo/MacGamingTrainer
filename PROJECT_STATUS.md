@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-09-30
+Updated: 2026-10-01
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -15,12 +15,12 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 ## Current operational state
 
-- Product release identity: `Info.plist` owns SemVer `0.1.0` and bundle build `3`. Do not duplicate these values into another source of truth.
+- Product release identity: `Info.plist` owns SemVer `0.2.0` and bundle build `4`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
 - Hades II module protocol: 6.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 54.
+- Hades II resident runtime revision: 59.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,13 +41,15 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current main contains revision 54:
+Current main contains revision 59. Revisions 52–59 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
-- revision 52: Echo synthetic `LastReward` fallback cleanup became transaction-local;
-- revision 53: resident replacement fails closed when prior cleanup fails;
-- revision 54: Trainer invulnerability runtime identity migrated to `invincibility`.
+- revision 55: first live boon level/rarity/force-removal slice;
+- revision 56: separate exact-boon acquisition;
+- revision 57: seamless Cast recast follows transformed/thrown delivery weapons;
+- revision 58: resident main-chunk local pressure reduced below stock Lua 5.2's compile limit;
+- revision 59: Cast diagnostics sequences use the resident JSON array contract.
 
-Revisions 52–54 remain pending the user's consolidated final real-game acceptance. Automated verification does not replace this manual acceptance.
+Automated verification does not replace this manual acceptance.
 
 The 1.143476 / Steam 25481925 compatibility target was previously accepted with target-machine static checks plus user-run attach/status and representative feature smoke checks. Future resident semantic changes still require user-run Hades II acceptance.
 
@@ -86,8 +88,9 @@ Planning issue #124 is the sequencing authority.
 - #214 exact-head governance convergence is complete.
 - #262 / PR #271 identity migration is complete.
 - Control-plane/catalog/CI/test hygiene through #273, #275, #277, #279, #281 and #283 is complete.
-- **Next selected feature task: #227** — the first bounded current-run mounted-effect management slice.
-- #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #228 and #236–#240 rather than collapsing into a raw-trait mutator.
+- #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
+- **Next selected feature task: #230** — infinite ammo compatible with native fired-ammo pickup/return and associated effects.
+- #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
 
