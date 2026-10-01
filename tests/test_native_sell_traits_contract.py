@@ -30,7 +30,7 @@ for token in (
     assert token in block, token
 assert 'thread(OpenSellTraitMenu' not in block, "sell UI must stay wrapped until its temporary screen definition is restored"
 assert 'OpenSellTraitMenu({})' not in block, "native sell UI must not block the LLDB dispatch synchronously"
-assert 'return action(command, params' in block
+assert 'return actionLedger.run(command, params' in block
 
 close_block = lua[lua.index('function MacGamingTrainerCloseSellTraitScreen'):lua.index('if command == "open_sell_traits" then')]
 assert 'CloseStoreScreen(screen, button)' in close_block
