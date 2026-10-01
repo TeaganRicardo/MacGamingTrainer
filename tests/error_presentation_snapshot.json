@@ -981,8 +981,8 @@
       "key": "hades2.error.disconnectBeforePrepare"
     },
     "请选择当前局祝福。": {
-      "key": "hades2.error.selectCurrentTrait",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.selectCurrentTrait"
     },
     "请选择掉落物或祝福。": {
       "arguments": [],
@@ -1164,44 +1164,44 @@
       "key": "hades2.error.requestIdRequired"
     },
     "remove_trait::Direct trait removal left the selected instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
     },
     "remove_trait::Native trait removal left a matching instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::Trait instance is no longer present": {
-      "key": "hades2.error.traitTargetMissing",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
     },
     "remove_trait::Trait mutation requires an active run room": {
-      "key": "hades2.error.traitMutationNeedsRun",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "remove_trait::Trait removal capability is unknown": {
-      "key": "hades2.error.traitRemovalCapabilityUnknown",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalCapabilityUnknown"
     },
     "remove_trait::Trait removal is unavailable for the selected target": {
-      "key": "hades2.error.traitRemovalUnavailable",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalUnavailable"
     },
     "remove_trait::Trait selection belongs to a stale run": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "remove_trait::Trait selection belongs to a stale runtime generation": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "remove_trait::Trait target changed since selection": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "remove_trait::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
@@ -1215,102 +1215,121 @@
       "key": "hades2.error.requestIdReused"
     },
     "set_trait_level::Action requires a requestId of 1..128 characters": {
-      "key": "hades2.error.requestIdRequired",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
     },
     "set_trait_level::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "key": "hades2.error.outcomeUnknownRuntime",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
     },
     "set_trait_level::Trait instance is no longer present": {
-      "key": "hades2.error.traitTargetMissing",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
     },
     "set_trait_level::Trait is no longer eligible for a meaningful level increase": {
-      "key": "hades2.error.traitLevelNoLongerEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitLevelNoLongerEligible"
     },
     "set_trait_level::Trait level editing is unavailable for the selected target": {
-      "key": "hades2.error.traitLevelUnavailable",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitLevelUnavailable"
     },
     "set_trait_level::Trait level increase did not produce an observed higher level": {
-      "key": "hades2.error.traitLevelNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitLevelNoEffect"
     },
     "set_trait_level::Trait mutation requires an active run room": {
-      "key": "hades2.error.traitMutationNeedsRun",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "set_trait_level::Trait selection belongs to a stale run": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_level::Trait selection belongs to a stale runtime generation": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_level::Trait target changed since selection": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "set_trait_level::Unsupported sample-purpose: missing SampleFunction": {
-      "key": "hades2.error.nativeFunctionMissing",
       "arguments": [
         "sample-purpose",
         "SampleFunction"
-      ]
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     },
     "set_trait_level::requestId reused for a different action": {
-      "key": "hades2.error.requestIdReused",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "set_trait_rarity::Action requires a requestId of 1..128 characters": {
-      "key": "hades2.error.requestIdRequired",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
     },
     "set_trait_rarity::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "key": "hades2.error.outcomeUnknownRuntime",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
     },
     "set_trait_rarity::Trait instance is no longer present": {
-      "key": "hades2.error.traitTargetMissing",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
     },
     "set_trait_rarity::Trait mutation requires an active run room": {
-      "key": "hades2.error.traitMutationNeedsRun",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "set_trait_rarity::Trait rarity editing is unavailable for the selected target": {
-      "key": "hades2.error.traitRarityUnavailable",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRarityUnavailable"
     },
     "set_trait_rarity::Trait rarity recompute did not reach the requested rarity": {
-      "key": "hades2.error.traitRarityNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRarityNoEffect"
     },
     "set_trait_rarity::Trait selection belongs to a stale run": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_rarity::Trait selection belongs to a stale runtime generation": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_rarity::Trait target changed since selection": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "set_trait_rarity::Unsupported sample-purpose: missing SampleFunction": {
-      "key": "hades2.error.nativeFunctionMissing",
       "arguments": [
         "sample-purpose",
         "SampleFunction"
-      ]
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     },
     "set_trait_rarity::requestId reused for a different action": {
-      "key": "hades2.error.requestIdReused",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
+    "spawn_reward::Selected boon became unavailable before acquisition": {
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
+    },
+    "spawn_reward::Selected boon is already owned": {
+      "arguments": [],
+      "key": "hades2.error.exactAlreadyOwned"
+    },
+    "spawn_reward::Selected boon is not currently eligible": {
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
+    },
+    "spawn_reward::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     }
   },
   "runtime_commands": [
@@ -1318,6 +1337,7 @@
     "open_special_choice",
     "remove_trait",
     "set_trait_level",
-    "set_trait_rarity"
+    "set_trait_rarity",
+    "spawn_reward"
   ]
 }
