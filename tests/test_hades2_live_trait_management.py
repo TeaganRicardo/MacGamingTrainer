@@ -135,7 +135,7 @@ def test_live_manager_is_searchable_grouped_and_shows_real_controls():
 
 
 def test_resident_revision_advances_for_the_new_runtime_contract():
-    assert "revision = 58" in LUA
+    assert "revision = 59" in LUA
 
 
 if __name__ == "__main__":
