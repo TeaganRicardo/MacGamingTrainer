@@ -70,10 +70,11 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 // A freshly spawned worker must start Python and begin reading stdin before it
-// can answer anything. Measured cold start on this machine is 0.83-0.99s
-// (p50 0.94s, against 0.50-0.65s for a bare interpreter), so a request timeout
-// or a wait budget at or below ~1s races process startup instead of exercising
-// the client -- with 1.0s budgets this suite failed roughly one run in six, and
+// can answer anything, and that startup is variable rather than a fixed cost:
+// it has been measured anywhere from ~0.15s on an idle machine to ~1.0s while
+// the machine was busy. A request timeout or a wait budget at or below ~1s
+// therefore races process startup instead of exercising the client -- with 1.0s
+// budgets this suite failed roughly one run in six on a loaded machine, and
 // widening the wait budgets alone did not help because the client's own request
 // timeout fired first. requestTimeout matches the client's documented default.
 let requestTimeout: TimeInterval = 6.0
