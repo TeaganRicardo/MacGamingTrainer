@@ -393,6 +393,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-gating-") as td:
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)
-        raise SystemExit(proc.returncode)
+        # Raise a Python AssertionError, not SystemExit: this fixture owns
+        # declared mutation anchors, and Tools/mutation_gate.py classifies a
+        # caught mutation by a reached Python/Swift assertion marker. The Lua
+        # harness's own "ASSERTION FAILED" text is not one of those markers, so
+        # the wrapper must surface the failure at the Python boundary or the
+        # gate would read a real catch as a harness error.
+        raise AssertionError(
+            "resident trait capability gating harness failed (exit "
+            f"{proc.returncode})\n{proc.stdout}\n{proc.stderr}"
+        )
     assert "hades2_live_trait_capability_gating_ok" in proc.stdout, proc.stdout
     print(proc.stdout.strip())
