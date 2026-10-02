@@ -327,6 +327,11 @@ end
 -- A changed same-name count is a changed target. A second instance appearing
 -- between selection and mutation must be rejected, not treated as a best-effort
 -- edit of whichever instance still matches the other fields.
+--
+-- Asserted on behaviour, not on wording: the refusal copy itself is owned by the
+-- error registry (hades2.error.traitTargetChanged) and already pinned by
+-- test_hades2_error_registry_single_source.py and the presentation snapshot, so
+-- repeating the literal here would only couple this block to a string.
 do
   local trait = newTrait("OrdinaryCountGuard", 401, 1, "Rare")
   setTraits(trait)
@@ -335,10 +340,31 @@ do
   local params = paramsFrom(row, "count-mismatch")
   table.insert(CurrentRun.Hero.Traits, newTrait("OrdinaryCountGuard", 402, 1, "Rare"))
   local beforeLevel = calls.level
-  expectError("Trait target changed since selection", function()
-    M.dispatch("set_trait_level", params)
-  end)
+  local ok = pcall(function() M.dispatch("set_trait_level", params) end)
+  check(not ok, "stale same-name count was accepted by set_trait_level")
   eq(calls.level, beforeLevel, "changed-count target reached the mutator")
+  eq(#CurrentRun.Hero.Traits, 2, "changed-count level edit mutated the inventory")
+end
+
+-- The same-name count recheck is the *only* guard on this path, so this block is
+-- the load-bearing one for the trait-target-count-recheck mutation anchor. The
+-- capability projection independently refuses a level or rarity edit while more
+-- than one instance shares a name, which masks the mutation in the block above;
+-- removal capability never consults the count, so without the recheck a stale
+-- selection would really be force-removed. It must therefore fail on the mutated
+-- inventory, never on a message.
+do
+  local trait = newTrait("OmegaExplodeBoon", 701, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("OmegaExplodeBoon", 701)
+  eq(row.sameNameCount, 1, "removal selection-time count")
+  local params = paramsFrom(row, "count-mismatch-removal")
+  table.insert(CurrentRun.Hero.Traits, newTrait("OmegaExplodeBoon", 702, 1, "Rare"))
+  local beforeDirect = calls.directRemove
+  local ok = pcall(function() M.dispatch("remove_trait", params) end)
+  check(not ok, "stale same-name count was accepted by remove_trait")
+  eq(#CurrentRun.Hero.Traits, 2, "changed-count removal mutated the inventory")
+  eq(calls.directRemove, beforeDirect, "changed-count removal reached the game callback")
 end
 
 -- C: forced removal. A qualified single-instance trait is actually removed and
