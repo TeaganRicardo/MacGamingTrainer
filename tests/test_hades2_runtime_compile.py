@@ -5,16 +5,14 @@ rewrite top-level locals before compilation, because that can hide Lua 5.2's
 per-function local-variable limit.
 """
 
-import shutil
 import subprocess
 from pathlib import Path
 
+from lua_runtime_support import require_lua52
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
-LUA = shutil.which("lua5.2")
-
-if not LUA:
-    raise SystemExit("lua5.2 is required for resident-runtime compile verification")
+LUA = require_lua52("resident-runtime compile verification")
 
 proc = subprocess.run(
     [

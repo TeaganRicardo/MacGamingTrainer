@@ -149,21 +149,20 @@ if __name__ == "__main__":
     print("hades2_live_trait_management_ok")
 
 # Executable resident-runtime behavior coverage belongs to this feature owner.
-import shutil
 import subprocess
 import tempfile
 import textwrap
 from pathlib import Path
 
+from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
-LUA = shutil.which("lua5.2")
-
-if not LUA:
-    raise SystemExit("lua5.2 is required for resident-runtime behavior tests")
+LUA = require_lua52("resident-runtime behavior tests")
 
 HARNESS = r'''
 local runtimePath = assert(arg[1], "runtime path required")
+local contractPath = assert(arg[2], "dispatch contract path required")
 
 SessionState = {}
 GameState = {
@@ -300,6 +299,8 @@ end
 
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
+-- Route every dispatch through the production JSON boundary.
+dofile(contractPath)
 M.session = SessionState
 M.run = CurrentRun
 M.hero = CurrentRun.Hero
@@ -596,7 +597,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-runtime-") as td:
     harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
 
     proc = subprocess.run(
-        [LUA, str(harness), str(RUNTIME)],
+        [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
         cwd=ROOT,
         text=True,
         capture_output=True,
