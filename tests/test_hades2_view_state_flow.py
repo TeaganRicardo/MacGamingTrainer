@@ -77,9 +77,10 @@ struct Main {
         )
 
         let model = Hades2GameModule.makeModel(session: session)
-        let localizationSuite = "mgt.hades-view.localization.\(UUID().uuidString)"
-        let localizationDefaults = UserDefaults(suiteName: localizationSuite)!
-        localizationDefaults.removePersistentDomain(forName: localizationSuite)
+        // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
+        // real preferences directory; a real suite there cannot be cleaned up
+        // afterwards.
+        let localizationDefaults = InMemoryDefaults()
         let localization = TrainerLocalizationStore(defaults: localizationDefaults)
         let host = NSHostingView(
             rootView: Hades2TrainerView(model: model)
@@ -174,7 +175,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-view-state-flow-") as td:
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [generated, main_path]
+        + [
+            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
+            generated,
+            main_path,
+        ]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
@@ -453,6 +458,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
         check=True,
         cwd=ROOT,
     )
+    # This harness drives the live-trait model only; it never builds a
+    # TrainerLocalizationStore, so it does not need the in-memory defaults.
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
