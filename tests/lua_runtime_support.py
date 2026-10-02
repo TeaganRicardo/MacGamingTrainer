@@ -23,7 +23,6 @@ RESIDENT_DISPATCH_CONTRACT = (
 _BARE_NAMES = ("lua5.2", "luac5.2")
 
 _CONVENTIONAL_PATHS = (
-    Path.home() / ".workbuddy-ai/binaries/lua/5.2.4/bin/lua5.2",
     Path("/opt/homebrew/opt/lua@5.2/bin/lua5.2"),
     Path("/usr/local/opt/lua@5.2/bin/lua5.2"),
     Path("/usr/local/bin/lua5.2"),
