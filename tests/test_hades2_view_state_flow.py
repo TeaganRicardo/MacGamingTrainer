@@ -458,14 +458,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-live-trait-model-flow-") as td:
         check=True,
         cwd=ROOT,
     )
+    # This harness drives the live-trait model only; it never builds a
+    # TrainerLocalizationStore, so it does not need the in-memory defaults.
     sources = (
         sorted((ROOT / "Sources/Core").rglob("*.swift"))
         + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-        + [
-            ROOT / "tests/fixtures/swift/InMemoryDefaults.swift",
-            generated,
-            main_path,
-        ]
+        + [generated, main_path]
     )
     subprocess.run(
         [SWIFTC, "-parse-as-library", *map(str, sources), "-o", str(binary)],
