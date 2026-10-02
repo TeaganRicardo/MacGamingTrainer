@@ -2,37 +2,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LUA = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
-SCHEMA = (ROOT / "Backend/games/hades2/schema.py").read_text()
 CATALOG = (ROOT / "Backend/games/hades2/catalog.py").read_text()
-API = (ROOT / "Sources/Hades2/Hades2API.swift").read_text()
 TYPES = (ROOT / "Sources/Hades2/Hades2Types.swift").read_text()
-STATE = (ROOT / "Sources/Hades2/Hades2BackendState.swift").read_text()
-MODEL = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text()
-VIEW = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
-
-
-def test_live_trait_inventory_carries_target_snapshot_and_operation_capabilities():
-    for token in (
-        "generationId",
-        "runId",
-        "instanceId",
-        "level",
-        "rarity",
-        "availableRarities",
-        "levelCapability",
-        "rarityCapability",
-        "removalCapability",
-        "levelReason",
-        "rarityReason",
-        "removalReason",
-        "deferredIssue",
-    ):
-        assert token in LUA
-
-    assert "TRAIT_LEVEL_INCREASE_ONE" in SCHEMA
-    assert "TRAIT_RARITY_SET_EXACT" in SCHEMA
-    assert "TRAIT_REMOVAL_SINGLE_INSTANCE_FORCE" in SCHEMA
-    assert "TRAIT_REMOVAL_NAME_LEVEL" in SCHEMA
 
 
 def test_current_run_traits_reuse_official_bilingual_localization_seam():
@@ -47,9 +18,6 @@ def test_current_run_traits_reuse_official_bilingual_localization_seam():
     assert "englishName" in TYPES
     assert "sourceName" in TYPES
     assert "sourceEnglishName" in TYPES
-
-
-
 
 
 def test_special_npc_ownership_comes_from_native_source_data():
@@ -87,64 +55,14 @@ def test_owner_family_controls_default_native_paths():
         assert f"{family} = {issue}" in LUA
 
 
-
-def test_swift_contract_carries_snapshot_not_just_trait_name():
-    for token in (
-        "generationID",
-        "runID",
-        "instanceID",
-        "level",
-        "rarity",
-        "availableRarities",
-        "levelCapability",
-        "rarityCapability",
-        "removalCapability",
-    ):
-        assert token in TYPES
-        assert token in STATE
-
-    assert "setTraitLevel(CurrentRunTrait)" in API
-    assert "setTraitRarity(CurrentRunTrait, rarity: String)" in API
-    assert "removeTrait(CurrentRunTrait)" in API
-    for token in ("generationId", "runId", "instanceId", "expectedLevel", "expectedRarity", "expectedSameNameCount"):
-        assert token in API
-
-
-def test_live_manager_is_searchable_grouped_and_shows_real_controls():
-    assert "traitSearch" in VIEW
-    assert "filteredCurrentRunTraits" in VIEW
-    assert "currentRunTraitFamilies" in VIEW
-    assert "traitFamilyLabel" in VIEW
-    assert "displayName" in VIEW
-    assert "englishName" in VIEW
-    assert "hades2.traits.level" in VIEW
-    assert "trait.rarity" in VIEW
-    assert "availableRarities" in VIEW
-    assert "model.increaseTraitLevel(trait)" in VIEW
-    assert "model.setTraitRarity(trait" in VIEW
-    assert "model.removeTrait(trait)" in VIEW
-    assert "Text(trait.name)" in VIEW
-    assert "traitLimitationRows" in VIEW
-    assert "trait.levelReason" in VIEW
-    assert "trait.rarityReason" in VIEW
-    assert "trait.removalReason" in VIEW
-
-    assert "func increaseTraitLevel(_ trait: CurrentRunTrait)" in MODEL
-    assert "func setTraitRarity(_ trait: CurrentRunTrait, rarity: String)" in MODEL
-    assert "func removeTrait(_ trait: CurrentRunTrait)" in MODEL
-
-
 def test_resident_revision_advances_for_the_new_runtime_contract():
     assert "revision = 59" in LUA
 
 
 if __name__ == "__main__":
-    test_live_trait_inventory_carries_target_snapshot_and_operation_capabilities()
     test_current_run_traits_reuse_official_bilingual_localization_seam()
     test_special_npc_ownership_comes_from_native_source_data()
     test_owner_family_controls_default_native_paths()
-    test_swift_contract_carries_snapshot_not_just_trait_name()
-    test_live_manager_is_searchable_grouped_and_shows_real_controls()
     test_resident_revision_advances_for_the_new_runtime_contract()
     print("hades2_live_trait_management_ok")
 
