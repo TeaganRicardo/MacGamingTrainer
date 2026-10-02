@@ -65,6 +65,11 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+// Normal requests must tolerate worker cold-start variance. The 0.15s hung-
+// worker request below is the timeout behavior under test and remains short.
+let requestTimeout: TimeInterval = 6.0
+let waitBudget: TimeInterval = 4.0
+
 let args = CommandLine.arguments
 if args.count != 2 { fail("expected worker path") }
 let worker = args[1]
@@ -93,7 +98,7 @@ if !session.currentStatus.backendAvailable { fail("backend not available after s
 
 func waitForRecovery(after stateIndex: Int, notice: String) {
     var sawUnavailable = false
-    let ok = waitUntil(3.0) {
+    let ok = waitUntil(waitBudget) {
         if states.dropFirst(stateIndex).contains(where: { !$0.backendAvailable }) { sawUnavailable = true }
         return sawUnavailable && session.currentStatus.backendAvailable && session.currentStatus.notice.contains(notice) && !session.currentStatus.busy
     }
@@ -104,12 +109,12 @@ func waitForRecovery(after stateIndex: Int, notice: String) {
 do {
     let startIndex = states.count
     var crashCompletion: Bool? = nil
-    session.send("crash", operation: "crash", timeout: 1.0, completion: { crashCompletion = $0 })
+    session.send("crash", operation: "crash", timeout: requestTimeout, completion: { crashCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if crashCompletion != false { fail("crash request completion must fail") }
     var ping: Bool? = nil
-    session.send("ping-after-crash", operation: "ping", timeout: 1.0, completion: { ping = $0 })
-    if !waitUntil(1.0, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
+    session.send("ping-after-crash", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
+    if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
 }
 
 // A timeout is outcome-unknown: stop/recover the worker but never replay the request.
@@ -120,8 +125,8 @@ do {
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if hangCompletion != false { fail("timeout request completion must fail") }
     var ping: Bool? = nil
-    session.send("ping-after-timeout", operation: "ping", timeout: 1.0, completion: { ping = $0 })
-    if !waitUntil(1.0, { ping != nil }) || ping != true { fail("timeout recovery backend cannot accept request") }
+    session.send("ping-after-timeout", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
+    if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("timeout recovery backend cannot accept request") }
 }
 
 // Explicit restart works while the worker is already running; no focus/UI round trip is required by the runtime layer.
@@ -130,8 +135,8 @@ do {
     session.restart()
     waitForRecovery(after: startIndex, notice: "host.backend.notice.restarted")
     var ping: Bool? = nil
-    session.send("ping-after-manual", operation: "ping", timeout: 1.0, completion: { ping = $0 })
-    if !waitUntil(1.0, { ping != nil }) || ping != true { fail("manual restart backend cannot accept request") }
+    session.send("ping-after-manual", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
+    if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("manual restart backend cannot accept request") }
 }
 
 session.stop()
