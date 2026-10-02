@@ -100,6 +100,9 @@ PROVENANCE = {
     "hades-compatibility-alias-leak": "#180: compatibility aliases are forbidden in canonical Hades UI",
     "runtime-error-code-identity": "#180: localized runtime copy must not replace the stable machine error code",
     "core-registry-vocabulary-leak": "#180: generic Core must reject Hades vocabulary from the production registry",
+    "trait-level-capability-gate": "#227: the trait family was rewritten around a snapshot capability projection, and the replacement set_trait_level guard kept only a source-token assertion, so deleting the increaseOne check went undetected until this audit added an owning behaviour test",
+    "trait-target-count-recheck": "#227: when the D01 remove_trait(name) mutation anchors were retired, the revalidated target snapshot's expectedSameNameCount recheck lost all mutation coverage; restored by test_hades2_live_trait_capability_gating.py",
+    "trait-direct-removal-verification": "#227: single-instance force removal must fail closed when the game-owned callback leaves the instance mounted, and that receipt guard had no owning behaviour test after the D01 model was retired",
 }
 
 
@@ -167,8 +170,38 @@ def manifest() -> list[Mutation]:
     return [
         # #227 supersedes the D01 SellTraits-only mutation model. Its live
         # target/capability/replay invariants are owned by
-        # test_hades2_live_trait_management.py instead of preserving stale
-        # mutation anchors for the retired remove_trait(name) design.
+        # test_hades2_live_trait_capability_gating.py. The retired
+        # remove_trait(name) design left that family with only source-token
+        # assertions and no mutation sensitivity, so these anchors restore the
+        # capability gate, the target-snapshot recheck and the removal
+        # verification that #227 shipped unguarded.
+        Mutation(
+            ident="trait-level-capability-gate",
+            invariant="a trait whose capability projects none cannot be levelled",
+            path=lua,
+            old='        if levelCapability ~= "increaseOne" then\n',
+            new="        if false then\n",
+            test="tests/test_hades2_live_trait_capability_gating.py",
+            note="#227: the replacement level gate shipped with only a source-token test",
+        ),
+        Mutation(
+            ident="trait-target-count-recheck",
+            invariant="a changed same-name count invalidates the selected target",
+            path=lua,
+            old="          or count ~= params.expectedSameNameCount then\n",
+            new="          or false then\n",
+            test="tests/test_hades2_live_trait_capability_gating.py",
+            note="#227: the revalidated target snapshot lost its count recheck guard",
+        ),
+        Mutation(
+            ident="trait-direct-removal-verification",
+            invariant="a silently dropped single-instance removal fails closed",
+            path=lua,
+            old='            if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then\n',
+            new="            if false then\n",
+            test="tests/test_hades2_live_trait_capability_gating.py",
+            note="#227: single-instance force removal must not report success when the instance survives",
+        ),
         # --- failed removal reported as success ----------------------------
         Mutation(
             ident="receipt-drop-remove-trait",
@@ -491,6 +524,11 @@ def _is_verdict(text: str) -> bool:
     return (
         # Python's bare assert raises AssertionError.
         "AssertionError" in text
+        # The resident Lua harness prints its own reached-assertion statement in
+        # uppercase; it is the Lua equivalent of Python's AssertionError. A Lua
+        # syntax/compile error prints only dofile stack frames, never this
+        # marker (measured), so it stays classified as an error.
+        or "ASSERTION FAILED:" in text
         # Swift's assert() and precondition() both trap, and both print their
         # own wording rather than "AssertionError". Measured on arm64 macOS:
         #   assert(ok, "...")        -> "T.swift:3: Assertion failed: ..."
