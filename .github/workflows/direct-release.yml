@@ -1,0 +1,108 @@
+name: Direct release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: contains(github.event.head_commit.message, '[release-direct]')
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Require exact checkout and release identity
+        id: version
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Info.plist)
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Info.plist)
+          tag="v$version"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$build" =~ ^[1-9][0-9]*$ ]]
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build Hades II trainer
+        run: ./build.sh hades2
+
+      - name: Verify package
+        run: |
+          app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
+          test -d "$app"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
+          test "$version" = "${{ steps.version.outputs.version }}"
+          test "$build" = "${{ steps.version.outputs.build }}"
+          test -f "$app/Contents/Resources/Backend/games/hades2/module.json"
+          test -f "$app/Contents/Resources/ui_terminology.json"
+          test -f "$app/Contents/Resources/hades2.zh-CN.json"
+          test -f "$app/Contents/Resources/hades2.en.json"
+          count=$(find "$app/Contents/Resources/Backend/games" -name module.json | wc -l | tr -d ' ')
+          test "$count" = "1"
+          codesign --verify --deep --strict "$app"
+
+      - name: Package and write provenance
+        id: package
+        run: |
+          mkdir -p artifacts
+          app="$(python3 Tools/verify_module_build.py hades2 --print-app)"
+          artifact="artifacts/$(python3 Tools/write_build_provenance.py \
+            --print-artifact-name \
+            --product-version "${{ steps.version.outputs.version }}" \
+            --bundle-build "${{ steps.version.outputs.build }}" \
+            --repo-root "$GITHUB_WORKSPACE")"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$artifact"
+          python3 Tools/write_build_provenance.py \
+            --artifact "$artifact" \
+            --product-version "${{ steps.version.outputs.version }}" \
+            --bundle-build "${{ steps.version.outputs.build }}" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --module-id hades2
+          sidecar="$artifact.sha256"
+          provenance="${artifact%.zip}.provenance.json"
+          test -f "$sidecar"
+          test -f "$provenance"
+          (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+          echo "sidecar=$sidecar" >> "$GITHUB_OUTPUT"
+          echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          digest=$(awk '{print $1}' "${{ steps.package.outputs.sidecar }}")
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          MacGamingTrainer ${{ steps.version.outputs.version }} is a maintenance release over 0.2.0.
+
+          Changes since 0.2.0 are verification, portability, and release-infrastructure fixes; product/runtime behavior remains unchanged.
+
+          Source: $GITHUB_SHA
+          Bundle build: ${{ steps.version.outputs.build }}
+          Resident runtime revision: 59
+          Primary artifact SHA-256: $digest
+
+          Real-game acceptance of resident revision 59 remains separate from this automated build/package verification.
+          EOF
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "${{ steps.package.outputs.artifact }}" \
+            "${{ steps.package.outputs.provenance }}" \
+            "${{ steps.package.outputs.sidecar }}" \
+            --target "$GITHUB_SHA" \
+            --title "MacGamingTrainer ${{ steps.version.outputs.version }}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
