@@ -69,6 +69,16 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+// A freshly spawned worker must start Python and begin reading stdin before it
+// can answer anything. Measured cold start on this machine is 0.83-0.99s
+// (p50 0.94s, against 0.50-0.65s for a bare interpreter), so a request timeout
+// or a wait budget at or below ~1s races process startup instead of exercising
+// the client -- with 1.0s budgets this suite failed roughly one run in six, and
+// widening the wait budgets alone did not help because the client's own request
+// timeout fired first. requestTimeout matches the client's documented default.
+let requestTimeout: TimeInterval = 6.0
+let waitBudget: TimeInterval = 4.0
+
 final class Probe {
     let client: BackendClient
     var replies: [String] = []
@@ -98,13 +108,13 @@ final class Probe {
         )
     }
 
-    func send(_ command: String, timeout: TimeInterval = 1.0, completion: ((Bool) -> Void)? = nil) {
+    func send(_ command: String, timeout: TimeInterval = requestTimeout, completion: ((Bool) -> Void)? = nil) {
         client.send(command, operation: command, timeout: timeout, completion: completion)
     }
 
     func stopAndWait() {
         client.stop()
-        _ = waitUntil(2.0) { !self.client.isStarted }
+        _ = waitUntil(waitBudget) { !self.client.isStarted }
     }
 }
 
@@ -118,7 +128,7 @@ do {
     let p = try Probe(python: python, worker: worker, game: "timeout")
     var result: Bool? = nil
     p.send("hang", timeout: 0.15) { result = $0 }
-    if !waitUntil(1.5, { result != nil && !p.terminations.isEmpty }) { fail("timeout did not resolve/terminate") }
+    if !waitUntil(waitBudget, { result != nil && !p.terminations.isEmpty }) { fail("timeout did not resolve/terminate") }
     if result != false { fail("timeout completion must be false") }
     if !p.failures.contains(where: { $0.code == "backend_timeout" }) { fail("timeout failure identity missing") }
     if p.client.isStarted { fail("timed-out backend still marked started") }
@@ -128,8 +138,8 @@ do {
 do {
     let p = try Probe(python: python, worker: worker, game: "malformed")
     var result: Bool? = nil
-    p.send("bad", timeout: 1.0) { result = $0 }
-    if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("malformed stdout did not fail") }
+    p.send("bad", timeout: requestTimeout) { result = $0 }
+    if !waitUntil(waitBudget, { result != nil && !p.terminations.isEmpty }) { fail("malformed stdout did not fail") }
     if result != false || !p.failures.contains(where: { $0.code == "backend_protocol_error" }) { fail("malformed stdout semantics wrong") }
 }
 
@@ -137,8 +147,8 @@ do {
 do {
     let p = try Probe(python: python, worker: worker, game: "mismatch")
     var result: Bool? = nil
-    p.send("probe", timeout: 1.0) { result = $0 }
-    if !waitUntil(1.0, { result != nil && !p.mismatches.isEmpty }) { fail("protocol mismatch did not resolve") }
+    p.send("probe", timeout: requestTimeout) { result = $0 }
+    if !waitUntil(waitBudget, { result != nil && !p.mismatches.isEmpty }) { fail("protocol mismatch did not resolve") }
     if result != false { fail("protocol mismatch completion must fail") }
     guard let mismatch = p.mismatches.first else { fail("protocol mismatch failure missing") }
     if mismatch.code != "protocol_mismatch" { fail("protocol mismatch identity changed") }
@@ -154,8 +164,8 @@ do {
 do {
     let p = try Probe(python: python, worker: worker, game: "wrong_then_right")
     var result: Bool? = nil
-    p.send("probe", timeout: 1.0) { result = $0 }
-    if !waitUntil(1.0, { result != nil }) { fail("correct reply after wrong id not accepted") }
+    p.send("probe", timeout: requestTimeout) { result = $0 }
+    if !waitUntil(waitBudget, { result != nil }) { fail("correct reply after wrong id not accepted") }
     if result != true || p.replies != ["probe"] { fail("wrong-id handling corrupted active request") }
     p.stopAndWait()
 }
@@ -171,7 +181,7 @@ do {
         done += 1
     }
     p.send("second") { if $0 { done += 1 } }
-    if !waitUntil(2.0, { done == 3 }) { fail("ordered requests did not finish") }
+    if !waitUntil(waitBudget, { done == 3 }) { fail("ordered requests did not finish") }
     if p.replies != ["first", "second", "third"] { fail("completion jumped queue: \(p.replies)") }
     p.stopAndWait()
 }
@@ -187,7 +197,7 @@ do {
     p.send("q3") { rejected = $0 }
     if !waitUntil(0.5, { rejected != nil }) || rejected != false { fail("queue overflow not rejected") }
     if !p.failures.contains(where: { $0.code == "backend_queue_full" }) { fail("queue overflow failure identity missing") }
-    if !waitUntil(2.0, { accepted == 3 }) { fail("accepted queue work did not finish") }
+    if !waitUntil(waitBudget, { accepted == 3 }) { fail("accepted queue work did not finish") }
     p.stopAndWait()
 }
 
@@ -196,7 +206,7 @@ do {
     let p = try Probe(python: python, worker: worker, game: "exit")
     var result: Bool? = nil
     p.send("exit") { result = $0 }
-    if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("process exit did not resolve request") }
+    if !waitUntil(waitBudget, { result != nil && !p.terminations.isEmpty }) { fail("process exit did not resolve request") }
     if result != false { fail("process-exit completion must fail") }
 }
 
@@ -204,8 +214,8 @@ do {
 do {
     let p = try Probe(python: python, worker: worker, game: "huge", maxBuffer: 4096)
     var result: Bool? = nil
-    p.send("huge", timeout: 1.0) { result = $0 }
-    if !waitUntil(1.0, { result != nil && !p.terminations.isEmpty }) { fail("stdout overflow did not fail") }
+    p.send("huge", timeout: requestTimeout) { result = $0 }
+    if !waitUntil(waitBudget, { result != nil && !p.terminations.isEmpty }) { fail("stdout overflow did not fail") }
     if result != false || !p.failures.contains(where: {
         $0.code == "backend_protocol_error" && ($0.diagnostic?.contains("stdout") ?? false)
     }) { fail("stdout overflow semantics wrong") }
