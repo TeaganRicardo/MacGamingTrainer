@@ -186,7 +186,7 @@ def manifest() -> list[Mutation]:
         ),
         Mutation(
             ident="trait-target-count-recheck",
-            invariant="a changed same-name count invalidates the selected target",
+            invariant="a changed same-name count invalidates the selected target for every mutating command",
             path=lua,
             old="          or count ~= params.expectedSameNameCount then\n",
             new="          or false then\n",
