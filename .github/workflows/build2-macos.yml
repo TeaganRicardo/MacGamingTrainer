@@ -97,6 +97,18 @@ jobs:
       # guards them is broken. Several of these tests compile Swift and drive
       # the real presentation and protocol paths, so this belongs in the
       # macOS lane rather than the portable one.
+      - name: Build Lua 5.2 runtime test dependency
+        if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
+        run: |
+          archive="$RUNNER_TEMP/lua-5.2.4.tar.gz"
+          lua_root="$RUNNER_TEMP/lua-5.2.4"
+          curl -fsSL --retry 3 -o "$archive" https://www.lua.org/ftp/lua-5.2.4.tar.gz
+          printf '%s  %s\n' b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b "$archive" | shasum -a 256 -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          make -C "$lua_root/src" generic
+          test "$("$lua_root/src/lua" -e 'io.write(_VERSION)')" = 'Lua 5.2'
+          echo "MGT_LUA52=$lua_root/src/lua" >> "$GITHUB_ENV"
+
       - name: Verify declared invariants fail under mutation
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
         run: python3 Tools/mutation_gate.py
