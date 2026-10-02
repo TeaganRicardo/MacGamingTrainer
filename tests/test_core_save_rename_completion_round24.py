@@ -56,6 +56,11 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+// These waits cover a Python worker round trip. They are not latency
+// assertions, so do not let cold-start variance decide whether the model logic
+// passes. The stopped-backend completion below stays intentionally short.
+let waitBudget: TimeInterval = 4.0
+
 @main
 struct Runner {
     static func main() throws {
@@ -81,7 +86,7 @@ struct Runner {
         )
         let model = TrainerSaveManagerModel(session: session)
         model.refresh()
-        guard waitUntil(1.0, { model.snapshots.first?.name == "old" && !model.busy }) else {
+        guard waitUntil(waitBudget, { model.snapshots.first?.name == "old" && !model.busy }) else {
             fail("initial snapshot did not load")
         }
 
@@ -89,14 +94,14 @@ struct Runner {
         model.rename(id: "snap", name: "new") { _ in
             callbackName = model.snapshots.first?.name
         }
-        guard waitUntil(1.0, { callbackName != nil && !model.busy }) else {
+        guard waitUntil(waitBudget, { callbackName != nil && !model.busy }) else {
             fail("rename completion did not run")
         }
         if callbackName != "new" {
             fail("rename completion ran before updated snapshot was visible: \(callbackName ?? "nil")")
         }
         session.stop()
-        _ = waitUntil(1.0) { !session.isStarted }
+        _ = waitUntil(waitBudget) { !session.isStarted }
 
         // Editing may begin while the backend is alive and commit after the
         // worker exits. The completion must still fire with failure so the

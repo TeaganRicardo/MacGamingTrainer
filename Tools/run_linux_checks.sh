@@ -4,10 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Tests build fixtures with tempfile.mkdtemp, which never removes the directory
-# it creates. Running the lane inside a private TMPDIR keeps every fixture --
-# including one a future test forgets to clean up -- inside a tree this script
-# owns, and the trap removes that tree when the lane exits.
+# Tests build fixtures with tempfile.mkdtemp and some production defaults derive
+# storage from HOME. Keep both temporary files and accidental default-path
+# writes inside one private tree owned by the lane.
 LANE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgt-lane-XXXXXX")"
 cleanup_lane_tmp() {
   if [[ -n "${LANE_TMP:-}" && -d "${LANE_TMP:-}" && "${LANE_TMP}" == */mgt-lane-* ]]; then
@@ -17,6 +16,8 @@ cleanup_lane_tmp() {
 }
 trap cleanup_lane_tmp EXIT
 export TMPDIR="$LANE_TMP"
+export HOME="$LANE_TMP/home"
+mkdir -p "$HOME"
 
 MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
 test -f "$MACOS_ONLY_LIST"

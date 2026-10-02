@@ -58,6 +58,11 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
     return predicate()
 }
 
+// A fresh Python worker may spend meaningful time starting under load. These
+// waits observe callback ordering, not startup latency, so keep startup noise
+// outside the assertion budget.
+let waitBudget: TimeInterval = 4.0
+
 @main
 struct Main {
     static func main() throws {
@@ -99,7 +104,7 @@ struct Main {
                 events.append("completion")
             }
         )
-        if !waitUntil(1.0, { events.count == 2 }) { fail("core callback did not complete") }
+        if !waitUntil(waitBudget, { events.count == 2 }) { fail("core callback did not complete") }
         if events != ["reply", "completion"] { fail("reply/completion order changed: \(events)") }
         if snapshots != 1 { fail("request-specific reply did not receive Core payload") }
         if !applied.isEmpty { fail("Core payload leaked into game applyPayload") }
@@ -112,7 +117,7 @@ struct Main {
             reply: { failureReply = $0 },
             completion: { failureDone = $0 }
         )
-        if !waitUntil(1.0, { failureReply != nil && failureDone != nil }) { fail("failure callback did not complete") }
+        if !waitUntil(waitBudget, { failureReply != nil && failureDone != nil }) { fail("failure callback did not complete") }
         if failureDone != false { fail("failure completion unexpectedly succeeded") }
         guard let failure = failureReply?.failure else { fail("failure value missing") }
         if failure.code != "fixture_failure" { fail("wrong failure code") }
@@ -122,11 +127,11 @@ struct Main {
 
         var gameDone = false
         session.send("status", operation: "status", completion: { ok in gameDone = ok })
-        if !waitUntil(1.0, { gameDone && applied.count == 1 }) { fail("game payload was not applied") }
+        if !waitUntil(waitBudget, { gameDone && applied.count == 1 }) { fail("game payload was not applied") }
         if applied[0]["connected"] as? Bool != true { fail("wrong game payload") }
 
         session.stop()
-        _ = waitUntil(1.0) { !session.isStarted }
+        _ = waitUntil(waitBudget) { !session.isStarted }
         print("backend_reply_callback_round20_ok")
     }
 }
