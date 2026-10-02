@@ -20,7 +20,7 @@ RESIDENT_DISPATCH_CONTRACT = (
     ROOT / "tests/fixtures/hades2/resident_dispatch_contract.lua"
 )
 
-_BARE_NAMES = ("lua5.2", "luac5.2")
+_BARE_NAMES = ("lua5.2",)
 
 _CONVENTIONAL_PATHS = (
     Path("/opt/homebrew/opt/lua@5.2/bin/lua5.2"),

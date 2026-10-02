@@ -101,10 +101,10 @@ guard waitUntil(handshakeBudget, {
     // A slow runner and a wedged backend must not produce the same message, or
     // this cannot be triaged without a local reproduction.
     let lastLog = capturedLogs.last ?? "<none>"
-    let detail = "within \\(handshakeBudget)s status=\\(model.backendStatus)"
-        + " sessionStarted=\\(session.isStarted) sessionRunning=\\(session.isRunning)"
-        + " logLines=\\(capturedLogs.count) lastLog=\\(lastLog)"
-    fail("reference model did not start the injected Host backend session \\(detail)")
+    let detail = "within \(handshakeBudget)s status=\(model.backendStatus)"
+        + " sessionStarted=\(session.isStarted) sessionRunning=\(session.isRunning)"
+        + " logLines=\(capturedLogs.count) lastLog=\(lastLog)"
+    fail("reference model did not start the injected Host backend session \(detail)")
 }
 
 if model.connected { fail("fixture must start disconnected") }
