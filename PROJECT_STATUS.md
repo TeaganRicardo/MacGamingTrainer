@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-01
+Updated: 2026-10-03
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -15,7 +15,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 ## Current operational state
 
-- Product release identity: `Info.plist` owns SemVer `0.2.0` and bundle build `4`. Do not duplicate these values into another source of truth.
+- Product release identity: `Info.plist` owns SemVer `0.2.1` and bundle build `5`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
 - Hades II module protocol: 6.
 - Hades II desired-state schema: 5.
