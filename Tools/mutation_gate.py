@@ -524,6 +524,11 @@ def _is_verdict(text: str) -> bool:
     return (
         # Python's bare assert raises AssertionError.
         "AssertionError" in text
+        # The resident Lua harness prints its own reached-assertion statement in
+        # uppercase; it is the Lua equivalent of Python's AssertionError. A Lua
+        # syntax/compile error prints only dofile stack frames, never this
+        # marker (measured), so it stays classified as an error.
+        or "ASSERTION FAILED:" in text
         # Swift's assert() and precondition() both trap, and both print their
         # own wording rather than "AssertionError". Measured on arm64 macOS:
         #   assert(ok, "...")        -> "T.swift:3: Assertion failed: ..."
