@@ -72,10 +72,9 @@ if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
     fail("startup diagnostic detail did not reach logging")
 }
 
-let localizationDomain = "ReferenceFixtureLocalization-\(UUID().uuidString)"
-let localizationDefaults = UserDefaults(suiteName: localizationDomain)!
-localizationDefaults.removePersistentDomain(forName: localizationDomain)
-defer { localizationDefaults.removePersistentDomain(forName: localizationDomain) }
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
+let localizationDefaults = InMemoryDefaults()
 
 let session = TrainerBackendSession()
 var capturedLogs: [String] = []
@@ -283,6 +282,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
             SWIFTC,
             *map(str, core_sources),
             str(project / "Sources/ReferenceFixture/ReferenceFixtureModule.swift"),
+            str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
             str(generated),
             str(main_swift),
             "-o",

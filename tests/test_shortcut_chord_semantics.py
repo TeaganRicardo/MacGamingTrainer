@@ -16,13 +16,9 @@ precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)) == Set(ShortcutAction.a
 precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)).count == ShortcutAction.uiOrder.count)
 precondition(ShortcutAction.uiOrder.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
 
-
-func makeDefaults(_ suffix: String) -> UserDefaults {
-    let suite = "mgt.shortcut.tests.\(suffix).\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
-    return defaults
-}
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
+func makeDefaults() -> UserDefaults { InMemoryDefaults() }
 
 func unique(_ store: Hades2ShortcutStore) -> Bool {
     let values = ShortcutAction.uiOrder.map { "\(store.chord($0).keyCode):\(store.chord($0).modifiers)" }
@@ -62,13 +58,13 @@ func seedKnownBrokenV4Defaults(_ defaults: UserDefaults) {
     defaults.set(HotkeyChord.controlOptionDigit(0)!.payload, forKey: legacyShortcutKey(.disableAll))
 }
 
-let migratedV3DefaultsStore = makeDefaults("migrated-v3-defaults")
+let migratedV3DefaultsStore = makeDefaults()
 seedV3Defaults(migratedV3DefaultsStore)
 let migratedV3Defaults = Hades2ShortcutStore(defaults: migratedV3DefaultsStore)
 precondition(ShortcutAction.uiOrder.map { migratedV3Defaults.chord($0).keyLabel } ==
     ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J"])
 
-let migratedV3CustomStore = makeDefaults("migrated-v3-custom")
+let migratedV3CustomStore = makeDefaults()
 seedV3Defaults(migratedV3CustomStore, invincibilityOverride: 0)
 let migratedV3Custom = Hades2ShortcutStore(defaults: migratedV3CustomStore)
 precondition(migratedV3Custom.chord(.invincibility).keyLabel == "0")
@@ -78,13 +74,13 @@ precondition(migratedV3Custom.chord(.moneyMultiplierEnabled).keyLabel == "D")
 precondition(migratedV3Custom.chord(.disableAll).keyLabel == "J")
 precondition(unique(migratedV3Custom))
 
-let brokenV4Store = makeDefaults("broken-v4-defaults")
+let brokenV4Store = makeDefaults()
 seedKnownBrokenV4Defaults(brokenV4Store)
 let repairedV4 = Hades2ShortcutStore(defaults: brokenV4Store)
 precondition(ShortcutAction.uiOrder.map { repairedV4.chord($0).keyLabel } ==
     ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J"])
 
-let defaults = Hades2ShortcutStore(defaults: makeDefaults("defaults"))
+let defaults = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(ShortcutAction.uiOrder.map { defaults.chord($0).keyLabel } ==
     ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J"])
 precondition(unique(defaults))
@@ -94,7 +90,7 @@ precondition(defaults.chord(.spawnSpecial).keyLabel == "H")
 precondition(defaults.chord(.applyNextRoomReward).keyLabel == "I")
 precondition(defaults.chord(.disableAll).keyLabel == "J")
 
-var full = Hades2ShortcutStore(defaults: makeDefaults("full"))
+var full = Hades2ShortcutStore(defaults: makeDefaults())
 var profile = full.payload()
 profile[ShortcutAction.invincibility.rawValue] = full.chord(.infiniteHealth).payload
 profile[ShortcutAction.infiniteHealth.rawValue] = full.chord(.invincibility).payload
@@ -102,13 +98,13 @@ full.applyProfile(profile)
 precondition(full.chord(.invincibility).keyLabel == "2" && full.chord(.infiniteHealth).keyLabel == "1")
 precondition(unique(full))
 
-var partial = Hades2ShortcutStore(defaults: makeDefaults("partial"))
+var partial = Hades2ShortcutStore(defaults: makeDefaults())
 let wanted = partial.chord(.infiniteHealth)
 partial.applyProfile([ShortcutAction.invincibility.rawValue: wanted.payload])
 precondition(partial.chord(.invincibility) == wanted && partial.chord(.infiniteHealth) != wanted)
 precondition(unique(partial))
 
-var partialWithExistingOverride = Hades2ShortcutStore(defaults: makeDefaults("partial-existing-override"))
+var partialWithExistingOverride = Hades2ShortcutStore(defaults: makeDefaults())
 let custom = HotkeyChord(keyCode: 18, modifiers: HotkeyChord.commandModifier, keyLabel: "1")
 precondition(partialWithExistingOverride.set(.infiniteHealth, chord: custom) == nil)
 partialWithExistingOverride.applyProfile([ShortcutAction.invincibility.rawValue: custom.payload])
@@ -131,6 +127,7 @@ with tempfile.TemporaryDirectory() as td:
         str(ROOT / 'Sources/Core/Input/HotkeyChord.swift'),
         str(ROOT / 'Sources/Hades2/Hades2Types.swift'),
         str(ROOT / 'Sources/Hades2/Services/Hades2ShortcutStore.swift'),
+        str(ROOT / 'tests/fixtures/swift/InMemoryDefaults.swift'),
         str(main), '-o', str(binary),
     ], check=True)
     subprocess.run([str(binary)], check=True)

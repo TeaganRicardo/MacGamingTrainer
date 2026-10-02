@@ -16,10 +16,10 @@ import Combine
 @main
 struct LocalizationBehaviorTest {
     static func main() {
-        let domain = "HostLocalizationTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: domain)!
-        defaults.removePersistentDomain(forName: domain)
-        defer { defaults.removePersistentDomain(forName: domain) }
+        // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the
+        // real preferences directory; a real suite there cannot be cleaned up
+        // afterwards.
+        let defaults = InMemoryDefaults()
 
         let missingValue = TrainerLocalizationStore(defaults: defaults)
         precondition(missingValue.language == .zhCN, "missing preference must default to zh-CN")
@@ -144,6 +144,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-host-localization-") as temporary:
             str(ROOT / "Sources/Core/Runtime/BackendProcess.swift"),
             str(ROOT / "Sources/Core/Runtime/BackendClient.swift"),
             str(ROOT / "Sources/Core/Host/TrainerLocalization.swift"),
+            str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
             str(harness_path),
             "-o", str(executable),
         ],

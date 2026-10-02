@@ -11,9 +11,9 @@ if not swiftc:
 harness = r"""
 import Foundation
 
-let suite = "mgt.invincibility.shortcut.\(UUID().uuidString)"
-let defaults = UserDefaults(suiteName: suite)!
-defaults.removePersistentDomain(forName: suite)
+// InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
+// preferences directory; a real suite there cannot be cleaned up afterwards.
+let defaults = InMemoryDefaults()
 defaults.set(5, forKey: "shortcut.layoutVersion")
 
 let legacy = HotkeyChord(
@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-invincibility-shortcut-") as td:
         str(ROOT / "Sources/Core/Input/HotkeyChord.swift"),
         str(ROOT / "Sources/Hades2/Hades2Types.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2ShortcutStore.swift"),
+        str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
         str(main),
         "-o", str(binary),
     ], check=True)
