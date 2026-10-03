@@ -13,6 +13,14 @@ struct Hades2TrainerView: View {
         case element(String)
     }
 
+    private enum TraitManagerLayout {
+        static let levelControlsWidth: CGFloat = 174
+        static let rarityControlsWidth: CGFloat = 224
+        static let removeControlWidth: CGFloat = 106
+        static let commonControlsWidth: CGFloat = 528
+        static let searchWidth: CGFloat = 260
+    }
+
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
@@ -44,6 +52,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
     @ViewState<String> private var traitSearch = ""
+    @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
     @ViewState<[String: String]> private var traitRarityInputs = [:]
     @ViewState<String> private var graspLimit = ""
@@ -269,33 +278,12 @@ struct Hades2TrainerView: View {
         localization.language == .en ? trait.englishName : trait.displayName
     }
 
-    private func linkedCurrentRunTraitName(_ trait: CurrentRunTrait) -> String {
-        let localized = localization.language == .en ? trait.linkedEnglishName : trait.linkedDisplayName
-        return localized.isEmpty ? text("hades2.spawn.unnamedEffect") : localized
-    }
-
-    private func currentRunTraitLifecycleRows(_ trait: CurrentRunTrait) -> [String] {
-        guard trait.family == "chaos", !trait.lifecycleState.isEmpty else { return [] }
-        var rows: [String] = []
-        let phaseKey = "hades2.traits.chaos." + trait.lifecycleState
-        var phaseParts = [text(phaseKey)]
-        if let remaining = trait.remainingUses {
-            let rendered = remaining.rounded() == remaining ? String(Int(remaining)) : String(format: "%.1f", remaining)
-            phaseParts.append(text("hades2.traits.chaos.remaining", arguments: [rendered]))
-        }
-        rows.append(phaseParts.joined(separator: " · "))
-        if trait.lifecycleState == "curse", !trait.linkedTrait.isEmpty {
-            rows.append(text("hades2.traits.chaos.transformsTo", arguments: [linkedCurrentRunTraitName(trait)]))
-        }
-        return rows
-    }
-
     private var filteredCurrentRunTraits: [CurrentRunTrait] {
         let rows = traitSearch.isEmpty ? model.currentRunTraits : model.currentRunTraits.filter { trait in
             [
-                trait.displayName, trait.englishName, trait.name,
+                trait.displayName, trait.englishName,
                 trait.linkedDisplayName, trait.linkedEnglishName,
-                trait.sourceName, trait.sourceEnglishName, trait.sourceID, trait.family,
+                trait.sourceName, trait.sourceEnglishName,
             ].contains { $0.localizedCaseInsensitiveContains(traitSearch) }
         }
         return rows.sorted {
@@ -314,26 +302,6 @@ struct Hades2TrainerView: View {
         return localized == key ? rarity : localized
     }
 
-    private func traitLimitationReason(_ reason: String) -> String {
-        let key = "hades2.traits.reason." + (reason.isEmpty ? "ownerSpecificLifecycle" : reason)
-        let localized = text(key)
-        return localized == key ? text("hades2.traits.reason.unknown") : localized
-    }
-
-    private func traitLimitationRows(_ trait: CurrentRunTrait) -> [String] {
-        var rows: [String] = []
-        if !trait.canIncreaseLevel {
-            rows.append(text("hades2.traits.limit.level", arguments: [traitLimitationReason(trait.levelReason)]))
-        }
-        if !trait.canSetRarity {
-            rows.append(text("hades2.traits.limit.rarity", arguments: [traitLimitationReason(trait.rarityReason)]))
-        }
-        if !trait.canRemove {
-            rows.append(text("hades2.traits.limit.remove", arguments: [traitLimitationReason(trait.removalReason)]))
-        }
-        return rows
-    }
-
     private func traitSourceLabel(_ trait: CurrentRunTrait) -> String {
         if !trait.sourceID.isEmpty {
             let label = localization.language == .en ? trait.sourceEnglishName : trait.sourceName
@@ -344,20 +312,63 @@ struct Hades2TrainerView: View {
         return localized == presentationKey ? trait.family : localized
     }
 
+    private var currentRunTraitPickerSections: [TrainerPickerSection<CurrentRunTrait>] {
+        var titles: [String] = []
+        var buckets: [String: [CurrentRunTrait]] = [:]
+        for trait in filteredCurrentRunTraits {
+            let title = traitSourceLabel(trait)
+            if buckets[title] == nil {
+                titles.append(title)
+                buckets[title] = []
+            }
+            buckets[title, default: []].append(trait)
+        }
+        return titles.enumerated().map { index, title in
+            TrainerPickerSection(id: index, title: title, items: buckets[title] ?? [])
+        }
+    }
+
+    private var managedCurrentRunTrait: CurrentRunTrait? {
+        model.currentRunTraits.first { $0.id == managedTraitSelection }
+    }
+
+    private func currentRunTraitPickerLabel(_ trait: CurrentRunTrait) -> String {
+        var parts = [currentRunTraitName(trait), text("hades2.traits.level", arguments: [String(trait.level)])]
+        if !trait.rarity.isEmpty {
+            parts.append(traitRarityLabel(trait.rarity))
+        }
+        if trait.sameNameCount > 1 {
+            parts.append(text("hades2.traits.instances", arguments: [String(trait.sameNameCount)]))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func repairManagedTraitSelection() {
+        let available = filteredCurrentRunTraits
+        guard !available.contains(where: { $0.id == managedTraitSelection }) else { return }
+        managedTraitSelection = available.first?.id ?? ""
+    }
+
     private func traitLevelInput(_ trait: CurrentRunTrait) -> Binding<String> {
         Binding(
-            get: { traitLevelInputs[trait.id] ?? String(trait.level + 1) },
+            get: {
+                traitLevelInputs[trait.id]
+                    ?? String(trait.canIncreaseLevel ? trait.level + 1 : trait.level)
+            },
             set: { traitLevelInputs[trait.id] = $0 }
         )
     }
 
     private func defaultTraitRarityInput(_ trait: CurrentRunTrait) -> String {
-        guard !trait.rarity.isEmpty else { return "" }
-        guard let index = trait.availableRarities.firstIndex(of: trait.rarity),
-              trait.availableRarities.indices.contains(index + 1) else {
-            return traitRarityLabel(trait.rarity)
+        guard !trait.availableRarities.isEmpty else { return "" }
+        guard !trait.rarity.isEmpty else { return trait.availableRarities[0] }
+        guard let index = trait.availableRarities.firstIndex(of: trait.rarity) else {
+            return trait.availableRarities[0]
         }
-        return traitRarityLabel(trait.availableRarities[index + 1])
+        guard trait.availableRarities.indices.contains(index + 1) else {
+            return trait.rarity
+        }
+        return trait.availableRarities[index + 1]
     }
 
     private func traitRarityInput(_ trait: CurrentRunTrait) -> Binding<String> {
@@ -365,14 +376,6 @@ struct Hades2TrainerView: View {
             get: { traitRarityInputs[trait.id] ?? defaultTraitRarityInput(trait) },
             set: { traitRarityInputs[trait.id] = $0 }
         )
-    }
-
-    private func canonicalTraitRarity(_ input: String, for trait: CurrentRunTrait) -> String? {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trait.availableRarities.first {
-            $0.caseInsensitiveCompare(trimmed) == .orderedSame
-                || traitRarityLabel($0).caseInsensitiveCompare(trimmed) == .orderedSame
-        }
     }
 
     private func canApplyTraitLevel(_ trait: CurrentRunTrait) -> Bool {
@@ -383,153 +386,158 @@ struct Hades2TrainerView: View {
     }
 
     private func canApplyTraitRarity(_ trait: CurrentRunTrait) -> Bool {
-        guard model.canOpenNativeBoonScreen, trait.canSetRarity,
-              let target = canonicalTraitRarity(traitRarityInput(trait).wrappedValue, for: trait)
-        else { return false }
-        return target != trait.rarity
+        let target = traitRarityInput(trait).wrappedValue
+        return model.canOpenNativeBoonScreen
+            && trait.canSetRarity
+            && trait.availableRarities.contains(target)
+            && target != trait.rarity
     }
 
     private var currentRunTraitsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Label(text("hades2.traits.section"), systemImage: "list.bullet.rectangle")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Label(text("hades2.traits.manager"), systemImage: "slider.horizontal.3")
                     .font(.subheadline.weight(.medium))
-                Text(text("hades2.traits.count", arguments: [String(filteredCurrentRunTraits.count)]))
-                    .font(.caption)
-                    .foregroundStyle(theme.mutedFill)
-                Spacer()
-                TextField(text("hades2.traits.search"), text: $traitSearch)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
-            }
+                    .fixedSize()
 
-            if filteredCurrentRunTraits.isEmpty {
-                TrainerEmptyState(text: text("hades2.traits.empty"))
-            } else {
-                LazyVStack(spacing: 8) {
-                    ForEach(filteredCurrentRunTraits) { trait in
-                        currentRunTraitRow(trait)
+                Picker(text("hades2.traits.manager"), selection: $managedTraitSelection) {
+                    if currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }) {
+                        Text(text("hades2.traits.empty")).tag("")
+                    }
+                    ForEach(currentRunTraitPickerSections) { section in
+                        Section(header: Text(section.title)) {
+                            ForEach(section.items) { trait in
+                                Text(currentRunTraitPickerLabel(trait)).tag(trait.id)
+                            }
+                        }
                     }
                 }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
+
+                TextField(text("hades2.traits.search"), text: $traitSearch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: TraitManagerLayout.searchWidth)
             }
 
-            if !model.currentRunTraitScope.isPersistent {
-                Text(text("hades2.traits.identityScope"))
-                    .font(.caption)
-                    .foregroundStyle(theme.mutedFill)
+            HStack(spacing: 12) {
+                if let trait = managedCurrentRunTrait {
+                    currentRunTraitContextualControls(trait)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    currentRunTraitCommonControls(trait)
+                } else {
+                    Spacer(minLength: 0)
+                    currentRunTraitCommonControls(nil)
+                }
             }
         }
+        .onAppear { repairManagedTraitSelection() }
+        .onChange(of: model.currentRunTraits) { _, _ in repairManagedTraitSelection() }
+        .onChange(of: traitSearch) { _, _ in repairManagedTraitSelection() }
     }
 
     @ViewBuilder
-    private func currentRunTraitRow(_ trait: CurrentRunTrait) -> some View {
-        TrainerListCard {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(currentRunTraitName(trait))
-                            .font(.body.weight(.medium))
-                        Text(traitSourceLabel(trait))
-                            .font(.caption2)
-                            .foregroundStyle(theme.mutedFill)
-                        ForEach(currentRunTraitLifecycleRows(trait), id: \.self) { lifecycle in
-                            Text(lifecycle)
-                                .font(.caption2)
-                                .foregroundStyle(theme.mutedFill)
-                        }
-                    }
+    private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
+        if trait.canAdvanceLifecycle {
+            Button(text("hades2.traits.chaos.advance")) {
+                model.advanceTraitLifecycle(trait)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!model.canOpenNativeBoonScreen)
+        }
+    }
 
-                    Spacer(minLength: theme.sectionSpacing)
-
-                    HStack(spacing: 8) {
-                        Text(text("hades2.traits.level", arguments: [String(trait.level)]))
-                        if !trait.rarity.isEmpty {
-                            Text(traitRarityLabel(trait.rarity))
-                        }
-                        if trait.sameNameCount > 1 {
-                            Text(text("hades2.traits.instances", arguments: [String(trait.sameNameCount)]))
-                        }
-                    }
+    private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Text(text("hades2.traits.targetLevel"))
                     .font(.caption)
-                    .foregroundStyle(theme.mutedFill)
-                }
+                    .foregroundStyle(.secondary)
+                    .frame(width: 42, alignment: .trailing)
 
-                HStack(alignment: .center, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Text(text("hades2.traits.targetLevel"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 70)
-                            .disabled(!model.canOpenNativeBoonScreen || !trait.canIncreaseLevel)
-                        Button(text("hades2.traits.apply")) {
-                            model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!canApplyTraitLevel(trait))
-                    }
+                if let trait {
+                    TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 58)
+                        .disabled(!model.canOpenNativeBoonScreen || !trait.canIncreaseLevel)
 
-                    Divider().frame(height: 24)
-
-                    HStack(spacing: 6) {
-                        Text(text("hades2.traits.targetRarity"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField(text("hades2.traits.targetRarity"), text: traitRarityInput(trait))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 105)
-                            .help(trait.availableRarities.map(traitRarityLabel).joined(separator: " / "))
-                            .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
-                        Button(text("hades2.traits.apply")) {
-                            guard let rarity = canonicalTraitRarity(
-                                traitRarityInput(trait).wrappedValue,
-                                for: trait
-                            ) else { return }
-                            model.setTraitRarity(trait, rarity: rarity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!canApplyTraitRarity(trait))
-                    }
-
-                    Spacer(minLength: 8)
-
-                    if trait.canAdvanceLifecycle {
-                        Button(text("hades2.traits.chaos.advance")) {
-                            model.advanceTraitLifecycle(trait)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(!model.canOpenNativeBoonScreen)
-                    }
-
-                    Button(role: .destructive) {
-                        model.removeTrait(trait)
-                    } label: {
-                        Text(text(trait.lifecycleState == "curse"
-                            ? "hades2.traits.chaos.cancelPair"
-                            : "hades2.traits.remove"))
+                    Button(text("hades2.traits.apply")) {
+                        model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(!model.canOpenNativeBoonScreen || !trait.canRemove)
-                }
+                    .frame(width: 62)
+                    .disabled(!canApplyTraitLevel(trait))
+                } else {
+                    TextField(text("hades2.traits.targetLevel"), text: .constant(""))
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 58)
+                        .disabled(true)
 
-                ForEach(traitLimitationRows(trait), id: \.self) { limitation in
-                    Text(limitation)
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
-                }
-                if let issue = trait.deferredIssue {
-                    Text(text("hades2.traits.deferredIssue", arguments: [String(issue)]))
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
-                }
-                if trait.removalScopeAllMatching {
-                    Text(text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)]))
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
+                    Button(text("hades2.traits.apply")) {}
+                        .buttonStyle(.bordered)
+                        .frame(width: 62)
+                        .disabled(true)
                 }
             }
+            .frame(width: TraitManagerLayout.levelControlsWidth, alignment: .trailing)
+
+            HStack(spacing: 6) {
+                Text(text("hades2.traits.targetRarity"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 48, alignment: .trailing)
+
+                if let trait {
+                    Picker(text("hades2.traits.targetRarity"), selection: traitRarityInput(trait)) {
+                        if trait.availableRarities.isEmpty {
+                            Text("—").tag("")
+                        } else {
+                            ForEach(trait.availableRarities, id: \.self) { rarity in
+                                Text(traitRarityLabel(rarity)).tag(rarity)
+                            }
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 108)
+                    .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
+
+                    Button(text("hades2.traits.apply")) {
+                        model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
+                    }
+                    .buttonStyle(.bordered)
+                    .frame(width: 62)
+                    .disabled(!canApplyTraitRarity(trait))
+                } else {
+                    Picker(text("hades2.traits.targetRarity"), selection: .constant("")) {
+                        Text("—").tag("")
+                    }
+                    .labelsHidden()
+                    .frame(width: 108)
+                    .disabled(true)
+
+                    Button(text("hades2.traits.apply")) {}
+                        .buttonStyle(.bordered)
+                        .frame(width: 62)
+                        .disabled(true)
+                }
+            }
+            .frame(width: TraitManagerLayout.rarityControlsWidth, alignment: .trailing)
+
+            Button(role: .destructive) {
+                guard let trait else { return }
+                model.removeTrait(trait)
+            } label: {
+                Text(text(trait?.lifecycleState == "curse"
+                    ? "hades2.traits.chaos.cancelPair"
+                    : "hades2.traits.remove"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .frame(width: TraitManagerLayout.removeControlWidth)
+            .disabled(trait == nil || !model.canOpenNativeBoonScreen || trait?.canRemove != true)
         }
+        .frame(width: TraitManagerLayout.commonControlsWidth, alignment: .trailing)
     }
 
     private var resourceSection: some View {
