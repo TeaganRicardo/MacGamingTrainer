@@ -378,9 +378,16 @@ struct Hades2TrainerView: View {
                     .font(.caption)
                     .foregroundStyle(theme.mutedFill)
                 Spacer()
+                Button {
+                    model.openSellTraits()
+                } label: {
+                    Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.canOpenNativeBoonScreen)
                 TextField(text("hades2.traits.search"), text: $traitSearch)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
+                    .frame(maxWidth: 260)
             }
 
             if filteredCurrentRunTraits.isEmpty {
@@ -1127,13 +1134,6 @@ struct Hades2TrainerView: View {
                     .frame(maxWidth: 280)
             }
             exactBoonAcquisitionList
-            Divider()
-            HStack {
-                Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
-                Spacer()
-                Button(text("hades2.spawn.open")) { model.openSellTraits() }
-                    .disabled(!model.canOpenNativeBoonScreen)
-            }
             if model.connected {
                 Divider()
                 currentRunTraitsPanel
