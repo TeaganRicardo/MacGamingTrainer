@@ -366,7 +366,10 @@
     "hades2.vital.health": "Life",
     "hades2.vital.lockedSuffix": "Locked",
     "hades2.vital.mana": "Magick",
-    "hades2.vital.runGold": "Run Gold"
+    "hades2.vital.runGold": "Run Gold",
+    "hades2.traits.family.weaponAspect": "Weapon Aspect",
+    "hades2.traits.reason.permanentProgressionOwned": "owned by the permanent weapon/aspect selection",
+    "hades2.rarity.Legendary": "Legendary"
   },
   "language": "en"
 }
