@@ -80,14 +80,14 @@ TraitData = {
   LobAmmoTrait = {
     Name = "LobAmmoTrait",
     IsHammerTrait = true,
-    CodexWeapon = "WeaponLob",
+    InheritFrom = { "LobHammerTrait" },
     RarityLevels = { Common = { Multiplier = 1 }, Legendary = { Multiplier = 2 } },
     WeaponAmmoModification = { Name = "WeaponLob" },
   },
   LobPulseAmmoTrait = {
     Name = "LobPulseAmmoTrait",
     IsHammerTrait = true,
-    CodexWeapon = "WeaponLob",
+    InheritFrom = { "LobHammerTrait" },
     RarityLevels = { Common = { Multiplier = 1 }, Legendary = { Multiplier = 1.5 } },
     PreEquipWeapons = { "WeaponLobPulse" },
     WeaponDataOverride = { WeaponLob = { MockOverride = "pulse" } },
@@ -95,21 +95,41 @@ TraitData = {
   LobPulseAmmoCollectTrait = {
     Name = "LobPulseAmmoCollectTrait",
     IsHammerTrait = true,
-    CodexWeapon = "WeaponLob",
+    InheritFrom = { "LobHammerTrait" },
     PreEquipWeapons = { "WeaponLobPulse" },
   },
   LobGunOverheatTrait = {
     Name = "LobGunOverheatTrait",
     IsHammerTrait = true,
-    CodexWeapon = "WeaponLob",
+    InheritFrom = { "LobHammerTrait" },
     RarityLevels = { Common = { Multiplier = 1 }, Legendary = { Multiplier = 2 } },
     WeaponDataOverride = { WeaponLob = { MockOverride = "gun" } },
   },
   StaffDoubleAttackTrait = {
     Name = "StaffDoubleAttackTrait",
     IsHammerTrait = true,
-    CodexWeapon = "WeaponStaffSwing",
+    InheritFrom = { "StaffHammerTrait" },
     RarityLevels = { Common = { Multiplier = 1 }, Legendary = { Multiplier = 2 } },
+  },
+  DaggerRapidAttackTrait = {
+    Name = "DaggerRapidAttackTrait",
+    IsHammerTrait = true,
+    InheritFrom = { "DaggerHammerTrait" },
+  },
+  AxeSpinSpeedTrait = {
+    Name = "AxeSpinSpeedTrait",
+    IsHammerTrait = true,
+    InheritFrom = { "AxeHammerTrait" },
+  },
+  TorchAttackSpeedTrait = {
+    Name = "TorchAttackSpeedTrait",
+    IsHammerTrait = true,
+    InheritFrom = { "TorchHammerTrait" },
+  },
+  SuitArmorTrait = {
+    Name = "SuitArmorTrait",
+    IsHammerTrait = true,
+    InheritFrom = { "SuitHammerTrait" },
   },
   LobAmmoBoostAspect = {
     Name = "LobAmmoBoostAspect",
@@ -137,6 +157,10 @@ LootData = {
       "LobPulseAmmoCollectTrait",
       "LobGunOverheatTrait",
       "StaffDoubleAttackTrait",
+      "DaggerRapidAttackTrait",
+      "AxeSpinSpeedTrait",
+      "TorchAttackSpeedTrait",
+      "SuitArmorTrait",
     },
     PriorityUpgrades = {},
     WeaponUpgrades = {},
@@ -198,16 +222,36 @@ GetHeroTrait = function(name)
   return type(values) == "table" and values[1] or nil
 end
 
+local fixtureParentWeapons = {
+  StaffHammerTrait = "WeaponStaffSwing",
+  DaggerHammerTrait = "WeaponDagger",
+  AxeHammerTrait = "WeaponAxe",
+  TorchHammerTrait = "WeaponTorch",
+  LobHammerTrait = "WeaponLob",
+  SuitHammerTrait = "WeaponSuit",
+}
+
 GetEquippedWeapon = function()
-  if CurrentRun.Hero.Weapons.WeaponLob then return "WeaponLob" end
-  if CurrentRun.Hero.Weapons.WeaponStaffSwing then return "WeaponStaffSwing" end
+  for _, weaponName in ipairs({
+    "WeaponStaffSwing", "WeaponDagger", "WeaponAxe",
+    "WeaponTorch", "WeaponLob", "WeaponSuit",
+  }) do
+    if CurrentRun.Hero.Weapons[weaponName] then return weaponName end
+  end
   return nil
+end
+
+local function fixtureOwner(definition)
+  for _, parent in ipairs(definition.InheritFrom or {}) do
+    if fixtureParentWeapons[parent] then return fixtureParentWeapons[parent] end
+  end
+  return definition.CodexWeapon
 end
 
 local function targetEligible(name)
   local definition = TraitData[name]
   if type(definition) ~= "table" or not definition.IsHammerTrait then return false end
-  if definition.CodexWeapon ~= GetEquippedWeapon() then return false end
+  if fixtureOwner(definition) ~= GetEquippedWeapon() then return false end
   if HeroHasTrait(name) then return false end
   if name == "LobGunOverheatTrait" then
     return GameState.LastWeaponUpgradeName.WeaponLob == "LobGunAspect"
@@ -392,6 +436,20 @@ CurrentRun.Hero.Weapons = { WeaponLob = true }
 GameState.LastWeaponUpgradeName.WeaponLob = "LobAmmoBoostAspect"
 check(findReward("hammer:LobAmmoTrait") ~= nil, "eligible Lob Hammer missing")
 check(findReward("hammer:StaffDoubleAttackTrait") == nil, "wrong-weapon Hammer leaked into catalog")
+local ownerSmoke = {
+  { "WeaponStaffSwing", "StaffDoubleAttackTrait" },
+  { "WeaponDagger", "DaggerRapidAttackTrait" },
+  { "WeaponAxe", "AxeSpinSpeedTrait" },
+  { "WeaponTorch", "TorchAttackSpeedTrait" },
+  { "WeaponLob", "LobAmmoTrait" },
+  { "WeaponSuit", "SuitArmorTrait" },
+}
+for _, pair in ipairs(ownerSmoke) do
+  CurrentRun.Hero.Weapons = { [pair[1]] = true }
+  check(findReward("hammer:" .. pair[2]) ~= nil,
+    "missing exact Hammer for owner " .. pair[1])
+end
+CurrentRun.Hero.Weapons = { WeaponLob = true }
 check(findReward("hammer:LobGunOverheatTrait") == nil, "wrong-aspect Hammer leaked into catalog")
 
 GameState.LastWeaponUpgradeName.WeaponLob = "LobGunAspect"
