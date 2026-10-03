@@ -1183,8 +1183,7 @@ struct Hades2TrainerView: View {
                     .foregroundStyle(theme.mutedFill)
             }
         }
-        .padding(10)
-        .background(theme.subtleFill.opacity(0.45), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
+        .padding(.vertical, 6)
     }
 
     private func exactBoonRow(_ option: BoonOption) -> some View {
