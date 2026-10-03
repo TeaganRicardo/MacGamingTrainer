@@ -43,15 +43,18 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "olympianHermes" and sellEligible' in capability_block
     assert 'GetAllUpgradeableGodTraits, 1' in LUA
 
-    # Only the audited direct examples may bypass ordinary menu eligibility.
-    # Chaos is now owner-specifically implemented by #236; the remaining
-    # families stay delegated to their own follow-up slices.
+    # Only audited owner strategies may bypass ordinary menu eligibility.
+    # Chaos (#236) and Selene Hex/talent ownership (#237) are implemented; the
+    # remaining families stay delegated to their follow-up slices.
     assert 'CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" }' in LUA
     assert 'OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" }' in LUA
     assert 'family == "chaos"' in capability_block
     assert 'chaosLifecycleState' in LUA
+    assert 'family == "hex"' in capability_block
+    assert 'family == "hexTalent"' in capability_block
+    assert "seleneModel.talentNodes" in LUA
     for family, issue in (
-        ("hex", "237"), ("hammer", "238"),
+        ("hammer", "238"),
         ("costume", "239"), ("temporary", "239"), ("directSpecial", "239"),
         ("familiar", "240"), ("other", "221"),
     ):

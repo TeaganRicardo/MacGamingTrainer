@@ -133,6 +133,60 @@ assert 'exactModeForced' not in exact_label
 assert 'option.targetID' not in exact_label
 assert 'nameFallback' not in exact_label
 
+# Selene exact acquisition uses the official Hex menu title for main spells and
+# the official Path of Stars title for generated current-tree talent targets.
+original_display_names = localization.official_display_names
+def selene_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'SpellMeteorTrait': '月蚀',
+            'MeteorDamageTalent': '毁灭之星',
+            'NPC_Selene_01': '塞勒涅',
+            'SpellScreenMenu_Title': '巫咒',
+            'TalentScreenMenu_Title': '繁星之路',
+        },
+        'en': {
+            'SpellMeteorTrait': 'Total Eclipse',
+            'MeteorDamageTalent': 'Gloaming',
+            'NPC_Selene_01': 'Selene',
+            'SpellScreenMenu_Title': 'Hexes',
+            'TalentScreenMenu_Title': 'Path of Stars',
+        },
+    }
+    source = table.get(language, {})
+    return {key: source[key] for key in identifiers if key in source}
+
+localization.official_display_names = selene_names
+try:
+    selene_payload = {
+        'rewards': [
+            {
+                'id': 'selene:spell:Meteor', 'trait': 'SpellMeteorTrait',
+                'kind': 'trait', 'group': 'exact', 'sourceId': 'Selene',
+                'sourceName': '塞勒涅', 'sectionTitle': '塞勒涅',
+                'category': '角色奖励', 'acquisitionMode': 'seleneSpell',
+            },
+            {
+                'id': 'selene:talent:Meteor:MeteorDamageTalent',
+                'trait': 'MeteorDamageTalent', 'kind': 'trait', 'group': 'exact',
+                'sourceId': 'Selene', 'sourceName': '塞勒涅',
+                'sectionTitle': '繁星之路', 'category': '角色奖励',
+                'acquisitionMode': 'seleneTalent',
+            },
+        ]
+    }
+    catalog.localize_catalog(selene_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+hex_row, talent_row = selene_payload['rewards']
+assert hex_row['name'] == '月蚀' and hex_row['englishName'] == 'Total Eclipse'
+assert hex_row['sourceName'] == '塞勒涅' and hex_row['sourceEnglishName'] == 'Selene'
+assert hex_row['sectionTitle'] == '巫咒' and hex_row['englishSectionTitle'] == 'Hexes'
+assert talent_row['name'] == '毁灭之星' and talent_row['englishName'] == 'Gloaming'
+assert talent_row['sectionTitle'] == '繁星之路'
+assert talent_row['englishSectionTitle'] == 'Path of Stars'
+
 # Player-facing mounted effects without an official DisplayName use one curated
 # effect label rather than their internal trait id. This is especially relevant
 # to Familiar upgrade subtraits in #240.
