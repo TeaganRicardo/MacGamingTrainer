@@ -1611,7 +1611,7 @@ if __MacGamingTrainerV1 == nil then
       local parts = { tostring(slotted.Name or ""), tostring(slotted.TraitName or "") }
       for depth, column in ipairs(slotted.Talents or {}) do
         local keys = {}
-        for slot in pairs(column or {}) do keys[#keys + 1] = slot end
+        for slot in pairs(type(column) == "table" and column or {}) do keys[#keys + 1] = slot end
         table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
         for _, slot in ipairs(keys) do
           local node = column[slot]
@@ -1700,10 +1700,10 @@ if __MacGamingTrainerV1 == nil then
       local slotted = DeepCopyTable(spellData)
       slotted.Name = spellName
       slotted.Talents = DeepCopyTable(CreateTalentTree(spellData))
-      CurrentRun.Hero.SlottedSpell = slotted
-      CurrentRun.SpellCharge = 0
       local added = AddTraitToHero({ TraitName = spellData.TraitName, SkipNewTraitHighlight = true })
       if type(added) ~= "table" then error("Selene spell acquisition failed") end
+      CurrentRun.Hero.SlottedSpell = slotted
+      CurrentRun.SpellCharge = 0
       if type(added.CheckChargeFunctionName) == "string" and type(CallFunctionName) == "function" then
         CallFunctionName(added.CheckChargeFunctionName, CurrentRun.Hero, nil, { Grouped = false })
       end
@@ -2360,7 +2360,11 @@ if __MacGamingTrainerV1 == nil then
         if sameCount > 1 then
           levelReason = "multipleMatchingInstances"
         elseif family == "hexTalent" and #seleneModel.talentNodes(trait.Name, false) > 0
-            and type(IncreaseTraitLevel) == "function" then
+            and type(IncreaseTraitLevel) == "function"
+            and type(UpdateTalentPointInvestedCache) == "function"
+            and (type(TraitData) ~= "table" or type(TraitData[trait.Name]) ~= "table"
+              or type(TraitData[trait.Name].AcquireFunctionName) ~= "string"
+              or type(CallFunctionName) == "function") then
           levelCapability, levelReason = "increaseOne", ""
         elseif family == "chaos"
             and type(GetProcessedTraitData) == "function"
@@ -2382,7 +2386,8 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "multipleMatchingInstances"
         elseif trait.Rarity == nil or #rarities < 2 then
           rarityReason = "notMeaningful"
-        elseif family == "hexTalent" and type(AddRarityToTraits) == "function" then
+        elseif family == "hexTalent" and type(AddRarityToTraits) == "function"
+            and type(UpdateTalentPointInvestedCache) == "function" then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "chaos"
             and type(GetProcessedTraitData) == "function"
@@ -2401,10 +2406,12 @@ if __MacGamingTrainerV1 == nil then
 
         local slotted = seleneModel.currentSpell()
         if family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
-            and type(RemoveTraitData) == "function" then
+            and type(HeroHasTrait) == "function" and type(RemoveTrait) == "function"
+            and type(UnequipWeapon) == "function" and type(UpdateTalentPointInvestedCache) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "hexTalent" and #seleneModel.talentNodes(trait.Name, true) > 0
-            and type(RemoveTraitData) == "function" then
+            and type(RemoveTraitData) == "function"
+            and type(UpdateTalentPointInvestedCache) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "chaos" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
