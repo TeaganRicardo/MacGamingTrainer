@@ -127,8 +127,9 @@ assert rows['OfficialTrait']['name'] == '官方祝福'
 assert rows['OfficialTrait']['officialName'] is True and rows['OfficialTrait']['nameSource'] == 'official_zh'
 assert rows['EnglishTrait']['name'] == 'English Trait'
 assert rows['EnglishTrait']['officialName'] is False and rows['EnglishTrait']['nameSource'] == 'official_en'
-assert rows['InternalOnlyTrait']['name'] == 'InternalOnlyTrait'
-assert rows['InternalOnlyTrait']['officialName'] is False and rows['InternalOnlyTrait']['nameSource'] == 'runtime_fallback'
+assert rows['InternalOnlyTrait']['name'] == '未命名效果'
+assert rows['InternalOnlyTrait']['englishName'] == 'Unnamed Effect'
+assert rows['InternalOnlyTrait']['officialName'] is False and rows['InternalOnlyTrait']['nameSource'] == 'trainer_generic_zh'
 assert rows['EnglishReward']['name'] == 'English Reward' and rows['EnglishReward']['nameSource'] == 'official_en'
 for identifier,expected_zh,expected_en in [
     ('GiftDrop','蜜露','Nectar'),
