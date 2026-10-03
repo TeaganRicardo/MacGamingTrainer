@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 6.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 59.
+- Hades II resident runtime revision: 60.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -47,7 +47,8 @@ Current main contains revision 59. Revisions 52–59 remain pending the user's c
 - revision 56: separate exact-boon acquisition;
 - revision 57: seamless Cast recast follows transformed/thrown delivery weapons;
 - revision 58: resident main-chunk local pressure reduced below stock Lua 5.2's compile limit;
-- revision 59: Cast diagnostics sequences use the resident JSON array contract.
+- revision 59: Cast diagnostics sequences use the resident JSON array contract;
+- revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract.
 
 Automated verification does not replace this manual acceptance.
 
@@ -89,7 +90,7 @@ Planning issue #124 is the sequencing authority.
 - #262 / PR #271 identity migration is complete.
 - Control-plane/catalog/CI/test hygiene through #273, #275, #277, #279, #281 and #283 is complete.
 - #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
-- **Next selected feature task: #230** — infinite ammo compatible with native fired-ammo pickup/return and associated effects.
+- **Current selected corrective task: #306** — finish the #221/#227 current-run boon manager as a generation-adjacent searchable list with explicit target-level/rarity Apply controls and visible removal. Resume #230 immediately after #306.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
