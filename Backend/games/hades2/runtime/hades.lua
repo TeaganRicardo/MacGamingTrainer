@@ -1938,7 +1938,7 @@ if __MacGamingTrainerV1 == nil then
       local current = currentWeapon()
       if current == nil then return false end
       local owner = ownerWeapon(name, runtimeTrait)
-      return owner == nil or owner == current
+      return owner ~= nil and owner == current
     end
 
     local function nativeEligible()
