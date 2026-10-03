@@ -1662,8 +1662,23 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       local mainTraitName = slotted.TraitName
-      local mainTrait = type(mainTraitName) == "string" and type(TraitData) == "table"
-        and TraitData[mainTraitName] or nil
+      local mainTrait = nil
+      for _, trait in ipairs(hero.Traits or {}) do
+        if type(trait) == "table" and trait.Name == mainTraitName then
+          mainTrait = trait
+          break
+        end
+      end
+      if type(mainTrait) ~= "table" and type(mainTraitName) == "string"
+          and type(TraitData) == "table" then
+        mainTrait = TraitData[mainTraitName]
+      end
+      if type(mainTrait) == "table" and type(SpellUnreadyPresentation) == "function" then
+        pcall(SpellUnreadyPresentation, mainTrait)
+      elseif type(SessionMapState) == "table" then
+        SessionMapState.SpellWorldReadyFx = nil
+      end
+      if type(MapState) == "table" then MapState.ActiveSpellPresentation = nil end
       for _, weaponName in pairs(type(mainTrait) == "table" and mainTrait.PreEquipWeapons or {}) do
         UnequipWeapon({
           DestinationId = hero.ObjectId, Name = weaponName, UnloadPackages = false,
