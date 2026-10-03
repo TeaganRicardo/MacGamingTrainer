@@ -47,11 +47,13 @@ assert 'CurrentRun.CurrentRoom.Store =' not in close_block, "trainer must never 
 
 assert 'func openSellTraits()' in model
 assert '.openSellTraits' in model
-# Player-facing copy resolves through the module presentation table, so the view
-# names a key rather than embedding the official term.
-assert 'Label(text("hades2.spawn.purgingPool")' in view
-assert 'text("hades2.spawn.open")' in view
+# Player-facing copy resolves through the module presentation table. The native
+# Pool of Purging remains directly available, but #312 places it as one compact
+# management action instead of a separate "label + Open" generation row.
+trait_panel = view[view.index('private var currentRunTraitsPanel'):view.index('private func currentRunTraitRow')]
+assert 'Label(text("hades2.spawn.purgingPool")' in trait_panel
+assert 'model.openSellTraits()' in trait_panel
+assert 'text("hades2.spawn.open")' not in trait_panel
 assert '出售祝福' not in view
-assert 'model.openSellTraits()' in view
 
 print("native_sell_traits_contract_ok")
