@@ -194,10 +194,24 @@ assert chaos['linkedDisplayName'] == '丰盛'
 assert chaos['linkedEnglishName'] == 'Affluence'
 assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 
-trait_row = view[view.index('private func currentRunTraitRow'):view.index('private var resourceSection')]
-assert 'Text(trait.name).monospaced()' not in trait_row
-assert 'model.advanceTraitLifecycle(trait)' in trait_row
-assert 'hades2.traits.chaos.cancelPair' in trait_row
+trait_manager = view[view.index('private var currentRunTraitsPanel'):view.index('private var resourceSection')]
+assert 'currentRunTraitRow' not in trait_manager
+assert 'hades2.traits.manager' in trait_manager
+assert '$managedTraitSelection' in trait_manager
+assert '$traitSearch' in trait_manager
+assert 'currentRunTraitPickerSections' in trait_manager
+assert 'currentRunTraitContextualControls' in trait_manager
+assert 'currentRunTraitCommonControls' in trait_manager
+assert 'TextField(text("hades2.traits.targetRarity")' not in trait_manager
+assert 'Picker(text("hades2.traits.targetRarity")' in trait_manager
+assert 'TraitManagerLayout.commonControlsWidth' in trait_manager
+assert 'TraitManagerLayout.levelControlsWidth' in trait_manager
+assert 'TraitManagerLayout.rarityControlsWidth' in trait_manager
+assert 'TraitManagerLayout.removeControlWidth' in trait_manager
+assert 'traitLimitationRows' not in trait_manager
+assert 'deferredIssue' not in trait_manager
+assert 'model.advanceTraitLifecycle(trait)' in trait_manager
+assert 'hades2.traits.chaos.cancelPair' in trait_manager
 
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.
