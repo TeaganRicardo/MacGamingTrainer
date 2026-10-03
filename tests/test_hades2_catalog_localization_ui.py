@@ -187,6 +187,49 @@ assert talent_row['name'] == '毁灭之星' and talent_row['englishName'] == 'Gl
 assert talent_row['sectionTitle'] == '繁星之路'
 assert talent_row['englishSectionTitle'] == 'Path of Stars'
 
+# Hammer exact acquisition and mounted runtime ownership reuse one official
+# WeaponUpgrade choice identity instead of exposing internal source ids.
+original_display_names = localization.official_display_names
+def hammer_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'LobAmmoTrait': '巨量弹仓',
+            'WeaponUpgradeChoiceMenu_Title': '狄德勒斯之锤',
+        },
+        'en': {
+            'LobAmmoTrait': 'Mega Driver',
+            'WeaponUpgradeChoiceMenu_Title': 'Daedalus Hammer',
+        },
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = hammer_names
+try:
+    hammer_payload = {
+        'rewards': [{
+            'id': 'hammer:LobAmmoTrait', 'name': 'LobAmmoTrait',
+            'trait': 'LobAmmoTrait', 'kind': 'trait', 'group': 'exact',
+            'sourceId': 'WeaponUpgrade', 'sourceName': '狄德勒斯之锤',
+            'sectionTitle': '狄德勒斯之锤', 'category': '角色奖励',
+            'acquisitionMode': 'hammerNative',
+        }],
+        'currentRunTraits': [{
+            'name': 'LobAmmoTrait', 'sourceId': 'WeaponUpgrade', 'family': 'hammer',
+        }],
+    }
+    catalog.localize_catalog(hammer_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+hammer_exact = hammer_payload['rewards'][0]
+hammer_live = hammer_payload['currentRunTraits'][0]
+assert hammer_exact['name'] == '巨量弹仓' and hammer_exact['englishName'] == 'Mega Driver'
+assert hammer_exact['sectionTitle'] == '狄德勒斯之锤'
+assert hammer_exact['englishSectionTitle'] == 'Daedalus Hammer'
+assert hammer_live['displayName'] == '巨量弹仓'
+assert hammer_live['englishName'] == 'Mega Driver'
+assert hammer_live['sourceName'] == '狄德勒斯之锤'
+assert hammer_live['sourceEnglishName'] == 'Daedalus Hammer'
+
 # Player-facing mounted effects without an official DisplayName use one curated
 # effect label rather than their internal trait id. This is especially relevant
 # to Familiar upgrade subtraits in #240.

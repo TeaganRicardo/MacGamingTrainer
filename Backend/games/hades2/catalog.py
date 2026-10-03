@@ -17,6 +17,7 @@ _SPECIAL_SOURCE_LOCALIZATION_IDS = {
 }
 
 _SELENE_TALENT_TITLE_ID = 'TalentScreenMenu_Title'
+_HAMMER_TITLE_ID = 'WeaponUpgradeChoiceMenu_Title'
 
 _NATIVE_CHOICE_TITLE_IDS = {
     'Artemis': 'UpgradeChoiceMenu_Artemis',
@@ -224,7 +225,7 @@ def localize_catalog(decoded):
     unique=set(lookup)
     linked_ids=set(_LINKED_OFFICIAL_NAME_IDS.values())
     linked_ids.update(base_id for base_id,_,_ in _LINKED_PROVISIONAL_RULES.values())
-    localization_ids=unique | linked_ids | set(_SPECIAL_SOURCE_LOCALIZATION_IDS.values()) | set(_NATIVE_CHOICE_TITLE_IDS.values()) | set(_OFFICIAL_CATEGORY_TITLE_IDS.values()) | {_OLYMPIAN_BOON_TITLE_ID, _SELENE_TALENT_TITLE_ID}
+    localization_ids=unique | linked_ids | set(_SPECIAL_SOURCE_LOCALIZATION_IDS.values()) | set(_NATIVE_CHOICE_TITLE_IDS.values()) | set(_OFFICIAL_CATEGORY_TITLE_IDS.values()) | {_OLYMPIAN_BOON_TITLE_ID, _SELENE_TALENT_TITLE_ID, _HAMMER_TITLE_ID}
     zh=localization.official_display_names(localization_ids,'zh-CN')
     en=localization.official_display_names(localization_ids,'en')
     fallback_special=[]
@@ -276,11 +277,15 @@ def localize_catalog(decoded):
             if group=='special':
                 item['category']=_CHARACTER_REWARD_CATEGORY
                 item['englishCategory']=_CHARACTER_REWARD_CATEGORY_EN
-            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            source_text_id = (
+                _HAMMER_TITLE_ID
+                if item.get('acquisitionMode') == 'hammerNative'
+                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            )
             official_source=_clean(zh.get(source_text_id)) if source_text_id else None
             official_source_en=_clean(en.get(source_text_id)) if source_text_id else None
             preserve_exact_section = group=='exact' and item.get('acquisitionMode') in (
-                'chaosBlessing','chaosCurse','seleneSpell','seleneTalent'
+                'chaosBlessing','chaosCurse','seleneSpell','seleneTalent','hammerNative'
             )
             if isinstance(official_source,str) and official_source:
                 item['sourceName']=official_source
@@ -294,6 +299,8 @@ def localize_catalog(decoded):
                 title_text_id = (
                     _SELENE_TALENT_TITLE_ID
                     if item.get('acquisitionMode') == 'seleneTalent'
+                    else _HAMMER_TITLE_ID
+                    if item.get('acquisitionMode') == 'hammerNative'
                     else _NATIVE_CHOICE_TITLE_IDS.get(source_id)
                 )
                 item['sectionTitle']=_clean(zh.get(title_text_id)) or item.get('sectionTitle','')
@@ -363,7 +370,11 @@ def localize_catalog(decoded):
             item['linkedEnglishName']=''
         source_id=item.get('sourceId')
         if isinstance(source_id,str) and source_id:
-            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            source_text_id = (
+                _HAMMER_TITLE_ID
+                if item.get('family') == 'hammer'
+                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            )
             item['sourceName']=_clean(zh.get(source_text_id)) or source_id
             item['sourceEnglishName']=_clean(en.get(source_text_id)) or source_id
         else:
