@@ -22,13 +22,16 @@ def test_selene_exact_catalog_is_owner_backed():
 
     # Exact talent rows are projected from the current generated Path of Stars,
     # never from every *Talent record in TraitData.
-    assert "CurrentRun.Hero.SlottedSpell.Talents" in rewards
+    assert "seleneModel.currentSpell()" in rewards
+    assert "slotted.Talents" in rewards
     assert "selene:talent:" in rewards
     assert "for traitName in pairs(TraitData)" not in rewards
 
 
 def test_selene_mutation_owns_spell_and_tree_lifecycle():
     dispatch = block('if command == "set_trait_level"', 'if command == "open_sell_traits"')
+
+    assert "local seleneModel = (function()" in LUA
 
     for token in (
         "teardownSlottedSpell",
