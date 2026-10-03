@@ -14,9 +14,7 @@ local runtimePath = assert(arg[1], "runtime path required")
 local contractPath = assert(arg[2], "dispatch contract path required")
 
 SessionState = {}
-SessionMapState = {
-  DuoTalentEligibleSpell = { Meteor = true },
-}
+SessionMapState = {}
 GameState = { Resources = {}, LifetimeResourcesGained = {}, RunHistory = {} }
 ResourceData = {}
 ResourceDisplayOrderData = {}
@@ -107,6 +105,11 @@ TraitData = {
     Name = "MeteorDamageTalent",
     RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} },
   },
+  MeteorDuoTalent = {
+    Name = "MeteorDuoTalent",
+    IsDuoBoon = true,
+    RarityLevels = { Legendary = {} },
+  },
 }
 
 SpellData = {
@@ -130,6 +133,7 @@ SpellData = {
       {
         { Name = "ChargeRegenTalent", Rarity = "Common" },
         { Name = "MeteorDamageTalent", Rarity = "Rare" },
+        { Name = "MeteorDuoTalent", Rarity = "Legendary" },
       },
       {
         { Name = "ChargeRegenTalent", Rarity = "Rare" },
@@ -452,7 +456,7 @@ do
   eq(CurrentRun.SpellCharge, 0, "spell charge was not reset on replacement")
   eq(CurrentRun.NumTalentPoints, beforePoints, "spell replacement rewrote talent-point progression")
   check(CurrentRun.Hero.SlottedSpell.HasDuoTalent == true,
-    "native Selene duo-eligibility marker was not initialized")
+    "generated Duo talent was not reflected in SlottedSpell.HasDuoTalent")
   check(calls.readyPresentation > 0, "normal Hex did not schedule native ready presentation")
   eq(result.actionOutcome, "completed", "spell replacement outcome")
 end
