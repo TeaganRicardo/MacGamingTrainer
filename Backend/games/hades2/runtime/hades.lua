@@ -3962,7 +3962,7 @@ if __MacGamingTrainerV1 == nil then
           requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
         elseif family == "hexTalent" then
           local delta = params.targetLevel - traitManagement.level(target)
-          if #traitManagement.seleneModel.talentNodes(target.Name, false) < delta then
+          if #traitManagement.seleneTalentNodes(target.Name, false) < delta then
             error("Not enough uninvested Path of Stars nodes remain for the requested level")
           end
           requireFunctions("Selene talent level editing", {
@@ -3995,7 +3995,7 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "hexTalent" then
           local before = traitManagement.level(live)
           local delta = params.targetLevel - before
-          local nodes = traitManagement.seleneModel.talentNodes(live.Name, false)
+          local nodes = traitManagement.seleneTalentNodes(live.Name, false)
           local base = type(TraitData) == "table" and TraitData[live.Name] or nil
           upgraded = live
           for index = 1, delta do
@@ -4105,7 +4105,7 @@ if __MacGamingTrainerV1 == nil then
           end
         elseif family == "hexTalent" then
           RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
-          for _, nodeEntry in ipairs(traitManagement.seleneModel.talentNodes(live.Name, true)) do
+          for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
             nodeEntry.node.Invested = false
             nodeEntry.node.QueuedInvested = nil
           end
