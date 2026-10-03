@@ -119,15 +119,22 @@ trait_target = {
     "expectedRarity": "Rare",
     "expectedSameNameCount": 1,
 }
-assert validate_command_params("set_trait_level", trait_target) == trait_target
+assert validate_command_params(
+    "set_trait_level", dict(trait_target, targetLevel=4)
+) == dict(trait_target, targetLevel=4)
 assert validate_command_params(
     "set_trait_rarity", dict(trait_target, rarity="Epic")
 ) == dict(trait_target, rarity="Epic")
 assert validate_command_params("remove_trait", trait_target) == trait_target
 expect_error(
     "set_trait_level",
-    {key: value for key, value in trait_target.items() if key != "instanceId"},
+    dict({key: value for key, value in trait_target.items() if key != "instanceId"}, targetLevel=4),
     "请选择当前局祝福。",
+)
+expect_error(
+    "set_trait_level",
+    dict(trait_target, targetLevel=1),
+    "目标等级必须高于当前等级。",
 )
 expect_error(
     "remove_trait",

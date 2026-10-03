@@ -229,6 +229,7 @@ local function paramsFrom(row, requestId)
     expectedLevel = row.level,
     expectedRarity = row.rarity,
     expectedSameNameCount = row.sameNameCount,
+    targetLevel = row.level + 1,
     includeCatalogs = false,
   }
 end

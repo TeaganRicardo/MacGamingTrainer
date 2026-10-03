@@ -54,7 +54,7 @@ enum Hades2Request {
     case setNextRoomReward(String?)
     case spawnReward(String)
     case openSellTraits
-    case setTraitLevel(CurrentRunTrait)
+    case setTraitLevel(CurrentRunTrait, targetLevel: Int)
     case setTraitRarity(CurrentRunTrait, rarity: String)
     case removeTrait(CurrentRunTrait)
     case openSpecialChoice(source: String)
@@ -196,8 +196,10 @@ enum Hades2Request {
             return ["reward": reward]
         case .openSellTraits:
             return [:]
-        case .setTraitLevel(let trait):
-            return Self.traitTargetParams(trait)
+        case .setTraitLevel(let trait, let targetLevel):
+            var params = Self.traitTargetParams(trait)
+            params["targetLevel"] = targetLevel
+            return params
         case .setTraitRarity(let trait, let rarity):
             var params = Self.traitTargetParams(trait)
             params["rarity"] = rarity
