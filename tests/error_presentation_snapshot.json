@@ -1412,6 +1412,7 @@
     }
   },
   "runtime_commands": [
+    "advance_trait_lifecycle",
     "open_sell_traits",
     "open_special_choice",
     "remove_trait",
