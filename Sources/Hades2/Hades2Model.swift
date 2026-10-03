@@ -151,7 +151,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
     @Published var selectedSpecialReward = ""
-    @Published var selectedExactBoon = ""
     @Published var selectedNextRoomReward = ""
     @Published var statSupport: [String: Bool] = [:]
     @Published var statAvailable: [String: Bool] = [:]
