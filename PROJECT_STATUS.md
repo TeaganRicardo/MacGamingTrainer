@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 62.
+- Hades II resident runtime revision: 63.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 62. Revisions 52–62 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 63. Revisions 52–63 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -51,6 +51,7 @@ Current source contains resident revision 62. Revisions 52–62 remain pending t
 - revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract;
 - revision 61: Trainer infinite ammo stops spoofing the native `UnlimitedAmmo` trait value so Argent Skull fire/death/pickup bookkeeping remains game-owned while negative ammo deltas stay suppressed for uninterrupted firing;
 - revision 62: Chaos exact acquisition and mounted lifecycle management preserve paired curse→blessing ownership, instance identity, remaining encounters, effect recomputation, explicit cancellation, and deliberate immediate transformation.
+- revision 63: Selene exact acquisition and mounted management use the native SlottedSpell / Path of Stars owner state, with typed spell replacement and talent tree synchronization; real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
