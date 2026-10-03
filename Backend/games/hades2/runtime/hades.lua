@@ -1968,13 +1968,16 @@ if __MacGamingTrainerV1 == nil then
       local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and type(slotted.Name) == "string"
           and type(slotted.Talents) == "table" then
-        local talentNames, seenTalents = {}, {}
+        local talentNames, seenTalents, availableTalents = {}, {}, {}
         for _, column in ipairs(slotted.Talents) do
           for _, node in pairs(type(column) == "table" and column or {}) do
             if type(node) == "table" and type(node.Name) == "string"
-                and type(TraitData[node.Name]) == "table" and not seenTalents[node.Name] then
-              seenTalents[node.Name] = true
-              talentNames[#talentNames + 1] = node.Name
+                and type(TraitData[node.Name]) == "table" then
+              if not seenTalents[node.Name] then
+                seenTalents[node.Name] = true
+                talentNames[#talentNames + 1] = node.Name
+              end
+              if not node.Invested then availableTalents[node.Name] = true end
             end
           end
         end
@@ -1988,7 +1991,7 @@ if __MacGamingTrainerV1 == nil then
             sortSection = 25, sortGroup = seleneOrder + 1, sortOrder = index,
           }
           allowed[id] = item
-          result[#result + 1] = item
+          if availableTalents[traitName] then result[#result + 1] = item end
         end
       end
     end
