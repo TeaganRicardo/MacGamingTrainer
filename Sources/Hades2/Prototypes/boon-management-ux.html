@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PROTOTYPE — Hades II 祝福管理 UX</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;color-scheme:dark;--bg:#17181b;--panel:#23252a;--panel2:#2a2d33;--line:#3a3d45;--muted:#9da2ad;--accent:#b985ff;--danger:#ff6b6b;--good:#74d99f}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:#f5f5f7} button,input{font:inherit}
+.app{max-width:1120px;margin:0 auto;padding:28px 28px 96px}.prototype{font-size:12px;color:#ffcc66;margin-bottom:14px}
+h1{font-size:22px;margin:0 0 5px}.sub{color:var(--muted);font-size:13px;margin-bottom:20px}.section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0}
+.header,.row,.toolbar,.actions,.split{display:flex;align-items:center}.header{gap:10px;margin-bottom:12px}.header h2{font-size:15px;margin:0}.count,.pill{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 7px}.toolbar{gap:8px;margin:10px 0}.search{flex:1;min-width:180px;background:#16171a;border:1px solid var(--line);border-radius:7px;color:white;padding:8px 9px}.chip{background:#1c1e22;border:1px solid var(--line);color:#d9dbe1;border-radius:999px;padding:5px 9px;font-size:12px}.chip.active{border-color:var(--accent);color:#e9d8ff}
+.list{display:grid;gap:7px}.row{gap:12px;background:var(--panel2);border:1px solid #343740;border-radius:9px;padding:10px 11px}.identity{min-width:190px;flex:1}.name{font-size:13px;font-weight:600}.meta{font-size:11px;color:var(--muted);margin-top:3px}.status{font-size:11px;color:#cbcdd5;white-space:nowrap}.actions{gap:6px;flex-wrap:wrap;justify-content:flex-end}.field{width:58px;background:#17181b;border:1px solid var(--line);border-radius:6px;color:white;padding:6px}.btn{background:#32353d;border:1px solid #484c56;border-radius:7px;color:#f3f3f5;padding:6px 9px}.btn.primary{border-color:#8758bd;background:#56357b}.btn.danger{border-color:#744046;color:#ffc2c2}.btn.quiet{color:#c9ccd4;background:#24262b}
+.note{font-size:11px;color:var(--muted);margin-top:8px}.divider{height:1px;background:var(--line);margin:16px 0}
+.tabs{display:flex;gap:4px;background:#1a1b1f;border:1px solid var(--line);padding:4px;border-radius:8px;width:max-content}.tab{padding:6px 11px;border-radius:6px;color:#b7bbc4;font-size:12px}.tab.active{background:#343740;color:#fff}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}.col{min-width:0}.compact .row{padding:8px 10px}.compact .identity{min-width:150px}
+.state{font-size:11px;color:var(--muted);background:#111216;border:1px dashed #414550;border-radius:8px;padding:8px 10px;margin-bottom:12px}
+.switcher{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;background:#08090b;border:1px solid #4b4f59;border-radius:999px;padding:8px 12px;box-shadow:0 8px 30px #0008;z-index:10}.switcher button{border:0;background:#24262b;color:white;border-radius:999px;width:30px;height:30px}.switcher strong{font-size:12px;min-width:160px;text-align:center}
+.hidden{display:none}
+@media(max-width:820px){.cols{grid-template-columns:1fr}.row{align-items:flex-start;flex-wrap:wrap}.actions{width:100%;justify-content:flex-start}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="prototype">PROTOTYPE ONLY · 不进入生产 main · 问题：祝福获取与本局管理应该如何组织，才能让 #237–#240 继续扩展而不继续堆专用 UI？</div>
+  <h1>祝福与效果</h1>
+  <div class="sub">模拟当前连接状态：已获取 14 项 · 支持获取 92 项 · 本局可编辑 9 项 · 当前语言 zh-CN</div>
+
+  <div id="A" class="variant hidden">
+    <div class="state">A — 模式切换：一个工作区，一次只做“获取”或“管理”。共享搜索、筛选与列表语法，减少页面纵向长度。</div>
+    <div class="section">
+      <div class="header"><h2>祝福工作区</h2><div class="tabs"><div class="tab active">获取新祝福</div><div class="tab">本局管理</div></div></div>
+      <div class="toolbar"><input class="search" value="" placeholder="搜索祝福、来源或效果"><button class="chip active">全部</button><button class="chip">奥林匹斯</button><button class="chip">卡俄斯</button><button class="chip">巫咒</button><button class="chip">锤子</button></div>
+      <div class="list">
+        <div class="row"><div class="identity"><div class="name">静电震颤</div><div class="meta">宙斯 · 奥林匹斯的祝福</div></div><div class="status">未获取</div><div class="actions"><button class="btn primary">获取</button></div></div>
+        <div class="row"><div class="identity"><div class="name">丰盛</div><div class="meta">卡俄斯 · 祝福</div></div><div class="status">需先经历对应诅咒</div><div class="actions"><button class="btn primary">获取</button></div></div>
+        <div class="row"><div class="identity"><div class="name">月之馈赠</div><div class="meta">塞勒涅 · 巫咒</div></div><div class="status">未获取</div><div class="actions"><button class="btn primary">获取</button></div></div>
+      </div>
+      <div class="note">原生三选一、角色奖励等仍作为“生成方式”存在，但具体祝福不再藏在下拉框里。</div>
+    </div>
+  </div>
+
+  <div id="B" class="variant hidden">
+    <div class="state">B — 连续工作流（推荐）：上半部“获取”，下半部“本局管理”。两块都采用同一种搜索 + 分组列表，用户无需切模式，也符合“管理放在生成下面”的既有方向。</div>
+    <div class="section">
+      <div class="header"><h2>获取指定祝福</h2><span class="count">92</span></div>
+      <div class="toolbar"><input class="search" placeholder="搜索名称、来源"><button class="chip active">全部</button><button class="chip">诸神</button><button class="chip">特殊</button><button class="chip">巫咒</button><button class="chip">武器</button></div>
+      <div class="list compact">
+        <div class="row"><div class="identity"><div class="name">静电震颤</div><div class="meta">宙斯 · 奥林匹斯的祝福</div></div><div class="actions"><button class="btn primary">获取</button></div></div>
+        <div class="row"><div class="identity"><div class="name">丰盛</div><div class="meta">卡俄斯 · 祝福</div></div><div class="actions"><button class="btn primary">获取</button></div></div>
+        <div class="row"><div class="identity"><div class="name">月之馈赠</div><div class="meta">塞勒涅 · 巫咒</div></div><div class="actions"><button class="btn primary">获取</button></div></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="header"><h2>本局祝福与效果</h2><span class="count">14</span></div>
+      <div class="toolbar"><input class="search" placeholder="搜索当前效果、来源"><button class="chip active">全部</button><button class="chip">可升级</button><button class="chip">可改稀有度</button><button class="chip">特殊状态</button></div>
+      <div class="list">
+        <div class="row"><div class="identity"><div class="name">静电震颤</div><div class="meta">宙斯 · Lv. 3 · 史诗</div></div><div class="actions"><span class="status">等级</span><input class="field" value="5"><button class="btn">应用</button><span class="status">稀有度</span><input class="field" value="英雄"><button class="btn">应用</button><button class="btn danger">删除</button></div></div>
+        <div class="row"><div class="identity"><div class="name">命定诅咒</div><div class="meta">卡俄斯 · 诅咒 · 剩余 2 场 → 丰盛</div></div><div class="actions"><button class="btn quiet">立即转化</button><button class="btn danger">取消这一对</button></div></div>
+        <div class="row"><div class="identity"><div class="name">月光射线</div><div class="meta">塞勒涅 · 巫咒</div></div><div class="actions"><span class="status">等级</span><input class="field" value="4"><button class="btn">应用</button><button class="btn quiet">更多…</button></div></div>
+      </div>
+      <div class="note">仅显示该效果真正支持的控件；不支持的“等级/稀有度”不占位置。内部 ID、issue 编号和 implementation reason 默认不展示。</div>
+    </div>
+  </div>
+
+  <div id="C" class="variant hidden">
+    <div class="state">C — 双栏 Power User：左侧目录用于获取，右侧始终展示本局构筑。适合宽窗口和高频比较，但会提高横向密度。</div>
+    <div class="cols">
+      <div class="section col">
+        <div class="header"><h2>可获取</h2><span class="count">92</span></div>
+        <div class="toolbar"><input class="search" placeholder="搜索目录"></div>
+        <div class="list compact">
+          <div class="row"><div class="identity"><div class="name">静电震颤</div><div class="meta">宙斯</div></div><button class="btn primary">获取</button></div>
+          <div class="row"><div class="identity"><div class="name">丰盛</div><div class="meta">卡俄斯</div></div><button class="btn primary">获取</button></div>
+          <div class="row"><div class="identity"><div class="name">月之馈赠</div><div class="meta">塞勒涅</div></div><button class="btn primary">获取</button></div>
+          <div class="row"><div class="identity"><div class="name">旋月锤击</div><div class="meta">代达罗斯</div></div><button class="btn primary">获取</button></div>
+        </div>
+      </div>
+      <div class="section col">
+        <div class="header"><h2>当前构筑</h2><span class="count">14</span></div>
+        <div class="toolbar"><input class="search" placeholder="搜索当前效果"></div>
+        <div class="list compact">
+          <div class="row"><div class="identity"><div class="name">静电震颤</div><div class="meta">Lv. 3 · 史诗</div></div><div class="actions"><input class="field" value="5"><button class="btn">应用</button><button class="btn danger">删</button></div></div>
+          <div class="row"><div class="identity"><div class="name">命定诅咒</div><div class="meta">剩余 2 场 → 丰盛</div></div><div class="actions"><button class="btn quiet">转化</button><button class="btn danger">取消</button></div></div>
+          <div class="row"><div class="identity"><div class="name">月光射线</div><div class="meta">塞勒涅</div></div><div class="actions"><button class="btn quiet">编辑</button></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="switcher"><button id="prev">←</button><strong id="label"></strong><button id="next">→</button></div>
+<script>
+const variants=[["A","单工作区"],["B","连续获取 + 管理"],["C","双栏构筑"]];
+const q=new URLSearchParams(location.search); let key=q.get("variant")||"B";
+function render(){
+  if(!variants.some(v=>v[0]===key)) key="B";
+  document.querySelectorAll(".variant").forEach(x=>x.classList.add("hidden"));
+  document.getElementById(key).classList.remove("hidden");
+  document.getElementById("label").textContent=key+" — "+variants.find(v=>v[0]===key)[1];
+  q.set("variant",key); history.replaceState(null,"","?"+q.toString());
+}
+function cycle(d){let i=variants.findIndex(v=>v[0]===key);key=variants[(i+d+variants.length)%variants.length][0];render()}
+document.getElementById("prev").onclick=()=>cycle(-1);document.getElementById("next").onclick=()=>cycle(1);
+addEventListener("keydown",e=>{if(["INPUT","TEXTAREA"].includes(document.activeElement.tagName)||document.activeElement.isContentEditable)return;if(e.key==="ArrowLeft")cycle(-1);if(e.key==="ArrowRight")cycle(1)});
+render();
+</script>
+</body>
+</html>
