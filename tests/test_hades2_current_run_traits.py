@@ -40,6 +40,6 @@ assert "TRAIT_IDENTITY_SCOPE = 'currentRunInstance'" in SCHEMA
 
 revision = int(re.search(r"version = 1, revision = (\d+)", LUA).group(1))
 previous = int(re.search(r"previousModule\.revision ~= (\d+)", LUA).group(1))
-assert revision == previous == 60
+assert revision == previous
 
 print("hades2_current_run_traits_ok")

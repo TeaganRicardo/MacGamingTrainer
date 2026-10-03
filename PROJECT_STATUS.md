@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 7.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 60.
+- Hades II resident runtime revision: 61.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,14 +41,15 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 60. Revisions 52–60 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 61. Revisions 52–61 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
 - revision 57: seamless Cast recast follows transformed/thrown delivery weapons;
 - revision 58: resident main-chunk local pressure reduced below stock Lua 5.2's compile limit;
 - revision 59: Cast diagnostics sequences use the resident JSON array contract;
-- revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract.
+- revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract;
+- revision 61: Trainer infinite ammo stops spoofing the native `UnlimitedAmmo` trait value so Argent Skull fire/death/pickup bookkeeping remains game-owned while negative ammo deltas stay suppressed for uninterrupted firing.
 
 Automated verification does not replace this manual acceptance.
 
@@ -91,7 +92,8 @@ Planning issue #124 is the sequencing authority.
 - Control-plane/catalog/CI/test hygiene through #273, #275, #277, #279, #281 and #283 is complete.
 - #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
 - #306 corrective current-run boon manager work is complete in this source.
-- **Next selected feature task: #230** — infinite ammo compatible with native fired-ammo pickup/return and associated effects.
+- #230 pickup-compatible infinite-ammo correction is complete in this source.
+- **Next selected feature task: #231** — viewport-pinned floating feedback with readable automatic fadeout and retained actionable error/recovery state.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
