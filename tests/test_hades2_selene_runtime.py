@@ -393,6 +393,12 @@ do
   eq(row.rarityCapability, "setExact", "talent rarity capability")
   eq(row.removalCapability, "singleInstanceForce", "talent removal capability")
 
+  local rarityParams = paramsFrom(row, "selene-talent-rarity")
+  rarityParams.rarity = "Epic"
+  M.dispatch("set_trait_rarity", rarityParams)
+  eq(GetHeroTrait("ChargeRegenTalent").Rarity, "Epic", "runtime talent rarity")
+
+  row = assert(findRow("ChargeRegenTalent"))
   local levelParams = paramsFrom(row, "selene-talent-level")
   levelParams.targetLevel = row.level + 1
   M.dispatch("set_trait_level", levelParams)
@@ -401,24 +407,14 @@ do
   local investedCount = 0
   for _, column in ipairs(CurrentRun.Hero.SlottedSpell.Talents) do
     for _, node in pairs(column) do
-      if node.Name == "ChargeRegenTalent" and node.Invested then investedCount = investedCount + 1 end
+      if node.Name == "ChargeRegenTalent" and node.Invested then
+        investedCount = investedCount + 1
+        eq(node.Rarity, "Epic", "repeatable invested node did not inherit mounted rarity")
+      end
     end
   end
   eq(investedCount, 2, "repeatable talent tree investment")
   check(calls.talentAcquire > 0, "repeatable talent acquire callback did not run")
-
-  row = assert(findRow("ChargeRegenTalent"))
-  local rarityParams = paramsFrom(row, "selene-talent-rarity")
-  rarityParams.rarity = "Epic"
-  M.dispatch("set_trait_rarity", rarityParams)
-  eq(GetHeroTrait("ChargeRegenTalent").Rarity, "Epic", "runtime talent rarity")
-  for _, column in ipairs(CurrentRun.Hero.SlottedSpell.Talents) do
-    for _, node in pairs(column) do
-      if node.Name == "ChargeRegenTalent" and node.Invested then
-        eq(node.Rarity, "Epic", "invested tree node rarity")
-      end
-    end
-  end
 
   row = assert(findRow("ChargeRegenTalent"))
   M.dispatch("remove_trait", paramsFrom(row, "selene-talent-remove"))
