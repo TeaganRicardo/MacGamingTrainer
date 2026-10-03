@@ -1134,17 +1134,8 @@ struct Hades2TrainerView: View {
 
     private func exactItemLabel(_ option: BoonOption) -> String {
         let localizedName = localization.language == .en ? option.englishName : option.name
-        let fallbackName = localizedName.isEmpty
-            ? (option.englishName.isEmpty ? option.targetID : option.englishName)
-            : localizedName
-        let strategyKey = option.acquisitionMode == "ordinaryNative"
-            ? "hades2.spawn.exactModeNative"
-            : "hades2.spawn.exactModeForced"
-        var parts = [fallbackName]
-        if !option.officialName { parts.append(text("hades2.spawn.nameFallback")) }
-        parts.append(text(strategyKey))
-        if !option.targetID.isEmpty { parts.append(option.targetID) }
-        return parts.joined(separator: " · ")
+        if !localizedName.isEmpty { return localizedName }
+        return localization.language == .en ? "Unnamed Effect" : "未命名效果"
     }
 
     private func spawnRow(
