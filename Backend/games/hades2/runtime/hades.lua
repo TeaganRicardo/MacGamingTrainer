@@ -2483,7 +2483,7 @@ if __MacGamingTrainerV1 == nil then
         end
 
         local slotted = seleneModel.currentSpell()
-        if sameCount > 1 then
+        if sameCount > 1 and (family == "hex" or family == "hexTalent") then
           removalReason = "multipleMatchingInstances"
         elseif family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
             and type(HeroHasTrait) == "function" and type(RemoveTrait) == "function"
