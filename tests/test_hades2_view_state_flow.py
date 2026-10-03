@@ -225,6 +225,8 @@ worker = r'''
 import argparse, json, pathlib, sys
 p=argparse.ArgumentParser(); p.add_argument('--game', required=True); args=p.parse_args()
 log_path=pathlib.Path(__file__).with_suffix('.commands.jsonl')
+ready_path=pathlib.Path(__file__).with_suffix('.ready')
+ready_path.write_text('ready', encoding='utf-8')
 for raw in sys.stdin:
     req=json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -375,7 +377,28 @@ struct Main {
         let commandLog = worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
         try? FileManager.default.removeItem(at: commandLog)
 
-        func withModel(_ body: (Hades2TrainerModel) -> Void) throws {
+        func waitForWorkerReady(_ url: URL, timeout: TimeInterval = 4.0) {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if FileManager.default.fileExists(atPath: url.path) { return }
+                pump(0.02)
+            }
+            fail("backend worker did not become ready before timeout")
+        }
+
+        func waitForCommandCount(_ expected: Int, timeout: TimeInterval = 4.0) {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if commands(at: commandLog).count >= expected { return }
+                pump(0.02)
+            }
+            fail("backend worker did not receive expected command count \(expected): \(commands(at: commandLog))")
+        }
+
+        func withModel(expectedNewCommands: Int, _ body: (Hades2TrainerModel) -> Void) throws {
+            let ready = worker.deletingPathExtension().appendingPathExtension("ready")
+            try? FileManager.default.removeItem(at: ready)
+            let before = commands(at: commandLog).count
             let process = BackendProcess(
                 executableURL: python,
                 argumentsPrefix: ["-u"],
@@ -390,13 +413,25 @@ struct Main {
                 log: { _ in },
                 onStatusChange: { _ in }
             )
+            waitForWorkerReady(ready)
             let model = Hades2GameModule.makeModel(session: session)
-            pump(0.10)
             model.connected = true
             model.status = "ready"
             model.scene = "run"
             body(model)
-            pump(0.35)
+
+            let expectedTotal = before + expectedNewCommands
+            if expectedNewCommands > 0 {
+                waitForCommandCount(expectedTotal)
+            } else {
+                // The worker is already proven ready, so this window checks that
+                // capability/model guards do not enqueue a command at all.
+                pump(0.20)
+            }
+            check(
+                commands(at: commandLog).count == expectedTotal,
+                "model flow emitted wrong command count: expected \(expectedTotal), got \(commands(at: commandLog))"
+            )
             session.stop()
             pump(0.15)
         }
@@ -410,10 +445,10 @@ struct Main {
             linkedEnglishName: "Affluence",
             canAdvanceLifecycle: true
         )
-        try withModel { $0.setTraitLevel(trait, targetLevel: "5") }
-        try withModel { $0.setTraitRarity(trait, rarity: "Epic") }
-        try withModel { $0.removeTrait(trait) }
-        try withModel { $0.advanceTraitLifecycle(chaosTrait) }
+        try withModel(expectedNewCommands: 1) { $0.setTraitLevel(trait, targetLevel: "5") }
+        try withModel(expectedNewCommands: 1) { $0.setTraitRarity(trait, rarity: "Epic") }
+        try withModel(expectedNewCommands: 1) { $0.removeTrait(trait) }
+        try withModel(expectedNewCommands: 1) { $0.advanceTraitLifecycle(chaosTrait) }
 
         let sent = commands(at: commandLog)
         check(sent.count == 4, "expected exactly four live-trait commands, got \(sent)")
@@ -428,7 +463,7 @@ struct Main {
 
         // Model capability guards and non-run state fail closed before the
         // backend transport boundary.
-        try withModel { model in
+        try withModel(expectedNewCommands: 0) { model in
             let blocked = makeTrait(
                 levelCapability: .none,
                 rarityCapability: .none,
@@ -460,7 +495,7 @@ struct Main {
             acquisitionMode: "direct"
         )
         let special = makeBoon(id: "TalentDrop", group: "special", kind: "consumable", sourceID: "Selene")
-        try withModel { model in
+        try withModel(expectedNewCommands: 1) { model in
             model.capabilities["spawnReward"] = true
             model.boons = [exact, special]
             check(model.exactBoonOptions.map(\.id) == [exact.id], "exact catalog projection is wrong")
