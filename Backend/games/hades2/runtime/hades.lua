@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 59 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 59, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 60, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3198,7 +3198,7 @@ if __MacGamingTrainerV1 == nil then
       set_resource = { "resource", "amount" },
       set_rerolls = { "amount" },
       open_sell_traits = {},
-      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "targetLevel" },
       set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
       remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
       open_special_choice = { "source" },
@@ -3570,6 +3570,10 @@ if __MacGamingTrainerV1 == nil then
     if command == "set_trait_level" then
       local function validateLevelTarget()
         local target, family, sellEligible, count = traitManagement.resolveTarget(params)
+        integer(params.targetLevel, 1)
+        if params.targetLevel <= traitManagement.level(target) then
+          error("Trait target level must be higher than the current level")
+        end
         local levelCapability = traitManagement.capabilities(target, family, sellEligible, count)
         if levelCapability ~= "increaseOne" then
           error("Trait level editing is unavailable for the selected target")
@@ -3592,9 +3596,10 @@ if __MacGamingTrainerV1 == nil then
         -- preflight and after action() has ruled out a duplicate request.
         local live = validateLevelTarget()
         local before = traitManagement.level(live)
-        local upgraded = IncreaseTraitLevel(live, 1)
-        if type(upgraded) ~= "table" or traitManagement.level(upgraded) <= before then
-          error("Trait level increase did not produce an observed higher level")
+        local delta = params.targetLevel - before
+        local upgraded = IncreaseTraitLevel(live, delta)
+        if type(upgraded) ~= "table" or traitManagement.level(upgraded) ~= params.targetLevel then
+          error("Trait level increase did not reach the requested target level")
         end
       end, validateLevelTarget)
     end
