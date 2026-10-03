@@ -124,7 +124,7 @@ SpellData = {
         { Name = "MeteorDamageTalent", Rarity = "Rare" },
       },
       {
-        { Name = "ChargeRegenTalent", Rarity = "Common" },
+        { Name = "ChargeRegenTalent", Rarity = "Rare" },
       },
     },
   },
@@ -153,6 +153,7 @@ local calls = {
   level = 0,
 }
 local nextId = 100
+local failAddAfterMutation = false
 
 local function rebuildDictionary()
   CurrentRun.Hero.TraitDictionary = {}
@@ -190,6 +191,10 @@ AddTraitToHero = function(args)
   rebuildDictionary()
   for _, weaponName in ipairs(trait.PreEquipWeapons or {}) do
     MapState.EquippedWeapons[weaponName] = true
+  end
+  if failAddAfterMutation then
+    failAddAfterMutation = false
+    error("synthetic Selene post-mutation acknowledgement failure")
   end
   return trait
 end
@@ -259,6 +264,18 @@ local function check(value, message) if not value then fail(message) end end
 local function eq(actual, expected, message)
   if actual ~= expected then
     fail(message .. ": expected=" .. tostring(expected) .. " actual=" .. tostring(actual))
+  end
+end
+
+local function contains(value, needle)
+  return string.find(tostring(value), needle, 1, true) ~= nil
+end
+
+local function expectError(needle, fn)
+  local ok, message = pcall(fn)
+  if ok then fail("expected error containing " .. needle) end
+  if not contains(message, needle) then
+    fail("wrong error; expected '" .. needle .. "', got '" .. tostring(message) .. "'")
   end
 end
 
@@ -341,6 +358,17 @@ check(findReward("selene:talent:Polymorph:ChargeRegenTalent") ~= nil,
 check(findReward("selene:talent:Polymorph:MeteorDamageTalent") == nil,
   "talent from another spell leaked into current exact catalog")
 
+-- With no slotted spell, main Hex targets remain available but no generated
+-- Path of Stars talent can leak from the previous source.
+CurrentRun.Hero.Traits = {}
+CurrentRun.Hero.TraitDictionary = {}
+CurrentRun.Hero.SlottedSpell = nil
+MapState.EquippedWeapons = {}
+check(findReward("selene:spell:Meteor") ~= nil, "main Hex disappeared without a slotted spell")
+check(findReward("selene:talent:Polymorph:ChargeRegenTalent") == nil,
+  "talent leaked into an empty/no-slotted-spell context")
+resetSpell("Polymorph", {})
+
 -- Exact talent acquisition invests a real current-tree node and adds the effect
 -- without consuming native talent points.
 do
@@ -361,7 +389,16 @@ do
   eq(CurrentRun.NumTalentPoints, beforePoints, "forced exact talent consumed native talent points")
   eq(result.actionOutcome, "completed", "exact talent outcome")
   check(findReward("selene:talent:Polymorph:PolymorphDamageTalent") == nil,
-    "invested talent remained in refreshed exact catalog")
+    "fully invested talent remained visible in the refreshed exact catalog")
+
+  local afterFirstAdd = calls.add
+  local duplicate = M.dispatch("spawn_reward", {
+    reward = "selene:talent:Polymorph:PolymorphDamageTalent",
+    requestId = "selene-talent-exact",
+    includeCatalogs = false,
+  })
+  eq(calls.add, afterFirstAdd, "completed exact talent request replayed the mutation")
+  check(duplicate.duplicate == true, "completed exact talent request did not return prior receipt")
 end
 
 -- Exact spell replacement tears down the previous owner: its main trait,
@@ -384,6 +421,36 @@ do
   eq(result.actionOutcome, "completed", "spell replacement outcome")
 end
 
+-- A game callback that mutates and then fails acknowledgement leaves a coherent
+-- Selene owner state, records outcome-unknown, and the same request is never
+-- replayed.
+do
+  resetSpell("Polymorph", {})
+  local beforeAdd = calls.add
+  failAddAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("spawn_reward", {
+      reward = "selene:spell:Meteor",
+      requestId = "selene-spell-outcome-unknown",
+      includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeAdd + 1, "outcome-unknown spell mutation did not run exactly once")
+  check(CurrentRun.Hero.SlottedSpell and CurrentRun.Hero.SlottedSpell.Name == "Meteor",
+    "mutated outcome-unknown spell lost its owner pointer")
+  check(hasTrait("SpellMeteorTrait"), "mutated outcome-unknown spell lost its mounted trait")
+  check(not hasTrait("SpellPolymorphTrait"), "old spell survived outcome-unknown replacement")
+  local beforeReplay = calls.add
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("spawn_reward", {
+      reward = "selene:spell:Meteor",
+      requestId = "selene-spell-outcome-unknown",
+      includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeReplay, "outcome-unknown Selene request replayed")
+end
+
 -- Mounted talent operations stay synchronized with the owning tree.
 do
   resetSpell("Meteor", { "ChargeRegenTalent" })
@@ -404,16 +471,21 @@ do
   M.dispatch("set_trait_level", levelParams)
   local levelled = assert(GetHeroTrait("ChargeRegenTalent"))
   eq(levelled.StackNum, 2, "runtime talent level")
-  local investedCount = 0
+  local investedCount, commonNodes, rareNodes = 0, 0, 0
   for _, column in ipairs(CurrentRun.Hero.SlottedSpell.Talents) do
     for _, node in pairs(column) do
       if node.Name == "ChargeRegenTalent" and node.Invested then
         investedCount = investedCount + 1
-        eq(node.Rarity, "Epic", "repeatable invested node did not inherit mounted rarity")
+        if node.Rarity == "Common" then commonNodes = commonNodes + 1 end
+        if node.Rarity == "Rare" then rareNodes = rareNodes + 1 end
       end
     end
   end
   eq(investedCount, 2, "repeatable talent tree investment")
+  eq(commonNodes, 1, "forced runtime rarity rewrote the first generated node")
+  eq(rareNodes, 1, "repeatable level edit rewrote the next generated node rarity")
+  eq(GetHeroTrait("ChargeRegenTalent").Rarity, "Epic",
+    "runtime rarity did not survive a later repeatable level investment")
   check(calls.talentAcquire > 0, "repeatable talent acquire callback did not run")
 
   row = assert(findRow("ChargeRegenTalent"))
