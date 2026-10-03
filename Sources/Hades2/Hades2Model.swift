@@ -942,14 +942,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
     }
 
-    func increaseTraitLevel(_ trait: CurrentRunTrait) {
+    func setTraitLevel(_ trait: CurrentRunTrait, targetLevel: String) {
         guard canOpenNativeBoonScreen, trait.canIncreaseLevel else { return }
+        let trimmed = targetLevel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let level = Int(trimmed), level > trait.level, level <= 999_999 else { return }
         send(
-            .setTraitLevel(trait),
+            .setTraitLevel(trait, targetLevel: level),
             title: "hades2.receipt.traitLevelAction",
             titleArguments: [trait.displayName],
             announceSuccess: false
         )
+    }
+
+    func increaseTraitLevel(_ trait: CurrentRunTrait) {
+        setTraitLevel(trait, targetLevel: String(trait.level + 1))
     }
 
     func setTraitRarity(_ trait: CurrentRunTrait, rarity: String) {
