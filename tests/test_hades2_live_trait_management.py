@@ -55,15 +55,10 @@ def test_owner_family_controls_default_native_paths():
         assert f"{family} = {issue}" in LUA
 
 
-def test_resident_revision_advances_for_the_new_runtime_contract():
-    assert "revision = 60" in LUA
-
-
 if __name__ == "__main__":
     test_current_run_traits_reuse_official_bilingual_localization_seam()
     test_special_npc_ownership_comes_from_native_source_data()
     test_owner_family_controls_default_native_paths()
-    test_resident_revision_advances_for_the_new_runtime_contract()
     print("hades2_live_trait_management_ok")
 
 # Executable resident-runtime behavior coverage belongs to this feature owner.

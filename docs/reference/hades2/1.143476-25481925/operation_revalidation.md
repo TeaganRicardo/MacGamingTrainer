@@ -327,6 +327,18 @@ Ready for a dedicated Spell/talent-tree task. Flat talent acquisition/removal re
 
 Ready for a dedicated weapon/aspect-aware native-choice task if selected. Flat 92-item add/remove remains unauthorized.
 
+## Argent Skull ammo recovery under infinite supply
+
+Target-build 1.143476 / Steam 25481925 confirms that recoverable Argent Skull ammo is owned by the native `WeaponLob` lifecycle rather than by a generic inventory counter.
+
+- `WeaponLob` uses `MaxAmmo = 4`, `OnProjectileDeathFunction = "WeaponLobAmmoDrop"`, and `AmmoPackName = "LobAmmoPack"`.
+- Its fired callback exits immediately when the native `UnlimitedAmmo` trait value is present. Otherwise it records the carried-ammo snapshot, increments `SessionMapState.LobAmmoInFlight` (including `NumProjectiles` for spread fire), and spends ammo.
+- `WeaponLobAmmoDrop` requires positive in-flight ammo, decrements that bookkeeping, and materializes a native `LobAmmoPack`.
+- `LobAmmoPack` adds one `WeaponLob` ammo through `AddAmmo`; that path also executes `OnCollectAmmoFunctionName` effects. The pack escalates magnetism after 10 seconds, so lifetime/cleanup remains game-owned.
+- `LobGunAspect` is a distinct native no-recovery mode: its trait data sets `UnlimitedAmmo = true`, hides the ammo UI, and removes the projectile-death ammo-drop callback.
+
+Therefore Trainer infinite ammo must not spoof the native `UnlimitedAmmo` trait value. It may suppress negative `UpdateWeaponAmmo` deltas to keep carried ammo available while leaving the fire, in-flight, projectile-death, pickup and collection-effect paths native. The real `LobGunAspect` signal remains untouched and keeps its own native semantics.
+
 ## Verification expectation
 
 This file changes reference documentation only. No runtime, adapter, Host/UI, protocol, Save/Profile, product version, canonical legality CSV, generated inventory, or resident Lua source is changed.

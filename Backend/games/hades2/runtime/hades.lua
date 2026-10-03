@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 60 then
+if previousModule and previousModule.revision ~= 61 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 60 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 60, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 61, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -823,7 +823,6 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseAmmo()
     M.infiniteAmmo = false
-    releaseHook("HasHeroTraitValue")
     releaseHook("UpdateWeaponAmmo")
   end
   local function releaseMiniGames()
@@ -1267,7 +1266,7 @@ if __MacGamingTrainerV1 == nil then
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
     if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then releaseInstantCastCooldown() end
     if M.hexAlwaysReady and not owns("SpellFire") then releaseHex() end
-    if M.infiniteAmmo and (not owns("HasHeroTraitValue") or not owns("UpdateWeaponAmmo")) then releaseAmmo() end
+    if M.infiniteAmmo and not owns("UpdateWeaponAmmo") then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
         and type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then releaseMiniGames() end
     if M.gardenQoL and (not owns("GardenPlantSeed") or not owns("UseGardenPlot")) then releaseGardenQoL() end
@@ -2518,13 +2517,7 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   local function installAmmo()
-    requireFunctions("infinite ammo", { "HasHeroTraitValue", "UpdateWeaponAmmo", "GetMaxAmmo" })
-    if not owns("HasHeroTraitValue") then
-      installHook("HasHeroTraitValue", function(original, valueName, ...)
-        if M.infiniteAmmo and valueName == "UnlimitedAmmo" then return true end
-        return original(valueName, ...)
-      end)
-    end
+    requireFunctions("infinite ammo", { "UpdateWeaponAmmo", "GetMaxAmmo" })
     if not owns("UpdateWeaponAmmo") then
       installHook("UpdateWeaponAmmo", function(original, weaponName, delta, args)
         if M.infiniteAmmo and finite(delta) and delta < 0 then delta = 0 end
@@ -2998,8 +2991,8 @@ if __MacGamingTrainerV1 == nil then
     },
     infiniteAmmo = {
       install = installAmmo, release = releaseAmmo,
-      support = function() return type(HasHeroTraitValue) == "function" and type(UpdateWeaponAmmo) == "function" and type(GetMaxAmmo) == "function" end,
-      active = function() return M.infiniteAmmo and owns("HasHeroTraitValue") and owns("UpdateWeaponAmmo") end,
+      support = function() return type(UpdateWeaponAmmo) == "function" and type(GetMaxAmmo) == "function" end,
+      active = function() return M.infiniteAmmo and owns("UpdateWeaponAmmo") end,
     },
     autoMiniGames = {
       install = installMiniGames, release = releaseMiniGames, available = function() return true end,
