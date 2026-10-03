@@ -1704,10 +1704,22 @@ if __MacGamingTrainerV1 == nil then
       local slotted = DeepCopyTable(spellData)
       slotted.Name = spellName
       slotted.Talents = DeepCopyTable(CreateTalentTree(spellData))
-      local added = AddTraitToHero({ TraitName = spellData.TraitName, SkipNewTraitHighlight = true })
-      if type(added) ~= "table" then error("Selene spell acquisition failed") end
       CurrentRun.Hero.SlottedSpell = slotted
       CurrentRun.SpellCharge = 0
+      requireFunctions("Selene spell acquisition", { "HeroHasTrait" })
+      local ok, added = pcall(AddTraitToHero, {
+        TraitName = spellData.TraitName, SkipNewTraitHighlight = true,
+      })
+      if not ok then
+        if not HeroHasTrait(spellData.TraitName) then CurrentRun.Hero.SlottedSpell = nil end
+        UpdateTalentPointInvestedCache()
+        error(added)
+      end
+      if type(added) ~= "table" then
+        if not HeroHasTrait(spellData.TraitName) then CurrentRun.Hero.SlottedSpell = nil end
+        UpdateTalentPointInvestedCache()
+        error("Selene spell acquisition failed")
+      end
       if type(added.CheckChargeFunctionName) == "string" and type(CallFunctionName) == "function" then
         CallFunctionName(added.CheckChargeFunctionName, CurrentRun.Hero, nil, { Grouped = false })
       end
@@ -1729,18 +1741,44 @@ if __MacGamingTrainerV1 == nil then
       if HeroHasTrait(traitName) then
         runtimeTrait = GetHeroTrait(traitName)
         if type(runtimeTrait) ~= "table" then error("Mounted Selene talent is unavailable") end
-        runtimeTrait = IncreaseTraitLevel(runtimeTrait)
+        local beforeLevel = tonumber(runtimeTrait.StackNum) or 1
+        local ok, upgraded = pcall(IncreaseTraitLevel, runtimeTrait)
+        if not ok then
+          if (tonumber(runtimeTrait.StackNum) or 1) == beforeLevel then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error(upgraded)
+        end
+        runtimeTrait = upgraded
         local base = type(TraitData) == "table" and TraitData[traitName] or nil
         if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
           requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
           CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, runtimeTrait)
         end
       else
-        runtimeTrait = AddTraitToHero({
+        local ok, added = pcall(AddTraitToHero, {
           TraitName = traitName, Rarity = selected.Rarity, FromLoot = true,
         })
+        if not ok then
+          if not HeroHasTrait(traitName) then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error(added)
+        end
+        runtimeTrait = added
       end
-      if type(runtimeTrait) ~= "table" then error("Selene talent acquisition failed") end
+      if type(runtimeTrait) ~= "table" then
+        if not HeroHasTrait(traitName) then
+          selected.Invested = false
+          selected.QueuedInvested = nil
+        end
+        UpdateTalentPointInvestedCache()
+        error("Selene talent acquisition failed")
+      end
       local base = type(TraitData) == "table" and TraitData[traitName] or nil
       if type(base) == "table" and base.IsDuoBoon then
         CurrentRun.Hero.SlottedSpell.ObtainedDuoTalent = true
@@ -1933,7 +1971,7 @@ if __MacGamingTrainerV1 == nil then
         local talentNames, seenTalents = {}, {}
         for _, column in ipairs(slotted.Talents) do
           for _, node in pairs(type(column) == "table" and column or {}) do
-            if type(node) == "table" and not node.Invested and type(node.Name) == "string"
+            if type(node) == "table" and type(node.Name) == "string"
                 and type(TraitData[node.Name]) == "table" and not seenTalents[node.Name] then
               seenTalents[node.Name] = true
               talentNames[#talentNames + 1] = node.Name
