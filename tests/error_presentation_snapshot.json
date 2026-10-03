@@ -820,6 +820,10 @@
       "arguments": [],
       "key": "hades2.error.healthMinimum"
     },
+    "目标等级必须高于当前等级。": {
+      "arguments": [],
+      "key": "hades2.error.traitLevelTargetInvalid"
+    },
     "稀有度倍率必须为 0–1000%。": {
       "arguments": [],
       "key": "hades2.error.invalidRarityMultiplier"
