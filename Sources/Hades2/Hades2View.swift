@@ -373,7 +373,12 @@ struct Hades2TrainerView: View {
 
     private func traitRarityInput(_ trait: CurrentRunTrait) -> Binding<String> {
         Binding(
-            get: { traitRarityInputs[trait.id] ?? defaultTraitRarityInput(trait) },
+            get: {
+                if let draft = traitRarityInputs[trait.id], trait.availableRarities.contains(draft) {
+                    return draft
+                }
+                return defaultTraitRarityInput(trait)
+            },
             set: { traitRarityInputs[trait.id] = $0 }
         )
     }
