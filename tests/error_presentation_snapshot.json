@@ -1109,6 +1109,10 @@
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
   "runtime": {
+    "advance_trait_lifecycle::Action requires a requestId of 1..128 characters": {
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
+    },
     "advance_trait_lifecycle::Chaos lifecycle transition failed": {
       "arguments": [],
       "key": "hades2.error.chaosLifecycleFailed"
@@ -1116,6 +1120,18 @@
     "advance_trait_lifecycle::Chaos lifecycle transition is unavailable": {
       "arguments": [],
       "key": "hades2.error.chaosLifecycleUnavailable"
+    },
+    "advance_trait_lifecycle::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "advance_trait_lifecycle::Trait instance is no longer present": {
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
+    },
+    "advance_trait_lifecycle::Trait mutation requires an active run room": {
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
