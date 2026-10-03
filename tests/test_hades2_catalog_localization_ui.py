@@ -207,7 +207,7 @@ try:
     hammer_payload = {
         'rewards': [{
             'id': 'hammer:LobAmmoTrait', 'name': 'LobAmmoTrait',
-            'kind': 'trait', 'group': 'exact',
+            'trait': 'LobAmmoTrait', 'kind': 'trait', 'group': 'exact',
             'sourceId': 'WeaponUpgrade', 'sourceName': '狄德勒斯之锤',
             'sectionTitle': '狄德勒斯之锤', 'category': '角色奖励',
             'acquisitionMode': 'hammerNative',
