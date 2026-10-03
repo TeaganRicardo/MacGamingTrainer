@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 59 then
+if previousModule and previousModule.revision ~= 60 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
