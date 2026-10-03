@@ -4540,10 +4540,16 @@ if __MacGamingTrainerV1 == nil then
                 and spellData.GameStateRequirements.Skip) then
             error("Selene spell target is unavailable")
           end
-          requireFunctions("exact Selene spell acquisition", {
+          local spellRequirements = {
             "DeepCopyTable", "CreateTalentTree", "AddTraitToHero", "RemoveTrait",
-            "UnequipWeapon", "UpdateTalentPointInvestedCache",
-          })
+            "UnequipWeapon", "UpdateTalentPointInvestedCache", "thread",
+          }
+          if spellData.CheckSpellReadyOnAcquire then
+            spellRequirements[#spellRequirements + 1] = "CallFunctionName"
+          else
+            spellRequirements[#spellRequirements + 1] = "SpellReadyPresentation"
+          end
+          requireFunctions("exact Selene spell acquisition", spellRequirements)
           exactPlan = { mode = "seleneSpell", spellName = entry.spellName }
           return
         end
@@ -4553,10 +4559,16 @@ if __MacGamingTrainerV1 == nil then
               or #seleneModel.talentNodes(entry.trait, false) == 0 then
             error("Selene talent is unavailable for the current Path of Stars")
           end
-          requireFunctions("exact Selene talent acquisition", {
+          local talentRequirements = {
             "HeroHasTrait", "GetHeroTrait", "AddTraitToHero", "IncreaseTraitLevel",
             "UpdateTalentPointInvestedCache",
-          })
+          }
+          local base = type(TraitData) == "table" and TraitData[entry.trait] or nil
+          if HeroHasTrait(entry.trait) and type(base) == "table"
+              and type(base.AcquireFunctionName) == "string" then
+            talentRequirements[#talentRequirements + 1] = "CallFunctionName"
+          end
+          requireFunctions("exact Selene talent acquisition", talentRequirements)
           exactPlan = { mode = "seleneTalent", spellName = entry.spellName }
           return
         end
