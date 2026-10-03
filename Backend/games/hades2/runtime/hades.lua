@@ -1626,17 +1626,6 @@ if __MacGamingTrainerV1 == nil then
       return table.concat(parts, "|")
     end
 
-    local function syncTalent(traitName, rarity, invested)
-      local changed = false
-      for _, entry in ipairs(talentNodes(traitName, nil)) do
-        if invested == nil or not not entry.node.Invested == invested then
-          if rarity ~= nil then entry.node.Rarity = rarity end
-          changed = true
-        end
-      end
-      return changed
-    end
-
     local function investedTalentNames(slotted)
       local names = {}
       for _, column in ipairs(type(slotted) == "table" and slotted.Talents or {}) do
@@ -1741,9 +1730,6 @@ if __MacGamingTrainerV1 == nil then
         runtimeTrait = GetHeroTrait(traitName)
         if type(runtimeTrait) ~= "table" then error("Mounted Selene talent is unavailable") end
         runtimeTrait = IncreaseTraitLevel(runtimeTrait)
-        if type(runtimeTrait) == "table" and runtimeTrait.Rarity ~= nil then
-          selected.Rarity = runtimeTrait.Rarity
-        end
         local base = type(TraitData) == "table" and TraitData[traitName] or nil
         if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
           requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
@@ -1767,7 +1753,6 @@ if __MacGamingTrainerV1 == nil then
       currentSpell = currentSpell,
       talentNodes = talentNodes,
       catalogSignature = catalogSignature,
-      syncTalent = syncTalent,
       teardown = teardown,
       applySpell = applySpell,
       applyTalent = applyTalent,
@@ -2595,7 +2580,6 @@ if __MacGamingTrainerV1 == nil then
       chaosLinkedTraitName = chaosLinkedTraitName,
       rebuildChaosTarget = rebuildChaosTarget,
       seleneTalentNodes = seleneModel.talentNodes,
-      syncSeleneTalent = seleneModel.syncTalent,
       teardownSlottedSpell = seleneModel.teardown,
       applySeleneSpell = seleneModel.applySpell,
       applySeleneTalent = seleneModel.applyTalent,
@@ -4032,7 +4016,6 @@ if __MacGamingTrainerV1 == nil then
             selected.QueuedInvested = nil
             upgraded = IncreaseTraitLevel(upgraded)
             if type(upgraded) == "table" and upgraded.Rarity ~= nil then
-              selected.Rarity = upgraded.Rarity
             end
             if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
               CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
@@ -4084,10 +4067,6 @@ if __MacGamingTrainerV1 == nil then
         end
         if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
           error("Trait rarity recompute did not reach the requested rarity")
-        end
-        if family == "hexTalent" then
-          traitManagement.syncSeleneTalent(live.Name, params.rarity, true)
-          UpdateTalentPointInvestedCache()
         end
       end, validateRarityTarget)
     end
