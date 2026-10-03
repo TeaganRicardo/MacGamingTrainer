@@ -519,7 +519,7 @@ do
     includeCatalogs = false,
   })
   local beforeAdd = calls.add
-  expectError("current Path of Stars", function()
+  expectError("Unknown or unsupported reward", function()
     M.dispatch("spawn_reward", {
       reward = staleReward,
       requestId = "selene-stale-source-talent",
