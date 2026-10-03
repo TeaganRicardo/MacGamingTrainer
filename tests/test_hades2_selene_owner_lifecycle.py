@@ -42,11 +42,12 @@ def test_selene_mutation_owns_spell_and_tree_lifecycle():
     ):
         assert token in LUA, token
 
-    # Talent level/rarity/removal must synchronize both mounted TraitData and
-    # the owning SlottedSpell.Talents nodes.
+    # Talent level/removal synchronize mounted TraitData with invested tree
+    # state, while runtime rarity preserves each generated node's native
+    # rarity metadata instead of rewriting the Path of Stars.
     assert "seleneTalentNodes" in LUA
     assert "family == \"hexTalent\"" in dispatch
-    assert "syncSeleneTalent" in LUA
+    assert "syncSeleneTalent" not in LUA
 
 
 def test_selene_current_run_capabilities_are_typed():
