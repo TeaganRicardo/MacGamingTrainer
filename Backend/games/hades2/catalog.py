@@ -134,6 +134,20 @@ _PROVISIONAL_NAMES = {
     'HealDropMinor': ('少量治疗', 'Minor Healing'),
     'RandomLoot': ('随机奥林匹斯祝福', 'Random Olympian Boon'),
     'BoostedRandomLoot': ('强化随机祝福', 'Boosted Random Boon'),
+
+    # Hidden Familiar upgrade traits have no standalone DisplayName in the
+    # supported target build. These product labels are derived from the native
+    # FamiliarData effect fields, never from prettifying the internal trait id.
+    'FamiliarFrogResourceBonus': ('弗利诺斯·额外采集概率', 'Frinos · Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('弗利诺斯·攻击伤害', 'Frinos · Attack Damage'),
+    'FamiliarCatResourceBonus': ('图拉·额外采集概率', 'Toula · Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('图拉·攻击次数', 'Toula · Attack Count'),
+    'FamiliarRavenResourceBonus': ('拉奇·额外采集概率', 'Raki · Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('拉奇·攻击间隔', 'Raki · Attack Interval'),
+    'FamiliarHoundResourceBonus': ('赫库芭·额外采集概率', 'Hecuba · Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('赫库芭·吠叫间隔', 'Hecuba · Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('加莉·额外采集概率', 'Gale · Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('加莉·攻击伤害', 'Gale · Attack Damage'),
 }
 
 
@@ -161,8 +175,10 @@ def _fallback_names(item, identifier, english_name, linked_zh, linked_en):
     if isinstance(english_name,str) and english_name:
         return english_name, 'official_en', english_name, 'official_en'
     runtime_name=_clean(item.get('name')) if isinstance(item,dict) else None
-    if isinstance(runtime_name,str) and runtime_name:
+    if isinstance(runtime_name,str) and runtime_name and runtime_name != identifier:
         return runtime_name, 'runtime_fallback', identifier, 'identifier'
+    if isinstance(item,dict) and item.get('kind')=='trait':
+        return '未命名效果', 'trainer_generic_zh', 'Unnamed Effect', 'trainer_generic_en'
     return identifier, 'identifier', identifier, 'identifier'
 
 
@@ -301,8 +317,16 @@ def localize_catalog(decoded):
         if not isinstance(identifier,str) or not identifier:continue
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
-        item['displayName']=official_zh or official_en or identifier
-        item['englishName']=official_en or identifier
+        if isinstance(official_zh,str) and official_zh:
+            item['displayName']=official_zh
+            item['englishName']=official_en or 'Unnamed Effect'
+        elif isinstance(official_en,str) and official_en:
+            item['displayName']=official_en
+            item['englishName']=official_en
+        else:
+            fallback_zh,_,fallback_en,_=_fallback_names({'kind':'trait','name':identifier},identifier,None,zh,en)
+            item['displayName']=fallback_zh
+            item['englishName']=fallback_en
         source_id=item.get('sourceId')
         if isinstance(source_id,str) and source_id:
             source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
