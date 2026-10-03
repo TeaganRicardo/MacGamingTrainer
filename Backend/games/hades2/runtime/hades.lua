@@ -1976,11 +1976,10 @@ if __MacGamingTrainerV1 == nil then
 
     local function catalogNames()
       local visible, eligibleLookup = nativeEligible()
-      local allowed, allowedLookup = setmetatable({}, arrayMeta), {}
+      local allowed = setmetatable({}, arrayMeta)
       for _, name in ipairs(sourceTraitNames()) do
         if ownerMatchesCurrent(name)
             and (eligibleLookup[name] or mountedCurrent(name)) then
-          allowedLookup[name] = true
           allowed[#allowed + 1] = name
         end
       end
@@ -2088,7 +2087,6 @@ if __MacGamingTrainerV1 == nil then
     return {
       catalogNames = catalogNames,
       catalogSignature = catalogSignature,
-      currentWeapon = currentWeapon,
       isHammerTrait = isHammerTrait,
       isRuntimeAspect = isRuntimeAspect,
       removalReady = removalReady,
@@ -2847,12 +2845,12 @@ if __MacGamingTrainerV1 == nil then
             family = family,
             sourceId = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
-              or ((family == "hammer" or family == "weaponAspect") and "WeaponUpgrade"
-              or traitSourceId(trait))),
+              or (family == "hammer" and "WeaponUpgrade"
+              or (family == "weaponAspect" and "" or traitSourceId(trait)))),
             owner = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
-              or ((family == "hammer" or family == "weaponAspect") and "WeaponUpgrade"
-              or traitSourceId(trait))),
+              or (family == "hammer" and "WeaponUpgrade"
+              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait)))),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
