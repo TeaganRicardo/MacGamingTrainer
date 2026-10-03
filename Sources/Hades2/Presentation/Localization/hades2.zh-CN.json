@@ -122,6 +122,7 @@
     "hades2.error.sellDataUnavailable": "当前游戏状态无法打开{term:officialTerms.purgingPool}。",
     "hades2.error.sellNeedsRunRoom": "{term:officialTerms.purgingPool}仅可在局内房间打开。",
     "hades2.error.sellScreenBusy": "已有游戏界面打开，请先关闭当前界面后再打开{term:officialTerms.purgingPool}。",
+    "hades2.error.seleneExactFailed": "所选塞勒涅效果未能完整应用到当前巫咒状态。",
     "hades2.error.signingVerificationFailed": "调试签名校验失败；未修改游戏。",
     "hades2.error.speedMultiplierRange": "速度倍率必须为 10–1000%。",
     "hades2.error.spellChargeRange": "{term:officialTerms.spell}充能必须为 0–{0}。",
