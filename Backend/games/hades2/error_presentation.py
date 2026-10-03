@@ -359,6 +359,7 @@ REGISTRY = [
  {'match': 'literal',
   'message': '暂存文件校验失败；未修改游戏。',
   'key': 'hades2.error.stagedVerificationFailed'},
+ {'match': 'literal', 'message': '目标等级必须高于当前等级。', 'key': 'hades2.error.traitLevelTargetInvalid'},
  {'match': 'literal', 'message': '最低稀有度无效。', 'key': 'hades2.error.invalidRarityTarget'},
  {'match': 'literal', 'message': '未找到该 Profile。', 'key': 'hades2.error.profileNotFound'},
  {'match': 'literal', 'message': '未知元素。', 'key': 'hades2.error.unknownElement'},
