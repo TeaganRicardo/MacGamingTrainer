@@ -1741,6 +1741,9 @@ if __MacGamingTrainerV1 == nil then
         runtimeTrait = GetHeroTrait(traitName)
         if type(runtimeTrait) ~= "table" then error("Mounted Selene talent is unavailable") end
         runtimeTrait = IncreaseTraitLevel(runtimeTrait)
+        if type(runtimeTrait) == "table" and runtimeTrait.Rarity ~= nil then
+          selected.Rarity = runtimeTrait.Rarity
+        end
         local base = type(TraitData) == "table" and TraitData[traitName] or nil
         if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
           requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
@@ -4028,6 +4031,9 @@ if __MacGamingTrainerV1 == nil then
             selected.Invested = true
             selected.QueuedInvested = nil
             upgraded = IncreaseTraitLevel(upgraded)
+            if type(upgraded) == "table" and upgraded.Rarity ~= nil then
+              selected.Rarity = upgraded.Rarity
+            end
             if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
               CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
             end
