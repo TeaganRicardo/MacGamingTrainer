@@ -954,10 +954,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         )
     }
 
-    func increaseTraitLevel(_ trait: CurrentRunTrait) {
-        setTraitLevel(trait, targetLevel: String(trait.level + 1))
-    }
-
     func setTraitRarity(_ trait: CurrentRunTrait, rarity: String) {
         guard canOpenNativeBoonScreen, trait.canSetRarity,
               trait.availableRarities.contains(rarity), rarity != trait.rarity else { return }
