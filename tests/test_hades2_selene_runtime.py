@@ -425,6 +425,7 @@ do
   eq(invested, 1, "exact talent did not invest one owner node")
   eq(CurrentRun.NumTalentPoints, beforePoints, "forced exact talent consumed native talent points")
   eq(result.actionOutcome, "completed", "exact talent outcome")
+  check(result.lootObjectId == nil, "exact talent leaked a trait table through lootObjectId")
   check(findReward("selene:talent:Polymorph:PolymorphDamageTalent") == nil,
     "fully invested talent remained visible in the refreshed exact catalog")
 
@@ -459,6 +460,7 @@ do
     "generated Duo talent was not reflected in SlottedSpell.HasDuoTalent")
   check(calls.readyPresentation > 0, "normal Hex did not schedule native ready presentation")
   eq(result.actionOutcome, "completed", "spell replacement outcome")
+  check(result.lootObjectId == nil, "exact Hex leaked a trait table through lootObjectId")
 end
 
 -- Hexes with CheckSpellReadyOnAcquire use the owner-specific charge check
