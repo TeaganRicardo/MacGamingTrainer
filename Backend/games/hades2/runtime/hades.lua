@@ -2007,7 +2007,6 @@ if __MacGamingTrainerV1 == nil then
           end
         end
       end
-      table.sort(parts, 3)
       return table.concat(parts, "|")
     end
 
