@@ -1686,6 +1686,31 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    -- Chaos exact targets remain paired lifecycle choices. Selecting one
+    -- exact phase narrows only that side of TrialUpgrade; the counterpart is
+    -- still chosen from the target build's eligible native pool at operation time.
+    local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
+    if type(chaosSource) == "table" and chaosSource.TransformingTraits then
+      local chaosOrder = officialSourceOrder.Chaos or 20
+      local function addChaosExactRows(pool, prefix, mode, sectionTitle, orderOffset)
+        for index, traitName in ipairs(orderedTraitIds(pool)) do
+          local id = "chaos:" .. prefix .. ":" .. traitName
+          if not allowed[id] then
+            local item = {
+              id = id, name = traitName, category = "卡俄斯的祝福", group = "exact", kind = "trait",
+              trait = traitName, family = "chaos", sourceId = "Chaos", sourceName = "卡俄斯",
+              sectionTitle = sectionTitle, acquisitionMode = mode,
+              sortSection = 25, sortGroup = chaosOrder + orderOffset, sortOrder = index,
+            }
+            allowed[id] = item
+            result[#result + 1] = item
+          end
+        end
+      end
+      addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯祝福", 0)
+      addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯诅咒", 1)
+    end
+
     local buckets = {}
     for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
@@ -3934,6 +3959,41 @@ if __MacGamingTrainerV1 == nil then
         requireFunctions("exact boon ownership", { "HeroHasTrait" })
         if HeroHasTrait(entry.trait) then error("Selected boon is already owned") end
 
+        if entry.acquisitionMode == "chaosBlessing" or entry.acquisitionMode == "chaosCurse" then
+          requireFunctions("exact Chaos acquisition", {
+            "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
+            "GetProcessedTraitData", "AddTraitToHero",
+          })
+          local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
+          if type(source) ~= "table" or not source.TransformingTraits then
+            error("Chaos acquisition source is unavailable")
+          end
+          local selectedPool = entry.acquisitionMode == "chaosBlessing"
+            and source.PermanentTraits or source.TemporaryTraits
+          if not listContains(selectedPool, entry.trait) then
+            error("Selected Chaos target is unavailable")
+          end
+          local eligibleSelected = GetEligibleTransformingTrait({ entry.trait })
+          if not listContains(eligibleSelected, entry.trait) then
+            error("Selected Chaos target is not currently eligible")
+          end
+          local counterpartPool = entry.acquisitionMode == "chaosBlessing"
+            and source.TemporaryTraits or source.PermanentTraits
+          local eligibleCounterparts = GetEligibleTransformingTrait(counterpartPool)
+          if type(eligibleCounterparts) ~= "table" or next(eligibleCounterparts) == nil then
+            error("No eligible paired Chaos target is available")
+          end
+          source = DeepCopyTable(source)
+          if entry.acquisitionMode == "chaosBlessing" then
+            source.PermanentTraits = { entry.trait }
+          else
+            source.TemporaryTraits = { entry.trait }
+          end
+          source.UpgradeOptions = nil
+          source.Rarity = nil
+          exactPlan = { mode = entry.acquisitionMode, source = source }
+          return
+        end
         if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
           requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
           if entry.acquisitionMode == "costume" then
@@ -3972,6 +4032,51 @@ if __MacGamingTrainerV1 == nil then
         end
         exactPlan = { mode = "ordinaryNative", source = source }
       end
+      local function addChaosExact()
+        local source = exactPlan.source
+        SetTraitsOnLoot(source)
+        local option = nil
+        for _, candidate in pairs(source.UpgradeOptions or {}) do
+          if type(candidate) == "table" then
+            if exactPlan.mode == "chaosBlessing" and candidate.ItemName == entry.trait then
+              option = candidate
+              break
+            elseif exactPlan.mode == "chaosCurse" and candidate.SecondaryItemName == entry.trait then
+              option = candidate
+              break
+            end
+          end
+        end
+        if type(option) ~= "table" then
+          error("Selected Chaos target became unavailable before acquisition")
+        end
+        if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
+          error("Chaos pair is incomplete")
+        end
+        local rarity = option.Rarity or "Common"
+        local blessing = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = option.ItemName, Rarity = rarity,
+        })
+        local curse = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
+        })
+        if type(blessing) ~= "table" or type(curse) ~= "table" then
+          error("Chaos pair processing failed")
+        end
+        curse.OnExpire = curse.OnExpire or {}
+        curse.OnExpire.TraitData = blessing
+        curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
+        local added = AddTraitToHero({
+          TraitData = curse,
+          PreProcessedForDisplay = true,
+          FromLoot = true,
+        })
+        if type(added) ~= "table" then error("Chaos exact acquisition did not return a trait") end
+        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
+        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
+        return nil
+      end
+
       local function addOrdinaryExact()
         local source = exactPlan.source
         local option
@@ -4053,6 +4158,9 @@ if __MacGamingTrainerV1 == nil then
         end
         if entry.kind == "trait" then
           if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
+          if exactPlan and (exactPlan.mode == "chaosBlessing" or exactPlan.mode == "chaosCurse") then
+            return addChaosExact()
+          end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
             return addOrdinaryExact()
           end
