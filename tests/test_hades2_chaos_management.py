@@ -64,6 +64,7 @@ LootData = {
 local nextId = 900
 local addCalls = 0
 local fromLootCalls = 0
+local failRemoveAfterMutation = false
 
 local function clone(value)
   if type(value) ~= "table" then return value end
@@ -124,6 +125,10 @@ RemoveTraitData = function(_, target, args)
     CurrentRun.Hero.Traits[#CurrentRun.Hero.Traits + 1] = nextTrait
     fromLootCalls = fromLootCalls + 1
   end
+  if failRemoveAfterMutation then
+    failRemoveAfterMutation = false
+    error("synthetic Chaos post-mutation acknowledgement failure")
+  end
 end
 
 local function makeCurse(id)
@@ -149,6 +154,16 @@ local function check(value, message) if not value then fail(message) end end
 local function eq(actual, expected, message)
   if actual ~= expected then
     fail(message .. ": expected=" .. tostring(expected) .. " actual=" .. tostring(actual))
+  end
+end
+local function contains(value, needle)
+  return string.find(tostring(value), needle, 1, true) ~= nil
+end
+local function expectError(needle, fn)
+  local ok, message = pcall(fn)
+  if ok then fail("expected error containing " .. needle) end
+  if not contains(message, needle) then
+    fail("wrong error: expected '" .. needle .. "' got '" .. tostring(message) .. "'")
   end
 end
 local function row()
@@ -223,12 +238,23 @@ eq(fromLootCalls, beforeFromLoot, "Chaos cancel incorrectly granted blessing")
 -- the queued blessing appears with the same runtime instance id.
 CurrentRun.Hero.Traits = { makeCurse(777) }
 observed = row()
-M.dispatch("advance_trait_lifecycle", paramsFrom(observed, "chaos-transform"))
+local transformParams = paramsFrom(observed, "chaos-transform")
+local transformedResult = M.dispatch("advance_trait_lifecycle", transformParams)
 eq(#CurrentRun.Hero.Traits, 1, "Chaos transform left wrong row count")
 local blessing = CurrentRun.Hero.Traits[1]
 eq(blessing.Name, "ChaosHealthBlessing", "Chaos transform did not mount queued blessing")
 eq(tostring(blessing.Id), "777", "Chaos transform did not preserve instance identity")
 check(blessing.FromLootObserved == true, "Chaos transform did not use native expiry acquisition semantics")
+
+local afterTransformFromLoot = fromLootCalls
+local duplicate = M.dispatch("advance_trait_lifecycle", transformParams)
+check(duplicate.duplicate == true, "completed Chaos transform request was not deduplicated")
+eq(fromLootCalls, afterTransformFromLoot, "duplicate Chaos transform replayed expiry")
+
+local staleParams = paramsFrom(observed, "chaos-transform-stale")
+expectError("Trait target changed since selection", function()
+  M.dispatch("advance_trait_lifecycle", staleParams)
+end)
 
 local transformed = row()
 eq(transformed.lifecycleState, "blessing", "transformed Chaos row not identified as blessing")
@@ -237,6 +263,25 @@ check(transformed.canAdvanceLifecycle == false, "active blessing exposed another
 eq(transformed.levelCapability, "increaseOne", "active Chaos blessing not level-editable")
 eq(transformed.rarityCapability, "setExact", "active Chaos blessing not rarity-editable")
 eq(transformed.removalCapability, "singleInstanceForce", "active Chaos blessing not removable")
+
+-- A failure after native expiry is outcome-unknown rather than retryable. The
+-- transformed live state remains authoritative and the same request id cannot
+-- fire expiry a second time.
+CurrentRun.Hero.Traits = { makeCurse(888) }
+observed = row()
+local unknownParams = paramsFrom(observed, "chaos-transform-unknown")
+failRemoveAfterMutation = true
+local beforeUnknownFromLoot = fromLootCalls
+expectError("MGT_OUTCOME_UNKNOWN", function()
+  M.dispatch("advance_trait_lifecycle", unknownParams)
+end)
+eq(#CurrentRun.Hero.Traits, 1, "outcome-unknown Chaos transform lost live state")
+eq(CurrentRun.Hero.Traits[1].Name, "ChaosHealthBlessing", "outcome-unknown transform did not apply once")
+eq(fromLootCalls, beforeUnknownFromLoot + 1, "outcome-unknown transform applied wrong number of expiries")
+expectError("Previous action outcome is unknown; do not retry", function()
+  M.dispatch("advance_trait_lifecycle", unknownParams)
+end)
+eq(fromLootCalls, beforeUnknownFromLoot + 1, "outcome-unknown request replayed expiry")
 
 print("hades2_chaos_management_runtime_ok")
 '''
