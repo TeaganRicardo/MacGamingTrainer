@@ -212,8 +212,10 @@ def localize_catalog(decoded):
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         trait_id=item.get('name')
+        linked_trait=item.get('linkedTrait')
         source_id=item.get('sourceId')
         if isinstance(trait_id,str) and trait_id:lookup.append(trait_id)
+        if isinstance(linked_trait,str) and linked_trait:lookup.append(linked_trait)
         if isinstance(source_id,str) and source_id:
             lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
     if not lookup:return decoded
@@ -334,6 +336,23 @@ def localize_catalog(decoded):
             fallback_zh,_,fallback_en,_=_fallback_names({'kind':'trait','name':identifier},identifier,None,zh,en)
             item['displayName']=fallback_zh
             item['englishName']=fallback_en
+        linked_trait=item.get('linkedTrait')
+        if isinstance(linked_trait,str) and linked_trait:
+            linked_zh=_clean(zh.get(linked_trait)) if linked_trait in zh else None
+            linked_en=_clean(en.get(linked_trait)) if linked_trait in en else None
+            if isinstance(linked_zh,str) and linked_zh:
+                item['linkedDisplayName']=linked_zh
+                item['linkedEnglishName']=linked_en or linked_zh
+            elif isinstance(linked_en,str) and linked_en:
+                item['linkedDisplayName']=linked_en
+                item['linkedEnglishName']=linked_en
+            else:
+                fallback_zh,_,fallback_en,_=_fallback_names({'kind':'trait','name':linked_trait},linked_trait,None,zh,en)
+                item['linkedDisplayName']=fallback_zh
+                item['linkedEnglishName']=fallback_en
+        else:
+            item['linkedDisplayName']=''
+            item['linkedEnglishName']=''
         source_id=item.get('sourceId')
         if isinstance(source_id,str) and source_id:
             source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
