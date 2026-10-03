@@ -1924,7 +1924,7 @@ if __MacGamingTrainerV1 == nil then
         result[#result + 1] = item
       end
 
-      local slotted = currentSpell()
+      local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and type(slotted.Name) == "string"
           and type(slotted.Talents) == "table" then
         local talentNames, seenTalents = {}, {}
