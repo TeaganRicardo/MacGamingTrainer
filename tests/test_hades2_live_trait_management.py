@@ -56,7 +56,7 @@ def test_owner_family_controls_default_native_paths():
 
 
 def test_resident_revision_advances_for_the_new_runtime_contract():
-    assert "revision = 59" in LUA
+    assert "revision = 60" in LUA
 
 
 if __name__ == "__main__":
