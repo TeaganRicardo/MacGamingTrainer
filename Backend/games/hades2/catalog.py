@@ -370,7 +370,11 @@ def localize_catalog(decoded):
             item['linkedEnglishName']=''
         source_id=item.get('sourceId')
         if isinstance(source_id,str) and source_id:
-            source_text_id=_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            source_text_id = (
+                _HAMMER_TITLE_ID
+                if item.get('family') == 'hammer'
+                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            )
             item['sourceName']=_clean(zh.get(source_text_id)) or source_id
             item['sourceEnglishName']=_clean(en.get(source_text_id)) or source_id
         else:
