@@ -507,6 +507,51 @@ do
   eq(calls.add, beforeReplay, "outcome-unknown Selene request replayed")
 end
 
+-- A talent target captured from the previous Hex becomes stale after a source
+-- transition and must fail before adding any new effect.
+do
+  resetSpell("Polymorph", {})
+  local staleReward = "selene:talent:Polymorph:PolymorphDamageTalent"
+  check(findReward(staleReward) ~= nil, "stale-source fixture target missing before transition")
+  M.dispatch("spawn_reward", {
+    reward = "selene:spell:Meteor",
+    requestId = "selene-source-transition",
+    includeCatalogs = false,
+  })
+  local beforeAdd = calls.add
+  expectError("current Path of Stars", function()
+    M.dispatch("spawn_reward", {
+      reward = staleReward,
+      requestId = "selene-stale-source-talent",
+      includeCatalogs = false,
+    })
+  end)
+  eq(calls.add, beforeAdd, "stale Selene source target reached the mutator")
+end
+
+-- Feature disable/reset is not an undo path for one-shot trainer acquisition.
+-- The game-owned SlottedSpell and mounted talent remain coherent after disable.
+do
+  resetSpell("Meteor", {})
+  M.dispatch("spawn_reward", {
+    reward = "selene:talent:Meteor:MeteorDamageTalent",
+    requestId = "selene-before-disable",
+    includeCatalogs = false,
+  })
+  M.dispatch("disable_all", { includeCatalogs = false })
+  check(CurrentRun.Hero.SlottedSpell and CurrentRun.Hero.SlottedSpell.Name == "Meteor",
+    "disable_all detached the one-shot SlottedSpell owner")
+  check(hasTrait("SpellMeteorTrait"), "disable_all removed the one-shot main Hex")
+  check(hasTrait("MeteorDamageTalent"), "disable_all removed the one-shot talent")
+  local invested = false
+  for _, column in ipairs(CurrentRun.Hero.SlottedSpell.Talents or {}) do
+    for _, node in pairs(column) do
+      if node.Name == "MeteorDamageTalent" and node.Invested then invested = true end
+    end
+  end
+  check(invested, "disable_all desynchronized the Path of Stars owner state")
+end
+
 -- Mounted talent operations stay synchronized with the owning tree.
 do
   resetSpell("Meteor", { "ChargeRegenTalent" })
