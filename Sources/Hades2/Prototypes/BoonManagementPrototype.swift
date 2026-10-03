@@ -274,7 +274,7 @@ struct BoonManagementPrototypeView: View {
                 Spacer()
                 Button {
                 } label: {
-                    Label(t("献祭池", "Purging Pool"), systemImage: "arrow.left.arrow.right.circle")
+                    Label(t("净化之池", "Pool of Purging"), systemImage: "arrow.left.arrow.right.circle")
                 }
                 .buttonStyle(.bordered)
                 TextField(t("搜索当前效果", "Search current effects"), text: $runSearch)
