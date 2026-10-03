@@ -1133,6 +1133,25 @@
       "arguments": [],
       "key": "hades2.error.traitMutationNeedsRun"
     },
+    "advance_trait_lifecycle::Trait selection belongs to a stale run": {
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
+    },
+    "advance_trait_lifecycle::Trait selection belongs to a stale runtime generation": {
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
+    },
+    "advance_trait_lifecycle::Trait target changed since selection": {
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
+    },
+    "advance_trait_lifecycle::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
       "key": "hades2.error.sellNeedsRunRoom"
