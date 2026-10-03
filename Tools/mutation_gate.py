@@ -298,12 +298,12 @@ def manifest() -> list[Mutation]:
             old=("  'message': 'Trait mutation requires an active run room',\n"
                  "  'key': 'hades2.error.traitMutationNeedsRun',\n"
                  "  'runtime_only': True,\n"
-                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait'], "
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget'}}},"),
             new=("  'message': 'Trait mutation requires an active run room',\n"
                  "  'key': 'hades2.error.traitMutationNeedsRun',\n"
                  "  'runtime_only': True,\n"
-                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait'], "
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget_missing'}}},"),
             test="tests/test_hades2_error_registry_single_source.py",
             note="#204 dead-entry reverse coverage",

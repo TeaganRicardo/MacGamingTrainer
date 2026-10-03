@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 61 then
+if previousModule and previousModule.revision ~= 62 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 61 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 61, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 62, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1686,6 +1686,31 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    -- Chaos exact targets remain paired lifecycle choices. Selecting one
+    -- exact phase narrows only that side of TrialUpgrade; the counterpart is
+    -- still chosen from the target build's eligible native pool at operation time.
+    local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
+    if type(chaosSource) == "table" and chaosSource.TransformingTraits then
+      local chaosOrder = officialSourceOrder.Chaos or 20
+      local function addChaosExactRows(pool, prefix, mode, sectionTitle, orderOffset)
+        for index, traitName in ipairs(orderedTraitIds(pool)) do
+          local id = "chaos:" .. prefix .. ":" .. traitName
+          if not allowed[id] then
+            local item = {
+              id = id, name = traitName, category = "卡俄斯的祝福", group = "exact", kind = "trait",
+              trait = traitName, family = "chaos", sourceId = "Chaos", sourceName = "卡俄斯",
+              sectionTitle = sectionTitle, acquisitionMode = mode,
+              sortSection = 25, sortGroup = chaosOrder + orderOffset, sortOrder = index,
+            }
+            allowed[id] = item
+            result[#result + 1] = item
+          end
+        end
+      end
+      addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯的祝福", 0)
+      addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯的祝福", 1)
+    end
+
     local buckets = {}
     for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
@@ -1903,7 +1928,6 @@ if __MacGamingTrainerV1 == nil then
       OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
     }
     local deferredTraitIssues = {
-      chaos = 236,
       hex = 237,
       hammer = 238,
       costume = 239,
@@ -1995,12 +2019,36 @@ if __MacGamingTrainerV1 == nil then
       return true, ""
     end
 
+    local function listHasTraitName(list, name)
+      if type(list) ~= "table" or type(name) ~= "string" then return false end
+      for _, value in pairs(list) do
+        local candidate = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
+        if candidate == name then return true end
+      end
+      return false
+    end
+
+    local function chaosLifecycleState(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string" then return "" end
+      local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
+      if type(source) ~= "table" then return "" end
+      if listHasTraitName(source.TemporaryTraits, trait.Name) then return "curse" end
+      if listHasTraitName(source.PermanentTraits, trait.Name) then return "blessing" end
+      return ""
+    end
+
+    local function chaosLinkedTraitName(trait)
+      if chaosLifecycleState(trait) ~= "curse" then return "" end
+      local onExpire = trait.OnExpire
+      local linked = type(onExpire) == "table" and onExpire.TraitData or nil
+      return type(linked) == "table" and type(linked.Name) == "string" and linked.Name or ""
+    end
+
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
       if directTraitStrategies[name] ~= nil then return "directSpecial" end
-      if trait.LastCurseName ~= nil or trait.LastBlessingName ~= nil
-          or string.find(name, "Chaos", 1, true) ~= nil then return "chaos" end
+      if chaosLifecycleState(trait) ~= "" then return "chaos" end
       if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
       if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
@@ -2033,6 +2081,13 @@ if __MacGamingTrainerV1 == nil then
       if type(trait) ~= "table" then return result end
       local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
       local levels = type(definition) == "table" and definition.RarityLevels or trait.RarityLevels
+      if type(levels) ~= "table" and chaosLifecycleState(trait) == "curse" then
+        local linkedName = chaosLinkedTraitName(trait)
+        local linked = type(TraitData) == "table" and TraitData[linkedName] or nil
+        levels = type(linked) == "table" and linked.RarityLevels
+          or (type(trait.OnExpire) == "table" and type(trait.OnExpire.TraitData) == "table"
+            and trait.OnExpire.TraitData.RarityLevels or nil)
+      end
       if type(levels) ~= "table" then return result end
       for _, rarity in ipairs(rarityOrder) do
         if levels[rarity] ~= nil then result[#result + 1] = rarity end
@@ -2059,6 +2114,11 @@ if __MacGamingTrainerV1 == nil then
       else
         if sameCount > 1 then
           levelReason = "multipleMatchingInstances"
+        elseif family == "chaos"
+            and type(GetProcessedTraitData) == "function"
+            and type(RemoveTraitData) == "function"
+            and type(AddTraitToHero) == "function" then
+          levelCapability, levelReason = "increaseOne", ""
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
         elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
@@ -2074,6 +2134,11 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "multipleMatchingInstances"
         elseif trait.Rarity == nil or #rarities < 2 then
           rarityReason = "notMeaningful"
+        elseif family == "chaos"
+            and type(GetProcessedTraitData) == "function"
+            and type(RemoveTraitData) == "function"
+            and type(AddTraitToHero) == "function" then
+          rarityCapability, rarityReason = "setExact", ""
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -2084,7 +2149,9 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "ownerSpecificLifecycle"
         end
 
-        if strategy and strategy.removal == "singleInstanceForce" and directSafe
+        if family == "chaos" and type(RemoveTraitData) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
             and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "olympianHermes" and sellEligible then
@@ -2123,14 +2190,18 @@ if __MacGamingTrainerV1 == nil then
             instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
             name = trait.Name,
             family = family,
-            sourceId = traitSourceId(trait),
-            owner = traitSourceId(trait),
+            sourceId = family == "chaos" and "Chaos" or traitSourceId(trait),
+            owner = family == "chaos" and "Chaos" or traitSourceId(trait),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
             availableRarities = availableRarities(trait),
             sameNameCount = count,
             remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
+            lifecycleState = family == "chaos" and chaosLifecycleState(trait) or "",
+            linkedTrait = family == "chaos" and chaosLinkedTraitName(trait) or "",
+            canAdvanceLifecycle = family == "chaos" and chaosLifecycleState(trait) == "curse"
+              and chaosLinkedTraitName(trait) ~= "" and type(RemoveTraitData) == "function",
             levelCapability = levelCapability,
             levelReason = levelReason,
             rarityCapability = rarityCapability,
@@ -2180,6 +2251,54 @@ if __MacGamingTrainerV1 == nil then
       return false
     end
 
+    local function rebuildChaosTarget(target, targetLevel, targetRarity)
+      if chaosLifecycleState(target) == "" then error("Chaos trait editing is unavailable") end
+      requireFunctions("Chaos trait editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+      local level = targetLevel or traitLevel(target)
+      local rarity = targetRarity or traitRarity(target)
+      local rebuilt = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = target.Name, StackNum = level, Rarity = rarity,
+      })
+      if type(rebuilt) ~= "table" then error("Chaos trait edit failed") end
+      rebuilt.Id = target.Id
+      rebuilt.StackNum = level
+      rebuilt.Rarity = rarity
+
+      for _, key in ipairs({ "RemainingUses", "Uses", "CurrentRoom", "TraitTitle" }) do
+        if target[key] ~= nil then rebuilt[key] = DeepCopyTable(target[key]) end
+      end
+
+      if chaosLifecycleState(target) == "curse" then
+        local linkedName = chaosLinkedTraitName(target)
+        if linkedName == "" then error("Chaos trait editing is unavailable") end
+        local queued = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = linkedName, StackNum = level, Rarity = rarity,
+        })
+        if type(queued) ~= "table" then error("Chaos trait edit failed") end
+        queued.StackNum = level
+        queued.Rarity = rarity
+        rebuilt.OnExpire = type(target.OnExpire) == "table" and DeepCopyTable(target.OnExpire) or {}
+        rebuilt.OnExpire.TraitData = queued
+        rebuilt.TraitTitle = target.TraitTitle or rebuilt.TraitTitle
+          or ("ChaosCombo_" .. target.Name .. "_" .. linkedName)
+      end
+
+      RemoveTraitData(CurrentRun.Hero, target, {
+        Silent = true, SkipExpire = true, SkipActivatedTraitUpdate = true,
+      })
+      local added = AddTraitToHero({
+        TraitData = rebuilt,
+        SkipNewTraitHighlight = true,
+        SkipActivatedTraitUpdate = true,
+        SkipSetup = true,
+        SkipQuestStatusCheck = true,
+      })
+      if type(added) ~= "table" or tostring(added.Id) ~= tostring(target.Id) then
+        error("Chaos trait edit failed")
+      end
+      return added
+    end
+
     return {
       currentRunTraits = currentRunTraits,
       resolveTarget = resolveTraitTarget,
@@ -2188,6 +2307,9 @@ if __MacGamingTrainerV1 == nil then
       targetHasRarity = targetHasRarity,
       level = traitLevel,
       rarity = traitRarity,
+      chaosLifecycleState = chaosLifecycleState,
+      chaosLinkedTraitName = chaosLinkedTraitName,
+      rebuildChaosTarget = rebuildChaosTarget,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -3194,6 +3316,7 @@ if __MacGamingTrainerV1 == nil then
       set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "targetLevel" },
       set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
       remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
       open_special_choice = { "source" },
       spawn_reward = { "reward" },
     }
@@ -3571,9 +3694,11 @@ if __MacGamingTrainerV1 == nil then
         if levelCapability ~= "increaseOne" then
           error("Trait level editing is unavailable for the selected target")
         end
+        if family == "chaos" then
+          requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
         -- Ordinary God boons are re-checked against the game's real Pom
         -- eligibility. The explicit direct strategy is the only bypass.
-        if not traitManagement.hasDirectStrategy(target.Name) then
+        elseif not traitManagement.hasDirectStrategy(target.Name) then
           requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
           local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
           if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
@@ -3582,15 +3707,20 @@ if __MacGamingTrainerV1 == nil then
         else
           requireFunctions("trait level editing", { "IncreaseTraitLevel" })
         end
-        return target
+        return target, family
       end
       return actionLedger.run(command, params, function()
         -- Resolve again immediately before the mutation, after the deterministic
         -- preflight and after action() has ruled out a duplicate request.
-        local live = validateLevelTarget()
-        local before = traitManagement.level(live)
-        local delta = params.targetLevel - before
-        local upgraded = IncreaseTraitLevel(live, delta)
+        local live, family = validateLevelTarget()
+        local upgraded
+        if family == "chaos" then
+          upgraded = traitManagement.rebuildChaosTarget(live, params.targetLevel, nil)
+        else
+          local before = traitManagement.level(live)
+          local delta = params.targetLevel - before
+          upgraded = IncreaseTraitLevel(live, delta)
+        end
         if type(upgraded) ~= "table" or traitManagement.level(upgraded) ~= params.targetLevel then
           error("Trait level increase did not reach the requested target level")
         end
@@ -3605,17 +3735,26 @@ if __MacGamingTrainerV1 == nil then
             or params.rarity == traitManagement.rarity(target) then
           error("Trait rarity editing is unavailable for the selected target")
         end
-        requireFunctions("trait rarity editing", { "AddRarityToTraits" })
-        return target
+        if family == "chaos" then
+          requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+        else
+          requireFunctions("trait rarity editing", { "AddRarityToTraits" })
+        end
+        return target, family
       end
       return actionLedger.run(command, params, function()
-        local live = validateRarityTarget()
-        local upgraded = AddRarityToTraits({}, {
-          NumTraits = 1,
-          ForceUpgrade = { live },
-          TargetRarityName = params.rarity,
-          Silent = true,
-        })
+        local live, family = validateRarityTarget()
+        local upgraded
+        if family == "chaos" then
+          upgraded = traitManagement.rebuildChaosTarget(live, nil, params.rarity)
+        else
+          upgraded = AddRarityToTraits({}, {
+            NumTraits = 1,
+            ForceUpgrade = { live },
+            TargetRarityName = params.rarity,
+            Silent = true,
+          })
+        end
         if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
           error("Trait rarity recompute did not reach the requested rarity")
         end
@@ -3635,10 +3774,10 @@ if __MacGamingTrainerV1 == nil then
         else
           error("Trait removal capability is unknown")
         end
-        return target, removalCapability
+        return target, removalCapability, family
       end
       return actionLedger.run(command, params, function()
-        local live, removalCapability = validateRemovalTarget()
+        local live, removalCapability, family = validateRemovalTarget()
         if removalCapability == "nameLevelAllMatching" then
           -- Native SellTraits teardown: deliberately name-level/all-matching.
           RemoveWeaponTrait(live.Name, { Silent = true })
@@ -3659,6 +3798,33 @@ if __MacGamingTrainerV1 == nil then
           end
         end
       end, validateRemovalTarget)
+    end
+    if command == "advance_trait_lifecycle" then
+      local function validateChaosAdvance()
+        local target, family = traitManagement.resolveTarget(params)
+        if family ~= "chaos" or traitManagement.chaosLifecycleState(target) ~= "curse"
+            or traitManagement.chaosLinkedTraitName(target) == "" then
+          error("Chaos lifecycle transition is unavailable")
+        end
+        requireFunctions("Chaos lifecycle transition", { "RemoveTraitData" })
+        return target, traitManagement.chaosLinkedTraitName(target)
+      end
+      return actionLedger.run(command, params, function()
+        local live, linkedName = validateChaosAdvance()
+        RemoveTraitData(CurrentRun.Hero, live, { Silent = true })
+        local replacement = nil
+        for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(trait) == "table" and trait.Id ~= nil
+              and tostring(trait.Id) == params.instanceId then
+            replacement = trait
+            break
+          end
+        end
+        if type(replacement) ~= "table" or replacement.Name ~= linkedName
+            or traitManagement.chaosLifecycleState(replacement) ~= "blessing" then
+          error("Chaos lifecycle transition failed")
+        end
+      end, validateChaosAdvance)
     end
     if command == "open_sell_traits" then
       if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
@@ -3934,6 +4100,41 @@ if __MacGamingTrainerV1 == nil then
         requireFunctions("exact boon ownership", { "HeroHasTrait" })
         if HeroHasTrait(entry.trait) then error("Selected boon is already owned") end
 
+        if entry.acquisitionMode == "chaosBlessing" or entry.acquisitionMode == "chaosCurse" then
+          requireFunctions("exact Chaos acquisition", {
+            "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
+            "GetProcessedTraitData", "AddTraitToHero",
+          })
+          local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
+          if type(source) ~= "table" or not source.TransformingTraits then
+            error("Chaos exact acquisition is unavailable")
+          end
+          local selectedPool = entry.acquisitionMode == "chaosBlessing"
+            and source.PermanentTraits or source.TemporaryTraits
+          if not listContains(selectedPool, entry.trait) then
+            error("Chaos exact acquisition is unavailable")
+          end
+          local eligibleSelected = GetEligibleTransformingTrait({ entry.trait })
+          if not listContains(eligibleSelected, entry.trait) then
+            error("Chaos exact acquisition is unavailable")
+          end
+          local counterpartPool = entry.acquisitionMode == "chaosBlessing"
+            and source.TemporaryTraits or source.PermanentTraits
+          local eligibleCounterparts = GetEligibleTransformingTrait(counterpartPool)
+          if type(eligibleCounterparts) ~= "table" or next(eligibleCounterparts) == nil then
+            error("Chaos exact acquisition is unavailable")
+          end
+          source = DeepCopyTable(source)
+          if entry.acquisitionMode == "chaosBlessing" then
+            source.PermanentTraits = { entry.trait }
+          else
+            source.TemporaryTraits = { entry.trait }
+          end
+          source.UpgradeOptions = nil
+          source.Rarity = nil
+          exactPlan = { mode = entry.acquisitionMode, source = source }
+          return
+        end
         if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
           requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
           if entry.acquisitionMode == "costume" then
@@ -3972,6 +4173,51 @@ if __MacGamingTrainerV1 == nil then
         end
         exactPlan = { mode = "ordinaryNative", source = source }
       end
+      local function addChaosExact()
+        local source = exactPlan.source
+        SetTraitsOnLoot(source)
+        local option = nil
+        for _, candidate in pairs(source.UpgradeOptions or {}) do
+          if type(candidate) == "table" then
+            if exactPlan.mode == "chaosBlessing" and candidate.ItemName == entry.trait then
+              option = candidate
+              break
+            elseif exactPlan.mode == "chaosCurse" and candidate.SecondaryItemName == entry.trait then
+              option = candidate
+              break
+            end
+          end
+        end
+        if type(option) ~= "table" then
+          error("Chaos exact acquisition is unavailable")
+        end
+        if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
+          error("Chaos exact acquisition failed")
+        end
+        local rarity = option.Rarity or "Common"
+        local blessing = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = option.ItemName, Rarity = rarity,
+        })
+        local curse = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
+        })
+        if type(blessing) ~= "table" or type(curse) ~= "table" then
+          error("Chaos exact acquisition failed")
+        end
+        curse.OnExpire = curse.OnExpire or {}
+        curse.OnExpire.TraitData = blessing
+        curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
+        local added = AddTraitToHero({
+          TraitData = curse,
+          PreProcessedForDisplay = true,
+          FromLoot = true,
+        })
+        if type(added) ~= "table" then error("Chaos exact acquisition failed") end
+        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
+        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
+        return nil
+      end
+
       local function addOrdinaryExact()
         local source = exactPlan.source
         local option
@@ -4053,6 +4299,9 @@ if __MacGamingTrainerV1 == nil then
         end
         if entry.kind == "trait" then
           if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
+          if exactPlan and (exactPlan.mode == "chaosBlessing" or exactPlan.mode == "chaosCurse") then
+            return addChaosExact()
+          end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
             return addOrdinaryExact()
           end

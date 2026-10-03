@@ -19,17 +19,17 @@ _RUNTIME_COMMANDS = frozenset((
     'status','disable_all','set_desired','set_vital','set_counter','lock_vital',
     'set_stat','set_element','lock_element','set_resource','lock_resource',
     'set_rerolls','lock_rerolls','spawn_reward','open_sell_traits',
-    'open_special_choice','set_trait_level','set_trait_rarity','remove_trait',
+    'open_special_choice','set_trait_level','set_trait_rarity','remove_trait','advance_trait_lifecycle',
 ))
 
 
-# Removal is non-idempotent, so it requires a request id: a replay of the
-# same id is deduplicated by the resident runtime, and an
-# outcome-unknown request is never auto-retried.
+# Live trait actions are non-idempotent, so they require request ids: a replay
+# of the same id is deduplicated by the resident runtime, and an outcome-unknown
+# request is never auto-retried.
 _REQUEST_ID_COMMANDS = frozenset((
     'set_resource','set_rerolls','spawn_reward','open_sell_traits',
     'open_special_choice','lock_resource','lock_rerolls',
-    'set_trait_level','set_trait_rarity','remove_trait',
+    'set_trait_level','set_trait_rarity','remove_trait','advance_trait_lifecycle',
 ))
 
 

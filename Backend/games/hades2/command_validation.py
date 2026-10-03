@@ -102,7 +102,7 @@ def validate_command_params(command, params):
         if not isinstance(source,str) or not source:
             raise ValueError('请选择支持原生奖励选择界面的角色。')
 
-    if command in ('set_trait_level','set_trait_rarity','remove_trait'):
+    if command in ('set_trait_level','set_trait_rarity','remove_trait','advance_trait_lifecycle'):
         # A mutation always carries the exact observed target snapshot. The
         # resident runtime re-resolves these values immediately before applying
         # the operation; none of them are durable identities.
