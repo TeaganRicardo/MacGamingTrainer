@@ -1707,8 +1707,8 @@ if __MacGamingTrainerV1 == nil then
           end
         end
       end
-      addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯祝福", 0)
-      addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯诅咒", 1)
+      addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯的祝福", 0)
+      addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯的祝福", 1)
     end
 
     local buckets = {}
