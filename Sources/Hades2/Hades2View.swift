@@ -330,6 +330,7 @@ struct Hades2TrainerView: View {
     }
 
     private func defaultTraitRarityInput(_ trait: CurrentRunTrait) -> String {
+        guard !trait.rarity.isEmpty else { return "" }
         guard let index = trait.availableRarities.firstIndex(of: trait.rarity),
               trait.availableRarities.indices.contains(index + 1) else {
             return traitRarityLabel(trait.rarity)
@@ -439,6 +440,7 @@ struct Hades2TrainerView: View {
                         TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 70)
+                            .disabled(!model.canOpenNativeBoonScreen || !trait.canIncreaseLevel)
                         Button(text("hades2.traits.apply")) {
                             model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                         }
@@ -456,6 +458,7 @@ struct Hades2TrainerView: View {
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 105)
                             .help(trait.availableRarities.map(traitRarityLabel).joined(separator: " / "))
+                            .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
                         Button(text("hades2.traits.apply")) {
                             guard let rarity = canonicalTraitRarity(
                                 traitRarityInput(trait).wrappedValue,
@@ -1122,8 +1125,10 @@ struct Hades2TrainerView: View {
                 Button(text("hades2.spawn.open")) { model.openSellTraits() }
                     .disabled(!model.canOpenNativeBoonScreen)
             }
-            Divider()
-            currentRunTraitsPanel
+            if model.connected {
+                Divider()
+                currentRunTraitsPanel
+            }
         }.trainerPanel()
     }
 
