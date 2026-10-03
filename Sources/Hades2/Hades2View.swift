@@ -321,7 +321,7 @@ struct Hades2TrainerView: View {
         }
         let presentationKey = "hades2.traits.family.\(trait.family)"
         let localized = text(presentationKey)
-        return localized == presentationKey ? trait.family : localized
+        return localized == presentationKey ? text("hades2.traits.family.other") : localized
     }
 
     private func traitLevelInput(_ trait: CurrentRunTrait) -> Binding<String> {
@@ -1216,7 +1216,7 @@ struct Hades2TrainerView: View {
     private func exactItemSourceLabel(_ option: BoonOption) -> String {
         let source = localization.language == .en ? option.sourceEnglishName : option.sourceName
         let category = localization.language == .en ? option.englishCategory : option.category
-        if source.isEmpty { return category }
+        if source.isEmpty { return category.isEmpty ? text("hades2.traits.family.other") : category }
         if category.isEmpty || category == source { return source }
         return "\(source) · \(category)"
     }
