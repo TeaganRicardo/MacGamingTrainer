@@ -1700,10 +1700,21 @@ if __MacGamingTrainerV1 == nil then
           or type(spellData.TraitName) ~= "string" then
         error("Selene spell target is unavailable")
       end
-      teardown()
       local slotted = DeepCopyTable(spellData)
       slotted.Name = spellName
+      local duoEligible = type(SessionMapState) == "table"
+        and type(SessionMapState.DuoTalentEligibleSpell) == "table"
+        and SessionMapState.DuoTalentEligibleSpell[spellName]
+      if duoEligible and type(IsGameStateEligible) == "function"
+          and type(SpellTalentData) == "table" then
+        duoEligible = not not IsGameStateEligible(nil, SpellTalentData.ServeDuoGameRequirements)
+      else
+        duoEligible = false
+      end
+      slotted.HasDuoTalent = not not duoEligible
       slotted.Talents = DeepCopyTable(CreateTalentTree(spellData))
+
+      teardown()
       CurrentRun.Hero.SlottedSpell = slotted
       CurrentRun.SpellCharge = 0
       requireFunctions("Selene spell acquisition", { "HeroHasTrait" })
@@ -1720,8 +1731,15 @@ if __MacGamingTrainerV1 == nil then
         UpdateTalentPointInvestedCache()
         error("Selene spell acquisition failed")
       end
-      if type(added.CheckChargeFunctionName) == "string" and type(CallFunctionName) == "function" then
-        CallFunctionName(added.CheckChargeFunctionName, CurrentRun.Hero, nil, { Grouped = false })
+
+      if slotted.CheckSpellReadyOnAcquire then
+        if type(added.CheckChargeFunctionName) == "string" then
+          requireFunctions("Selene spell ready check", { "thread", "CallFunctionName" })
+          thread(CallFunctionName, added.CheckChargeFunctionName, CurrentRun.Hero)
+        end
+      else
+        requireFunctions("Selene spell ready presentation", { "thread", "SpellReadyPresentation" })
+        thread(SpellReadyPresentation, added, 1.5)
       end
       UpdateTalentPointInvestedCache()
       return added
