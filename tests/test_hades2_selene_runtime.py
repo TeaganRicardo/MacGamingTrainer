@@ -14,7 +14,9 @@ local runtimePath = assert(arg[1], "runtime path required")
 local contractPath = assert(arg[2], "dispatch contract path required")
 
 SessionState = {}
-SessionMapState = {}
+SessionMapState = {
+  DuoTalentEligibleSpell = { Meteor = true },
+}
 GameState = { Resources = {}, LifetimeResourcesGained = {}, RunHistory = {} }
 ResourceData = {}
 ResourceDisplayOrderData = {}
@@ -80,6 +82,12 @@ TraitData = {
     Slot = "Spell",
     PreEquipWeapons = { "WeaponSpellMeteor" },
   },
+  SpellSummonTrait = {
+    Name = "SpellSummonTrait",
+    Slot = "Spell",
+    PreEquipWeapons = { "WeaponSpellSummon" },
+    CheckChargeFunctionName = "MockSpellCheck",
+  },
   SpellMoonBeamTrait = {
     Name = "SpellMoonBeamTrait",
     Slot = "Spell",
@@ -128,6 +136,16 @@ SpellData = {
       },
     },
   },
+  Summon = {
+    Name = "Summon",
+    TraitName = "SpellSummonTrait",
+    CheckSpellReadyOnAcquire = true,
+    MockTree = {
+      {
+        { Name = "ChargeRegenTalent", Rarity = "Common" },
+      },
+    },
+  },
   MoonBeam = {
     Name = "MoonBeam",
     TraitName = "SpellMoonBeamTrait",
@@ -135,6 +153,9 @@ SpellData = {
     MockTree = {},
   },
 }
+
+SpellTalentData = { ServeDuoGameRequirements = {} }
+IsGameStateEligible = function() return true end
 
 CreateTalentTree = function(spellData)
   return deepCopy(spellData.MockTree or {})
@@ -151,6 +172,8 @@ local calls = {
   talentAcquire = 0,
   rarity = 0,
   level = 0,
+  readyCheck = 0,
+  readyPresentation = 0,
 }
 local nextId = 100
 local failAddAfterMutation = false
@@ -246,7 +269,17 @@ end
 CallFunctionName = function(name, args, trait)
   if name == "MockTalentAcquire" then
     calls.talentAcquire = calls.talentAcquire + 1
+  elseif name == "MockSpellCheck" then
+    calls.readyCheck = calls.readyCheck + 1
   end
+end
+
+SpellReadyPresentation = function()
+  calls.readyPresentation = calls.readyPresentation + 1
+end
+
+thread = function(fn, ...)
+  return fn(...)
 end
 
 IsGodTrait = function() return false end
@@ -418,7 +451,26 @@ do
   check(MapState.EquippedWeapons.WeaponSpellPolymorph == nil, "old spell weapon remained equipped")
   eq(CurrentRun.SpellCharge, 0, "spell charge was not reset on replacement")
   eq(CurrentRun.NumTalentPoints, beforePoints, "spell replacement rewrote talent-point progression")
+  check(CurrentRun.Hero.SlottedSpell.HasDuoTalent == true,
+    "native Selene duo-eligibility marker was not initialized")
+  check(calls.readyPresentation > 0, "normal Hex did not schedule native ready presentation")
   eq(result.actionOutcome, "completed", "spell replacement outcome")
+end
+
+-- Hexes with CheckSpellReadyOnAcquire use the owner-specific charge check
+-- instead of the normal ready presentation.
+do
+  resetSpell("Polymorph", {})
+  local beforeReadyCheck = calls.readyCheck
+  local beforePresentation = calls.readyPresentation
+  M.dispatch("spawn_reward", {
+    reward = "selene:spell:Summon",
+    requestId = "selene-summon-ready-check",
+    includeCatalogs = false,
+  })
+  eq(calls.readyCheck, beforeReadyCheck + 1, "Summon Hex did not run its charge check")
+  eq(calls.readyPresentation, beforePresentation,
+    "Summon Hex incorrectly used the generic ready presentation")
 end
 
 -- A game callback that mutates and then fails acknowledgement leaves a coherent
