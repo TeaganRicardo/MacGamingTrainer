@@ -431,7 +431,7 @@ do
     M.dispatch("set_trait_level", staleRun)
   end)
 
-  local changed = paramsFrom(row, "changed-target")
+  local changed = paramsFrom(row, "changed-target", row.level + 1)
   trait.StackNum = 2
   expectError("Trait target changed since selection", function()
     M.dispatch("set_trait_level", changed)
@@ -446,7 +446,7 @@ do
   local trait = newTrait("OrdinaryReplay", 901, 1, "Rare")
   setTraits(trait)
   local row = findRow("OrdinaryReplay", 901)
-  local params = paramsFrom(row, "dedup-level")
+  local params = paramsFrom(row, "dedup-level", row.level + 1)
   local beforeLevel = calls.level
   local first = M.dispatch("set_trait_level", params)
   local second = M.dispatch("set_trait_level", params)
