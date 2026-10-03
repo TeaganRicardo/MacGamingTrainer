@@ -454,6 +454,7 @@ do
   eq(hammer.rarityCapability, "setExact", "upgradable Hammer rarity capability")
   eq(hammer.removalCapability, "singleInstanceForce", "Hammer removal capability")
   eq(aspect.family, "weaponAspect", "runtime aspect owner family")
+  eq(aspect.sourceId, "", "runtime aspect incorrectly presented as a Hammer source")
   eq(aspect.levelCapability, "none", "runtime aspect fabricated level support")
   eq(aspect.rarityCapability, "none", "runtime aspect diverged from permanent rank")
   eq(aspect.removalCapability, "none", "runtime aspect exposed unsafe removal")
