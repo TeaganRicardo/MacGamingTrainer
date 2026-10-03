@@ -115,18 +115,28 @@ assert direct['sourceName'] == '阿耳忒弥斯' and direct['sourceEnglishName']
 assert direct['sectionTitle'] == '阿耳忒弥斯' and direct['englishSectionTitle'] == 'Artemis'
 assert direct['englishCategory'] == 'Character Rewards'
 
-# The exact-acquisition picker is its own user-visible surface directly below
-# Character Rewards and above the mounted-management affordance. Recognition
-# labels must stay user-facing: backend strategy and raw TraitData ids are not
-# presentation fields.
+# Exact acquisition is a browsable Hades-owned list directly below Character
+# Rewards and above mounted management. Full-catalog browsing must not require
+# one picker selection, and search must use player-facing names/source metadata
+# rather than raw routing ids.
 boon_panel = view[view.index('private var boonPanel: some View'):view.index('private func spawnRow', view.index('private var boonPanel: some View'))]
 character_index = boon_panel.index('hades2.spawn.characterRewards')
 exact_index = boon_panel.index('hades2.spawn.exactBoons')
 purging_index = boon_panel.index('hades2.spawn.purgingPool')
 assert character_index < exact_index < purging_index
-assert '$model.selectedExactBoon' in boon_panel
+assert '$model.selectedExactBoon' not in boon_panel
 assert '$exactSearch' in boon_panel
-assert 'exactItemLabel' in boon_panel
+exact_surface = boon_panel[exact_index:purging_index]
+assert 'TrainerGroupedOptionPicker' not in exact_surface
+assert 'exactBoonAcquisitionList' in exact_surface
+assert 'model.acquireExactBoon(option.id)' in view
+assert 'DisclosureGroup' in view
+assert 'exactSearch.isEmpty' in view
+
+exact_filter = view[view.index('private var exactBoons:'):view.index('private var material:', view.index('private var exactBoons:'))]
+assert '.targetID.localizedCaseInsensitiveContains(exactSearch)' not in exact_filter
+assert '.id.localizedCaseInsensitiveContains(exactSearch)' not in exact_filter
+
 exact_label = view[view.index('private func exactItemLabel'):view.index('private func spawnRow', view.index('private func exactItemLabel'))]
 assert 'exactModeNative' not in exact_label
 assert 'exactModeForced' not in exact_label
@@ -196,8 +206,16 @@ assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 
 trait_row = view[view.index('private func currentRunTraitRow'):view.index('private var resourceSection')]
 assert 'Text(trait.name).monospaced()' not in trait_row
-assert 'model.advanceTraitLifecycle(trait)' in trait_row
+assert 'if trait.canIncreaseLevel' in trait_row
+assert 'if trait.canSetRarity' in trait_row
+assert 'if trait.canRemove' in trait_row
+assert 'traitLimitationRows(trait)' not in trait_row
+assert 'trait.deferredIssue' not in trait_row
+assert 'currentRunTraitContextActions(trait)' in trait_row
 assert 'hades2.traits.chaos.cancelPair' in trait_row
+
+context_actions = view[view.index('private func currentRunTraitContextActions'):view.index('private var resourceSection')]
+assert 'model.advanceTraitLifecycle(trait)' in context_actions
 
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.
