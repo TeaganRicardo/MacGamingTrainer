@@ -44,6 +44,5 @@ struct Hades2ViewCatalogSnapshot: Equatable {
     let olympianIDs: [String]
     let pickupIDs: [String]
     let specialIDs: [String]
-    let exactIDs: [String]
     let filteredResourceIDs: [String]
 }
