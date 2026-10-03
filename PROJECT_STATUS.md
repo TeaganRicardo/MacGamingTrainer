@@ -48,7 +48,8 @@ Current source contains resident revision 61. Revisions 52–61 remain pending t
 - revision 57: seamless Cast recast follows transformed/thrown delivery weapons;
 - revision 58: resident main-chunk local pressure reduced below stock Lua 5.2's compile limit;
 - revision 59: Cast diagnostics sequences use the resident JSON array contract;
-- revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract;\n- revision 61: Trainer infinite ammo stops spoofing the native `UnlimitedAmmo` trait value so Argent Skull fire/death/pickup bookkeeping remains game-owned while negative ammo deltas stay suppressed for uninterrupted firing.
+- revision 60: current-run boon level mutation accepts one explicit higher target level while preserving live-target revalidation and game-owned recomputation; #306 also reworks the manager UI around that contract;
+- revision 61: Trainer infinite ammo stops spoofing the native `UnlimitedAmmo` trait value so Argent Skull fire/death/pickup bookkeeping remains game-owned while negative ammo deltas stay suppressed for uninterrupted firing.
 
 Automated verification does not replace this manual acceptance.
 
@@ -91,7 +92,8 @@ Planning issue #124 is the sequencing authority.
 - Control-plane/catalog/CI/test hygiene through #273, #275, #277, #279, #281 and #283 is complete.
 - #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
 - #306 corrective current-run boon manager work is complete in this source.
-- #230 pickup-compatible infinite-ammo correction is complete in this source.\n- **Next selected feature task: #231** — viewport-pinned floating feedback with readable automatic fadeout and retained actionable error/recovery state.
+- #230 pickup-compatible infinite-ammo correction is complete in this source.
+- **Next selected feature task: #231** — viewport-pinned floating feedback with readable automatic fadeout and retained actionable error/recovery state.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
