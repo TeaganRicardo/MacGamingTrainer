@@ -90,7 +90,8 @@ Planning issue #124 is the sequencing authority.
 - #262 / PR #271 identity migration is complete.
 - Control-plane/catalog/CI/test hygiene through #273, #275, #277, #279, #281 and #283 is complete.
 - #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
-- **Current selected corrective task: #306** — finish the #221/#227 current-run boon manager as a generation-adjacent searchable list with explicit target-level/rarity Apply controls and visible removal. Resume #230 immediately after #306.
+- #306 corrective current-run boon manager work is complete in this source.
+- **Next selected feature task: #230** — infinite ammo compatible with native fired-ammo pickup/return and associated effects.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
