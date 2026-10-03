@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 62 then
+if previousModule and previousModule.revision ~= 63 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 62 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 62, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 63, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1576,9 +1576,268 @@ if __MacGamingTrainerV1 == nil then
     for _, name in ipairs(fallback) do add(name) end
     return result
   end
+  local seleneModel = (function()
+    local function currentSpell()
+      local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      local slotted = type(hero) == "table" and hero.SlottedSpell or nil
+      return type(slotted) == "table" and slotted or nil
+    end
+
+    local function talentNodes(traitName, invested)
+      local result = setmetatable({}, arrayMeta)
+      local slotted = currentSpell()
+      local talents = slotted and slotted.Talents or nil
+      if type(traitName) ~= "string" or type(talents) ~= "table" then return result end
+      for depth, column in ipairs(talents) do
+        if type(column) == "table" then
+          for slot, node in pairs(column) do
+            if type(node) == "table" and node.Name == traitName
+                and (invested == nil or not not node.Invested == invested) then
+              result[#result + 1] = { depth = depth, slot = slot, node = node }
+            end
+          end
+        end
+      end
+      table.sort(result, function(a, b)
+        if a.depth ~= b.depth then return a.depth < b.depth end
+        return tostring(a.slot) < tostring(b.slot)
+      end)
+      return result
+    end
+
+    local function catalogSignature()
+      local slotted = currentSpell()
+      if type(slotted) ~= "table" then return "none" end
+      local parts = { tostring(slotted.Name or ""), tostring(slotted.TraitName or "") }
+      for depth, column in ipairs(slotted.Talents or {}) do
+        local keys = {}
+        for slot in pairs(type(column) == "table" and column or {}) do keys[#keys + 1] = slot end
+        table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+        for _, slot in ipairs(keys) do
+          local node = column[slot]
+          if type(node) == "table" and type(node.Name) == "string" then
+            parts[#parts + 1] = table.concat({
+              tostring(depth), tostring(slot), node.Name,
+              node.Invested and "1" or "0", tostring(node.Rarity or ""),
+            }, ":")
+          end
+        end
+      end
+      return table.concat(parts, "|")
+    end
+
+    local function investedTalentNames(slotted)
+      local names = {}
+      for _, column in ipairs(type(slotted) == "table" and slotted.Talents or {}) do
+        for _, node in pairs(type(column) == "table" and column or {}) do
+          if type(node) == "table" and node.Invested and type(node.Name) == "string" then
+            names[node.Name] = true
+          end
+        end
+      end
+      return names
+    end
+
+    local function teardown()
+      local slotted = currentSpell()
+      if type(slotted) ~= "table" then return nil end
+      requireFunctions("Selene spell teardown", {
+        "HeroHasTrait", "RemoveTrait", "UnequipWeapon", "UpdateTalentPointInvestedCache",
+      })
+      local hero = CurrentRun.Hero
+      for traitName in pairs(investedTalentNames(slotted)) do
+        while HeroHasTrait(traitName) do
+          RemoveTrait(hero, traitName, { Silent = true, SkipExpire = true })
+        end
+      end
+      local mainTraitName = slotted.TraitName
+      local mainTrait = nil
+      for _, trait in ipairs(hero.Traits or {}) do
+        if type(trait) == "table" and trait.Name == mainTraitName then
+          mainTrait = trait
+          break
+        end
+      end
+      if type(mainTrait) ~= "table" and type(mainTraitName) == "string"
+          and type(TraitData) == "table" then
+        mainTrait = TraitData[mainTraitName]
+      end
+      if type(mainTrait) == "table" and type(SpellUnreadyPresentation) == "function" then
+        pcall(SpellUnreadyPresentation, mainTrait)
+      elseif type(SessionMapState) == "table" then
+        SessionMapState.SpellWorldReadyFx = nil
+      end
+      if type(MapState) == "table" then MapState.ActiveSpellPresentation = nil end
+      for _, weaponName in pairs(type(mainTrait) == "table" and mainTrait.PreEquipWeapons or {}) do
+        UnequipWeapon({
+          DestinationId = hero.ObjectId, Name = weaponName, UnloadPackages = false,
+        })
+        if type(MapState) == "table" and type(MapState.EquippedWeapons) == "table" then
+          MapState.EquippedWeapons[weaponName] = nil
+        end
+      end
+      if type(mainTraitName) == "string" then
+        while HeroHasTrait(mainTraitName) do
+          RemoveTrait(hero, mainTraitName, { Silent = true, SkipExpire = true })
+        end
+      end
+      hero.SlottedSpell = nil
+      CurrentRun.SpellCharge = 0
+      CurrentRun.AllSpellInvestedCache = false
+      CurrentRun.AllUniqueSpellInvestedCache = false
+      if type(SessionMapState) == "table" then SessionMapState.PendingSpellChanges = nil end
+      UpdateTalentPointInvestedCache()
+      return mainTraitName
+    end
+
+    local function applySpell(spellName)
+      requireFunctions("Selene spell acquisition", {
+        "DeepCopyTable", "CreateTalentTree", "AddTraitToHero", "UpdateTalentPointInvestedCache",
+      })
+      local spellData = type(SpellData) == "table" and SpellData[spellName] or nil
+      if type(spellData) ~= "table" or spellData.Skip
+          or (type(spellData.GameStateRequirements) == "table" and spellData.GameStateRequirements.Skip)
+          or type(spellData.TraitName) ~= "string" then
+        error("Selene spell target is unavailable")
+      end
+      local slotted = DeepCopyTable(spellData)
+      slotted.Name = spellName
+      slotted.Talents = DeepCopyTable(CreateTalentTree(spellData))
+      slotted.HasDuoTalent = false
+      for _, column in ipairs(slotted.Talents or {}) do
+        for _, node in pairs(type(column) == "table" and column or {}) do
+          local talentData = type(node) == "table" and type(TraitData) == "table"
+            and TraitData[node.Name] or nil
+          if type(talentData) == "table" and talentData.IsDuoBoon then
+            slotted.HasDuoTalent = true
+            break
+          end
+        end
+        if slotted.HasDuoTalent then break end
+      end
+
+      teardown()
+      requireFunctions("Selene spell acquisition", { "HeroHasTrait" })
+      local ok, added = pcall(AddTraitToHero, {
+        TraitName = spellData.TraitName, SkipNewTraitHighlight = true,
+      })
+      if not ok then
+        if HeroHasTrait(spellData.TraitName) then
+          CurrentRun.Hero.SlottedSpell = slotted
+          CurrentRun.SpellCharge = 0
+        end
+        UpdateTalentPointInvestedCache()
+        error(added)
+      end
+      if type(added) ~= "table" then
+        if HeroHasTrait(spellData.TraitName) then
+          CurrentRun.Hero.SlottedSpell = slotted
+          CurrentRun.SpellCharge = 0
+        end
+        UpdateTalentPointInvestedCache()
+        error("Selene spell acquisition failed")
+      end
+      CurrentRun.Hero.SlottedSpell = slotted
+      CurrentRun.SpellCharge = 0
+
+      if slotted.CheckSpellReadyOnAcquire then
+        if type(added.CheckChargeFunctionName) == "string" then
+          requireFunctions("Selene spell ready check", { "thread", "CallFunctionName" })
+          thread(CallFunctionName, added.CheckChargeFunctionName, CurrentRun.Hero)
+        end
+      else
+        requireFunctions("Selene spell ready presentation", { "thread", "SpellReadyPresentation" })
+        thread(SpellReadyPresentation, added, 1.5)
+      end
+      UpdateTalentPointInvestedCache()
+      return added
+    end
+
+    local function applyTalent(traitName)
+      local available = talentNodes(traitName, false)
+      if #available == 0 then error("Selene talent is no longer available in the current Path of Stars") end
+      requireFunctions("Selene talent acquisition", {
+        "HeroHasTrait", "GetHeroTrait", "AddTraitToHero", "IncreaseTraitLevel",
+        "UpdateTalentPointInvestedCache",
+      })
+      local selected = available[1].node
+      selected.Invested = true
+      selected.QueuedInvested = nil
+      local runtimeTrait
+      if HeroHasTrait(traitName) then
+        runtimeTrait = GetHeroTrait(traitName)
+        if type(runtimeTrait) ~= "table" then error("Mounted Selene talent is unavailable") end
+        local beforeLevel = tonumber(runtimeTrait.StackNum) or 1
+        local ok, upgraded = pcall(IncreaseTraitLevel, runtimeTrait)
+        local liveLevel = tonumber(runtimeTrait.StackNum) or 1
+        if not ok then
+          if liveLevel == beforeLevel then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error(upgraded)
+        end
+        if type(upgraded) ~= "table" or (tonumber(upgraded.StackNum) or liveLevel) <= beforeLevel then
+          if liveLevel == beforeLevel then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error("Selene talent acquisition failed")
+        end
+        runtimeTrait = upgraded
+        local base = type(TraitData) == "table" and TraitData[traitName] or nil
+        if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
+          requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
+          CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, runtimeTrait)
+        end
+      else
+        local ok, added = pcall(AddTraitToHero, {
+          TraitName = traitName, Rarity = selected.Rarity, FromLoot = true,
+        })
+        if not ok then
+          if not HeroHasTrait(traitName) then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error(added)
+        end
+        runtimeTrait = added
+      end
+      if type(runtimeTrait) ~= "table" then
+        if not HeroHasTrait(traitName) then
+          selected.Invested = false
+          selected.QueuedInvested = nil
+        end
+        UpdateTalentPointInvestedCache()
+        error("Selene talent acquisition failed")
+      end
+      local base = type(TraitData) == "table" and TraitData[traitName] or nil
+      if type(base) == "table" and base.IsDuoBoon then
+        CurrentRun.Hero.SlottedSpell.ObtainedDuoTalent = true
+      end
+      UpdateTalentPointInvestedCache()
+      return runtimeTrait
+    end
+
+    return {
+      currentSpell = currentSpell,
+      talentNodes = talentNodes,
+      catalogSignature = catalogSignature,
+      teardown = teardown,
+      applySpell = applySpell,
+      applyTalent = applyTalent,
+    }
+  end)()
+
   local function rewards()
     local cached = M.catalogCache.rewards
-    if type(cached) == "table" then return cached.list, cached.allowed end
+    local seleneSignature = seleneModel.catalogSignature()
+    if type(cached) == "table" and cached.seleneSignature == seleneSignature then
+      return cached.list, cached.allowed
+    end
     local result, allowed = setmetatable({}, arrayMeta), {}
     local officialSourceOrder = officialSpecialSourceOrder()
     local familyTitles = {
@@ -1601,7 +1860,7 @@ if __MacGamingTrainerV1 == nil then
         allowed[entry.id] = {
           id = entry.id, name = entry.name, category = entry.category, group = entry.group or "pickup", kind = entry.kind,
           family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode,
-          acquisitionMode = entry.acquisitionMode, sortSection = section,
+          acquisitionMode = entry.acquisitionMode, spellName = entry.spellName, sortSection = section,
           sortGroup = (entry.group == "special" or entry.group == "exact")
             and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
           sortOrder = entry.itemOrder or 0, sourceId = entry.sourceId, sourceName = entry.sourceName,
@@ -1711,6 +1970,67 @@ if __MacGamingTrainerV1 == nil then
       addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯的祝福", 1)
     end
 
+    -- Selene exact targets are projected from the native spell owner. Main
+    -- Hexes come from SpellData; talents come only from the current generated
+    -- Path of Stars rather than the global TraitData talent universe.
+    if type(SpellData) == "table" and type(TraitData) == "table" then
+      local seleneOrder = officialSourceOrder.Selene or 10
+      local spellNames = {}
+      for spellName, spellData in pairs(SpellData) do
+        if type(spellName) == "string" and type(spellData) == "table"
+            and not spellData.Skip
+            and not (type(spellData.GameStateRequirements) == "table"
+              and spellData.GameStateRequirements.Skip)
+            and type(spellData.TraitName) == "string"
+            and type(TraitData[spellData.TraitName]) == "table" then
+          spellNames[#spellNames + 1] = spellName
+        end
+      end
+      table.sort(spellNames)
+      for index, spellName in ipairs(spellNames) do
+        local spellData = SpellData[spellName]
+        local id = "selene:spell:" .. spellName
+        local item = {
+          id = id, name = spellData.TraitName, category = "角色奖励", group = "exact", kind = "trait",
+          trait = spellData.TraitName, family = "hex", sourceId = "Selene", sourceName = "塞勒涅",
+          sectionTitle = "塞勒涅", acquisitionMode = "seleneSpell", spellName = spellName,
+          sortSection = 25, sortGroup = seleneOrder, sortOrder = index,
+        }
+        allowed[id] = item
+        result[#result + 1] = item
+      end
+
+      local slotted = seleneModel.currentSpell()
+      if type(slotted) == "table" and type(slotted.Name) == "string"
+          and type(slotted.Talents) == "table" then
+        local talentNames, seenTalents, availableTalents = {}, {}, {}
+        for _, column in ipairs(slotted.Talents) do
+          for _, node in pairs(type(column) == "table" and column or {}) do
+            if type(node) == "table" and type(node.Name) == "string"
+                and type(TraitData[node.Name]) == "table" then
+              if not seenTalents[node.Name] then
+                seenTalents[node.Name] = true
+                talentNames[#talentNames + 1] = node.Name
+              end
+              if not node.Invested then availableTalents[node.Name] = true end
+            end
+          end
+        end
+        table.sort(talentNames)
+        for index, traitName in ipairs(talentNames) do
+          local id = "selene:talent:" .. slotted.Name .. ":" .. traitName
+          local item = {
+            id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
+            trait = traitName, family = "hexTalent", sourceId = "Selene", sourceName = "塞勒涅",
+            sectionTitle = "繁星之路", acquisitionMode = "seleneTalent", spellName = slotted.Name,
+            sortSection = 25, sortGroup = seleneOrder + 1, sortOrder = index,
+          }
+          allowed[id] = item
+          if availableTalents[traitName] then result[#result + 1] = item end
+        end
+      end
+    end
+
     local buckets = {}
     for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
@@ -1770,7 +2090,9 @@ if __MacGamingTrainerV1 == nil then
     end)
     if type(LootData) == "table" and type(ConsumableData) == "table"
         and type(RewardStoreData) == "table" and type(UnitSetData) == "table" and type(TraitData) == "table" then
-      M.catalogCache.rewards = { list = result, allowed = allowed }
+      M.catalogCache.rewards = {
+        list = result, allowed = allowed, seleneSignature = seleneSignature,
+      }
     end
     return result, allowed
   end
@@ -1928,7 +2250,6 @@ if __MacGamingTrainerV1 == nil then
       OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
     }
     local deferredTraitIssues = {
-      hex = 237,
       hammer = 238,
       costume = 239,
       temporary = 239,
@@ -2049,6 +2370,9 @@ if __MacGamingTrainerV1 == nil then
       local name = trait.Name or ""
       if directTraitStrategies[name] ~= nil then return "directSpecial" end
       if chaosLifecycleState(trait) ~= "" then return "chaos" end
+      local slotted = seleneModel.currentSpell()
+      if type(slotted) == "table" and slotted.TraitName == name then return "hex" end
+      if #seleneModel.talentNodes(name, true) > 0 then return "hexTalent" end
       if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
       if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
@@ -2114,6 +2438,13 @@ if __MacGamingTrainerV1 == nil then
       else
         if sameCount > 1 then
           levelReason = "multipleMatchingInstances"
+        elseif family == "hexTalent" and #seleneModel.talentNodes(trait.Name, false) > 0
+            and type(IncreaseTraitLevel) == "function"
+            and type(UpdateTalentPointInvestedCache) == "function"
+            and (type(TraitData) ~= "table" or type(TraitData[trait.Name]) ~= "table"
+              or type(TraitData[trait.Name].AcquireFunctionName) ~= "string"
+              or type(CallFunctionName) == "function") then
+          levelCapability, levelReason = "increaseOne", ""
         elseif family == "chaos"
             and type(GetProcessedTraitData) == "function"
             and type(RemoveTraitData) == "function"
@@ -2134,6 +2465,8 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "multipleMatchingInstances"
         elseif trait.Rarity == nil or #rarities < 2 then
           rarityReason = "notMeaningful"
+        elseif family == "hexTalent" and type(AddRarityToTraits) == "function" then
+          rarityCapability, rarityReason = "setExact", ""
         elseif family == "chaos"
             and type(GetProcessedTraitData) == "function"
             and type(RemoveTraitData) == "function"
@@ -2149,7 +2482,18 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "ownerSpecificLifecycle"
         end
 
-        if family == "chaos" and type(RemoveTraitData) == "function" then
+        local slotted = seleneModel.currentSpell()
+        if sameCount > 1 and (family == "hex" or family == "hexTalent") then
+          removalReason = "multipleMatchingInstances"
+        elseif family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
+            and type(HeroHasTrait) == "function" and type(RemoveTrait) == "function"
+            and type(UnequipWeapon) == "function" and type(UpdateTalentPointInvestedCache) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "hexTalent" and #seleneModel.talentNodes(trait.Name, true) > 0
+            and type(RemoveTraitData) == "function"
+            and type(UpdateTalentPointInvestedCache) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "chaos" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
             and type(RemoveTraitData) == "function" then
@@ -2190,8 +2534,10 @@ if __MacGamingTrainerV1 == nil then
             instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
             name = trait.Name,
             family = family,
-            sourceId = family == "chaos" and "Chaos" or traitSourceId(trait),
-            owner = family == "chaos" and "Chaos" or traitSourceId(trait),
+            sourceId = family == "chaos" and "Chaos"
+              or ((family == "hex" or family == "hexTalent") and "Selene" or traitSourceId(trait)),
+            owner = family == "chaos" and "Chaos"
+              or ((family == "hex" or family == "hexTalent") and "Selene" or traitSourceId(trait)),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
@@ -2310,6 +2656,8 @@ if __MacGamingTrainerV1 == nil then
       chaosLifecycleState = chaosLifecycleState,
       chaosLinkedTraitName = chaosLinkedTraitName,
       rebuildChaosTarget = rebuildChaosTarget,
+      seleneTalentNodes = seleneModel.talentNodes,
+      teardownSlottedSpell = seleneModel.teardown,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -3696,6 +4044,18 @@ if __MacGamingTrainerV1 == nil then
         end
         if family == "chaos" then
           requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+        elseif family == "hexTalent" then
+          local delta = params.targetLevel - traitManagement.level(target)
+          if #traitManagement.seleneTalentNodes(target.Name, false) < delta then
+            error("Not enough uninvested Path of Stars nodes remain for the requested level")
+          end
+          requireFunctions("Selene talent level editing", {
+            "IncreaseTraitLevel", "UpdateTalentPointInvestedCache",
+          })
+          local base = type(TraitData) == "table" and TraitData[target.Name] or nil
+          if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
+            requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
+          end
         -- Ordinary God boons are re-checked against the game's real Pom
         -- eligibility. The explicit direct strategy is the only bypass.
         elseif not traitManagement.hasDirectStrategy(target.Name) then
@@ -3716,6 +4076,44 @@ if __MacGamingTrainerV1 == nil then
         local upgraded
         if family == "chaos" then
           upgraded = traitManagement.rebuildChaosTarget(live, params.targetLevel, nil)
+        elseif family == "hexTalent" then
+          local before = traitManagement.level(live)
+          local delta = params.targetLevel - before
+          local nodes = traitManagement.seleneTalentNodes(live.Name, false)
+          local base = type(TraitData) == "table" and TraitData[live.Name] or nil
+          upgraded = live
+          for index = 1, delta do
+            local selected = nodes[index] and nodes[index].node or nil
+            if type(selected) ~= "table" then
+              error("Selene talent tree changed before the requested level was applied")
+            end
+            selected.Invested = true
+            selected.QueuedInvested = nil
+            local beforeStep = traitManagement.level(upgraded)
+            local ok, nextTrait = pcall(IncreaseTraitLevel, upgraded)
+            local liveStep = traitManagement.level(upgraded)
+            if not ok then
+              if liveStep == beforeStep then
+                selected.Invested = false
+                selected.QueuedInvested = nil
+              end
+              UpdateTalentPointInvestedCache()
+              error(nextTrait)
+            end
+            if type(nextTrait) ~= "table" or traitManagement.level(nextTrait) <= beforeStep then
+              if liveStep == beforeStep then
+                selected.Invested = false
+                selected.QueuedInvested = nil
+              end
+              UpdateTalentPointInvestedCache()
+              error("Trait level increase did not reach the requested target level")
+            end
+            upgraded = nextTrait
+            if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
+              CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
+            end
+          end
+          UpdateTalentPointInvestedCache()
         else
           local before = traitManagement.level(live)
           local delta = params.targetLevel - before
@@ -3737,6 +4135,8 @@ if __MacGamingTrainerV1 == nil then
         end
         if family == "chaos" then
           requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+        elseif family == "hexTalent" then
+          requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
         else
           requireFunctions("trait rarity editing", { "AddRarityToTraits" })
         end
@@ -3769,6 +4169,14 @@ if __MacGamingTrainerV1 == nil then
         end
         if removalCapability == "nameLevelAllMatching" then
           requireFunctions("native trait removal", { "RemoveWeaponTrait" })
+        elseif removalCapability == "singleInstanceForce" and family == "hex" then
+          requireFunctions("Selene spell removal", {
+            "HeroHasTrait", "RemoveTrait", "UnequipWeapon", "UpdateTalentPointInvestedCache",
+          })
+        elseif removalCapability == "singleInstanceForce" and family == "hexTalent" then
+          requireFunctions("Selene talent removal", {
+            "RemoveTraitData", "UpdateTalentPointInvestedCache",
+          })
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -3786,6 +4194,32 @@ if __MacGamingTrainerV1 == nil then
               error("Native trait removal left a matching instance mounted")
             end
           end
+        elseif family == "hex" then
+          traitManagement.teardownSlottedSpell()
+          local slotted = seleneModel.currentSpell()
+          if type(slotted) == "table" or HeroHasTrait(live.Name) then
+            error("Selene spell removal left owner state mounted")
+          end
+        elseif family == "hexTalent" then
+          local ok, removalError = pcall(
+            RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
+          )
+          local stillMounted = false
+          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+            if type(trait) == "table" and trait.Name == live.Name then
+              stillMounted = true
+              break
+            end
+          end
+          if not stillMounted then
+            for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
+              nodeEntry.node.Invested = false
+              nodeEntry.node.QueuedInvested = nil
+            end
+            UpdateTalentPointInvestedCache()
+          end
+          if not ok then error(removalError) end
+          if stillMounted then error("Selene talent removal left the mounted effect present") end
         else
           -- Bounded object-level force removal for an audited declarative trait.
           -- SkipExpire prevents a one-shot/reward expiration path from firing;
@@ -4098,7 +4532,9 @@ if __MacGamingTrainerV1 == nil then
           error("Exact boon target is unavailable")
         end
         requireFunctions("exact boon ownership", { "HeroHasTrait" })
-        if HeroHasTrait(entry.trait) then error("Selected boon is already owned") end
+        if entry.acquisitionMode ~= "seleneTalent" and HeroHasTrait(entry.trait) then
+          error("Selected boon is already owned")
+        end
 
         if entry.acquisitionMode == "chaosBlessing" or entry.acquisitionMode == "chaosCurse" then
           requireFunctions("exact Chaos acquisition", {
@@ -4133,6 +4569,46 @@ if __MacGamingTrainerV1 == nil then
           source.UpgradeOptions = nil
           source.Rarity = nil
           exactPlan = { mode = entry.acquisitionMode, source = source }
+          return
+        end
+        if entry.acquisitionMode == "seleneSpell" then
+          local spellData = type(SpellData) == "table" and SpellData[entry.spellName] or nil
+          if type(spellData) ~= "table" or spellData.TraitName ~= entry.trait
+              or spellData.Skip
+              or (type(spellData.GameStateRequirements) == "table"
+                and spellData.GameStateRequirements.Skip) then
+            error("Selene spell target is unavailable")
+          end
+          local spellRequirements = {
+            "DeepCopyTable", "CreateTalentTree", "AddTraitToHero", "RemoveTrait",
+            "UnequipWeapon", "UpdateTalentPointInvestedCache", "thread",
+          }
+          if spellData.CheckSpellReadyOnAcquire then
+            spellRequirements[#spellRequirements + 1] = "CallFunctionName"
+          else
+            spellRequirements[#spellRequirements + 1] = "SpellReadyPresentation"
+          end
+          requireFunctions("exact Selene spell acquisition", spellRequirements)
+          exactPlan = { mode = "seleneSpell", spellName = entry.spellName }
+          return
+        end
+        if entry.acquisitionMode == "seleneTalent" then
+          local slotted = seleneModel.currentSpell()
+          if type(slotted) ~= "table" or slotted.Name ~= entry.spellName
+              or #seleneModel.talentNodes(entry.trait, false) == 0 then
+            error("Selene talent is unavailable for the current Path of Stars")
+          end
+          local talentRequirements = {
+            "HeroHasTrait", "GetHeroTrait", "AddTraitToHero", "IncreaseTraitLevel",
+            "UpdateTalentPointInvestedCache",
+          }
+          local base = type(TraitData) == "table" and TraitData[entry.trait] or nil
+          if HeroHasTrait(entry.trait) and type(base) == "table"
+              and type(base.AcquireFunctionName) == "string" then
+            talentRequirements[#talentRequirements + 1] = "CallFunctionName"
+          end
+          requireFunctions("exact Selene talent acquisition", talentRequirements)
+          exactPlan = { mode = "seleneTalent", spellName = entry.spellName }
           return
         end
         if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
@@ -4301,6 +4777,14 @@ if __MacGamingTrainerV1 == nil then
           if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
           if exactPlan and (exactPlan.mode == "chaosBlessing" or exactPlan.mode == "chaosCurse") then
             return addChaosExact()
+          end
+          if exactPlan and exactPlan.mode == "seleneSpell" then
+            seleneModel.applySpell(exactPlan.spellName)
+            return nil
+          end
+          if exactPlan and exactPlan.mode == "seleneTalent" then
+            seleneModel.applyTalent(entry.trait)
+            return nil
           end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
             return addOrdinaryExact()
