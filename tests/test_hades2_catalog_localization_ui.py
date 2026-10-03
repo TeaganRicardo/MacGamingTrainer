@@ -204,6 +204,9 @@ assert chaos['linkedDisplayName'] == '丰盛'
 assert chaos['linkedEnglishName'] == 'Affluence'
 assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 
+trait_source = view[view.index('private func traitSourceLabel'):view.index('private func traitLevelInput')]
+assert 'return trait.family' not in trait_source
+
 trait_row = view[view.index('private func currentRunTraitRow'):view.index('private var resourceSection')]
 assert 'Text(trait.name).monospaced()' not in trait_row
 assert 'if trait.canIncreaseLevel' in trait_row
