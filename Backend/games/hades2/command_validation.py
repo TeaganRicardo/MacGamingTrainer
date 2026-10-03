@@ -118,6 +118,10 @@ def validate_command_params(command, params):
         rarity=params.get('expectedRarity')
         if not isinstance(rarity,str):
             raise ValueError('请选择当前局祝福。')
+        if command=='set_trait_level':
+            target_level=params.get('targetLevel')
+            if type(target_level) is not int or target_level <= level or target_level > 999999:
+                raise ValueError('目标等级必须高于当前等级。')
         if command=='set_trait_rarity':
             target=params.get('rarity')
             if target not in BOON_RARITY_TARGETS:

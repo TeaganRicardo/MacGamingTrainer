@@ -56,7 +56,7 @@ def test_owner_family_controls_default_native_paths():
 
 
 def test_resident_revision_advances_for_the_new_runtime_contract():
-    assert "revision = 59" in LUA
+    assert "revision = 60" in LUA
 
 
 if __name__ == "__main__":
@@ -280,8 +280,8 @@ local function findRow(name, instanceId)
   fail("missing observed trait row " .. tostring(name) .. "/" .. tostring(instanceId))
 end
 
-local function paramsFrom(row, requestId)
-  return {
+local function paramsFrom(row, requestId, targetLevel)
+  local params = {
     requestId = requestId,
     generationId = row.generationId,
     runId = row.runId,
@@ -293,6 +293,8 @@ local function paramsFrom(row, requestId)
     expectedSameNameCount = row.sameNameCount,
     includeCatalogs = false,
   }
+  if targetLevel ~= nil then params.targetLevel = targetLevel end
+  return params
 end
 
 -- Native Pom-eligible level change: execute the resident command and verify
@@ -304,11 +306,11 @@ do
   eq(row.family, "olympianHermes", "ordinary level family")
   eq(row.levelCapability, "increaseOne", "ordinary level capability")
   local beforeCalls = calls.level
-  local result = M.dispatch("set_trait_level", paramsFrom(row, "native-level"))
+  local result = M.dispatch("set_trait_level", paramsFrom(row, "native-level", 4))
   eq(calls.level, beforeCalls + 1, "native level callback count")
-  eq(trait.StackNum, 2, "native level mutation")
-  eq(trait.EffectValue, 100, "native level effect recomputation")
-  eq(result.currentRunTraits[1].level, 2, "native level observed result")
+  eq(trait.StackNum, 4, "native target-level mutation")
+  eq(trait.EffectValue, 300, "native target-level effect recomputation")
+  eq(result.currentRunTraits[1].level, 4, "native target-level observed result")
   eq(result.actionOutcome, "completed", "native level receipt")
 end
 
@@ -321,9 +323,9 @@ do
   eq(row.family, "directSpecial", "Artemis direct family")
   eq(row.levelCapability, "increaseOne", "Artemis direct level capability")
   check(GetAllUpgradeableGodTraits(1)[trait.Name] ~= true, "Artemis unexpectedly native-Pom eligible")
-  M.dispatch("set_trait_level", paramsFrom(row, "direct-level"))
-  eq(trait.StackNum, 2, "direct level mutation")
-  eq(trait.EffectValue, 100, "direct level effect mutation")
+  M.dispatch("set_trait_level", paramsFrom(row, "direct-level", 3))
+  eq(trait.StackNum, 3, "direct target-level mutation")
+  eq(trait.EffectValue, 200, "direct target-level effect mutation")
 end
 
 -- Native rarity change must run the game recomputation callback rather than
@@ -404,7 +406,7 @@ do
   eq(row.rarityCapability, "none", "duplicate-name rarity capability")
   local beforeLevel = calls.level
   expectError("Trait level editing is unavailable", function()
-    M.dispatch("set_trait_level", paramsFrom(row, "duplicate-level"))
+    M.dispatch("set_trait_level", paramsFrom(row, "duplicate-level", row.level + 1))
   end)
   eq(calls.level, beforeLevel, "duplicate-name level reached mutator")
 end
@@ -417,19 +419,19 @@ do
   local row = findRow("OrdinaryStale", 801)
   local beforeLevel = calls.level
 
-  local staleGeneration = paramsFrom(row, "stale-generation")
+  local staleGeneration = paramsFrom(row, "stale-generation", row.level + 1)
   staleGeneration.generationId = "old-generation"
   expectError("stale runtime generation", function()
     M.dispatch("set_trait_level", staleGeneration)
   end)
 
-  local staleRun = paramsFrom(row, "stale-run")
+  local staleRun = paramsFrom(row, "stale-run", row.level + 1)
   staleRun.runId = "old-run"
   expectError("stale run", function()
     M.dispatch("set_trait_level", staleRun)
   end)
 
-  local changed = paramsFrom(row, "changed-target")
+  local changed = paramsFrom(row, "changed-target", row.level + 1)
   trait.StackNum = 2
   expectError("Trait target changed since selection", function()
     M.dispatch("set_trait_level", changed)
@@ -444,7 +446,7 @@ do
   local trait = newTrait("OrdinaryReplay", 901, 1, "Rare")
   setTraits(trait)
   local row = findRow("OrdinaryReplay", 901)
-  local params = paramsFrom(row, "dedup-level")
+  local params = paramsFrom(row, "dedup-level", row.level + 1)
   local beforeLevel = calls.level
   local first = M.dispatch("set_trait_level", params)
   local second = M.dispatch("set_trait_level", params)
@@ -461,7 +463,7 @@ do
   local trait = newTrait("OrdinaryOutcomeUnknown", 1001, 1, "Rare")
   setTraits(trait)
   local row = findRow("OrdinaryOutcomeUnknown", 1001)
-  local params = paramsFrom(row, "unknown-level")
+  local params = paramsFrom(row, "unknown-level", row.level + 1)
   local beforeLevel = calls.level
   failLevelAfterMutation = true
   expectError("MGT_OUTCOME_UNKNOWN", function()
@@ -501,7 +503,7 @@ do
   eq(row.levelCapability, "none", "unsafe direct lifecycle exposed level mutation")
   local beforeLevel = calls.level
   expectError("Trait level editing is unavailable", function()
-    M.dispatch("set_trait_level", paramsFrom(row, "unsafe-direct-level"))
+    M.dispatch("set_trait_level", paramsFrom(row, "unsafe-direct-level", row.level + 1))
   end)
   eq(calls.level, beforeLevel, "unsafe direct lifecycle reached level mutator")
 end

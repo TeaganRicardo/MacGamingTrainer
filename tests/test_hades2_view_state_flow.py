@@ -324,7 +324,11 @@ func makeTrait(
     )
 }
 
-func requireTargetParams(_ command: [String: Any], expectedRarity: String? = nil) {
+func requireTargetParams(
+    _ command: [String: Any],
+    expectedTargetLevel: Int? = nil,
+    expectedRarity: String? = nil
+) {
     guard let params = command["params"] as? [String: Any] else {
         fail("missing params: \(command)")
     }
@@ -336,6 +340,11 @@ func requireTargetParams(_ command: [String: Any], expectedRarity: String? = nil
     check(params["expectedLevel"] as? Int == 2, "expected level lost")
     check(params["expectedRarity"] as? String == "Rare", "expected rarity lost")
     check(params["expectedSameNameCount"] as? Int == 1, "same-name snapshot lost")
+    if let expectedTargetLevel {
+        check(params["targetLevel"] as? Int == expectedTargetLevel, "requested target level lost")
+    } else {
+        check(params["targetLevel"] == nil, "unexpected target-level parameter")
+    }
     if let expectedRarity {
         check(params["rarity"] as? String == expectedRarity, "requested rarity lost")
     } else {
@@ -381,7 +390,7 @@ struct Main {
         }
 
         let trait = makeTrait()
-        try withModel { $0.increaseTraitLevel(trait) }
+        try withModel { $0.setTraitLevel(trait, targetLevel: "5") }
         try withModel { $0.setTraitRarity(trait, rarity: "Epic") }
         try withModel { $0.removeTrait(trait) }
 
@@ -390,7 +399,7 @@ struct Main {
         check(sent[0]["command"] as? String == "set_trait_level", "wrong level command")
         check(sent[1]["command"] as? String == "set_trait_rarity", "wrong rarity command")
         check(sent[2]["command"] as? String == "remove_trait", "wrong removal command")
-        requireTargetParams(sent[0])
+        requireTargetParams(sent[0], expectedTargetLevel: 5)
         requireTargetParams(sent[1], expectedRarity: "Epic")
         requireTargetParams(sent[2])
 
@@ -402,13 +411,17 @@ struct Main {
                 rarityCapability: .none,
                 removalCapability: .none
             )
-            model.increaseTraitLevel(blocked)
+            model.setTraitLevel(blocked, targetLevel: "5")
             model.setTraitRarity(blocked, rarity: "Epic")
             model.removeTrait(blocked)
             model.scene = "loading"
-            model.increaseTraitLevel(trait)
+            model.setTraitLevel(trait, targetLevel: "5")
             model.setTraitRarity(trait, rarity: "Heroic")
             model.removeTrait(trait)
+            model.scene = "run"
+            model.setTraitLevel(trait, targetLevel: "2")
+            model.setTraitLevel(trait, targetLevel: "1")
+            model.setTraitLevel(trait, targetLevel: "not-a-level")
         }
         check(commands(at: commandLog).count == 3, "guarded trait operation reached backend transport")
 
