@@ -1157,10 +1157,8 @@ struct Hades2TrainerView: View {
                 Button(text("hades2.spawn.open")) { model.openSellTraits() }
                     .disabled(!model.canOpenNativeBoonScreen)
             }
-            if model.connected {
-                Divider()
-                currentRunTraitsPanel
-            }
+            Divider()
+            BoonManagementPrototypeView(model: model)
         }.trainerPanel()
     }
 
