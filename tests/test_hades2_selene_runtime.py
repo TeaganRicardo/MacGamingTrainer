@@ -277,16 +277,20 @@ local function resetSpell(spellName, investedNames)
 
   AddTraitToHero({ TraitName = SpellData[spellName].TraitName })
   for _, wanted in ipairs(investedNames or {}) do
+    local investedOne = false
     for _, column in ipairs(CurrentRun.Hero.SlottedSpell.Talents) do
-      for _, node in pairs(column) do
-        if node.Name == wanted and not node.Invested then
-          node.Invested = true
-          if HeroHasTrait(wanted) then
-            IncreaseTraitLevel(GetHeroTrait(wanted))
-          else
-            AddTraitToHero({ TraitName = wanted, Rarity = node.Rarity, FromLoot = true })
+      if not investedOne then
+        for _, node in pairs(column) do
+          if node.Name == wanted and not node.Invested then
+            node.Invested = true
+            if HeroHasTrait(wanted) then
+              IncreaseTraitLevel(GetHeroTrait(wanted))
+            else
+              AddTraitToHero({ TraitName = wanted, Rarity = node.Rarity, FromLoot = true })
+            end
+            investedOne = true
+            break
           end
-          break
         end
       end
     end
