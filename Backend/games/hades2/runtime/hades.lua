@@ -1702,35 +1702,43 @@ if __MacGamingTrainerV1 == nil then
       end
       local slotted = DeepCopyTable(spellData)
       slotted.Name = spellName
-      local duoEligible = type(SessionMapState) == "table"
-        and type(SessionMapState.DuoTalentEligibleSpell) == "table"
-        and SessionMapState.DuoTalentEligibleSpell[spellName]
-      if duoEligible and type(IsGameStateEligible) == "function"
-          and type(SpellTalentData) == "table" then
-        duoEligible = not not IsGameStateEligible(nil, SpellTalentData.ServeDuoGameRequirements)
-      else
-        duoEligible = false
-      end
-      slotted.HasDuoTalent = not not duoEligible
       slotted.Talents = DeepCopyTable(CreateTalentTree(spellData))
+      slotted.HasDuoTalent = false
+      for _, column in ipairs(slotted.Talents or {}) do
+        for _, node in pairs(type(column) == "table" and column or {}) do
+          local talentData = type(node) == "table" and type(TraitData) == "table"
+            and TraitData[node.Name] or nil
+          if type(talentData) == "table" and talentData.IsDuoBoon then
+            slotted.HasDuoTalent = true
+            break
+          end
+        end
+        if slotted.HasDuoTalent then break end
+      end
 
       teardown()
-      CurrentRun.Hero.SlottedSpell = slotted
-      CurrentRun.SpellCharge = 0
       requireFunctions("Selene spell acquisition", { "HeroHasTrait" })
       local ok, added = pcall(AddTraitToHero, {
         TraitName = spellData.TraitName, SkipNewTraitHighlight = true,
       })
       if not ok then
-        if not HeroHasTrait(spellData.TraitName) then CurrentRun.Hero.SlottedSpell = nil end
+        if HeroHasTrait(spellData.TraitName) then
+          CurrentRun.Hero.SlottedSpell = slotted
+          CurrentRun.SpellCharge = 0
+        end
         UpdateTalentPointInvestedCache()
         error(added)
       end
       if type(added) ~= "table" then
-        if not HeroHasTrait(spellData.TraitName) then CurrentRun.Hero.SlottedSpell = nil end
+        if HeroHasTrait(spellData.TraitName) then
+          CurrentRun.Hero.SlottedSpell = slotted
+          CurrentRun.SpellCharge = 0
+        end
         UpdateTalentPointInvestedCache()
         error("Selene spell acquisition failed")
       end
+      CurrentRun.Hero.SlottedSpell = slotted
+      CurrentRun.SpellCharge = 0
 
       if slotted.CheckSpellReadyOnAcquire then
         if type(added.CheckChargeFunctionName) == "string" then
