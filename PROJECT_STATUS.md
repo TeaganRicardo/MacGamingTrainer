@@ -93,7 +93,7 @@ Planning issue #124 is the sequencing authority.
 - #227 and #228 are complete; #229 is complete with follow-up correctness fixes #291/#292.
 - #306 corrective current-run boon manager work is complete in this source.
 - #230 pickup-compatible infinite-ammo correction is complete in this source.
-- **Next selected feature task: #231** — viewport-pinned floating feedback with readable automatic fadeout and retained actionable error/recovery state.
+- **Next selected feature task: #236** — Chaos lifecycle acquisition and mounted management. The user explicitly moved #236–#240 ahead of #231 on 2026-10-03.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #236–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
