@@ -74,6 +74,7 @@ CurrentRun = {
 local MAX_AMMO = 4
 local packs = 0
 local collectEffects = 0
+local nativeUnlimitedAmmo = false
 
 local function fail(message) error("ASSERTION FAILED: " .. message, 0) end
 local function check(value, message) if not value then fail(message) end end
@@ -90,7 +91,8 @@ local function decrementTableValue(owner, key, amount)
   owner[key] = (owner[key] or 0) - (amount or 1)
 end
 
-HasHeroTraitValue = function(_)
+HasHeroTraitValue = function(valueName)
+  if valueName == "UnlimitedAmmo" then return nativeUnlimitedAmmo end
   return false
 end
 GetMaxAmmo = function(weaponName)
@@ -117,13 +119,19 @@ end
 
 -- Target-build WeaponLob OnWeaponFired semantics, reduced to the exact seam
 -- that the Trainer hooks.
-local function nativeFire()
+local function nativeFire(numProjectiles)
   if HasHeroTraitValue("UnlimitedAmmo") then
     return false
   end
+  numProjectiles = numProjectiles or 1
   SessionMapState.AmmoAtFireStart = getCurrentAmmo("WeaponLob")
-  incrementTableValue(SessionMapState, "LobAmmoInFlight")
-  spendAmmo("WeaponLob")
+  if numProjectiles > 1 then
+    UpdateWeaponAmmo("WeaponLob", -numProjectiles)
+    incrementTableValue(SessionMapState, "LobAmmoInFlight", numProjectiles)
+  else
+    incrementTableValue(SessionMapState, "LobAmmoInFlight")
+    spendAmmo("WeaponLob")
+  end
   return true
 end
 
@@ -155,6 +163,15 @@ M.dispatch("set_feature", { feature = "infiniteAmmo", value = true })
 eq(HasHeroTraitValue("UnlimitedAmmo"), false,
   "Trainer must not impersonate the native UnlimitedAmmo trait value")
 
+-- The current target also has a real LobGunAspect whose own trait data sets
+-- UnlimitedAmmo=true and removes the ammo-drop lifecycle. The Trainer must
+-- preserve that native aspect signal rather than forcing either value.
+nativeUnlimitedAmmo = true
+eq(HasHeroTraitValue("UnlimitedAmmo"), true,
+  "Trainer masked the native UnlimitedAmmo aspect value")
+check(not nativeFire(), "native UnlimitedAmmo aspect unexpectedly entered the recovery lifecycle")
+nativeUnlimitedAmmo = false
+
 for i = 1, 6 do
   check(nativeFire(), "native WeaponLob fire path was bypassed at shot " .. tostring(i))
   eq(getCurrentAmmo("WeaponLob"), MAX_AMMO,
@@ -164,6 +181,17 @@ end
 
 eq(packs, 6, "projectile deaths did not create one native recovery pack per fired skull")
 eq(SessionMapState.LobAmmoInFlight, 0, "in-flight recovery bookkeeping did not drain")
+
+-- Spread Shot spends and records NumProjectiles as one native volley. Infinite
+-- supply must not collapse that accounting to a single recovery object.
+check(nativeFire(3), "spread-shot native fire path was bypassed")
+eq(getCurrentAmmo("WeaponLob"), MAX_AMMO, "spread-shot infinite supply reduced carried ammo")
+eq(SessionMapState.LobAmmoInFlight, 3, "spread-shot in-flight count was not preserved")
+for _ = 1, 3 do
+  check(nativeProjectileDeath(), "spread-shot projectile did not produce a recovery pack")
+end
+eq(packs, 9, "spread-shot recovery pack count drifted")
+eq(SessionMapState.LobAmmoInFlight, 0, "spread-shot in-flight bookkeeping did not drain")
 
 check(nativeCollectPack(), "native ammo pack could not be collected")
 eq(getCurrentAmmo("WeaponLob"), MAX_AMMO, "pickup inflated or reduced carried ammo")
