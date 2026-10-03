@@ -293,6 +293,12 @@ func makeBoon(
 }
 
 func makeTrait(
+    family: String = "directSpecial",
+    lifecycleState: String = "",
+    linkedTrait: String = "",
+    linkedDisplayName: String = "",
+    linkedEnglishName: String = "",
+    canAdvanceLifecycle: Bool = false,
     levelCapability: TraitLevelCapability = .increaseOne,
     rarityCapability: TraitRarityCapability = .setExact,
     removalCapability: TraitRemovalCapability = .singleInstanceForce
@@ -304,7 +310,7 @@ func makeTrait(
         name: "OmegaExplodeBoon",
         displayName: "爆裂欧米伽",
         englishName: "Omega Explosion",
-        family: "directSpecial",
+        family: family,
         sourceID: "Icarus",
         sourceName: "伊卡洛斯",
         sourceEnglishName: "Icarus",
@@ -313,6 +319,11 @@ func makeTrait(
         availableRarities: ["Common", "Rare", "Epic", "Heroic"],
         sameNameCount: 1,
         remainingUses: nil,
+        lifecycleState: lifecycleState,
+        linkedTrait: linkedTrait,
+        linkedDisplayName: linkedDisplayName,
+        linkedEnglishName: linkedEnglishName,
+        canAdvanceLifecycle: canAdvanceLifecycle,
         levelCapability: levelCapability,
         levelReason: "",
         rarityCapability: rarityCapability,
@@ -326,6 +337,7 @@ func makeTrait(
 
 func requireTargetParams(
     _ command: [String: Any],
+    expectedFamily: String = "directSpecial",
     expectedTargetLevel: Int? = nil,
     expectedRarity: String? = nil
 ) {
@@ -336,7 +348,7 @@ func requireTargetParams(
     check(params["runId"] as? String == "run-table-1", "run snapshot lost")
     check(params["instanceId"] as? String == "4242", "instance snapshot lost")
     check(params["trait"] as? String == "OmegaExplodeBoon", "trait identity lost")
-    check(params["family"] as? String == "directSpecial", "family identity lost")
+    check(params["family"] as? String == expectedFamily, "family identity lost")
     check(params["expectedLevel"] as? Int == 2, "expected level lost")
     check(params["expectedRarity"] as? String == "Rare", "expected rarity lost")
     check(params["expectedSameNameCount"] as? Int == 1, "same-name snapshot lost")
@@ -390,18 +402,29 @@ struct Main {
         }
 
         let trait = makeTrait()
+        let chaosTrait = makeTrait(
+            family: "chaos",
+            lifecycleState: "curse",
+            linkedTrait: "ChaosHealthBlessing",
+            linkedDisplayName: "丰盛",
+            linkedEnglishName: "Affluence",
+            canAdvanceLifecycle: true
+        )
         try withModel { $0.setTraitLevel(trait, targetLevel: "5") }
         try withModel { $0.setTraitRarity(trait, rarity: "Epic") }
         try withModel { $0.removeTrait(trait) }
+        try withModel { $0.advanceTraitLifecycle(chaosTrait) }
 
         let sent = commands(at: commandLog)
-        check(sent.count == 3, "expected exactly three live-trait commands, got \(sent)")
+        check(sent.count == 4, "expected exactly four live-trait commands, got \(sent)")
         check(sent[0]["command"] as? String == "set_trait_level", "wrong level command")
         check(sent[1]["command"] as? String == "set_trait_rarity", "wrong rarity command")
         check(sent[2]["command"] as? String == "remove_trait", "wrong removal command")
+        check(sent[3]["command"] as? String == "advance_trait_lifecycle", "wrong Chaos lifecycle command")
         requireTargetParams(sent[0], expectedTargetLevel: 5)
         requireTargetParams(sent[1], expectedRarity: "Epic")
         requireTargetParams(sent[2])
+        requireTargetParams(sent[3], expectedFamily: "chaos")
 
         // Model capability guards and non-run state fail closed before the
         // backend transport boundary.
@@ -414,16 +437,18 @@ struct Main {
             model.setTraitLevel(blocked, targetLevel: "5")
             model.setTraitRarity(blocked, rarity: "Epic")
             model.removeTrait(blocked)
+            model.advanceTraitLifecycle(blocked)
             model.scene = "loading"
             model.setTraitLevel(trait, targetLevel: "5")
             model.setTraitRarity(trait, rarity: "Heroic")
             model.removeTrait(trait)
+            model.advanceTraitLifecycle(chaosTrait)
             model.scene = "run"
             model.setTraitLevel(trait, targetLevel: "2")
             model.setTraitLevel(trait, targetLevel: "1")
             model.setTraitLevel(trait, targetLevel: "not-a-level")
         }
-        check(commands(at: commandLog).count == 3, "guarded trait operation reached backend transport")
+        check(commands(at: commandLog).count == 4, "guarded trait operation reached backend transport")
 
         // Exact acquisition is a separate catalog surface. Individual exact
         // targets do not leak back into Character Rewards, but their source can
@@ -445,9 +470,9 @@ struct Main {
             model.acquireExactBoon(exact.id)
         }
         let afterExact = commands(at: commandLog)
-        check(afterExact.count == 4, "exact acquisition did not emit one command: \(afterExact)")
-        check(afterExact[3]["command"] as? String == "spawn_reward", "exact acquisition used the wrong command")
-        guard let exactParams = afterExact[3]["params"] as? [String: Any] else { fail("exact acquisition params missing") }
+        check(afterExact.count == 5, "exact acquisition did not emit one command: \(afterExact)")
+        check(afterExact[4]["command"] as? String == "spawn_reward", "exact acquisition used the wrong command")
+        guard let exactParams = afterExact[4]["params"] as? [String: Any] else { fail("exact acquisition params missing") }
         check(exactParams["reward"] as? String == exact.id, "exact acquisition lost reward identity")
 
         print("hades2_live_trait_model_flow_ok")
