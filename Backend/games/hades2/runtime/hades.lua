@@ -1761,13 +1761,22 @@ if __MacGamingTrainerV1 == nil then
         if type(runtimeTrait) ~= "table" then error("Mounted Selene talent is unavailable") end
         local beforeLevel = tonumber(runtimeTrait.StackNum) or 1
         local ok, upgraded = pcall(IncreaseTraitLevel, runtimeTrait)
+        local liveLevel = tonumber(runtimeTrait.StackNum) or 1
         if not ok then
-          if (tonumber(runtimeTrait.StackNum) or 1) == beforeLevel then
+          if liveLevel == beforeLevel then
             selected.Invested = false
             selected.QueuedInvested = nil
           end
           UpdateTalentPointInvestedCache()
           error(upgraded)
+        end
+        if type(upgraded) ~= "table" or (tonumber(upgraded.StackNum) or liveLevel) <= beforeLevel then
+          if liveLevel == beforeLevel then
+            selected.Invested = false
+            selected.QueuedInvested = nil
+          end
+          UpdateTalentPointInvestedCache()
+          error("Selene talent acquisition failed")
         end
         runtimeTrait = upgraded
         local base = type(TraitData) == "table" and TraitData[traitName] or nil
@@ -2448,8 +2457,7 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "multipleMatchingInstances"
         elseif trait.Rarity == nil or #rarities < 2 then
           rarityReason = "notMeaningful"
-        elseif family == "hexTalent" and type(AddRarityToTraits) == "function"
-            and type(UpdateTalentPointInvestedCache) == "function" then
+        elseif family == "hexTalent" and type(AddRarityToTraits) == "function" then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "chaos"
             and type(GetProcessedTraitData) == "function"
@@ -2467,7 +2475,9 @@ if __MacGamingTrainerV1 == nil then
         end
 
         local slotted = seleneModel.currentSpell()
-        if family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
+        if sameCount > 1 then
+          removalReason = "multipleMatchingInstances"
+        elseif family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
             and type(HeroHasTrait) == "function" and type(RemoveTrait) == "function"
             and type(UnequipWeapon) == "function" and type(UpdateTalentPointInvestedCache) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
@@ -2640,8 +2650,6 @@ if __MacGamingTrainerV1 == nil then
       rebuildChaosTarget = rebuildChaosTarget,
       seleneTalentNodes = seleneModel.talentNodes,
       teardownSlottedSpell = seleneModel.teardown,
-      applySeleneSpell = seleneModel.applySpell,
-      applySeleneTalent = seleneModel.applyTalent,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -4073,9 +4081,26 @@ if __MacGamingTrainerV1 == nil then
             end
             selected.Invested = true
             selected.QueuedInvested = nil
-            upgraded = IncreaseTraitLevel(upgraded)
-            if type(upgraded) == "table" and upgraded.Rarity ~= nil then
+            local beforeStep = traitManagement.level(upgraded)
+            local ok, nextTrait = pcall(IncreaseTraitLevel, upgraded)
+            local liveStep = traitManagement.level(upgraded)
+            if not ok then
+              if liveStep == beforeStep then
+                selected.Invested = false
+                selected.QueuedInvested = nil
+              end
+              UpdateTalentPointInvestedCache()
+              error(nextTrait)
             end
+            if type(nextTrait) ~= "table" or traitManagement.level(nextTrait) <= beforeStep then
+              if liveStep == beforeStep then
+                selected.Invested = false
+                selected.QueuedInvested = nil
+              end
+              UpdateTalentPointInvestedCache()
+              error("Trait level increase did not reach the requested target level")
+            end
+            upgraded = nextTrait
             if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
               CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
             end
@@ -4103,9 +4128,7 @@ if __MacGamingTrainerV1 == nil then
         if family == "chaos" then
           requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
         elseif family == "hexTalent" then
-          requireFunctions("Selene talent rarity editing", {
-            "AddRarityToTraits", "UpdateTalentPointInvestedCache",
-          })
+          requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
         else
           requireFunctions("trait rarity editing", { "AddRarityToTraits" })
         end
@@ -4170,17 +4193,25 @@ if __MacGamingTrainerV1 == nil then
             error("Selene spell removal left owner state mounted")
           end
         elseif family == "hexTalent" then
-          RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
-          for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
-            nodeEntry.node.Invested = false
-            nodeEntry.node.QueuedInvested = nil
-          end
-          UpdateTalentPointInvestedCache()
+          local ok, removalError = pcall(
+            RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
+          )
+          local stillMounted = false
           for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
             if type(trait) == "table" and trait.Name == live.Name then
-              error("Selene talent removal left the mounted effect present")
+              stillMounted = true
+              break
             end
           end
+          if not stillMounted then
+            for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
+              nodeEntry.node.Invested = false
+              nodeEntry.node.QueuedInvested = nil
+            end
+            UpdateTalentPointInvestedCache()
+          end
+          if not ok then error(removalError) end
+          if stillMounted then error("Selene talent removal left the mounted effect present") end
         else
           -- Bounded object-level force removal for an audited declarative trait.
           -- SkipExpire prevents a one-shot/reward expiration path from firing;
