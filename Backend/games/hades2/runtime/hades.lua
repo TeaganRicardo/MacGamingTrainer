@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 63 then
+if previousModule and previousModule.revision ~= 64 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 63 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 63, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 64, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1832,10 +1832,276 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  local hammerModel = (function()
+    local parentWeapons = {
+      StaffHammerTrait = "WeaponStaffSwing",
+      DaggerHammerTrait = "WeaponDagger",
+      AxeHammerTrait = "WeaponAxe",
+      TorchHammerTrait = "WeaponTorch",
+      LobHammerTrait = "WeaponLob",
+      SuitHammerTrait = "WeaponSuit",
+    }
+
+    local function source()
+      local value = type(LootData) == "table" and LootData.WeaponUpgrade or nil
+      return type(value) == "table" and value or nil
+    end
+
+    local function sourceTraitNames()
+      local result, seen = setmetatable({}, arrayMeta), {}
+      local value = source()
+      if value == nil then return result end
+      for _, pool in ipairs({ value.PriorityUpgrades, value.WeaponUpgrades, value.Traits }) do
+        for _, name in ipairs(orderedTraitIds(pool)) do
+          if not seen[name] then
+            seen[name] = true
+            result[#result + 1] = name
+          end
+        end
+      end
+      return result
+    end
+
+    local function sourceContains(name)
+      if type(name) ~= "string" then return false end
+      for _, candidate in ipairs(sourceTraitNames()) do
+        if candidate == name then return true end
+      end
+      return false
+    end
+
+    local function ownerWeaponForDefinition(definition)
+      if type(definition) ~= "table" then return nil end
+      if type(definition.CodexWeapon) == "string" and definition.CodexWeapon ~= "" then
+        return definition.CodexWeapon
+      end
+      for _, parent in ipairs(type(definition.InheritFrom) == "table" and definition.InheritFrom or {}) do
+        if parentWeapons[parent] ~= nil then return parentWeapons[parent] end
+      end
+      return nil
+    end
+
+    local function ownerWeapon(name, runtimeTrait)
+      local runtimeOwner = ownerWeaponForDefinition(runtimeTrait)
+      if runtimeOwner ~= nil then return runtimeOwner end
+      local definition = type(TraitData) == "table" and TraitData[name] or nil
+      return ownerWeaponForDefinition(definition)
+    end
+
+    local function currentWeapon()
+      if type(GetEquippedWeapon) == "function" then
+        local ok, value = pcall(GetEquippedWeapon)
+        if ok and type(value) == "string" and value ~= "" then return value end
+      end
+      local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      local weapons = type(hero) == "table" and hero.Weapons or nil
+      if type(weapons) ~= "table" then return nil end
+      local candidates = {}
+      for _, name in ipairs(sourceTraitNames()) do
+        local weapon = ownerWeapon(name)
+        if type(weapon) == "string" then candidates[weapon] = true end
+      end
+      local ordered = {}
+      for weapon in pairs(candidates) do ordered[#ordered + 1] = weapon end
+      table.sort(ordered)
+      for _, weapon in ipairs(ordered) do
+        if weapons[weapon] then return weapon end
+      end
+      return nil
+    end
+
+    local function currentAspect()
+      local weapon = currentWeapon()
+      local selected = type(GameState) == "table" and GameState.LastWeaponUpgradeName or nil
+      return type(selected) == "table" and type(selected[weapon]) == "string" and selected[weapon] or ""
+    end
+
+    local function isHammerTrait(trait)
+      if type(trait) ~= "table" then return false end
+      if trait.IsHammerTrait then return true end
+      return type(trait.Name) == "string" and sourceContains(trait.Name)
+    end
+
+    local function isRuntimeAspect(trait)
+      if type(trait) ~= "table" then return false end
+      if trait.IsWeaponEnchantment then return true end
+      if trait.Slot ~= "Aspect" or type(trait.RequiredWeapon) ~= "string" then return false end
+      if type(trait.InheritFrom) == "table" then
+        for _, parent in ipairs(trait.InheritFrom) do
+          if parent == "WeaponEnchantmentTrait" then return true end
+        end
+      end
+      return false
+    end
+
+    local function ownerMatchesCurrent(name, runtimeTrait)
+      local current = currentWeapon()
+      if current == nil then return false end
+      local owner = ownerWeapon(name, runtimeTrait)
+      return owner ~= nil and owner == current
+    end
+
+    local function nativeEligible()
+      local names, lookup = setmetatable({}, arrayMeta), {}
+      local value = source()
+      if value == nil or currentWeapon() == nil or type(GetEligibleUpgrades) ~= "function" then
+        return names, lookup
+      end
+      local ok, options = pcall(GetEligibleUpgrades, {}, value, value)
+      if not ok or type(options) ~= "table" then return names, lookup end
+      local sourceLookup = {}
+      for _, name in ipairs(sourceTraitNames()) do sourceLookup[name] = true end
+      for _, option in pairs(options) do
+        local name = type(option) == "table" and (option.ItemName or option.TraitName or option.Name) or option
+        if type(name) == "string" and sourceLookup[name] and not lookup[name] then
+          lookup[name] = true
+          names[#names + 1] = name
+        end
+      end
+      table.sort(names)
+      return names, lookup
+    end
+
+    local function mountedCurrent(name)
+      local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      if type(hero) ~= "table" or type(hero.Traits) ~= "table" then return false end
+      for _, trait in ipairs(hero.Traits) do
+        if type(trait) == "table" and trait.Name == name and isHammerTrait(trait)
+            and ownerMatchesCurrent(name, trait) then
+          return true
+        end
+      end
+      return false
+    end
+
+    local function catalogNames()
+      local visible, eligibleLookup = nativeEligible()
+      local allowed = setmetatable({}, arrayMeta)
+      for _, name in ipairs(sourceTraitNames()) do
+        if ownerMatchesCurrent(name)
+            and (eligibleLookup[name] or mountedCurrent(name)) then
+          allowed[#allowed + 1] = name
+        end
+      end
+      return visible, allowed
+    end
+
+    local function catalogSignature()
+      local parts = { tostring(currentWeapon() or ""), currentAspect() }
+      local eligible = nativeEligible()
+      for _, name in ipairs(eligible) do parts[#parts + 1] = "eligible:" .. name end
+      local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      if type(hero) == "table" then
+        for _, trait in ipairs(type(hero.Traits) == "table" and hero.Traits or {}) do
+          if isHammerTrait(trait) then
+            parts[#parts + 1] = table.concat({
+              "mounted", tostring(trait.Name or ""), tostring(trait.Id or ""),
+              tostring(trait.Rarity or ""), tostring(ownerWeapon(trait.Name, trait) or ""),
+            }, ":")
+          elseif isRuntimeAspect(trait) then
+            parts[#parts + 1] = table.concat({
+              "aspect", tostring(trait.Name or ""), tostring(trait.Id or ""),
+              tostring(trait.Rarity or ""), tostring(trait.RequiredWeapon or ""),
+            }, ":")
+          end
+        end
+      end
+      return table.concat(parts, "|")
+    end
+
+    local function applyExact(name)
+      local value = source()
+      if value == nil or not sourceContains(name) then
+        error("Selected boon is not currently eligible")
+      end
+      requireFunctions("exact Hammer acquisition", {
+        "GetEligibleUpgrades", "GetProcessedTraitData", "AddTraitToHero",
+      })
+      local _, eligible = nativeEligible()
+      if not eligible[name] then error("Selected boon is not currently eligible") end
+      local processed = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = name, Rarity = "Common",
+      })
+      if type(processed) ~= "table" then error("Exact boon processing failed") end
+      local added = AddTraitToHero({
+        TraitData = processed,
+        PreProcessedForDisplay = true,
+        FromLoot = true,
+      })
+      if type(added) ~= "table" then error("Exact boon acquisition did not return a trait") end
+      if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[name] = true end
+      if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = name end
+      return added
+    end
+
+    local function needsUnequip(trait)
+      return type(trait) == "table" and type(trait.PreEquipWeapons) == "table"
+        and next(trait.PreEquipWeapons) ~= nil
+    end
+
+    local function removalReady(trait)
+      if type(RemoveTraitData) ~= "function" then return false end
+      return not needsUnequip(trait) or type(UnequipWeapon) == "function"
+    end
+
+    local function removeMounted(trait)
+      if type(trait) ~= "table" or not isHammerTrait(trait) then
+        error("Trait removal is unavailable for the selected target")
+      end
+      requireFunctions("Hammer trait removal", { "RemoveTraitData" })
+      local helperWeapons = {}
+      for _, weaponName in pairs(type(trait.PreEquipWeapons) == "table" and trait.PreEquipWeapons or {}) do
+        if type(weaponName) == "string" then helperWeapons[#helperWeapons + 1] = weaponName end
+      end
+      if #helperWeapons > 0 then requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" }) end
+      local instanceId = trait.Id ~= nil and tostring(trait.Id) or ""
+      RemoveTraitData(CurrentRun.Hero, trait, { Silent = true, SkipExpire = true })
+      for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(candidate) == "table" and candidate.Id ~= nil
+            and tostring(candidate.Id) == instanceId then
+          error("Direct trait removal left the selected instance mounted")
+        end
+      end
+      for _, weaponName in ipairs(helperWeapons) do
+        local owned = false
+        for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+          for _, referenced in pairs(type(candidate) == "table"
+              and type(candidate.PreEquipWeapons) == "table" and candidate.PreEquipWeapons or {}) do
+            if referenced == weaponName then owned = true; break end
+          end
+          if owned then break end
+        end
+        if not owned then
+          UnequipWeapon({
+            DestinationId = CurrentRun.Hero.ObjectId,
+            Name = weaponName,
+            UnloadPackages = false,
+          })
+          if type(MapState) == "table" and type(MapState.EquippedWeapons) == "table" then
+            MapState.EquippedWeapons[weaponName] = nil
+          end
+        end
+      end
+    end
+
+    return {
+      catalogNames = catalogNames,
+      catalogSignature = catalogSignature,
+      isHammerTrait = isHammerTrait,
+      isRuntimeAspect = isRuntimeAspect,
+      removalReady = removalReady,
+      applyExact = applyExact,
+      removeMounted = removeMounted,
+    }
+  end)()
+
   local function rewards()
     local cached = M.catalogCache.rewards
     local seleneSignature = seleneModel.catalogSignature()
-    if type(cached) == "table" and cached.seleneSignature == seleneSignature then
+    local hammerSignature = hammerModel.catalogSignature()
+    if type(cached) == "table"
+        and cached.seleneSignature == seleneSignature
+        and cached.hammerSignature == hammerSignature then
       return cached.list, cached.allowed
     end
     local result, allowed = setmetatable({}, arrayMeta), {}
@@ -2031,6 +2297,30 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+
+    -- Daedalus Hammer exact targets are the game's current native eligibility
+    -- for the equipped weapon/aspect.  Mounted targets remain in the internal
+    -- allowed map only so an identical completed request can return its receipt
+    -- after the game removes that target from the visible eligible pool.
+    do
+      local visibleNames, allowedNames = hammerModel.catalogNames()
+      local visible = {}
+      for _, name in ipairs(visibleNames) do visible[name] = true end
+      local hammerOrder = 850
+      for index, traitName in ipairs(allowedNames) do
+        local id = "hammer:" .. traitName
+        local item = {
+          id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
+          trait = traitName, family = "hammer", sourceId = "WeaponUpgrade",
+          sourceName = "狄德勒斯之锤", sectionTitle = "狄德勒斯之锤",
+          acquisitionMode = "hammerNative",
+          sortSection = 25, sortGroup = hammerOrder, sortOrder = index,
+        }
+        allowed[id] = item
+        if visible[traitName] then result[#result + 1] = item end
+      end
+    end
+
     local buckets = {}
     for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
@@ -2092,6 +2382,7 @@ if __MacGamingTrainerV1 == nil then
         and type(RewardStoreData) == "table" and type(UnitSetData) == "table" and type(TraitData) == "table" then
       M.catalogCache.rewards = {
         list = result, allowed = allowed, seleneSignature = seleneSignature,
+        hammerSignature = hammerSignature,
       }
     end
     return result, allowed
@@ -2250,7 +2541,6 @@ if __MacGamingTrainerV1 == nil then
       OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
     }
     local deferredTraitIssues = {
-      hammer = 238,
       costume = 239,
       temporary = 239,
       directSpecial = 239,
@@ -2318,6 +2608,9 @@ if __MacGamingTrainerV1 == nil then
       if type(trait) ~= "table" then return "" end
       local strategy = directTraitStrategies[trait.Name]
       if strategy then return strategy.sourceId end
+      if hammerModel.isHammerTrait(trait) or hammerModel.isRuntimeAspect(trait) then
+        return "WeaponUpgrade"
+      end
       local specialSource = specialTraitSourceId(trait.Name)
       if specialSource ~= "" then return specialSource end
       if type(trait.LootDataName) == "string" and trait.LootDataName ~= "" then return trait.LootDataName end
@@ -2375,8 +2668,8 @@ if __MacGamingTrainerV1 == nil then
       if #seleneModel.talentNodes(name, true) > 0 then return "hexTalent" end
       if trait.Slot == "Spell" or string.find(name, "Spell", 1, true) ~= nil
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
-      if trait.Slot == "Weapon" or string.find(name, "WeaponUpgrade", 1, true) ~= nil
-          or string.find(name, "Hammer", 1, true) ~= nil then return "hammer" end
+      if hammerModel.isRuntimeAspect(trait) then return "weaponAspect" end
+      if hammerModel.isHammerTrait(trait) then return "hammer" end
       if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
       if trait.RemainingUses ~= nil then return "temporary" end
       if type(trait.InheritFrom) == "table" then
@@ -2416,6 +2709,9 @@ if __MacGamingTrainerV1 == nil then
       for _, rarity in ipairs(rarityOrder) do
         if levels[rarity] ~= nil then result[#result + 1] = rarity end
       end
+      if hammerModel.isHammerTrait(trait) and levels.Legendary ~= nil then
+        result[#result + 1] = "Legendary"
+      end
       return result
     end
 
@@ -2450,6 +2746,8 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function"
             and type(AddTraitToHero) == "function" then
           levelCapability, levelReason = "increaseOne", ""
+        elseif family == "hammer" or family == "weaponAspect" then
+          levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
         elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
@@ -2472,6 +2770,13 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function"
             and type(AddTraitToHero) == "function" then
           rarityCapability, rarityReason = "setExact", ""
+        elseif family == "hammer" and type(AddRarityToTraits) == "function"
+            and type(TraitData) == "table" and type(TraitData[trait.Name]) == "table"
+            and type(TraitData[trait.Name].RarityLevels) == "table"
+            and TraitData[trait.Name].RarityLevels.Legendary ~= nil then
+          rarityCapability, rarityReason = "setExact", ""
+        elseif family == "weaponAspect" then
+          rarityReason = "permanentProgressionOwned"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -2495,6 +2800,10 @@ if __MacGamingTrainerV1 == nil then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "chaos" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "hammer" and hammerModel.removalReady(trait) then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "weaponAspect" then
+          removalReason = "permanentProgressionOwned"
         elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
             and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
@@ -2535,9 +2844,13 @@ if __MacGamingTrainerV1 == nil then
             name = trait.Name,
             family = family,
             sourceId = family == "chaos" and "Chaos"
-              or ((family == "hex" or family == "hexTalent") and "Selene" or traitSourceId(trait)),
+              or ((family == "hex" or family == "hexTalent") and "Selene"
+              or (family == "hammer" and "WeaponUpgrade"
+              or (family == "weaponAspect" and "" or traitSourceId(trait)))),
             owner = family == "chaos" and "Chaos"
-              or ((family == "hex" or family == "hexTalent") and "Selene" or traitSourceId(trait)),
+              or ((family == "hex" or family == "hexTalent") and "Selene"
+              or (family == "hammer" and "WeaponUpgrade"
+              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait)))),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
@@ -4177,6 +4490,12 @@ if __MacGamingTrainerV1 == nil then
           requireFunctions("Selene talent removal", {
             "RemoveTraitData", "UpdateTalentPointInvestedCache",
           })
+        elseif removalCapability == "singleInstanceForce" and family == "hammer" then
+          requireFunctions("Hammer trait removal", { "RemoveTraitData" })
+          if type(live) == "table" and type(live.PreEquipWeapons) == "table"
+              and next(live.PreEquipWeapons) ~= nil then
+            requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
+          end
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -4200,6 +4519,8 @@ if __MacGamingTrainerV1 == nil then
           if type(slotted) == "table" or HeroHasTrait(live.Name) then
             error("Selene spell removal left owner state mounted")
           end
+        elseif family == "hammer" then
+          hammerModel.removeMounted(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
@@ -4592,6 +4913,19 @@ if __MacGamingTrainerV1 == nil then
           exactPlan = { mode = "seleneSpell", spellName = entry.spellName }
           return
         end
+        if entry.acquisitionMode == "hammerNative" then
+          requireFunctions("exact Hammer acquisition", {
+            "GetEligibleUpgrades", "GetProcessedTraitData", "AddTraitToHero",
+          })
+          local source = type(LootData) == "table" and LootData.WeaponUpgrade or nil
+          if type(source) ~= "table" then error("Selected boon is not currently eligible") end
+          local eligible = GetEligibleUpgrades({}, source, source)
+          if findTargetOption(eligible, entry.trait) == nil then
+            error("Selected boon is not currently eligible")
+          end
+          exactPlan = { mode = "hammerNative" }
+          return
+        end
         if entry.acquisitionMode == "seleneTalent" then
           local slotted = seleneModel.currentSpell()
           if type(slotted) ~= "table" or slotted.Name ~= entry.spellName
@@ -4784,6 +5118,10 @@ if __MacGamingTrainerV1 == nil then
           end
           if exactPlan and exactPlan.mode == "seleneTalent" then
             seleneModel.applyTalent(entry.trait)
+            return nil
+          end
+          if exactPlan and exactPlan.mode == "hammerNative" then
+            hammerModel.applyExact(entry.trait)
             return nil
           end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
