@@ -54,6 +54,7 @@ CurrentRun = {
     TraitDictionary = {},
     Weapons = { WeaponLob = true },
     BoonData = { GameStateRequirements = {}, ReplaceChance = 0 },
+    Ammo = { WeaponLob = 4 },
   },
   CurrentRoom = {},
   NumRerolls = 0,
@@ -153,6 +154,30 @@ local calls = {
 }
 local nextId = 200
 local failAddAfterMutation = false
+
+-- Minimal engine seams for coexistence with the existing Cast and ammo
+-- features.  Hammer work must not replace or release these hooks.
+local castProperties = {
+  IgnoreOwnerAttackDisabled = false,
+  Cooldown = 0.75,
+  AllowMultiFireRequest = false,
+  IgnoreForceCooldown = false,
+  ActiveProjectileCap = 1,
+}
+GetWeaponDataValue = function(args)
+  if args.WeaponName ~= "WeaponCast" then return nil end
+  return castProperties[args.Property]
+end
+SetWeaponProperty = function(args)
+  if args.WeaponName == "WeaponCast" then castProperties[args.Property] = args.Value end
+end
+SetEffectProperty = function() return true end
+GetMaxAmmo = function(weaponName)
+  return weaponName == "WeaponLob" and 4 or 0
+end
+UpdateWeaponAmmo = function(weaponName, delta)
+  CurrentRun.Hero.Ammo[weaponName] = (CurrentRun.Hero.Ammo[weaponName] or 0) + delta
+end
 
 local function rebuildDictionary()
   CurrentRun.Hero.TraitDictionary = {}
@@ -471,6 +496,37 @@ do
   M.dispatch("remove_trait", paramsFrom(second, "hammer-pre-equip-last"))
   check(MapState.EquippedWeapons.WeaponLobPulse == nil,
     "orphaned Hammer helper weapon survived final owner removal")
+end
+
+-- Hammer acquisition/rarity/removal coexists with the existing Cast recast
+-- and infinite-ammo hooks; this slice never reimplements or releases them.
+do
+  clearRunTraits()
+  CurrentRun.Hero.Weapons = { WeaponLob = true }
+  CurrentRun.Hero.Ammo = { WeaponLob = 4 }
+  M.dispatch("set_feature", { feature = "instantCastCooldown", value = true, includeCatalogs = false })
+  M.dispatch("set_feature", { feature = "infiniteAmmo", value = true, includeCatalogs = false })
+  local before = status(false)
+  check(before.activeFeatures.instantCastCooldown == true, "Cast recast fixture did not arm")
+  check(before.activeFeatures.infiniteAmmo == true, "infinite-ammo fixture did not arm")
+
+  M.dispatch("spawn_reward", {
+    reward = "hammer:LobAmmoTrait",
+    requestId = "hammer-coexist-acquire",
+    includeCatalogs = false,
+  })
+  local row = assert(findRow("LobAmmoTrait"))
+  local rarityParams = paramsFrom(row, "hammer-coexist-rarity")
+  rarityParams.rarity = "Legendary"
+  M.dispatch("set_trait_rarity", rarityParams)
+  row = assert(findRow("LobAmmoTrait"))
+  M.dispatch("remove_trait", paramsFrom(row, "hammer-coexist-remove"))
+
+  local after = status(false)
+  check(after.activeFeatures.instantCastCooldown == true,
+    "Hammer mutation released the Cast recast hook")
+  check(after.activeFeatures.infiniteAmmo == true,
+    "Hammer mutation released the infinite-ammo hook")
 end
 
 -- One-shot Hammer acquisition is not undone by disable_all.
