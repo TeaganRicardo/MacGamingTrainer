@@ -93,8 +93,12 @@ assert 'onAction: model.performSpecialReward' in view
 assert 'text("hades2.spawn.rewardChoice")' not in view
 assert 'actionTitle: text("hades2.spawn.generate")' in view
 assert 'selectedSpecialRewardIsNativeChoice' not in view
-assert 'text("hades2.spawn.open")' in view
-assert 'Label(text("hades2.spawn.purgingPool")' in view
+# #312 keeps the native Pool of Purging action but folds it into current-run
+# management, so the old standalone "Open" companion label is intentionally gone.
+trait_panel = view[view.index('private var currentRunTraitsPanel'):view.index('private func currentRunTraitRow')]
+assert 'Label(text("hades2.spawn.purgingPool")' in trait_panel
+assert 'model.openSellTraits()' in trait_panel
+assert 'text("hades2.spawn.open")' not in trait_panel
 assert '祝福管理' not in view
 
 definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
