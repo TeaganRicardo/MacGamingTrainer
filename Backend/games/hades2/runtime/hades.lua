@@ -2252,14 +2252,14 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function rebuildChaosTarget(target, targetLevel, targetRarity)
-      if chaosLifecycleState(target) == "" then error("Selected trait is not a managed Chaos phase") end
+      if chaosLifecycleState(target) == "" then error("Chaos trait editing is unavailable") end
       requireFunctions("Chaos trait editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
       local level = targetLevel or traitLevel(target)
       local rarity = targetRarity or traitRarity(target)
       local rebuilt = GetProcessedTraitData({
         Unit = CurrentRun.Hero, TraitName = target.Name, StackNum = level, Rarity = rarity,
       })
-      if type(rebuilt) ~= "table" then error("Chaos trait recompute failed") end
+      if type(rebuilt) ~= "table" then error("Chaos trait edit failed") end
       rebuilt.Id = target.Id
       rebuilt.StackNum = level
       rebuilt.Rarity = rarity
@@ -2270,11 +2270,11 @@ if __MacGamingTrainerV1 == nil then
 
       if chaosLifecycleState(target) == "curse" then
         local linkedName = chaosLinkedTraitName(target)
-        if linkedName == "" then error("Chaos curse has no queued blessing") end
+        if linkedName == "" then error("Chaos trait editing is unavailable") end
         local queued = GetProcessedTraitData({
           Unit = CurrentRun.Hero, TraitName = linkedName, StackNum = level, Rarity = rarity,
         })
-        if type(queued) ~= "table" then error("Queued Chaos blessing recompute failed") end
+        if type(queued) ~= "table" then error("Chaos trait edit failed") end
         queued.StackNum = level
         queued.Rarity = rarity
         rebuilt.OnExpire = type(target.OnExpire) == "table" and DeepCopyTable(target.OnExpire) or {}
@@ -2294,7 +2294,7 @@ if __MacGamingTrainerV1 == nil then
         SkipQuestStatusCheck = true,
       })
       if type(added) ~= "table" or tostring(added.Id) ~= tostring(target.Id) then
-        error("Chaos trait rebuild did not preserve runtime identity")
+        error("Chaos trait edit failed")
       end
       return added
     end
@@ -3804,7 +3804,7 @@ if __MacGamingTrainerV1 == nil then
         local target, family = traitManagement.resolveTarget(params)
         if family ~= "chaos" or traitManagement.chaosLifecycleState(target) ~= "curse"
             or traitManagement.chaosLinkedTraitName(target) == "" then
-          error("Selected Chaos target has no pending lifecycle transition")
+          error("Chaos lifecycle transition is unavailable")
         end
         requireFunctions("Chaos lifecycle transition", { "RemoveTraitData" })
         return target, traitManagement.chaosLinkedTraitName(target)
@@ -3822,7 +3822,7 @@ if __MacGamingTrainerV1 == nil then
         end
         if type(replacement) ~= "table" or replacement.Name ~= linkedName
             or traitManagement.chaosLifecycleState(replacement) ~= "blessing" then
-          error("Chaos lifecycle transition did not mount the queued blessing")
+          error("Chaos lifecycle transition failed")
         end
       end, validateChaosAdvance)
     end
@@ -4107,22 +4107,22 @@ if __MacGamingTrainerV1 == nil then
           })
           local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
           if type(source) ~= "table" or not source.TransformingTraits then
-            error("Chaos acquisition source is unavailable")
+            error("Chaos exact acquisition is unavailable")
           end
           local selectedPool = entry.acquisitionMode == "chaosBlessing"
             and source.PermanentTraits or source.TemporaryTraits
           if not listContains(selectedPool, entry.trait) then
-            error("Selected Chaos target is unavailable")
+            error("Chaos exact acquisition is unavailable")
           end
           local eligibleSelected = GetEligibleTransformingTrait({ entry.trait })
           if not listContains(eligibleSelected, entry.trait) then
-            error("Selected Chaos target is not currently eligible")
+            error("Chaos exact acquisition is unavailable")
           end
           local counterpartPool = entry.acquisitionMode == "chaosBlessing"
             and source.TemporaryTraits or source.PermanentTraits
           local eligibleCounterparts = GetEligibleTransformingTrait(counterpartPool)
           if type(eligibleCounterparts) ~= "table" or next(eligibleCounterparts) == nil then
-            error("No eligible paired Chaos target is available")
+            error("Chaos exact acquisition is unavailable")
           end
           source = DeepCopyTable(source)
           if entry.acquisitionMode == "chaosBlessing" then
@@ -4189,10 +4189,10 @@ if __MacGamingTrainerV1 == nil then
           end
         end
         if type(option) ~= "table" then
-          error("Selected Chaos target became unavailable before acquisition")
+          error("Chaos exact acquisition is unavailable")
         end
         if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
-          error("Chaos pair is incomplete")
+          error("Chaos exact acquisition failed")
         end
         local rarity = option.Rarity or "Common"
         local blessing = GetProcessedTraitData({
@@ -4202,7 +4202,7 @@ if __MacGamingTrainerV1 == nil then
           Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
         })
         if type(blessing) ~= "table" or type(curse) ~= "table" then
-          error("Chaos pair processing failed")
+          error("Chaos exact acquisition failed")
         end
         curse.OnExpire = curse.OnExpire or {}
         curse.OnExpire.TraitData = blessing
@@ -4212,7 +4212,7 @@ if __MacGamingTrainerV1 == nil then
           PreProcessedForDisplay = true,
           FromLoot = true,
         })
-        if type(added) ~= "table" then error("Chaos exact acquisition did not return a trait") end
+        if type(added) ~= "table" then error("Chaos exact acquisition failed") end
         if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
         if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
         return nil
