@@ -272,6 +272,7 @@
     "hades2.spawn.exactModeNative": "原生规则",
     "hades2.spawn.generate": "生成",
     "hades2.spawn.nameFallback": "名称回退",
+    "hades2.spawn.unnamedEffect": "未命名效果",
     "hades2.spawn.noItems": "没有可用项目",
     "hades2.spawn.olympianBoons": "{term:officialTerms.olympianBoons}",
     "hades2.spawn.open": "打开",
