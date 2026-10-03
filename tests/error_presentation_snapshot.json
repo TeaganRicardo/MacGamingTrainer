@@ -1109,6 +1109,14 @@
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
   "runtime": {
+    "advance_trait_lifecycle::Chaos lifecycle transition failed": {
+      "arguments": [],
+      "key": "hades2.error.chaosLifecycleFailed"
+    },
+    "advance_trait_lifecycle::Chaos lifecycle transition is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.chaosLifecycleUnavailable"
+    },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
       "key": "hades2.error.sellNeedsRunRoom"
@@ -1222,6 +1230,10 @@
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
     },
+    "set_trait_level::Chaos trait editing is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.chaosTraitEditUnavailable"
+    },
     "set_trait_level::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
@@ -1277,6 +1289,10 @@
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
     },
+    "set_trait_rarity::Chaos trait edit failed": {
+      "arguments": [],
+      "key": "hades2.error.chaosTraitEditFailed"
+    },
     "set_trait_rarity::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
@@ -1319,6 +1335,14 @@
     "set_trait_rarity::requestId reused for a different action": {
       "arguments": [],
       "key": "hades2.error.requestIdReused"
+    },
+    "spawn_reward::Chaos exact acquisition failed": {
+      "arguments": [],
+      "key": "hades2.error.chaosExactFailed"
+    },
+    "spawn_reward::Chaos exact acquisition is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.chaosExactUnavailable"
     },
     "spawn_reward::Selected boon became unavailable before acquisition": {
       "arguments": [],
