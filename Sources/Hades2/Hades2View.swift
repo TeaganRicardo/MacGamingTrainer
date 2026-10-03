@@ -1132,35 +1132,7 @@ struct Hades2TrainerView: View {
                 onAction: model.performSpecialReward
             )
             Divider()
-            HStack {
-                Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
-                Spacer()
-                TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
-            }
-            TrainerGroupedOptionPicker(
-                title: nil,
-                icon: nil,
-                pickerLabel: text("hades2.spawn.exactBoons"),
-                selection: $model.selectedExactBoon,
-                sections: boonGroups(exactBoons),
-                enabled: model.canSpawnReward,
-                emptyLabel: text("hades2.spawn.noItems"),
-                actionTitle: text("hades2.spawn.acquire"),
-                shortcutText: nil,
-                itemLabel: exactItemLabel,
-                onAction: model.acquireExactBoon
-            )
-            Divider()
-            HStack {
-                Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
-                Spacer()
-                Button(text("hades2.spawn.open")) { model.openSellTraits() }
-                    .disabled(!model.canOpenNativeBoonScreen)
-            }
-            if model.connected {
-                Divider()
-                currentRunTraitsPanel
-            }
+            BoonManagementPrototypeView()
         }.trainerPanel()
     }
 
