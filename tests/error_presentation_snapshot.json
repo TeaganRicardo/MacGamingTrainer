@@ -1226,6 +1226,14 @@
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
     },
+    "remove_trait::Selene spell removal left owner state mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "remove_trait::Selene talent removal left the mounted effect present": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
     "remove_trait::Trait instance is no longer present": {
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
@@ -1280,6 +1288,14 @@
     "set_trait_level::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "set_trait_level::Not enough uninvested Path of Stars nodes remain for the requested level": {
+      "key": "hades2.error.traitLevelNoLongerEligible",
+      "arguments": []
+    },
+    "set_trait_level::Selene talent tree changed before the requested level was applied": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
     },
     "set_trait_level::Trait instance is no longer present": {
       "arguments": [],
@@ -1391,6 +1407,10 @@
       "arguments": [],
       "key": "hades2.error.chaosExactUnavailable"
     },
+    "spawn_reward::Mounted Selene talent is unavailable": {
+      "key": "hades2.error.exactNotEligible",
+      "arguments": []
+    },
     "spawn_reward::Selected boon became unavailable before acquisition": {
       "arguments": [],
       "key": "hades2.error.exactNotEligible"
@@ -1402,6 +1422,26 @@
     "spawn_reward::Selected boon is not currently eligible": {
       "arguments": [],
       "key": "hades2.error.exactNotEligible"
+    },
+    "spawn_reward::Selene spell acquisition failed": {
+      "key": "hades2.error.seleneExactFailed",
+      "arguments": []
+    },
+    "spawn_reward::Selene spell target is unavailable": {
+      "key": "hades2.error.exactNotEligible",
+      "arguments": []
+    },
+    "spawn_reward::Selene talent acquisition failed": {
+      "key": "hades2.error.seleneExactFailed",
+      "arguments": []
+    },
+    "spawn_reward::Selene talent is no longer available in the current Path of Stars": {
+      "key": "hades2.error.exactNotEligible",
+      "arguments": []
+    },
+    "spawn_reward::Selene talent is unavailable for the current Path of Stars": {
+      "key": "hades2.error.exactNotEligible",
+      "arguments": []
     },
     "spawn_reward::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
