@@ -91,8 +91,9 @@ local function removeMatching(predicate)
 end
 
 -- Ordinary (Olympian) traits are the native Pom/shop-eligible family; the
--- "Chaos" name routes into an owner-specific family whose capabilities project
--- "none". Both predicates mirror the real game-owned callbacks.
+-- A Hex-shaped name routes into an owner-specific family whose capabilities
+-- still project "none" until #237. Both predicates mirror the real game-owned
+-- callbacks.
 IsGodTrait = function(name)
   return string.find(name or "", "Ordinary", 1, true) == 1
 end
@@ -143,7 +144,7 @@ for _, name in ipairs({
   "OrdinaryLevel",
   "OrdinaryDup",
   "OrdinaryCountGuard",
-  "ChaosGuard",
+  "HexGuard",
   "OmegaExplodeBoon",
 }) do
   defineRarities(name)
@@ -238,10 +239,10 @@ end
 -- commands must refuse it with the capability error key instead of succeeding or
 -- silently doing nothing.
 do
-  local trait = newTrait("ChaosGuard", 101, 1, "Rare")
+  local trait = newTrait("HexGuard", 101, 1, "Rare")
   setTraits(trait)
-  local row = findRow("ChaosGuard", 101)
-  eq(row.family, "chaos", "owner-specific family")
+  local row = findRow("HexGuard", 101)
+  eq(row.family, "hex", "owner-specific family")
   eq(row.levelCapability, "none", "owner-specific level capability")
   eq(row.levelReason, "ownerSpecificLifecycle", "owner-specific level reason")
   eq(row.removalCapability, "none", "owner-specific removal capability")
@@ -254,9 +255,9 @@ do
 end
 
 do
-  local trait = newTrait("ChaosGuard", 102, 1, "Rare")
+  local trait = newTrait("HexGuard", 102, 1, "Rare")
   setTraits(trait)
-  local row = findRow("ChaosGuard", 102)
+  local row = findRow("HexGuard", 102)
   eq(row.removalCapability, "none", "owner-specific removal capability")
   local beforeNative, beforeDirect = calls.nativeRemove, calls.directRemove
   expectError("Trait removal is unavailable for the selected target", function()

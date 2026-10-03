@@ -23,6 +23,7 @@ enum Hades2Command: String {
     case setTraitLevel = "set_trait_level"
     case setTraitRarity = "set_trait_rarity"
     case removeTrait = "remove_trait"
+    case advanceTraitLifecycle = "advance_trait_lifecycle"
     case openSpecialChoice = "open_special_choice"
     case listProfiles = "list_profiles"
     case saveProfile = "save_profile"
@@ -34,7 +35,7 @@ enum Hades2Command: String {
     case restore
 }
 
-/// Typed Hades module-protocol-v5 request boundary. Command spelling and JSON parameter
+/// Typed Hades module request boundary. Command spelling and JSON parameter
 /// keys live here rather than being duplicated through the store and views.
 enum Hades2Request {
     case scan, status, disconnect, launch, disableAll, runtimeReset, resetDesired
@@ -57,6 +58,7 @@ enum Hades2Request {
     case setTraitLevel(CurrentRunTrait, targetLevel: Int)
     case setTraitRarity(CurrentRunTrait, rarity: String)
     case removeTrait(CurrentRunTrait)
+    case advanceTraitLifecycle(CurrentRunTrait)
     case openSpecialChoice(source: String)
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
@@ -93,6 +95,7 @@ enum Hades2Request {
         case .setTraitLevel: return .setTraitLevel
         case .setTraitRarity: return .setTraitRarity
         case .removeTrait: return .removeTrait
+        case .advanceTraitLifecycle: return .advanceTraitLifecycle
         case .openSpecialChoice: return .openSpecialChoice
         case .listProfiles: return .listProfiles
         case .saveProfile: return .saveProfile
@@ -205,6 +208,8 @@ enum Hades2Request {
             params["rarity"] = rarity
             return params
         case .removeTrait(let trait):
+            return Self.traitTargetParams(trait)
+        case .advanceTraitLifecycle(let trait):
             return Self.traitTargetParams(trait)
         case .openSpecialChoice(let source):
             return ["source": source]

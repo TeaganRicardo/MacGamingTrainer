@@ -269,10 +269,32 @@ struct Hades2TrainerView: View {
         localization.language == .en ? trait.englishName : trait.displayName
     }
 
+    private func linkedCurrentRunTraitName(_ trait: CurrentRunTrait) -> String {
+        let localized = localization.language == .en ? trait.linkedEnglishName : trait.linkedDisplayName
+        return localized.isEmpty ? text("hades2.spawn.unnamedEffect") : localized
+    }
+
+    private func currentRunTraitLifecycleRows(_ trait: CurrentRunTrait) -> [String] {
+        guard trait.family == "chaos", !trait.lifecycleState.isEmpty else { return [] }
+        var rows: [String] = []
+        let phaseKey = "hades2.traits.chaos." + trait.lifecycleState
+        var phaseParts = [text(phaseKey)]
+        if let remaining = trait.remainingUses {
+            let rendered = remaining.rounded() == remaining ? String(Int(remaining)) : String(format: "%.1f", remaining)
+            phaseParts.append(text("hades2.traits.chaos.remaining", arguments: [rendered]))
+        }
+        rows.append(phaseParts.joined(separator: " · "))
+        if trait.lifecycleState == "curse", !trait.linkedTrait.isEmpty {
+            rows.append(text("hades2.traits.chaos.transformsTo", arguments: [linkedCurrentRunTraitName(trait)]))
+        }
+        return rows
+    }
+
     private var filteredCurrentRunTraits: [CurrentRunTrait] {
         let rows = traitSearch.isEmpty ? model.currentRunTraits : model.currentRunTraits.filter { trait in
             [
                 trait.displayName, trait.englishName, trait.name,
+                trait.linkedDisplayName, trait.linkedEnglishName,
                 trait.sourceName, trait.sourceEnglishName, trait.sourceID, trait.family,
             ].contains { $0.localizedCaseInsensitiveContains(traitSearch) }
         }
@@ -407,14 +429,14 @@ struct Hades2TrainerView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(currentRunTraitName(trait))
                             .font(.body.weight(.medium))
-                        HStack(spacing: 7) {
-                            Text(traitSourceLabel(trait))
-                            if trait.name != currentRunTraitName(trait) {
-                                Text(trait.name).monospaced()
-                            }
+                        Text(traitSourceLabel(trait))
+                            .font(.caption2)
+                            .foregroundStyle(theme.mutedFill)
+                        ForEach(currentRunTraitLifecycleRows(trait), id: \.self) { lifecycle in
+                            Text(lifecycle)
+                                .font(.caption2)
+                                .foregroundStyle(theme.mutedFill)
                         }
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
                     }
 
                     Spacer(minLength: theme.sectionSpacing)
@@ -472,10 +494,20 @@ struct Hades2TrainerView: View {
 
                     Spacer(minLength: 8)
 
+                    if trait.canAdvanceLifecycle {
+                        Button(text("hades2.traits.chaos.advance")) {
+                            model.advanceTraitLifecycle(trait)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!model.canOpenNativeBoonScreen)
+                    }
+
                     Button(role: .destructive) {
                         model.removeTrait(trait)
                     } label: {
-                        Text(text("hades2.traits.remove"))
+                        Text(text(trait.lifecycleState == "curse"
+                            ? "hades2.traits.chaos.cancelPair"
+                            : "hades2.traits.remove"))
                     }
                     .buttonStyle(.bordered)
                     .disabled(!model.canOpenNativeBoonScreen || !trait.canRemove)

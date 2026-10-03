@@ -157,6 +157,48 @@ assert cat['englishName'] == 'Toula · Attack Count'
 assert frog['displayName'] != frog['name']
 assert cat['displayName'] != cat['name']
 
+# Linked Chaos phases use the same official presentation seam; the raw linked
+# trait id remains routing/diagnostic identity and is not a user label.
+original_display_names = localization.official_display_names
+def chaos_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'ChaosDamageCurse': '受难',
+            'ChaosHealthBlessing': '丰盛',
+            'NPC_Chaos_01': '卡俄斯',
+        },
+        'en': {
+            'ChaosDamageCurse': 'Maimed',
+            'ChaosHealthBlessing': 'Affluence',
+            'NPC_Chaos_01': 'Chaos',
+        },
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = chaos_names
+try:
+    chaos_payload = {
+        'currentRunTraits': [{
+            'name': 'ChaosDamageCurse',
+            'linkedTrait': 'ChaosHealthBlessing',
+            'sourceId': 'Chaos',
+            'family': 'chaos',
+        }]
+    }
+    catalog.localize_catalog(chaos_payload)
+finally:
+    localization.official_display_names = original_display_names
+chaos = chaos_payload['currentRunTraits'][0]
+assert chaos['displayName'] == '受难'
+assert chaos['englishName'] == 'Maimed'
+assert chaos['linkedDisplayName'] == '丰盛'
+assert chaos['linkedEnglishName'] == 'Affluence'
+assert chaos['linkedDisplayName'] != chaos['linkedTrait']
+
+trait_row = view[view.index('private func currentRunTraitRow'):view.index('private var resourceSection')]
+assert 'Text(trait.name).monospaced()' not in trait_row
+assert 'model.advanceTraitLifecycle(trait)' in trait_row
+assert 'hades2.traits.chaos.cancelPair' in trait_row
+
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.
 metric = card[card.index('struct TrainerMetricCard'):]

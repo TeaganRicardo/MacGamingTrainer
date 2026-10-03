@@ -978,6 +978,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         )
     }
 
+    func advanceTraitLifecycle(_ trait: CurrentRunTrait) {
+        guard canOpenNativeBoonScreen, trait.canAdvanceLifecycle else { return }
+        send(
+            .advanceTraitLifecycle(trait),
+            title: "hades2.receipt.traitLifecycleAction",
+            titleArguments: [trait.displayName],
+            announceSuccess: false
+        )
+    }
+
     func performSpecialReward(_ reward: String) {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {

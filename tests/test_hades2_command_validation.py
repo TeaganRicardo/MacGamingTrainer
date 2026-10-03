@@ -126,6 +126,7 @@ assert validate_command_params(
     "set_trait_rarity", dict(trait_target, rarity="Epic")
 ) == dict(trait_target, rarity="Epic")
 assert validate_command_params("remove_trait", trait_target) == trait_target
+assert validate_command_params("advance_trait_lifecycle", trait_target) == trait_target
 expect_error(
     "set_trait_level",
     dict({key: value for key, value in trait_target.items() if key != "instanceId"}, targetLevel=4),

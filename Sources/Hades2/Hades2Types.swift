@@ -165,6 +165,11 @@ struct CurrentRunTrait: Identifiable, Equatable, Sendable {
     let availableRarities: [String]
     let sameNameCount: Int
     let remainingUses: Double?
+    let lifecycleState: String
+    let linkedTrait: String
+    let linkedDisplayName: String
+    let linkedEnglishName: String
+    let canAdvanceLifecycle: Bool
 
     let levelCapability: TraitLevelCapability
     let levelReason: String
