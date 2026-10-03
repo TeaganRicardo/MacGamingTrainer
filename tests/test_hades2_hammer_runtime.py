@@ -548,7 +548,11 @@ do
   AddTraitToHero({ TraitName = "LobPulseAmmoCollectTrait", Rarity = "Common" })
   check(MapState.EquippedWeapons.WeaponLobPulse == true, "helper weapon was not mounted")
   local first = assert(findRow("LobPulseAmmoTrait"))
+  check(CurrentRun.Hero.WeaponDataOverride.WeaponLob ~= nil,
+    "Hammer weapon override was not installed")
   M.dispatch("remove_trait", paramsFrom(first, "hammer-pre-equip-first"))
+  check(CurrentRun.Hero.WeaponDataOverride.WeaponLob == nil,
+    "Hammer weapon override survived native teardown")
   check(MapState.EquippedWeapons.WeaponLobPulse == true,
     "shared helper weapon was released while another Hammer still owned it")
   local second = assert(findRow("LobPulseAmmoCollectTrait"))
