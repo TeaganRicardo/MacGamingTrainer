@@ -489,18 +489,6 @@ struct Hades2TrainerView: View {
                         Spacer(minLength: 8)
 
                         currentRunTraitContextActions(trait)
-
-                        if trait.canRemove {
-                            Button(role: .destructive) {
-                                model.removeTrait(trait)
-                            } label: {
-                                Text(text(trait.lifecycleState == "curse"
-                                    ? "hades2.traits.chaos.cancelPair"
-                                    : "hades2.traits.remove"))
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(!model.canOpenNativeBoonScreen)
-                        }
                     }
                 }
 
@@ -518,6 +506,18 @@ struct Hades2TrainerView: View {
         if trait.canAdvanceLifecycle {
             Button(text("hades2.traits.chaos.advance")) {
                 model.advanceTraitLifecycle(trait)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!model.canOpenNativeBoonScreen)
+        }
+
+        if trait.canRemove {
+            Button(role: .destructive) {
+                model.removeTrait(trait)
+            } label: {
+                Text(text(trait.lifecycleState == "curse"
+                    ? "hades2.traits.chaos.cancelPair"
+                    : "hades2.traits.remove"))
             }
             .buttonStyle(.bordered)
             .disabled(!model.canOpenNativeBoonScreen)
