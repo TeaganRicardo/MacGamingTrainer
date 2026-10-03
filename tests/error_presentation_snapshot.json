@@ -1234,7 +1234,7 @@
       "arguments": [],
       "key": "hades2.error.traitLevelUnavailable"
     },
-    "set_trait_level::Trait level increase did not produce an observed higher level": {
+    "set_trait_level::Trait level increase did not reach the requested target level": {
       "arguments": [],
       "key": "hades2.error.traitLevelNoEffect"
     },
@@ -1253,6 +1253,10 @@
     "set_trait_level::Trait target changed since selection": {
       "arguments": [],
       "key": "hades2.error.traitTargetChanged"
+    },
+    "set_trait_level::Trait target level must be higher than the current level": {
+      "arguments": [],
+      "key": "hades2.error.traitLevelTargetInvalid"
     },
     "set_trait_level::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
