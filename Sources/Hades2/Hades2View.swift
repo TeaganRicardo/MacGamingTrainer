@@ -43,6 +43,7 @@ struct Hades2TrainerView: View {
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
+    @ViewState<Set<String>> private var expandedExactBoonGroups = []
     @ViewState<String> private var traitSearch = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
     @ViewState<[String: String]> private var traitRarityInputs = [:]
@@ -87,11 +88,10 @@ struct Hades2TrainerView: View {
             exactSearch.isEmpty
                 || $0.name.localizedCaseInsensitiveContains(exactSearch)
                 || $0.englishName.localizedCaseInsensitiveContains(exactSearch)
-                || $0.targetID.localizedCaseInsensitiveContains(exactSearch)
-                || $0.id.localizedCaseInsensitiveContains(exactSearch)
-                || $0.sourceId.localizedCaseInsensitiveContains(exactSearch)
                 || $0.sourceName.localizedCaseInsensitiveContains(exactSearch)
                 || $0.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
+                || $0.sectionTitle.localizedCaseInsensitiveContains(exactSearch)
+                || $0.englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)
                 || $0.category.localizedCaseInsensitiveContains(exactSearch)
                 || $0.englishCategory.localizedCaseInsensitiveContains(exactSearch)
         })
@@ -293,9 +293,9 @@ struct Hades2TrainerView: View {
     private var filteredCurrentRunTraits: [CurrentRunTrait] {
         let rows = traitSearch.isEmpty ? model.currentRunTraits : model.currentRunTraits.filter { trait in
             [
-                trait.displayName, trait.englishName, trait.name,
+                trait.displayName, trait.englishName,
                 trait.linkedDisplayName, trait.linkedEnglishName,
-                trait.sourceName, trait.sourceEnglishName, trait.sourceID, trait.family,
+                trait.sourceName, trait.sourceEnglishName,
             ].contains { $0.localizedCaseInsensitiveContains(traitSearch) }
         }
         return rows.sorted {
@@ -312,26 +312,6 @@ struct Hades2TrainerView: View {
         let key = "hades2.rarity." + rarity
         let localized = text(key)
         return localized == key ? rarity : localized
-    }
-
-    private func traitLimitationReason(_ reason: String) -> String {
-        let key = "hades2.traits.reason." + (reason.isEmpty ? "ownerSpecificLifecycle" : reason)
-        let localized = text(key)
-        return localized == key ? text("hades2.traits.reason.unknown") : localized
-    }
-
-    private func traitLimitationRows(_ trait: CurrentRunTrait) -> [String] {
-        var rows: [String] = []
-        if !trait.canIncreaseLevel {
-            rows.append(text("hades2.traits.limit.level", arguments: [traitLimitationReason(trait.levelReason)]))
-        }
-        if !trait.canSetRarity {
-            rows.append(text("hades2.traits.limit.rarity", arguments: [traitLimitationReason(trait.rarityReason)]))
-        }
-        if !trait.canRemove {
-            rows.append(text("hades2.traits.limit.remove", arguments: [traitLimitationReason(trait.removalReason)]))
-        }
-        return rows
     }
 
     private func traitSourceLabel(_ trait: CurrentRunTrait) -> String {
@@ -454,81 +434,86 @@ struct Hades2TrainerView: View {
                     .foregroundStyle(theme.mutedFill)
                 }
 
-                HStack(alignment: .center, spacing: 10) {
-                    HStack(spacing: 6) {
-                        Text(text("hades2.traits.targetLevel"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 70)
-                            .disabled(!model.canOpenNativeBoonScreen || !trait.canIncreaseLevel)
-                        Button(text("hades2.traits.apply")) {
-                            model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
+                if trait.canIncreaseLevel || trait.canSetRarity || trait.canAdvanceLifecycle || trait.canRemove {
+                    HStack(alignment: .center, spacing: 10) {
+                        if trait.canIncreaseLevel {
+                            HStack(spacing: 6) {
+                                Text(text("hades2.traits.targetLevel"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 70)
+                                    .disabled(!model.canOpenNativeBoonScreen)
+                                Button(text("hades2.traits.apply")) {
+                                    model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!canApplyTraitLevel(trait))
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(!canApplyTraitLevel(trait))
-                    }
 
-                    Divider().frame(height: 24)
-
-                    HStack(spacing: 6) {
-                        Text(text("hades2.traits.targetRarity"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField(text("hades2.traits.targetRarity"), text: traitRarityInput(trait))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 105)
-                            .help(trait.availableRarities.map(traitRarityLabel).joined(separator: " / "))
-                            .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
-                        Button(text("hades2.traits.apply")) {
-                            guard let rarity = canonicalTraitRarity(
-                                traitRarityInput(trait).wrappedValue,
-                                for: trait
-                            ) else { return }
-                            model.setTraitRarity(trait, rarity: rarity)
+                        if trait.canIncreaseLevel && trait.canSetRarity {
+                            Divider().frame(height: 24)
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(!canApplyTraitRarity(trait))
-                    }
 
-                    Spacer(minLength: 8)
-
-                    if trait.canAdvanceLifecycle {
-                        Button(text("hades2.traits.chaos.advance")) {
-                            model.advanceTraitLifecycle(trait)
+                        if trait.canSetRarity {
+                            HStack(spacing: 6) {
+                                Text(text("hades2.traits.targetRarity"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TextField(text("hades2.traits.targetRarity"), text: traitRarityInput(trait))
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 105)
+                                    .help(trait.availableRarities.map(traitRarityLabel).joined(separator: " / "))
+                                    .disabled(!model.canOpenNativeBoonScreen)
+                                Button(text("hades2.traits.apply")) {
+                                    guard let rarity = canonicalTraitRarity(
+                                        traitRarityInput(trait).wrappedValue,
+                                        for: trait
+                                    ) else { return }
+                                    model.setTraitRarity(trait, rarity: rarity)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(!canApplyTraitRarity(trait))
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(!model.canOpenNativeBoonScreen)
-                    }
 
-                    Button(role: .destructive) {
-                        model.removeTrait(trait)
-                    } label: {
-                        Text(text(trait.lifecycleState == "curse"
-                            ? "hades2.traits.chaos.cancelPair"
-                            : "hades2.traits.remove"))
+                        Spacer(minLength: 8)
+
+                        currentRunTraitContextActions(trait)
+
+                        if trait.canRemove {
+                            Button(role: .destructive) {
+                                model.removeTrait(trait)
+                            } label: {
+                                Text(text(trait.lifecycleState == "curse"
+                                    ? "hades2.traits.chaos.cancelPair"
+                                    : "hades2.traits.remove"))
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(!model.canOpenNativeBoonScreen)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(!model.canOpenNativeBoonScreen || !trait.canRemove)
                 }
 
-                ForEach(traitLimitationRows(trait), id: \.self) { limitation in
-                    Text(limitation)
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
-                }
-                if let issue = trait.deferredIssue {
-                    Text(text("hades2.traits.deferredIssue", arguments: [String(issue)]))
-                        .font(.caption2)
-                        .foregroundStyle(theme.mutedFill)
-                }
                 if trait.removalScopeAllMatching {
                     Text(text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)]))
                         .font(.caption2)
                         .foregroundStyle(theme.mutedFill)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func currentRunTraitContextActions(_ trait: CurrentRunTrait) -> some View {
+        if trait.canAdvanceLifecycle {
+            Button(text("hades2.traits.chaos.advance")) {
+                model.advanceTraitLifecycle(trait)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!model.canOpenNativeBoonScreen)
         }
     }
 
@@ -683,7 +668,6 @@ struct Hades2TrainerView: View {
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
             specialIDs: specialBoons.map(\.id),
-            exactIDs: exactBoons.map(\.id),
             filteredResourceIDs: filtered.map(\.id)
         )
     }
@@ -833,7 +817,6 @@ struct Hades2TrainerView: View {
         if !newValue.olympianIDs.contains(model.selectedOlympianReward) { model.selectedOlympianReward = newValue.olympianIDs.first ?? "" }
         if !newValue.pickupIDs.contains(model.selectedPickupReward) { model.selectedPickupReward = newValue.pickupIDs.first ?? "" }
         if !newValue.specialIDs.contains(model.selectedSpecialReward) { model.selectedSpecialReward = newValue.specialIDs.first ?? "" }
-        if !newValue.exactIDs.contains(model.selectedExactBoon) { model.selectedExactBoon = newValue.exactIDs.first ?? "" }
         if !newValue.filteredResourceIDs.contains(selectedMaterial) {
             selectedMaterial = search.isEmpty && newValue.filteredResourceIDs.contains("MetaCurrency")
                 ? "MetaCurrency"
@@ -1132,24 +1115,18 @@ struct Hades2TrainerView: View {
                 onAction: model.performSpecialReward
             )
             Divider()
-            HStack {
-                Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
+            HStack(spacing: 10) {
+                Label(text("hades2.spawn.exactBoons"), systemImage: "scope")
+                    .font(.subheadline.weight(.medium))
+                Text(text("hades2.traits.count", arguments: [String(exactBoons.count)]))
+                    .font(.caption)
+                    .foregroundStyle(theme.mutedFill)
                 Spacer()
-                TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                TextField(text("hades2.spawn.search"), text: $exactSearch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 280)
             }
-            TrainerGroupedOptionPicker(
-                title: nil,
-                icon: nil,
-                pickerLabel: text("hades2.spawn.exactBoons"),
-                selection: $model.selectedExactBoon,
-                sections: boonGroups(exactBoons),
-                enabled: model.canSpawnReward,
-                emptyLabel: text("hades2.spawn.noItems"),
-                actionTitle: text("hades2.spawn.acquire"),
-                shortcutText: nil,
-                itemLabel: exactItemLabel,
-                onAction: model.acquireExactBoon
-            )
+            exactBoonAcquisitionList
             Divider()
             HStack {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
@@ -1164,10 +1141,84 @@ struct Hades2TrainerView: View {
         }.trainerPanel()
     }
 
+    @ViewBuilder
+    private var exactBoonAcquisitionList: some View {
+        let groups = boonGroups(exactBoons)
+        if groups.isEmpty {
+            TrainerEmptyState(text: text("hades2.spawn.noItems"))
+        } else {
+            LazyVStack(spacing: 8) {
+                ForEach(groups) { section in
+                    exactBoonGroup(section)
+                }
+            }
+        }
+    }
+
+    private func exactBoonGroup(_ section: TrainerPickerSection<BoonOption>) -> some View {
+        let expansion = Binding(
+            get: { !exactSearch.isEmpty || expandedExactBoonGroups.contains(section.title) },
+            set: { expanded in
+                guard exactSearch.isEmpty else { return }
+                if expanded {
+                    expandedExactBoonGroups.insert(section.title)
+                } else {
+                    expandedExactBoonGroups.remove(section.title)
+                }
+            }
+        )
+        return DisclosureGroup(isExpanded: expansion) {
+            LazyVStack(spacing: 6) {
+                ForEach(section.items) { option in
+                    exactBoonRow(option)
+                }
+            }
+            .padding(.top, 8)
+        } label: {
+            HStack(spacing: 8) {
+                Text(section.title)
+                    .font(.body.weight(.medium))
+                Text(text("hades2.traits.count", arguments: [String(section.items.count)]))
+                    .font(.caption2)
+                    .foregroundStyle(theme.mutedFill)
+            }
+        }
+        .padding(10)
+        .background(theme.subtleFill.opacity(0.45), in: RoundedRectangle(cornerRadius: theme.controlCornerRadius))
+    }
+
+    private func exactBoonRow(_ option: BoonOption) -> some View {
+        TrainerListCard {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(exactItemLabel(option))
+                        .font(.body.weight(.medium))
+                    Text(exactItemSourceLabel(option))
+                        .font(.caption2)
+                        .foregroundStyle(theme.mutedFill)
+                }
+                Spacer(minLength: 12)
+                Button(text("hades2.spawn.acquire")) {
+                    model.acquireExactBoon(option.id)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.canSpawnReward)
+            }
+        }
+    }
+
     private func exactItemLabel(_ option: BoonOption) -> String {
         let localizedName = localization.language == .en ? option.englishName : option.name
         if !localizedName.isEmpty { return localizedName }
         return text("hades2.spawn.unnamedEffect")
+    }
+
+    private func exactItemSourceLabel(_ option: BoonOption) -> String {
+        let source = localization.language == .en ? option.sourceEnglishName : option.sourceName
+        let category = localization.language == .en ? option.englishCategory : option.category
+        if source.isEmpty { return category }
+        if category.isEmpty || category == source { return source }
+        return "\(source) · \(category)"
     }
 
     private func spawnRow(
