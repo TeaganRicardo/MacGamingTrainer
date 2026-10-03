@@ -4779,10 +4779,12 @@ if __MacGamingTrainerV1 == nil then
             return addChaosExact()
           end
           if exactPlan and exactPlan.mode == "seleneSpell" then
-            return seleneModel.applySpell(exactPlan.spellName)
+            seleneModel.applySpell(exactPlan.spellName)
+            return nil
           end
           if exactPlan and exactPlan.mode == "seleneTalent" then
-            return seleneModel.applyTalent(entry.trait)
+            seleneModel.applyTalent(entry.trait)
+            return nil
           end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
             return addOrdinaryExact()
