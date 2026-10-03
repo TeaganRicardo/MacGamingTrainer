@@ -50,8 +50,6 @@ _PRODUCT_LABEL_EN_BY_ZH = {
     '商店商品': 'Shop Items',
     '资源': 'Resources',
     '无敌模式': 'Invincibility',
-    '卡俄斯祝福': 'Chaos Blessings',
-    '卡俄斯诅咒': 'Chaos Curses',
 }
 
 
@@ -287,7 +285,9 @@ def localize_catalog(decoded):
                 if not preserve_exact_section:
                     item['englishSectionTitle']=official_source_en
             if preserve_exact_section:
-                item['englishSectionTitle']=_english_group_label(item.get('sectionTitle'),en)
+                title_text_id=_NATIVE_CHOICE_TITLE_IDS.get(source_id)
+                item['sectionTitle']=_clean(zh.get(title_text_id)) or item.get('sectionTitle','')
+                item['englishSectionTitle']=_clean(en.get(title_text_id)) or item.get('englishSectionTitle','')
             if group=='special' or item.get('nativeChoice'):
                 title_text_id=_NATIVE_CHOICE_TITLE_IDS.get(source_id)
                 official_title=_clean(zh.get(title_text_id)) if title_text_id else None
