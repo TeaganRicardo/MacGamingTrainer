@@ -35,8 +35,8 @@ def test_selene_mutation_owns_spell_and_tree_lifecycle():
 
     for token in (
         "teardownSlottedSpell",
-        "applySeleneSpell",
-        "applySeleneTalent",
+        "local function applySpell",
+        "local function applyTalent",
         "UpdateTalentPointInvestedCache",
         "UnequipWeapon",
     ):
