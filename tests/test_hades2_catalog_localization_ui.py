@@ -122,12 +122,13 @@ assert direct['englishCategory'] == 'Character Rewards'
 boon_panel = view[view.index('private var boonPanel: some View'):view.index('private func spawnRow', view.index('private var boonPanel: some View'))]
 character_index = boon_panel.index('hades2.spawn.characterRewards')
 exact_index = boon_panel.index('hades2.spawn.exactBoons')
-purging_index = boon_panel.index('hades2.spawn.purgingPool')
-assert character_index < exact_index < purging_index
+current_run_index = boon_panel.index('currentRunTraitsPanel')
+assert character_index < exact_index < current_run_index
 assert '$model.selectedExactBoon' not in boon_panel
 assert '$exactSearch' in boon_panel
-exact_surface = boon_panel[exact_index:purging_index]
+exact_surface = boon_panel[exact_index:current_run_index]
 assert 'TrainerGroupedOptionPicker' not in exact_surface
+assert 'hades2.spawn.purgingPool' not in exact_surface
 assert 'exactBoonAcquisitionList' in exact_surface
 assert 'model.acquireExactBoon(option.id)' in view
 assert 'DisclosureGroup' in view
@@ -206,6 +207,10 @@ assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 
 trait_source = view[view.index('private func traitSourceLabel'):view.index('private func traitLevelInput')]
 assert 'return trait.family' not in trait_source
+
+trait_panel = view[view.index('private var currentRunTraitsPanel'):view.index('private func currentRunTraitRow')]
+assert 'hades2.spawn.purgingPool' in trait_panel
+assert 'model.openSellTraits()' in trait_panel
 
 trait_row = view[view.index('private func currentRunTraitRow'):view.index('private var resourceSection')]
 assert 'Text(trait.name).monospaced()' not in trait_row
