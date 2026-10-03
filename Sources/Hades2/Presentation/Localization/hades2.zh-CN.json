@@ -366,7 +366,10 @@
     "hades2.vital.health": "{term:officialTerms.health}",
     "hades2.vital.lockedSuffix": "已锁定",
     "hades2.vital.mana": "{term:officialTerms.mana}",
-    "hades2.vital.runGold": "本局金币"
+    "hades2.vital.runGold": "本局金币",
+    "hades2.traits.family.weaponAspect": "武器形态",
+    "hades2.traits.reason.permanentProgressionOwned": "由永久武器/形态选择管理",
+    "hades2.rarity.Legendary": "传奇"
   },
   "language": "zh-CN"
 }
