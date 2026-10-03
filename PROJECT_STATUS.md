@@ -97,8 +97,9 @@ Planning issue #124 is the sequencing authority.
 - #230 pickup-compatible infinite-ammo correction is complete in this source.
 - #236 Chaos lifecycle acquisition and mounted management is complete in this source.
 - #312 boon-management UX consolidation is complete in this source: Exact Boons keeps its grouped picker/search acquisition flow, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions.
-- **Next selected feature task: #237** — extend exact acquisition and mounted management to Selene Hexes and talents.
-- Then continue #238–#240 on the same Hades-owned contextual-action seam instead of adding family-specific layouts.
+- #237 Selene Hex / Path of Stars exact acquisition and mounted management is complete in this source at resident revision 63; final real-game acceptance remains part of the consolidated manual pass.
+- **Next selected feature task: #238** — add weapon/aspect-aware Hammer acquisition and mounted-effect management.
+- Then continue #239–#240 on the same Hades-owned contextual-action seam instead of adding family-specific layouts.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
