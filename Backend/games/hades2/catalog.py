@@ -14,6 +14,7 @@ _SPECIAL_SOURCE_LOCALIZATION_IDS = {
     'Icarus': 'NPC_Icarus_01',
     'Chaos': 'NPC_Chaos_01',
     'Selene': 'NPC_Selene_01',
+    'WeaponUpgrade': 'WeaponUpgradeChoiceMenu_Title',
 }
 
 _SELENE_TALENT_TITLE_ID = 'TalentScreenMenu_Title'
@@ -31,6 +32,7 @@ _NATIVE_CHOICE_TITLE_IDS = {
     'Icarus': 'IcarusChoiceMenu_Title',
     'Chaos': 'UpgradeChoiceMenu_Chaos',
     'Selene': 'SpellScreenMenu_Title',
+    'WeaponUpgrade': 'WeaponUpgradeChoiceMenu_Title',
 }
 
 _OLYMPIAN_BOON_TITLE_ID = 'Boon'
@@ -280,7 +282,7 @@ def localize_catalog(decoded):
             official_source=_clean(zh.get(source_text_id)) if source_text_id else None
             official_source_en=_clean(en.get(source_text_id)) if source_text_id else None
             preserve_exact_section = group=='exact' and item.get('acquisitionMode') in (
-                'chaosBlessing','chaosCurse','seleneSpell','seleneTalent'
+                'chaosBlessing','chaosCurse','seleneSpell','seleneTalent','hammerNative'
             )
             if isinstance(official_source,str) and official_source:
                 item['sourceName']=official_source
