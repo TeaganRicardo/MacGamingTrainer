@@ -116,8 +116,9 @@ assert direct['sectionTitle'] == '阿耳忒弥斯' and direct['englishSectionTit
 assert direct['englishCategory'] == 'Character Rewards'
 
 # The exact-acquisition picker is its own user-visible surface directly below
-# Character Rewards and above the mounted-management affordance. Individual
-# exact targets have their own search/selection and show strategy + raw ID.
+# Character Rewards and above the mounted-management affordance. Recognition
+# labels must stay user-facing: backend strategy and raw TraitData ids are not
+# presentation fields.
 boon_panel = view[view.index('private var boonPanel: some View'):view.index('private func spawnRow', view.index('private var boonPanel: some View'))]
 character_index = boon_panel.index('hades2.spawn.characterRewards')
 exact_index = boon_panel.index('hades2.spawn.exactBoons')
@@ -126,6 +127,35 @@ assert character_index < exact_index < purging_index
 assert '$model.selectedExactBoon' in boon_panel
 assert '$exactSearch' in boon_panel
 assert 'exactItemLabel' in boon_panel
+exact_label = view[view.index('private func exactItemLabel'):view.index('private func spawnRow', view.index('private func exactItemLabel'))]
+assert 'exactModeNative' not in exact_label
+assert 'exactModeForced' not in exact_label
+assert 'option.targetID' not in exact_label
+assert 'nameFallback' not in exact_label
+
+# Player-facing mounted effects without an official DisplayName use one curated
+# effect label rather than their internal trait id. This is especially relevant
+# to Familiar upgrade subtraits in #240.
+original_display_names = localization.official_display_names
+localization.official_display_names = lambda identifiers, language='zh-CN', game_path=None: {}
+try:
+    live_payload = {
+        'currentRunTraits': [
+            {'name': 'FamiliarFrogDamage', 'sourceId': '', 'family': 'familiar'},
+            {'name': 'FamiliarCatAttacks', 'sourceId': '', 'family': 'familiar'},
+        ]
+    }
+    catalog.localize_catalog(live_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+frog, cat = live_payload['currentRunTraits']
+assert frog['displayName'] == '弗利诺斯·攻击伤害'
+assert frog['englishName'] == 'Frinos · Attack Damage'
+assert cat['displayName'] == '图拉·攻击次数'
+assert cat['englishName'] == 'Toula · Attack Count'
+assert frog['displayName'] != frog['name']
+assert cat['displayName'] != cat['name']
 
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.
