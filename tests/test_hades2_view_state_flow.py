@@ -301,6 +301,8 @@ func makeTrait(
     linkedDisplayName: String = "",
     linkedEnglishName: String = "",
     canAdvanceLifecycle: Bool = false,
+    canSetRemainingUses: Bool = false,
+    canExpire: Bool = false,
     levelCapability: TraitLevelCapability = .increaseOne,
     rarityCapability: TraitRarityCapability = .setExact,
     removalCapability: TraitRemovalCapability = .singleInstanceForce
@@ -326,6 +328,8 @@ func makeTrait(
         linkedDisplayName: linkedDisplayName,
         linkedEnglishName: linkedEnglishName,
         canAdvanceLifecycle: canAdvanceLifecycle,
+        canSetRemainingUses: canSetRemainingUses,
+        canExpire: canExpire,
         levelCapability: levelCapability,
         levelReason: "",
         rarityCapability: rarityCapability,
