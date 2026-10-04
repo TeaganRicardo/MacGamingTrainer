@@ -82,9 +82,9 @@ assert "preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())" in lo
 assert "preferences.get('nextRoomRewardToken') is None" not in load_profile
 assert "'token':self.preferences.get('nextRoomRewardToken')" in adapter
 assert 'next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)' in adapter
-assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)') < adapter.index(
-    "if not host_observation_only and command=='status' and self.preference_dirty and not replay:"
-)
+replay_guard = "if not host_observation_only and command=='status' and self.preference_dirty and not replay and not trait_tray_active:"
+assert replay_guard in adapter
+assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)') < adapter.index(replay_guard)
 
 assert runtime_revision(lua) >= 42
 assert 'nextRoomRewardToken = nil' in lua
