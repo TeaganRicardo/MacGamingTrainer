@@ -2927,6 +2927,27 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
+    local function directSpecialRemovalSafe(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(RemoveTraitData) ~= "function" then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+      -- RemoveTraitData is authoritative for trait-local callbacks/properties.
+      -- These markers instead indicate acquisition/setup/counter/weapon state
+      -- that lives outside the row and therefore needs an owner-specific path.
+      for _, key in ipairs({
+        "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
+        "OnExpire", "OnExpireFunctionName", "Uses", "RemainingUses",
+        "CurrentRoom", "RoomsPerUpgrade", "PreEquipWeapons",
+        "UseFunctionName", "UseFunctionNames", "AddMetaUpgradeLastStands",
+      }) do
+        if trait[key] ~= nil or definition[key] ~= nil then return false end
+      end
+      return true
+    end
+
     local function traitSourceId(trait)
       if type(trait) ~= "table" then return "" end
       local strategy = directTraitStrategies[trait.Name]
@@ -3779,6 +3800,10 @@ if __MacGamingTrainerV1 == nil then
         elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
             and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" and directSpecialRemovalSafe(trait) then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" then
+          removalReason = "ownerSpecificLifecycle"
         elseif family == "olympianHermes" and sellEligible then
           removalCapability, removalReason = "nameLevelAllMatching", ""
         elseif strategy and not directSafe then
