@@ -54,14 +54,17 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "hex"' in capability_block
     assert 'family == "hexTalent"' in capability_block
     assert "seleneModel.talentNodes" in LUA
-    # Hammer/weaponAspect, Arachne costume, and temporary-effect semantics are
-    # covered by executable resident suites; only pin the capability boundary.
+    # Hammer/weaponAspect, Arachne costume, temporary-effect, and Familiar
+    # semantics are covered by executable resident suites; pin the owner boundary.
     assert 'family == "temporary"' in capability_block
+    assert 'family == "familiar"' in capability_block
+    assert "familiarModel.isMounted(trait)" in family_block
+    assert 'string.find(name, "Familiar", 1, true)' not in family_block
     for family, issue in (
-        ("directSpecial", "239"),
-        ("familiar", "240"), ("other", "221"),
+        ("directSpecial", "239"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
+    assert "familiar = 240" not in LUA
 
 
 if __name__ == "__main__":
@@ -91,6 +94,9 @@ GameState = {
   Resources = {},
   LifetimeResourcesGained = {},
   RunHistory = {},
+  EquippedFamiliar = nil,
+  FamiliarsUnlocked = { CatFamiliar = true, RavenFamiliar = true },
+  FamiliarUpgrades = { PersistentCatUpgrade = true },
 }
 ResourceData = {}
 ResourceDisplayOrderData = {}
@@ -123,8 +129,13 @@ local calls = {
   rarity = 0,
   nativeRemove = 0,
   directRemove = 0,
+  familiarRemove = 0,
+  lastStandRemove = 0,
+  familiarDestroy = 0,
+  lifePips = 0,
 }
 local failLevelAfterMutation = false
+local failFamiliarDestroyAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
@@ -192,6 +203,36 @@ RemoveTraitData = function(hero, target, args)
   end
 end
 
+RemoveTrait = function(hero, name)
+  calls.familiarRemove = calls.familiarRemove + 1
+  removeMatching(function(trait) return trait.Name == name end)
+end
+
+RemoveLastStand = function(hero, name)
+  calls.lastStandRemove = calls.lastStandRemove + 1
+end
+
+UpdateLifePips = function(hero)
+  calls.lifePips = calls.lifePips + 1
+end
+
+Destroy = function(args)
+  calls.familiarDestroy = calls.familiarDestroy + 1
+  if failFamiliarDestroyAfterMutation then
+    failFamiliarDestroyAfterMutation = false
+    error("synthetic Familiar destroy acknowledgement failure")
+  end
+end
+
+FamiliarData = {
+  CatFamiliar = {
+    TraitNames = { "LastStandFamiliar", "FamiliarCatResourceBonus", "FamiliarCatAttacks" },
+  },
+  RavenFamiliar = {
+    TraitNames = { "CritFamiliar", "FamiliarRavenResourceBonus", "FamiliarRavenAttackDuration" },
+  },
+}
+
 TraitData = {}
 
 local function defineRarities(name)
@@ -217,6 +258,19 @@ for _, name in ipairs({
   "OmegaExplodeBoon",
 }) do
   defineRarities(name)
+end
+
+for _, name in ipairs({
+  "LastStandFamiliar",
+  "FamiliarCatResourceBonus",
+  "FamiliarCatAttacks",
+  "CritFamiliar",
+  "FamiliarRavenResourceBonus",
+  "FamiliarRavenAttackDuration",
+  "RestedFamiliarResourceBonus",
+  "DoubleFamiliarTrait",
+}) do
+  TraitData[name] = TraitData[name] or {}
 end
 
 dofile(runtimePath)
@@ -510,6 +564,134 @@ do
     M.dispatch("set_trait_level", paramsFrom(row, "unsafe-direct-level", row.level + 1))
   end)
   eq(calls.level, beforeLevel, "unsafe direct lifecycle reached level mutator")
+end
+
+-- Familiar ownership comes from the equipped Familiar's declared trait bundle,
+-- not from a substring match. A Circe trait whose ID happens to contain
+-- "Familiar" is not re-owned by the Familiar lifecycle.
+do
+  GameState.EquippedFamiliar = "RavenFamiliar"
+  MapState.FamiliarUnit = { Name = "RavenFamiliar", ObjectId = 7001 }
+  local primary = newTrait("CritFamiliar", 1301, 1, nil)
+  local resource = newTrait("FamiliarRavenResourceBonus", 1302, 1, nil)
+  local duration = newTrait("FamiliarRavenAttackDuration", 1303, 1, nil)
+  local circe = newTrait("DoubleFamiliarTrait", 1304, 1, nil)
+  local rested = newTrait("RestedFamiliarResourceBonus", 1305, 1, nil)
+  setTraits(primary, resource, duration, circe, rested)
+
+  local row = findRow("CritFamiliar", 1301)
+  eq(row.family, "familiar", "equipped Familiar primary family")
+  eq(row.levelCapability, "increaseOne", "Familiar primary level capability")
+  eq(row.rarityCapability, "none", "Familiar fabricated rarity capability")
+  eq(row.removalCapability, "singleInstanceForce", "Familiar owner removal capability")
+  check(findRow("DoubleFamiliarTrait", 1304).family ~= "familiar", "substring trait stolen by Familiar owner")
+  local restedRow = findRow("RestedFamiliarResourceBonus", 1305)
+  eq(restedRow.family, "familiar", "rested bonus owner family")
+  eq(restedRow.levelCapability, "none", "rested bonus fabricated level editing")
+
+  local beforeLevel = calls.level
+  M.dispatch("set_trait_level", paramsFrom(row, "familiar-level", 3))
+  eq(calls.level, beforeLevel + 1, "Familiar level did not use native trait recomputation")
+  eq(primary.StackNum, 3, "Familiar target level")
+  eq(primary.EffectValue, 200, "Familiar level did not recompute effect sentinel")
+
+  -- The owner survives a room object transition and remains manageable.
+  CurrentRun.CurrentRoom = { Name = "B_TestRoom" }
+  local roomRow = findRow("CritFamiliar", 1301)
+  M.dispatch("set_trait_level", paramsFrom(roomRow, "familiar-room-level", 4))
+  eq(primary.StackNum, 4, "Familiar level failed after room transition")
+
+  -- Replacing the native owner invalidates the old observed selection before
+  -- any mutator can touch the no-longer-owned Raven trait.
+  local staleOwnerRow = findRow("CritFamiliar", 1301)
+  local beforeStaleLevel = calls.level
+  GameState.EquippedFamiliar = "CatFamiliar"
+  MapState.FamiliarUnit = { Name = "CatFamiliar", ObjectId = 7002 }
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_level", paramsFrom(staleOwnerRow, "familiar-owner-stale", 5))
+  end)
+  eq(calls.level, beforeStaleLevel, "stale Familiar owner reached level mutator")
+  GameState.EquippedFamiliar = "RavenFamiliar"
+  MapState.FamiliarUnit = { Name = "RavenFamiliar", ObjectId = 7001 }
+
+  -- Trainer-wide cleanup is not an implicit undo/unequip path for game-owned
+  -- Familiar state.
+  M.dispatch("disable_all", { includeCatalogs = false })
+  eq(GameState.EquippedFamiliar, "RavenFamiliar", "disable_all unequipped Familiar owner")
+  check(MapState.FamiliarUnit ~= nil, "disable_all cleared live Familiar unit")
+  check(findRow("CritFamiliar", 1301).family == "familiar", "disable_all removed Familiar runtime state")
+end
+
+-- Removing any mounted member of the owner bundle tears down the equipped
+-- Familiar runtime owner as one unit while leaving durable unlock/upgrades
+-- untouched. Cat/Toula additionally owns a Last Stand entry.
+do
+  GameState.EquippedFamiliar = "CatFamiliar"
+  MapState.FamiliarUnit = { Name = "CatFamiliar", ObjectId = 7101 }
+  CurrentRun.Hero.MaxLastStands = 2
+  local primary = newTrait("LastStandFamiliar", 1401, 1, nil)
+  local resource = newTrait("FamiliarCatResourceBonus", 1402, 1, nil)
+  local attacks = newTrait("FamiliarCatAttacks", 1403, 1, nil)
+  local unrelated = newTrait("DoubleFamiliarTrait", 1404, 1, nil)
+  setTraits(primary, resource, attacks, unrelated)
+
+  local row = findRow("FamiliarCatAttacks", 1403)
+  eq(row.family, "familiar", "Familiar helper owner family")
+  local beforeUnlock = GameState.FamiliarsUnlocked.CatFamiliar
+  local beforeUpgrade = GameState.FamiliarUpgrades.PersistentCatUpgrade
+  local beforeLastStand = calls.lastStandRemove
+  local beforeDestroy = calls.familiarDestroy
+  local result = M.dispatch("remove_trait", paramsFrom(row, "familiar-owner-remove"))
+
+  check(GameState.EquippedFamiliar == nil, "Familiar owner remained equipped")
+  check(MapState.FamiliarUnit == nil, "live Familiar owner remained mounted")
+  eq(calls.lastStandRemove, beforeLastStand + 1, "Cat Familiar Last Stand not removed")
+  eq(calls.familiarDestroy, beforeDestroy + 1, "live Familiar entity not cleaned")
+  eq(CurrentRun.Hero.MaxLastStands, 1, "Cat Familiar MaxLastStands not restored")
+  eq(#CurrentRun.Hero.Traits, 1, "Familiar owner teardown did not remove exactly its bundle")
+  eq(CurrentRun.Hero.Traits[1].Name, "DoubleFamiliarTrait", "Familiar teardown removed unrelated trait")
+  eq(GameState.FamiliarsUnlocked.CatFamiliar, beforeUnlock, "Familiar unlock ownership mutated")
+  eq(GameState.FamiliarUpgrades.PersistentCatUpgrade, beforeUpgrade, "Familiar durable upgrade mutated")
+  eq(#result.currentRunTraits, 1, "post-teardown observed inventory mismatch")
+
+  local removeCalls = calls.familiarRemove
+  local duplicate = M.dispatch("remove_trait", paramsFrom(row, "familiar-owner-remove"))
+  check(duplicate.duplicate == true, "Familiar owner teardown replay not deduplicated")
+  eq(calls.familiarRemove, removeCalls, "Familiar owner teardown replayed mutation")
+end
+
+-- A post-mutation failure still finishes the distinct owner cleanup steps so
+-- runtime ownership is coherent, then reports outcome-unknown. The same request
+-- can never replay the non-idempotent teardown.
+do
+  GameState.EquippedFamiliar = "RavenFamiliar"
+  MapState.FamiliarUnit = { Name = "RavenFamiliar", ObjectId = 7201 }
+  local primary = newTrait("CritFamiliar", 1501, 1, nil)
+  local resource = newTrait("FamiliarRavenResourceBonus", 1502, 1, nil)
+  local duration = newTrait("FamiliarRavenAttackDuration", 1503, 1, nil)
+  setTraits(primary, resource, duration)
+
+  local row = findRow("CritFamiliar", 1501)
+  local params = paramsFrom(row, "familiar-owner-unknown")
+  local beforeDestroy = calls.familiarDestroy
+  local beforeRemove = calls.familiarRemove
+  failFamiliarDestroyAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(GameState.EquippedFamiliar, nil, "outcome-unknown left Familiar equipped")
+  eq(MapState.FamiliarUnit, nil, "outcome-unknown left live Familiar pointer")
+  eq(#CurrentRun.Hero.Traits, 0, "outcome-unknown left Familiar traits mounted")
+  eq(calls.familiarDestroy, beforeDestroy + 1, "outcome-unknown destroy call count")
+  check(calls.familiarRemove > beforeRemove, "outcome-unknown skipped trait teardown")
+
+  local removeAfterUnknown = calls.familiarRemove
+  local destroyAfterUnknown = calls.familiarDestroy
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.familiarRemove, removeAfterUnknown, "outcome-unknown Familiar request replayed trait teardown")
+  eq(calls.familiarDestroy, destroyAfterUnknown, "outcome-unknown Familiar request replayed entity teardown")
 end
 
 print("hades2_live_trait_runtime_behavior_ok")
