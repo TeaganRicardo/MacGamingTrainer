@@ -58,6 +58,7 @@ CurrentRun = {
   SpellCharge = 0,
   PickedTraits = {},
   LootChoiceHistory = {},
+  LootTypeHistory = {},
 }
 
 EnemyData = {
@@ -146,6 +147,7 @@ local calls = {
   openMenu = 0,
   waitUntil = 0,
   processed = {},
+  packages = 0,
 }
 local nextId = 100
 local failAddAfterMutation = false
@@ -233,7 +235,12 @@ AddTraitToHero = function(args)
 end
 
 GetLootSourceName = function() return "ZeusUpgrade" end
-LoadPackages = function() end
+LoadPackages = function()
+  calls.packages = calls.packages + 1
+end
+IncrementTableValue = function(tableValue, key)
+  tableValue[key] = (tableValue[key] or 0) + 1
+end
 LoadVoiceBanks = function() end
 OpenUpgradeChoiceMenu = function()
   calls.openMenu = calls.openMenu + 1
@@ -312,6 +319,8 @@ local result = M.dispatch("spawn_reward", {
 check(HeroHasTrait("ZeusBoon"), "Echo exact target did not materialize the actual boon")
 check(not HeroHasTrait("EchoLastRunBoon"), "Echo shell trait was mounted instead of the actual boon")
 eq(GetHeroTrait("ZeusBoon").Rarity, "Rare", "previous-run rarity was not preserved")
+eq(CurrentRun.LootTypeHistory.ZeusUpgrade, 1, "Echo exact did not update native loot-source history")
+check(calls.packages > 0, "Echo exact did not prepare the source package")
 eq(calls.openMenu, 0, "exact Echo target opened the random/native choice menu")
 eq(calls.waitUntil, 0, "exact Echo target waited on a nonexistent choice screen")
 check(result.lootObjectId == nil, "Echo exact target leaked a trait object into action receipt")
