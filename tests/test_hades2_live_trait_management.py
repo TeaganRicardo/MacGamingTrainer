@@ -262,6 +262,7 @@ for _, name in ipairs({
   "CritFamiliar",
   "FamiliarRavenResourceBonus",
   "FamiliarRavenAttackDuration",
+  "RestedFamiliarResourceBonus",
   "DoubleFamiliarTrait",
 }) do
   TraitData[name] = TraitData[name] or {}
@@ -570,7 +571,8 @@ do
   local resource = newTrait("FamiliarRavenResourceBonus", 1302, 1, nil)
   local duration = newTrait("FamiliarRavenAttackDuration", 1303, 1, nil)
   local circe = newTrait("DoubleFamiliarTrait", 1304, 1, nil)
-  setTraits(primary, resource, duration, circe)
+  local rested = newTrait("RestedFamiliarResourceBonus", 1305, 1, nil)
+  setTraits(primary, resource, duration, circe, rested)
 
   local row = findRow("CritFamiliar", 1301)
   eq(row.family, "familiar", "equipped Familiar primary family")
@@ -578,6 +580,9 @@ do
   eq(row.rarityCapability, "none", "Familiar fabricated rarity capability")
   eq(row.removalCapability, "singleInstanceForce", "Familiar owner removal capability")
   check(findRow("DoubleFamiliarTrait", 1304).family ~= "familiar", "substring trait stolen by Familiar owner")
+  local restedRow = findRow("RestedFamiliarResourceBonus", 1305)
+  eq(restedRow.family, "familiar", "rested bonus owner family")
+  eq(restedRow.levelCapability, "none", "rested bonus fabricated level editing")
 
   local beforeLevel = calls.level
   M.dispatch("set_trait_level", paramsFrom(row, "familiar-level", 3))
