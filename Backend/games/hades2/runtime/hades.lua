@@ -2984,7 +2984,11 @@ if __MacGamingTrainerV1 == nil then
         local value = counterValue(trait)
         if not finite(value) or value <= 0 then return false end
         local kind = counterKind(trait)
-        return (kind == "remainingUses" or kind == "uses")
+        if kind == "remainingUses" then
+          return type(RemoveTraitData) == "function"
+        end
+        return kind == "uses"
+          and type(UpdateTraitNumber) == "function"
           and type(RemoveTraitData) == "function"
       end
 
