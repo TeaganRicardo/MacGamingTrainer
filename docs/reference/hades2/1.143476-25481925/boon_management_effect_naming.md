@@ -1,67 +1,73 @@
-# Boon Management effect naming governance
+# Current-run effect naming governance
 
 Target: Hades II **1.143476** / Steam build **25481925**  
-Status: **proposed — pending user review**
+Status: **active implementation — final in-game acceptance pending**
 
-This document owns the presentation rules for concrete runtime traits that can appear in Boon Management but do not have a sufficiently specific standalone native title. The row-level review ledger is `boon_management_effect_names.csv`.
+This document governs how concrete runtime traits are named when they can appear in the current-run effect manager. It defines the rules and evidence boundary only; it does not duplicate the row-level naming data.
+
+## Single source of truth
+
+There are two name owners, but only one stored Trainer exception registry:
+
+- Native Game Terms are resolved dynamically from the installed target build through the localization loader, including SJSON `InheritFrom` chains.
+- Native Trait Tray title identity comes from `GetTraitTooltipTitle` / `CustomTitle` when the runtime exposes a more appropriate player-facing title than `trait.Name`.
+- Trainer-owned substitute labels and Arcana function descriptors live only in `catalog._CURRENT_RUN_DERIVED_NAMES`.
+- Family labels are presentation/grouping vocabulary, not a substitute-name registry.
+
+Do not create a second CSV, document table, fixture list, or other hand-maintained copy of `_CURRENT_RUN_DERIVED_NAMES`.
 
 ## Resolution order
 
 1. Keep runtime identity (`trait.Name`, owner/source IDs and instance ID) internal.
-2. Ask the resident runtime for the same title identity used by the native Trait Tray (`GetTraitTooltipTitle`).
-3. Resolve the target game's bilingual `DisplayName`, including SJSON `InheritFrom` chains. An inherited native title is still a Native Game Term.
-4. Only if the resulting title is insufficient to identify the function, use the derived bilingual descriptor in the CSV.
-5. Arcana is one UI section. Its final item label is **native card title · derived function descriptor**. The exact card remains owner/source metadata, not a separate section.
-6. Family labels such as “其他效果 / Other Effect” are emergency compatibility fallbacks only. No row in the supported-target census is allowed to rely on one as its final label.
+2. Ask the resident runtime for the same title identity used by the native Trait Tray.
+3. Resolve the target game's bilingual `DisplayName`, including SJSON inheritance.
+4. If the concrete mounted effect still has no readable/sufficiently specific title, use the bilingual Trainer Product Term in `_CURRENT_RUN_DERIVED_NAMES`.
+5. Arcana is one UI section. Its item label is **native card title · Trainer function descriptor**.
+6. Generic family labels such as “其他效果 / Other Effect” are forward-compatibility fallbacks only. No known concrete mounted effect in the supported target may rely on a family-only label as its final name.
 
-## Provenance
+Trait IDs must never be prettified into user-facing names.
 
-- `native-owner+trainer-derived-effect`: the owner/card/familiar/weapon name is an official target-build localization term; the short function descriptor is Trainer-owned and derived from target Lua fields or the official Description.
-- `trainer-derived-effect`: no standalone target-build title exists; both language labels are neutral Trainer Product Terms derived from the target effect semantics.
-- Ordinary boons, Hexes, Chaos traits, Hammers, Keepsakes and other rows with a concrete native title are **not duplicated in this ledger**. They stay dynamically sourced from installed target localization.
-- Text records that merely omit `DisplayName` but use `InheritFrom` are **not** treated as unnamed. The localization parser resolves their native parent title.
+## Current-target census
 
-## Census boundary
+The census was re-run against the installed **1.143476 / 25481925** target rather than inferred from the retained 1.139672 snapshot.
 
-The retained 1.139672 generated TraitData inventory was used only to find historical missing-title candidates. Every row admitted to this ledger was then revalidated against the installed 1.143476 target's Lua/text files. Debug/base/template traits are excluded unless target code proves they are concretely mounted in `CurrentRun.Hero.Traits`.
+The active `TraitData` assembly was enumerated from every `OverwriteTableKeys( TraitData, ... )` / `TraitSetData` source, including the non-`TraitData*.lua` additions in `BiomeStateData.lua` and `FamiliarData.lua`. The apparent extra `CastProtectionMetaUpgrade` is inside a Lua block comment and is not installed into `TraitData`.
 
-### Census accounting
+Result: **670 active unique TraitData IDs**. The identity set matches the retained 1.139672 snapshot, but the installed target remains the authority.
 
-The supported target has **670 unique TraitData IDs**. The naming census closes over all 670:
+For the 603 IDs that historically had a readable native title, an exact-ID search of the installed target's current **zh-CN and English** text trees found all **603 / 603** records in each language, each with either a `DisplayName` or `InheritFrom` presentation seam.
 
-- **603** resolve to a readable target-build title through direct or inherited SJSON `DisplayName`. Ordinary native rows stay dynamic rather than being copied into the Trainer registry.
-- **25 of those 603** are Arcana mounted traits whose native title identifies the card but not its function; they therefore receive the functional suffixes recorded in the CSV.
-- **6** additional concrete mounted weapon placeholder traits have no standalone text title but resolve through the native Trait Tray `CustomTitle` seam:
-  - `DummyWeaponStaff` → 女巫之杖 / Witch's Staff
-  - `DummyWeaponDagger` → 姊妹双刃 / Sister Blades
-  - `DummyWeaponAxe` → 月石之斧 / Moonstone Axe
-  - `DummyWeaponTorch` → 暗影之炬 / Umbral Flames
-  - `DummyWeaponLob` → 银白之颅 / Argent Skull
-  - `DummyWeaponSuit` → 漆黑战衣 / Black Coat
-- **22** additional concrete mounted effects have no sufficiently specific native title and therefore require the Trainer-derived bilingual labels in the CSV.
-- **39** IDs are base/debug/template scaffolding with no independently proven mounted identity and are intentionally excluded from Boon Management presentation:
-  `AxeHammerTrait`, `BaseBoonUpgradeKeepsake`, `BaseCirce`, `BaseCurse`, `BaseDummyWeapon`, `BaseEcho`, `BaseIcarus`, `BaseTrait`, `BiomeState`, `ChaosBlessing`, `ChaosBlessingTrait`, `ChaosCurse`, `ChaosCurseRemainingEncounters`, `ChaosCurseTrait`, `ChaosLegacyTrait`, `CostumeTrait`, `DaggerHammerTrait`, `FamiliarTrait`, `ForceCommonAppearanceTrait`, `ForceDuoAppearanceTrait`, `GiftTrait`, `InPersonOlympianTrait`, `LegacyTrait`, `LegendaryTalent`, `LegendaryTrait`, `LobHammerTrait`, `ManaOverTimeSource`, `MetaUpgradeTrait`, `MoonBeamTalentTrait`, `ShopTrait`, `SpellTalentTrait`, `SpellTrait`, `StaffHammerTrait`, `SuitHammerTrait`, `SynergyTrait`, `TorchHammerTrait`, `UnityTrait`, `WeaponEnchantmentTrait`, `WeaponTrait`.
+The remaining naming boundary is:
 
-Accounting: **603 + 6 + 22 + 39 = 670**. The CSV has **47 rows** because it contains the 22 otherwise unnamed concrete effects plus the 25 Arcana function descriptors.
+- **6** concrete mounted dummy-weapon traits use native `CustomTitle` and therefore resolve to the equipped weapon's official name.
+- **22** concrete mounted effects have no readable/sufficiently specific standalone native title and use the Trainer substitute labels in `_CURRENT_RUN_DERIVED_NAMES`. `ElementalEssence` belongs here because its native `DisplayName` is icon-only.
+- **39** no-title IDs are base/debug/template scaffolding with no independently mounted user-facing identity.
+- **25** Arcana mounted traits are among the 603 native-title IDs. Their native title identifies the card, while the same canonical registry supplies the concise function suffix required to distinguish the mounted effect.
 
-Concrete target seams used in this review include:
+Therefore the stored Trainer registry has **47 entries: 22 substitute names + 25 Arcana function descriptors**. The registry itself is the row-level source of truth; this document records only the accounting and rules.
 
-- `MetaUpgradeData.lua` + `TraitText.*.sjson` for all 25 Arcana cards;
-- `FamiliarData.lua` + `FamiliarShopData.lua` for hidden Familiar upgrade traits;
-- `ConsumableData.lua` + `TraitData_Essence.lua` for elemental essence traits;
+## Evidence seams
+
+Representative target evidence used to establish the boundary:
+
+- `TraitData*.lua`, `BiomeStateData.lua`, and `FamiliarData.lua` for the active TraitData identity census;
+- `TraitText.*.sjson` and the target text tree for bilingual native titles and SJSON inheritance;
+- `TraitData.lua` + native weapon text for the six dummy-weapon `CustomTitle` identities;
+- `MetaUpgradeData.lua` / `TraitData_MetaUpgrade.lua` + official Arcana descriptions for all 25 Arcana descriptors;
+- `FamiliarData.lua` + `FamiliarShopData.lua` for hidden Familiar upgrade effects;
+- `ConsumableData.lua` + `TraitData_Essence.lua` for mounted elemental effects;
 - `RoomLogic.lua` + `TraitData.lua` for Max Life, Max Magick and Armor state;
-- `WeaponLogic.lua` + `TraitData.lua` + native `WeaponSuit` text for the Black Coat sprint trait;
-- `BiomeStateData.lua` + `BiomeStateLogic.lua` for normal/rain environment-state traits; these are grouped as the product family `biomeState` rather than leaking into `other`.
+- `BiomeStateData.lua` + `BiomeStateLogic.lua` for normal/rain environment effects.
 
-## Governance rule
+The frozen 1.139672 generated census is useful only as a historical cross-check and candidate seed. It is not current execution authority.
 
-Adding a new current-run derived label requires all of the following in the same focused change:
+## Change rule
 
-- target-build evidence proving the trait can be mounted;
-- a bilingual label pair;
-- provenance classification;
-- an entry in the CSV;
-- a matching code entry in `catalog._CURRENT_RUN_DERIVED_NAMES`;
-- local regression coverage proving the target census does not fall through to “未命名效果 / Unnamed Effect” or a family-only label.
+Adding or changing a Trainer-derived current-run name requires, in the same focused change:
 
-Do not infer a display name by prettifying Trait IDs.
+- target-build evidence for the mounted effect or Arcana semantics;
+- one explicit bilingual Trainer Product Term pair;
+- an update to `catalog._CURRENT_RUN_DERIVED_NAMES`, the single stored registry;
+- local regression coverage that proves the label is bilingual, recognizable, and not a Trait ID, “未命名效果 / Unnamed Effect”, or a family-only fallback.
+
+If the target build gains a native title for an exception, prefer the native term and remove the redundant Trainer entry instead of preserving both.
