@@ -76,7 +76,8 @@ _CURRENT_RUN_FAMILY_LABELS = {
 # Current-target (1.143476 / Steam 25481925) mounted TraitData rows that do not
 # have a sufficiently specific standalone native title. Values are Trainer
 # Product Terms derived from the target build's effect data/descriptions. Arcana
-# values are descriptors only; the native card title is prepended at runtime.
+# and Familiar entries are descriptors only; their native owner title is composed
+# dynamically at presentation time.
 _CURRENT_RUN_DERIVED_NAMES = {
     # Element essence traits are installed by the matching *Boost consumables.
     'AirEssence': ('风元素', 'Air Element'),
@@ -95,7 +96,8 @@ _CURRENT_RUN_DERIVED_NAMES = {
     'WetState': ('雨天环境', 'Rainy Environment'),
 
     # Hidden Familiar upgrade traits; descriptors follow target FamiliarData fields.
-    # The native Familiar owner name is resolved dynamically and composed at presentation time.
+    # The native Familiar owner name is resolved dynamically and composed at
+    # presentation time.
     'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
     'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
     'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
@@ -460,9 +462,9 @@ def localize_catalog(decoded):
             family, ('其他效果','Other Effect')
         )
 
-        # Arcana is one player-facing card system. The card itself is the most
-        # stable recognition identity; include a distinct effect title when the
-        # game exposes one, otherwise use the card name alone.
+        # Arcana keeps its native card title; Familiar derived rows keep the native
+        # familiar owner. Only the Trainer-owned function descriptor comes from
+        # the exception registry.
         if family == 'arcana' and source_zh:
             if display_zh == '未命名效果' or not display_zh:
                 display_zh=source_zh
