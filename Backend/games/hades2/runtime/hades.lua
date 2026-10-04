@@ -3388,6 +3388,7 @@ if __MacGamingTrainerV1 == nil then
       rebuildChaosTarget = rebuildChaosTarget,
       seleneTalentNodes = seleneModel.talentNodes,
       teardownSlottedSpell = seleneModel.teardown,
+      temporary = temporaryModel,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -4895,7 +4896,7 @@ if __MacGamingTrainerV1 == nil then
     if command == "set_trait_remaining_uses" then
       local function validateTemporaryDurationTarget()
         local target, family = traitManagement.resolveTarget(params)
-        if family ~= "temporary" or not temporaryModel.canSet(target) then
+        if family ~= "temporary" or not traitManagement.temporary.canSet(target) then
           error("Temporary effect duration editing is unavailable for the selected target")
         end
         integer(params.targetRemainingUses, 1)
@@ -4903,20 +4904,20 @@ if __MacGamingTrainerV1 == nil then
       end
       return actionLedger.run(command, params, function()
         local live = validateTemporaryDurationTarget()
-        temporaryModel.set(live, params.targetRemainingUses)
+        traitManagement.temporary.set(live, params.targetRemainingUses)
       end, validateTemporaryDurationTarget)
     end
     if command == "expire_trait" then
       local function validateTemporaryExpiryTarget()
         local target, family = traitManagement.resolveTarget(params)
-        if family ~= "temporary" or not temporaryModel.canExpire(target) then
+        if family ~= "temporary" or not traitManagement.temporary.canExpire(target) then
           error("Temporary effect expiry is unavailable for the selected target")
         end
         return target
       end
       return actionLedger.run(command, params, function()
         local live = validateTemporaryExpiryTarget()
-        temporaryModel.expire(live)
+        traitManagement.temporary.expire(live)
       end, validateTemporaryExpiryTarget)
     end
     if command == "remove_trait" then
@@ -4974,7 +4975,7 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "costume" then
           traitManagement.removeCostume(live)
         elseif family == "temporary" then
-          temporaryModel.cancel(live)
+          traitManagement.temporary.cancel(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
