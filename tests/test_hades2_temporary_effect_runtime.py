@@ -92,6 +92,11 @@ TraitData = {
     ForceSwaps = true,
     BlockStacking = true,
   },
+  ManaOverTimeRefundTrait = {
+    Name = "ManaOverTimeRefundTrait",
+    InheritFrom = { "ShopTrait" },
+    TotalManaRecovered = 500,
+  },
 }
 
 local calls = {
@@ -271,6 +276,18 @@ check(limitedRow.canExpire ~= true, "already-expired Uses-backed Well still expo
 check(limitedRow.canSetRemainingUses == true, "expired Uses-backed Well cannot be reactivated by count edit")
 M.dispatch("remove_trait", paramsFrom(limitedRow, "temporary-uses-cancel"))
 check(not HeroHasTrait(limited.Name), "explicit cancellation did not remove Uses-backed Well trait")
+
+-- A Well owner without a duration counter is still a Well-managed effect. It
+-- exposes cancellation only; duration/expiry controls must not be fabricated.
+local passiveWell = AddTraitToHero({ TraitName = "ManaOverTimeRefundTrait" })
+local passiveRow = assert(findRow(passiveWell.Name), "counterless Well row missing")
+eq(passiveRow.family, "temporary", "counterless ShopTrait owner family")
+check(passiveRow.remainingUses == nil, "counterless Well fabricated a remaining-use value")
+check(passiveRow.canSetRemainingUses ~= true, "counterless Well fabricated duration editing")
+check(passiveRow.canExpire ~= true, "counterless Well fabricated expiry")
+eq(passiveRow.removalCapability, "singleInstanceForce", "counterless Well cancellation unavailable")
+M.dispatch("remove_trait", paramsFrom(passiveRow, "temporary-counterless-cancel"))
+check(not HeroHasTrait(passiveWell.Name), "counterless Well cancellation left owner mounted")
 
 local staleDurationRow = row
 local setParams = paramsFrom(row, "temporary-set-uses")
