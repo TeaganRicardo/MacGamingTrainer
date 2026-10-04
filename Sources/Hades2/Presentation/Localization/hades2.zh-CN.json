@@ -255,6 +255,8 @@
     "hades2.receipt.outcomeUnknown": "{0}结果不明，请重新连接后检查游戏状态",
     "hades2.receipt.traitLevelAction": "祝福等级修改",
     "hades2.receipt.traitRarityAction": "祝福稀有度修改",
+    "hades2.receipt.traitDurationAction": "临时效果次数修改",
+    "hades2.receipt.traitExpiryAction": "临时效果立即到期",
     "hades2.receipt.traitRemoveAction": "祝福移除",
     "hades2.receipt.traitLifecycleAction": "卡俄斯效果转化",
     "hades2.resource.materials": "材料",
