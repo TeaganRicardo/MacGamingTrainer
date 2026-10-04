@@ -292,6 +292,34 @@ assert cat['englishName'] == 'Toula · Attack Count'
 assert frog['displayName'] != frog['name']
 assert cat['displayName'] != cat['name']
 
+# Familiar owner IDs are native localization IDs. The current-run source label
+# must resolve through the same bilingual official-localization seam instead of
+# exposing RavenFamiliar/CatFamiliar as product text.
+original_display_names = localization.official_display_names
+def familiar_owner_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'CritFamiliar': '锐眼', 'RavenFamiliar': '拉奇'},
+        'en': {'CritFamiliar': 'Sharp Eye', 'RavenFamiliar': 'Raki'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = familiar_owner_names
+try:
+    familiar_owner_payload = {
+        'currentRunTraits': [{
+            'name': 'CritFamiliar', 'sourceId': 'RavenFamiliar', 'family': 'familiar',
+        }]
+    }
+    catalog.localize_catalog(familiar_owner_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+familiar_owner = familiar_owner_payload['currentRunTraits'][0]
+assert familiar_owner['displayName'] == '锐眼'
+assert familiar_owner['englishName'] == 'Sharp Eye'
+assert familiar_owner['sourceName'] == '拉奇'
+assert familiar_owner['sourceEnglishName'] == 'Raki'
+assert familiar_owner['sourceName'] != familiar_owner['sourceId']
+
 # Linked Chaos phases use the same official presentation seam; the raw linked
 # trait id remains routing/diagnostic identity and is not a user label.
 original_display_names = localization.official_display_names

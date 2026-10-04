@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-03
+Updated: 2026-10-04
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 67.
+- Hades II resident runtime revision: 68.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 67. Revisions 52–67 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 68. Revisions 52–68 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -56,6 +56,7 @@ Current source contains resident revision 67. Revisions 52–67 remain pending t
 - revision 65: Arachne costume exact acquisition and mounted removal use the costume owner lifecycle so trait teardown, armor-source state and active appearance remain coherent.
 - revision 66: Echo previous-run exact targets materialize concrete eligible God boons directly from the latest run history without opening the native random choice screen; automated and real-game acceptance remain pending.
 - revision 67: Well / temporary mounted effects support owner-aware RemainingUses editing, explicit cancellation without expiry side effects, and deliberate immediate expiry through native OnExpire teardown; automated and real-game acceptance remain pending.
+- revision 68: equipped Familiar effects are owned by the active Familiar bundle rather than trait-name heuristics; safe runtime stack edits use native trait recomputation, while forced removal tears down the equipped runtime owner and linked Toula Last Stand without changing Familiar unlocks or purchased upgrades; real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
@@ -106,8 +107,9 @@ Planning issue #124 is the sequencing authority.
 - #239 is split into focused owner-lifecycle children: #318 Arachne costumes, #319 Echo previous-run acquisition, and #320 Well/temporary effects.
 - #318 Arachne costume exact acquisition and owner-aware removal is complete in this source at resident revision 65; final real-game acceptance remains part of the consolidated manual pass.
 - #319 Echo previous-run exact acquisition is complete in this source at resident revision 66: concrete eligible previous-run God boons materialize directly without opening the native random choice screen; final real-game acceptance remains part of the consolidated manual pass.
-- **Next selected feature task remains #239 via #320** — implement Well / temporary-effect acquisition, duration/expiry and owner-aware teardown.
-- After #239 closes, continue #240 on the same Hades-owned contextual-action seam instead of adding family-specific layouts.
+- #320 Well/temporary lifecycle management is complete in main at resident revision 67; final real-game acceptance remains part of the consolidated manual pass.
+- #239 implementation children are complete; parent manual acceptance remains pending and is intentionally consolidated with the later resident acceptance pass.
+- **Next selected feature task is #240 via #327** — manage the equipped Familiar runtime owner on the same Hades-owned contextual-action seam without introducing a raw-trait mutator.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
