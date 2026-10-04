@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 67 then
+if previousModule and previousModule.revision ~= 68 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 67 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 67, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 68, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2710,7 +2710,6 @@ if __MacGamingTrainerV1 == nil then
     local deferredTraitIssues = {
       costume = 239,
       directSpecial = 239,
-      familiar = 240,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
@@ -2925,6 +2924,123 @@ if __MacGamingTrainerV1 == nil then
       return type(linked) == "table" and type(linked.Name) == "string" and linked.Name or ""
     end
 
+    local familiarModel = (function()
+      local function ownerName()
+        if type(GameState) ~= "table" or type(GameState.EquippedFamiliar) ~= "string"
+            or GameState.EquippedFamiliar == "" then
+          return ""
+        end
+        local name = GameState.EquippedFamiliar
+        if type(FamiliarData) ~= "table" or type(FamiliarData[name]) ~= "table" then
+          return ""
+        end
+        return name
+      end
+
+      local function ownerData()
+        local name = ownerName()
+        return name ~= "" and FamiliarData[name] or nil
+      end
+
+      local function mountedName(name)
+        if type(name) ~= "string" or name == "" then return false end
+        local data = ownerData()
+        if type(data) ~= "table" or type(data.TraitNames) ~= "table" then return false end
+        for _, traitName in ipairs(data.TraitNames) do
+          if traitName == name then return true end
+        end
+        if name ~= "RestedFamiliarResourceBonus" then return false end
+        for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(trait) == "table" and trait.Name == name then return true end
+        end
+        return false
+      end
+
+      local function isMounted(trait)
+        return type(trait) == "table" and mountedName(trait.Name)
+      end
+
+      local function canLevel(trait)
+        if not isMounted(trait) or type(IncreaseTraitLevel) ~= "function" then return false end
+        -- Toula's primary stack also owns a live Last Stand record, and the
+        -- damage-modifier helper traits are copied onto the live Familiar unit
+        -- at spawn time. Do not expose a half-applied runtime level edit.
+        if trait.Name == "LastStandFamiliar" then return false end
+        local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+        local model = type(definition) == "table" and definition or trait
+        if type(model.FamiliarDataModifiers) == "table" then return false end
+        return not trait.BlockStacking
+      end
+
+      local function removalReady()
+        local data = ownerData()
+        if type(data) ~= "table" or type(data.TraitNames) ~= "table"
+            or type(RemoveTrait) ~= "function" then
+          return false
+        end
+        if data.TraitNames[1] == "LastStandFamiliar"
+            and (type(RemoveLastStand) ~= "function" or type(UpdateLifePips) ~= "function") then
+          return false
+        end
+        local unit = type(MapState) == "table" and MapState.FamiliarUnit or nil
+        if type(unit) == "table" and unit.ObjectId ~= nil and type(Destroy) ~= "function" then
+          return false
+        end
+        return true
+      end
+
+      local function teardown()
+        if not removalReady() then error("Familiar owner removal is unavailable") end
+        local name = ownerName()
+        local data = ownerData()
+        local names = {}
+        for _, traitName in ipairs(data.TraitNames) do names[#names + 1] = traitName end
+        if mountedName("RestedFamiliarResourceBonus") then
+          names[#names + 1] = "RestedFamiliarResourceBonus"
+        end
+
+        for _, traitName in ipairs(names) do
+          RemoveTrait(CurrentRun.Hero, traitName)
+        end
+
+        if data.TraitNames[1] == "LastStandFamiliar" then
+          RemoveLastStand(CurrentRun.Hero, "LastStandFamiliar")
+          if finite(CurrentRun.Hero.MaxLastStands) and CurrentRun.Hero.MaxLastStands > 0 then
+            CurrentRun.Hero.MaxLastStands = CurrentRun.Hero.MaxLastStands - 1
+          end
+          UpdateLifePips(CurrentRun.Hero)
+        end
+
+        local unit = type(MapState) == "table" and MapState.FamiliarUnit or nil
+        if type(unit) == "table" and unit.ObjectId ~= nil then Destroy({ Id = unit.ObjectId }) end
+        if type(GameState) == "table" and GameState.EquippedFamiliar == name then
+          GameState.EquippedFamiliar = nil
+        end
+        if type(MapState) == "table" and MapState.FamiliarUnit == unit then
+          MapState.FamiliarUnit = nil
+        end
+
+        for _, traitName in ipairs(names) do
+          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+            if type(trait) == "table" and trait.Name == traitName then
+              error("Familiar owner removal left a mounted trait")
+            end
+          end
+        end
+        if type(GameState) == "table" and GameState.EquippedFamiliar == name then
+          error("Familiar owner removal left the owner equipped")
+        end
+      end
+
+      return {
+        ownerName = ownerName,
+        isMounted = isMounted,
+        canLevel = canLevel,
+        removalReady = removalReady,
+        teardown = teardown,
+      }
+    end)()
+
     local temporaryModel = (function()
       local function hasParent(value, parent)
         if type(value) ~= "table" then return false end
@@ -3068,7 +3184,7 @@ if __MacGamingTrainerV1 == nil then
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
       if hammerModel.isRuntimeAspect(trait) then return "weaponAspect" end
       if hammerModel.isHammerTrait(trait) then return "hammer" end
-      if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
+      if familiarModel.isMounted(trait) then return "familiar" end
       if temporaryModel.isManaged(trait) then return "temporary" end
       if type(trait.InheritFrom) == "table" then
         for _, parent in ipairs(trait.InheritFrom) do
@@ -3144,9 +3260,13 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function"
             and type(AddTraitToHero) == "function" then
           levelCapability, levelReason = "increaseOne", ""
+        elseif family == "familiar" and familiarModel.canLevel(trait) then
+          levelCapability, levelReason = "increaseOne", ""
         elseif family == "hammer" or family == "weaponAspect" or family == "costume"
             or family == "temporary" then
           levelReason = "notMeaningful"
+        elseif family == "familiar" then
+          levelReason = "ownerSpecificLifecycle"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
         elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
@@ -3176,7 +3296,7 @@ if __MacGamingTrainerV1 == nil then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "weaponAspect" then
           rarityReason = "permanentProgressionOwned"
-        elseif family == "costume" or family == "temporary" then
+        elseif family == "costume" or family == "temporary" or family == "familiar" then
           rarityReason = "notMeaningful"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
@@ -3207,6 +3327,8 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "temporary" and type(RemoveTraitData) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "familiar" and familiarModel.removalReady() then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
@@ -3252,11 +3374,13 @@ if __MacGamingTrainerV1 == nil then
             sourceId = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
               or (family == "hammer" and "WeaponUpgrade"
-              or (family == "weaponAspect" and "" or traitSourceId(trait)))),
+              or (family == "familiar" and familiarModel.ownerName()
+              or (family == "weaponAspect" and "" or traitSourceId(trait))))),
             owner = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
               or (family == "hammer" and "WeaponUpgrade"
-              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait)))),
+              or (family == "familiar" and familiarModel.ownerName()
+              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait))))),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
@@ -3389,6 +3513,7 @@ if __MacGamingTrainerV1 == nil then
       seleneTalentNodes = seleneModel.talentNodes,
       teardownSlottedSpell = seleneModel.teardown,
       temporary = temporaryModel,
+      familiar = familiarModel,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -4789,6 +4914,8 @@ if __MacGamingTrainerV1 == nil then
           if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
             requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
           end
+        elseif family == "familiar" then
+          requireFunctions("Familiar trait level editing", { "IncreaseTraitLevel" })
         -- Ordinary God boons are re-checked against the game's real Pom
         -- eligibility. The explicit direct strategy is the only bypass.
         elseif not traitManagement.hasDirectStrategy(target.Name) then
@@ -4947,6 +5074,10 @@ if __MacGamingTrainerV1 == nil then
           requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "temporary" then
           requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
+        elseif removalCapability == "singleInstanceForce" and family == "familiar" then
+          if not traitManagement.familiar.removalReady() then
+            error("Familiar owner removal is unavailable")
+          end
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -4976,6 +5107,8 @@ if __MacGamingTrainerV1 == nil then
           traitManagement.removeCostume(live)
         elseif family == "temporary" then
           traitManagement.temporary.cancel(live)
+        elseif family == "familiar" then
+          traitManagement.familiar.teardown()
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
