@@ -642,6 +642,20 @@ do
   eq(trait.StackNum, 3, "dynamic direct-special target level")
 end
 
+-- A room transition within the same run does not invalidate a mounted direct
+-- special target. The row remains current-run state and the owner-derived
+-- capability is recomputed from the live trait before mutation.
+do
+  local trait = newTrait("DynamicDirectLevel", 265, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 265)
+  CurrentRun.CurrentRoom = { Name = "F_DirectSpecialTransition" }
+  local before = calls.level
+  M.dispatch("set_trait_level", paramsFrom(row, "direct-room-transition", 2))
+  eq(calls.level, before + 1, "direct-special room transition blocked mutation")
+  eq(trait.StackNum, 2, "direct-special room transition lost target")
+end
+
 -- Exact rarity for direct special traits is also derived from current native
 -- ownership and the trait's real rarity model rather than a hardcoded strategy.
 do
