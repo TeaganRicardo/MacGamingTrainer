@@ -59,10 +59,19 @@ with tempfile.TemporaryDirectory(prefix='mgt-catalog-loc-') as td:
     (text_dir / 'Traits.zh-CN.sjson').write_text('''
 Thing = { Id = "EchoMockTrait" DisplayName = "(#Echo) 回声之赐" }
 Mana = { Id = "MaxManaDrop" DisplayName = "{#Emph}灵魂滋补剂" }
+Owner = { Id = "ArcanaOwner" DisplayName = "猎手" }
+Child = { Id = "ArcanaMountedTrait" InheritFrom = "ArcanaOwner" }
+Grandchild = { Id = "ArcanaTrayTrait" InheritFrom = "ArcanaMountedTrait" }
 ''', encoding='utf-8')
-    names = localization.official_display_names({'EchoMockTrait', 'MaxManaDrop'}, 'zh-CN', game_path=root)
+    names = localization.official_display_names(
+        {'EchoMockTrait', 'MaxManaDrop', 'ArcanaMountedTrait', 'ArcanaTrayTrait'},
+        'zh-CN',
+        game_path=root,
+    )
     assert names['EchoMockTrait'] == '回声之赐'
     assert names['MaxManaDrop'] == '灵魂滋补剂'
+    assert names['ArcanaMountedTrait'] == '猎手'
+    assert names['ArcanaTrayTrait'] == '猎手'
 
 # Exact acquisition rows keep the trait's official name while grouping by the
 # official source identity in both languages. The group is product structure;
@@ -322,20 +331,15 @@ assert familiar_owner['sourceName'] == '拉奇'
 assert familiar_owner['sourceEnglishName'] == 'Raki'
 assert familiar_owner['sourceName'] != familiar_owner['sourceId']
 
-# Arcana runtime rows keep the concrete mounted effect as the item label and
-# expose the exact native card as the bilingual owner/source label. Internal
-# TraitName remains routing identity rather than recognition text.
+# Arcana runtime rows have two presentation identities: the card title is a
+# native game term, while the short functional descriptor is Trainer-owned and
+# derived from the target build's official card Description. TraitName remains
+# routing identity only.
 original_display_names = localization.official_display_names
 def arcana_names(identifiers, language='zh-CN', game_path=None):
     table = {
-        'zh-CN': {
-            'LowManaDamageMetaupgrade': '低魔力伤害加成',
-            'LowManaDamageBonus': '猎手',
-        },
-        'en': {
-            'LowManaDamageMetaupgrade': 'Low-Mana Damage Bonus',
-            'LowManaDamageBonus': 'The Huntress',
-        },
+        'zh-CN': {'LowManaDamageBonus': '猎手'},
+        'en': {'LowManaDamageBonus': 'The Huntress'},
     }
     return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
 localization.official_display_names = arcana_names
@@ -352,41 +356,12 @@ finally:
     localization.official_display_names = original_display_names
 
 arcana = arcana_payload['currentRunTraits'][0]
-assert arcana['displayName'] == '猎手 · 低魔力伤害加成'
-assert arcana['englishName'] == 'The Huntress · Low-Mana Damage Bonus'
+assert arcana['displayName'] == '猎手 · 低魔力攻击/特攻增伤'
+assert arcana['englishName'] == 'The Huntress · Low-Magick Attack/Special Damage'
 assert arcana['sourceName'] == '猎手'
 assert arcana['sourceEnglishName'] == 'The Huntress'
 assert arcana['sourceName'] != arcana['sourceId']
 assert arcana['displayName'] != arcana['name']
-
-# Arcana cards remain recognizable even when their mounted implementation trait
-# has no standalone DisplayName. The native card owner becomes the item label;
-# the generic "Unnamed Effect" fallback must never reach Boon Management.
-original_display_names = localization.official_display_names
-def arcana_owner_only_names(identifiers, language='zh-CN', game_path=None):
-    table = {
-        'zh-CN': {'LowManaDamageBonus': '猎手'},
-        'en': {'LowManaDamageBonus': 'The Huntress'},
-    }
-    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
-localization.official_display_names = arcana_owner_only_names
-try:
-    arcana_owner_only_payload = {
-        'currentRunTraits': [{
-            'name': 'InternalArcanaEffect',
-            'sourceId': 'LowManaDamageBonus',
-            'family': 'arcana',
-        }]
-    }
-    catalog.localize_catalog(arcana_owner_only_payload)
-finally:
-    localization.official_display_names = original_display_names
-
-arcana_owner_only = arcana_owner_only_payload['currentRunTraits'][0]
-assert arcana_owner_only['displayName'] == '猎手'
-assert arcana_owner_only['englishName'] == 'The Huntress'
-assert arcana_owner_only['displayName'] != '未命名效果'
-assert arcana_owner_only['englishName'] != 'Unnamed Effect'
 
 # Other mounted owner-backed effects also receive a source/family recognition
 # label instead of a generic unnamed row when no standalone native title exists.
@@ -416,32 +391,62 @@ assert owner_fallback['englishName'] == 'Echo · Special NPC Effect'
 assert owner_fallback['displayName'] != '未命名效果'
 assert owner_fallback['englishName'] != 'Unnamed Effect'
 
-# Every current-run family has a deliberate bilingual recognition fallback.
-# New/unknown mounted implementation ids may remain internal, but the generic
-# "Unnamed Effect" placeholder must never be the Boon Management label.
-original_display_names = localization.official_display_names
-localization.official_display_names = lambda identifiers, language='zh-CN', game_path=None: {}
-try:
-    all_family_payload = {
-        'currentRunTraits': [
-            {
-                'name': f'Internal{index}Trait',
-                'sourceId': '',
-                'family': family,
-            }
-            for index, family in enumerate(catalog._CURRENT_RUN_FAMILY_LABELS)
-        ]
-    }
-    catalog.localize_catalog(all_family_payload)
-finally:
-    localization.official_display_names = original_display_names
-
-for row in all_family_payload['currentRunTraits']:
-    fallback_zh, fallback_en = catalog._CURRENT_RUN_FAMILY_LABELS[row['family']]
-    assert row['displayName'] == fallback_zh, row
-    assert row['englishName'] == fallback_en, row
-    assert row['displayName'] != '未命名效果', row
-    assert row['englishName'] != 'Unnamed Effect', row
+# The supported-target census owns every current-run trait that lacks a concrete
+# native title. Family labels are emergency compatibility fallbacks only; none
+# of these known 1.143476 traits may resolve to one.
+expected_derived_names = {
+    'AirEssence': ('风元素精华', 'Air Essence'),
+    'FireEssence': ('火元素精华', 'Fire Essence'),
+    'EarthEssence': ('土元素精华', 'Earth Essence'),
+    'WaterEssence': ('水元素精华', 'Water Essence'),
+    'ElementalEssence': ('元素精华', 'Elemental Essence'),
+    'MinorArmorBoon': ('护甲增加', 'Armor Gain'),
+    'RoomRewardMaxHealthTrait': ('最大生命提升', 'Max Life Increase'),
+    'RoomRewardEmptyMaxHealthTrait': ('最大生命提升（不恢复生命）', 'Max Life Increase (No Heal)'),
+    'RoomRewardMaxManaTrait': ('最大魔力提升', 'Max Magick Increase'),
+    'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度提升', 'Black Coat · Sprint Speed Increase'),
+    'VanillaState': ('环境状态 · 常态', 'Environment State · Normal'),
+    'WetState': ('环境状态 · 降雨', 'Environment State · Rain'),
+    'FamiliarFrogResourceBonus': ('弗利诺斯 · 额外采集概率', 'Frinos · Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('弗利诺斯 · 攻击伤害', 'Frinos · Attack Damage'),
+    'FamiliarCatResourceBonus': ('图拉 · 额外采集概率', 'Toula · Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('图拉 · 攻击次数', 'Toula · Attack Count'),
+    'FamiliarRavenResourceBonus': ('拉奇 · 额外采集概率', 'Raki · Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('拉奇 · 攻击间隔', 'Raki · Attack Interval'),
+    'FamiliarHoundResourceBonus': ('赫库芭 · 额外采集概率', 'Hecuba · Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('赫库芭 · 吠叫间隔', 'Hecuba · Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('加莉 · 额外采集概率', 'Gale · Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('加莉 · 攻击伤害', 'Gale · Attack Damage'),
+    'ChannelSlowMetaUpgrade': ('Ω蓄力速度', 'Ω Charge Speed'),
+    'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
+    'LowManaDamageMetaupgrade': ('低魔力攻击/特攻增伤', 'Low-Magick Attack/Special Damage'),
+    'CastDamageMetaUpgrade': ('Ω蓄力时减缓时间', 'Time Slow While Channeling Ω'),
+    'SorceryRegenMetaUpgrade': ('巫咒自动充能', 'Automatic Hex Charge'),
+    'InsideCastBuffMetaUpgrade': ('法阵内伤害', 'Cast-Zone Damage'),
+    'HealthManaBonusMetaUpgrade': ('最大生命与魔力', 'Max Life & Magick'),
+    'DodgeBonusMetaUpgrade': ('法阵无敌与移动速度', 'Cast Invulnerability & Move Speed'),
+    'ManaOverTimeMetaUpgrade': ('每秒恢复魔力', 'Magick Regeneration'),
+    'MagicCritMetaUpgrade': ('Ω招式暴击率', 'Ω-Move Critical Chance'),
+    'SprintShieldMetaUpgrade': ('冲刺速度与穿行', 'Sprint Speed & Phasing'),
+    'LastStandSlowTimeMetaUpgrade': ('死里逃生次数', 'Death Defiance Charges'),
+    'ChamberHealthMetaUpgrade': ('定期提升生命与魔力上限', 'Periodic Max Life/Magick Gain'),
+    'EffectVulnerabilityMetaUpgrade': ('多状态增伤', 'Multi-Status Damage'),
+    'BossShieldMetaUpgrade': ('首领战受击免伤', 'Guardian Hit Blocks'),
+    'DoorRerollMetaUpgrade': ('地点奖励重掷', 'Location Reward Rerolls'),
+    'StartingGoldMetaUpgrade': ('初始金币', 'Starting Gold'),
+    'MetaToRunMetaUpgrade': ('局外奖励转局内奖励', 'Meta-to-Run Reward Conversion'),
+    'RarityBoostMetaUpgrade': ('稀有/传奇祝福概率', 'Rare/Legendary Boon Chance'),
+    'DuoRarityBoostMetaUpgrade': ('双重祝福概率', 'Duo Boon Chance'),
+    'RerollTradeOffMetaUpgrade': ('重掷次数', 'Rerolls'),
+    'PanelRerollMetaUpgrade': ('祝福及选项重掷', 'Boon & Choice Rerolls'),
+    'LowHealthBuffMetaUpgrade': ('无死里逃生时增伤减伤', 'No-Death-Defiance Damage & Defense'),
+    'EpicRarityBoostMetaUpgrade': ('史诗祝福概率', 'Epic Boon Chance'),
+    'BossProgressionMetaUpgrade': ('击败首领激活随机阿卡那', 'Activate Arcana After Guardians'),
+}
+assert catalog._CURRENT_RUN_DERIVED_NAMES == expected_derived_names
+for trait_id, pair in expected_derived_names.items():
+    assert pair[0] not in {'未命名效果', *[value[0] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+    assert pair[1] not in {'Unnamed Effect', *[value[1] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
 
 # Runtime presentation follows the same title identity the native Trait Tray uses.
 # A CustomTitle / native tooltip title can therefore name an otherwise internal
