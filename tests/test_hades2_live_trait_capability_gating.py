@@ -43,7 +43,11 @@ GameState = { Resources = {}, LifetimeResourcesGained = {}, RunHistory = {} }
 ResourceData = {}
 ResourceDisplayOrderData = {}
 TraitElementData = {}
-EnemyData = {}
+EnemyData = {
+  NPC_Icarus_01 = {
+    Traits = { "OmegaExplodeBoon" },
+  },
+}
 PresetEventArgs = {}
 ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
