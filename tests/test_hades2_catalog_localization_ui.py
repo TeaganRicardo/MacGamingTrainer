@@ -149,7 +149,11 @@ assert 'nameFallback' not in exact_label
 # identity stays language-neutral and distinct from item identity, so language
 # switches and same-name effects cannot cause selection jumps.
 assert '@ViewState<String> private var exactSourceSelection = ""' in view
+assert 'private var genericExactCatalog: [BoonOption]' in view
 assert 'private var genericExactBoons: [BoonOption]' in view
+assert 'genericExactCatalog.filter' in view
+assert 'exactIDs: genericExactCatalog.map(\\.id)' in view
+assert 'exactIDs: genericExactBoons.map(\\.id)' not in view
 assert 'option.acquisitionMode != "chaosBlessing"' in view
 assert 'option.acquisitionMode != "chaosCurse"' in view
 assert 'private var exactBoonSourceGroups:' in view
