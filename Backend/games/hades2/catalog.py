@@ -56,6 +56,88 @@ _PRODUCT_LABEL_EN_BY_ZH = {
     '无敌模式': 'Invincibility',
 }
 
+_CURRENT_RUN_FAMILY_LABELS = {
+    'arcana': ('阿卡那牌', 'Arcana'),
+    'biomeState': ('环境状态', 'Biome States'),
+    'chaos': ('卡俄斯效果', 'Chaos Effect'),
+    'costume': ('服装效果', 'Costume Effect'),
+    'directSpecial': ('特殊角色效果', 'Special NPC Effect'),
+    'familiar': ('魔宠效果', 'Familiar Effect'),
+    'hammer': ('代达罗斯 / 武器效果', 'Daedalus / Weapon Effect'),
+    'hex': ('巫咒', 'Hex'),
+    'hexTalent': ('繁星之路天赋', 'Path of Stars Talent'),
+    'keepsake': ('信物效果', 'Keepsake Effect'),
+    'olympianHermes': ('奥林匹斯 / 赫尔墨斯祝福', 'Olympian / Hermes Boon'),
+    'other': ('其他效果', 'Other Effect'),
+    'temporary': ('临时效果', 'Temporary Effect'),
+    'weaponAspect': ('武器形态效果', 'Weapon Aspect Effect'),
+}
+
+# Current-target (1.143476 / Steam 25481925) mounted TraitData rows that do not
+# have a sufficiently specific standalone native title. Values are Trainer
+# Product Terms derived from the target build's effect data/descriptions. Arcana
+# and Familiar entries are descriptors only; their native owner title is composed
+# dynamically at presentation time.
+_CURRENT_RUN_DERIVED_NAMES = {
+    # Element essence traits are installed by the matching *Boost consumables.
+    'AirEssence': ('风元素', 'Air Element'),
+    'FireEssence': ('火元素', 'Fire Element'),
+    'EarthEssence': ('土元素', 'Earth Element'),
+    'WaterEssence': ('水元素', 'Water Element'),
+    'ElementalEssence': ('元素', 'Element'),
+
+    # Direct current-run state/effect traits.
+    'MinorArmorBoon': ('护甲加成', 'Armor Bonus'),
+    'RoomRewardMaxHealthTrait': ('最大生命值增加', 'Max Life Increase'),
+    'RoomRewardEmptyMaxHealthTrait': ('最大生命值增加（不恢复生命）', 'Max Life Increase (No Healing)'),
+    'RoomRewardMaxManaTrait': ('最大魔力值增加', 'Max Magick Increase'),
+    'SuitInherentSpeedBoon': ('冲刺速度加成', 'Sprint Speed Bonus'),
+    'VanillaState': ('默认环境', 'Default Environment'),
+    'WetState': ('雨天环境', 'Rainy Environment'),
+
+    # Hidden Familiar upgrade traits; descriptors follow target FamiliarData fields.
+    # The native Familiar owner name is resolved dynamically and composed at
+    # presentation time.
+    'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
+    'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('攻击次数', 'Attack Count'),
+    'FamiliarRavenResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('攻击间隔', 'Attack Interval'),
+    'FamiliarHoundResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('吠叫间隔', 'Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('攻击伤害', 'Attack Damage'),
+
+    # Arcana mounted traits: concise functional descriptors derived from the
+    # official target-build card Description. Native card titles remain sourceName.
+    'ChannelSlowMetaUpgrade': ('Ω招式加速', 'Faster Omega Moves'),
+    'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
+    'LowManaDamageMetaupgrade': ('魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'),
+    'CastDamageMetaUpgrade': ('Ω蓄力时减缓时间', 'Time Slow While Channeling Ω'),
+    'SorceryRegenMetaUpgrade': ('巫咒自动充能', 'Automatic Hex Charge'),
+    'InsideCastBuffMetaUpgrade': ('法阵内敌人增伤', 'Cast-Area Enemy Damage'),
+    'HealthManaBonusMetaUpgrade': ('最大生命值/魔力值增加', 'Max Life/Magick Increase'),
+    'DodgeBonusMetaUpgrade': ('施展法阵时短暂无敌并提高移速', 'Cast Invulnerability & Move Speed'),
+    'ManaOverTimeMetaUpgrade': ('魔力值自动恢复', 'Magick Regeneration'),
+    'MagicCritMetaUpgrade': ('Ω组合技暴击率', 'Omega Combo Critical Chance'),
+    'SprintShieldMetaUpgrade': ('冲刺加速并穿过敌人', 'Faster Sprint & Phasing'),
+    'LastStandSlowTimeMetaUpgrade': ('增加死里逃生次数', 'Extra Death Defiance'),
+    'ChamberHealthMetaUpgrade': ('每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'),
+    'EffectVulnerabilityMetaUpgrade': ('至少2种奥林匹斯状态时增伤', 'Damage vs. 2+ Olympian Statuses'),
+    'BossShieldMetaUpgrade': ('区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'),
+    'DoorRerollMetaUpgrade': ('重塑地点奖励', 'Location Reward Rerolls'),
+    'StartingGoldMetaUpgrade': ('增加初始金币', 'Starting Gold Increase'),
+    'MetaToRunMetaUpgrade': ('局外奖励转化为局内奖励', 'Meta-to-Run Reward Conversion'),
+    'RarityBoostMetaUpgrade': ('提高稀有/传奇祝福概率', 'Higher Rare/Legendary Boon Chance'),
+    'DuoRarityBoostMetaUpgrade': ('提高双重祝福概率', 'Higher Duo Boon Chance'),
+    'RerollTradeOffMetaUpgrade': ('增加重塑命运次数', 'Extra Reroll Uses'),
+    'PanelRerollMetaUpgrade': ('重塑祝福及其他选项', 'Boon/Choice Rerolls'),
+    'LowHealthBuffMetaUpgrade': ('无死里逃生时增伤减伤', 'No-Death-Defiance Damage & Defense'),
+    'EpicRarityBoostMetaUpgrade': ('提高史诗祝福概率', 'Higher Epic Boon Chance'),
+    'BossProgressionMetaUpgrade': ('击败区域守卫后随机激活阿卡那', 'Random Arcana Activation After Guardian'),
+}
+
 
 _LINKED_OFFICIAL_NAME_IDS = {
     # These runtime reward identifiers may resolve through another official
@@ -139,19 +221,6 @@ _PROVISIONAL_NAMES = {
     'RandomLoot': ('随机奥林匹斯祝福', 'Random Olympian Boon'),
     'BoostedRandomLoot': ('强化随机祝福', 'Boosted Random Boon'),
 
-    # Hidden Familiar upgrade traits have no standalone DisplayName in the
-    # supported target build. These product labels are derived from the native
-    # FamiliarData effect fields, never from prettifying the internal trait id.
-    'FamiliarFrogResourceBonus': ('弗利诺斯·额外采集概率', 'Frinos · Bonus Gathering Chance'),
-    'FamiliarFrogDamage': ('弗利诺斯·攻击伤害', 'Frinos · Attack Damage'),
-    'FamiliarCatResourceBonus': ('图拉·额外采集概率', 'Toula · Bonus Gathering Chance'),
-    'FamiliarCatAttacks': ('图拉·攻击次数', 'Toula · Attack Count'),
-    'FamiliarRavenResourceBonus': ('拉奇·额外采集概率', 'Raki · Bonus Gathering Chance'),
-    'FamiliarRavenAttackDuration': ('拉奇·攻击间隔', 'Raki · Attack Interval'),
-    'FamiliarHoundResourceBonus': ('赫库芭·额外采集概率', 'Hecuba · Bonus Gathering Chance'),
-    'FamiliarHoundBarkDuration': ('赫库芭·吠叫间隔', 'Hecuba · Bark Interval'),
-    'FamiliarPolecatResourceBonus': ('加莉·额外采集概率', 'Gale · Bonus Gathering Chance'),
-    'FamiliarPolecatDamage': ('加莉·攻击伤害', 'Gale · Attack Damage'),
 }
 
 
@@ -216,9 +285,11 @@ def localize_catalog(decoded):
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         trait_id=item.get('name')
+        display_id=item.get('displayId')
         linked_trait=item.get('linkedTrait')
         source_id=item.get('sourceId')
         if isinstance(trait_id,str) and trait_id:lookup.append(trait_id)
+        if isinstance(display_id,str) and display_id:lookup.append(display_id)
         if isinstance(linked_trait,str) and linked_trait:lookup.append(linked_trait)
         if isinstance(source_id,str) and source_id:
             lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
@@ -336,24 +407,87 @@ def localize_catalog(decoded):
             item['officialName']=False
             item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
 
-    # Live trait rows keep their runtime identity in `name`, but presentation
-    # reuses the same official language source as the acquisition catalog.
+    # Live trait rows keep runtime routing identity in `name`, but every row
+    # presented to Boon Management needs a player-recognizable label. Resolve
+    # the owner/source first so owner-backed systems can recover when the
+    # concrete mounted implementation trait has no standalone DisplayName.
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         identifier=item.get('name')
         if not isinstance(identifier,str) or not identifier:continue
-        official_zh=_clean(zh.get(identifier)) if identifier in zh else None
-        official_en=_clean(en.get(identifier)) if identifier in en else None
-        if isinstance(official_zh,str) and official_zh:
-            item['displayName']=official_zh
-            item['englishName']=official_en or 'Unnamed Effect'
-        elif isinstance(official_en,str) and official_en:
-            item['displayName']=official_en
-            item['englishName']=official_en
+        family=item.get('family') if isinstance(item.get('family'),str) else 'other'
+        source_id=item.get('sourceId')
+        if isinstance(source_id,str) and source_id:
+            source_text_id = (
+                _HAMMER_TITLE_ID
+                if family == 'hammer'
+                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            )
+            official_source_zh=_clean(zh.get(source_text_id)) if source_text_id else None
+            official_source_en=_clean(en.get(source_text_id)) if source_text_id else None
+            # sourceId remains the routing identity. Raw internal owner ids are
+            # never promoted to user-facing copy merely because localization is
+            # missing.
+            item['sourceName']=official_source_zh or ''
+            item['sourceEnglishName']=official_source_en or ''
         else:
-            fallback_zh,_,fallback_en,_=_fallback_names({'kind':'trait','name':identifier},identifier,None,zh,en)
-            item['displayName']=fallback_zh
-            item['englishName']=fallback_en
+            item['sourceName']=''
+            item['sourceEnglishName']=''
+
+        presentation_id=item.get('displayId')
+        if not isinstance(presentation_id,str) or not presentation_id:
+            presentation_id=identifier
+        official_zh=_clean(zh.get(presentation_id)) if presentation_id in zh else None
+        official_en=_clean(en.get(presentation_id)) if presentation_id in en else None
+        derived_name=_CURRENT_RUN_DERIVED_NAMES.get(identifier)
+        if derived_name:
+            # The registry is intentionally more specific than either a missing
+            # native title or (for Arcana) an inherited card title. Card/source
+            # identity is retained separately and composed below.
+            display_zh,display_en=derived_name
+        elif isinstance(official_zh,str) and official_zh:
+            display_zh=official_zh
+            display_en=official_en or ''
+        elif isinstance(official_en,str) and official_en:
+            display_zh=official_en
+            display_en=official_en
+        else:
+            display_zh,_,display_en,_=_fallback_names(
+                {'kind':'trait','name':identifier},identifier,None,zh,en
+            )
+
+        source_zh=item['sourceName']
+        source_en=item['sourceEnglishName']
+        family_zh,family_en=_CURRENT_RUN_FAMILY_LABELS.get(
+            family, ('其他效果','Other Effect')
+        )
+
+        # Arcana keeps its native card title; Familiar derived rows keep the native
+        # familiar owner. Only the Trainer-owned function descriptor comes from
+        # the exception registry.
+        if family == 'arcana' and source_zh:
+            if display_zh == '未命名效果' or not display_zh:
+                display_zh=source_zh
+            elif display_zh != source_zh:
+                display_zh=f'{source_zh} · {display_zh}'
+        elif family == 'familiar' and derived_name and source_zh:
+            display_zh=f'{source_zh} · {display_zh}'
+        elif display_zh == '未命名效果' or not display_zh:
+            display_zh=f'{source_zh} · {family_zh}' if source_zh else family_zh
+
+        if family == 'arcana' and source_en:
+            if display_en == 'Unnamed Effect' or not display_en:
+                display_en=source_en
+            elif display_en != source_en:
+                display_en=f'{source_en} · {display_en}'
+        elif family == 'familiar' and derived_name and source_en:
+            display_en=f'{source_en} · {display_en}'
+        elif display_en == 'Unnamed Effect' or not display_en:
+            display_en=f'{source_en} · {family_en}' if source_en else family_en
+
+        item['displayName']=display_zh
+        item['englishName']=display_en
+
         linked_trait=item.get('linkedTrait')
         if isinstance(linked_trait,str) and linked_trait:
             linked_zh=_clean(zh.get(linked_trait)) if linked_trait in zh else None
@@ -371,18 +505,6 @@ def localize_catalog(decoded):
         else:
             item['linkedDisplayName']=''
             item['linkedEnglishName']=''
-        source_id=item.get('sourceId')
-        if isinstance(source_id,str) and source_id:
-            source_text_id = (
-                _HAMMER_TITLE_ID
-                if item.get('family') == 'hammer'
-                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
-            )
-            item['sourceName']=_clean(zh.get(source_text_id)) or source_id
-            item['sourceEnglishName']=_clean(en.get(source_text_id)) or source_id
-        else:
-            item['sourceName']=''
-            item['sourceEnglishName']=''
     if fallback_special:
         missing=set(fallback_special)
         warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []

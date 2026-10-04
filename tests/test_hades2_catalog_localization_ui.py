@@ -12,6 +12,8 @@ from games.hades2 import catalog, localization
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
+zh_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json').read_text()
+en_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.en.json').read_text()
 
 # Known full-release room rewards that were missing from the curated spawn list.
 for token in (
@@ -57,10 +59,19 @@ with tempfile.TemporaryDirectory(prefix='mgt-catalog-loc-') as td:
     (text_dir / 'Traits.zh-CN.sjson').write_text('''
 Thing = { Id = "EchoMockTrait" DisplayName = "(#Echo) 回声之赐" }
 Mana = { Id = "MaxManaDrop" DisplayName = "{#Emph}灵魂滋补剂" }
+Owner = { Id = "ArcanaOwner" DisplayName = "猎手" }
+Child = { Id = "ArcanaMountedTrait" InheritFrom = "ArcanaOwner" }
+Grandchild = { Id = "ArcanaTrayTrait" InheritFrom = "ArcanaMountedTrait" }
 ''', encoding='utf-8')
-    names = localization.official_display_names({'EchoMockTrait', 'MaxManaDrop'}, 'zh-CN', game_path=root)
+    names = localization.official_display_names(
+        {'EchoMockTrait', 'MaxManaDrop', 'ArcanaMountedTrait', 'ArcanaTrayTrait'},
+        'zh-CN',
+        game_path=root,
+    )
     assert names['EchoMockTrait'] == '回声之赐'
     assert names['MaxManaDrop'] == '灵魂滋补剂'
+    assert names['ArcanaMountedTrait'] == '猎手'
+    assert names['ArcanaTrayTrait'] == '猎手'
 
 # Exact acquisition rows keep the trait's official name while grouping by the
 # official source identity in both languages. The group is product structure;
@@ -272,12 +283,18 @@ assert hammer_live['sourceEnglishName'] == 'Daedalus Hammer'
 # effect label rather than their internal trait id. This is especially relevant
 # to Familiar upgrade subtraits in #240.
 original_display_names = localization.official_display_names
-localization.official_display_names = lambda identifiers, language='zh-CN', game_path=None: {}
+def familiar_derived_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'FrogFamiliar': '弗利诺斯', 'CatFamiliar': '图拉'},
+        'en': {'FrogFamiliar': 'Frinos', 'CatFamiliar': 'Toula'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = familiar_derived_names
 try:
     live_payload = {
         'currentRunTraits': [
-            {'name': 'FamiliarFrogDamage', 'sourceId': '', 'family': 'familiar'},
-            {'name': 'FamiliarCatAttacks', 'sourceId': '', 'family': 'familiar'},
+            {'name': 'FamiliarFrogDamage', 'sourceId': 'FrogFamiliar', 'family': 'familiar'},
+            {'name': 'FamiliarCatAttacks', 'sourceId': 'CatFamiliar', 'family': 'familiar'},
         ]
     }
     catalog.localize_catalog(live_payload)
@@ -285,9 +302,9 @@ finally:
     localization.official_display_names = original_display_names
 
 frog, cat = live_payload['currentRunTraits']
-assert frog['displayName'] == '弗利诺斯·攻击伤害'
+assert frog['displayName'] == '弗利诺斯 · 攻击伤害'
 assert frog['englishName'] == 'Frinos · Attack Damage'
-assert cat['displayName'] == '图拉·攻击次数'
+assert cat['displayName'] == '图拉 · 攻击次数'
 assert cat['englishName'] == 'Toula · Attack Count'
 assert frog['displayName'] != frog['name']
 assert cat['displayName'] != cat['name']
@@ -320,20 +337,15 @@ assert familiar_owner['sourceName'] == '拉奇'
 assert familiar_owner['sourceEnglishName'] == 'Raki'
 assert familiar_owner['sourceName'] != familiar_owner['sourceId']
 
-# Arcana runtime rows keep the concrete mounted effect as the item label and
-# expose the exact native card as the bilingual owner/source label. Internal
-# TraitName remains routing identity rather than recognition text.
+# Arcana runtime rows have two presentation identities: the card title is a
+# native game term, while the short functional descriptor is Trainer-owned and
+# derived from the target build's official card Description. TraitName remains
+# routing identity only.
 original_display_names = localization.official_display_names
 def arcana_names(identifiers, language='zh-CN', game_path=None):
     table = {
-        'zh-CN': {
-            'LowManaDamageMetaupgrade': '低魔力伤害加成',
-            'LowManaDamageBonus': '猎手',
-        },
-        'en': {
-            'LowManaDamageMetaupgrade': 'Low-Mana Damage Bonus',
-            'LowManaDamageBonus': 'The Huntress',
-        },
+        'zh-CN': {'LowManaDamageBonus': '猎手'},
+        'en': {'LowManaDamageBonus': 'The Huntress'},
     }
     return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
 localization.official_display_names = arcana_names
@@ -350,12 +362,107 @@ finally:
     localization.official_display_names = original_display_names
 
 arcana = arcana_payload['currentRunTraits'][0]
-assert arcana['displayName'] == '低魔力伤害加成'
-assert arcana['englishName'] == 'Low-Mana Damage Bonus'
+assert arcana['displayName'] == '猎手 · 魔力未满时攻击/特技增伤'
+assert arcana['englishName'] == 'The Huntress · Attack/Special Damage Below Full Magick'
 assert arcana['sourceName'] == '猎手'
 assert arcana['sourceEnglishName'] == 'The Huntress'
 assert arcana['sourceName'] != arcana['sourceId']
 assert arcana['displayName'] != arcana['name']
+
+# Other mounted owner-backed effects also receive a source/family recognition
+# label instead of a generic unnamed row when no standalone native title exists.
+original_display_names = localization.official_display_names
+def owner_fallback_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'NPC_Echo_01': '回声'},
+        'en': {'NPC_Echo_01': 'Echo'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = owner_fallback_names
+try:
+    owner_fallback_payload = {
+        'currentRunTraits': [{
+            'name': 'InternalEchoEffect',
+            'sourceId': 'Echo',
+            'family': 'directSpecial',
+        }]
+    }
+    catalog.localize_catalog(owner_fallback_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+owner_fallback = owner_fallback_payload['currentRunTraits'][0]
+assert owner_fallback['displayName'] == '回声 · 特殊角色效果'
+assert owner_fallback['englishName'] == 'Echo · Special NPC Effect'
+assert owner_fallback['displayName'] != '未命名效果'
+assert owner_fallback['englishName'] != 'Unnamed Effect'
+
+# The supported-target census owns every current-run trait that lacks a concrete
+# native title. Family labels are emergency compatibility fallbacks only; none
+# of these known 1.143476 traits may resolve to one.
+derived_names = catalog._CURRENT_RUN_DERIVED_NAMES
+assert len(derived_names) == 47
+generic_zh = {'未命名效果', *[value[0] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+generic_en = {'Unnamed Effect', *[value[1] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+for trait_id, pair in derived_names.items():
+    assert isinstance(pair, tuple) and len(pair) == 2, trait_id
+    assert all(isinstance(value, str) and value.strip() for value in pair), trait_id
+    assert trait_id not in pair, trait_id
+    assert pair[0] not in generic_zh, trait_id
+    assert pair[1] not in generic_en, trait_id
+
+# Regression checks are deliberately selective: the production registry is the
+# sole row-level source of truth, so the test must not mirror all 47 labels.
+assert derived_names['ElementalEssence'] == ('元素', 'Element')
+assert derived_names['SuitInherentSpeedBoon'] == ('冲刺速度加成', 'Sprint Speed Bonus')
+assert derived_names['FamiliarFrogDamage'] == ('攻击伤害', 'Attack Damage')
+assert derived_names['LowManaDamageMetaupgrade'] == (
+    '魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'
+)
+assert derived_names['ChamberHealthMetaUpgrade'] == (
+    '每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'
+)
+assert derived_names['EffectVulnerabilityMetaUpgrade'] == (
+    '至少2种奥林匹斯状态时增伤', 'Damage vs. 2+ Olympian Statuses'
+)
+assert derived_names['BossShieldMetaUpgrade'] == (
+    '区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'
+)
+
+governance_path = ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_naming.md'
+governance = governance_path.read_text(encoding='utf-8')
+assert 'boon_management_effect_names.csv' not in governance
+assert 'catalog._CURRENT_RUN_DERIVED_NAMES' in governance
+assert not (ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_names.csv').exists()
+
+# Runtime presentation follows the same title identity the native Trait Tray uses.
+# A CustomTitle / native tooltip title can therefore name an otherwise internal
+# TraitData row without changing its routing identity.
+original_display_names = localization.official_display_names
+def native_title_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'PlayerVisibleInternalTitle': '原生可辨识效果'},
+        'en': {'PlayerVisibleInternalTitle': 'Native Recognizable Effect'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = native_title_names
+try:
+    native_title_payload = {
+        'currentRunTraits': [{
+            'name': 'InternalImplementationTrait',
+            'displayId': 'PlayerVisibleInternalTitle',
+            'sourceId': '',
+            'family': 'other',
+        }]
+    }
+    catalog.localize_catalog(native_title_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+native_title = native_title_payload['currentRunTraits'][0]
+assert native_title['displayName'] == '原生可辨识效果'
+assert native_title['englishName'] == 'Native Recognizable Effect'
+assert native_title['displayName'] != native_title['name']
 
 # The selected Keepsake owner uses the native Keepsake localization identity.
 # Runtime routing may retain the exact trait id, but the user-facing owner label
@@ -423,6 +530,22 @@ assert chaos['englishName'] == 'Maimed'
 assert chaos['linkedDisplayName'] == '丰盛'
 assert chaos['linkedEnglishName'] == 'Affluence'
 assert chaos['linkedDisplayName'] != chaos['linkedTrait']
+
+# Arcana cards share one player-facing family section instead of each exact card
+# owner becoming its own section. The full mounted inventory remains visible.
+source_label = view[view.index('private func traitSourceLabel'):view.index('private var currentRunTraitPickerSections')]
+assert 'trait.family == "arcana"' in source_label
+assert '"biomeState"' in lua
+assert 'hades2.traits.family.arcana' in zh_presentation
+assert '"hades2.traits.family.arcana": "阿卡那牌"' in zh_presentation
+assert '"hades2.traits.family.arcana": "Arcana"' in en_presentation
+for family in (
+    'arcana', 'biomeState', 'chaos', 'costume', 'directSpecial', 'familiar', 'hammer',
+    'hex', 'hexTalent', 'keepsake', 'olympianHermes', 'other',
+    'temporary', 'weaponAspect',
+):
+    assert f'"hades2.traits.family.{family}"' in zh_presentation, family
+    assert f'"hades2.traits.family.{family}"' in en_presentation, family
 
 trait_manager = view[view.index('private var currentRunTraitsPanel'):view.index('private var resourceSection')]
 assert 'currentRunTraitRow' not in trait_manager
