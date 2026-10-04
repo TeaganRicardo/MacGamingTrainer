@@ -264,18 +264,17 @@ check(HeroHasTrait(limited.Name), "Uses-backed Well edit removed owner trait")
 limitedRow = assert(findRow(limited.Name), "Uses-backed Well row missing after edit")
 local beforeUsesExpireRemove = calls.remove
 local beforeUsesExpireSideEffect = calls.expiry
-M.dispatch("expire_trait", paramsFrom(limitedRow, "temporary-uses-expire"))
+local usesExpireParams = paramsFrom(limitedRow, "temporary-uses-expire")
+M.dispatch("expire_trait", usesExpireParams)
 eq(limited.Uses, 0, "Uses-backed Well expiry did not reach terminal counter")
-check(HeroHasTrait(limited.Name), "Uses-backed Well expiry incorrectly removed owner trait")
-eq(calls.remove, beforeUsesExpireRemove, "Uses-backed Well expiry called RemoveTraitData")
+check(not HeroHasTrait(limited.Name), "Uses-backed Well expiry did not perform native terminal teardown")
+eq(calls.remove, beforeUsesExpireRemove + 1, "Uses-backed Well expiry did not call RemoveTraitData once")
 eq(calls.expiry, beforeUsesExpireSideEffect, "Uses-backed Well expiry fabricated OnExpire")
 
-limitedRow = assert(findRow(limited.Name), "expired Uses-backed Well row disappeared")
-eq(limitedRow.remainingUses, 0, "expired Uses-backed Well projection")
-check(limitedRow.canExpire ~= true, "already-expired Uses-backed Well still exposes Expire Now")
-check(limitedRow.canSetRemainingUses == true, "expired Uses-backed Well cannot be reactivated by count edit")
-M.dispatch("remove_trait", paramsFrom(limitedRow, "temporary-uses-cancel"))
-check(not HeroHasTrait(limited.Name), "explicit cancellation did not remove Uses-backed Well trait")
+local removeAfterUsesExpire = calls.remove
+local duplicateUsesExpire = M.dispatch("expire_trait", usesExpireParams)
+check(duplicateUsesExpire.duplicate == true, "Uses-backed Well expiry replay was not deduplicated")
+eq(calls.remove, removeAfterUsesExpire, "Uses-backed Well expiry replayed teardown")
 
 -- A Well owner without a duration counter is still a Well-managed effect. It
 -- exposes cancellation only; duration/expiry controls must not be fabricated.
