@@ -2748,6 +2748,33 @@ if __MacGamingTrainerV1 == nil then
       return false
     end
 
+    local function isIcarusCostumeTrait(name)
+      if type(name) ~= "string" or type(TraitData) ~= "table" then return false end
+      local definition = TraitData[name]
+      if type(definition) ~= "table" or type(definition.InheritFrom) ~= "table" then return false end
+      local costume = false
+      for _, parent in ipairs(definition.InheritFrom) do
+        if parent == "CostumeTrait" then
+          costume = true
+          break
+        end
+      end
+      if not costume then return false end
+      local npc = type(EnemyData) == "table" and EnemyData.NPC_Icarus_01 or nil
+      for _, traitName in pairs(type(npc) == "table" and npc.Traits or {}) do
+        if traitName == name then return true end
+      end
+      local choices = type(PresetEventArgs) == "table" and PresetEventArgs.IcarusBenefitChoices or nil
+      for _, option in pairs(type(choices) == "table" and choices.UpgradeOptions or {}) do
+        if type(option) == "table" and option.ItemName == name then return true end
+      end
+      return false
+    end
+
+    local function isManagedCostumeTrait(name)
+      return isArachneCostumeTrait(name) or isIcarusCostumeTrait(name)
+    end
+
     local function applyCostume(name)
       if not isArachneCostumeChoice(name) then error("Exact costume target is unavailable") end
       requireFunctions("Arachne costume acquisition", { "AddTraitToHero", "SetupCostume" })
@@ -2795,10 +2822,10 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function removeCostume(trait)
-      if type(trait) ~= "table" or not isArachneCostumeTrait(trait.Name) then
+      if type(trait) ~= "table" or not isManagedCostumeTrait(trait.Name) then
         error("Trait removal is unavailable for the selected target")
       end
-      requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
+      requireFunctions("costume owner removal", { "RemoveTraitData", "SetupCostume" })
       local instanceId = trait.Id ~= nil and tostring(trait.Id) or ""
       local ok, message = pcall(
         RemoveTraitData, CurrentRun.Hero, trait, { Silent = true, SkipExpire = true }
@@ -2816,7 +2843,7 @@ if __MacGamingTrainerV1 == nil then
         if not setupOk then error(setupMessage) end
       end
       if not ok then error(message) end
-      if stillMounted then error("Arachne costume removal left owner state mounted") end
+      if stillMounted then error("Costume owner removal left owner state mounted") end
     end
 
     local function traitLevel(trait)
@@ -3864,6 +3891,9 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "costume" and isArachneCostumeTrait(trait.Name)
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" and isIcarusCostumeTrait(trait.Name)
+            and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "temporary" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "familiar" and familiarModel.removalReady() then
@@ -4056,6 +4086,7 @@ if __MacGamingTrainerV1 == nil then
       targetHasRarity = targetHasRarity,
       isArachneCostumeChoice = isArachneCostumeChoice,
       isArachneCostumeTrait = isArachneCostumeTrait,
+      isIcarusCostumeTrait = isIcarusCostumeTrait,
       applyCostume = applyCostume,
       removeCostume = removeCostume,
       level = traitLevel,
@@ -5651,6 +5682,9 @@ if __MacGamingTrainerV1 == nil then
           requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "costume" then
           requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
+        elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
+            and traitManagement.isIcarusCostumeTrait(target.Name) then
+          requireFunctions("Icarus costume armor removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "temporary" then
           requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
         elseif removalCapability == "singleInstanceForce" and family == "familiar" then
@@ -5687,6 +5721,8 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "hammer" then
           hammerModel.removeMounted(live)
         elseif family == "costume" then
+          traitManagement.removeCostume(live)
+        elseif family == "directSpecial" and traitManagement.isIcarusCostumeTrait(live.Name) then
           traitManagement.removeCostume(live)
         elseif family == "temporary" then
           traitManagement.temporary.cancel(live)
