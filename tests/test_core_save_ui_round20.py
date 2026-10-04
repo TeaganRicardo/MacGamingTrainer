@@ -59,7 +59,17 @@ for token in (
     assert token in host, token
 
 assert "TrainerHostView<ActiveGameModule>(model: model, session: backendSession)" in app
-assert ".disabled(!model.backendAvailable)" in host
-assert ".disabled(!model.backendAvailable || model.busy)" not in host
+for token in (
+    "private var managementActions: TrainerManagementActions",
+    "TrainerManagementActions(openSaveManagement:",
+    "saveManagerPresented = true",
+    "saveManager.refresh()",
+    ".environment(\\.trainerManagementActions, managementActions)",
+):
+    assert token in host, token
+
+sidebar = host[host.index("TrainerSidebar("):host.index("} content: {")]
+assert 'host.saveManagement' not in sidebar
+assert "saveManagerPresented = true" not in sidebar
 
 print("core_save_ui_round20_ok")

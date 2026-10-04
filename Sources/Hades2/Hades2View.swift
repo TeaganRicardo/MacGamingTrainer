@@ -1343,10 +1343,10 @@ struct Hades2TrainerView: View {
                 HStack(spacing: 12) {
                     Button { model.prepareDebugging() } label: { Label(text("hades2.manage.prepareSigning"), systemImage: "signature") }
                     Button { model.restoreOriginalSignature() } label: { Label(text("hades2.manage.restoreSigning"), systemImage: "arrow.uturn.backward.circle") }
-                    Button { model.openLog() } label: {
-                        Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")
-                    }
-                }.disabled(model.busy || model.exiting)
+                    Spacer()
+                }
+                .disabled(model.busy || model.exiting)
+                Hades2ManagementUtilities(model: model)
             }.trainerPanel()
         }
     }
