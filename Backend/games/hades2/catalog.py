@@ -232,9 +232,11 @@ def localize_catalog(decoded):
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         trait_id=item.get('name')
+        display_id=item.get('displayId')
         linked_trait=item.get('linkedTrait')
         source_id=item.get('sourceId')
         if isinstance(trait_id,str) and trait_id:lookup.append(trait_id)
+        if isinstance(display_id,str) and display_id:lookup.append(display_id)
         if isinstance(linked_trait,str) and linked_trait:lookup.append(linked_trait)
         if isinstance(source_id,str) and source_id:
             lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
@@ -379,8 +381,11 @@ def localize_catalog(decoded):
             item['sourceName']=''
             item['sourceEnglishName']=''
 
-        official_zh=_clean(zh.get(identifier)) if identifier in zh else None
-        official_en=_clean(en.get(identifier)) if identifier in en else None
+        presentation_id=item.get('displayId')
+        if not isinstance(presentation_id,str) or not presentation_id:
+            presentation_id=identifier
+        official_zh=_clean(zh.get(presentation_id)) if presentation_id in zh else None
+        official_en=_clean(en.get(presentation_id)) if presentation_id in en else None
         if isinstance(official_zh,str) and official_zh:
             display_zh=official_zh
             display_en=official_en or ''
