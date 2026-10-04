@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 69.
+- Hades II resident runtime revision: 70.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 69. Revisions 52–69 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 70. Revisions 52–70 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -58,6 +58,7 @@ Current source contains resident revision 69. Revisions 52–69 remain pending t
 - revision 67: Well / temporary mounted effects support owner-aware RemainingUses editing, explicit cancellation without expiry side effects, and deliberate immediate expiry through native OnExpire teardown; automated and real-game acceptance remain pending.
 - revision 68: equipped Familiar effects are owned by the active Familiar bundle rather than trait-name heuristics; safe runtime stack edits use native trait recomputation, while forced removal tears down the equipped runtime owner and linked Toula Last Stand without changing Familiar unlocks or purchased upgrades; real-game acceptance remains pending.
 - revision 69: the currently selected Keepsake is recognized through `GameState.LastAwardTrait`; forced current-run removal delegates to native `UnequipKeepsake` while preserving durable Keepsake selection and chamber progression. Runtime level/rarity semantics remain explicitly deferred under #329; real-game acceptance remains pending.
+- revision 70: selected Keepsake runtime rank is an exact rarity override rebuilt through native Unequip/Equip owner semantics with `PersistentKeepsakeKeys` preservation and no `KeepsakeChambers` mutation; StackNum-style level remains not meaningful. #329/#332 implementation is complete pending automated and consolidated real-game acceptance.
 
 Automated verification does not replace this manual acceptance.
 
@@ -111,8 +112,9 @@ Planning issue #124 is the sequencing authority.
 - #320 Well/temporary lifecycle management is complete in main at resident revision 67; final real-game acceptance remains part of the consolidated manual pass.
 - #239 implementation children are complete; parent manual acceptance remains pending and is intentionally consolidated with the later resident acceptance pass.
 - #327 implements the equipped Familiar runtime owner at resident revision 68; final real-game acceptance remains part of the consolidated manual pass.
-- **Current selected #240 slice is #329** — selected-Keepsake owner-aware current-run removal is implemented at resident revision 69, while safe runtime level/rarity recomputation remains deliberately unresolved in #329.
-- #330 records Arcana as a separate progression-owned runtime owner for the next bounded slice; do not fold it into Keepsake or a generic trait mutator.
+- #329 selected-Keepsake owner-aware removal is implemented at resident revision 69.
+- #332 completes the meaningful Keepsake runtime upgrade surface at resident revision 70: rank/rarity can be overridden through owner rebuild without advancing durable progression, while a separate StackNum-style level is explicitly not meaningful.
+- **Next selected #240 slice is #330** — model Arcana as its own progression-owned runtime owner; do not fold it into Keepsake or a generic trait mutator.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
