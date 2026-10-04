@@ -2901,6 +2901,32 @@ if __MacGamingTrainerV1 == nil then
       return before ~= nil and after ~= nil and before ~= after
     end
 
+    local function directSpecialRarityMeaningful(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(AddRarityToTraits) ~= "function" then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" or type(definition.RarityLevels) ~= "table"
+          or trait.BlockInRunRarify or definition.BlockInRunRarify then
+        return false
+      end
+      -- AddRarityToTraits deliberately rebuilds with SkipSetup. Traits whose
+      -- runtime ownership lives in setup/counters need a dedicated owner path
+      -- unless the game declares its own level/rarity reconciliation callback.
+      local hasReconcile = type(definition.OnLevelOrRarityChangeFunctionName) == "string"
+          and definition.OnLevelOrRarityChangeFunctionName ~= ""
+      for _, key in ipairs({
+        "CurrentRoom", "RoomsPerUpgrade", "Uses", "RemainingUses",
+        "OnExpire", "SetupFunction", "SetupFunctions",
+      }) do
+        if (trait[key] ~= nil or definition[key] ~= nil) and not hasReconcile then
+          return false
+        end
+      end
+      return true
+    end
+
     local function traitSourceId(trait)
       if type(trait) ~= "table" then return "" end
       local strategy = directTraitStrategies[trait.Name]
@@ -3712,6 +3738,10 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
           rarityCapability, rarityReason = "setExact", ""
+        elseif family == "directSpecial" and directSpecialRarityMeaningful(trait) then
+          rarityCapability, rarityReason = "setExact", ""
+        elseif family == "directSpecial" then
+          rarityReason = "notMeaningful"
         elseif family == "olympianHermes" and sellEligible then
           rarityCapability, rarityReason = "setExact", ""
         else
