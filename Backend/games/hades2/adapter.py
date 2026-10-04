@@ -113,6 +113,7 @@ class Hades2Adapter(GameAdapter):
         self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(self.transport),helper_path,[GAME_SPEC.executable_name])
         self._time_warp_speed=1.0;self._time_warp_error=None
         self._runtime_bootstrapped=False;self._catalog_initialized=False
+        self._trait_tray_active=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
@@ -145,6 +146,13 @@ class Hades2Adapter(GameAdapter):
     def _save_preferences(self):
         self.preference_store.save(self.preferences)
 
+    def _restore_preference_snapshot(self, preferences, initialized, dirty):
+        self.preference_store.save(preferences)
+        self.preferences=preferences
+        self.preference_initialized=initialized
+        self.preference_dirty=dirty
+        self._overlay_preferences()
+
     def list_profiles(self):
         return self.profile_service.list()
 
@@ -163,6 +171,8 @@ class Hades2Adapter(GameAdapter):
         observed_locks=None
         if self.transport.alive() and self.state.get('connected'):
             self.observe_runtime()
+            if self._trait_tray_active:
+                raise TransportError('invalid_request',_TRAIT_TRAY_BLOCKED_MESSAGE)
             observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
@@ -458,11 +468,13 @@ class Hades2Adapter(GameAdapter):
         return False
 
     def set_desired(self,feature,value):
+        previous_preferences=self._normalize_preferences(self.preferences)
+        previous_initialized=self.preference_initialized
+        was_dirty=self.preference_dirty
         preferences=dict(self.preferences);preferences[feature]=value
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True
-        was_dirty=self.preference_dirty
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
@@ -486,6 +498,7 @@ class Hades2Adapter(GameAdapter):
                 return result
             except TransportError as error:
                 if error.code == 'invalid_request' and str(error) == _TRAIT_TRAY_BLOCKED_MESSAGE:
+                    self._restore_preference_snapshot(previous_preferences,previous_initialized,was_dirty)
                     raise
                 logging.warning('Desired feature %s stored pending reconnect: %s',feature,error)
                 self.state['preferenceApplyError']=str(error)
@@ -493,27 +506,47 @@ class Hades2Adapter(GameAdapter):
         return dict(self.state)
 
     def set_boon_rarity_desired(self,config):
+        previous_preferences=self._normalize_preferences(self.preferences)
+        previous_initialized=self.preference_initialized
+        was_dirty=self.preference_dirty
         normalized=self._normalize_preferences({'boonRarity':config})['boonRarity']
         preferences=dict(self.preferences);preferences['boonRarity']=normalized
         self.preference_store.save(preferences);self.preferences=preferences
         self.preference_initialized=True
-        was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
+            try:
+                result=self.execute('set_boon_rarity',dict(normalized))
+                self.preference_dirty=was_dirty
+                return result
+            except TransportError as error:
+                if error.code == 'invalid_request' and str(error) == _TRAIT_TRAY_BLOCKED_MESSAGE:
+                    self._restore_preference_snapshot(previous_preferences,previous_initialized,was_dirty)
+                    raise
+                raise
         return dict(self.state)
 
 
     def set_next_room_reward_desired(self,reward):
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
+        previous_preferences=self._normalize_preferences(self.preferences)
+        previous_initialized=self.preference_initialized
+        was_dirty=self.preference_dirty
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
         self.preference_store.save(preferences);self.preferences=preferences
         self.preference_initialized=True
-        was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
         if self.transport.alive() and self.state.get('status')=='ready':
-            result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
+            try:
+                result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')})
+                self.preference_dirty=was_dirty
+                return result
+            except TransportError as error:
+                if error.code == 'invalid_request' and str(error) == _TRAIT_TRAY_BLOCKED_MESSAGE:
+                    self._restore_preference_snapshot(previous_preferences,previous_initialized,was_dirty)
+                    raise
+                raise
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
@@ -721,6 +754,11 @@ class Hades2Adapter(GameAdapter):
             raise ValueError('runtime observation 仅允许 status。')
         project_desired=not host_observation_only
         teardown=not host_observation_only and command in ('disable_all','cleanup')
+        disable_all_snapshot = (
+            self._normalize_preferences(self.preferences),
+            self.preference_initialized,
+            self.preference_dirty,
+        ) if command == 'disable_all' else None
         # Durable intent is reset before any potentially slow debugger attach or
         # Lua boundary. If that write is explicitly blocked/failed, still make a
         # best-effort runtime teardown; report the persistence error afterwards
@@ -742,7 +780,7 @@ class Hades2Adapter(GameAdapter):
             self.transport.attach(self.state['pid']);self.state['connected']=True
         if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
         teardown_speed_error=None
-        if teardown:
+        if teardown and command=='cleanup':
             try:self._apply_game_speed(1.0)
             except TransportError as error:
                 teardown_speed_error=error
@@ -831,6 +869,7 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_json_duration=decode_metrics.get('json',0.0)
                 self._last_status_localize_duration=decode_metrics.get('localize',0.0)
             trait_tray_active = bool(decoded.pop('__trainerTraitTrayActive', False)) if isinstance(decoded, dict) else False
+            if command=='status':self._trait_tray_active=trait_tray_active
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             last_action=decoded.get('lastAction')
@@ -878,6 +917,11 @@ class Hades2Adapter(GameAdapter):
                         self.preference_dirty=True
                         raise
             if project_desired:self._overlay_preferences()
+            if teardown and command=='disable_all':
+                try:self._apply_game_speed(1.0)
+                except TransportError as error:
+                    teardown_speed_error=error
+                    logging.warning('Time Warp teardown failed after Lua cleanup: %s',error)
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
@@ -887,6 +931,8 @@ class Hades2Adapter(GameAdapter):
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
         except TransportError as e:
+            if command=='disable_all' and e.code=='invalid_request' and str(e)==_TRAIT_TRAY_BLOCKED_MESSAGE and disable_all_snapshot is not None:
+                self._restore_preference_snapshot(*disable_all_snapshot)
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'

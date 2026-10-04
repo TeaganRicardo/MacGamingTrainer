@@ -110,9 +110,63 @@ except AdapterError as error:
 else:
     raise AssertionError('Trait Tray mutation guard did not fail closed')
 
+# A blocked durable feature toggle must not remain queued for replay after the
+# player closes Trait Tray. The refusal is a transaction: both in-memory and
+# persisted desired state stay at the pre-click value.
+adapter.state.setdefault('capabilities', {})['setFeature'] = True
+before_desired = adapter.preferences['invincibility']
+before_dirty = adapter.preference_dirty
+try:
+    adapter.set_desired('invincibility', not before_desired)
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray guard allowed durable feature intent to queue')
+assert adapter.preferences['invincibility'] is before_desired
+assert adapter.preference_dirty is before_dirty
+persisted_after_block = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_after_block['invincibility'] is before_desired
+
+# Other pre-persisted desired families use the same transaction semantics.
+before_rarity = dict(adapter.preferences['boonRarity'])
+blocked_rarity = dict(before_rarity)
+blocked_rarity['target'] = 'Heroic' if before_rarity.get('target') != 'Heroic' else 'Epic'
+try:
+    adapter.set_boon_rarity_desired(blocked_rarity)
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray guard allowed boon-rarity intent to queue')
+assert adapter.preferences['boonRarity'] == before_rarity
+persisted_after_rarity_block = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_after_rarity_block['boonRarity'] == before_rarity
+
+before_reward = adapter.preferences.get('nextRoomReward')
+before_reward_token = adapter.preferences.get('nextRoomRewardToken')
+try:
+    adapter.set_next_room_reward_desired('WeaponUpgrade')
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray guard allowed next-room intent to queue')
+assert adapter.preferences.get('nextRoomReward') == before_reward
+assert adapter.preferences.get('nextRoomRewardToken') == before_reward_token
+persisted_after_reward_block = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_after_reward_block.get('nextRoomReward') == before_reward
+assert persisted_after_reward_block.get('nextRoomRewardToken') == before_reward_token
+
 # Disable All is still a user-triggered mutation, not a recovery-only transport
-# primitive. It must be rejected by the same guard rather than being a special
-# case that can still touch game state while Trait Tray owns UI/input.
+# primitive. It must be rejected without first clearing durable desired state or
+# changing Core-owned Process Time Warp.
+adapter.preferences['invincibility'] = True
+adapter._save_preferences()
+adapter.preference_dirty = True
+original_apply_game_speed = adapter._apply_game_speed
+blocked_speed_calls = []
+adapter._apply_game_speed = lambda value: blocked_speed_calls.append(value) or value
 try:
     adapter.execute('disable_all', {})
 except AdapterError as error:
@@ -120,6 +174,34 @@ except AdapterError as error:
     assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
 else:
     raise AssertionError('Trait Tray guard allowed disable_all mutation')
+finally:
+    adapter._apply_game_speed = original_apply_game_speed
+assert adapter.preferences['invincibility'] is True
+assert adapter.preference_dirty is True
+persisted_after_disable_block = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_after_disable_block['invincibility'] is True
+assert blocked_speed_calls == []
+
+# Loading a Profile also pre-persists desired state before its forced replay.
+# A Trait Tray refusal must leave the current desired snapshot intact instead of
+# silently queueing the Profile for application after the menu closes.
+blocked_profile = adapter._normalize_preferences(adapter.preferences)
+blocked_profile['invincibility'] = False
+adapter.profile_service.save('trait-tray-blocked', blocked_profile, {})
+original_apply_game_speed = adapter._apply_game_speed
+adapter._apply_game_speed = lambda value: value
+try:
+    adapter.load_profile('trait-tray-blocked')
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray guard allowed Profile replay to queue')
+finally:
+    adapter._apply_game_speed = original_apply_game_speed
+assert adapter.preferences['invincibility'] is True
+persisted_after_profile_block = json.loads((base / 'desired-state.json').read_text(encoding='utf-8'))
+assert persisted_after_profile_block['invincibility'] is True
 
 # Read-only status stays available while the screen is open. If desired state is
 # dirty, the observation must not fall through into the automatic replay batch.
