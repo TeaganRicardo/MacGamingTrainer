@@ -2697,26 +2697,11 @@ if __MacGamingTrainerV1 == nil then
   -- None is persisted, and every mutation re-resolves the selection immediately
   -- before it calls a game-owned operation.
   local traitManagement = (function()
-    local directTraitStrategies = {
-      -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
-      -- boon proves an intentional direct level path without replaying acquisition.
-      CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
-      -- Icarus' OmegaExplodeBoon is not native SellTraits / rarity-menu eligible.
-      -- Its mounted state is declarative (mana modifier + damage callback), with no
-      -- acquire/setup/expire reward lifecycle, so it is the bounded direct example
-      -- for exact rarity recompute and single-instance teardown in #227.
-      OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
-    }
     local deferredTraitIssues = {
       costume = 239,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
-    local directUnsafeLifecycleKeys = {
-      "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
-      "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
-    }
-
     local function isArachneCostumeChoice(name)
       if type(name) ~= "string" or type(PresetEventArgs) ~= "table" then return false end
       local choiceData = PresetEventArgs.ArachneCostumeChoices
@@ -2838,15 +2823,6 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       return count
-    end
-
-    local function directStrategySafe(trait)
-      if type(trait) ~= "table" or directTraitStrategies[trait.Name] == nil then return false end
-      for _, key in ipairs(directUnsafeLifecycleKeys) do
-        if trait[key] ~= nil then return false end
-      end
-      if trait.RemainingUses ~= nil then return false end
-      return true
     end
 
     local function specialTraitSourceId(name)
@@ -3026,8 +3002,6 @@ if __MacGamingTrainerV1 == nil then
 
     local function traitSourceId(trait)
       if type(trait) ~= "table" then return "" end
-      local strategy = directTraitStrategies[trait.Name]
-      if strategy then return strategy.sourceId end
       if hammerModel.isHammerTrait(trait) or hammerModel.isRuntimeAspect(trait) then
         return "WeaponUpgrade"
       end
@@ -3689,7 +3663,6 @@ if __MacGamingTrainerV1 == nil then
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
-      if directTraitStrategies[name] ~= nil then return "directSpecial" end
       if chaosLifecycleState(trait) ~= "" then return "chaos" end
       local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and slotted.TraitName == name then return "hex" end
@@ -3758,8 +3731,6 @@ if __MacGamingTrainerV1 == nil then
       local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
       local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
       local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
-      local strategy = directTraitStrategies[trait.Name]
-      local directSafe = strategy ~= nil and directStrategySafe(trait)
       local hasIdentity = trait.Id ~= nil
 
       if not hasIdentity then
@@ -3790,8 +3761,6 @@ if __MacGamingTrainerV1 == nil then
           levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
-        elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
-          levelCapability, levelReason = "increaseOne", ""
         elseif family == "directSpecial" and directSpecialLevelMeaningful(trait) then
           levelCapability, levelReason = "increaseOne", ""
         elseif family == "directSpecial" then
@@ -3833,8 +3802,6 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "ownerSpecificLifecycle"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
-        elseif strategy and strategy.rarity == "setExact" and directSafe then
-          rarityCapability, rarityReason = "setExact", ""
         elseif family == "directSpecial" and directSpecialRarityMeaningful(trait) then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "directSpecial" then
@@ -3873,9 +3840,6 @@ if __MacGamingTrainerV1 == nil then
           removalReason = "permanentProgressionOwned"
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
-        elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
-            and type(RemoveTraitData) == "function" then
-          removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "directSpecial" and directSpecialCostumeArmor(trait)
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
@@ -3885,8 +3849,6 @@ if __MacGamingTrainerV1 == nil then
           removalReason = "ownerSpecificLifecycle"
         elseif family == "olympianHermes" and sellEligible then
           removalCapability, removalReason = "nameLevelAllMatching", ""
-        elseif strategy and not directSafe then
-          removalReason = "directSafetyFailed"
         end
       end
 
@@ -4070,7 +4032,6 @@ if __MacGamingTrainerV1 == nil then
       arcana = arcanaModel,
       directSpecialCostumeArmor = directSpecialCostumeArmor,
       removeDirectSpecial = removeDirectSpecial,
-      hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
 
@@ -5477,7 +5438,7 @@ if __MacGamingTrainerV1 == nil then
         -- Ordinary God boons are re-checked against the game's real Pom
         -- eligibility. Direct special traits have their own processed-effect
         -- capability gate above and never borrow GodLoot eligibility.
-        elseif not traitManagement.hasDirectStrategy(target.Name) then
+        elseif family == "olympianHermes" then
           requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
           local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
           if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
@@ -5718,7 +5679,7 @@ if __MacGamingTrainerV1 == nil then
         else
           -- Bounded object-level force removal for an audited declarative trait.
           -- SkipExpire prevents a one-shot/reward expiration path from firing;
-          -- directStrategySafe() refuses traits with such a lifecycle anyway.
+          -- capability projection refuses owner state that cannot be torn down here.
           RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
           for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
             if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
