@@ -776,7 +776,7 @@ class Hades2Adapter(GameAdapter):
                     # observes the screen owner in-band so dirty desired state
                     # can remain pending without starting a replay batch.
                     trait_tray_probe = 'type(ActiveScreens)=="table" and ActiveScreens.TraitTrayScreen~=nil'
-                    mutation_boundary = batch is not None or command not in ('status', 'disable_all', 'cleanup')
+                    mutation_boundary = batch is not None or command not in ('status', 'cleanup')
                     trait_tray_guard = (
                         'if '+trait_tray_probe+' then error("MGT_TRAIT_TRAY_ACTIVE",0) end;'
                         if mutation_boundary else ''

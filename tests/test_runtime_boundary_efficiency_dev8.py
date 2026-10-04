@@ -110,6 +110,17 @@ except AdapterError as error:
 else:
     raise AssertionError('Trait Tray mutation guard did not fail closed')
 
+# Disable All is still a user-triggered mutation, not a recovery-only transport
+# primitive. It must be rejected by the same guard rather than being a special
+# case that can still touch game state while Trait Tray owns UI/input.
+try:
+    adapter.execute('disable_all', {})
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray guard allowed disable_all mutation')
+
 # Read-only status stays available while the screen is open. If desired state is
 # dirty, the observation must not fall through into the automatic replay batch.
 adapter.preference_dirty = True
