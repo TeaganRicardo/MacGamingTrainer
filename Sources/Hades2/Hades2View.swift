@@ -10,6 +10,7 @@ struct Hades2TrainerView: View {
         case healthCurrent, healthMax, manaCurrent, manaMax, armorCurrent, spellCharge
         case coins, material, rerolls, damageMultiplier, moneyMultiplier, resourceMultiplier, boonRarity, gameSpeed
         case grasp, dodge, crit, chargeSpeed, moveSpeed, sprintSpeed, dashSpeed, attackSpeed, manaRegen, enemyDamage, enemyHealth
+        case traitRemainingUses
         case element(String)
     }
 
@@ -55,7 +56,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
     @ViewState<[String: String]> private var traitRarityInputs = [:]
-    @ViewState<[String: String]> private var traitRemainingUsesInputs = [:]
+    @ViewState<String> private var traitRemainingUsesInput = ""
     @ViewState<String> private var graspLimit = ""
     @ViewState<String> private var dodgeChance = ""
     @ViewState<String> private var critChance = ""
@@ -384,21 +385,23 @@ struct Hades2TrainerView: View {
         )
     }
 
-    private func traitRemainingUsesInput(_ trait: CurrentRunTrait) -> Binding<String> {
-        Binding(
-            get: {
-                if let draft = traitRemainingUsesInputs[trait.id] { return draft }
-                guard let uses = trait.remainingUses else { return "" }
-                return uses.rounded() == uses ? String(Int(uses)) : String(format: "%.1f", uses)
-            },
-            set: { traitRemainingUsesInputs[trait.id] = $0 }
-        )
+    private func renderedTraitRemainingUses(_ trait: CurrentRunTrait) -> String {
+        guard let uses = trait.remainingUses else { return "" }
+        return uses.rounded() == uses ? String(Int(uses)) : String(format: "%.1f", uses)
+    }
+
+    private func syncManagedTraitRemainingUsesInput(force: Bool = false) {
+        guard force || focusedField != .traitRemainingUses else { return }
+        guard let trait = managedCurrentRunTrait else {
+            traitRemainingUsesInput = ""
+            return
+        }
+        traitRemainingUsesInput = renderedTraitRemainingUses(trait)
     }
 
     private func canApplyTraitRemainingUses(_ trait: CurrentRunTrait) -> Bool {
         guard model.canOpenNativeBoonScreen, trait.canSetRemainingUses,
-              let target = Int(traitRemainingUsesInput(trait).wrappedValue
-                .trimmingCharacters(in: .whitespacesAndNewlines)),
+              let target = Int(traitRemainingUsesInput.trimmingCharacters(in: .whitespacesAndNewlines)),
               (1...999_999).contains(target) else { return false }
         return trait.remainingUses != Double(target)
     }
@@ -457,9 +460,26 @@ struct Hades2TrainerView: View {
                 }
             }
         }
-        .onAppear { repairManagedTraitSelection() }
-        .onChange(of: model.currentRunTraits) { _, _ in repairManagedTraitSelection() }
-        .onChange(of: traitSearch) { _, _ in repairManagedTraitSelection() }
+        .onAppear {
+            repairManagedTraitSelection()
+            syncManagedTraitRemainingUsesInput(force: true)
+        }
+        .onChange(of: model.currentRunTraits) { _, _ in
+            repairManagedTraitSelection()
+            syncManagedTraitRemainingUsesInput()
+        }
+        .onChange(of: traitSearch) { _, _ in
+            repairManagedTraitSelection()
+            syncManagedTraitRemainingUsesInput(force: true)
+        }
+        .onChange(of: managedTraitSelection) { _, _ in
+            syncManagedTraitRemainingUsesInput(force: true)
+        }
+        .onChange(of: focusedField) { oldValue, newValue in
+            if oldValue == .traitRemainingUses && newValue != .traitRemainingUses {
+                syncManagedTraitRemainingUsesInput(force: true)
+            }
+        }
     }
 
     @ViewBuilder
@@ -472,16 +492,17 @@ struct Hades2TrainerView: View {
                     .foregroundStyle(.secondary)
                 TextField(
                     text("hades2.traits.remainingUses"),
-                    text: traitRemainingUsesInput(trait)
+                    text: $traitRemainingUsesInput
                 )
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .traitRemainingUses)
                 .frame(width: 58)
                 .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRemainingUses)
 
                 Button(text("hades2.traits.apply")) {
                     model.setTraitRemainingUses(
                         trait,
-                        targetRemainingUses: traitRemainingUsesInput(trait).wrappedValue
+                        targetRemainingUses: traitRemainingUsesInput
                     )
                 }
                 .buttonStyle(.bordered)
@@ -963,6 +984,7 @@ struct Hades2TrainerView: View {
         enemyHealth = "100"
         elementInputs = [:]
         elementsInitialized = false
+        traitRemainingUsesInput = ""
     }
 
     private var sessionStatsPanel: some View {
