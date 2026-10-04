@@ -97,6 +97,20 @@ assert validate_command_params(
     "spawn_reward", {"reward": "EmptyMaxHealthDrop"}
 ) == {"reward": "EmptyMaxHealthDrop"}
 assert validate_command_params(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"},
+) == {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"}
+expect_error(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing"},
+    "请选择掉落物或祝福。",
+)
+expect_error(
+    "acquire_chaos_pair",
+    {"blessing": "", "curse": "ChaosDamageCurse"},
+    "请选择掉落物或祝福。",
+)
+assert validate_command_params(
     "open_sell_traits", {}
 ) == {}
 assert validate_command_params(
