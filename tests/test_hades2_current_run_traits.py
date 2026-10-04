@@ -24,6 +24,10 @@ assert "traitInventoryGeneration" in LUA
 assert "generationId" in block
 assert "runId" in block
 assert "instanceId" in block
+# Presentation identity follows the game's own Trait Tray title seam without
+# replacing the stable runtime routing identity in `name`.
+assert "GetTraitTooltipTitle" in block
+assert "displayId = displayId" in block
 assert 'identityScope: "currentRunInstance"' in TYPES
 assert "isPersistent: false" in TYPES
 
