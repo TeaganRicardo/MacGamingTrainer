@@ -79,6 +79,12 @@ TraitData = {
       HealFraction = 0.5,
     },
   },
+  BossMetaUpgradeKeepsake = {
+    Name = "BossMetaUpgradeKeepsake",
+    InheritFrom = { "GiftTrait" },
+    Slot = "Keepsake",
+    RemainingUses = 1,
+  },
 }
 
 local calls = {
@@ -216,6 +222,16 @@ eq(row.levelCapability, "none", "temporary effect fabricated level editing")
 eq(row.rarityCapability, "none", "temporary effect fabricated rarity editing")
 eq(row.removalCapability, "singleInstanceForce", "temporary cancellation capability")
 check(row.deferredIssue == nil, "temporary lifecycle remained deferred")
+
+-- RemainingUses is not itself proof of Well/temporary ownership. Keepsakes and
+-- other progression-owned runtime effects also use that counter and stay out of
+-- #320 until their owner-specific #240 strategy is implemented.
+local keepsake = AddTraitToHero({ TraitName = "BossMetaUpgradeKeepsake" })
+local keepsakeRow = assert(findRow(keepsake.Name), "progression-owned keepsake row missing")
+check(keepsakeRow.family ~= "temporary", "RemainingUses misclassified a keepsake as a Well effect")
+check(keepsakeRow.canSetRemainingUses ~= true, "keepsake exposed Well duration editing")
+check(keepsakeRow.canExpire ~= true, "keepsake exposed Well expiry semantics")
+M.dispatch("remove_trait", paramsFrom(keepsakeRow, "cleanup-keepsake"))
 
 local staleDurationRow = row
 local setParams = paramsFrom(row, "temporary-set-uses")
