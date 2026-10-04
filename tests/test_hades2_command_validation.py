@@ -133,6 +133,11 @@ assert validate_command_params(
     "set_trait_remaining_uses", dict(temporary_target, targetRemainingUses=8)
 ) == dict(temporary_target, targetRemainingUses=8)
 assert validate_command_params("expire_trait", temporary_target) == temporary_target
+expired_uses_target = dict(trait_target, family="temporary", expectedRemainingUses=0)
+assert validate_command_params("remove_trait", expired_uses_target) == expired_uses_target
+assert validate_command_params(
+    "set_trait_remaining_uses", dict(expired_uses_target, targetRemainingUses=2)
+) == dict(expired_uses_target, targetRemainingUses=2)
 expect_error(
     "set_trait_remaining_uses",
     dict(temporary_target, targetRemainingUses=0),
