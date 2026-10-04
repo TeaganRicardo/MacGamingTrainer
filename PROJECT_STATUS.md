@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 65.
+- Hades II resident runtime revision: 66.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 65. Revisions 52–65 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 66. Revisions 52–66 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -54,6 +54,7 @@ Current source contains resident revision 65. Revisions 52–65 remain pending t
 - revision 63: Selene exact acquisition and mounted management use the native SlottedSpell / Path of Stars owner state, with typed spell replacement and talent tree synchronization; real-game acceptance remains pending.
 - revision 64: Daedalus Hammer exact acquisition follows current WeaponUpgrade eligibility for the equipped weapon/aspect; mounted Hammer rarity/removal use game-owned recomputation/teardown, while runtime Aspect state remains observation-only and permanent weapon progression is untouched.
 - revision 65: Arachne costume exact acquisition and mounted removal use the costume owner lifecycle so trait teardown, armor-source state and active appearance remain coherent.
+- revision 66: Echo previous-run exact targets materialize concrete eligible God boons directly from the latest run history without opening the native random choice screen; automated and real-game acceptance remain pending.
 
 Automated verification does not replace this manual acceptance.
 
