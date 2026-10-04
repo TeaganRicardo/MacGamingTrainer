@@ -64,6 +64,8 @@ UnitSetData = {}
 
 local calls = { setTraits = 0, add = 0 }
 local nextId = 100
+local ineligibleTrait = nil
+local failAddAfterMutation = false
 
 local function clone(value)
   if type(value) ~= "table" then return value end
@@ -77,7 +79,9 @@ ShallowCopyTable = clone
 IsTraitEligible = function(_) return true end
 GetEligibleTransformingTrait = function(names)
   local result = {}
-  for _, name in ipairs(names or {}) do result[#result + 1] = name end
+  for _, name in ipairs(names or {}) do
+    if name ~= ineligibleTrait then result[#result + 1] = name end
+  end
   return result
 end
 HeroHasTrait = function(name)
@@ -124,6 +128,10 @@ AddTraitToHero = function(args)
   value.Id = value.Id or nextId
   value.FromLootObserved = args.FromLoot == true
   CurrentRun.Hero.Traits[#CurrentRun.Hero.Traits + 1] = value
+  if failAddAfterMutation then
+    failAddAfterMutation = false
+    error("synthetic Chaos pair post-mutation acknowledgement failure")
+  end
   return value
 end
 
@@ -200,6 +208,86 @@ eq(mounted.Name, "ChaosDamageCurse", "wrong exact Chaos curse mounted")
 check(type(mounted.OnExpire) == "table" and type(mounted.OnExpire.TraitData) == "table",
   "exact Chaos curse has no queued blessing")
 eq(mounted.OnExpire.TraitData.Name, "ChaosWeaponBlessing", "Chaos curse counterpart was not native-pool blessing")
+
+-- #347: the primary product route carries both identities in one one-shot
+-- request. Runtime must mount exactly the selected curse and queue exactly the
+-- selected blessing, with the same native-shaped metadata as TrialUpgrade.
+resetTraits()
+local beforePairAdd = calls.add
+local pair = M.dispatch("acquire_chaos_pair", {
+  blessing = "ChaosHealthBlessing",
+  curse = "ChaosDamageCurse",
+  requestId = "chaos-pair-exact",
+  includeCatalogs = false,
+})
+eq(calls.add, beforePairAdd + 1, "Chaos pair added wrong number of runtime traits")
+eq(#CurrentRun.Hero.Traits, 1, "Chaos pair mounted more than one phase")
+mounted = CurrentRun.Hero.Traits[1]
+eq(mounted.Name, "ChaosDamageCurse", "Chaos pair mounted the wrong curse")
+eq(mounted.OnExpire.TraitData.Name, "ChaosHealthBlessing", "Chaos pair queued the wrong blessing")
+eq(mounted.TraitTitle, "ChaosCombo_ChaosDamageCurse_ChaosHealthBlessing", "Chaos pair title drifted")
+check(mounted.FromLootObserved, "Chaos pair did not preserve FromLoot")
+eq(pair.actionOutcome, "completed", "Chaos pair did not complete")
+
+local duplicate = M.dispatch("acquire_chaos_pair", {
+  blessing = "ChaosHealthBlessing",
+  curse = "ChaosDamageCurse",
+  requestId = "chaos-pair-exact",
+  includeCatalogs = false,
+})
+check(duplicate.duplicate == true, "Chaos pair duplicate request was not deduplicated")
+eq(calls.add, beforePairAdd + 1, "Chaos pair duplicate request mutated twice")
+
+-- Current-pool and eligibility checks are both immediate fail-closed gates.
+resetTraits()
+ineligibleTrait = "ChaosHealthBlessing"
+local beforeIneligible = calls.add
+local okIneligible = pcall(M.dispatch, "acquire_chaos_pair", {
+  blessing = "ChaosHealthBlessing",
+  curse = "ChaosDamageCurse",
+  requestId = "chaos-pair-ineligible",
+  includeCatalogs = false,
+})
+check(not okIneligible, "ineligible Chaos pair unexpectedly succeeded")
+eq(calls.add, beforeIneligible, "ineligible Chaos pair mutated")
+ineligibleTrait = nil
+
+local originalTemporary = LootData.TrialUpgrade.TemporaryTraits
+LootData.TrialUpgrade.TemporaryTraits = { "ChaosNoMoneyCurse" }
+local beforeRemoved = calls.add
+local okRemoved = pcall(M.dispatch, "acquire_chaos_pair", {
+  blessing = "ChaosHealthBlessing",
+  curse = "ChaosDamageCurse",
+  requestId = "chaos-pair-removed",
+  includeCatalogs = false,
+})
+check(not okRemoved, "removed Chaos curse unexpectedly succeeded")
+eq(calls.add, beforeRemoved, "removed Chaos curse mutated")
+LootData.TrialUpgrade.TemporaryTraits = originalTemporary
+
+-- If mutation happened but acknowledgement became unknown, the same request id
+-- must never replay.
+resetTraits()
+failAddAfterMutation = true
+local beforeUnknown = calls.add
+local okUnknown, unknownMessage = pcall(M.dispatch, "acquire_chaos_pair", {
+  blessing = "ChaosWeaponBlessing",
+  curse = "ChaosNoMoneyCurse",
+  requestId = "chaos-pair-unknown",
+  includeCatalogs = false,
+})
+check(not okUnknown and string.find(tostring(unknownMessage), "MGT_OUTCOME_UNKNOWN", 1, true),
+  "Chaos pair did not surface outcome-unknown")
+eq(calls.add, beforeUnknown + 1, "Chaos outcome-unknown mutation did not execute exactly once")
+local okReplay, replayMessage = pcall(M.dispatch, "acquire_chaos_pair", {
+  blessing = "ChaosWeaponBlessing",
+  curse = "ChaosNoMoneyCurse",
+  requestId = "chaos-pair-unknown",
+  includeCatalogs = false,
+})
+check(not okReplay and string.find(tostring(replayMessage), "do not retry", 1, true),
+  "Chaos outcome-unknown request was replayable")
+eq(calls.add, beforeUnknown + 1, "Chaos outcome-unknown request replayed")
 
 print("hades2_chaos_exact_acquisition_runtime_ok")
 '''
