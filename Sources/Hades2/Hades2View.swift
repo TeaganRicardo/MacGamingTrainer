@@ -101,25 +101,28 @@ struct Hades2TrainerView: View {
     private var specialBoons: [BoonOption] {
         sortedBoons(model.specialRewardOptions.filter { specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch) || $0.englishCategory.localizedCaseInsensitiveContains(specialSearch) || $0.englishSectionTitle.localizedCaseInsensitiveContains(specialSearch) })
     }
-    private var genericExactBoons: [BoonOption] {
+    private var genericExactCatalog: [BoonOption] {
         sortedBoons(model.exactBoonOptions.filter { option in
             option.acquisitionMode != "chaosBlessing"
                 && option.acquisitionMode != "chaosCurse"
-                && (
-                    exactSearch.isEmpty
-                        || option.name.localizedCaseInsensitiveContains(exactSearch)
-                        || option.englishName.localizedCaseInsensitiveContains(exactSearch)
-                        || option.targetID.localizedCaseInsensitiveContains(exactSearch)
-                        || option.id.localizedCaseInsensitiveContains(exactSearch)
-                        || option.sourceId.localizedCaseInsensitiveContains(exactSearch)
-                        || option.sourceName.localizedCaseInsensitiveContains(exactSearch)
-                        || option.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
-                        || option.sectionTitle.localizedCaseInsensitiveContains(exactSearch)
-                        || option.englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)
-                        || option.category.localizedCaseInsensitiveContains(exactSearch)
-                        || option.englishCategory.localizedCaseInsensitiveContains(exactSearch)
-                )
         })
+    }
+
+    private var genericExactBoons: [BoonOption] {
+        genericExactCatalog.filter { option in
+            exactSearch.isEmpty
+                || option.name.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishName.localizedCaseInsensitiveContains(exactSearch)
+                || option.targetID.localizedCaseInsensitiveContains(exactSearch)
+                || option.id.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceId.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceName.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
+                || option.sectionTitle.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)
+                || option.category.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishCategory.localizedCaseInsensitiveContains(exactSearch)
+        }
     }
     private var material: MaterialResource? { filtered.first { $0.id == selectedMaterial } }
 
@@ -900,7 +903,7 @@ struct Hades2TrainerView: View {
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
             specialIDs: specialBoons.map(\.id),
-            exactIDs: exactBoons.map(\.id),
+            exactIDs: genericExactCatalog.map(\.id),
             filteredResourceIDs: filtered.map(\.id)
         )
     }
