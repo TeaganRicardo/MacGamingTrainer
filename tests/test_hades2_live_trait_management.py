@@ -128,7 +128,10 @@ ResourceDisplayOrderData = {}
 TraitElementData = {}
 EnemyData = {
   NPC_Artemis_Field_01 = {
-    Traits = { "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval" },
+    Traits = {
+      "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval",
+      "DynamicDirectOneShot",
+    },
   },
   NPC_Icarus_01 = {
     Traits = { "DynamicIcarusArmor" },
@@ -419,10 +422,13 @@ for _, name in ipairs({
   "DynamicDirectLevel",
   "DynamicDirectRarity",
   "DynamicDirectRemoval",
+  "DynamicDirectOneShot",
 }) do
   defineRarities(name)
 end
 TraitData.DynamicDirectLevel.SyntheticStackEffect = true
+TraitData.DynamicDirectOneShot.SyntheticStackEffect = true
+TraitData.DynamicDirectOneShot.AcquireFunctionName = "SyntheticOneShotAcquire"
 TraitData.DynamicIcarusArmor = {
   InheritFrom = { "BaseIcarus", "CostumeTrait" },
   Uses = 1,
@@ -876,6 +882,19 @@ do
     M.dispatch("set_trait_level", paramsFrom(row, "unsafe-direct-level", row.level + 1))
   end)
   eq(calls.level, beforeLevel, "unsafe direct lifecycle reached level mutator")
+end
+
+-- A one-shot acquisition trait without the game's own level/rarity
+-- reconciliation callback must not expose edits that only change the mounted
+-- row while leaving the already-granted external reward stale.
+do
+  local trait = newTrait("DynamicDirectOneShot", 1251, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectOneShot", 1251)
+  eq(row.family, "directSpecial", "one-shot direct-special family")
+  eq(row.levelCapability, "none", "one-shot direct-special level capability")
+  eq(row.rarityCapability, "none", "one-shot direct-special rarity capability")
+  eq(row.removalCapability, "none", "one-shot direct-special removal capability")
 end
 
 -- Familiar ownership comes from the equipped Familiar's declared trait bundle,
