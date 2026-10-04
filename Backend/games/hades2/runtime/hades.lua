@@ -2090,7 +2090,7 @@ if __MacGamingTrainerV1 == nil then
       isHammerTrait = isHammerTrait,
       isRuntimeAspect = isRuntimeAspect,
       removalReady = removalReady,
-      applyExact = applyPreviousRunExact,
+      applyExact = applyExact,
       removeMounted = removeMounted,
     }
   end)()
