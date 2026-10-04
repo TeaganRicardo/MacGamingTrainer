@@ -542,6 +542,23 @@ do
   eq(result.actionOutcome, "completed", "native level receipt")
 end
 
+-- A normal God boon may use CostumeTrait as an implementation detail (for
+-- example Hephaestus armor). Native sell/Pom ownership must win over that
+-- inheritance marker so ordinary management capabilities are not stolen by the
+-- special-costume lifecycle.
+do
+  local trait = newTrait("OrdinaryArmorBoon", 151, 1, "Rare", {
+    InheritFrom = { "CostumeTrait" },
+  })
+  defineRarities("OrdinaryArmorBoon")
+  setTraits(trait)
+  local row = findRow("OrdinaryArmorBoon", 151)
+  eq(row.family, "olympianHermes", "ordinary CostumeTrait boon owner family")
+  eq(row.levelCapability, "increaseOne", "ordinary CostumeTrait level capability")
+  eq(row.rarityCapability, "setExact", "ordinary CostumeTrait rarity capability")
+  eq(row.removalCapability, "nameLevelAllMatching", "ordinary CostumeTrait removal capability")
+end
+
 -- Artemis direct example: native Pom eligibility deliberately says false, so
 -- this proves the bounded direct strategy rather than a widened native gate.
 do
