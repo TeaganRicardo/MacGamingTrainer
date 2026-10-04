@@ -79,26 +79,6 @@
       ],
       "key": "hades2.error.architectureRequired"
     },
-    "Temporary effect cancellation left the selected instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
-    },
-    "Temporary effect duration did not reach the requested remaining uses": {
-      "key": "hades2.error.traitDurationNoEffect",
-      "arguments": []
-    },
-    "Temporary effect duration editing is unavailable for the selected target": {
-      "key": "hades2.error.traitDurationUnavailable",
-      "arguments": []
-    },
-    "Temporary effect expiry is unavailable for the selected target": {
-      "key": "hades2.error.traitExpiryUnavailable",
-      "arguments": []
-    },
-    "Temporary effect expiry left the selected instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
-    },
     "desired-state schemaVersion 无效。": {
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
