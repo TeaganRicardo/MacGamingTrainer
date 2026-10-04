@@ -40,7 +40,7 @@ For the 603 IDs that historically had a readable native title, an exact-ID searc
 The remaining naming boundary is:
 
 - **6** concrete mounted dummy-weapon traits use native `CustomTitle` and therefore resolve to the equipped weapon's official name.
-- **22** concrete mounted effects have no readable/sufficiently specific standalone native title and use the Trainer substitute labels in `_CURRENT_RUN_DERIVED_NAMES`. `ElementalEssence` belongs here because its native `DisplayName` is icon-only.
+- **22** concrete mounted effects have no readable/sufficiently specific standalone native title and use `_CURRENT_RUN_DERIVED_NAMES`. Familiar rows store only the function descriptor and compose it with the dynamically resolved native Familiar owner; `ElementalEssence` belongs here because its native `DisplayName` is icon-only.
 - **39** no-title IDs are base/debug/template scaffolding with no independently mounted user-facing identity.
 - **25** Arcana mounted traits are among the 603 native-title IDs. Their native title identifies the card, while the same canonical registry supplies the concise function suffix required to distinguish the mounted effect.
 
