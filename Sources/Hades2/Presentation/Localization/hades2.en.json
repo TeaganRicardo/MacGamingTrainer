@@ -108,6 +108,8 @@
     "hades2.error.requestIdReused": "That request id was already used for a different action; please retry.",
     "hades2.error.residentCleanupFailed": "The previous resident runtime could not be cleaned up safely. Quit and restart the game before reconnecting.",
     "hades2.error.restartRequired": "The previous call result is unknown; restart the game and reconnect.",
+    "hades2.error.traitTrayCloseTimeout": "The in-game Boon menu did not close in time. The Trainer change was not applied.",
+    "hades2.error.traitTrayCloseUnsupported": "This game version does not expose a supported Boon menu close path. The Trainer change was not applied.",
     "hades2.error.restoreUUIDMismatch": "The original restore copy UUID does not match; the game was not modified.",
     "hades2.error.resumeFailed": "The game could not be resumed: {0}",
     "hades2.error.resumeUnverified": "The game did not resume running.",
