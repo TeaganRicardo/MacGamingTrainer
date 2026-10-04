@@ -1127,6 +1127,33 @@ do
   eq(unsafe.removalCapability, "none", "one-shot Arcana exposed removal")
 end
 
+-- Adjacency and durable card level may change through native Arcana ownership
+-- after the row was observed. A runtime rank edit uses the current adjacency
+-- multiplier and never rewrites the game's newer durable level.
+do
+  local owned = newTrait("LowManaDamageMetaupgrade", 2351, 1, "Rare")
+  setTraits(owned)
+  local row = findRow("LowManaDamageMetaupgrade", 2351)
+  local durable = GameState.MetaUpgradeState.LowManaDamageBonus
+  durable.Level = 3
+  durable.AdjacencyBonuses.CustomMultiplier = 0.25
+
+  local params = paramsFrom(row, "arcana-owner-state-changed")
+  params.rarity = "Heroic"
+  M.dispatch("set_trait_rarity", params)
+
+  local rebuilt = findMountedTrait("LowManaDamageMetaupgrade")
+  eq(rebuilt.Rarity, "Heroic", "Arcana changed-owner-state target rarity")
+  eq(rebuilt.CustomMultiplier, 1.25, "Arcana rebuild used stale adjacency multiplier")
+  eq(durable.Level, 3, "Arcana runtime edit rewrote newer durable card level")
+  eq(durable.AdjacencyBonuses.CustomMultiplier, 0.25,
+    "Arcana runtime edit rewrote newer adjacency state")
+
+  -- Restore the fixture's durable native state for later run-reset coverage.
+  durable.Level = 2
+  durable.AdjacencyBonuses.CustomMultiplier = 0.5
+end
+
 -- If owner rebuild mounts the replacement and acknowledges late, the request is
 -- outcome-unknown and never replayed. Durable card progression is still untouched.
 do
