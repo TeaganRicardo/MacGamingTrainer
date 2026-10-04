@@ -203,17 +203,21 @@ struct Hades2TrainerView: View {
         exactBoonSourceGroups.first { $0.id == exactSourceSelection }
     }
 
+    private var selectedExactItems: [BoonOption] {
+        selectedExactSourceGroup?.items ?? []
+    }
+
     private var exactItemSelection: Binding<String> {
         Binding(
             get: {
-                guard selectedExactSourceGroup?.items.contains(where: { $0.id == model.selectedExactBoon }) == true else {
+                guard selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }) else {
                     return ""
                 }
                 return model.selectedExactBoon
             },
             set: { itemID in
                 guard !itemID.isEmpty,
-                      selectedExactSourceGroup?.items.contains(where: { $0.id == itemID }) == true else { return }
+                      selectedExactItems.contains(where: { $0.id == itemID }) else { return }
                 model.selectedExactBoon = itemID
             }
         )
@@ -1376,17 +1380,16 @@ struct Hades2TrainerView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Picker(text("hades2.spawn.exactTarget"), selection: exactItemSelection) {
-                            if selectedExactSourceGroup?.items.isEmpty != false
-                                || exactItemSelection.wrappedValue.isEmpty {
+                            if selectedExactItems.isEmpty || exactItemSelection.wrappedValue.isEmpty {
                                 Text(text("hades2.spawn.noItems")).tag("")
                             }
-                            ForEach(selectedExactSourceGroup?.items ?? []) { option in
+                            ForEach(selectedExactItems) { option in
                                 Text(exactItemLabel(option)).tag(option.id)
                             }
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || selectedExactSourceGroup?.items.isEmpty != false)
+                        .disabled(!model.canSpawnReward || selectedExactItems.isEmpty)
                     }
 
                     Button(text("hades2.spawn.acquire")) {
@@ -1394,7 +1397,7 @@ struct Hades2TrainerView: View {
                     }
                     .disabled(
                         !model.canSpawnReward
-                            || selectedExactSourceGroup?.items.contains(where: { $0.id == model.selectedExactBoon }) != true
+                            || !selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
                     )
                 }
             }
