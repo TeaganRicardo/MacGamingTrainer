@@ -360,7 +360,7 @@ check(findReward("echo:lastRun:ZeusBoon") ~= nil, "source-change target missing 
 GameState.RunHistory = { { TraitRarityCache = { HeraBoon = "Epic" } } }
 check(findReward("echo:lastRun:ZeusBoon") == nil, "removed previous-run target survived catalog refresh")
 local beforeSourceChange = calls.add
-expectError("Unknown or unsupported reward", function()
+expectError("Echo previous-run boon is no longer eligible", function()
   M.dispatch("spawn_reward", {
     reward = "echo:lastRun:ZeusBoon",
     requestId = "echo-stale-source",
@@ -368,6 +368,17 @@ expectError("Unknown or unsupported reward", function()
   })
 end)
 eq(calls.add, beforeSourceChange, "removed previous-run target reached mutation")
+
+-- Catalog removal does not erase the action ledger. The original completed
+-- request must still return its prior receipt without rerunning or revalidating.
+local beforeHistoricalReplay = calls.add
+local historicalDuplicate = M.dispatch("spawn_reward", {
+  reward = "echo:lastRun:ZeusBoon",
+  requestId = "echo-last-run-zeus",
+  includeCatalogs = false,
+})
+check(historicalDuplicate.duplicate == true, "historical Echo request lost its completed receipt")
+eq(calls.add, beforeHistoricalReplay, "historical Echo completed request replayed after source change")
 
 -- Restore source and prove mutation-after-commit failure becomes outcome unknown
 -- and is never replayed.
