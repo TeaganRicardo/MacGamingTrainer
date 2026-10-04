@@ -35,7 +35,12 @@ The active `TraitData` assembly was enumerated from every `OverwriteTableKeys( T
 
 Result: **670 active unique TraitData IDs**. The identity set matches the retained 1.139672 snapshot, but the installed target remains the authority.
 
-For the 603 IDs that historically had a readable native title, an exact-ID search of the installed target's current **zh-CN and English** text trees found all **603 / 603** records in each language, each with either a `DisplayName` or `InheritFrom` presentation seam.
+An exact-ID search of all 670 active IDs against the installed target's current text trees establishes the readable native-title set directly:
+
+- **zh-CN:** 604 IDs have a `DisplayName` / `InheritFrom` record; `ElementalEssence` is icon-only, leaving **603 readable native titles**.
+- **English:** 608 IDs have a `DisplayName` / `InheritFrom` record; `AirEssence`, `FireEssence`, `EarthEssence`, `WaterEssence`, and `ElementalEssence` are icon-only, likewise leaving **603 readable native titles**.
+
+The shared readable set is therefore **603 IDs in both supported UI languages**, derived from the current target itself rather than inherited from the old snapshot.
 
 The remaining naming boundary is:
 
