@@ -125,7 +125,7 @@ def validate_command_params(command, params):
         remaining=params.get('expectedRemainingUses')
         if remaining is not None and (
             type(remaining) not in (int,float) or isinstance(remaining,bool)
-            or not math.isfinite(remaining) or remaining <= 0
+            or not math.isfinite(remaining) or remaining < 0
         ):
             raise ValueError('请选择当前局效果。')
         if command in ('set_trait_remaining_uses','expire_trait') and remaining is None:
