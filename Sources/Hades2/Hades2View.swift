@@ -312,7 +312,7 @@ struct Hades2TrainerView: View {
         // carried by the item label; using each card name as a section heading
         // fragments one deck into dozens of one-item groups.
         if trait.family == "arcana" {
-            return localizedFamily == presentationKey ? "Arcana" : localizedFamily
+            return localizedFamily == presentationKey ? trait.family : localizedFamily
         }
 
         if !trait.sourceID.isEmpty {
