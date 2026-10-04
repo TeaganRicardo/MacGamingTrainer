@@ -1419,6 +1419,14 @@
       "arguments": [],
       "key": "hades2.error.chaosExactUnavailable"
     },
+    "spawn_reward::Echo previous-run boon acquisition failed": {
+      "arguments": [],
+      "key": "hades2.error.echoLastRunFailed"
+    },
+    "spawn_reward::Echo previous-run boon is no longer eligible": {
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
+    },
     "spawn_reward::Exact costume target is unavailable": {
       "arguments": [],
       "key": "hades2.error.exactNotEligible"
