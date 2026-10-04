@@ -1113,6 +1113,10 @@
     "额外魔力恢复必须为 0–1000/秒。": {
       "arguments": [],
       "key": "hades2.error.manaRegenRange"
+    },
+    "当前祝福菜单打开时无法执行修改，请先关闭菜单。": {
+      "arguments": [],
+      "key": "hades2.error.traitTrayActive"
     }
   },
   "fallback_key": "hades2.error.runtimeActionFailed",

@@ -764,15 +764,26 @@ class Hades2Adapter(GameAdapter):
             recovered_generation=False
             try:
                 while True:
+                    # The in-game Trait Tray (B menu) owns UI/input coroutines.
+                    # Entering a synchronous LLDB lua_pcall mutation while that
+                    # screen is active can make native trait/UI code yield from
+                    # outside a coroutine and leave the game unrecoverably
+                    # frozen. Guard the same boundary before *any* mutation or
+                    # replay batch touches resident state. Observation and
+                    # teardown remain available for recovery/disconnect.
+                    trait_tray_guard = '' if command in ('status', 'disable_all', 'cleanup') else (
+                        'if type(ActiveScreens)=="table" and ActiveScreens.TraitTrayScreen~=nil '
+                        'then error("MGT_TRAIT_TRAY_ACTIVE",0) end;'
+                    )
                     if batch is None:
-                        dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                        dispatch=trait_tray_guard+'return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
                     else:
                         calls=[]
                         for batch_command,batch_params in batch:
                             item_params=dict(batch_params or {});item_params['includeCatalogs']=False
                             calls.append('__MacGamingTrainerV1.dispatch('+lua_value(batch_command)+','+lua_value(item_params)+')')
                         calls.append('return __MacGamingTrainerV1.dispatch("status",{["includeCatalogs"]=false})')
-                        dispatch='return __MacGamingTrainerV1.json((function() '+ ';'.join(calls) +' end)())'
+                        dispatch=trait_tray_guard+'return __MacGamingTrainerV1.json((function() '+ ';'.join(calls) +' end)())'
                     code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
                     try:
                         decoded=execute_with_ledger(
@@ -781,6 +792,11 @@ class Hades2Adapter(GameAdapter):
                         )
                         break
                     except TransportError as error:
+                        if error.code == 'lua_error' and 'MGT_TRAIT_TRAY_ACTIVE' in str(error):
+                            raise TransportError(
+                                'invalid_request',
+                                '当前祝福菜单打开时无法执行修改，请先关闭菜单。',
+                            ) from error
                         if self._resident_cleanup_failed(error):
                             raise TransportError(
                                 'restart_required',

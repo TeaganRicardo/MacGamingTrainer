@@ -101,6 +101,9 @@ class Hades2PresentationError(AdapterError):
 
 REGISTRY = [
  {'match': 'literal',
+  'message': '当前祝福菜单打开时无法执行修改，请先关闭菜单。',
+  'key': 'hades2.error.traitTrayActive'},
+ {'match': 'literal',
   'message': 'Selected boon is already owned',
   'key': 'hades2.error.exactAlreadyOwned',
   'runtime_only': True,

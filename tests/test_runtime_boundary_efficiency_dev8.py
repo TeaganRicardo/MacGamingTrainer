@@ -8,6 +8,7 @@ from runtime_revision_support import runtime_revision
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+from core.adapter import AdapterError
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
@@ -23,6 +24,7 @@ class FakeTransport:
         self.pid = 4242
         self.last_duration = 0.001
         self.sources = []
+        self.trait_tray_open = False
 
     def alive(self): return True
     def attach(self, pid): self.pid = pid
@@ -31,6 +33,8 @@ class FakeTransport:
 
     def execute(self, source):
         self.sources.append(source)
+        if self.trait_tray_open and 'MGT_TRAIT_TRAY_ACTIVE' in source:
+            raise AdapterError('lua_error', 'MGT_TRAIT_TRAY_ACTIVE')
         include_catalogs = '["includeCatalogs"]=true' in source
         payload = {
             'status': 'ready',
@@ -93,6 +97,16 @@ trait_tray_guard = 'ActiveScreens.TraitTrayScreen'
 assert trait_tray_guard in mutation_source
 assert mutation_source.index(trait_tray_guard) < mutation_source.index('__MacGamingTrainerV1.dispatch')
 assert 'MGT_TRAIT_TRAY_ACTIVE' in mutation_source
+
+transport.trait_tray_open = True
+try:
+    adapter.execute('set_vital', {'vital': 'health', 'field': 'current', 'value': 90})
+except AdapterError as error:
+    assert error.code == 'invalid_request'
+    assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
+else:
+    raise AssertionError('Trait Tray mutation guard did not fail closed')
+transport.trait_tray_open = False
 
 # World::Update boundary contract: the live transport must break on the one
 # engine frame boundary we actually need, not on every Lua pcall and then

@@ -40,6 +40,7 @@
     "hades2.error.enemyHealthRange": "敌人生命倍率必须为 10–1000%。",
     "hades2.error.featureCodeTooLong": "功能代码过长。",
     "hades2.error.featureToggleBoolean": "开关值必须为布尔值。",
+    "hades2.error.traitTrayActive": "请先关闭游戏内祝福菜单，再使用修改器功能。",
     "hades2.error.fileChangedDuringOperation": "游戏文件在操作期间改变；拒绝覆盖。",
     "hades2.error.focusNotRestored": "后台暂停标志尚未恢复，请保持连接重试断开。",
     "hades2.error.focusRestoreFailed": "后台暂停标志恢复失败：{0}",

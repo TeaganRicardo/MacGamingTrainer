@@ -40,6 +40,7 @@
     "hades2.error.enemyHealthRange": "Enemy health multiplier must be from 10 to 1000%.",
     "hades2.error.featureCodeTooLong": "The feature code is too long.",
     "hades2.error.featureToggleBoolean": "The toggle value must be a boolean.",
+    "hades2.error.traitTrayActive": "Close the in-game Boon menu before using Trainer features.",
     "hades2.error.fileChangedDuringOperation": "The game files changed during the operation; overwriting was refused.",
     "hades2.error.focusNotRestored": "The background pause flag has not been restored; stay connected and retry disconnecting.",
     "hades2.error.focusRestoreFailed": "Restoring the background pause flag failed: {0}",
