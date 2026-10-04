@@ -124,6 +124,7 @@
     "hades2.error.sellScreenBusy": "已有游戏界面打开，请先关闭当前界面后再打开{term:officialTerms.purgingPool}。",
     "hades2.error.seleneExactFailed": "所选塞勒涅效果未能完整应用到当前巫咒状态。",
     "hades2.error.costumeOwnerFailed": "所选服装状态未能完整应用到当前局。",
+    "hades2.error.echoLastRunFailed": "所选上局祝福未能完整应用到当前局。",
     "hades2.error.signingVerificationFailed": "调试签名校验失败；未修改游戏。",
     "hades2.error.speedMultiplierRange": "速度倍率必须为 10–1000%。",
     "hades2.error.spellChargeRange": "{term:officialTerms.spell}充能必须为 0–{0}。",

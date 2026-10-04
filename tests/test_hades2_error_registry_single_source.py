@@ -83,6 +83,8 @@ CASES = (
     ("spawn_reward", "Selected boon is already owned", "hades2.error.exactAlreadyOwned", ()),
     ("spawn_reward", "Selected boon is not currently eligible", "hades2.error.exactNotEligible", ()),
     ("spawn_reward", "Selected boon became unavailable before acquisition", "hades2.error.exactNotEligible", ()),
+    ("spawn_reward", "Echo previous-run boon is no longer eligible", "hades2.error.exactNotEligible", ()),
+    ("spawn_reward", "Echo previous-run boon acquisition failed", "hades2.error.echoLastRunFailed", ()),
     ("set_trait_level", "Trait mutation requires an active run room", "hades2.error.traitMutationNeedsRun", ()),
     ("set_trait_level", "Trait selection belongs to a stale runtime generation", "hades2.error.traitSelectionStale", ()),
     ("set_trait_level", "Trait instance is no longer present", "hades2.error.traitTargetMissing", ()),

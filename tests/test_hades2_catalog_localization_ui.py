@@ -187,6 +187,44 @@ assert talent_row['name'] == '毁灭之星' and talent_row['englishName'] == 'Gl
 assert talent_row['sectionTitle'] == '繁星之路'
 assert talent_row['englishSectionTitle'] == 'Path of Stars'
 
+# Echo previous-run exact targets use the concrete boon identity, Echo as the
+# source identity, and the native previous-run choice title as their section.
+original_display_names = localization.official_display_names
+def echo_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'ZeusBoon': '雷霆打击',
+            'NPC_Echo_01': '回声',
+            'EchoChoiceMenu_LastRun': '上局祝福',
+        },
+        'en': {
+            'ZeusBoon': 'Thunder Strike',
+            'NPC_Echo_01': 'Echo',
+            'EchoChoiceMenu_LastRun': 'Boons from Last Night',
+        },
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = echo_names
+try:
+    echo_payload = {
+        'rewards': [{
+            'id': 'echo:lastRun:ZeusBoon', 'name': 'ZeusBoon',
+            'trait': 'ZeusBoon', 'kind': 'trait', 'group': 'exact',
+            'sourceId': 'Echo', 'sourceName': '回声',
+            'sectionTitle': '上局祝福', 'category': '角色奖励',
+            'acquisitionMode': 'echoLastRunExact',
+        }]
+    }
+    catalog.localize_catalog(echo_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+echo_exact = echo_payload['rewards'][0]
+assert echo_exact['name'] == '雷霆打击' and echo_exact['englishName'] == 'Thunder Strike'
+assert echo_exact['sourceName'] == '回声' and echo_exact['sourceEnglishName'] == 'Echo'
+assert echo_exact['sectionTitle'] == '上局祝福'
+assert echo_exact['englishSectionTitle'] == 'Boons from Last Night'
+
 # Hammer exact acquisition and mounted runtime ownership reuse one official
 # WeaponUpgrade choice identity instead of exposing internal source ids.
 original_display_names = localization.official_display_names
