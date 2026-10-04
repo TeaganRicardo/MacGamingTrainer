@@ -416,6 +416,33 @@ assert owner_fallback['englishName'] == 'Echo · Special NPC Effect'
 assert owner_fallback['displayName'] != '未命名效果'
 assert owner_fallback['englishName'] != 'Unnamed Effect'
 
+# Every current-run family has a deliberate bilingual recognition fallback.
+# New/unknown mounted implementation ids may remain internal, but the generic
+# "Unnamed Effect" placeholder must never be the Boon Management label.
+original_display_names = localization.official_display_names
+localization.official_display_names = lambda identifiers, language='zh-CN', game_path=None: {}
+try:
+    all_family_payload = {
+        'currentRunTraits': [
+            {
+                'name': f'Internal{index}Trait',
+                'sourceId': '',
+                'family': family,
+            }
+            for index, family in enumerate(catalog._CURRENT_RUN_FAMILY_LABELS)
+        ]
+    }
+    catalog.localize_catalog(all_family_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+for row in all_family_payload['currentRunTraits']:
+    fallback_zh, fallback_en = catalog._CURRENT_RUN_FAMILY_LABELS[row['family']]
+    assert row['displayName'] == fallback_zh, row
+    assert row['englishName'] == fallback_en, row
+    assert row['displayName'] != '未命名效果', row
+    assert row['englishName'] != 'Unnamed Effect', row
+
 # Runtime presentation follows the same title identity the native Trait Tray uses.
 # A CustomTitle / native tooltip title can therefore name an otherwise internal
 # TraitData row without changing its routing identity.
