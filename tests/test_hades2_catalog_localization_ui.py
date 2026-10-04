@@ -1,3 +1,4 @@
+import csv
 import sys
 import tempfile
 from pathlib import Path
@@ -447,6 +448,16 @@ assert catalog._CURRENT_RUN_DERIVED_NAMES == expected_derived_names
 for trait_id, pair in expected_derived_names.items():
     assert pair[0] not in {'未命名效果', *[value[0] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
     assert pair[1] not in {'Unnamed Effect', *[value[1] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+
+ledger_path = ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_names.csv'
+with ledger_path.open(encoding='utf-8', newline='') as handle:
+    ledger = list(csv.DictReader(handle))
+ledger_names = {
+    row['internal_id']: (row['descriptor_zh_cn'], row['descriptor_en'])
+    for row in ledger
+}
+assert ledger_names == expected_derived_names
+assert all(row['review_status'] == 'proposed' for row in ledger)
 
 # Runtime presentation follows the same title identity the native Trait Tray uses.
 # A CustomTitle / native tooltip title can therefore name an otherwise internal
