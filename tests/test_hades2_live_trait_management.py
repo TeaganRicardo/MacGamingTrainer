@@ -54,14 +54,16 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "hex"' in capability_block
     assert 'family == "hexTalent"' in capability_block
     assert "seleneModel.talentNodes" in LUA
-    # Hammer/weaponAspect, Arachne costume, temporary-effect, and Familiar
-    # semantics are covered by executable resident suites; pin the owner boundary.
+    # Hammer/weaponAspect, Arachne costume, temporary-effect, Familiar, and
+    # selected-Keepsake ownership have executable resident coverage.
     assert 'family == "temporary"' in capability_block
     assert 'family == "familiar"' in capability_block
+    assert 'family == "keepsake"' in capability_block
     assert "familiarModel.isMounted(trait)" in family_block
+    assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
     for family, issue in (
-        ("directSpecial", "239"), ("other", "221"),
+        ("directSpecial", "239"), ("keepsake", "329"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
     assert "familiar = 240" not in LUA
