@@ -110,15 +110,12 @@ jobs:
       - name: Verify retained artifact provenance and checksum
         id: package
         run: |
-          mapfile -t zips < <(find artifacts -maxdepth 1 -type f -name '*.zip' -print)
-          mapfile -t provenances < <(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print)
-          mapfile -t sidecars < <(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print)
-          test "${#zips[@]}" -eq 1
-          test "${#provenances[@]}" -eq 1
-          test "${#sidecars[@]}" -eq 1
-          artifact="${zips[0]}"
-          provenance="${provenances[0]}"
-          sidecar="${sidecars[0]}"
+          test "$(find artifacts -maxdepth 1 -type f -name '*.zip' -print | wc -l | tr -d ' ')" -eq 1
+          test "$(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print | wc -l | tr -d ' ')" -eq 1
+          test "$(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print | wc -l | tr -d ' ')" -eq 1
+          artifact="$(find artifacts -maxdepth 1 -type f -name '*.zip' -print)"
+          provenance="$(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print)"
+          sidecar="$(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print)"
           (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
           python3 - "$provenance" "$GITHUB_SHA" "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}" <<'PY'
           import json
