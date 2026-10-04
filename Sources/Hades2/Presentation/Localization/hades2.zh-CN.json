@@ -350,7 +350,7 @@
     "hades2.traits.levelUp": "等级 +1",
     "hades2.traits.manager": "祝福管理",
     "hades2.traits.targetLevel": "目标等级",
-    "hades2.traits.targetRarity": "目标稀有度",
+    "hades2.traits.targetRarity": "稀有度",
     "hades2.traits.apply": "应用",
     "hades2.traits.limit.level": "等级不可修改：{0}",
     "hades2.traits.limit.rarity": "稀有度不可修改：{0}",
