@@ -17,7 +17,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 - Product release identity: `Info.plist` owns SemVer `0.2.1` and bundle build `5`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
-- Hades II module protocol: 8.
+- Hades II module protocol: 9.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
 - Hades II resident runtime revision: 76.
