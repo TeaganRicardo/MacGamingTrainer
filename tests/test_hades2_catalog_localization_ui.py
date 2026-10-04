@@ -453,10 +453,23 @@ ledger_path = ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_ef
 with ledger_path.open(encoding='utf-8', newline='') as handle:
     ledger = list(csv.DictReader(handle))
 ledger_names = {
-    row['internal_id']: (row['descriptor_zh_cn'], row['descriptor_en'])
+    row['internal_id']: (
+        (row['descriptor_zh_cn'], row['descriptor_en'])
+        if row['family'] == 'arcana'
+        else (row['final_label_zh_cn'], row['final_label_en'])
+    )
     for row in ledger
 }
 assert ledger_names == expected_derived_names
+for row in ledger:
+    owner_zh = row['native_owner_zh_cn']
+    owner_en = row['native_owner_en']
+    descriptor_zh = row['descriptor_zh_cn']
+    descriptor_en = row['descriptor_en']
+    expected_final_zh = f"{owner_zh} · {descriptor_zh}" if owner_zh else descriptor_zh
+    expected_final_en = f"{owner_en} · {descriptor_en}" if owner_en else descriptor_en
+    assert row['final_label_zh_cn'] == expected_final_zh, row
+    assert row['final_label_en'] == expected_final_en, row
 assert all(row['review_status'] == 'proposed' for row in ledger)
 
 # Runtime presentation follows the same title identity the native Trait Tray uses.
