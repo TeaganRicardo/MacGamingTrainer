@@ -214,3 +214,27 @@ struct Hades2ShortcutSettingsView: View {
         capturing = nil
     }
 }
+
+struct Hades2ManagementUtilities: View {
+    @ObservedObject var model: Hades2TrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerManagementActions) private var managementActions
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button { model.shortcutSettingsPresented = true } label: {
+                Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")
+            }
+            Button { model.openLog() } label: {
+                Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")
+            }
+            if let openSaveManagement = managementActions.openSaveManagement {
+                Button(action: openSaveManagement) {
+                    Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")
+                }
+                .disabled(!model.backendAvailable)
+            }
+            Spacer()
+        }
+    }
+}

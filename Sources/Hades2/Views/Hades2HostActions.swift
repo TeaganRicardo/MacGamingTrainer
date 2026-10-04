@@ -2,17 +2,9 @@ import SwiftUI
 
 struct Hades2SidebarActions: View {
     @ObservedObject var model: Hades2TrainerModel
-    @EnvironmentObject private var localization: TrainerLocalizationStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Button { model.shortcutSettingsPresented = true } label: {
-                Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")
-            }
-            Button { model.openLog() } label: {
-                Label(localization.localized("host.viewRuntimeLog"), systemImage: "doc.text")
-            }
-        }
+        EmptyView()
     }
 }
 

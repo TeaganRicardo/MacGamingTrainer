@@ -20,6 +20,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         ))
     }
 
+    private var managementActions: TrainerManagementActions {
+        guard Module.descriptor.supportsSaveManagement else { return .none }
+        return TrainerManagementActions(openSaveManagement: {
+            saveManagerPresented = true
+            saveManager.refresh()
+        })
+    }
+
     /// Register the selected module's presentation namespace before the first
     /// render. Core stores only the resolver closure, so the shell resolves
     /// module tokens without knowing the module's vocabulary, and switching
@@ -38,18 +46,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 presentation: Module.presentation,
                 connected: model.connected
             ) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Module.makeSidebarActions(model: model)
-                    if Module.descriptor.supportsSaveManagement {
-                        Button {
-                            saveManagerPresented = true
-                            saveManager.refresh()
-                        } label: {
-                            Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")
-                        }
-                        .disabled(!model.backendAvailable)
-                    }
-                }
+                Module.makeSidebarActions(model: model)
             }
         } content: {
             VStack(alignment: .leading, spacing: theme.pageSpacing) {
@@ -69,6 +66,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                     onRestart: model.restartBackendFromHost
                 )
                 Module.makeContent(model: model)
+                    .environment(\.trainerManagementActions, managementActions)
             }
             .frame(minWidth: theme.contentMinWidth, maxWidth: theme.pageMaxWidth, minHeight: theme.contentMinHeight, alignment: .topLeading)
         }
