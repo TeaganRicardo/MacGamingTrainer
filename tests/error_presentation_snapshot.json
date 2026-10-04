@@ -79,6 +79,26 @@
       ],
       "key": "hades2.error.architectureRequired"
     },
+    "Temporary effect cancellation left the selected instance mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "Temporary effect duration did not reach the requested remaining uses": {
+      "key": "hades2.error.traitDurationNoEffect",
+      "arguments": []
+    },
+    "Temporary effect duration editing is unavailable for the selected target": {
+      "key": "hades2.error.traitDurationUnavailable",
+      "arguments": []
+    },
+    "Temporary effect expiry is unavailable for the selected target": {
+      "key": "hades2.error.traitExpiryUnavailable",
+      "arguments": []
+    },
+    "Temporary effect expiry left the selected instance mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
     "desired-state schemaVersion 无效。": {
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
@@ -1164,6 +1184,57 @@
       "arguments": [],
       "key": "hades2.error.requestIdReused"
     },
+    "expire_trait::Action requires a requestId of 1..128 characters": {
+      "key": "hades2.error.requestIdRequired",
+      "arguments": []
+    },
+    "expire_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "key": "hades2.error.outcomeUnknownRuntime",
+      "arguments": []
+    },
+    "expire_trait::Temporary effect duration did not reach the requested remaining uses": {
+      "key": "hades2.error.traitDurationNoEffect",
+      "arguments": []
+    },
+    "expire_trait::Temporary effect expiry is unavailable for the selected target": {
+      "key": "hades2.error.traitExpiryUnavailable",
+      "arguments": []
+    },
+    "expire_trait::Temporary effect expiry left the selected instance mounted": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "expire_trait::Trait instance is no longer present": {
+      "key": "hades2.error.traitTargetMissing",
+      "arguments": []
+    },
+    "expire_trait::Trait mutation requires an active run room": {
+      "key": "hades2.error.traitMutationNeedsRun",
+      "arguments": []
+    },
+    "expire_trait::Trait selection belongs to a stale run": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "expire_trait::Trait selection belongs to a stale runtime generation": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "expire_trait::Trait target changed since selection": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
+    },
+    "expire_trait::Unsupported sample-purpose: missing SampleFunction": {
+      "key": "hades2.error.nativeFunctionMissing",
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ]
+    },
+    "expire_trait::requestId reused for a different action": {
+      "key": "hades2.error.requestIdReused",
+      "arguments": []
+    },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
       "key": "hades2.error.sellNeedsRunRoom"
@@ -1243,6 +1314,10 @@
       "arguments": []
     },
     "remove_trait::Selene talent removal left the mounted effect present": {
+      "key": "hades2.error.traitRemovalNoEffect",
+      "arguments": []
+    },
+    "remove_trait::Temporary effect cancellation left the selected instance mounted": {
       "key": "hades2.error.traitRemovalNoEffect",
       "arguments": []
     },
@@ -1411,6 +1486,53 @@
       "arguments": [],
       "key": "hades2.error.requestIdReused"
     },
+    "set_trait_remaining_uses::Action requires a requestId of 1..128 characters": {
+      "key": "hades2.error.requestIdRequired",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "key": "hades2.error.outcomeUnknownRuntime",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Temporary effect duration did not reach the requested remaining uses": {
+      "key": "hades2.error.traitDurationNoEffect",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Temporary effect duration editing is unavailable for the selected target": {
+      "key": "hades2.error.traitDurationUnavailable",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Trait instance is no longer present": {
+      "key": "hades2.error.traitTargetMissing",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Trait mutation requires an active run room": {
+      "key": "hades2.error.traitMutationNeedsRun",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Trait selection belongs to a stale run": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Trait selection belongs to a stale runtime generation": {
+      "key": "hades2.error.traitSelectionStale",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Trait target changed since selection": {
+      "key": "hades2.error.traitTargetChanged",
+      "arguments": []
+    },
+    "set_trait_remaining_uses::Unsupported sample-purpose: missing SampleFunction": {
+      "key": "hades2.error.nativeFunctionMissing",
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ]
+    },
+    "set_trait_remaining_uses::requestId reused for a different action": {
+      "key": "hades2.error.requestIdReused",
+      "arguments": []
+    },
     "spawn_reward::Arachne costume acquisition failed": {
       "arguments": [],
       "key": "hades2.error.costumeOwnerFailed"
@@ -1485,11 +1607,13 @@
   },
   "runtime_commands": [
     "advance_trait_lifecycle",
+    "expire_trait",
     "open_sell_traits",
     "open_special_choice",
     "remove_trait",
     "set_trait_level",
     "set_trait_rarity",
+    "set_trait_remaining_uses",
     "spawn_reward"
   ]
 }
