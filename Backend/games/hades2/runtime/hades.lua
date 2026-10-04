@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 71 then
+if previousModule and previousModule.revision ~= 72 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 71 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 71, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 72, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3548,16 +3548,14 @@ if __MacGamingTrainerV1 == nil then
       if keepsakeModel.isMounted(trait) then return "keepsake" end
       if familiarModel.isMounted(trait) then return "familiar" end
       if temporaryModel.isManaged(trait) then return "temporary" end
-      if type(trait.InheritFrom) == "table" then
-        for _, parent in ipairs(trait.InheritFrom) do
-          if parent == "CostumeTrait" then return "costume" end
-        end
-      end
+      -- Arachne's outfit is an actual owner lifecycle. Other game-owned boons
+      -- may inherit CostumeTrait only to participate in armor/appearance
+      -- mechanics, so inheritance alone must not steal their stronger owner.
+      if isArachneCostumeTrait(name) then return "costume" end
 
       -- TreatAsGodLootByShops makes several field/special NPC rewards sellable,
       -- but that does not make their lifecycle an ordinary Olympian/Hermes one.
-      -- Ownership wins over menu eligibility; #239 handles those families unless
-      -- an explicit direct strategy above opts in one audited operation.
+      -- Special-NPC source ownership therefore still wins over shop eligibility.
       local source = traitSourceId(trait)
       if type(source) == "string" and source ~= "" then
         if string.find(source, "NPC_", 1, true) == 1
@@ -3566,6 +3564,11 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       if sellEligible then return "olympianHermes" end
+      if type(trait.InheritFrom) == "table" then
+        for _, parent in ipairs(trait.InheritFrom) do
+          if parent == "CostumeTrait" then return "costume" end
+        end
+      end
       return "other"
     end
 
