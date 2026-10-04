@@ -305,13 +305,21 @@ struct Hades2TrainerView: View {
     }
 
     private func traitSourceLabel(_ trait: CurrentRunTrait) -> String {
+        let presentationKey = "hades2.traits.family.\(trait.family)"
+        let localizedFamily = text(presentationKey)
+
+        // Arcana cards are one player-facing system. The exact card owner is
+        // carried by the item label; using each card name as a section heading
+        // fragments one deck into dozens of one-item groups.
+        if trait.family == "arcana" {
+            return localizedFamily == presentationKey ? trait.family : localizedFamily
+        }
+
         if !trait.sourceID.isEmpty {
             let label = localization.language == .en ? trait.sourceEnglishName : trait.sourceName
             if !label.isEmpty { return label }
         }
-        let presentationKey = "hades2.traits.family.\(trait.family)"
-        let localized = text(presentationKey)
-        return localized == presentationKey ? trait.family : localized
+        return localizedFamily == presentationKey ? trait.family : localizedFamily
     }
 
     private var currentRunTraitPickerSections: [TrainerPickerSection<CurrentRunTrait>] {

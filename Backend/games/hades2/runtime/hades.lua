@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 73 then
+if previousModule and previousModule.revision ~= 75 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 73 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 73, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 75, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3662,6 +3662,7 @@ if __MacGamingTrainerV1 == nil then
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
+      if trait.BiomeStateTrait then return "biomeState" end
       if chaosLifecycleState(trait) ~= "" then return "chaos" end
       local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and slotted.TraitName == name then return "hex" end
@@ -3867,6 +3868,13 @@ if __MacGamingTrainerV1 == nil then
           local sellEligible, sellReason = sellScreenEligible(trait)
           local family = traitFamily(trait, sellEligible)
           local count = sameNameCount(trait.Name)
+          local displayId = trait.Name
+          if type(GetTraitTooltipTitle) == "function" then
+            local titleOk, title = pcall(GetTraitTooltipTitle, trait)
+            if titleOk and type(title) == "string" and title ~= "" then displayId = title end
+          elseif type(trait.CustomTitle) == "string" and trait.CustomTitle ~= "" then
+            displayId = trait.CustomTitle
+          end
           local levelCapability, levelReason, rarityCapability, rarityReason,
             removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count)
           if removalCapability == "none" and removalReason == "ownerSpecificLifecycle"
@@ -3879,6 +3887,7 @@ if __MacGamingTrainerV1 == nil then
             -- A row without the game-owned Id remains observable but cannot mutate.
             instanceId = trait.Id ~= nil and tostring(trait.Id) or ("missing:" .. tostring(index)),
             name = trait.Name,
+            displayId = displayId,
             family = family,
             sourceId = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
