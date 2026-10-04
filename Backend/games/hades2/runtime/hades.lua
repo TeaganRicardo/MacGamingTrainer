@@ -3037,7 +3037,7 @@ if __MacGamingTrainerV1 == nil then
       end
 
       return {
-        isManaged = function(trait) return counterKind(trait) ~= nil end,
+        isManaged = isWellOwner,
         value = counterValue,
         canSet = canSetCounter,
         canExpire = canExpire,
@@ -3197,8 +3197,7 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "costume" and isArachneCostumeTrait(trait.Name)
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
-        elseif family == "temporary" and temporaryModel.value(trait) ~= nil
-            and type(RemoveTraitData) == "function" then
+        elseif family == "temporary" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
