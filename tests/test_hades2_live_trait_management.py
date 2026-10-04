@@ -128,7 +128,7 @@ ResourceDisplayOrderData = {}
 TraitElementData = {}
 EnemyData = {
   NPC_Artemis_Field_01 = {
-    Traits = { "DynamicDirectLevel" },
+    Traits = { "DynamicDirectLevel", "DynamicDirectRarity" },
   },
 }
 PresetEventArgs = {}
@@ -410,6 +410,7 @@ for _, name in ipairs({
   "CritBonusBoon",
   "OmegaExplodeBoon",
   "DynamicDirectLevel",
+  "DynamicDirectRarity",
 }) do
   defineRarities(name)
 end
@@ -609,6 +610,23 @@ do
   M.dispatch("set_trait_level", paramsFrom(row, "dynamic-direct-level", 3))
   eq(calls.level, before + 1, "dynamic direct-special level callback")
   eq(trait.StackNum, 3, "dynamic direct-special target level")
+end
+
+-- Exact rarity for direct special traits is also derived from current native
+-- ownership and the trait's real rarity model rather than a hardcoded strategy.
+do
+  local trait = newTrait("DynamicDirectRarity", 275, 1, "Common")
+  setTraits(trait)
+  local row = findRow("DynamicDirectRarity", 275)
+  eq(row.family, "directSpecial", "dynamic direct rarity family")
+  eq(row.rarityCapability, "setExact", "dynamic direct rarity capability")
+  local params = paramsFrom(row, "dynamic-direct-rarity")
+  params.rarity = "Epic"
+  local before = calls.rarity
+  M.dispatch("set_trait_rarity", params)
+  eq(calls.rarity, before + 1, "dynamic direct rarity recompute callback")
+  eq(trait.Rarity, "Epic", "dynamic direct rarity target")
+  eq(trait.EffectValue, 3000, "dynamic direct rarity effect recomputation")
 end
 
 -- Native rarity change must run the game recomputation callback rather than
