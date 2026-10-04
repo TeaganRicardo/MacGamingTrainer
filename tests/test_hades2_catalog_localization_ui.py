@@ -153,8 +153,8 @@ assert 'option.acquisitionMode != "chaosBlessing"' in view
 assert 'option.acquisitionMode != "chaosCurse"' in view
 assert 'private var exactBoonSourceGroups:' in view
 assert 'option.sourceId' in view and 'option.sortGroup' in view
-assert '$0.sectionTitle.localizedCaseInsensitiveContains(exactSearch)' in view
-assert '$0.englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)' in view
+assert 'sectionTitle.localizedCaseInsensitiveContains(exactSearch)' in view
+assert 'englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)' in view
 assert 'private func repairExactSourceSelection()' in view
 assert 'private func selectExactSource(_ sourceID: String)' in view
 assert 'private var exactItemSelection: Binding<String>' in view
@@ -164,8 +164,9 @@ exact_surface = boon_panel[
     boon_panel.index('hades2.spawn.purgingPool')
 ]
 assert 'TrainerGroupedOptionPicker(' not in exact_surface
-assert 'Picker(text("hades2.spawn.exactSource")' in exact_surface
-assert 'Picker(text("hades2.spawn.exactTarget")' in exact_surface
+assert exact_surface.count('Picker(') >= 2
+assert 'text("hades2.spawn.exactSource")' in exact_surface
+assert 'text("hades2.spawn.exactTarget")' in exact_surface
 assert 'selectExactSource' in exact_surface
 assert 'exactItemSelection' in exact_surface
 assert '"hades2.spawn.exactSource": "来源"' in zh_presentation
