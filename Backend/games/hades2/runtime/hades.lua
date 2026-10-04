@@ -2870,6 +2870,37 @@ if __MacGamingTrainerV1 == nil then
       return ""
     end
 
+    local function directSpecialLevelMeaningful(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(IncreaseTraitLevel) ~= "function"
+          or type(GetProcessedTraitData) ~= "function"
+          or type(ExtractValues) ~= "function" then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if trait.BlockStacking or (type(definition) == "table" and definition.BlockStacking) then
+        return false
+      end
+      local function signature(stackNum)
+        local ok, processed = pcall(GetProcessedTraitData, {
+          Unit = CurrentRun.Hero,
+          TraitName = trait.Name,
+          StackNum = stackNum,
+          RarityMultiplier = trait.RarityMultiplier,
+        })
+        if not ok or type(processed) ~= "table" then return nil end
+        processed.Rarity = trait.Rarity or processed.Rarity
+        local extracted = pcall(ExtractValues, CurrentRun.Hero, processed, processed)
+        if not extracted or type(processed.ExtractData) ~= "table" then return nil end
+        local encoded, value = pcall(M.json, processed.ExtractData)
+        return encoded and value or nil
+      end
+      local current = traitLevel(trait)
+      local before = signature(current)
+      local after = signature(current + 1)
+      return before ~= nil and after ~= nil and before ~= after
+    end
+
     local function traitSourceId(trait)
       if type(trait) ~= "table" then return "" end
       local strategy = directTraitStrategies[trait.Name]
@@ -3638,6 +3669,10 @@ if __MacGamingTrainerV1 == nil then
           levelReason = "nativePathUnavailable"
         elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
           levelCapability, levelReason = "increaseOne", ""
+        elseif family == "directSpecial" and directSpecialLevelMeaningful(trait) then
+          levelCapability, levelReason = "increaseOne", ""
+        elseif family == "directSpecial" then
+          levelReason = "notMeaningful"
         elseif family == "olympianHermes" and nativeLevelEligible(trait) then
           levelCapability, levelReason = "increaseOne", ""
         else
@@ -5301,8 +5336,11 @@ if __MacGamingTrainerV1 == nil then
           end
         elseif family == "familiar" then
           requireFunctions("Familiar trait level editing", { "IncreaseTraitLevel" })
+        elseif family == "directSpecial" then
+          requireFunctions("direct special trait level editing", { "IncreaseTraitLevel" })
         -- Ordinary God boons are re-checked against the game's real Pom
-        -- eligibility. The explicit direct strategy is the only bypass.
+        -- eligibility. Direct special traits have their own processed-effect
+        -- capability gate above and never borrow GodLoot eligibility.
         elseif not traitManagement.hasDirectStrategy(target.Name) then
           requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
           local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
