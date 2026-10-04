@@ -517,8 +517,8 @@ assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 source_label = view[view.index('private func traitSourceLabel'):view.index('private var currentRunTraitPickerSections')]
 assert 'trait.family == "arcana"' in source_label
 assert 'hades2.traits.family.arcana' in zh_presentation
-assert '"hades2.traits.family.arcana": "阿卡那牌"' in zh_presentation
-assert '"hades2.traits.family.arcana": "Arcana"' in en_presentation
+assert '"hades2.traits.family.arcana": "阿卡那牌效果"' in zh_presentation
+assert '"hades2.traits.family.arcana": "Arcana Card Effects"' in en_presentation
 for family in (
     'arcana', 'chaos', 'costume', 'directSpecial', 'familiar', 'hammer',
     'hex', 'hexTalent', 'keepsake', 'olympianHermes', 'other',
