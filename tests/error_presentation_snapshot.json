@@ -1583,6 +1583,18 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "remove_trait::Familiar owner removal is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalUnavailable"
+    },
+    "remove_trait::Familiar owner removal left a mounted trait": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
+    },
+    "remove_trait::Familiar owner removal left the owner equipped": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     }
   },
   "runtime_commands": [
