@@ -12,6 +12,9 @@ from games.hades2 import catalog, localization
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
+types = (ROOT / 'Sources/Hades2/Hades2Types.swift').read_text()
+zh_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json').read_text()
+en_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.en.json').read_text()
 
 # Known full-release room rewards that were missing from the curated spawn list.
 for token in (
@@ -350,12 +353,69 @@ finally:
     localization.official_display_names = original_display_names
 
 arcana = arcana_payload['currentRunTraits'][0]
-assert arcana['displayName'] == '低魔力伤害加成'
-assert arcana['englishName'] == 'Low-Mana Damage Bonus'
+assert arcana['displayName'] == '猎手 · 低魔力伤害加成'
+assert arcana['englishName'] == 'The Huntress · Low-Mana Damage Bonus'
 assert arcana['sourceName'] == '猎手'
 assert arcana['sourceEnglishName'] == 'The Huntress'
 assert arcana['sourceName'] != arcana['sourceId']
 assert arcana['displayName'] != arcana['name']
+
+# Arcana cards remain recognizable even when their mounted implementation trait
+# has no standalone DisplayName. The native card owner becomes the item label;
+# the generic "Unnamed Effect" fallback must never reach Boon Management.
+original_display_names = localization.official_display_names
+def arcana_owner_only_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'LowManaDamageBonus': '猎手'},
+        'en': {'LowManaDamageBonus': 'The Huntress'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = arcana_owner_only_names
+try:
+    arcana_owner_only_payload = {
+        'currentRunTraits': [{
+            'name': 'InternalArcanaEffect',
+            'sourceId': 'LowManaDamageBonus',
+            'family': 'arcana',
+        }]
+    }
+    catalog.localize_catalog(arcana_owner_only_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+arcana_owner_only = arcana_owner_only_payload['currentRunTraits'][0]
+assert arcana_owner_only['displayName'] == '猎手'
+assert arcana_owner_only['englishName'] == 'The Huntress'
+assert arcana_owner_only['displayName'] != '未命名效果'
+assert arcana_owner_only['englishName'] != 'Unnamed Effect'
+
+# Other mounted owner-backed effects also receive a source/family recognition
+# label instead of a generic unnamed row when no standalone native title exists.
+original_display_names = localization.official_display_names
+def owner_fallback_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'NPC_Echo_01': '回声'},
+        'en': {'NPC_Echo_01': 'Echo'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = owner_fallback_names
+try:
+    owner_fallback_payload = {
+        'currentRunTraits': [{
+            'name': 'InternalEchoEffect',
+            'sourceId': 'Echo',
+            'family': 'directSpecial',
+        }]
+    }
+    catalog.localize_catalog(owner_fallback_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+owner_fallback = owner_fallback_payload['currentRunTraits'][0]
+assert owner_fallback['displayName'] == '回声 · 特殊角色效果'
+assert owner_fallback['englishName'] == 'Echo · Special NPC Effect'
+assert owner_fallback['displayName'] != '未命名效果'
+assert owner_fallback['englishName'] != 'Unnamed Effect'
 
 # The selected Keepsake owner uses the native Keepsake localization identity.
 # Runtime routing may retain the exact trait id, but the user-facing owner label
@@ -423,6 +483,18 @@ assert chaos['englishName'] == 'Maimed'
 assert chaos['linkedDisplayName'] == '丰盛'
 assert chaos['linkedEnglishName'] == 'Affluence'
 assert chaos['linkedDisplayName'] != chaos['linkedTrait']
+
+# Boon Management is an action surface, not a raw CurrentRun.Hero.Traits dump:
+# rows with no supported operation stay out of the picker. Arcana cards share one
+# family section instead of each card owner becoming its own section.
+assert 'var isManageable: Bool' in types
+filtered_traits = view[view.index('private var filteredCurrentRunTraits'):view.index('private func traitRarityLabel')]
+assert 'filter(\\.isManageable)' in filtered_traits
+source_label = view[view.index('private func traitSourceLabel'):view.index('private var currentRunTraitPickerSections')]
+assert 'trait.family == "arcana"' in source_label
+assert 'hades2.traits.family.arcana' in zh_presentation
+assert '"hades2.traits.family.arcana": "阿卡那牌"' in zh_presentation
+assert '"hades2.traits.family.arcana": "Arcana"' in en_presentation
 
 trait_manager = view[view.index('private var currentRunTraitsPanel'):view.index('private var resourceSection')]
 assert 'currentRunTraitRow' not in trait_manager
