@@ -519,6 +519,13 @@ assert 'trait.family == "arcana"' in source_label
 assert 'hades2.traits.family.arcana' in zh_presentation
 assert '"hades2.traits.family.arcana": "阿卡那牌"' in zh_presentation
 assert '"hades2.traits.family.arcana": "Arcana"' in en_presentation
+for family in (
+    'arcana', 'chaos', 'costume', 'directSpecial', 'familiar', 'hammer',
+    'hex', 'hexTalent', 'keepsake', 'olympianHermes', 'other',
+    'temporary', 'weaponAspect',
+):
+    assert f'"hades2.traits.family.{family}"' in zh_presentation, family
+    assert f'"hades2.traits.family.{family}"' in en_presentation, family
 
 trait_manager = view[view.index('private var currentRunTraitsPanel'):view.index('private var resourceSection')]
 assert 'currentRunTraitRow' not in trait_manager
