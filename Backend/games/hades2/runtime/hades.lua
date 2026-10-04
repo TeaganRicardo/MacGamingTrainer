@@ -3000,20 +3000,33 @@ if __MacGamingTrainerV1 == nil then
           names[#names + 1] = "RestedFamiliarResourceBonus"
         end
 
+        -- Each owner step is attempted at most once. If an engine callback
+        -- acknowledges late or throws after mutating, finish the other distinct
+        -- cleanup steps so the runtime owner is not left half-mounted, then
+        -- surface outcome-unknown through the action ledger. Never retry the
+        -- uncertain callback.
+        local firstError = nil
+        local function attempt(work)
+          local ok, message = pcall(work)
+          if not ok and firstError == nil then firstError = tostring(message) end
+        end
+
         for _, traitName in ipairs(names) do
-          RemoveTrait(CurrentRun.Hero, traitName)
+          attempt(function() RemoveTrait(CurrentRun.Hero, traitName) end)
         end
 
         if data.TraitNames[1] == "LastStandFamiliar" then
-          RemoveLastStand(CurrentRun.Hero, "LastStandFamiliar")
+          attempt(function() RemoveLastStand(CurrentRun.Hero, "LastStandFamiliar") end)
           if finite(CurrentRun.Hero.MaxLastStands) and CurrentRun.Hero.MaxLastStands > 0 then
             CurrentRun.Hero.MaxLastStands = CurrentRun.Hero.MaxLastStands - 1
           end
-          UpdateLifePips(CurrentRun.Hero)
+          attempt(function() UpdateLifePips(CurrentRun.Hero) end)
         end
 
         local unit = type(MapState) == "table" and MapState.FamiliarUnit or nil
-        if type(unit) == "table" and unit.ObjectId ~= nil then Destroy({ Id = unit.ObjectId }) end
+        if type(unit) == "table" and unit.ObjectId ~= nil then
+          attempt(function() Destroy({ Id = unit.ObjectId }) end)
+        end
         if type(GameState) == "table" and GameState.EquippedFamiliar == name then
           GameState.EquippedFamiliar = nil
         end
@@ -3031,6 +3044,7 @@ if __MacGamingTrainerV1 == nil then
         if type(GameState) == "table" and GameState.EquippedFamiliar == name then
           error("Familiar owner removal left the owner equipped")
         end
+        if firstError ~= nil then error(firstError) end
       end
 
       return {
