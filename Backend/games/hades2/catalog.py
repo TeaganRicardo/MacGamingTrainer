@@ -57,7 +57,7 @@ _PRODUCT_LABEL_EN_BY_ZH = {
 }
 
 _CURRENT_RUN_FAMILY_LABELS = {
-    'arcana': ('阿卡那牌效果', 'Arcana Card Effect'),
+    'arcana': ('阿卡那牌', 'Arcana'),
     'biomeState': ('环境状态', 'Biome States'),
     'chaos': ('卡俄斯效果', 'Chaos Effect'),
     'costume': ('服装效果', 'Costume Effect'),
@@ -79,20 +79,20 @@ _CURRENT_RUN_FAMILY_LABELS = {
 # values are descriptors only; the native card title is prepended at runtime.
 _CURRENT_RUN_DERIVED_NAMES = {
     # Element essence traits are installed by the matching *Boost consumables.
-    'AirEssence': ('风元素精华', 'Air Essence'),
-    'FireEssence': ('火元素精华', 'Fire Essence'),
-    'EarthEssence': ('土元素精华', 'Earth Essence'),
-    'WaterEssence': ('水元素精华', 'Water Essence'),
-    'ElementalEssence': ('元素精华', 'Elemental Essence'),
+    'AirEssence': ('风元素', 'Air Element'),
+    'FireEssence': ('火元素', 'Fire Element'),
+    'EarthEssence': ('土元素', 'Earth Element'),
+    'WaterEssence': ('水元素', 'Water Element'),
+    'ElementalEssence': ('元素', 'Element'),
 
     # Direct current-run state/effect traits.
-    'MinorArmorBoon': ('护甲增加', 'Armor Increase'),
+    'MinorArmorBoon': ('护甲加成', 'Armor Bonus'),
     'RoomRewardMaxHealthTrait': ('最大生命值增加', 'Max Life Increase'),
     'RoomRewardEmptyMaxHealthTrait': ('最大生命值增加（不恢复生命）', 'Max Life Increase (No Healing)'),
     'RoomRewardMaxManaTrait': ('最大魔力值增加', 'Max Magick Increase'),
-    'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度提升', 'Black Coat · Sprint Speed Increase'),
-    'VanillaState': ('默认环境状态', 'Default Biome State'),
-    'WetState': ('雨天环境状态', 'Rain Biome State'),
+    'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度', 'Black Coat · Sprint Speed'),
+    'VanillaState': ('默认环境', 'Default Environment'),
+    'WetState': ('雨天环境', 'Rainy Environment'),
 
     # Hidden Familiar upgrade traits; names follow target FamiliarData fields.
     'FamiliarFrogResourceBonus': ('弗利诺斯 · 额外采集概率', 'Frinos · Bonus Gathering Chance'),
@@ -108,30 +108,30 @@ _CURRENT_RUN_DERIVED_NAMES = {
 
     # Arcana mounted traits: concise functional descriptors derived from the
     # official target-build card Description. Native card titles remain sourceName.
-    'ChannelSlowMetaUpgrade': ('Ω招式速度', 'Omega Move Speed'),
+    'ChannelSlowMetaUpgrade': ('Ω招式加速', 'Faster Omega Moves'),
     'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
-    'LowManaDamageMetaupgrade': ('低魔力攻击/特技增伤', 'Low-Magick Attack/Special Damage'),
+    'LowManaDamageMetaupgrade': ('魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'),
     'CastDamageMetaUpgrade': ('Ω蓄力时减缓时间', 'Time Slow While Channeling Ω'),
     'SorceryRegenMetaUpgrade': ('巫咒自动充能', 'Automatic Hex Charge'),
     'InsideCastBuffMetaUpgrade': ('法阵内敌人增伤', 'Cast-Area Enemy Damage'),
     'HealthManaBonusMetaUpgrade': ('最大生命值/魔力值增加', 'Max Life/Magick Increase'),
-    'DodgeBonusMetaUpgrade': ('法阵无敌与移动速度', 'Cast Invulnerability & Move Speed'),
+    'DodgeBonusMetaUpgrade': ('施展法阵时短暂无敌并提高移速', 'Cast Invulnerability & Move Speed'),
     'ManaOverTimeMetaUpgrade': ('魔力值自动恢复', 'Magick Regeneration'),
     'MagicCritMetaUpgrade': ('Ω组合技暴击率', 'Omega Combo Critical Chance'),
-    'SprintShieldMetaUpgrade': ('冲刺速度与穿行', 'Sprint Speed & Phasing'),
-    'LastStandSlowTimeMetaUpgrade': ('死里逃生次数', 'Death Defiance Charges'),
-    'ChamberHealthMetaUpgrade': ('定期提升生命值/魔力值上限', 'Periodic Max Life/Magick Gain'),
-    'EffectVulnerabilityMetaUpgrade': ('双状态敌人增伤', 'Damage vs. Dual-Status Enemies'),
-    'BossShieldMetaUpgrade': ('区域守卫战受击免伤', 'Guardian Hit Blocks'),
-    'DoorRerollMetaUpgrade': ('地点奖励重塑', 'Location Reward Rerolls'),
-    'StartingGoldMetaUpgrade': ('初始金币', 'Starting Gold'),
-    'MetaToRunMetaUpgrade': ('局外奖励转局内奖励', 'Meta-to-Run Reward Conversion'),
-    'RarityBoostMetaUpgrade': ('稀有/传奇祝福概率', 'Rare/Legendary Boon Chance'),
-    'DuoRarityBoostMetaUpgrade': ('双重祝福概率', 'Duo Boon Chance'),
-    'RerollTradeOffMetaUpgrade': ('重塑命运次数', 'Reroll Uses'),
-    'PanelRerollMetaUpgrade': ('祝福及选项重塑', 'Boon/Choice Rerolls'),
+    'SprintShieldMetaUpgrade': ('冲刺加速并穿过敌人', 'Faster Sprint & Phasing'),
+    'LastStandSlowTimeMetaUpgrade': ('增加死里逃生次数', 'Extra Death Defiance'),
+    'ChamberHealthMetaUpgrade': ('每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'),
+    'EffectVulnerabilityMetaUpgrade': ('至少2种状态时增伤', 'Damage vs. Enemies with 2+ Statuses'),
+    'BossShieldMetaUpgrade': ('区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'),
+    'DoorRerollMetaUpgrade': ('重塑地点奖励', 'Location Reward Rerolls'),
+    'StartingGoldMetaUpgrade': ('增加初始金币', 'Starting Gold Increase'),
+    'MetaToRunMetaUpgrade': ('局外奖励转化为局内奖励', 'Meta-to-Run Reward Conversion'),
+    'RarityBoostMetaUpgrade': ('提高稀有/传奇祝福概率', 'Higher Rare/Legendary Boon Chance'),
+    'DuoRarityBoostMetaUpgrade': ('提高双重祝福概率', 'Higher Duo Boon Chance'),
+    'RerollTradeOffMetaUpgrade': ('增加重塑命运次数', 'Extra Reroll Uses'),
+    'PanelRerollMetaUpgrade': ('重塑祝福及其他选项', 'Boon/Choice Rerolls'),
     'LowHealthBuffMetaUpgrade': ('无死里逃生时增伤减伤', 'No-Death-Defiance Damage & Defense'),
-    'EpicRarityBoostMetaUpgrade': ('史诗祝福概率', 'Epic Boon Chance'),
+    'EpicRarityBoostMetaUpgrade': ('提高史诗祝福概率', 'Higher Epic Boon Chance'),
     'BossProgressionMetaUpgrade': ('击败区域守卫后随机激活阿卡那', 'Random Arcana Activation After Guardian'),
 }
 
