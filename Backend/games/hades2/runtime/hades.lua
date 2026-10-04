@@ -2563,8 +2563,68 @@ if __MacGamingTrainerV1 == nil then
       return false
     end
 
+    local function isArachneCostumeTrait(name)
+      if type(name) ~= "string" or type(TraitData) ~= "table" then return false end
+      local definition = TraitData[name]
+      if type(definition) ~= "table" or type(definition.InheritFrom) ~= "table" then return false end
+      local costume = false
+      for _, parent in ipairs(definition.InheritFrom) do
+        if parent == "CostumeTrait" then
+          costume = true
+          break
+        end
+      end
+      if not costume then return false end
+      return specialTraitSourceId(name) == "Arachne" or isArachneCostumeChoice(name)
+    end
+
+    local function applyCostume(name)
+      if not isArachneCostumeChoice(name) then error("Exact costume target is unavailable") end
+      requireFunctions("Arachne costume acquisition", {
+        "AddTraitToHero", "RemoveTraitData", "SetupCostume",
+      })
+
+      local previous = {}
+      for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(trait) == "table" and trait.Name ~= name and isArachneCostumeTrait(trait.Name) then
+          previous[#previous + 1] = trait
+        end
+      end
+
+      for _, trait in ipairs(previous) do
+        local ok, message = pcall(
+          RemoveTraitData, CurrentRun.Hero, trait, { Silent = true, SkipExpire = true }
+        )
+        local stillMounted = false
+        for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+          if candidate == trait then
+            stillMounted = true
+            break
+          end
+        end
+        if not ok or stillMounted then
+          pcall(SetupCostume)
+          if not ok then error(message) end
+          error("Arachne costume replacement left previous owner mounted")
+        end
+      end
+
+      local ok, added = pcall(AddTraitToHero, { TraitName = name, FromLoot = true })
+      local setupOk, setupMessage = pcall(SetupCostume)
+      if not ok then error(added) end
+      if type(added) ~= "table" then error("Arachne costume acquisition failed") end
+      if not setupOk then error(setupMessage) end
+
+      for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+        if trait ~= added and type(trait) == "table" and isArachneCostumeTrait(trait.Name) then
+          error("Arachne costume replacement left previous owner mounted")
+        end
+      end
+      return added
+    end
+
     local function removeCostume(trait)
-      if type(trait) ~= "table" or not isArachneCostumeChoice(trait.Name) then
+      if type(trait) ~= "table" or not isArachneCostumeTrait(trait.Name) then
         error("Trait removal is unavailable for the selected target")
       end
       requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
@@ -2574,8 +2634,8 @@ if __MacGamingTrainerV1 == nil then
       )
       local stillMounted = false
       for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
-        if type(candidate) == "table" and candidate.Id ~= nil
-            and tostring(candidate.Id) == instanceId then
+        if candidate == trait or (type(candidate) == "table" and candidate.Id ~= nil
+            and instanceId ~= "" and tostring(candidate.Id) == instanceId) then
           stillMounted = true
           break
         end
@@ -2839,7 +2899,7 @@ if __MacGamingTrainerV1 == nil then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "hammer" and hammerModel.removalReady(trait) then
           removalCapability, removalReason = "singleInstanceForce", ""
-        elseif family == "costume" and isArachneCostumeChoice(trait.Name)
+        elseif family == "costume" and isArachneCostumeTrait(trait.Name)
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
@@ -3005,6 +3065,8 @@ if __MacGamingTrainerV1 == nil then
       availableRarities = availableRarities,
       targetHasRarity = targetHasRarity,
       isArachneCostumeChoice = isArachneCostumeChoice,
+      isArachneCostumeTrait = isArachneCostumeTrait,
+      applyCostume = applyCostume,
       removeCostume = removeCostume,
       level = traitLevel,
       rarity = traitRarity,
@@ -4997,7 +5059,7 @@ if __MacGamingTrainerV1 == nil then
             if entry.sourceId ~= "Arachne" or not traitManagement.isArachneCostumeChoice(entry.trait) then
               error("Exact costume target is unavailable")
             end
-            requireFunctions("exact costume acquisition", { "SetupCostume" })
+            requireFunctions("exact costume acquisition", { "SetupCostume", "RemoveTraitData" })
           end
           exactPlan = { mode = entry.acquisitionMode }
           return
@@ -5171,6 +5233,10 @@ if __MacGamingTrainerV1 == nil then
           end
           if exactPlan and exactPlan.mode == "hammerNative" then
             hammerModel.applyExact(entry.trait)
+            return nil
+          end
+          if exactPlan and exactPlan.mode == "costume" then
+            traitManagement.applyCostume(entry.trait)
             return nil
           end
           if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
