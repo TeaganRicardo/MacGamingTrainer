@@ -654,6 +654,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
+        case .setTraitRemainingUses: title = presentation("hades2.receipt.traitDurationAction")
+        case .expireTrait: title = presentation("hades2.receipt.traitExpiryAction")
         case .removeTrait: title = presentation("hades2.receipt.traitRemoveAction")
         default: return
         }
@@ -960,6 +962,29 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(
             .setTraitRarity(trait, rarity: rarity),
             title: "hades2.receipt.traitRarityAction",
+            titleArguments: [trait.displayName],
+            announceSuccess: false
+        )
+    }
+
+    func setTraitRemainingUses(_ trait: CurrentRunTrait, targetRemainingUses: String) {
+        guard canOpenNativeBoonScreen, trait.canSetRemainingUses else { return }
+        let trimmed = targetRemainingUses.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let uses = Int(trimmed), (1...999_999).contains(uses),
+              trait.remainingUses != Double(uses) else { return }
+        send(
+            .setTraitRemainingUses(trait, targetRemainingUses: uses),
+            title: "hades2.receipt.traitDurationAction",
+            titleArguments: [trait.displayName],
+            announceSuccess: false
+        )
+    }
+
+    func expireTrait(_ trait: CurrentRunTrait) {
+        guard canOpenNativeBoonScreen, trait.canExpire else { return }
+        send(
+            .expireTrait(trait),
+            title: "hades2.receipt.traitExpiryAction",
             titleArguments: [trait.displayName],
             announceSuccess: false
         )
