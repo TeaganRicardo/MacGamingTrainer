@@ -127,6 +127,33 @@ assert validate_command_params(
 ) == dict(trait_target, rarity="Epic")
 assert validate_command_params("remove_trait", trait_target) == trait_target
 assert validate_command_params("advance_trait_lifecycle", trait_target) == trait_target
+
+temporary_target = dict(trait_target, family="temporary", expectedRemainingUses=5)
+assert validate_command_params(
+    "set_trait_remaining_uses", dict(temporary_target, targetRemainingUses=8)
+) == dict(temporary_target, targetRemainingUses=8)
+assert validate_command_params("expire_trait", temporary_target) == temporary_target
+expired_uses_target = dict(trait_target, family="temporary", expectedRemainingUses=0)
+assert validate_command_params("remove_trait", expired_uses_target) == expired_uses_target
+assert validate_command_params(
+    "set_trait_remaining_uses", dict(expired_uses_target, targetRemainingUses=2)
+) == dict(expired_uses_target, targetRemainingUses=2)
+expect_error(
+    "set_trait_remaining_uses",
+    dict(temporary_target, targetRemainingUses=0),
+    "剩余次数必须为 1–999999 的整数。",
+)
+expect_error(
+    "set_trait_remaining_uses",
+    dict({key: value for key, value in temporary_target.items() if key != "expectedRemainingUses"},
+         targetRemainingUses=8),
+    "请选择当前局效果。",
+)
+expect_error(
+    "expire_trait",
+    {key: value for key, value in temporary_target.items() if key != "expectedRemainingUses"},
+    "请选择当前局效果。",
+)
 expect_error(
     "set_trait_level",
     dict({key: value for key, value in trait_target.items() if key != "instanceId"}, targetLevel=4),

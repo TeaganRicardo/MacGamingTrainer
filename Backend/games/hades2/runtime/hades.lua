@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 66 then
+if previousModule and previousModule.revision ~= 67 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 66 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 66, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 67, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2709,7 +2709,6 @@ if __MacGamingTrainerV1 == nil then
     }
     local deferredTraitIssues = {
       costume = 239,
-      temporary = 239,
       directSpecial = 239,
       familiar = 240,
       other = 221,
@@ -2926,6 +2925,137 @@ if __MacGamingTrainerV1 == nil then
       return type(linked) == "table" and type(linked.Name) == "string" and linked.Name or ""
     end
 
+    local temporaryModel = (function()
+      local function hasParent(value, parent)
+        if type(value) ~= "table" then return false end
+        for _, name in ipairs(type(value.InheritFrom) == "table" and value.InheritFrom or {}) do
+          if name == parent then return true end
+        end
+        return false
+      end
+
+      local function isWellOwner(trait)
+        if type(trait) ~= "table" or type(trait.Name) ~= "string" then return false end
+        if hasParent(trait, "ShopTrait") then return true end
+        local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+        return hasParent(definition, "ShopTrait")
+      end
+
+      local function counterKind(trait)
+        if not isWellOwner(trait) then return nil end
+        if finite(trait.RemainingUses) then return "remainingUses" end
+        if finite(trait.Uses) then return "uses" end
+        return nil
+      end
+
+      local function counterValue(trait)
+        local kind = counterKind(trait)
+        if kind == "remainingUses" then return trait.RemainingUses end
+        if kind == "uses" then return trait.Uses end
+        return nil
+      end
+
+      local function refreshCounter(trait)
+        requireFunctions("temporary effect counter editing", { "UpdateTraitNumber" })
+        UpdateTraitNumber(trait)
+        if type(TraitUIUpdateText) == "function" then TraitUIUpdateText(trait) end
+      end
+
+      local function setCounter(trait, value)
+        local kind = counterKind(trait)
+        if kind == "remainingUses" then
+          trait.RemainingUses = value
+        elseif kind == "uses" then
+          trait.Uses = value
+        else
+          error("Temporary effect duration editing is unavailable for the selected target")
+        end
+        refreshCounter(trait)
+        if counterValue(trait) ~= value then
+          error("Temporary effect duration did not reach the requested remaining uses")
+        end
+      end
+
+      local function canSetCounter(trait)
+        return counterKind(trait) ~= nil and type(UpdateTraitNumber) == "function"
+      end
+
+      local function canExpire(trait)
+        local value = counterValue(trait)
+        if not finite(value) or value <= 0 then return false end
+        local kind = counterKind(trait)
+        if kind == "remainingUses" then
+          return type(RemoveTraitData) == "function"
+        end
+        return kind == "uses"
+          and type(UpdateTraitNumber) == "function"
+          and type(RemoveTraitData) == "function"
+      end
+
+      local function instanceStillMounted(trait)
+        if type(trait) ~= "table" or trait.Id == nil then return false end
+        for _, mounted in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(mounted) == "table" and mounted.Id ~= nil
+              and tostring(mounted.Id) == tostring(trait.Id) then
+            return true
+          end
+        end
+        return false
+      end
+
+      local function expire(trait)
+        local kind = counterKind(trait)
+        local value = counterValue(trait)
+        if not finite(value) or value <= 0 then
+          error("Temporary effect expiry is unavailable for the selected target")
+        end
+        if kind == "remainingUses" then
+          requireFunctions("temporary effect expiry", { "RemoveTraitData" })
+          trait.RemainingUses = 0
+          RemoveTraitData(CurrentRun.Hero, trait, { Silent = true })
+          if instanceStillMounted(trait) then
+            error("Temporary effect expiry left the selected instance mounted")
+          end
+          return
+        end
+        if kind == "uses" then
+          trait.Uses = 0
+          refreshCounter(trait)
+          if trait.Uses ~= 0 then
+            error("Temporary effect duration did not reach the requested remaining uses")
+          end
+          requireFunctions("temporary effect expiry", { "RemoveTraitData" })
+          RemoveTraitData(CurrentRun.Hero, trait, { Silent = true })
+          if instanceStillMounted(trait) then
+            error("Temporary effect expiry left the selected instance mounted")
+          end
+          return
+        end
+        error("Temporary effect expiry is unavailable for the selected target")
+      end
+
+      local function cancel(trait)
+        -- Well ownership is the cancellation authority. Some persistent Well
+        -- effects have no duration counter, but still require explicit owner
+        -- teardown; duration/expiry controls remain gated separately.
+        requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
+        RemoveTraitData(CurrentRun.Hero, trait, { Silent = true, SkipExpire = true })
+        if instanceStillMounted(trait) then
+          error("Temporary effect cancellation left the selected instance mounted")
+        end
+      end
+
+      return {
+        isManaged = isWellOwner,
+        value = counterValue,
+        canSet = canSetCounter,
+        canExpire = canExpire,
+        set = setCounter,
+        expire = expire,
+        cancel = cancel,
+      }
+    end)()
+
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
@@ -2939,7 +3069,7 @@ if __MacGamingTrainerV1 == nil then
       if hammerModel.isRuntimeAspect(trait) then return "weaponAspect" end
       if hammerModel.isHammerTrait(trait) then return "hammer" end
       if string.find(name, "Familiar", 1, true) ~= nil then return "familiar" end
-      if trait.RemainingUses ~= nil then return "temporary" end
+      if temporaryModel.isManaged(trait) then return "temporary" end
       if type(trait.InheritFrom) == "table" then
         for _, parent in ipairs(trait.InheritFrom) do
           if parent == "CostumeTrait" then return "costume" end
@@ -3014,7 +3144,8 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function"
             and type(AddTraitToHero) == "function" then
           levelCapability, levelReason = "increaseOne", ""
-        elseif family == "hammer" or family == "weaponAspect" or family == "costume" then
+        elseif family == "hammer" or family == "weaponAspect" or family == "costume"
+            or family == "temporary" then
           levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
@@ -3045,8 +3176,8 @@ if __MacGamingTrainerV1 == nil then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "weaponAspect" then
           rarityReason = "permanentProgressionOwned"
-        elseif family == "costume" then
-          rarityReason = "ownerSpecificLifecycle"
+        elseif family == "costume" or family == "temporary" then
+          rarityReason = "notMeaningful"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -3074,6 +3205,8 @@ if __MacGamingTrainerV1 == nil then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "costume" and isArachneCostumeTrait(trait.Name)
             and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "temporary" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
@@ -3129,11 +3262,14 @@ if __MacGamingTrainerV1 == nil then
             hasRarity = trait.Rarity ~= nil,
             availableRarities = availableRarities(trait),
             sameNameCount = count,
-            remainingUses = finite(trait.RemainingUses) and trait.RemainingUses or nil,
+            remainingUses = family == "temporary" and temporaryModel.value(trait)
+              or (finite(trait.RemainingUses) and trait.RemainingUses or nil),
             lifecycleState = family == "chaos" and chaosLifecycleState(trait) or "",
             linkedTrait = family == "chaos" and chaosLinkedTraitName(trait) or "",
             canAdvanceLifecycle = family == "chaos" and chaosLifecycleState(trait) == "curse"
               and chaosLinkedTraitName(trait) ~= "" and type(RemoveTraitData) == "function",
+            canSetRemainingUses = family == "temporary" and temporaryModel.canSet(trait),
+            canExpire = family == "temporary" and temporaryModel.canExpire(trait),
             levelCapability = levelCapability,
             levelReason = levelReason,
             rarityCapability = rarityCapability,
@@ -3170,9 +3306,13 @@ if __MacGamingTrainerV1 == nil then
       local family = traitFamily(target, sellEligible)
       local count = sameNameCount(target.Name)
       local expectedRarity = type(params.expectedRarity) == "string" and params.expectedRarity or ""
+      local expectedRemainingUses = params.expectedRemainingUses
+      local observedRemainingUses = family == "temporary" and temporaryModel.value(target)
+        or (finite(target.RemainingUses) and target.RemainingUses or nil)
       if target.Name ~= params.trait or family ~= params.family
           or traitLevel(target) ~= params.expectedLevel or traitRarity(target) ~= expectedRarity
-          or count ~= params.expectedSameNameCount then
+          or count ~= params.expectedSameNameCount
+          or (expectedRemainingUses ~= nil and observedRemainingUses ~= expectedRemainingUses) then
         error("Trait target changed since selection")
       end
       return target, family, sellEligible, count
@@ -3248,6 +3388,7 @@ if __MacGamingTrainerV1 == nil then
       rebuildChaosTarget = rebuildChaosTarget,
       seleneTalentNodes = seleneModel.talentNodes,
       teardownSlottedSpell = seleneModel.teardown,
+      temporary = temporaryModel,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -4251,10 +4392,12 @@ if __MacGamingTrainerV1 == nil then
       set_resource = { "resource", "amount" },
       set_rerolls = { "amount" },
       open_sell_traits = {},
-      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "targetLevel" },
-      set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
-      remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
-      advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "targetLevel" },
+      set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "rarity" },
+      set_trait_remaining_uses = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "targetRemainingUses" },
+      expire_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
+      remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
+      advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
       spawn_reward = { "reward" },
     }
@@ -4750,6 +4893,33 @@ if __MacGamingTrainerV1 == nil then
         end
       end, validateRarityTarget)
     end
+    if command == "set_trait_remaining_uses" then
+      local function validateTemporaryDurationTarget()
+        local target, family = traitManagement.resolveTarget(params)
+        if family ~= "temporary" or not traitManagement.temporary.canSet(target) then
+          error("Temporary effect duration editing is unavailable for the selected target")
+        end
+        integer(params.targetRemainingUses, 1)
+        return target
+      end
+      return actionLedger.run(command, params, function()
+        local live = validateTemporaryDurationTarget()
+        traitManagement.temporary.set(live, params.targetRemainingUses)
+      end, validateTemporaryDurationTarget)
+    end
+    if command == "expire_trait" then
+      local function validateTemporaryExpiryTarget()
+        local target, family = traitManagement.resolveTarget(params)
+        if family ~= "temporary" or not traitManagement.temporary.canExpire(target) then
+          error("Temporary effect expiry is unavailable for the selected target")
+        end
+        return target
+      end
+      return actionLedger.run(command, params, function()
+        local live = validateTemporaryExpiryTarget()
+        traitManagement.temporary.expire(live)
+      end, validateTemporaryExpiryTarget)
+    end
     if command == "remove_trait" then
       local function validateRemovalTarget()
         local target, family, sellEligible, count = traitManagement.resolveTarget(params)
@@ -4775,6 +4945,8 @@ if __MacGamingTrainerV1 == nil then
           end
         elseif removalCapability == "singleInstanceForce" and family == "costume" then
           requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
+        elseif removalCapability == "singleInstanceForce" and family == "temporary" then
+          requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -4802,6 +4974,8 @@ if __MacGamingTrainerV1 == nil then
           hammerModel.removeMounted(live)
         elseif family == "costume" then
           traitManagement.removeCostume(live)
+        elseif family == "temporary" then
+          traitManagement.temporary.cancel(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }

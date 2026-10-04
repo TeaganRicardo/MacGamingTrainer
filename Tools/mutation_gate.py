@@ -188,8 +188,10 @@ def manifest() -> list[Mutation]:
             ident="trait-target-count-recheck",
             invariant="a changed same-name count invalidates the selected target for every mutating command",
             path=lua,
-            old="          or count ~= params.expectedSameNameCount then\n",
-            new="          or false then\n",
+            old=("          or count ~= params.expectedSameNameCount\n"
+                 "          or (expectedRemainingUses ~= nil and observedRemainingUses ~= expectedRemainingUses) then\n"),
+            new=("          or false\n"
+                 "          or (expectedRemainingUses ~= nil and observedRemainingUses ~= expectedRemainingUses) then\n"),
             test="tests/test_hades2_live_trait_capability_gating.py",
             note="#227: the revalidated target snapshot lost its count recheck guard",
         ),
@@ -298,12 +300,12 @@ def manifest() -> list[Mutation]:
             old=("  'message': 'Trait mutation requires an active run room',\n"
                  "  'key': 'hades2.error.traitMutationNeedsRun',\n"
                  "  'runtime_only': True,\n"
-                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait', 'advance_trait_lifecycle'], "
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'set_trait_remaining_uses', 'expire_trait', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget'}}},"),
             new=("  'message': 'Trait mutation requires an active run room',\n"
                  "  'key': 'hades2.error.traitMutationNeedsRun',\n"
                  "  'runtime_only': True,\n"
-                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'remove_trait', 'advance_trait_lifecycle'], "
+                 "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'set_trait_remaining_uses', 'expire_trait', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget_missing'}}},"),
             test="tests/test_hades2_error_registry_single_source.py",
             note="#204 dead-entry reverse coverage",

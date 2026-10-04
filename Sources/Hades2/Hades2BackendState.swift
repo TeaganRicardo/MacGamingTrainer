@@ -328,6 +328,8 @@ struct Hades2StatePatch {
             linkedDisplayName: row["linkedDisplayName"] as? String ?? "",
             linkedEnglishName: row["linkedEnglishName"] as? String ?? "",
             canAdvanceLifecycle: row["canAdvanceLifecycle"] as? Bool ?? false,
+            canSetRemainingUses: row["canSetRemainingUses"] as? Bool ?? false,
+            canExpire: row["canExpire"] as? Bool ?? false,
             levelCapability: levelCapability,
             levelReason: row["levelReason"] as? String ?? "",
             rarityCapability: rarityCapability,
