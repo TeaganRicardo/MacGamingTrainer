@@ -2879,7 +2879,7 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "weaponAspect" then
           rarityReason = "permanentProgressionOwned"
         elseif family == "costume" then
-          rarityReason = "notMeaningful"
+          rarityReason = "ownerSpecificLifecycle"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -4602,8 +4602,8 @@ if __MacGamingTrainerV1 == nil then
           })
         elseif removalCapability == "singleInstanceForce" and family == "hammer" then
           requireFunctions("Hammer trait removal", { "RemoveTraitData" })
-          if type(target) == "table" and type(target.PreEquipWeapons) == "table"
-              and next(target.PreEquipWeapons) ~= nil then
+          if type(live) == "table" and type(live.PreEquipWeapons) == "table"
+              and next(live.PreEquipWeapons) ~= nil then
             requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
           end
         elseif removalCapability == "singleInstanceForce" and family == "costume" then
