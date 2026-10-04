@@ -362,7 +362,28 @@ assert not _literal_titles, (
     "a feature row carries a literal title instead of a presentation key, so "
     f"its text cannot re-render on a language switch: {_literal_titles}")
 
-# 11c. A Trainer Product Term must be declared in the terminology registry and
+# 11c. Exact Boons keep bilingual recognition in the Chinese UI. The catalog
+# already carries both names and the filter searches both; the picker label must
+# preserve that pairing without echoing Chinese back into the English UI or
+# falling back to a raw Trait ID when one side is missing.
+_exact_label = _view[
+    _view.index("private func exactItemLabel"):
+    _view.index("private func spawnRow")
+]
+assert "if localization.language == .en" in _exact_label
+assert "return option.englishName" in _exact_label
+assert "option.englishName != option.name" in _exact_label
+assert '"\\(option.name) · \\(option.englishName)"' in _exact_label
+assert "if !option.name.isEmpty { return option.name }" in _exact_label
+assert "if !option.englishName.isEmpty { return option.englishName }" in _exact_label
+_exact_filter = _view[
+    _view.index("private var exactBoons"):
+    _view.index("private var material:")
+]
+assert "$0.name.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+assert "$0.englishName.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+
+# 11d. A Trainer Product Term must be declared in the terminology registry and
 # referenced through it, not spelled out in a table. A hardcoded bilingual pair
 # records its provenance only in a comment.
 _reg = json.loads(
