@@ -23,6 +23,12 @@ struct Hades2TrainerView: View {
         static let searchWidth: CGFloat = 260
     }
 
+    private struct ExactBoonSourceGroup: Identifiable {
+        let id: String
+        let title: String
+        let items: [BoonOption]
+    }
+
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
@@ -53,6 +59,7 @@ struct Hades2TrainerView: View {
     @ViewState<Bool> private var rerollsInitialized = false
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
+    @ViewState<String> private var exactSourceSelection = ""
     @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
@@ -94,19 +101,28 @@ struct Hades2TrainerView: View {
     private var specialBoons: [BoonOption] {
         sortedBoons(model.specialRewardOptions.filter { specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch) || $0.englishCategory.localizedCaseInsensitiveContains(specialSearch) || $0.englishSectionTitle.localizedCaseInsensitiveContains(specialSearch) })
     }
-    private var exactBoons: [BoonOption] {
-        sortedBoons(model.exactBoonOptions.filter {
-            exactSearch.isEmpty
-                || $0.name.localizedCaseInsensitiveContains(exactSearch)
-                || $0.englishName.localizedCaseInsensitiveContains(exactSearch)
-                || $0.targetID.localizedCaseInsensitiveContains(exactSearch)
-                || $0.id.localizedCaseInsensitiveContains(exactSearch)
-                || $0.sourceId.localizedCaseInsensitiveContains(exactSearch)
-                || $0.sourceName.localizedCaseInsensitiveContains(exactSearch)
-                || $0.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
-                || $0.category.localizedCaseInsensitiveContains(exactSearch)
-                || $0.englishCategory.localizedCaseInsensitiveContains(exactSearch)
+    private var genericExactCatalog: [BoonOption] {
+        sortedBoons(model.exactBoonOptions.filter { option in
+            option.acquisitionMode != "chaosBlessing"
+                && option.acquisitionMode != "chaosCurse"
         })
+    }
+
+    private var genericExactBoons: [BoonOption] {
+        genericExactCatalog.filter { option in
+            exactSearch.isEmpty
+                || option.name.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishName.localizedCaseInsensitiveContains(exactSearch)
+                || option.targetID.localizedCaseInsensitiveContains(exactSearch)
+                || option.id.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceId.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceName.localizedCaseInsensitiveContains(exactSearch)
+                || option.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)
+                || option.sectionTitle.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishSectionTitle.localizedCaseInsensitiveContains(exactSearch)
+                || option.category.localizedCaseInsensitiveContains(exactSearch)
+                || option.englishCategory.localizedCaseInsensitiveContains(exactSearch)
+        }
     }
     private var material: MaterialResource? { filtered.first { $0.id == selectedMaterial } }
 
@@ -146,6 +162,91 @@ struct Hades2TrainerView: View {
         return titles.enumerated().map { index, title in
             TrainerPickerSection(id: index, title: title, items: buckets[title] ?? [])
         }
+    }
+
+    private func exactSourceGroupID(_ option: BoonOption) -> String {
+        // Stable machine identity only: localized titles and item names never
+        // participate in source selection, so language changes and same-name
+        // effects cannot move the user's selection.
+        "\(option.sourceId)|\(option.acquisitionMode)|\(option.sortGroup)"
+    }
+
+    private func exactSourceTitle(_ option: BoonOption) -> String {
+        let section = localization.language == .en ? option.englishSectionTitle : option.sectionTitle
+        if !section.isEmpty { return section }
+        let source = localization.language == .en ? option.sourceEnglishName : option.sourceName
+        if !source.isEmpty { return source }
+        let category = localization.language == .en ? option.englishCategory : option.category
+        return category.isEmpty ? text("hades2.spawn.exactBoons") : category
+    }
+
+    private var exactBoonSourceGroups: [ExactBoonSourceGroup] {
+        var order: [String] = []
+        var titles: [String: String] = [:]
+        var buckets: [String: [BoonOption]] = [:]
+        for option in genericExactBoons {
+            let sourceID = exactSourceGroupID(option)
+            if buckets[sourceID] == nil {
+                order.append(sourceID)
+                titles[sourceID] = exactSourceTitle(option)
+                buckets[sourceID] = []
+            }
+            buckets[sourceID, default: []].append(option)
+        }
+        return order.map { sourceID in
+            ExactBoonSourceGroup(
+                id: sourceID,
+                title: titles[sourceID] ?? text("hades2.spawn.exactBoons"),
+                items: buckets[sourceID] ?? []
+            )
+        }
+    }
+
+    private var selectedExactSourceGroup: ExactBoonSourceGroup? {
+        exactBoonSourceGroups.first { $0.id == exactSourceSelection }
+    }
+
+    private var selectedExactItems: [BoonOption] {
+        selectedExactSourceGroup?.items ?? []
+    }
+
+    private var exactItemSelection: Binding<String> {
+        Binding(
+            get: {
+                guard selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }) else {
+                    return ""
+                }
+                return model.selectedExactBoon
+            },
+            set: { itemID in
+                guard !itemID.isEmpty,
+                      selectedExactItems.contains(where: { $0.id == itemID }) else { return }
+                model.selectedExactBoon = itemID
+            }
+        )
+    }
+
+    private func selectExactSource(_ sourceID: String) {
+        guard let source = exactBoonSourceGroups.first(where: { $0.id == sourceID }) else { return }
+        exactSourceSelection = sourceID
+        if !source.items.contains(where: { $0.id == model.selectedExactBoon }) {
+            model.selectedExactBoon = ""
+        }
+    }
+
+    private func repairExactSourceSelection() {
+        let groups = exactBoonSourceGroups
+        guard !groups.isEmpty else { return }
+
+        let selectedGroup = groups.first(where: { group in
+            group.items.contains(where: { $0.id == model.selectedExactBoon })
+        })
+        if exactSearch.isEmpty, let selectedGroup {
+            exactSourceSelection = selectedGroup.id
+            return
+        }
+        if groups.contains(where: { $0.id == exactSourceSelection }) { return }
+        exactSourceSelection = selectedGroup?.id ?? groups[0].id
     }
 
     /// Resolve one Hades presentation key against the live Host language.
@@ -802,7 +903,7 @@ struct Hades2TrainerView: View {
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
             specialIDs: specialBoons.map(\.id),
-            exactIDs: exactBoons.map(\.id),
+            exactIDs: genericExactCatalog.map(\.id),
             filteredResourceIDs: filtered.map(\.id)
         )
     }
@@ -1257,19 +1358,60 @@ struct Hades2TrainerView: View {
                 Spacer()
                 TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
-            TrainerGroupedOptionPicker(
-                title: nil,
-                icon: nil,
-                pickerLabel: text("hades2.spawn.exactBoons"),
-                selection: $model.selectedExactBoon,
-                sections: boonGroups(exactBoons),
-                enabled: model.canSpawnReward,
-                emptyLabel: text("hades2.spawn.noItems"),
-                actionTitle: text("hades2.spawn.acquire"),
-                shortcutText: nil,
-                itemLabel: exactItemLabel,
-                onAction: model.acquireExactBoon
-            )
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("hades2.spawn.exactSource"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker(
+                            text("hades2.spawn.exactSource"),
+                            selection: Binding(
+                                get: { exactSourceSelection },
+                                set: { selectExactSource($0) }
+                            )
+                        ) {
+                            if exactBoonSourceGroups.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(exactBoonSourceGroups) { group in
+                                Text(group.title).tag(group.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 240)
+                        .disabled(!model.canSpawnReward || exactBoonSourceGroups.isEmpty)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("hades2.spawn.exactTarget"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker(text("hades2.spawn.exactTarget"), selection: exactItemSelection) {
+                            if selectedExactItems.isEmpty || exactItemSelection.wrappedValue.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(selectedExactItems) { option in
+                                Text(exactItemLabel(option)).tag(option.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        .disabled(!model.canSpawnReward || selectedExactItems.isEmpty)
+                    }
+
+                    Button(text("hades2.spawn.acquire")) {
+                        model.acquireExactBoon(model.selectedExactBoon)
+                    }
+                    .disabled(
+                        !model.canSpawnReward
+                            || !selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
+                    )
+                }
+            }
+            .onAppear { repairExactSourceSelection() }
+            .onChange(of: exactSearch) { _, _ in repairExactSourceSelection() }
+            .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairExactSourceSelection() }
             Divider()
             HStack {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
