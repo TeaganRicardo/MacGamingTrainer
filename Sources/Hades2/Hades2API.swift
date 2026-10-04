@@ -22,6 +22,8 @@ enum Hades2Command: String {
     case openSellTraits = "open_sell_traits"
     case setTraitLevel = "set_trait_level"
     case setTraitRarity = "set_trait_rarity"
+    case setTraitRemainingUses = "set_trait_remaining_uses"
+    case expireTrait = "expire_trait"
     case removeTrait = "remove_trait"
     case advanceTraitLifecycle = "advance_trait_lifecycle"
     case openSpecialChoice = "open_special_choice"
@@ -57,6 +59,8 @@ enum Hades2Request {
     case openSellTraits
     case setTraitLevel(CurrentRunTrait, targetLevel: Int)
     case setTraitRarity(CurrentRunTrait, rarity: String)
+    case setTraitRemainingUses(CurrentRunTrait, targetRemainingUses: Int)
+    case expireTrait(CurrentRunTrait)
     case removeTrait(CurrentRunTrait)
     case advanceTraitLifecycle(CurrentRunTrait)
     case openSpecialChoice(source: String)
@@ -94,6 +98,8 @@ enum Hades2Request {
         case .openSellTraits: return .openSellTraits
         case .setTraitLevel: return .setTraitLevel
         case .setTraitRarity: return .setTraitRarity
+        case .setTraitRemainingUses: return .setTraitRemainingUses
+        case .expireTrait: return .expireTrait
         case .removeTrait: return .removeTrait
         case .advanceTraitLifecycle: return .advanceTraitLifecycle
         case .openSpecialChoice: return .openSpecialChoice
@@ -151,7 +157,7 @@ enum Hades2Request {
     }
 
     private static func traitTargetParams(_ trait: CurrentRunTrait) -> [String: Any] {
-        [
+        var params: [String: Any] = [
             "generationId": trait.generationID,
             "runId": trait.runID,
             "instanceId": trait.instanceID,
@@ -161,6 +167,10 @@ enum Hades2Request {
             "expectedRarity": trait.rarity,
             "expectedSameNameCount": trait.sameNameCount,
         ]
+        if let remainingUses = trait.remainingUses {
+            params["expectedRemainingUses"] = remainingUses
+        }
+        return params
     }
 
     var params: [String: Any] {
@@ -207,6 +217,12 @@ enum Hades2Request {
             var params = Self.traitTargetParams(trait)
             params["rarity"] = rarity
             return params
+        case .setTraitRemainingUses(let trait, let targetRemainingUses):
+            var params = Self.traitTargetParams(trait)
+            params["targetRemainingUses"] = targetRemainingUses
+            return params
+        case .expireTrait(let trait):
+            return Self.traitTargetParams(trait)
         case .removeTrait(let trait):
             return Self.traitTargetParams(trait)
         case .advanceTraitLifecycle(let trait):
