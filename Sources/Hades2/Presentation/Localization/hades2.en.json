@@ -117,6 +117,7 @@
     "hades2.error.runtimeVerificationFailed": "A function in the running game failed verification: {0}",
     "hades2.error.selectChoiceSource": "Select a character that supports the native reward choice screen.",
     "hades2.error.selectCurrentTrait": "Select a boon or effect from the current-run list.",
+    "hades2.error.remainingUsesRange": "Remaining uses must be an integer from 1 to 999999.",
     "hades2.error.selectResource": "Select a resource.",
     "hades2.error.selectReward": "Select a drop or a boon.",
     "hades2.error.sellDataUnavailable": "The current game state cannot open Pool of Purging.",
