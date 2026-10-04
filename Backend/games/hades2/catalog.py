@@ -90,7 +90,7 @@ _CURRENT_RUN_DERIVED_NAMES = {
     'RoomRewardMaxHealthTrait': ('最大生命值增加', 'Max Life Increase'),
     'RoomRewardEmptyMaxHealthTrait': ('最大生命值增加（不恢复生命）', 'Max Life Increase (No Healing)'),
     'RoomRewardMaxManaTrait': ('最大魔力值增加', 'Max Magick Increase'),
-    'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度', 'Black Coat · Sprint Speed'),
+    'SuitInherentSpeedBoon': ('冲刺速度加成', 'Sprint Speed Bonus'),
     'VanillaState': ('默认环境', 'Default Environment'),
     'WetState': ('雨天环境', 'Rainy Environment'),
 
@@ -121,7 +121,7 @@ _CURRENT_RUN_DERIVED_NAMES = {
     'SprintShieldMetaUpgrade': ('冲刺加速并穿过敌人', 'Faster Sprint & Phasing'),
     'LastStandSlowTimeMetaUpgrade': ('增加死里逃生次数', 'Extra Death Defiance'),
     'ChamberHealthMetaUpgrade': ('每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'),
-    'EffectVulnerabilityMetaUpgrade': ('至少2种状态时增伤', 'Damage vs. Enemies with 2+ Statuses'),
+    'EffectVulnerabilityMetaUpgrade': ('至少2种奥林匹斯状态时增伤', 'Damage vs. 2+ Olympian Statuses'),
     'BossShieldMetaUpgrade': ('区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'),
     'DoorRerollMetaUpgrade': ('重塑地点奖励', 'Location Reward Rerolls'),
     'StartingGoldMetaUpgrade': ('增加初始金币', 'Starting Gold Increase'),
