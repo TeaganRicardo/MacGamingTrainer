@@ -1187,6 +1187,40 @@ do
   eq(calls.keepsakeEquip, equipAfter, "unknown Keepsake rank replayed equip")
 end
 
+-- A new run/death reset receives native durable Arcana state again. The
+-- previous run's forced rank is ephemeral, and an old selection cannot mutate
+-- the replacement run.
+do
+  GameState.LastAwardTrait = nil
+  local previous = newTrait("LowManaDamageMetaupgrade", 2501, 1, "Epic")
+  setTraits(previous)
+  local oldRow = findRow("LowManaDamageMetaupgrade", 2501)
+  local stale = paramsFrom(oldRow, "arcana-old-run")
+  stale.rarity = "Heroic"
+
+  CurrentRun = {
+    Hero = {
+      ObjectId = 2,
+      Health = 100, MaxHealth = 100,
+      Mana = 50, MaxMana = 50,
+      HealthBuffer = 0, Elements = {},
+      Traits = { newTrait("LowManaDamageMetaupgrade", 2502, 1, "Rare") },
+    },
+    CurrentRoom = {},
+    NumRerolls = 0,
+    SpellCharge = 0,
+  }
+
+  local resetRow = findRow("LowManaDamageMetaupgrade", 2502)
+  eq(resetRow.family, "arcana", "Arcana owner lost after run reset")
+  eq(resetRow.rarity, "Rare", "runtime Arcana override leaked into replacement run")
+  eq(GameState.MetaUpgradeState.LowManaDamageBonus.Level, 2,
+    "run reset changed durable Arcana level")
+  expectError("stale run", function()
+    M.dispatch("set_trait_rarity", stale)
+  end)
+end
+
 print("hades2_live_trait_runtime_behavior_ok")
 '''
 
