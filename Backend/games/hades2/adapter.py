@@ -41,6 +41,7 @@ __all__ = [
 ]
 
 TransportError = AdapterError
+_TRAIT_TRAY_BLOCKED_MESSAGE = '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
 _TRANSIENT_ACTION_RESULT_FIELDS = (
     'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',
 )
@@ -484,6 +485,8 @@ class Hades2Adapter(GameAdapter):
                 self.preference_dirty=was_dirty
                 return result
             except TransportError as error:
+                if error.code == 'invalid_request' and str(error) == _TRAIT_TRAY_BLOCKED_MESSAGE:
+                    raise
                 logging.warning('Desired feature %s stored pending reconnect: %s',feature,error)
                 self.state['preferenceApplyError']=str(error)
                 self._overlay_preferences()
@@ -769,14 +772,24 @@ class Hades2Adapter(GameAdapter):
                     # screen is active can make native trait/UI code yield from
                     # outside a coroutine and leave the game unrecoverably
                     # frozen. Guard the same boundary before *any* mutation or
-                    # replay batch touches resident state. Observation and
-                    # teardown remain available for recovery/disconnect.
-                    trait_tray_guard = '' if command in ('status', 'disable_all', 'cleanup') else (
-                        'if type(ActiveScreens)=="table" and ActiveScreens.TraitTrayScreen~=nil '
-                        'then error("MGT_TRAIT_TRAY_ACTIVE",0) end;'
+                    # replay batch touches resident state. Status instead
+                    # observes the screen owner in-band so dirty desired state
+                    # can remain pending without starting a replay batch.
+                    trait_tray_probe = 'type(ActiveScreens)=="table" and ActiveScreens.TraitTrayScreen~=nil'
+                    mutation_boundary = batch is not None or command not in ('status', 'disable_all', 'cleanup')
+                    trait_tray_guard = (
+                        'if '+trait_tray_probe+' then error("MGT_TRAIT_TRAY_ACTIVE",0) end;'
+                        if mutation_boundary else ''
                     )
                     if batch is None:
-                        dispatch=trait_tray_guard+'return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                        if command == 'status':
+                            dispatch=(
+                                'return __MacGamingTrainerV1.json((function() '
+                                'local result=__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+');'
+                                'result.__trainerTraitTrayActive='+trait_tray_probe+';return result end)())'
+                            )
+                        else:
+                            dispatch=trait_tray_guard+'return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
                     else:
                         calls=[]
                         for batch_command,batch_params in batch:
@@ -795,7 +808,7 @@ class Hades2Adapter(GameAdapter):
                         if error.code == 'lua_error' and 'MGT_TRAIT_TRAY_ACTIVE' in str(error):
                             raise TransportError(
                                 'invalid_request',
-                                '当前祝福菜单打开时无法执行修改，请先关闭菜单。',
+                                _TRAIT_TRAY_BLOCKED_MESSAGE,
                             ) from error
                         if self._resident_cleanup_failed(error):
                             raise TransportError(
@@ -817,6 +830,7 @@ class Hades2Adapter(GameAdapter):
             if command=='status':
                 self._last_status_json_duration=decode_metrics.get('json',0.0)
                 self._last_status_localize_duration=decode_metrics.get('localize',0.0)
+            trait_tray_active = bool(decoded.pop('__trainerTraitTrayActive', False)) if isinstance(decoded, dict) else False
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             last_action=decoded.get('lastAction')
@@ -854,7 +868,7 @@ class Hades2Adapter(GameAdapter):
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
-            if not host_observation_only and command=='status' and self.preference_dirty and not replay:
+            if not host_observation_only and command=='status' and self.preference_dirty and not replay and not trait_tray_active:
                 return self._replay_preferences()
             if not host_observation_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):

@@ -54,6 +54,8 @@ class FakeTransport:
         if include_catalogs:
             payload['boons'] = [{'id': 'ZeusUpgrade', 'name': 'Zeus'}]
             payload['rewards'] = [{'id': 'RoomMoneyDrop', 'name': 'Gold'}]
+        if self.trait_tray_open and '__trainerTraitTrayActive' in source:
+            payload['__trainerTraitTrayActive'] = True
         return json.dumps(payload)
 
 
@@ -89,7 +91,8 @@ assert second['boons'][0]['id'] == 'ZeusUpgrade'
 # Mutations injected through the synchronous LLDB lua_pcall boundary must refuse
 # to dispatch before touching resident state, while read-only status remains
 # available so Host observation/recovery still works.
-assert 'ActiveScreens.TraitTrayScreen' not in transport.sources[1]
+assert 'MGT_TRAIT_TRAY_ACTIVE' not in transport.sources[1]
+assert '__trainerTraitTrayActive' in transport.sources[1]
 adapter.execute('set_vital', {'vital': 'health', 'field': 'current', 'value': 100})
 assert len(transport.sources) == 3
 mutation_source = transport.sources[2]
@@ -106,7 +109,27 @@ except AdapterError as error:
     assert str(error) == '当前祝福菜单打开时无法执行修改，请先关闭菜单。'
 else:
     raise AssertionError('Trait Tray mutation guard did not fail closed')
+
+# Read-only status stays available while the screen is open. If desired state is
+# dirty, the observation must not fall through into the automatic replay batch.
+adapter.preference_dirty = True
+status_source_count = len(transport.sources)
+status_while_open = adapter.execute('status', {})
+assert status_while_open['status'] == 'ready'
+assert len(transport.sources) == status_source_count + 1
+assert adapter.preference_dirty is True
+assert 'MGT_TRAIT_TRAY_ACTIVE' not in transport.sources[-1]
 transport.trait_tray_open = False
+adapter.preference_dirty = False
+
+# Explicit replay batches carry the same pre-dispatch guard as direct mutations.
+adapter.execute(
+    'replay_preferences', {}, replay=True,
+    batch=[('set_feature', {'feature': 'invincibility', 'value': False})],
+)
+batch_source = transport.sources[-1]
+assert 'MGT_TRAIT_TRAY_ACTIVE' in batch_source
+assert batch_source.index(trait_tray_guard) < batch_source.index('__MacGamingTrainerV1.dispatch')
 
 # World::Update boundary contract: the live transport must break on the one
 # engine frame boundary we actually need, not on every Lua pcall and then
