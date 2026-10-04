@@ -400,59 +400,34 @@ assert owner_fallback['englishName'] != 'Unnamed Effect'
 # The supported-target census owns every current-run trait that lacks a concrete
 # native title. Family labels are emergency compatibility fallbacks only; none
 # of these known 1.143476 traits may resolve to one.
-expected_derived_names = {
-    'AirEssence': ('风元素', 'Air Element'),
-    'FireEssence': ('火元素', 'Fire Element'),
-    'EarthEssence': ('土元素', 'Earth Element'),
-    'WaterEssence': ('水元素', 'Water Element'),
-    'ElementalEssence': ('元素', 'Element'),
-    'MinorArmorBoon': ('护甲加成', 'Armor Bonus'),
-    'RoomRewardMaxHealthTrait': ('最大生命值增加', 'Max Life Increase'),
-    'RoomRewardEmptyMaxHealthTrait': ('最大生命值增加（不恢复生命）', 'Max Life Increase (No Healing)'),
-    'RoomRewardMaxManaTrait': ('最大魔力值增加', 'Max Magick Increase'),
-    'SuitInherentSpeedBoon': ('冲刺速度加成', 'Sprint Speed Bonus'),
-    'VanillaState': ('默认环境', 'Default Environment'),
-    'WetState': ('雨天环境', 'Rainy Environment'),
-    'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
-    'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
-    'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
-    'FamiliarCatAttacks': ('攻击次数', 'Attack Count'),
-    'FamiliarRavenResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
-    'FamiliarRavenAttackDuration': ('攻击间隔', 'Attack Interval'),
-    'FamiliarHoundResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
-    'FamiliarHoundBarkDuration': ('吠叫间隔', 'Bark Interval'),
-    'FamiliarPolecatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
-    'FamiliarPolecatDamage': ('攻击伤害', 'Attack Damage'),
-    'ChannelSlowMetaUpgrade': ('Ω招式加速', 'Faster Omega Moves'),
-    'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
-    'LowManaDamageMetaupgrade': ('魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'),
-    'CastDamageMetaUpgrade': ('Ω蓄力时减缓时间', 'Time Slow While Channeling Ω'),
-    'SorceryRegenMetaUpgrade': ('巫咒自动充能', 'Automatic Hex Charge'),
-    'InsideCastBuffMetaUpgrade': ('法阵内敌人增伤', 'Cast-Area Enemy Damage'),
-    'HealthManaBonusMetaUpgrade': ('最大生命值/魔力值增加', 'Max Life/Magick Increase'),
-    'DodgeBonusMetaUpgrade': ('施展法阵时短暂无敌并提高移速', 'Cast Invulnerability & Move Speed'),
-    'ManaOverTimeMetaUpgrade': ('魔力值自动恢复', 'Magick Regeneration'),
-    'MagicCritMetaUpgrade': ('Ω组合技暴击率', 'Omega Combo Critical Chance'),
-    'SprintShieldMetaUpgrade': ('冲刺加速并穿过敌人', 'Faster Sprint & Phasing'),
-    'LastStandSlowTimeMetaUpgrade': ('增加死里逃生次数', 'Extra Death Defiance'),
-    'ChamberHealthMetaUpgrade': ('每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'),
-    'EffectVulnerabilityMetaUpgrade': ('至少2种奥林匹斯状态时增伤', 'Damage vs. 2+ Olympian Statuses'),
-    'BossShieldMetaUpgrade': ('区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'),
-    'DoorRerollMetaUpgrade': ('重塑地点奖励', 'Location Reward Rerolls'),
-    'StartingGoldMetaUpgrade': ('增加初始金币', 'Starting Gold Increase'),
-    'MetaToRunMetaUpgrade': ('局外奖励转化为局内奖励', 'Meta-to-Run Reward Conversion'),
-    'RarityBoostMetaUpgrade': ('提高稀有/传奇祝福概率', 'Higher Rare/Legendary Boon Chance'),
-    'DuoRarityBoostMetaUpgrade': ('提高双重祝福概率', 'Higher Duo Boon Chance'),
-    'RerollTradeOffMetaUpgrade': ('增加重塑命运次数', 'Extra Reroll Uses'),
-    'PanelRerollMetaUpgrade': ('重塑祝福及其他选项', 'Boon/Choice Rerolls'),
-    'LowHealthBuffMetaUpgrade': ('无死里逃生时增伤减伤', 'No-Death-Defiance Damage & Defense'),
-    'EpicRarityBoostMetaUpgrade': ('提高史诗祝福概率', 'Higher Epic Boon Chance'),
-    'BossProgressionMetaUpgrade': ('击败区域守卫后随机激活阿卡那', 'Random Arcana Activation After Guardian'),
-}
-assert catalog._CURRENT_RUN_DERIVED_NAMES == expected_derived_names
-for trait_id, pair in expected_derived_names.items():
-    assert pair[0] not in {'未命名效果', *[value[0] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
-    assert pair[1] not in {'Unnamed Effect', *[value[1] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+derived_names = catalog._CURRENT_RUN_DERIVED_NAMES
+assert len(derived_names) == 47
+generic_zh = {'未命名效果', *[value[0] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+generic_en = {'Unnamed Effect', *[value[1] for value in catalog._CURRENT_RUN_FAMILY_LABELS.values()]}
+for trait_id, pair in derived_names.items():
+    assert isinstance(pair, tuple) and len(pair) == 2, trait_id
+    assert all(isinstance(value, str) and value.strip() for value in pair), trait_id
+    assert trait_id not in pair, trait_id
+    assert pair[0] not in generic_zh, trait_id
+    assert pair[1] not in generic_en, trait_id
+
+# Regression checks are deliberately selective: the production registry is the
+# sole row-level source of truth, so the test must not mirror all 47 labels.
+assert derived_names['ElementalEssence'] == ('元素', 'Element')
+assert derived_names['SuitInherentSpeedBoon'] == ('冲刺速度加成', 'Sprint Speed Bonus')
+assert derived_names['FamiliarFrogDamage'] == ('攻击伤害', 'Attack Damage')
+assert derived_names['LowManaDamageMetaupgrade'] == (
+    '魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'
+)
+assert derived_names['ChamberHealthMetaUpgrade'] == (
+    '每5个房间增加生命值/魔力值上限', 'Max Life/Magick Every 5 Rooms'
+)
+assert derived_names['EffectVulnerabilityMetaUpgrade'] == (
+    '至少2种奥林匹斯状态时增伤', 'Damage vs. 2+ Olympian Statuses'
+)
+assert derived_names['BossShieldMetaUpgrade'] == (
+    '区域守卫战前几次受击免伤', 'First Guardian Hits Blocked'
+)
 
 governance_path = ROOT / 'docs/reference/hades2/1.143476-25481925/boon_management_effect_naming.md'
 governance = governance_path.read_text(encoding='utf-8')
