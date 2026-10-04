@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 73.
+- Hades II resident runtime revision: 76.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 73. Revisions 52–73 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 76. Revisions 52–76 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -62,6 +62,7 @@ Current source contains resident revision 73. Revisions 52–73 remain pending t
 - revision 71: mounted Arcana effects are owned only by an exact equipped `MetaUpgradeCardData[card].TraitName` mapping. Safe declarative cards can receive a current-run rank/rarity override through native owner-shaped teardown/rebuild with adjacency and derived health/mana/weapon refreshes, while permanent Arcana state remains read-only; one-shot/setup-state cards and runtime-only removal fail closed. #330 implementation is complete pending automated and consolidated real-game acceptance.
 - revision 72: direct special-NPC mounted management is derived from native source identity and processed runtime semantics rather than a trait allowlist. Meaningful declarative level/rarity/removal operations are exposed; one-shot acquisition and unsupported setup/counter lifecycles fail closed; Icarus CostumeArmor teardown refreshes costume owner state. The residual #239 `directSpecial` deferred bucket is removed.
 - revision 73: final #236–#240 convergence removes the stale closed-#239 Arachne costume deferral marker; no mutation capability or durable progression semantics change.
+- revision 76: deterministic Chaos acquisition accepts an explicit current-build blessing + curse pair in one non-replayable request, revalidates both against the live TrialUpgrade pools/eligibility immediately before mutation, mounts exactly the selected curse, and queues exactly the selected blessing through the native curse lifecycle shape. Real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
@@ -106,7 +107,8 @@ Planning issue #124 is the sequencing authority.
 - #306 corrective current-run boon manager work is complete in this source.
 - #230 pickup-compatible infinite-ammo correction is complete in this source.
 - #236 Chaos lifecycle acquisition and mounted management is complete in this source.
-- #312 boon-management UX consolidation is complete in this source: Exact Boons keeps its grouped picker/search acquisition flow, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions.
+- #344–#347 manual-QA follow-ups are implemented in this source: recognizable current-run effect labels, stable Boon Management geometry, compact two-level Exact Boon navigation, and deterministic Chaos blessing + curse pair acquisition. Resident revision 76 still requires the consolidated user-run exact-build acceptance.
+- #312 boon-management UX consolidation is complete in this source: Exact Boons uses a compact source → boon/effect navigation flow with search, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions. Chaos acquisition is intentionally separated into its dedicated blessing + curse pair control.
 - #237 Selene Hex / Path of Stars exact acquisition and mounted management is complete in this source at resident revision 63; final real-game acceptance remains part of the consolidated manual pass.
 - #238 weapon/aspect-aware Hammer exact acquisition and mounted-effect management is complete in this source at resident revision 64; final real-game acceptance remains part of the consolidated manual pass.
 - #239 is split into focused owner-lifecycle children: #318 Arachne costumes, #319 Echo previous-run acquisition, #320 Well/temporary effects, and #335 direct special-NPC mounted management.
