@@ -2989,7 +2989,7 @@ if __MacGamingTrainerV1 == nil then
         return true
       end
 
-      local function teardown()
+      local function teardownOwner()
         if not removalReady() then error("Familiar owner removal is unavailable") end
         local name = ownerName()
         local data = ownerData()
@@ -3037,7 +3037,7 @@ if __MacGamingTrainerV1 == nil then
         isMounted = isMounted,
         canLevel = canLevel,
         removalReady = removalReady,
-        teardown = teardown,
+        teardown = teardownOwner,
       }
     end)()
 
