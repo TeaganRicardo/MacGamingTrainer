@@ -281,8 +281,7 @@ struct Hades2TrainerView: View {
     }
 
     private var filteredCurrentRunTraits: [CurrentRunTrait] {
-        let manageable = model.currentRunTraits.filter(\.isManageable)
-        let rows = traitSearch.isEmpty ? manageable : manageable.filter { trait in
+        let rows = traitSearch.isEmpty ? model.currentRunTraits : model.currentRunTraits.filter { trait in
             [
                 trait.displayName, trait.englishName,
                 trait.linkedDisplayName, trait.linkedEnglishName,
