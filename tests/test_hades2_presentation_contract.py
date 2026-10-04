@@ -349,6 +349,13 @@ for path in sorted((ROOT / "Sources/Hades2").rglob("*.swift")):
 # re-renders it. One row passed a bare literal, which froze English into the
 # combat screen and made the table edit that fixed it invisible to the player.
 _view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
+_trait_manager = _view[
+    _view.index("private var currentRunTraitsPanel"):
+    _view.index("private var resourceSection")
+]
+assert "trait.removalScopeAllMatching" in _trait_manager
+assert "hades2.traits.removeAllMatching" in _trait_manager
+
 _literal_titles = re.findall(
     r'feature(?:Row|MultiplierRow)\(\s*("(?:[^"\\]|\\.)*")', _view)
 assert not _literal_titles, (
