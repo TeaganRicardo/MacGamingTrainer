@@ -188,8 +188,10 @@ def manifest() -> list[Mutation]:
             ident="trait-target-count-recheck",
             invariant="a changed same-name count invalidates the selected target for every mutating command",
             path=lua,
-            old="          or count ~= params.expectedSameNameCount then\n",
-            new="          or false then\n",
+            old=("          or count ~= params.expectedSameNameCount\n"
+                 "          or (expectedRemainingUses ~= nil\n"),
+            new=("          or false\n"
+                 "          or (expectedRemainingUses ~= nil\n"),
             test="tests/test_hades2_live_trait_capability_gating.py",
             note="#227: the revalidated target snapshot lost its count recheck guard",
         ),
