@@ -135,7 +135,8 @@ character_index = boon_panel.index('hades2.spawn.characterRewards')
 exact_index = boon_panel.index('hades2.spawn.exactBoons')
 purging_index = boon_panel.index('hades2.spawn.purgingPool')
 assert character_index < exact_index < purging_index
-assert '$model.selectedExactBoon' in boon_panel
+assert 'model.selectedExactBoon' in view
+assert 'selection: exactItemSelection' in boon_panel
 assert '$exactSearch' in boon_panel
 assert 'exactItemLabel' in boon_panel
 exact_label = view[view.index('private func exactItemLabel'):view.index('private func spawnRow', view.index('private func exactItemLabel'))]
