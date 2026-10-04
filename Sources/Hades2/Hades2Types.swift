@@ -186,6 +186,10 @@ struct CurrentRunTrait: Identifiable, Equatable, Sendable {
     var canIncreaseLevel: Bool { levelCapability == .increaseOne }
     var canSetRarity: Bool { rarityCapability == .setExact }
     var canRemove: Bool { removalCapability != .none }
+    var isManageable: Bool {
+        canIncreaseLevel || canSetRarity || canRemove
+            || canAdvanceLifecycle || canSetRemainingUses || canExpire
+    }
 }
 
 /// The identity scope the runtime reported, carried so the UI cannot imply more
