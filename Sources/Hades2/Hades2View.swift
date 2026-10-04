@@ -453,6 +453,17 @@ struct Hades2TrainerView: View {
         }
     }
 
+    private func currentRunTraitRemovalLabel(_ trait: CurrentRunTrait?) -> String {
+        guard let trait else { return text("hades2.traits.remove") }
+        if trait.lifecycleState == "curse" {
+            return text("hades2.traits.chaos.cancelPair")
+        }
+        if trait.removalScopeAllMatching {
+            return text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)])
+        }
+        return text("hades2.traits.remove")
+    }
+
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
         HStack(spacing: 12) {
             HStack(spacing: 6) {
@@ -533,9 +544,9 @@ struct Hades2TrainerView: View {
                 guard let trait else { return }
                 model.removeTrait(trait)
             } label: {
-                Text(text(trait?.lifecycleState == "curse"
-                    ? "hades2.traits.chaos.cancelPair"
-                    : "hades2.traits.remove"))
+                Text(currentRunTraitRemovalLabel(trait))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
