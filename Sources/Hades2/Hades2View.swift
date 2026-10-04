@@ -55,6 +55,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
     @ViewState<[String: String]> private var traitRarityInputs = [:]
+    @ViewState<[String: String]> private var traitRemainingUsesInputs = [:]
     @ViewState<String> private var graspLimit = ""
     @ViewState<String> private var dodgeChance = ""
     @ViewState<String> private var critChance = ""
@@ -383,6 +384,25 @@ struct Hades2TrainerView: View {
         )
     }
 
+    private func traitRemainingUsesInput(_ trait: CurrentRunTrait) -> Binding<String> {
+        Binding(
+            get: {
+                if let draft = traitRemainingUsesInputs[trait.id] { return draft }
+                guard let uses = trait.remainingUses else { return "" }
+                return uses.rounded() == uses ? String(Int(uses)) : String(format: "%.1f", uses)
+            },
+            set: { traitRemainingUsesInputs[trait.id] = $0 }
+        )
+    }
+
+    private func canApplyTraitRemainingUses(_ trait: CurrentRunTrait) -> Bool {
+        guard model.canOpenNativeBoonScreen, trait.canSetRemainingUses,
+              let target = Int(traitRemainingUsesInput(trait).wrappedValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)),
+              (1...999_999).contains(target) else { return false }
+        return trait.remainingUses != Double(target)
+    }
+
     private func canApplyTraitLevel(_ trait: CurrentRunTrait) -> Bool {
         guard model.canOpenNativeBoonScreen, trait.canIncreaseLevel,
               let target = Int(traitLevelInput(trait).wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -444,7 +464,36 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
-        if trait.canAdvanceLifecycle {
+        if trait.family == "temporary" {
+            HStack(spacing: 6) {
+                Text(text("hades2.traits.remainingUses"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField(
+                    text("hades2.traits.remainingUses"),
+                    text: traitRemainingUsesInput(trait)
+                )
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 58)
+                .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRemainingUses)
+
+                Button(text("hades2.traits.apply")) {
+                    model.setTraitRemainingUses(
+                        trait,
+                        targetRemainingUses: traitRemainingUsesInput(trait).wrappedValue
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canApplyTraitRemainingUses(trait))
+
+                Button(text("hades2.traits.expireNow")) {
+                    model.expireTrait(trait)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!model.canOpenNativeBoonScreen || !trait.canExpire)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+        } else if trait.canAdvanceLifecycle {
             Button(text("hades2.traits.chaos.advance")) {
                 model.advanceTraitLifecycle(trait)
             }
@@ -457,6 +506,9 @@ struct Hades2TrainerView: View {
         guard let trait else { return text("hades2.traits.remove") }
         if trait.lifecycleState == "curse" {
             return text("hades2.traits.chaos.cancelPair")
+        }
+        if trait.family == "temporary" {
+            return text("hades2.traits.temporary.cancel")
         }
         if trait.removalScopeAllMatching {
             return text("hades2.traits.removeAllMatching", arguments: [currentRunTraitName(trait)])
