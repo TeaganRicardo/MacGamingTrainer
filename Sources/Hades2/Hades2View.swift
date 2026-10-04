@@ -15,6 +15,7 @@ struct Hades2TrainerView: View {
     }
 
     private enum TraitManagerLayout {
+        static let rowSpacing: CGFloat = 12
         static let levelControlsWidth: CGFloat = 174
         static let rarityControlsWidth: CGFloat = 224
         static let removeControlWidth: CGFloat = 106
@@ -457,16 +458,15 @@ struct Hades2TrainerView: View {
                     .frame(width: TraitManagerLayout.searchWidth)
             }
 
-            HStack(spacing: 12) {
-                if let trait = managedCurrentRunTrait {
-                    currentRunTraitContextualControls(trait)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    currentRunTraitCommonControls(trait)
-                } else {
-                    Spacer(minLength: 0)
-                    currentRunTraitCommonControls(nil)
+            currentRunTraitCommonControls(managedCurrentRunTrait)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .overlay(alignment: .leading) {
+                    if let trait = managedCurrentRunTrait {
+                        currentRunTraitContextualControls(trait)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)
+                    }
                 }
-            }
         }
         .onAppear {
             repairManagedTraitSelection()
@@ -498,6 +498,7 @@ struct Hades2TrainerView: View {
                 Text(text("hades2.traits.remainingUses"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 TextField(
                     text("hades2.traits.remainingUses"),
                     text: $traitRemainingUsesInput
@@ -514,20 +515,22 @@ struct Hades2TrainerView: View {
                     )
                 }
                 .buttonStyle(.bordered)
+                .lineLimit(1)
                 .disabled(!canApplyTraitRemainingUses(trait))
 
                 Button(text("hades2.traits.expireNow")) {
                     model.expireTrait(trait)
                 }
                 .buttonStyle(.bordered)
+                .lineLimit(1)
                 .disabled(!model.canOpenNativeBoonScreen || !trait.canExpire)
             }
-            .fixedSize(horizontal: true, vertical: false)
         } else if trait.canAdvanceLifecycle {
             Button(text("hades2.traits.chaos.advance")) {
                 model.advanceTraitLifecycle(trait)
             }
             .buttonStyle(.bordered)
+            .lineLimit(1)
             .disabled(!model.canOpenNativeBoonScreen)
         }
     }
@@ -547,11 +550,13 @@ struct Hades2TrainerView: View {
     }
 
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: TraitManagerLayout.rowSpacing) {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.targetLevel"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
@@ -564,6 +569,7 @@ struct Hades2TrainerView: View {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
                     .buttonStyle(.bordered)
+                    .lineLimit(1)
                     .frame(width: 62)
                     .disabled(!canApplyTraitLevel(trait))
                 } else {
@@ -574,6 +580,7 @@ struct Hades2TrainerView: View {
 
                     Button(text("hades2.traits.apply")) {}
                         .buttonStyle(.bordered)
+                        .lineLimit(1)
                         .frame(width: 62)
                         .disabled(true)
                 }
@@ -584,6 +591,8 @@ struct Hades2TrainerView: View {
                 Text(text("hades2.traits.targetRarity"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .frame(width: 48, alignment: .trailing)
 
                 if let trait {
@@ -597,13 +606,15 @@ struct Hades2TrainerView: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 108)
+                    .lineLimit(1)
+                    .frame(width: 102)
                     .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
 
                     Button(text("hades2.traits.apply")) {
                         model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
                     }
                     .buttonStyle(.bordered)
+                    .lineLimit(1)
                     .frame(width: 62)
                     .disabled(!canApplyTraitRarity(trait))
                 } else {
@@ -611,11 +622,13 @@ struct Hades2TrainerView: View {
                         Text("—").tag("")
                     }
                     .labelsHidden()
-                    .frame(width: 108)
+                    .lineLimit(1)
+                    .frame(width: 102)
                     .disabled(true)
 
                     Button(text("hades2.traits.apply")) {}
                         .buttonStyle(.bordered)
+                        .lineLimit(1)
                         .frame(width: 62)
                         .disabled(true)
                 }

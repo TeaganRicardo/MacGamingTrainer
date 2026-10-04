@@ -566,6 +566,24 @@ assert 'deferredIssue' not in trait_manager
 assert 'model.advanceTraitLifecycle(trait)' in trait_manager
 assert 'hades2.traits.chaos.cancelPair' in trait_manager
 
+# #345: contextual controls may change with the selected effect, but they must
+# never participate in positioning the fixed level / rarity / remove group.
+assert 'currentRunTraitCommonControls(managedCurrentRunTrait)' in trait_manager
+assert '.overlay(alignment: .leading)' in trait_manager
+assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' in trait_manager
+
+contextual_controls = trait_manager[
+    trait_manager.index('private func currentRunTraitContextualControls'):
+    trait_manager.index('private func currentRunTraitRemovalLabel')
+]
+common_controls = trait_manager[
+    trait_manager.index('private func currentRunTraitCommonControls'):
+]
+assert contextual_controls.count('.lineLimit(1)') >= 2
+assert common_controls.count('.lineLimit(1)') >= 4
+assert '"hades2.traits.targetRarity": "稀有度"' in zh_presentation
+assert '"hades2.traits.targetRarity": "Rarity"' in en_presentation
+
 # Metric cards are content-sized; no hidden min-height is allowed to re-create
 # the empty strip above title/lock controls.
 metric = card[card.index('struct TrainerMetricCard'):]
