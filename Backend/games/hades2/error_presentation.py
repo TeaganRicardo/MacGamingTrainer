@@ -519,6 +519,8 @@ REGISTRY = [
  {'match': 'literal', 'message': '请选择掉落物或祝福。', 'key': 'hades2.error.selectReward'},
  {'match': 'literal', 'message': '请选择支持原生奖励选择界面的角色。', 'key': 'hades2.error.selectChoiceSource'},
  {'match': 'literal', 'message': '请选择当前局祝福。', 'key': 'hades2.error.selectCurrentTrait'},
+ {'match': 'literal', 'message': '请选择当前局效果。', 'key': 'hades2.error.selectCurrentTrait'},
+ {'match': 'literal', 'message': '剩余次数必须为 1–999999 的整数。', 'key': 'hades2.error.remainingUsesRange'},
  {'match': 'literal', 'message': '请选择资源。', 'key': 'hades2.error.selectResource'},
  {'match': 'literal',
   'message': '调试签名校验失败；未修改游戏。',
