@@ -255,6 +255,8 @@
     "hades2.receipt.outcomeUnknown": "The result of {0} is unknown; reconnect and check the game state",
     "hades2.receipt.traitLevelAction": "Boon level change",
     "hades2.receipt.traitRarityAction": "Boon rarity change",
+    "hades2.receipt.traitDurationAction": "Temporary-effect duration change",
+    "hades2.receipt.traitExpiryAction": "Temporary-effect expiry",
     "hades2.receipt.traitRemoveAction": "Boon removal",
     "hades2.receipt.traitLifecycleAction": "Chaos effect transformation",
     "hades2.resource.materials": "Materials",
