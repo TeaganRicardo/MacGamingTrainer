@@ -297,9 +297,9 @@ finally:
     localization.official_display_names = original_display_names
 
 frog, cat = live_payload['currentRunTraits']
-assert frog['displayName'] == '弗利诺斯·攻击伤害'
+assert frog['displayName'] == '弗利诺斯 · 攻击伤害'
 assert frog['englishName'] == 'Frinos · Attack Damage'
-assert cat['displayName'] == '图拉·攻击次数'
+assert cat['displayName'] == '图拉 · 攻击次数'
 assert cat['englishName'] == 'Toula · Attack Count'
 assert frog['displayName'] != frog['name']
 assert cat['displayName'] != cat['name']

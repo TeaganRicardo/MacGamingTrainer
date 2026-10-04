@@ -328,6 +328,7 @@
     "hades2.traits.deferredIssue": "该效果的其他独立生命周期操作由 #{0} 继续处理。",
     "hades2.traits.empty": "当前局没有可显示的祝福。",
     "hades2.traits.family.arcana": "阿卡那牌效果",
+    "hades2.traits.family.biomeState": "环境状态",
     "hades2.traits.family.chaos": "卡俄斯",
     "hades2.traits.family.costume": "服装效果",
     "hades2.traits.family.directSpecial": "特殊角色效果",

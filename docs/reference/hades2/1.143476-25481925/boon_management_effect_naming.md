@@ -32,7 +32,7 @@ Concrete target seams used in this review include:
 - `ConsumableData.lua` + `TraitData_Essence.lua` for elemental essence traits;
 - `RoomLogic.lua` + `TraitData.lua` for Max Life, Max Magick and Armor state;
 - `WeaponLogic.lua` + `TraitData.lua` + native `WeaponSuit` text for the Black Coat sprint trait;
-- `BiomeStateData.lua` + `BiomeStateLogic.lua` for normal/rain environment-state traits.
+- `BiomeStateData.lua` + `BiomeStateLogic.lua` for normal/rain environment-state traits; these are grouped as the product family `biomeState` rather than leaking into `other`.
 
 ## Governance rule
 

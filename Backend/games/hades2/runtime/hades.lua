@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 74 then
+if previousModule and previousModule.revision ~= 75 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 74 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 74, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 75, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3662,6 +3662,7 @@ if __MacGamingTrainerV1 == nil then
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
+      if trait.BiomeStateTrait then return "biomeState" end
       if chaosLifecycleState(trait) ~= "" then return "chaos" end
       local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and slotted.TraitName == name then return "hex" end
