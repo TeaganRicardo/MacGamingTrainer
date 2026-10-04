@@ -3035,9 +3035,9 @@ if __MacGamingTrainerV1 == nil then
       end
 
       local function cancel(trait)
-        if counterKind(trait) == nil then
-          error("Trait removal is unavailable for the selected target")
-        end
+        -- Well ownership is the cancellation authority. Some persistent Well
+        -- effects have no duration counter, but still require explicit owner
+        -- teardown; duration/expiry controls remain gated separately.
         requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
         RemoveTraitData(CurrentRun.Hero, trait, { Silent = true, SkipExpire = true })
         if instanceStillMounted(trait) then
