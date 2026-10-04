@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 64 then
+if previousModule and previousModule.revision ~= 65 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 64 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 64, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 65, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2553,6 +2553,43 @@ if __MacGamingTrainerV1 == nil then
       "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
     }
 
+    local function isArachneCostumeChoice(name)
+      if type(name) ~= "string" or type(PresetEventArgs) ~= "table" then return false end
+      local choiceData = PresetEventArgs.ArachneCostumeChoices
+      if type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table" then return false end
+      for _, option in pairs(choiceData.UpgradeOptions) do
+        if type(option) == "table" and option.Type == "Trait" and option.ItemName == name then
+          return true
+        end
+      end
+      return false
+    end
+
+    local function removeCostume(trait)
+      if type(trait) ~= "table" or not isArachneCostumeChoice(trait.Name) then
+        error("Trait removal is unavailable for the selected target")
+      end
+      requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
+      local instanceId = trait.Id ~= nil and tostring(trait.Id) or ""
+      local ok, message = pcall(
+        RemoveTraitData, CurrentRun.Hero, trait, { Silent = true, SkipExpire = true }
+      )
+      local stillMounted = false
+      for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(candidate) == "table" and candidate.Id ~= nil
+            and tostring(candidate.Id) == instanceId then
+          stillMounted = true
+          break
+        end
+      end
+      if not stillMounted then
+        local setupOk, setupMessage = pcall(SetupCostume)
+        if not setupOk then error(setupMessage) end
+      end
+      if not ok then error(message) end
+      if stillMounted then error("Arachne costume removal left owner state mounted") end
+    end
+
     local function traitLevel(trait)
       if type(trait) ~= "table" then return 1 end
       local value = trait.StackNum
@@ -2746,7 +2783,7 @@ if __MacGamingTrainerV1 == nil then
             and type(RemoveTraitData) == "function"
             and type(AddTraitToHero) == "function" then
           levelCapability, levelReason = "increaseOne", ""
-        elseif family == "hammer" or family == "weaponAspect" then
+        elseif family == "hammer" or family == "weaponAspect" or family == "costume" then
           levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
@@ -2777,6 +2814,8 @@ if __MacGamingTrainerV1 == nil then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "weaponAspect" then
           rarityReason = "permanentProgressionOwned"
+        elseif family == "costume" then
+          rarityReason = "notMeaningful"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -2788,7 +2827,7 @@ if __MacGamingTrainerV1 == nil then
         end
 
         local slotted = seleneModel.currentSpell()
-        if sameCount > 1 and (family == "hex" or family == "hexTalent") then
+        if sameCount > 1 and (family == "hex" or family == "hexTalent" or family == "costume") then
           removalReason = "multipleMatchingInstances"
         elseif family == "hex" and type(slotted) == "table" and slotted.TraitName == trait.Name
             and type(HeroHasTrait) == "function" and type(RemoveTrait) == "function"
@@ -2801,6 +2840,9 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "chaos" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "hammer" and hammerModel.removalReady(trait) then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "costume" and isArachneCostumeChoice(trait.Name)
+            and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
@@ -2964,6 +3006,8 @@ if __MacGamingTrainerV1 == nil then
       capabilities = operationCapabilities,
       availableRarities = availableRarities,
       targetHasRarity = targetHasRarity,
+      isArachneCostumeChoice = isArachneCostumeChoice,
+      removeCostume = removeCostume,
       level = traitLevel,
       rarity = traitRarity,
       chaosLifecycleState = chaosLifecycleState,
@@ -4492,10 +4536,12 @@ if __MacGamingTrainerV1 == nil then
           })
         elseif removalCapability == "singleInstanceForce" and family == "hammer" then
           requireFunctions("Hammer trait removal", { "RemoveTraitData" })
-          if type(live) == "table" and type(live.PreEquipWeapons) == "table"
-              and next(live.PreEquipWeapons) ~= nil then
+          if type(target) == "table" and type(target.PreEquipWeapons) == "table"
+              and next(target.PreEquipWeapons) ~= nil then
             requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
           end
+        elseif removalCapability == "singleInstanceForce" and family == "costume" then
+          requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -4521,6 +4567,8 @@ if __MacGamingTrainerV1 == nil then
           end
         elseif family == "hammer" then
           hammerModel.removeMounted(live)
+        elseif family == "costume" then
+          traitManagement.removeCostume(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
@@ -4948,6 +4996,9 @@ if __MacGamingTrainerV1 == nil then
         if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
           requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
           if entry.acquisitionMode == "costume" then
+            if entry.sourceId ~= "Arachne" or not traitManagement.isArachneCostumeChoice(entry.trait) then
+              error("Exact costume target is unavailable")
+            end
             requireFunctions("exact costume acquisition", { "SetupCostume" })
           end
           exactPlan = { mode = entry.acquisitionMode }
