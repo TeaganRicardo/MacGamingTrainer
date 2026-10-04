@@ -3085,6 +3085,7 @@ if __MacGamingTrainerV1 == nil then
         "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
         "OnExpire", "OnExpireFunctionName", "Uses", "RemainingUses", "CurrentRoom",
         "RerollCount", "BonusMoney", "AddMetaUpgradeLastStands", "MetaConversionUses",
+        "BossEncounterShieldHits",
       }
 
       local function ownerName(trait)
