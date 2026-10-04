@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 69 then
+if previousModule and previousModule.revision ~= 70 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 69 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 69, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 70, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2710,7 +2710,6 @@ if __MacGamingTrainerV1 == nil then
     local deferredTraitIssues = {
       costume = 239,
       directSpecial = 239,
-      keepsake = 329,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
@@ -2941,8 +2940,31 @@ if __MacGamingTrainerV1 == nil then
         return name ~= "" and type(trait) == "table" and trait.Name == name
       end
 
+      local function mountedTrait(name)
+        for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(trait) == "table" and trait.Name == name then return trait end
+        end
+        return nil
+      end
+
       local function removalReady()
         return ownerName() ~= "" and type(UnequipKeepsake) == "function"
+      end
+
+      local function rankReady(trait)
+        if not isMounted(trait) or type(trait.Rarity) ~= "string"
+            or type(UnequipKeepsake) ~= "function" or type(EquipKeepsake) ~= "function"
+            or type(PersistentKeepsakeKeys) ~= "table" or type(UpdateTraitNumber) ~= "function" then
+          return false
+        end
+        local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+        return type(definition) == "table" and type(definition.RarityLevels) == "table"
+      end
+
+      local function targetRankAvailable(trait, rarity)
+        if not rankReady(trait) or type(rarity) ~= "string" then return false end
+        local definition = TraitData[trait.Name]
+        return definition.RarityLevels[rarity] ~= nil
       end
 
       local function teardownOwner()
@@ -2956,10 +2978,104 @@ if __MacGamingTrainerV1 == nil then
         end
       end
 
+      local function rebuildRarity(trait, targetRarity)
+        if not targetRankAvailable(trait, targetRarity) then
+          error("Trait rarity editing is unavailable for the selected target")
+        end
+        local name = ownerName()
+        local persistentValues = {}
+        for _, key in pairs(PersistentKeepsakeKeys) do
+          local value = trait[key]
+          if key == "DoorHealReserve" and value ~= nil and type(round) == "function" then
+            value = round(value)
+          end
+          persistentValues[key] = value
+        end
+
+        local firstError = nil
+        local function attempt(work)
+          local ok, value = pcall(work)
+          if not ok then
+            if firstError == nil then firstError = tostring(value) end
+            return nil
+          end
+          return value
+        end
+
+        -- This mirrors the game's AdvanceKeepsake(fromTrait=true) rebuild
+        -- shape, with ForceRarity as the only semantic difference. No durable
+        -- chamber progress or selected Keepsake identity is touched.
+        attempt(function()
+          UnequipKeepsake(CurrentRun.Hero, name, {
+            SkipValidateHealth = true,
+            AdvanceKeepsakeMoment = true,
+          })
+        end)
+        if mountedTrait(name) ~= nil then
+          if firstError ~= nil then error(firstError) end
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+
+        attempt(function()
+          return EquipKeepsake(CurrentRun.Hero, name, {
+            SkipSetup = true,
+            ForceRarity = targetRarity,
+          })
+        end)
+        local rebuilt = mountedTrait(name)
+        if type(rebuilt) ~= "table" then
+          if firstError ~= nil then error(firstError) end
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+
+        -- Even if EquipKeepsake acknowledged late after mounting the owner,
+        -- restore the same runtime-owned fields that native AdvanceKeepsake
+        -- preserves before surfacing outcome-unknown.
+        for key, value in pairs(persistentValues) do rebuilt[key] = value end
+
+        if rebuilt.CostumeTrait and type(rebuilt.SetupFunction) == "table"
+            and rebuilt.SetupFunction.Name == "CostumeArmor"
+            and finite(rebuilt.CurrentArmor) and rebuilt.CurrentArmor ~= 0
+            and type(AddHealthBuffer) == "function" then
+          attempt(function()
+            AddHealthBuffer(rebuilt.CurrentArmor, rebuilt.Name)
+            if type(FrameState) == "table" then FrameState.RequestUpdateHealthUI = true end
+          end)
+        end
+        if name == "LowHealthCritKeepsake" then
+          if type(IsTraitActive) == "function" and not IsTraitActive(rebuilt)
+              and type(rebuilt.PropertyChanges) == "table"
+              and type(rebuilt.PropertyChanges[1]) == "table" then
+            rebuilt.PropertyChanges[1].ChangeValue = 1
+          end
+          if type(ValidateMaxHealth) == "function" then
+            attempt(function() ValidateMaxHealth(true) end)
+          end
+          if type(FrameState) == "table" then FrameState.RequestUpdateHealthUI = true end
+        end
+        if name == "ReincarnationKeepsake" then rebuilt.CustomTrayText = nil end
+        if name == "DecayingBoostKeepsake" then
+          rebuilt.CurrentKeepsakeDamageBonus = rebuilt.InitialKeepsakeDamageBonus
+        end
+        if name == "ManaOverTimeRefundKeepsake" and type(ValidateMaxMana) == "function" then
+          attempt(function() ValidateMaxMana() end)
+        end
+        attempt(function() UpdateTraitNumber(rebuilt) end)
+
+        if rebuilt.Rarity ~= targetRarity then
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+        if firstError ~= nil then error(firstError) end
+        return rebuilt
+      end
+
       return {
         ownerName = ownerName,
         isMounted = isMounted,
         removalReady = removalReady,
+        rankReady = rankReady,
+        targetRankAvailable = targetRankAvailable,
+        rebuildRarity = rebuildRarity,
         teardown = teardownOwner,
       }
     end)()
@@ -3321,8 +3437,10 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "hammer" or family == "weaponAspect" or family == "costume"
             or family == "temporary" then
           levelReason = "notMeaningful"
-        elseif family == "familiar" or family == "keepsake" then
+        elseif family == "familiar" then
           levelReason = "ownerSpecificLifecycle"
+        elseif family == "keepsake" then
+          levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
         elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
@@ -3354,8 +3472,10 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "permanentProgressionOwned"
         elseif family == "costume" or family == "temporary" or family == "familiar" then
           rarityReason = "notMeaningful"
+        elseif family == "keepsake" and keepsakeModel.rankReady(trait) then
+          rarityCapability, rarityReason = "setExact", ""
         elseif family == "keepsake" then
-          rarityReason = "ownerSpecificLifecycle"
+          rarityReason = "nativePathUnavailable"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -5060,6 +5180,10 @@ if __MacGamingTrainerV1 == nil then
           requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
         elseif family == "hexTalent" then
           requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
+        elseif family == "keepsake" then
+          if not traitManagement.keepsake.targetRankAvailable(target, params.rarity) then
+            error("Trait rarity editing is unavailable for the selected target")
+          end
         else
           requireFunctions("trait rarity editing", { "AddRarityToTraits" })
         end
@@ -5070,6 +5194,8 @@ if __MacGamingTrainerV1 == nil then
         local upgraded
         if family == "chaos" then
           upgraded = traitManagement.rebuildChaosTarget(live, nil, params.rarity)
+        elseif family == "keepsake" then
+          upgraded = traitManagement.keepsake.rebuildRarity(live, params.rarity)
         else
           upgraded = AddRarityToTraits({}, {
             NumTraits = 1,
