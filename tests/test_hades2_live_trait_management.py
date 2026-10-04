@@ -130,6 +130,9 @@ EnemyData = {
   NPC_Artemis_Field_01 = {
     Traits = { "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval" },
   },
+  NPC_Icarus_01 = {
+    Traits = { "DynamicIcarusArmor" },
+  },
 }
 PresetEventArgs = {}
 ScreenData = {}
@@ -191,6 +194,7 @@ local calls = {
   validateHealth = 0,
   validateMana = 0,
   weaponAnim = 0,
+  costumeSetup = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
@@ -358,6 +362,9 @@ end
 HandleWeaponAnimSwaps = function()
   calls.weaponAnim = calls.weaponAnim + 1
 end
+SetupCostume = function()
+  calls.costumeSetup = calls.costumeSetup + 1
+end
 AddHealthBuffer = function() end
 IsTraitActive = function() return true end
 
@@ -416,6 +423,16 @@ for _, name in ipairs({
   defineRarities(name)
 end
 TraitData.DynamicDirectLevel.SyntheticStackEffect = true
+TraitData.DynamicIcarusArmor = {
+  InheritFrom = { "BaseIcarus", "CostumeTrait" },
+  Uses = 1,
+  SetupFunctions = {
+    {
+      Name = "CostumeArmor",
+      Args = { Source = "Icarus", BaseAmount = 40 },
+    },
+  },
+}
 
 for _, name in ipairs({
   "LastStandFamiliar",
@@ -680,6 +697,38 @@ do
   eq(CurrentRun.Hero.Traits[1].Id, 452, "dynamic direct removal removed wrong instance")
   check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
     "dynamic direct removal did not suppress expiration")
+end
+
+-- Icarus armor/coating traits are direct-special owned but carry a native
+-- CostumeArmor setup lifecycle. They are not generic declarative rows: removal
+-- must perform exact RemoveTraitData teardown and then refresh costume owner
+-- presentation/state instead of silently disabling the operation.
+do
+  local trait = newTrait("DynamicIcarusArmor", 475, 1, "Common", {
+    InheritFrom = { "BaseIcarus", "CostumeTrait" },
+    Uses = 1,
+    SetupFunctions = {
+      {
+        Name = "CostumeArmor",
+        Args = { Source = "Icarus", BaseAmount = 40 },
+      },
+    },
+    CurrentArmor = 40,
+  })
+  setTraits(trait)
+  local row = findRow("DynamicIcarusArmor", 475)
+  eq(row.family, "directSpecial", "Icarus armor owner family")
+  eq(row.levelCapability, "none", "Icarus armor exposed generic level editing")
+  eq(row.rarityCapability, "none", "Icarus armor exposed generic rarity editing")
+  eq(row.removalCapability, "singleInstanceForce", "Icarus armor removal capability")
+  local beforeRemove = calls.directRemove
+  local beforeSetup = calls.costumeSetup
+  M.dispatch("remove_trait", paramsFrom(row, "icarus-armor-remove"))
+  eq(calls.directRemove, beforeRemove + 1, "Icarus armor teardown callback")
+  eq(calls.costumeSetup, beforeSetup + 1, "Icarus armor costume refresh")
+  eq(#CurrentRun.Hero.Traits, 0, "Icarus armor remained mounted")
+  check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
+    "Icarus armor removal did not suppress expiration")
 end
 
 -- Native SellTraits-equivalent removal is explicitly name-level/all-matching.
