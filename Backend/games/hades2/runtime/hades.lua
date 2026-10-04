@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 65 then
+if previousModule and previousModule.revision ~= 66 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 65 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 65, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 66, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2095,13 +2095,142 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  local echoModel = (function()
+    local prefix = "echo:lastRun:"
+
+    local function previousRun()
+      local history = type(GameState) == "table" and GameState.RunHistory or nil
+      if type(history) ~= "table" or #history == 0 then return nil end
+      local value = history[#history]
+      return type(value) == "table" and value or nil
+    end
+
+    local function sourceRarity(name)
+      local previous = previousRun()
+      if type(previous) ~= "table" then return nil end
+      if type(previous.SpecialInteractRecord) == "table" and previous.SpecialInteractRecord.Shrine then
+        return nil
+      end
+      local cache = previous.TraitRarityCache
+      if type(cache) ~= "table" or cache[name] == nil then return nil end
+      local definition = type(TraitData) == "table" and TraitData[name] or nil
+      if type(definition) ~= "table" or definition.ExcludeTraitFromLastRunBoonPool then return nil end
+      if type(IsGodTrait) ~= "function" then return nil end
+      local ok, isGod = pcall(IsGodTrait, name, { ForShop = true, ForLastRunBoon = true })
+      if not ok or not isGod then return nil end
+      local rarity = cache[name]
+      return type(rarity) == "string" and rarity or "Common"
+    end
+
+    local function catalogTargets()
+      local result = setmetatable({}, arrayMeta)
+      local previous = previousRun()
+      local cache = type(previous) == "table" and previous.TraitRarityCache or nil
+      if type(cache) ~= "table" then return result end
+      local names = {}
+      for name in pairs(cache) do
+        if type(name) == "string" and sourceRarity(name) ~= nil then names[#names + 1] = name end
+      end
+      table.sort(names)
+      for _, name in ipairs(names) do
+        result[#result + 1] = { name = name, rarity = sourceRarity(name) }
+      end
+      return result
+    end
+
+    local function catalogSignature()
+      local previous = previousRun()
+      if type(previous) ~= "table" then return "none" end
+      local parts = {
+        type(previous.SpecialInteractRecord) == "table" and previous.SpecialInteractRecord.Shrine
+          and "shrine" or "ordinary",
+      }
+      local cache = previous.TraitRarityCache
+      if type(cache) ~= "table" then return table.concat(parts, "|") end
+      local names = {}
+      for name in pairs(cache) do if type(name) == "string" then names[#names + 1] = name end end
+      table.sort(names)
+      for _, name in ipairs(names) do
+        parts[#parts + 1] = tostring(name) .. ":" .. tostring(cache[name] or "")
+      end
+      return table.concat(parts, "|")
+    end
+
+    local function eligibleRarity(name)
+      local rarity = sourceRarity(name)
+      if rarity == nil then return false, nil end
+      local definition = type(TraitData) == "table" and TraitData[name] or nil
+      if type(definition) ~= "table" then return false, nil end
+      if type(HeroHasTrait) ~= "function" or HeroHasTrait(name) then return false, nil end
+      if type(IsTraitEligible) ~= "function" or not IsTraitEligible(definition) then return false, nil end
+      if definition.Slot ~= nil then
+        if type(HeroSlotFilled) ~= "function" or HeroSlotFilled(definition.Slot) then return false, nil end
+      end
+      if type(GetHeroTrait) == "function" then
+        local floor = GetHeroTrait("ElementalRarityUpgradeBoon")
+        if type(floor) == "table" and floor.Activated
+            and (rarity == "" or rarity == "Common") then
+          rarity = "Rare"
+        end
+      end
+      return true, rarity ~= "" and rarity or "Common"
+    end
+
+    local function hiddenEntry(rewardId)
+      if type(rewardId) ~= "string" or string.sub(rewardId, 1, #prefix) ~= prefix then return nil end
+      local name = string.sub(rewardId, #prefix + 1)
+      if name == "" or type(TraitData) ~= "table" or type(TraitData[name]) ~= "table" then return nil end
+      return {
+        id = rewardId, name = name, category = "角色奖励", group = "exact", kind = "trait",
+        trait = name, family = "Echo", sourceId = "Echo", sourceName = "回声",
+        sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
+      }
+    end
+
+    local function applyExact(name, rarity)
+      requireFunctions("Echo previous-run exact acquisition", {
+        "GetProcessedTraitData", "AddTraitToHero",
+      })
+      local processed = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = name, Rarity = rarity,
+      })
+      if type(processed) ~= "table" then error("Echo previous-run boon acquisition failed") end
+      local added = AddTraitToHero({
+        FromLoot = true,
+        TraitData = processed,
+        OverwriteArgs = {
+          OffsetX = -50, OffsetY = -50,
+          AngleMin = 90, AngleMax = 180,
+          ForceMin = 80, ForceMax = 180,
+          UpwardForceMin = 300, UpwardForceMax = 700,
+          ReRandomizeForcePerItem = true,
+          ForceToValidLocation = false,
+          KeepCollision = false,
+        },
+      })
+      if type(added) ~= "table" then error("Echo previous-run boon acquisition failed") end
+      if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = name end
+      return added
+    end
+
+    return {
+      catalogTargets = catalogTargets,
+      catalogSignature = catalogSignature,
+      eligibleRarity = eligibleRarity,
+      hiddenEntry = hiddenEntry,
+      applyExact = applyExact,
+    }
+  end)()
+
   local function rewards()
     local cached = M.catalogCache.rewards
     local seleneSignature = seleneModel.catalogSignature()
     local hammerSignature = hammerModel.catalogSignature()
+    local echoSignature = echoModel.catalogSignature()
     if type(cached) == "table"
         and cached.seleneSignature == seleneSignature
-        and cached.hammerSignature == hammerSignature then
+        and cached.hammerSignature == hammerSignature
+        and cached.echoSignature == echoSignature then
       return cached.list, cached.allowed
     end
     local result, allowed = setmetatable({}, arrayMeta), {}
@@ -2297,6 +2426,24 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    -- Echo's previous-run blessing is an owner action, not a trait target.
+    -- Project the concrete God boons from the latest run history directly so
+    -- exact acquisition never opens/waits on Echo's random three-choice menu.
+    do
+      local echoOrder = officialSourceOrder.Echo or 60
+      for index, target in ipairs(echoModel.catalogTargets()) do
+        local id = "echo:lastRun:" .. target.name
+        local item = {
+          id = id, name = target.name, category = "角色奖励", group = "exact", kind = "trait",
+          trait = target.name, family = "Echo", sourceId = "Echo", sourceName = "回声",
+          sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
+          sortSection = 25, sortGroup = echoOrder, sortOrder = index,
+        }
+        allowed[id] = item
+        result[#result + 1] = item
+      end
+    end
+
 
     -- Daedalus Hammer exact targets are the game's current native eligibility
     -- for the equipped weapon/aspect.  Mounted targets remain in the internal
@@ -2382,7 +2529,7 @@ if __MacGamingTrainerV1 == nil then
         and type(RewardStoreData) == "table" and type(UnitSetData) == "table" and type(TraitData) == "table" then
       M.catalogCache.rewards = {
         list = result, allowed = allowed, seleneSignature = seleneSignature,
-        hammerSignature = hammerSignature,
+        hammerSignature = hammerSignature, echoSignature = echoSignature,
       }
     end
     return result, allowed
@@ -4939,6 +5086,7 @@ if __MacGamingTrainerV1 == nil then
       local _, allowed = rewards()
       local rewardId = params.reward
       local entry = type(rewardId) == "string" and allowed[rewardId] or nil
+      if not entry then entry = echoModel.hiddenEntry(rewardId) end
       if not entry then error("Unknown or unsupported reward") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot spawn a reward during a transition") end
 
@@ -5057,6 +5205,16 @@ if __MacGamingTrainerV1 == nil then
           end
           requireFunctions("exact Selene talent acquisition", talentRequirements)
           exactPlan = { mode = "seleneTalent", spellName = entry.spellName }
+          return
+        end
+        if entry.acquisitionMode == "echoLastRunExact" then
+          requireFunctions("Echo previous-run exact eligibility", {
+            "HeroHasTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled",
+            "GetProcessedTraitData", "AddTraitToHero",
+          })
+          local eligible, rarity = echoModel.eligibleRarity(entry.trait)
+          if not eligible then error("Echo previous-run boon is no longer eligible") end
+          exactPlan = { mode = "echoLastRunExact", rarity = rarity }
           return
         end
         if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
@@ -5239,6 +5397,10 @@ if __MacGamingTrainerV1 == nil then
           end
           if exactPlan and exactPlan.mode == "hammerNative" then
             hammerModel.applyExact(entry.trait)
+            return nil
+          end
+          if exactPlan and exactPlan.mode == "echoLastRunExact" then
+            echoModel.applyExact(entry.trait, exactPlan.rarity)
             return nil
           end
           if exactPlan and exactPlan.mode == "costume" then
