@@ -28,6 +28,7 @@ assert "instanceId" in block
 # replacing the stable runtime routing identity in `name`.
 assert "GetTraitTooltipTitle" in block
 assert "displayId = displayId" in block
+assert 'if trait.BiomeStateTrait then return "biomeState" end' in LUA
 assert 'identityScope: "currentRunInstance"' in TYPES
 assert "isPersistent: false" in TYPES
 
@@ -45,5 +46,6 @@ assert "TRAIT_IDENTITY_SCOPE = 'currentRunInstance'" in SCHEMA
 revision = int(re.search(r"version = 1, revision = (\d+)", LUA).group(1))
 previous = int(re.search(r"previousModule\.revision ~= (\d+)", LUA).group(1))
 assert revision == previous
+assert revision >= 75
 
 print("hades2_current_run_traits_ok")
