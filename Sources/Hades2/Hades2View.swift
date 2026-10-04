@@ -464,7 +464,8 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
-        if trait.family == "temporary" {
+        if trait.family == "temporary"
+            && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire) {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.remainingUses"))
                     .font(.caption)
