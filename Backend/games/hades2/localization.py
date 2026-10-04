@@ -60,6 +60,8 @@ def _load_official_display_names(language, game_path=None):
         files = []
     id_pattern = re.compile(r'\bId\s*=\s*"((?:\\.|[^"\\])*)"')
     display_pattern = re.compile(r'\bDisplayName\s*=\s*"((?:\\.|[^"\\])*)"')
+    inherit_pattern = re.compile(r'\bInheritFrom\s*=\s*(?:\{\s*)?"((?:\\.|[^"\\])*)"')
+    inherited_from = {}
     for path in files:
         try:
             text = path.read_text(encoding='utf-8-sig', errors='replace')
@@ -72,6 +74,34 @@ def _load_official_display_names(language, game_path=None):
             display = display_pattern.search(text, match.end(), end)
             if display and identifier not in names:
                 names[identifier] = _clean_display_name(display.group(1))
+            inherit = inherit_pattern.search(text, match.end(), end)
+            if inherit and identifier not in inherited_from:
+                inherited_from[identifier] = _sjson_unescape(inherit.group(1))
+
+    # Hades text records use SJSON inheritance for presentation identity. Many
+    # mounted runtime traits (notably Arcana, Well and persistent Keepsake
+    # variants) intentionally omit their own DisplayName and inherit the exact
+    # native title from a parent record. Resolve that chain here rather than
+    # manufacturing Trainer names for game-owned terminology.
+    resolving = set()
+    def resolve(identifier):
+        direct = names.get(identifier)
+        if isinstance(direct, str) and direct:
+            return direct
+        parent = inherited_from.get(identifier)
+        if not parent or identifier in resolving:
+            return None
+        resolving.add(identifier)
+        resolved = resolve(parent)
+        resolving.discard(identifier)
+        if isinstance(resolved, str) and resolved:
+            names[identifier] = resolved
+            return resolved
+        return None
+
+    for identifier in inherited_from:
+        resolve(identifier)
+
     _OFFICIAL_TEXT_CACHE[cache_key] = names
     return names
 
