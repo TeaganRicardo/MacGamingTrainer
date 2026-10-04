@@ -354,12 +354,18 @@ local function status()
   return M.dispatch("status", { includeCatalogs = false })
 end
 
-local function findRow(name, instanceId)
+local function maybeFindRow(name, instanceId)
   for _, row in ipairs(status().currentRunTraits or {}) do
     if row.name == name and (instanceId == nil or row.instanceId == tostring(instanceId)) then
       return row
     end
   end
+  return nil
+end
+
+local function findRow(name, instanceId)
+  local row = maybeFindRow(name, instanceId)
+  if row ~= nil then return row end
   fail("missing observed trait row " .. tostring(name) .. "/" .. tostring(instanceId))
 end
 
@@ -759,7 +765,7 @@ do
   local beforeUnequip = calls.keepsakeUnequip
   local result = M.dispatch("remove_trait", paramsFrom(findRow("ReincarnationKeepsake", 1601), "keepsake-remove"))
   eq(calls.keepsakeUnequip, beforeUnequip + 1, "Keepsake removal did not use native owner teardown")
-  check(findRow("ReincarnationKeepsake", 1601) == nil, "Keepsake owner remained mounted")
+  check(maybeFindRow("ReincarnationKeepsake", 1601) == nil, "Keepsake owner remained mounted")
   eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "runtime Keepsake removal rewrote selected durable owner")
   eq(GameState.KeepsakeChambers.ReincarnationKeepsake, progressBefore, "runtime Keepsake removal changed progression")
   eq(CurrentRun.Hero.MaxLastStands, 1, "Keepsake native teardown did not remove linked Last Stand")
@@ -787,7 +793,7 @@ do
   expectError("MGT_OUTCOME_UNKNOWN", function()
     M.dispatch("remove_trait", params)
   end)
-  check(findRow("ReincarnationKeepsake", 1701) == nil, "unknown Keepsake teardown left trait mounted")
+  check(maybeFindRow("ReincarnationKeepsake", 1701) == nil, "unknown Keepsake teardown left trait mounted")
   eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "unknown Keepsake teardown rewrote durable selection")
   eq(GameState.KeepsakeChambers.ReincarnationKeepsake, progressBefore, "unknown Keepsake teardown changed progression")
   local afterUnknown = calls.keepsakeUnequip
