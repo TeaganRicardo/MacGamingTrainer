@@ -128,7 +128,7 @@ ResourceDisplayOrderData = {}
 TraitElementData = {}
 EnemyData = {
   NPC_Artemis_Field_01 = {
-    Traits = { "DynamicDirectLevel", "DynamicDirectRarity" },
+    Traits = { "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval" },
   },
 }
 PresetEventArgs = {}
@@ -411,6 +411,7 @@ for _, name in ipairs({
   "OmegaExplodeBoon",
   "DynamicDirectLevel",
   "DynamicDirectRarity",
+  "DynamicDirectRemoval",
 }) do
   defineRarities(name)
 end
@@ -660,6 +661,25 @@ do
   M.dispatch("set_trait_rarity", params)
   eq(trait.Rarity, "Heroic", "direct rarity mutation")
   eq(trait.EffectValue, 4000, "direct rarity effect recomputation")
+end
+
+-- A direct special whose runtime ownership is fully trait-local can be force
+-- removed as one exact instance even though native SellTraits rejects it.
+do
+  local first = newTrait("DynamicDirectRemoval", 451, 1, "Rare")
+  local second = newTrait("DynamicDirectRemoval", 452, 1, "Rare")
+  setTraits(first, second)
+  local row = findRow("DynamicDirectRemoval", 451)
+  eq(row.family, "directSpecial", "dynamic direct removal family")
+  eq(row.removalCapability, "singleInstanceForce", "dynamic direct removal capability")
+  check(row.removalScopeAllMatching == false, "dynamic direct removal widened scope")
+  local before = calls.directRemove
+  M.dispatch("remove_trait", paramsFrom(row, "dynamic-direct-remove"))
+  eq(calls.directRemove, before + 1, "dynamic direct removal callback")
+  eq(#CurrentRun.Hero.Traits, 1, "dynamic direct removal removed wrong count")
+  eq(CurrentRun.Hero.Traits[1].Id, 452, "dynamic direct removal removed wrong instance")
+  check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
+    "dynamic direct removal did not suppress expiration")
 end
 
 -- Native SellTraits-equivalent removal is explicitly name-level/all-matching.
