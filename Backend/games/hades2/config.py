@@ -23,6 +23,13 @@ class SteamSpec:
 MODULE_DIR = Path(__file__).resolve().parent
 MODULE_MANIFEST = GameModuleManifest.load(MODULE_DIR / 'module.json')
 
+# Resident Lua source is trusted Trainer-owned code and is substantially larger
+# than a normal dispatch. Keep its input budget bounded, but separate it from
+# the response buffer budget so runtime growth does not silently consume output
+# headroom or fail before luaL_loadbufferx sees a valid bootstrap.
+LUA_TRANSPORT_SOURCE_LIMIT_BYTES = 1_048_576
+LUA_TRANSPORT_RESULT_LIMIT_BYTES = 262_144
+
 HOME = Path.home()
 STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
 _RAW_MODULE = json.loads((MODULE_DIR / 'module.json').read_text(encoding='utf-8'))
