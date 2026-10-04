@@ -12,7 +12,6 @@ from games.hades2 import catalog, localization
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
-types = (ROOT / 'Sources/Hades2/Hades2Types.swift').read_text()
 zh_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json').read_text()
 en_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.en.json').read_text()
 
@@ -417,6 +416,35 @@ assert owner_fallback['englishName'] == 'Echo · Special NPC Effect'
 assert owner_fallback['displayName'] != '未命名效果'
 assert owner_fallback['englishName'] != 'Unnamed Effect'
 
+# Runtime presentation follows the same title identity the native Trait Tray uses.
+# A CustomTitle / native tooltip title can therefore name an otherwise internal
+# TraitData row without changing its routing identity.
+original_display_names = localization.official_display_names
+def native_title_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'PlayerVisibleInternalTitle': '原生可辨识效果'},
+        'en': {'PlayerVisibleInternalTitle': 'Native Recognizable Effect'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = native_title_names
+try:
+    native_title_payload = {
+        'currentRunTraits': [{
+            'name': 'InternalImplementationTrait',
+            'displayId': 'PlayerVisibleInternalTitle',
+            'sourceId': '',
+            'family': 'other',
+        }]
+    }
+    catalog.localize_catalog(native_title_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+native_title = native_title_payload['currentRunTraits'][0]
+assert native_title['displayName'] == '原生可辨识效果'
+assert native_title['englishName'] == 'Native Recognizable Effect'
+assert native_title['displayName'] != native_title['name']
+
 # The selected Keepsake owner uses the native Keepsake localization identity.
 # Runtime routing may retain the exact trait id, but the user-facing owner label
 # must resolve from official bilingual game text.
@@ -484,12 +512,8 @@ assert chaos['linkedDisplayName'] == '丰盛'
 assert chaos['linkedEnglishName'] == 'Affluence'
 assert chaos['linkedDisplayName'] != chaos['linkedTrait']
 
-# Boon Management is an action surface, not a raw CurrentRun.Hero.Traits dump:
-# rows with no supported operation stay out of the picker. Arcana cards share one
-# family section instead of each card owner becoming its own section.
-assert 'var isManageable: Bool' in types
-filtered_traits = view[view.index('private var filteredCurrentRunTraits'):view.index('private func traitRarityLabel')]
-assert 'filter(\\.isManageable)' in filtered_traits
+# Arcana cards share one player-facing family section instead of each exact card
+# owner becoming its own section. The full mounted inventory remains visible.
 source_label = view[view.index('private func traitSourceLabel'):view.index('private var currentRunTraitPickerSections')]
 assert 'trait.family == "arcana"' in source_label
 assert 'hades2.traits.family.arcana' in zh_presentation
