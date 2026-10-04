@@ -63,10 +63,13 @@ def test_owner_family_controls_default_native_paths():
     assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
     for family, issue in (
-        ("directSpecial", "239"), ("keepsake", "329"), ("other", "221"),
+        ("directSpecial", "239"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
     assert "familiar = 240" not in LUA
+    assert "keepsake = 329" not in LUA
+    assert "keepsakeModel.rankReady(trait)" in capability_block
+    assert "traitManagement.keepsake.rebuildRarity" in LUA
 
 
 if __name__ == "__main__":
@@ -109,6 +112,9 @@ EnemyData = {}
 PresetEventArgs = {}
 ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
+FrameState = {}
+PersistentKeepsakeKeys = { "DoorHealReserve", "CustomTrayText" }
+round = function(value) return math.floor(value + 0.5) end
 LootObjects = {}
 UpdateTimers = function() end
 
@@ -138,10 +144,13 @@ local calls = {
   familiarDestroy = 0,
   lifePips = 0,
   keepsakeUnequip = 0,
+  keepsakeEquip = 0,
+  traitNumber = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
 local failKeepsakeUnequipAfterMutation = false
+local failKeepsakeEquipAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
@@ -229,6 +238,39 @@ UnequipKeepsake = function(hero, name, args)
   end
 end
 
+local nextKeepsakeId = 8000
+EquipKeepsake = function(hero, name, args)
+  args = args or {}
+  calls.keepsakeEquip = calls.keepsakeEquip + 1
+  nextKeepsakeId = nextKeepsakeId + 1
+  local trait = {
+    Name = name,
+    Id = nextKeepsakeId,
+    StackNum = 1,
+    Rarity = args.ForceRarity or "Common",
+    EffectValue = rarityValue[args.ForceRarity or "Common"] * 1000,
+    DoorHealReserve = 999,
+    CustomTrayText = "fresh",
+  }
+  table.insert(hero.Traits, trait)
+  if name == "ReincarnationKeepsake" then
+    hero.MaxLastStands = (hero.MaxLastStands or 0) + 1
+  end
+  if failKeepsakeEquipAfterMutation then
+    failKeepsakeEquipAfterMutation = false
+    error("synthetic Keepsake equip acknowledgement failure")
+  end
+  return trait
+end
+
+UpdateTraitNumber = function(trait)
+  calls.traitNumber = calls.traitNumber + 1
+end
+ValidateMaxMana = function() end
+ValidateMaxHealth = function() end
+AddHealthBuffer = function() end
+IsTraitActive = function() return true end
+
 RemoveLastStand = function(hero, name)
   calls.lastStandRemove = calls.lastStandRemove + 1
 end
@@ -292,11 +334,16 @@ for _, name in ipairs({
   "DoubleFamiliarTrait",
   "ReincarnationKeepsake",
   "BonusMoneyKeepsake",
+  "DoorHealReserveKeepsake",
 }) do
   TraitData[name] = TraitData[name] or {}
 end
 TraitData.ReincarnationKeepsake.InheritFrom = { "GiftTrait" }
+TraitData.ReincarnationKeepsake.RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} }
 TraitData.BonusMoneyKeepsake.InheritFrom = { "GiftTrait" }
+TraitData.BonusMoneyKeepsake.RarityLevels = { Common = {}, Rare = {}, Epic = {} }
+TraitData.DoorHealReserveKeepsake.InheritFrom = { "GiftTrait" }
+TraitData.DoorHealReserveKeepsake.RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} }
 
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
@@ -739,7 +786,7 @@ do
   eq(row.family, "keepsake", "selected Keepsake owner family")
   eq(row.removalCapability, "singleInstanceForce", "Keepsake removal capability")
   eq(row.levelCapability, "none", "Keepsake fabricated stack-level editing")
-  eq(row.rarityCapability, "none", "Keepsake fabricated runtime rarity editing")
+  eq(row.rarityCapability, "setExact", "Keepsake runtime rank capability")
   check(findRow("BonusMoneyKeepsake", 1602).family ~= "keepsake", "unselected GiftTrait stolen by Keepsake owner")
 
   -- Room changes do not change the selected owner.
@@ -801,6 +848,131 @@ do
     M.dispatch("remove_trait", params)
   end)
   eq(calls.keepsakeUnequip, afterUnknown, "unknown Keepsake teardown replayed")
+end
+
+-- Keepsake rank is the runtime rarity model. Exact rank override rebuilds the
+-- selected owner through native Unequip/Equip semantics while durable chamber
+-- progression and selection remain untouched.
+do
+  GameState.LastAwardTrait = "ReincarnationKeepsake"
+  GameState.KeepsakeChambers.ReincarnationKeepsake = 42
+  CurrentRun.Hero.MaxLastStands = 2
+  local selected = newTrait("ReincarnationKeepsake", 1801, 1, "Rare", {
+    CustomTrayText = "spent-state",
+  })
+  setTraits(selected)
+  CurrentRun.CurrentRoom = { Name = "D_TestRoom" }
+  local row = findRow("ReincarnationKeepsake", 1801)
+  eq(row.levelCapability, "none", "Keepsake fabricated StackNum level editing")
+  eq(row.rarityCapability, "setExact", "Keepsake rank override unavailable")
+  local progressBefore = GameState.KeepsakeChambers.ReincarnationKeepsake
+  local beforeUnequip = calls.keepsakeUnequip
+  local beforeEquip = calls.keepsakeEquip
+  local params = paramsFrom(row, "keepsake-rank")
+  params.rarity = "Epic"
+  local result = M.dispatch("set_trait_rarity", params)
+  eq(calls.keepsakeUnequip, beforeUnequip + 1, "Keepsake rank did not use native unequip")
+  eq(calls.keepsakeEquip, beforeEquip + 1, "Keepsake rank did not use native equip")
+  eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "Keepsake rank rewrote selected owner")
+  eq(GameState.KeepsakeChambers.ReincarnationKeepsake, progressBefore, "Keepsake rank advanced durable progression")
+  eq(CurrentRun.Hero.MaxLastStands, 2, "Keepsake rank duplicated or lost Last Stand ownership")
+  local rebuilt = findRow("ReincarnationKeepsake")
+  eq(rebuilt.rarity, "Epic", "Keepsake rank did not reach target rarity")
+  eq(result.actionOutcome, "completed", "Keepsake rank outcome")
+
+  local unequipAfter = calls.keepsakeUnequip
+  local equipAfter = calls.keepsakeEquip
+  local duplicate = M.dispatch("set_trait_rarity", params)
+  check(duplicate.duplicate == true, "Keepsake rank replay was not deduplicated")
+  eq(calls.keepsakeUnequip, unequipAfter, "Keepsake rank replayed native unequip")
+  eq(calls.keepsakeEquip, equipAfter, "Keepsake rank replayed native equip")
+
+  M.dispatch("disable_all", { includeCatalogs = false })
+  eq(findRow("ReincarnationKeepsake").rarity, "Epic", "disable_all reverted game-owned Keepsake rank")
+end
+
+-- Native Keepsake rebuild preserves the same explicit runtime fields that
+-- AdvanceKeepsake preserves. A forced rank must not reset partially consumed
+-- owner state such as Charon's DoorHealReserve.
+do
+  GameState.LastAwardTrait = "DoorHealReserveKeepsake"
+  GameState.KeepsakeChambers.DoorHealReserveKeepsake = 19
+  local selected = newTrait("DoorHealReserveKeepsake", 1901, 1, "Rare", {
+    DoorHealReserve = 37.4,
+    CustomTrayText = "reserve-state",
+  })
+  setTraits(selected)
+  local row = findRow("DoorHealReserveKeepsake", 1901)
+  local progressBefore = GameState.KeepsakeChambers.DoorHealReserveKeepsake
+  local params = paramsFrom(row, "keepsake-persistent-rank")
+  params.rarity = "Heroic"
+  M.dispatch("set_trait_rarity", params)
+  local rebuilt = findRow("DoorHealReserveKeepsake")
+  eq(rebuilt.rarity, "Heroic", "Keepsake persistent-state rank")
+  eq(rebuilt.DoorHealReserve, 37, "Keepsake rank did not preserve native rounded reserve")
+  eq(rebuilt.CustomTrayText, "reserve-state", "Keepsake rank reset persistent tray state")
+  eq(GameState.KeepsakeChambers.DoorHealReserveKeepsake, progressBefore, "Keepsake persistent rank changed progression")
+end
+
+-- Native owner replacement invalidates a rank request before teardown/rebuild.
+do
+  GameState.LastAwardTrait = "ReincarnationKeepsake"
+  local selected = newTrait("ReincarnationKeepsake", 1951, 1, "Rare")
+  setTraits(selected)
+  local row = findRow("ReincarnationKeepsake", 1951)
+  local params = paramsFrom(row, "keepsake-rank-stale-owner")
+  params.rarity = "Epic"
+  local beforeUnequip = calls.keepsakeUnequip
+  GameState.LastAwardTrait = "BonusMoneyKeepsake"
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  eq(calls.keepsakeUnequip, beforeUnequip, "stale Keepsake rank reached owner teardown")
+end
+
+-- Unsupported target ranks fail before owner teardown.
+do
+  GameState.LastAwardTrait = "BonusMoneyKeepsake"
+  local selected = newTrait("BonusMoneyKeepsake", 2001, 1, "Rare")
+  setTraits(selected)
+  local row = findRow("BonusMoneyKeepsake", 2001)
+  local params = paramsFrom(row, "keepsake-unsupported-rank")
+  params.rarity = "Heroic"
+  local beforeUnequip = calls.keepsakeUnequip
+  expectError("Trait rarity editing is unavailable for the selected target", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  eq(calls.keepsakeUnequip, beforeUnequip, "unsupported Keepsake rank mutated owner")
+end
+
+-- If native EquipKeepsake mutates then acknowledges late, restore persistent
+-- values on the newly mounted owner before surfacing outcome-unknown. The
+-- uncertain request must never replay.
+do
+  GameState.LastAwardTrait = "DoorHealReserveKeepsake"
+  local selected = newTrait("DoorHealReserveKeepsake", 2101, 1, "Rare", {
+    DoorHealReserve = 23,
+    CustomTrayText = "unknown-state",
+  })
+  setTraits(selected)
+  local row = findRow("DoorHealReserveKeepsake", 2101)
+  local params = paramsFrom(row, "keepsake-rank-unknown")
+  params.rarity = "Epic"
+  failKeepsakeEquipAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  local rebuilt = findRow("DoorHealReserveKeepsake")
+  eq(rebuilt.rarity, "Epic", "unknown Keepsake rank left wrong target")
+  eq(rebuilt.DoorHealReserve, 23, "unknown Keepsake rank lost persistent reserve")
+  eq(rebuilt.CustomTrayText, "unknown-state", "unknown Keepsake rank lost persistent tray state")
+  local unequipAfter = calls.keepsakeUnequip
+  local equipAfter = calls.keepsakeEquip
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  eq(calls.keepsakeUnequip, unequipAfter, "unknown Keepsake rank replayed unequip")
+  eq(calls.keepsakeEquip, equipAfter, "unknown Keepsake rank replayed equip")
 end
 
 print("hades2_live_trait_runtime_behavior_ok")
