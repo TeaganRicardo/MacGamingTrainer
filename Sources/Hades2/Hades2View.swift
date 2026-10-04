@@ -1272,8 +1272,18 @@ struct Hades2TrainerView: View {
     }
 
     private func exactItemLabel(_ option: BoonOption) -> String {
-        let localizedName = localization.language == .en ? option.englishName : option.name
-        if !localizedName.isEmpty { return localizedName }
+        if localization.language == .en {
+            if !option.englishName.isEmpty { return option.englishName }
+            if !option.name.isEmpty { return option.name }
+            return text("hades2.spawn.unnamedEffect")
+        }
+        if !option.name.isEmpty {
+            if !option.englishName.isEmpty && option.englishName != option.name {
+                return "\(option.name) · \(option.englishName)"
+            }
+            return option.name
+        }
+        if !option.englishName.isEmpty { return option.englishName }
         return text("hades2.spawn.unnamedEffect")
     }
 
