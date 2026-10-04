@@ -126,7 +126,11 @@ GameState = {
 ResourceData = {}
 ResourceDisplayOrderData = {}
 TraitElementData = {}
-EnemyData = {}
+EnemyData = {
+  NPC_Artemis_Field_01 = {
+    Traits = { "DynamicDirectLevel" },
+  },
+}
 PresetEventArgs = {}
 ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
@@ -224,6 +228,22 @@ GetAllUpgradeableGodTraits = function()
     end
   end
   return result
+end
+
+GetProcessedTraitData = function(args)
+  local definition = TraitData and TraitData[args.TraitName] or {}
+  local stack = args.StackNum or 1
+  local value = definition.SyntheticStackEffect and (stack * 10) or 10
+  return {
+    Name = args.TraitName,
+    StackNum = stack,
+    Rarity = args.Rarity or "Common",
+    ExtractData = { SyntheticValue = value },
+  }
+end
+
+ExtractValues = function(unit, source, target)
+  return target and target.ExtractData
 end
 
 IncreaseTraitLevel = function(trait, amount)
@@ -389,9 +409,11 @@ for _, name in ipairs({
   "OrdinaryOutcomeUnknown",
   "CritBonusBoon",
   "OmegaExplodeBoon",
+  "DynamicDirectLevel",
 }) do
   defineRarities(name)
 end
+TraitData.DynamicDirectLevel.SyntheticStackEffect = true
 
 for _, name in ipairs({
   "LastStandFamiliar",
@@ -571,6 +593,22 @@ do
   M.dispatch("set_trait_level", paramsFrom(row, "direct-level", 3))
   eq(trait.StackNum, 3, "direct target-level mutation")
   eq(trait.EffectValue, 200, "direct target-level effect mutation")
+end
+
+-- Direct special ownership/capability is derived from the current native NPC
+-- source, not from a hardcoded trait allowlist. A stack edit is exposed only
+-- when processing the next StackNum changes an extracted effect value.
+do
+  local trait = newTrait("DynamicDirectLevel", 251, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 251)
+  eq(row.family, "directSpecial", "dynamic direct-special family")
+  eq(row.sourceId, "Artemis", "dynamic direct-special source")
+  eq(row.levelCapability, "increaseOne", "dynamic direct-special level capability")
+  local before = calls.level
+  M.dispatch("set_trait_level", paramsFrom(row, "dynamic-direct-level", 3))
+  eq(calls.level, before + 1, "dynamic direct-special level callback")
+  eq(trait.StackNum, 3, "dynamic direct-special target level")
 end
 
 -- Native rarity change must run the game recomputation callback rather than
