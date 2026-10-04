@@ -201,6 +201,7 @@ local function paramsFrom(row, requestId)
     expectedLevel = row.level,
     expectedRarity = row.rarity,
     expectedSameNameCount = row.sameNameCount,
+    expectedRemainingUses = row.remainingUses,
     includeCatalogs = false,
   }
 end
@@ -230,7 +231,7 @@ local duplicateSet = M.dispatch("set_trait_remaining_uses", setParams)
 check(duplicateSet.duplicate == true, "duration edit replay was not deduplicated")
 eq(calls.updateNumber, updatesAfterFirst, "duration edit replayed native refresh")
 
-expectError("stale runtime generation", function()
+expectError("Trait target changed since selection", function()
   local staleParams = paramsFrom(staleDurationRow, "temporary-stale-duration")
   staleParams.targetRemainingUses = 9
   M.dispatch("set_trait_remaining_uses", staleParams)
