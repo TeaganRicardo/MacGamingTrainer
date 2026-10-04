@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from games.hades2.command_router import Hades2CommandRouter
 from games.hades2.command_validation import validate_command_params
 
 
@@ -231,5 +232,30 @@ expect_error(
 original = {"ignored": "value"}
 validated = validate_command_params("status", original)
 assert validated == original and validated is not original
+
+class RuntimeProbe:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, command, params):
+        self.calls.append((command, params))
+        return {"ok": True}
+
+probe = RuntimeProbe()
+router = Hades2CommandRouter(probe)
+result = router.dispatch(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"},
+    "chaos-pair-router-request",
+)
+assert result == {"ok": True}
+assert probe.calls == [(
+    "acquire_chaos_pair",
+    {
+        "blessing": "ChaosHealthBlessing",
+        "curse": "ChaosDamageCurse",
+        "requestId": "chaos-pair-router-request",
+    },
+)]
 
 print("hades2_command_validation_ok")
