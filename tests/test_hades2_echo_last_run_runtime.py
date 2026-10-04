@@ -389,6 +389,25 @@ local historicalDuplicate = M.dispatch("spawn_reward", {
 check(historicalDuplicate.duplicate == true, "historical Echo request lost its completed receipt")
 eq(calls.add, beforeHistoricalReplay, "historical Echo completed request replayed after source change")
 
+-- The native EchoLastRunBoon shell is not offered after a Shrine-ended
+-- previous run; exact targets inherit the same owner requirement.
+GameState.RunHistory = {
+  {
+    TraitRarityCache = { ZeusBoon = "Rare" },
+    SpecialInteractRecord = { Shrine = true },
+  },
+}
+check(findReward("echo:lastRun:ZeusBoon") == nil, "Shrine previous run leaked Echo exact targets")
+local beforeShrine = calls.add
+expectError("Echo previous-run boon is no longer eligible", function()
+  M.dispatch("spawn_reward", {
+    reward = "echo:lastRun:ZeusBoon",
+    requestId = "echo-shrine-source",
+    includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforeShrine, "Shrine previous-run target reached mutation")
+
 -- Restore source and prove mutation-after-commit failure becomes outcome unknown
 -- and is never replayed.
 GameState.RunHistory = {
