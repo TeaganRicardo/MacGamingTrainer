@@ -705,10 +705,14 @@ do
   eq(row.removalCapability, "singleInstanceForce", "dynamic direct removal capability")
   check(row.removalScopeAllMatching == false, "dynamic direct removal widened scope")
   local before = calls.directRemove
-  M.dispatch("remove_trait", paramsFrom(row, "dynamic-direct-remove"))
+  local params = paramsFrom(row, "dynamic-direct-remove")
+  local firstResult = M.dispatch("remove_trait", params)
+  local replayResult = M.dispatch("remove_trait", params)
   eq(calls.directRemove, before + 1, "dynamic direct removal callback")
   eq(#CurrentRun.Hero.Traits, 1, "dynamic direct removal removed wrong count")
   eq(CurrentRun.Hero.Traits[1].Id, 452, "dynamic direct removal removed wrong instance")
+  check(firstResult.duplicate == false, "first direct removal marked duplicate")
+  check(replayResult.duplicate == true, "completed direct removal was not deduplicated")
   check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
     "dynamic direct removal did not suppress expiration")
 end
@@ -861,19 +865,39 @@ do
   eq(calls.level, beforeLevel + 1, "outcome-unknown request auto-replayed")
 end
 
+-- Direct-special stale snapshots use the same preflight seam and must fail
+-- before their native mutation path is reached.
+do
+  local trait = newTrait("DynamicDirectLevel", 1025, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 1025)
+  local params = paramsFrom(row, "direct-stale-level", 3)
+  local beforeLevel = calls.level
+  trait.StackNum = 2
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_level", params)
+  end)
+  eq(calls.level, beforeLevel, "stale direct-special target reached mutator")
+end
+
 -- The runtime verifies removal cleanup instead of trusting the callback return.
 do
   local trait = newTrait("OmegaExplodeBoon", 1101, 1, "Rare")
   setTraits(trait)
   local row = findRow("OmegaExplodeBoon", 1101)
   local beforeRemove = calls.directRemove
+  local params = paramsFrom(row, "direct-cleanup-failure")
   skipDirectRemoval = true
   expectError("MGT_OUTCOME_UNKNOWN", function()
-    M.dispatch("remove_trait", paramsFrom(row, "direct-cleanup-failure"))
+    M.dispatch("remove_trait", params)
   end)
   skipDirectRemoval = false
   eq(calls.directRemove, beforeRemove + 1, "direct cleanup callback count")
   eq(#CurrentRun.Hero.Traits, 1, "cleanup-failure fixture unexpectedly removed trait")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.directRemove, beforeRemove + 1, "outcome-unknown direct removal replayed")
 end
 
 -- Direct strategies with acquisition/expiration lifecycle markers fail closed;
