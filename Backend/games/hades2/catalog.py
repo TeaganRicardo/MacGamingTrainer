@@ -94,7 +94,8 @@ _CURRENT_RUN_DERIVED_NAMES = {
     'VanillaState': ('默认环境', 'Default Environment'),
     'WetState': ('雨天环境', 'Rainy Environment'),
 
-    # Hidden Familiar upgrade traits; descriptors follow target FamiliarData fields.\n    # The native Familiar owner name is resolved dynamically and composed at presentation time.
+    # Hidden Familiar upgrade traits; descriptors follow target FamiliarData fields.
+    # The native Familiar owner name is resolved dynamically and composed at presentation time.
     'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
     'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
     'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
