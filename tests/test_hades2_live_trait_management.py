@@ -416,6 +416,13 @@ local function findRow(name, instanceId)
   fail("missing observed trait row " .. tostring(name) .. "/" .. tostring(instanceId))
 end
 
+local function findMountedTrait(name)
+  for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+    if type(trait) == "table" and trait.Name == name then return trait end
+  end
+  fail("missing mounted trait " .. tostring(name))
+end
+
 local function paramsFrom(row, requestId, targetLevel)
   local params = {
     requestId = requestId,
@@ -880,6 +887,9 @@ do
   eq(rebuilt.rarity, "Epic", "Keepsake rank did not reach target rarity")
   eq(result.actionOutcome, "completed", "Keepsake rank outcome")
 
+  CurrentRun.CurrentRoom = { Name = "E_TestRoom" }
+  eq(findRow("ReincarnationKeepsake").rarity, "Epic", "Keepsake rank lost across room transition")
+
   local unequipAfter = calls.keepsakeUnequip
   local equipAfter = calls.keepsakeEquip
   local duplicate = M.dispatch("set_trait_rarity", params)
@@ -907,8 +917,8 @@ do
   local params = paramsFrom(row, "keepsake-persistent-rank")
   params.rarity = "Heroic"
   M.dispatch("set_trait_rarity", params)
-  local rebuilt = findRow("DoorHealReserveKeepsake")
-  eq(rebuilt.rarity, "Heroic", "Keepsake persistent-state rank")
+  local rebuilt = findMountedTrait("DoorHealReserveKeepsake")
+  eq(rebuilt.Rarity, "Heroic", "Keepsake persistent-state rank")
   eq(rebuilt.DoorHealReserve, 37, "Keepsake rank did not preserve native rounded reserve")
   eq(rebuilt.CustomTrayText, "reserve-state", "Keepsake rank reset persistent tray state")
   eq(GameState.KeepsakeChambers.DoorHealReserveKeepsake, progressBefore, "Keepsake persistent rank changed progression")
@@ -962,8 +972,8 @@ do
   expectError("MGT_OUTCOME_UNKNOWN", function()
     M.dispatch("set_trait_rarity", params)
   end)
-  local rebuilt = findRow("DoorHealReserveKeepsake")
-  eq(rebuilt.rarity, "Epic", "unknown Keepsake rank left wrong target")
+  local rebuilt = findMountedTrait("DoorHealReserveKeepsake")
+  eq(rebuilt.Rarity, "Epic", "unknown Keepsake rank left wrong target")
   eq(rebuilt.DoorHealReserve, 23, "unknown Keepsake rank lost persistent reserve")
   eq(rebuilt.CustomTrayText, "unknown-state", "unknown Keepsake rank lost persistent tray state")
   local unequipAfter = calls.keepsakeUnequip
