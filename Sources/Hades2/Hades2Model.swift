@@ -939,6 +939,22 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.spawnReward(reward), title: "hades2.op.acquireExactBoon")
     }
 
+    func acquireChaosPair(blessingReward: String, curseReward: String) {
+        guard canSpawnReward,
+              let blessing = exactBoonOptions.first(where: {
+                  $0.id == blessingReward && $0.acquisitionMode == "chaosBlessing"
+              }),
+              let curse = exactBoonOptions.first(where: {
+                  $0.id == curseReward && $0.acquisitionMode == "chaosCurse"
+              }),
+              !blessing.targetID.isEmpty,
+              !curse.targetID.isEmpty else { return }
+        send(
+            .acquireChaosPair(blessing: blessing.targetID, curse: curse.targetID),
+            title: "hades2.op.acquireExactBoon"
+        )
+    }
+
     func openSellTraits() {
         guard canOpenNativeBoonScreen else { return }
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
