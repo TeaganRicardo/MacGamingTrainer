@@ -43,12 +43,12 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "olympianHermes" and sellEligible' in capability_block
     assert 'GetAllUpgradeableGodTraits, 1' in LUA
 
-    # Only audited owner strategies may bypass ordinary menu eligibility.
-    # Chaos (#236), Selene (#237), Hammer/weapon ownership (#238), Arachne,
-    # Echo, and temporary-effect ownership (#239 children) are implemented;
-    # the remaining families stay delegated to follow-up slices.
-    assert 'CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" }' in LUA
-    assert 'OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" }' in LUA
+    # Direct special-NPC management is source- and behavior-derived; no
+    # per-trait strategy/allowlist may bypass the native owner model.
+    assert "directTraitStrategies" not in LUA
+    assert "directSpecialLevelMeaningful" in LUA
+    assert "directSpecialRarityMeaningful" in LUA
+    assert "directSpecialRemovalSafe" in LUA
     assert 'family == "chaos"' in capability_block
     assert 'chaosLifecycleState' in LUA
     assert 'family == "hex"' in capability_block
@@ -62,10 +62,8 @@ def test_owner_family_controls_default_native_paths():
     assert "familiarModel.isMounted(trait)" in family_block
     assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
-    for family, issue in (
-        ("directSpecial", "239"), ("other", "221"),
-    ):
-        assert f"{family} = {issue}" in LUA
+    assert "directSpecial = 239" not in LUA
+    assert "other = 221" in LUA
     assert "familiar = 240" not in LUA
     assert "keepsake = 329" not in LUA
     assert "keepsakeModel.rankReady(trait)" in capability_block
