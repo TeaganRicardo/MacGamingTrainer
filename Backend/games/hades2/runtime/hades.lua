@@ -3177,9 +3177,12 @@ if __MacGamingTrainerV1 == nil then
       local family = traitFamily(target, sellEligible)
       local count = sameNameCount(target.Name)
       local expectedRarity = type(params.expectedRarity) == "string" and params.expectedRarity or ""
+      local expectedRemainingUses = params.expectedRemainingUses
       if target.Name ~= params.trait or family ~= params.family
           or traitLevel(target) ~= params.expectedLevel or traitRarity(target) ~= expectedRarity
-          or count ~= params.expectedSameNameCount then
+          or count ~= params.expectedSameNameCount
+          or (expectedRemainingUses ~= nil
+            and (not finite(target.RemainingUses) or target.RemainingUses ~= expectedRemainingUses)) then
         error("Trait target changed since selection")
       end
       return target, family, sellEligible, count
@@ -4258,12 +4261,12 @@ if __MacGamingTrainerV1 == nil then
       set_resource = { "resource", "amount" },
       set_rerolls = { "amount" },
       open_sell_traits = {},
-      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "targetLevel" },
-      set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "rarity" },
-      set_trait_remaining_uses = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "targetRemainingUses" },
-      expire_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
-      remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
-      advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount" },
+      set_trait_level = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "targetLevel" },
+      set_trait_rarity = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "rarity" },
+      set_trait_remaining_uses = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses", "targetRemainingUses" },
+      expire_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
+      remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
+      advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
       spawn_reward = { "reward" },
     }
