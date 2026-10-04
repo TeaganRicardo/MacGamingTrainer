@@ -102,7 +102,11 @@ def validate_command_params(command, params):
         if not isinstance(source,str) or not source:
             raise ValueError('请选择支持原生奖励选择界面的角色。')
 
-    if command in ('set_trait_level','set_trait_rarity','remove_trait','advance_trait_lifecycle'):
+    trait_mutations=(
+        'set_trait_level','set_trait_rarity','set_trait_remaining_uses',
+        'expire_trait','remove_trait','advance_trait_lifecycle',
+    )
+    if command in trait_mutations:
         # A mutation always carries the exact observed target snapshot. The
         # resident runtime re-resolves these values immediately before applying
         # the operation; none of them are durable identities.
@@ -118,6 +122,14 @@ def validate_command_params(command, params):
         rarity=params.get('expectedRarity')
         if not isinstance(rarity,str):
             raise ValueError('请选择当前局祝福。')
+        remaining=params.get('expectedRemainingUses')
+        if remaining is not None and (
+            type(remaining) not in (int,float) or isinstance(remaining,bool)
+            or not math.isfinite(remaining) or remaining <= 0
+        ):
+            raise ValueError('请选择当前局效果。')
+        if command in ('set_trait_remaining_uses','expire_trait') and remaining is None:
+            raise ValueError('请选择当前局效果。')
         if command=='set_trait_level':
             target_level=params.get('targetLevel')
             if type(target_level) is not int or target_level <= level or target_level > 999999:
@@ -126,6 +138,10 @@ def validate_command_params(command, params):
             target=params.get('rarity')
             if target not in BOON_RARITY_TARGETS:
                 raise ValueError('最低稀有度无效。')
+        if command=='set_trait_remaining_uses':
+            target_uses=params.get('targetRemainingUses')
+            if type(target_uses) is not int or not 1 <= target_uses <= 999999:
+                raise ValueError('剩余次数必须为 1–999999 的整数。')
 
     if command=='set_boon_rarity_desired':
         config={
