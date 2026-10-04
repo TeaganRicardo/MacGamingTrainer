@@ -81,6 +81,19 @@ assert '["includeCatalogs"]=false' in transport.sources[1]
 assert second['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert second['boons'][0]['id'] == 'ZeusUpgrade'
 
+# A player-opened Trait Tray owns UI/script input and can enter wait/yield paths.
+# Mutations injected through the synchronous LLDB lua_pcall boundary must refuse
+# to dispatch before touching resident state, while read-only status remains
+# available so Host observation/recovery still works.
+assert 'ActiveScreens.TraitTrayScreen' not in transport.sources[1]
+adapter.execute('set_vital', {'vital': 'health', 'field': 'current', 'value': 100})
+assert len(transport.sources) == 3
+mutation_source = transport.sources[2]
+trait_tray_guard = 'ActiveScreens.TraitTrayScreen'
+assert trait_tray_guard in mutation_source
+assert mutation_source.index(trait_tray_guard) < mutation_source.index('__MacGamingTrainerV1.dispatch')
+assert 'MGT_TRAIT_TRAY_ACTIVE' in mutation_source
+
 # World::Update boundary contract: the live transport must break on the one
 # engine frame boundary we actually need, not on every Lua pcall and then
 # filter callers after repeatedly stopping the game.
