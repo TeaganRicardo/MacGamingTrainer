@@ -57,7 +57,7 @@ _PRODUCT_LABEL_EN_BY_ZH = {
 }
 
 _CURRENT_RUN_FAMILY_LABELS = {
-    'arcana': ('阿卡那牌', 'Arcana'),
+    'arcana': ('阿卡那牌效果', 'Arcana Card Effect'),
     'chaos': ('卡俄斯效果', 'Chaos Effect'),
     'costume': ('服装效果', 'Costume Effect'),
     'directSpecial': ('特殊角色效果', 'Special NPC Effect'),
