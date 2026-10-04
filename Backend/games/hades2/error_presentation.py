@@ -101,6 +101,12 @@ class Hades2PresentationError(AdapterError):
 
 REGISTRY = [
  {'match': 'literal',
+  'message': '游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。',
+  'key': 'hades2.error.traitTrayCloseUnsupported'},
+ {'match': 'literal',
+  'message': '游戏内祝福菜单未能及时关闭，修改尚未执行。',
+  'key': 'hades2.error.traitTrayCloseTimeout'},
+ {'match': 'literal',
   'message': 'Selected boon is already owned',
   'key': 'hades2.error.exactAlreadyOwned',
   'runtime_only': True,

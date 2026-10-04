@@ -726,6 +726,14 @@
       "arguments": [],
       "key": "hades2.error.runtimeActionFailed"
     },
+    "游戏内祝福菜单未能及时关闭，修改尚未执行。": {
+      "arguments": [],
+      "key": "hades2.error.traitTrayCloseTimeout"
+    },
+    "游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。": {
+      "arguments": [],
+      "key": "hades2.error.traitTrayCloseUnsupported"
+    },
     "游戏发生非预期停顿，已停止当前操作。": {
       "arguments": [],
       "key": "hades2.error.unexpectedStop"

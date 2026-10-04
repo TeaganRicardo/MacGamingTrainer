@@ -88,6 +88,9 @@ def lua_value(value):
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_next_room_reward',
 ))
+_TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
+_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
+_TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
 
 
 class Hades2Adapter(GameAdapter):
@@ -762,23 +765,68 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_json_duration=0.0
                 self._last_status_localize_duration=0.0
             recovered_generation=False
+            trait_tray_handoff_started=None
+            trait_tray_handoff_boundaries=0
             try:
                 while True:
+                    if (
+                        trait_tray_handoff_started is not None
+                        and time.monotonic()-trait_tray_handoff_started>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
+                    ):
+                        raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
                     if batch is None:
-                        dispatch='return __MacGamingTrainerV1.json(__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+'))'
+                        dispatch_value='__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+')'
                     else:
                         calls=[]
                         for batch_command,batch_params in batch:
                             item_params=dict(batch_params or {});item_params['includeCatalogs']=False
                             calls.append('__MacGamingTrainerV1.dispatch('+lua_value(batch_command)+','+lua_value(item_params)+')')
                         calls.append('return __MacGamingTrainerV1.dispatch("status",{["includeCatalogs"]=false})')
-                        dispatch='return __MacGamingTrainerV1.json((function() '+ ';'.join(calls) +' end)())'
+                        dispatch_value='(function() '+ ';'.join(calls) +' end)()'
+                    if command=='status':
+                        dispatch='return __MacGamingTrainerV1.json('+dispatch_value+')'
+                    else:
+                        # Target build 1.143476 already uses this exact game-owned
+                        # coroutine close in CheckLastStand. thread() resumes the
+                        # close routine until its first wait without yielding the
+                        # debugger pcall, then the game's scheduler owns the rest.
+                        dispatch=(
+                            'return __MacGamingTrainerV1.json((function() '
+                            'local __mgtScreen=(type(ActiveScreens)=="table") and ActiveScreens.TraitTrayScreen or nil;'
+                            'if __mgtScreen~=nil then '
+                            'if type(thread)~="function" or type(TraitTrayScreenClose)~="function" then '
+                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="unsupported"} end;'
+                            'if not __mgtScreen.Closing then thread(TraitTrayScreenClose,__mgtScreen) end;'
+                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="closing"} end;'
+                            'return '+dispatch_value+' end)())'
+                        )
                     code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
+                    boundary_started=time.monotonic()
                     try:
                         decoded=execute_with_ledger(
                             self.transport,command,code,decode_runtime,
                             replay=replay,read_only=host_observation_only,
                         )
+                        handoff=decoded.get(_TRAIT_TRAY_HANDOFF_KEY) if isinstance(decoded,dict) else None
+                        if handoff is not None:
+                            if handoff=='unsupported':
+                                raise TransportError(
+                                    'incompatible',
+                                    '游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。',
+                                )
+                            if handoff!='closing':
+                                raise TransportError('lua_error','游戏内祝福菜单未能及时关闭，修改尚未执行。')
+                            if trait_tray_handoff_started is None:
+                                trait_tray_handoff_started=boundary_started
+                            trait_tray_handoff_boundaries+=1
+                            elapsed=time.monotonic()-trait_tray_handoff_started
+                            if elapsed>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS:
+                                raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
+                            time.sleep(min(
+                                _TRAIT_TRAY_HANDOFF_POLL_SECONDS,
+                                max(0.0,_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS-elapsed),
+                            ))
+                            continue
                         break
                     except TransportError as error:
                         if self._resident_cleanup_failed(error):
@@ -795,6 +843,11 @@ class Hades2Adapter(GameAdapter):
                         recovered_generation=True
                         runtime_params['includeCatalogs']=True
                         logging.info('Lua runtime generation reset detected; re-bootstrap status in same debugger attachment')
+                if trait_tray_handoff_started is not None:
+                    logging.info(
+                        'TraitTrayHandoff command=%s duration=%.3fs boundaries=%d',
+                        command,time.monotonic()-trait_tray_handoff_started,trait_tray_handoff_boundaries+1,
+                    )
             finally:
                 if command=='status':
                     self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
