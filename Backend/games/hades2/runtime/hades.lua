@@ -2585,15 +2585,16 @@ if __MacGamingTrainerV1 == nil then
 
     local function applyCostume(name)
       if not isArachneCostumeChoice(name) then error("Exact costume target is unavailable") end
-      requireFunctions("Arachne costume acquisition", {
-        "AddTraitToHero", "RemoveTraitData", "SetupCostume",
-      })
+      requireFunctions("Arachne costume acquisition", { "AddTraitToHero", "SetupCostume" })
 
       local previous = {}
       for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
         if type(trait) == "table" and trait.Name ~= name and isArachneCostumeTrait(trait.Name) then
           previous[#previous + 1] = trait
         end
+      end
+      if #previous > 0 then
+        requireFunctions("Arachne costume replacement", { "RemoveTraitData" })
       end
 
       for _, trait in ipairs(previous) do
@@ -5064,7 +5065,7 @@ if __MacGamingTrainerV1 == nil then
             if entry.sourceId ~= "Arachne" or not traitManagement.isArachneCostumeChoice(entry.trait) then
               error("Exact costume target is unavailable")
             end
-            requireFunctions("exact costume acquisition", { "SetupCostume", "RemoveTraitData" })
+            requireFunctions("exact costume acquisition", { "SetupCostume" })
           end
           exactPlan = { mode = entry.acquisitionMode }
           return
