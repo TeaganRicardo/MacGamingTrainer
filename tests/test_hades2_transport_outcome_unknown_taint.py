@@ -1,9 +1,13 @@
 import ast
+import sys
 import time
 import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Backend'))
+from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+
 transport_path = ROOT / 'Backend/games/hades2/transport.py'
 tree = ast.parse(transport_path.read_text())
 
@@ -111,9 +115,46 @@ namespace = {
     'lldb': fake_lldb,
     'TransportError': FakeTransportError,
     'time': time,
+    'LUA_TRANSPORT_SOURCE_LIMIT_BYTES': LUA_TRANSPORT_SOURCE_LIMIT_BYTES,
+    'LUA_TRANSPORT_RESULT_LIMIT_BYTES': LUA_TRANSPORT_RESULT_LIMIT_BYTES,
 }
 exec(compile(isolated, str(transport_path), 'exec'), namespace)
 Transport = namespace['IsolatedTransport']
+
+
+class SuccessfulProcess(FakeProcess):
+    def __init__(self):
+        self.allocated_size = None
+
+    def AllocateMemory(self, size, permissions, error):
+        self.allocated_size = size
+        return 0x1000
+
+    def ReadCStringFromMemory(self, address, capacity, error):
+        return '{}'
+
+
+# A fresh resident bootstrap is currently ~326 KiB. The trusted source-input
+# budget must accept it without also enlarging the independent result buffer.
+large = Transport.__new__(Transport)
+large.tainted = False
+large.process = SuccessfulProcess()
+large.target = object()
+large.last_duration = 0
+large.boundary = lambda: (FakeThread(), 0x2000)
+large.address = lambda name: 0x3000
+large.alive = lambda: False
+large_source = 'x' * 325_841
+assert large.execute(large_source) == '{}'
+assert large.process.allocated_size == len(large_source.encode('utf-8')) + 1 + LUA_TRANSPORT_RESULT_LIMIT_BYTES
+
+try:
+    large.execute('x' * (LUA_TRANSPORT_SOURCE_LIMIT_BYTES + 1))
+except FakeTransportError as error:
+    assert error.code == 'invalid_request'
+else:
+    raise AssertionError('Lua source transport accepted an over-budget payload')
+
 
 transport = Transport.__new__(Transport)
 transport.tainted = False
