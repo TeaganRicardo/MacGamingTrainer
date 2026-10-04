@@ -178,6 +178,7 @@ local calls = {
 }
 local nextId = 200
 local failAddAfterMutation = false
+local suppressRemoveMutation = false
 
 -- Minimal engine seams for coexistence with the existing Cast and ammo
 -- features.  Hammer work must not replace or release these hooks.
@@ -312,6 +313,7 @@ end
 
 RemoveTraitData = function(hero, target)
   calls.remove = calls.remove + 1
+  if suppressRemoveMutation then return end
   for index, trait in ipairs(hero.Traits) do
     if trait == target then
       table.remove(hero.Traits, index)
@@ -537,6 +539,29 @@ do
   eq(calls.resetAmmo, beforeReset + 1, "Hammer ammo teardown did not reset ammo")
   check(not HeroHasTrait("LobAmmoTrait"), "Hammer survived removal")
   check(HeroHasTrait("LobAmmoBoostAspect"), "Hammer removal damaged runtime aspect owner")
+end
+
+-- A game-owned Hammer teardown that silently leaves the selected instance
+-- mounted is outcome-unknown and the same request must never replay.
+do
+  clearRunTraits()
+  CurrentRun.Hero.Weapons = { WeaponLob = true }
+  AddTraitToHero({ TraitName = "LobAmmoBoostAspect", Rarity = "Legendary" })
+  AddTraitToHero({ TraitName = "LobAmmoTrait", Rarity = "Common" })
+  local hammer = assert(findRow("LobAmmoTrait"), "silent-removal Hammer row missing")
+  local params = paramsFrom(hammer, "hammer-removal-no-effect")
+  local beforeRemove = calls.remove
+  suppressRemoveMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("remove_trait", params)
+  end)
+  suppressRemoveMutation = false
+  eq(calls.remove, beforeRemove + 1, "silent Hammer removal did not call game teardown once")
+  check(HeroHasTrait("LobAmmoTrait"), "silent Hammer removal unexpectedly removed the trait")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.remove, beforeRemove + 1, "outcome-unknown Hammer removal replayed")
 end
 
 -- Pre-equipped helper weapons are released only after the final owning Hammer

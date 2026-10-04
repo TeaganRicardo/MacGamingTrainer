@@ -53,9 +53,8 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "hex"' in capability_block
     assert 'family == "hexTalent"' in capability_block
     assert "seleneModel.talentNodes" in LUA
-    assert 'family == "hammer"' in capability_block
-    assert 'family == "weaponAspect"' in capability_block
-    assert 'family == "costume"' in capability_block
+    # Hammer/weaponAspect and Arachne costume semantics are covered by their
+    # executable resident suites; do not pin their implementation shape here.
     for family, issue in (
         ("temporary", "239"), ("directSpecial", "239"),
         ("familiar", "240"), ("other", "221"),
