@@ -60,6 +60,8 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
     @ViewState<String> private var exactSourceSelection = ""
+    @ViewState<String> private var chaosBlessingSelection = ""
+    @ViewState<String> private var chaosCurseSelection = ""
     @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
@@ -101,6 +103,14 @@ struct Hades2TrainerView: View {
     private var specialBoons: [BoonOption] {
         sortedBoons(model.specialRewardOptions.filter { specialSearch.isEmpty || $0.name.localizedCaseInsensitiveContains(specialSearch) || $0.englishName.localizedCaseInsensitiveContains(specialSearch) || $0.id.localizedCaseInsensitiveContains(specialSearch) || $0.category.localizedCaseInsensitiveContains(specialSearch) || $0.englishCategory.localizedCaseInsensitiveContains(specialSearch) || $0.englishSectionTitle.localizedCaseInsensitiveContains(specialSearch) })
     }
+    private var chaosBlessingOptions: [BoonOption] {
+        sortedBoons(model.exactBoonOptions.filter { $0.acquisitionMode == "chaosBlessing" })
+    }
+
+    private var chaosCurseOptions: [BoonOption] {
+        sortedBoons(model.exactBoonOptions.filter { $0.acquisitionMode == "chaosCurse" })
+    }
+
     private var genericExactCatalog: [BoonOption] {
         sortedBoons(model.exactBoonOptions.filter { option in
             option.acquisitionMode != "chaosBlessing"
@@ -247,6 +257,15 @@ struct Hades2TrainerView: View {
         }
         if groups.contains(where: { $0.id == exactSourceSelection }) { return }
         exactSourceSelection = selectedGroup?.id ?? groups[0].id
+    }
+
+    private func repairChaosPairSelections() {
+        if !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection }) {
+            chaosBlessingSelection = chaosBlessingOptions.first?.id ?? ""
+        }
+        if !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection }) {
+            chaosCurseSelection = chaosCurseOptions.first?.id ?? ""
+        }
     }
 
     /// Resolve one Hades presentation key against the live Host language.
@@ -1358,6 +1377,61 @@ struct Hades2TrainerView: View {
                 Spacer()
                 TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
             }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(text("hades2.spawn.chaosPair"))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("hades2.spawn.chaosBlessing"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection) {
+                            if chaosBlessingOptions.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(chaosBlessingOptions) { option in
+                                Text(exactItemLabel(option)).tag(option.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        .disabled(!model.canSpawnReward || chaosBlessingOptions.isEmpty)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(text("hades2.spawn.chaosCurse"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection) {
+                            if chaosCurseOptions.isEmpty {
+                                Text(text("hades2.spawn.noItems")).tag("")
+                            }
+                            ForEach(chaosCurseOptions) { option in
+                                Text(exactItemLabel(option)).tag(option.id)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        .disabled(!model.canSpawnReward || chaosCurseOptions.isEmpty)
+                    }
+
+                    Button(text("hades2.spawn.acquire")) {
+                        model.acquireChaosPair(
+                            blessingReward: chaosBlessingSelection,
+                            curseReward: chaosCurseSelection
+                        )
+                    }
+                    .disabled(
+                        !model.canSpawnReward
+                            || !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection })
+                            || !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection })
+                    )
+                }
+            }
+            .onAppear { repairChaosPairSelections() }
+            .onChange(of: model.exactBoonOptions.map(\.id)) { _, _ in repairChaosPairSelections() }
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
