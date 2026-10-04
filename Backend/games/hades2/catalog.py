@@ -56,6 +56,22 @@ _PRODUCT_LABEL_EN_BY_ZH = {
     '无敌模式': 'Invincibility',
 }
 
+_CURRENT_RUN_FAMILY_LABELS = {
+    'arcana': ('阿卡那牌', 'Arcana'),
+    'chaos': ('卡俄斯效果', 'Chaos Effect'),
+    'costume': ('服装效果', 'Costume Effect'),
+    'directSpecial': ('特殊角色效果', 'Special NPC Effect'),
+    'familiar': ('魔宠效果', 'Familiar Effect'),
+    'hammer': ('代达罗斯 / 武器效果', 'Daedalus / Weapon Effect'),
+    'hex': ('巫咒', 'Hex'),
+    'hexTalent': ('繁星之路天赋', 'Path of Stars Talent'),
+    'keepsake': ('信物效果', 'Keepsake Effect'),
+    'olympianHermes': ('奥林匹斯 / 赫尔墨斯祝福', 'Olympian / Hermes Boon'),
+    'other': ('其他效果', 'Other Effect'),
+    'temporary': ('临时效果', 'Temporary Effect'),
+    'weaponAspect': ('武器形态效果', 'Weapon Aspect Effect'),
+}
+
 
 _LINKED_OFFICIAL_NAME_IDS = {
     # These runtime reward identifiers may resolve through another official
@@ -336,24 +352,74 @@ def localize_catalog(decoded):
             item['officialName']=False
             item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
 
-    # Live trait rows keep their runtime identity in `name`, but presentation
-    # reuses the same official language source as the acquisition catalog.
+    # Live trait rows keep runtime routing identity in `name`, but every row
+    # presented to Boon Management needs a player-recognizable label. Resolve
+    # the owner/source first so owner-backed systems can recover when the
+    # concrete mounted implementation trait has no standalone DisplayName.
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         identifier=item.get('name')
         if not isinstance(identifier,str) or not identifier:continue
+        family=item.get('family') if isinstance(item.get('family'),str) else 'other'
+        source_id=item.get('sourceId')
+        if isinstance(source_id,str) and source_id:
+            source_text_id = (
+                _HAMMER_TITLE_ID
+                if family == 'hammer'
+                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
+            )
+            official_source_zh=_clean(zh.get(source_text_id)) if source_text_id else None
+            official_source_en=_clean(en.get(source_text_id)) if source_text_id else None
+            # sourceId remains the routing identity. Raw internal owner ids are
+            # never promoted to user-facing copy merely because localization is
+            # missing.
+            item['sourceName']=official_source_zh or ''
+            item['sourceEnglishName']=official_source_en or ''
+        else:
+            item['sourceName']=''
+            item['sourceEnglishName']=''
+
         official_zh=_clean(zh.get(identifier)) if identifier in zh else None
         official_en=_clean(en.get(identifier)) if identifier in en else None
         if isinstance(official_zh,str) and official_zh:
-            item['displayName']=official_zh
-            item['englishName']=official_en or 'Unnamed Effect'
+            display_zh=official_zh
+            display_en=official_en or ''
         elif isinstance(official_en,str) and official_en:
-            item['displayName']=official_en
-            item['englishName']=official_en
+            display_zh=official_en
+            display_en=official_en
         else:
-            fallback_zh,_,fallback_en,_=_fallback_names({'kind':'trait','name':identifier},identifier,None,zh,en)
-            item['displayName']=fallback_zh
-            item['englishName']=fallback_en
+            display_zh,_,display_en,_=_fallback_names(
+                {'kind':'trait','name':identifier},identifier,None,zh,en
+            )
+
+        source_zh=item['sourceName']
+        source_en=item['sourceEnglishName']
+        family_zh,family_en=_CURRENT_RUN_FAMILY_LABELS.get(
+            family, ('其他效果','Other Effect')
+        )
+
+        # Arcana is one player-facing card system. The card itself is the most
+        # stable recognition identity; include a distinct effect title when the
+        # game exposes one, otherwise use the card name alone.
+        if family == 'arcana' and source_zh:
+            if display_zh == '未命名效果' or not display_zh:
+                display_zh=source_zh
+            elif display_zh != source_zh:
+                display_zh=f'{source_zh} · {display_zh}'
+        elif display_zh == '未命名效果' or not display_zh:
+            display_zh=f'{source_zh} · {family_zh}' if source_zh else family_zh
+
+        if family == 'arcana' and source_en:
+            if display_en == 'Unnamed Effect' or not display_en:
+                display_en=source_en
+            elif display_en != source_en:
+                display_en=f'{source_en} · {display_en}'
+        elif display_en == 'Unnamed Effect' or not display_en:
+            display_en=f'{source_en} · {family_en}' if source_en else family_en
+
+        item['displayName']=display_zh
+        item['englishName']=display_en
+
         linked_trait=item.get('linkedTrait')
         if isinstance(linked_trait,str) and linked_trait:
             linked_zh=_clean(zh.get(linked_trait)) if linked_trait in zh else None
@@ -371,18 +437,6 @@ def localize_catalog(decoded):
         else:
             item['linkedDisplayName']=''
             item['linkedEnglishName']=''
-        source_id=item.get('sourceId')
-        if isinstance(source_id,str) and source_id:
-            source_text_id = (
-                _HAMMER_TITLE_ID
-                if item.get('family') == 'hammer'
-                else _SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id)
-            )
-            item['sourceName']=_clean(zh.get(source_text_id)) or source_id
-            item['sourceEnglishName']=_clean(en.get(source_text_id)) or source_id
-        else:
-            item['sourceName']=''
-            item['sourceEnglishName']=''
     if fallback_special:
         missing=set(fallback_special)
         warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
