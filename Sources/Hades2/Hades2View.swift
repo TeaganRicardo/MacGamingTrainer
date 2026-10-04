@@ -224,21 +224,26 @@ struct Hades2TrainerView: View {
     }
 
     private func selectExactSource(_ sourceID: String) {
-        guard exactBoonSourceGroups.contains(where: { $0.id == sourceID }) else { return }
+        guard let source = exactBoonSourceGroups.first(where: { $0.id == sourceID }) else { return }
         exactSourceSelection = sourceID
+        if !source.items.contains(where: { $0.id == model.selectedExactBoon }) {
+            model.selectedExactBoon = ""
+        }
     }
 
     private func repairExactSourceSelection() {
         let groups = exactBoonSourceGroups
         guard !groups.isEmpty else { return }
-        if groups.contains(where: { $0.id == exactSourceSelection }) { return }
-        if let selectedGroup = groups.first(where: { group in
+
+        let selectedGroup = groups.first(where: { group in
             group.items.contains(where: { $0.id == model.selectedExactBoon })
-        }) {
+        })
+        if exactSearch.isEmpty, let selectedGroup {
             exactSourceSelection = selectedGroup.id
-        } else {
-            exactSourceSelection = groups[0].id
+            return
         }
+        if groups.contains(where: { $0.id == exactSourceSelection }) { return }
+        exactSourceSelection = selectedGroup?.id ?? groups[0].id
     }
 
     /// Resolve one Hades presentation key against the live Host language.
