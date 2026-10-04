@@ -283,12 +283,18 @@ assert hammer_live['sourceEnglishName'] == 'Daedalus Hammer'
 # effect label rather than their internal trait id. This is especially relevant
 # to Familiar upgrade subtraits in #240.
 original_display_names = localization.official_display_names
-localization.official_display_names = lambda identifiers, language='zh-CN', game_path=None: {}
+def familiar_derived_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'FrogFamiliar': '弗利诺斯', 'CatFamiliar': '图拉'},
+        'en': {'FrogFamiliar': 'Frinos', 'CatFamiliar': 'Toula'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = familiar_derived_names
 try:
     live_payload = {
         'currentRunTraits': [
-            {'name': 'FamiliarFrogDamage', 'sourceId': '', 'family': 'familiar'},
-            {'name': 'FamiliarCatAttacks', 'sourceId': '', 'family': 'familiar'},
+            {'name': 'FamiliarFrogDamage', 'sourceId': 'FrogFamiliar', 'family': 'familiar'},
+            {'name': 'FamiliarCatAttacks', 'sourceId': 'CatFamiliar', 'family': 'familiar'},
         ]
     }
     catalog.localize_catalog(live_payload)
@@ -407,16 +413,16 @@ expected_derived_names = {
     'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度', 'Black Coat · Sprint Speed'),
     'VanillaState': ('默认环境', 'Default Environment'),
     'WetState': ('雨天环境', 'Rainy Environment'),
-    'FamiliarFrogResourceBonus': ('弗利诺斯 · 额外采集概率', 'Frinos · Bonus Gathering Chance'),
-    'FamiliarFrogDamage': ('弗利诺斯 · 攻击伤害', 'Frinos · Attack Damage'),
-    'FamiliarCatResourceBonus': ('图拉 · 额外采集概率', 'Toula · Bonus Gathering Chance'),
-    'FamiliarCatAttacks': ('图拉 · 攻击次数', 'Toula · Attack Count'),
-    'FamiliarRavenResourceBonus': ('拉奇 · 额外采集概率', 'Raki · Bonus Gathering Chance'),
-    'FamiliarRavenAttackDuration': ('拉奇 · 攻击间隔', 'Raki · Attack Interval'),
-    'FamiliarHoundResourceBonus': ('赫库芭 · 额外采集概率', 'Hecuba · Bonus Gathering Chance'),
-    'FamiliarHoundBarkDuration': ('赫库芭 · 吠叫间隔', 'Hecuba · Bark Interval'),
-    'FamiliarPolecatResourceBonus': ('加莉 · 额外采集概率', 'Gale · Bonus Gathering Chance'),
-    'FamiliarPolecatDamage': ('加莉 · 攻击伤害', 'Gale · Attack Damage'),
+    'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
+    'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('攻击次数', 'Attack Count'),
+    'FamiliarRavenResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('攻击间隔', 'Attack Interval'),
+    'FamiliarHoundResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('吠叫间隔', 'Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('攻击伤害', 'Attack Damage'),
     'ChannelSlowMetaUpgrade': ('Ω招式加速', 'Faster Omega Moves'),
     'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
     'LowManaDamageMetaupgrade': ('魔力未满时攻击/特技增伤', 'Attack/Special Damage Below Full Magick'),
