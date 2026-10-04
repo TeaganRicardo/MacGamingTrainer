@@ -104,7 +104,8 @@ Planning issue #124 is the sequencing authority.
 - #238 weapon/aspect-aware Hammer exact acquisition and mounted-effect management is complete in this source at resident revision 64; final real-game acceptance remains part of the consolidated manual pass.
 - #239 is split into focused owner-lifecycle children: #318 Arachne costumes, #319 Echo previous-run acquisition, and #320 Well/temporary effects.
 - #318 Arachne costume exact acquisition and owner-aware removal is complete in this source at resident revision 65; final real-game acceptance remains part of the consolidated manual pass.
-- **Next selected feature task remains #239 via #319** — implement Echo previous-run exact acquisition lifecycle, then #320 Well/temporary effects.
+- #319 Echo previous-run exact acquisition is complete in this source at resident revision 66: concrete eligible previous-run God boons materialize directly without opening the native random choice screen; final real-game acceptance remains part of the consolidated manual pass.
+- **Next selected feature task remains #239 via #320** — implement Well / temporary-effect acquisition, duration/expiry and owner-aware teardown.
 - After #239 closes, continue #240 on the same Hades-owned contextual-action seam instead of adding family-specific layouts.
 - #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
