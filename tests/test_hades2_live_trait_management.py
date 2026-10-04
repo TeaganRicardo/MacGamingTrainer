@@ -43,12 +43,12 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "olympianHermes" and sellEligible' in capability_block
     assert 'GetAllUpgradeableGodTraits, 1' in LUA
 
-    # Only audited owner strategies may bypass ordinary menu eligibility.
-    # Chaos (#236), Selene (#237), Hammer/weapon ownership (#238), Arachne,
-    # Echo, and temporary-effect ownership (#239 children) are implemented;
-    # the remaining families stay delegated to follow-up slices.
-    assert 'CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" }' in LUA
-    assert 'OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" }' in LUA
+    # Direct special-NPC management is source- and behavior-derived; no
+    # per-trait strategy/allowlist may bypass the native owner model.
+    assert "directTraitStrategies" not in LUA
+    assert "directSpecialLevelMeaningful" in LUA
+    assert "directSpecialRarityMeaningful" in LUA
+    assert "directSpecialRemovalSafe" in LUA
     assert 'family == "chaos"' in capability_block
     assert 'chaosLifecycleState' in LUA
     assert 'family == "hex"' in capability_block
@@ -62,10 +62,8 @@ def test_owner_family_controls_default_native_paths():
     assert "familiarModel.isMounted(trait)" in family_block
     assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
-    for family, issue in (
-        ("directSpecial", "239"), ("other", "221"),
-    ):
-        assert f"{family} = {issue}" in LUA
+    assert "directSpecial = 239" not in LUA
+    assert "other = 221" in LUA
     assert "familiar = 240" not in LUA
     assert "keepsake = 329" not in LUA
     assert "keepsakeModel.rankReady(trait)" in capability_block
@@ -126,7 +124,18 @@ GameState = {
 ResourceData = {}
 ResourceDisplayOrderData = {}
 TraitElementData = {}
-EnemyData = {}
+EnemyData = {
+  NPC_Artemis_Field_01 = {
+    Traits = {
+      "CritBonusBoon",
+      "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval",
+      "DynamicDirectOneShot", "DynamicDirectSetup",
+    },
+  },
+  NPC_Icarus_01 = {
+    Traits = { "OmegaExplodeBoon", "DynamicIcarusArmor" },
+  },
+}
 PresetEventArgs = {}
 ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
@@ -187,6 +196,7 @@ local calls = {
   validateHealth = 0,
   validateMana = 0,
   weaponAnim = 0,
+  costumeSetup = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
@@ -224,6 +234,22 @@ GetAllUpgradeableGodTraits = function()
     end
   end
   return result
+end
+
+GetProcessedTraitData = function(args)
+  local definition = TraitData and TraitData[args.TraitName] or {}
+  local stack = args.StackNum or 1
+  local value = definition.SyntheticStackEffect and (stack * 10) or 10
+  return {
+    Name = args.TraitName,
+    StackNum = stack,
+    Rarity = args.Rarity or "Common",
+    ExtractData = { SyntheticValue = value },
+  }
+end
+
+ExtractValues = function(unit, source, target)
+  return target and target.ExtractData
 end
 
 IncreaseTraitLevel = function(trait, amount)
@@ -338,6 +364,9 @@ end
 HandleWeaponAnimSwaps = function()
   calls.weaponAnim = calls.weaponAnim + 1
 end
+SetupCostume = function()
+  calls.costumeSetup = calls.costumeSetup + 1
+end
 AddHealthBuffer = function() end
 IsTraitActive = function() return true end
 
@@ -389,9 +418,33 @@ for _, name in ipairs({
   "OrdinaryOutcomeUnknown",
   "CritBonusBoon",
   "OmegaExplodeBoon",
+  "DynamicDirectLevel",
+  "DynamicDirectRarity",
+  "DynamicDirectRemoval",
+  "DynamicDirectOneShot",
+  "DynamicDirectSetup",
 }) do
   defineRarities(name)
 end
+TraitData.CritBonusBoon.SyntheticStackEffect = true
+TraitData.DynamicDirectLevel.SyntheticStackEffect = true
+TraitData.DynamicDirectOneShot.SyntheticStackEffect = true
+TraitData.DynamicDirectOneShot.AcquireFunctionName = "SyntheticOneShotAcquire"
+TraitData.DynamicDirectSetup.SyntheticStackEffect = true
+TraitData.DynamicDirectSetup.SetupFunction = {
+  Name = "SyntheticExternalSetup",
+  Args = {},
+}
+TraitData.DynamicIcarusArmor = {
+  InheritFrom = { "BaseIcarus", "CostumeTrait" },
+  Uses = 1,
+  SetupFunctions = {
+    {
+      Name = "CostumeArmor",
+      Args = { Source = "Icarus", BaseAmount = 40 },
+    },
+  },
+}
 
 for _, name in ipairs({
   "LastStandFamiliar",
@@ -542,6 +595,23 @@ do
   eq(result.actionOutcome, "completed", "native level receipt")
 end
 
+-- A normal God boon may use CostumeTrait as an implementation detail (for
+-- example Hephaestus armor). Native sell/Pom ownership must win over that
+-- inheritance marker so ordinary management capabilities are not stolen by the
+-- special-costume lifecycle.
+do
+  local trait = newTrait("OrdinaryArmorBoon", 151, 1, "Rare", {
+    InheritFrom = { "CostumeTrait" },
+  })
+  defineRarities("OrdinaryArmorBoon")
+  setTraits(trait)
+  local row = findRow("OrdinaryArmorBoon", 151)
+  eq(row.family, "olympianHermes", "ordinary CostumeTrait boon owner family")
+  eq(row.levelCapability, "increaseOne", "ordinary CostumeTrait level capability")
+  eq(row.rarityCapability, "setExact", "ordinary CostumeTrait rarity capability")
+  eq(row.removalCapability, "nameLevelAllMatching", "ordinary CostumeTrait removal capability")
+end
+
 -- Artemis direct example: native Pom eligibility deliberately says false, so
 -- this proves the bounded direct strategy rather than a widened native gate.
 do
@@ -554,6 +624,53 @@ do
   M.dispatch("set_trait_level", paramsFrom(row, "direct-level", 3))
   eq(trait.StackNum, 3, "direct target-level mutation")
   eq(trait.EffectValue, 200, "direct target-level effect mutation")
+end
+
+-- Direct special ownership/capability is derived from the current native NPC
+-- source, not from a hardcoded trait allowlist. A stack edit is exposed only
+-- when processing the next StackNum changes an extracted effect value.
+do
+  local trait = newTrait("DynamicDirectLevel", 251, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 251)
+  eq(row.family, "directSpecial", "dynamic direct-special family")
+  eq(row.sourceId, "Artemis", "dynamic direct-special source")
+  eq(row.levelCapability, "increaseOne", "dynamic direct-special level capability")
+  local before = calls.level
+  M.dispatch("set_trait_level", paramsFrom(row, "dynamic-direct-level", 3))
+  eq(calls.level, before + 1, "dynamic direct-special level callback")
+  eq(trait.StackNum, 3, "dynamic direct-special target level")
+end
+
+-- A room transition within the same run does not invalidate a mounted direct
+-- special target. The row remains current-run state and the owner-derived
+-- capability is recomputed from the live trait before mutation.
+do
+  local trait = newTrait("DynamicDirectLevel", 265, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 265)
+  CurrentRun.CurrentRoom = { Name = "F_DirectSpecialTransition" }
+  local before = calls.level
+  M.dispatch("set_trait_level", paramsFrom(row, "direct-room-transition", 2))
+  eq(calls.level, before + 1, "direct-special room transition blocked mutation")
+  eq(trait.StackNum, 2, "direct-special room transition lost target")
+end
+
+-- Exact rarity for direct special traits is also derived from current native
+-- ownership and the trait's real rarity model rather than a hardcoded strategy.
+do
+  local trait = newTrait("DynamicDirectRarity", 275, 1, "Common")
+  setTraits(trait)
+  local row = findRow("DynamicDirectRarity", 275)
+  eq(row.family, "directSpecial", "dynamic direct rarity family")
+  eq(row.rarityCapability, "setExact", "dynamic direct rarity capability")
+  local params = paramsFrom(row, "dynamic-direct-rarity")
+  params.rarity = "Epic"
+  local before = calls.rarity
+  M.dispatch("set_trait_rarity", params)
+  eq(calls.rarity, before + 1, "dynamic direct rarity recompute callback")
+  eq(trait.Rarity, "Epic", "dynamic direct rarity target")
+  eq(trait.EffectValue, 3000, "dynamic direct rarity effect recomputation")
 end
 
 -- Native rarity change must run the game recomputation callback rather than
@@ -587,6 +704,61 @@ do
   M.dispatch("set_trait_rarity", params)
   eq(trait.Rarity, "Heroic", "direct rarity mutation")
   eq(trait.EffectValue, 4000, "direct rarity effect recomputation")
+end
+
+-- A direct special whose runtime ownership is fully trait-local can be force
+-- removed as one exact instance even though native SellTraits rejects it.
+do
+  local first = newTrait("DynamicDirectRemoval", 451, 1, "Rare")
+  local second = newTrait("DynamicDirectRemoval", 452, 1, "Rare")
+  setTraits(first, second)
+  local row = findRow("DynamicDirectRemoval", 451)
+  eq(row.family, "directSpecial", "dynamic direct removal family")
+  eq(row.removalCapability, "singleInstanceForce", "dynamic direct removal capability")
+  check(row.removalScopeAllMatching == false, "dynamic direct removal widened scope")
+  local before = calls.directRemove
+  local params = paramsFrom(row, "dynamic-direct-remove")
+  local firstResult = M.dispatch("remove_trait", params)
+  local replayResult = M.dispatch("remove_trait", params)
+  eq(calls.directRemove, before + 1, "dynamic direct removal callback")
+  eq(#CurrentRun.Hero.Traits, 1, "dynamic direct removal removed wrong count")
+  eq(CurrentRun.Hero.Traits[1].Id, 452, "dynamic direct removal removed wrong instance")
+  check(firstResult.duplicate == false, "first direct removal marked duplicate")
+  check(replayResult.duplicate == true, "completed direct removal was not deduplicated")
+  check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
+    "dynamic direct removal did not suppress expiration")
+end
+
+-- Icarus armor/coating traits are direct-special owned but carry a native
+-- CostumeArmor setup lifecycle. They are not generic declarative rows: removal
+-- must perform exact RemoveTraitData teardown and then refresh costume owner
+-- presentation/state instead of silently disabling the operation.
+do
+  local trait = newTrait("DynamicIcarusArmor", 475, 1, "Common", {
+    InheritFrom = { "BaseIcarus", "CostumeTrait" },
+    Uses = 1,
+    SetupFunctions = {
+      {
+        Name = "CostumeArmor",
+        Args = { Source = "Icarus", BaseAmount = 40 },
+      },
+    },
+    CurrentArmor = 40,
+  })
+  setTraits(trait)
+  local row = findRow("DynamicIcarusArmor", 475)
+  eq(row.family, "directSpecial", "Icarus armor owner family")
+  eq(row.levelCapability, "none", "Icarus armor exposed generic level editing")
+  eq(row.rarityCapability, "none", "Icarus armor exposed generic rarity editing")
+  eq(row.removalCapability, "singleInstanceForce", "Icarus armor removal capability")
+  local beforeRemove = calls.directRemove
+  local beforeSetup = calls.costumeSetup
+  M.dispatch("remove_trait", paramsFrom(row, "icarus-armor-remove"))
+  eq(calls.directRemove, beforeRemove + 1, "Icarus armor teardown callback")
+  eq(calls.costumeSetup, beforeSetup + 1, "Icarus armor costume refresh")
+  eq(#CurrentRun.Hero.Traits, 0, "Icarus armor remained mounted")
+  check(lastDirectRemoveArgs and lastDirectRemoveArgs.SkipExpire == true,
+    "Icarus armor removal did not suppress expiration")
 end
 
 -- Native SellTraits-equivalent removal is explicitly name-level/all-matching.
@@ -705,19 +877,39 @@ do
   eq(calls.level, beforeLevel + 1, "outcome-unknown request auto-replayed")
 end
 
+-- Direct-special stale snapshots use the same preflight seam and must fail
+-- before their native mutation path is reached.
+do
+  local trait = newTrait("DynamicDirectLevel", 1025, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectLevel", 1025)
+  local params = paramsFrom(row, "direct-stale-level", 3)
+  local beforeLevel = calls.level
+  trait.StackNum = 2
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_level", params)
+  end)
+  eq(calls.level, beforeLevel, "stale direct-special target reached mutator")
+end
+
 -- The runtime verifies removal cleanup instead of trusting the callback return.
 do
   local trait = newTrait("OmegaExplodeBoon", 1101, 1, "Rare")
   setTraits(trait)
   local row = findRow("OmegaExplodeBoon", 1101)
   local beforeRemove = calls.directRemove
+  local params = paramsFrom(row, "direct-cleanup-failure")
   skipDirectRemoval = true
   expectError("MGT_OUTCOME_UNKNOWN", function()
-    M.dispatch("remove_trait", paramsFrom(row, "direct-cleanup-failure"))
+    M.dispatch("remove_trait", params)
   end)
   skipDirectRemoval = false
   eq(calls.directRemove, beforeRemove + 1, "direct cleanup callback count")
   eq(#CurrentRun.Hero.Traits, 1, "cleanup-failure fixture unexpectedly removed trait")
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.directRemove, beforeRemove + 1, "outcome-unknown direct removal replayed")
 end
 
 -- Direct strategies with acquisition/expiration lifecycle markers fail closed;
@@ -734,6 +926,47 @@ do
     M.dispatch("set_trait_level", paramsFrom(row, "unsafe-direct-level", row.level + 1))
   end)
   eq(calls.level, beforeLevel, "unsafe direct lifecycle reached level mutator")
+end
+
+-- A one-shot acquisition trait without the game's own level/rarity
+-- reconciliation callback must not expose edits that only change the mounted
+-- row while leaving the already-granted external reward stale.
+do
+  local trait = newTrait("DynamicDirectOneShot", 1251, 1, "Rare")
+  setTraits(trait)
+  local row = findRow("DynamicDirectOneShot", 1251)
+  eq(row.family, "directSpecial", "one-shot direct-special family")
+  eq(row.levelCapability, "none", "one-shot direct-special level capability")
+  eq(row.rarityCapability, "none", "one-shot direct-special rarity capability")
+  eq(row.removalCapability, "none", "one-shot direct-special removal capability")
+end
+
+-- Unsupported setup ownership is an explicit not-applicable disposition,
+-- not a deferred #239 bucket. Safe declarative and one-shot rows likewise have
+-- complete supported/not-applicable capability results with no residual issue.
+do
+  local setupTrait = newTrait("DynamicDirectSetup", 1275, 1, "Rare", {
+    SetupFunction = { Name = "SyntheticExternalSetup", Args = {} },
+  })
+  setTraits(setupTrait)
+  local setupRow = findRow("DynamicDirectSetup", 1275)
+  eq(setupRow.family, "directSpecial", "setup direct-special family")
+  eq(setupRow.levelCapability, "none", "setup direct-special level capability")
+  eq(setupRow.rarityCapability, "none", "setup direct-special rarity capability")
+  eq(setupRow.removalCapability, "none", "setup direct-special removal capability")
+  eq(setupRow.deferredIssue, nil, "setup direct-special remained deferred")
+
+  local declarative = newTrait("DynamicDirectRemoval", 1276, 1, "Rare")
+  setTraits(declarative)
+  eq(findRow("DynamicDirectRemoval", 1276).deferredIssue, nil,
+    "safe direct-special remained deferred")
+
+  local oneShot = newTrait("DynamicDirectOneShot", 1277, 1, "Rare", {
+    AcquireFunctionName = "SyntheticOneShotAcquire",
+  })
+  setTraits(oneShot)
+  eq(findRow("DynamicDirectOneShot", 1277).deferredIssue, nil,
+    "one-shot direct-special remained deferred")
 end
 
 -- Familiar ownership comes from the equipped Familiar's declared trait bundle,

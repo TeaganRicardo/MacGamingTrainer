@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 71 then
+if previousModule and previousModule.revision ~= 72 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 71 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 71, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 72, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2697,27 +2697,11 @@ if __MacGamingTrainerV1 == nil then
   -- None is persisted, and every mutation re-resolves the selection immediately
   -- before it calls a game-owned operation.
   local traitManagement = (function()
-    local directTraitStrategies = {
-      -- Artemis is shop-owned but not normal Pom eligibility. This ordinary-effect
-      -- boon proves an intentional direct level path without replaying acquisition.
-      CritBonusBoon = { sourceId = "Artemis", level = "increaseOne" },
-      -- Icarus' OmegaExplodeBoon is not native SellTraits / rarity-menu eligible.
-      -- Its mounted state is declarative (mana modifier + damage callback), with no
-      -- acquire/setup/expire reward lifecycle, so it is the bounded direct example
-      -- for exact rarity recompute and single-instance teardown in #227.
-      OmegaExplodeBoon = { sourceId = "Icarus", rarity = "setExact", removal = "singleInstanceForce" },
-    }
     local deferredTraitIssues = {
       costume = 239,
-      directSpecial = 239,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
-    local directUnsafeLifecycleKeys = {
-      "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
-      "OnExpire", "OnExpireFunctionName", "Uses", "ExpireAfterRooms",
-    }
-
     local function isArachneCostumeChoice(name)
       if type(name) ~= "string" or type(PresetEventArgs) ~= "table" then return false end
       local choiceData = PresetEventArgs.ArachneCostumeChoices
@@ -2841,15 +2825,6 @@ if __MacGamingTrainerV1 == nil then
       return count
     end
 
-    local function directStrategySafe(trait)
-      if type(trait) ~= "table" or directTraitStrategies[trait.Name] == nil then return false end
-      for _, key in ipairs(directUnsafeLifecycleKeys) do
-        if trait[key] ~= nil then return false end
-      end
-      if trait.RemainingUses ~= nil then return false end
-      return true
-    end
-
     local function specialTraitSourceId(name)
       if type(name) ~= "string" or name == "" then return "" end
       for sourceId, definition in pairs(nativeSpecialChoiceDefinitions) do
@@ -2870,10 +2845,163 @@ if __MacGamingTrainerV1 == nil then
       return ""
     end
 
+    local function directSpecialEditLifecycleSafe(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string" then return false end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+
+      -- Acquisition callbacks grant state outside the mounted row. Rebuilding
+      -- or levelling that row cannot undo/recompute those one-shot rewards.
+      for _, key in ipairs({ "AcquireFunctionName", "AcquireFunction" }) do
+        if trait[key] ~= nil or definition[key] ~= nil then return false end
+      end
+
+      -- IncreaseTraitLevel/AddRarityToTraits both rebuild with SkipSetup. A
+      -- setup/counter owner is editable only when the game provides its own
+      -- explicit level/rarity reconciliation callback.
+      local hasReconcile = type(definition.OnLevelOrRarityChangeFunctionName) == "string"
+          and definition.OnLevelOrRarityChangeFunctionName ~= ""
+      for _, key in ipairs({
+        "CurrentRoom", "RoomsPerUpgrade", "Uses", "RemainingUses",
+        "OnExpire", "OnExpireFunctionName", "SetupFunction", "SetupFunctions",
+        "PreEquipWeapons", "UseFunctionName", "UseFunctionNames",
+      }) do
+        if (trait[key] ~= nil or definition[key] ~= nil) and not hasReconcile then
+          return false
+        end
+      end
+      return true
+    end
+
+    local function directSpecialLevelMeaningful(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(IncreaseTraitLevel) ~= "function"
+          or type(GetProcessedTraitData) ~= "function"
+          or type(ExtractValues) ~= "function"
+          or not directSpecialEditLifecycleSafe(trait) then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if trait.BlockStacking or (type(definition) == "table" and definition.BlockStacking) then
+        return false
+      end
+      local function signature(stackNum)
+        local ok, processed = pcall(GetProcessedTraitData, {
+          Unit = CurrentRun.Hero,
+          TraitName = trait.Name,
+          StackNum = stackNum,
+          RarityMultiplier = trait.RarityMultiplier,
+        })
+        if not ok or type(processed) ~= "table" then return nil end
+        processed.Rarity = trait.Rarity or processed.Rarity
+        local extracted = pcall(ExtractValues, CurrentRun.Hero, processed, processed)
+        if not extracted or type(processed.ExtractData) ~= "table" then return nil end
+        local encoded, value = pcall(M.json, processed.ExtractData)
+        return encoded and value or nil
+      end
+      local current = traitLevel(trait)
+      local before = signature(current)
+      local after = signature(current + 1)
+      return before ~= nil and after ~= nil and before ~= after
+    end
+
+    local function directSpecialRarityMeaningful(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(AddRarityToTraits) ~= "function" then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" or type(definition.RarityLevels) ~= "table"
+          or trait.BlockInRunRarify or definition.BlockInRunRarify
+          or not directSpecialEditLifecycleSafe(trait) then
+        return false
+      end
+      return true
+    end
+
+    local function directSpecialRemovalSafe(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string"
+          or type(RemoveTraitData) ~= "function" then
+        return false
+      end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+      -- RemoveTraitData is authoritative for trait-local callbacks/properties.
+      -- These markers instead indicate acquisition/setup/counter/weapon state
+      -- that lives outside the row and therefore needs an owner-specific path.
+      for _, key in ipairs({
+        "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
+        "OnExpire", "OnExpireFunctionName", "Uses", "RemainingUses",
+        "CurrentRoom", "RoomsPerUpgrade", "PreEquipWeapons",
+        "UseFunctionName", "UseFunctionNames", "AddMetaUpgradeLastStands",
+      }) do
+        if trait[key] ~= nil or definition[key] ~= nil then return false end
+      end
+      return true
+    end
+
+    local function directSpecialCostumeArmor(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string" then return false end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+
+      local function inheritsCostume(value)
+        if type(value) ~= "table" then return false end
+        if value.CostumeTrait == true then return true end
+        for _, parent in pairs(type(value.InheritFrom) == "table" and value.InheritFrom or {}) do
+          if parent == "CostumeTrait" then return true end
+        end
+        return false
+      end
+      if not inheritsCostume(trait) and not inheritsCostume(definition) then return false end
+
+      local function hasCostumeArmor(value)
+        if type(value) ~= "table" then return false end
+        if type(value.SetupFunction) == "table" and value.SetupFunction.Name == "CostumeArmor" then
+          return true
+        end
+        for _, setup in pairs(type(value.SetupFunctions) == "table" and value.SetupFunctions or {}) do
+          if type(setup) == "table" and setup.Name == "CostumeArmor" then return true end
+        end
+        return false
+      end
+      return hasCostumeArmor(trait) or hasCostumeArmor(definition)
+    end
+
+    local function removeDirectSpecial(trait)
+      if type(trait) ~= "table" or trait.Id == nil then
+        error("Trait removal is unavailable for the selected target")
+      end
+      local refreshCostume = directSpecialCostumeArmor(trait)
+      if refreshCostume and type(SetupCostume) ~= "function" then
+        error("Direct costume armor removal is unavailable")
+      end
+      local instanceId = tostring(trait.Id)
+      local ok, message = pcall(
+        RemoveTraitData, CurrentRun.Hero, trait, { Silent = true, SkipExpire = true }
+      )
+      local stillMounted = false
+      for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(candidate) == "table" and candidate.Id ~= nil
+            and tostring(candidate.Id) == instanceId then
+          stillMounted = true
+          break
+        end
+      end
+
+      -- Native RemoveTraitData already owns armor-source teardown. Costume
+      -- refresh is the remaining owner state and must run even when removal
+      -- acknowledged late, before the request is surfaced outcome-unknown.
+      if not stillMounted and refreshCostume then
+        local setupOk, setupMessage = pcall(SetupCostume)
+        if not setupOk then error(setupMessage) end
+      end
+      if not ok then error(message) end
+      if stillMounted then error("Direct trait removal left the selected instance mounted") end
+    end
+
     local function traitSourceId(trait)
       if type(trait) ~= "table" then return "" end
-      local strategy = directTraitStrategies[trait.Name]
-      if strategy then return strategy.sourceId end
       if hammerModel.isHammerTrait(trait) or hammerModel.isRuntimeAspect(trait) then
         return "WeaponUpgrade"
       end
@@ -3535,7 +3663,6 @@ if __MacGamingTrainerV1 == nil then
     local function traitFamily(trait, sellEligible)
       if type(trait) ~= "table" then return "other" end
       local name = trait.Name or ""
-      if directTraitStrategies[name] ~= nil then return "directSpecial" end
       if chaosLifecycleState(trait) ~= "" then return "chaos" end
       local slotted = seleneModel.currentSpell()
       if type(slotted) == "table" and slotted.TraitName == name then return "hex" end
@@ -3548,16 +3675,14 @@ if __MacGamingTrainerV1 == nil then
       if keepsakeModel.isMounted(trait) then return "keepsake" end
       if familiarModel.isMounted(trait) then return "familiar" end
       if temporaryModel.isManaged(trait) then return "temporary" end
-      if type(trait.InheritFrom) == "table" then
-        for _, parent in ipairs(trait.InheritFrom) do
-          if parent == "CostumeTrait" then return "costume" end
-        end
-      end
+      -- Arachne's outfit is an actual owner lifecycle. Other game-owned boons
+      -- may inherit CostumeTrait only to participate in armor/appearance
+      -- mechanics, so inheritance alone must not steal their stronger owner.
+      if isArachneCostumeTrait(name) then return "costume" end
 
       -- TreatAsGodLootByShops makes several field/special NPC rewards sellable,
       -- but that does not make their lifecycle an ordinary Olympian/Hermes one.
-      -- Ownership wins over menu eligibility; #239 handles those families unless
-      -- an explicit direct strategy above opts in one audited operation.
+      -- Special-NPC source ownership therefore still wins over shop eligibility.
       local source = traitSourceId(trait)
       if type(source) == "string" and source ~= "" then
         if string.find(source, "NPC_", 1, true) == 1
@@ -3566,6 +3691,11 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       if sellEligible then return "olympianHermes" end
+      if type(trait.InheritFrom) == "table" then
+        for _, parent in ipairs(trait.InheritFrom) do
+          if parent == "CostumeTrait" then return "costume" end
+        end
+      end
       return "other"
     end
 
@@ -3601,8 +3731,6 @@ if __MacGamingTrainerV1 == nil then
       local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
       local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
       local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
-      local strategy = directTraitStrategies[trait.Name]
-      local directSafe = strategy ~= nil and directStrategySafe(trait)
       local hasIdentity = trait.Id ~= nil
 
       if not hasIdentity then
@@ -3633,8 +3761,10 @@ if __MacGamingTrainerV1 == nil then
           levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
-        elseif strategy and strategy.level == "increaseOne" and directSafe and not trait.BlockStacking then
+        elseif family == "directSpecial" and directSpecialLevelMeaningful(trait) then
           levelCapability, levelReason = "increaseOne", ""
+        elseif family == "directSpecial" then
+          levelReason = "notMeaningful"
         elseif family == "olympianHermes" and nativeLevelEligible(trait) then
           levelCapability, levelReason = "increaseOne", ""
         else
@@ -3672,8 +3802,10 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "ownerSpecificLifecycle"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
-        elseif strategy and strategy.rarity == "setExact" and directSafe then
+        elseif family == "directSpecial" and directSpecialRarityMeaningful(trait) then
           rarityCapability, rarityReason = "setExact", ""
+        elseif family == "directSpecial" then
+          rarityReason = "notMeaningful"
         elseif family == "olympianHermes" and sellEligible then
           rarityCapability, rarityReason = "setExact", ""
         else
@@ -3708,13 +3840,15 @@ if __MacGamingTrainerV1 == nil then
           removalReason = "permanentProgressionOwned"
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
-        elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
-            and type(RemoveTraitData) == "function" then
+        elseif family == "directSpecial" and directSpecialCostumeArmor(trait)
+            and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" and directSpecialRemovalSafe(trait) then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" then
+          removalReason = "ownerSpecificLifecycle"
         elseif family == "olympianHermes" and sellEligible then
           removalCapability, removalReason = "nameLevelAllMatching", ""
-        elseif strategy and not directSafe then
-          removalReason = "directSafetyFailed"
         end
       end
 
@@ -3896,7 +4030,8 @@ if __MacGamingTrainerV1 == nil then
       familiar = familiarModel,
       keepsake = keepsakeModel,
       arcana = arcanaModel,
-      hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
+      directSpecialCostumeArmor = directSpecialCostumeArmor,
+      removeDirectSpecial = removeDirectSpecial,
     }
   end)()
 
@@ -5298,9 +5433,12 @@ if __MacGamingTrainerV1 == nil then
           end
         elseif family == "familiar" then
           requireFunctions("Familiar trait level editing", { "IncreaseTraitLevel" })
+        elseif family == "directSpecial" then
+          requireFunctions("direct special trait level editing", { "IncreaseTraitLevel" })
         -- Ordinary God boons are re-checked against the game's real Pom
-        -- eligibility. The explicit direct strategy is the only bypass.
-        elseif not traitManagement.hasDirectStrategy(target.Name) then
+        -- eligibility. Direct special traits have their own processed-effect
+        -- capability gate above and never borrow GodLoot eligibility.
+        elseif family == "olympianHermes" then
           requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
           local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
           if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
@@ -5464,10 +5602,13 @@ if __MacGamingTrainerV1 == nil then
           })
         elseif removalCapability == "singleInstanceForce" and family == "hammer" then
           requireFunctions("Hammer trait removal", { "RemoveTraitData" })
-          if type(live) == "table" and type(live.PreEquipWeapons) == "table"
-              and next(live.PreEquipWeapons) ~= nil then
+          if type(target) == "table" and type(target.PreEquipWeapons) == "table"
+              and next(target.PreEquipWeapons) ~= nil then
             requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
           end
+        elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
+            and traitManagement.directSpecialCostumeArmor(target) then
+          requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "costume" then
           requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "temporary" then
@@ -5513,6 +5654,8 @@ if __MacGamingTrainerV1 == nil then
           traitManagement.familiar.teardown()
         elseif family == "keepsake" then
           traitManagement.keepsake.teardown()
+        elseif family == "directSpecial" then
+          traitManagement.removeDirectSpecial(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
@@ -5536,7 +5679,7 @@ if __MacGamingTrainerV1 == nil then
         else
           -- Bounded object-level force removal for an audited declarative trait.
           -- SkipExpire prevents a one-shot/reward expiration path from firing;
-          -- directStrategySafe() refuses traits with such a lifecycle anyway.
+          -- capability projection refuses owner state that cannot be torn down here.
           RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
           for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
             if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
