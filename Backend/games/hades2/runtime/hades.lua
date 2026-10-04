@@ -2195,6 +2195,26 @@ if __MacGamingTrainerV1 == nil then
         Unit = CurrentRun.Hero, TraitName = name, Rarity = rarity,
       })
       if type(processed) ~= "table" then error("Echo previous-run boon acquisition failed") end
+
+      local lootSource = GetLootSourceName(name, {
+        CheckEnemyData = true, GetPackageName = true,
+      })
+      if lootSource ~= nil then
+        requireFunctions("Echo previous-run package preparation", {
+          "LoadPackages", "IncrementTableValue",
+        })
+        if type(CurrentRun.LootTypeHistory) ~= "table" then
+          error("Echo previous-run boon acquisition failed")
+        end
+        LoadPackages({ Name = lootSource, IgnoreAssert = true })
+        IncrementTableValue(CurrentRun.LootTypeHistory, lootSource)
+        if type(processed.AcquireFunctionArgs) == "table"
+            and processed.AcquireFunctionArgs.GlobalVoiceLines ~= nil then
+          requireFunctions("Echo previous-run voice preparation", { "LoadVoiceBanks" })
+          LoadVoiceBanks(lootSource, nil, true)
+        end
+      end
+
       local added = AddTraitToHero({
         FromLoot = true,
         TraitData = processed,
@@ -5209,8 +5229,8 @@ if __MacGamingTrainerV1 == nil then
         end
         if entry.acquisitionMode == "echoLastRunExact" then
           requireFunctions("Echo previous-run exact eligibility", {
-            "HeroHasTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled",
-            "GetProcessedTraitData", "AddTraitToHero",
+            "HeroHasTrait", "GetHeroTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled",
+            "GetProcessedTraitData", "AddTraitToHero", "GetLootSourceName",
           })
           local eligible, rarity = echoModel.eligibleRarity(entry.trait)
           if not eligible then error("Echo previous-run boon is no longer eligible") end
