@@ -170,6 +170,8 @@ struct CurrentRunTrait: Identifiable, Equatable, Sendable {
     let linkedDisplayName: String
     let linkedEnglishName: String
     let canAdvanceLifecycle: Bool
+    let canSetRemainingUses: Bool
+    let canExpire: Bool
 
     let levelCapability: TraitLevelCapability
     let levelReason: String
