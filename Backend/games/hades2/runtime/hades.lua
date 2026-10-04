@@ -2558,9 +2558,7 @@ if __MacGamingTrainerV1 == nil then
       local choiceData = PresetEventArgs.ArachneCostumeChoices
       if type(choiceData) ~= "table" or type(choiceData.UpgradeOptions) ~= "table" then return false end
       for _, option in pairs(choiceData.UpgradeOptions) do
-        if type(option) == "table" and option.Type == "Trait" and option.ItemName == name then
-          return true
-        end
+        if type(option) == "table" and option.ItemName == name then return true end
       end
       return false
     end
