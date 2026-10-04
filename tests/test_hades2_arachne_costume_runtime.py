@@ -96,7 +96,7 @@ TraitData = {
     Costume = "Texture_Agility",
     SetupFunction = {
       Name = "CostumeArmor",
-      Args = { Source = "AgilityCostume", BaseAmount = 20 },
+      Args = { Source = "Robe", BaseAmount = 20 },
     },
     RarityLevels = { Common = { Multiplier = 1.0 }, Rare = { Multiplier = 1.5 } },
   },
@@ -107,7 +107,7 @@ TraitData = {
     Costume = "Texture_Mana",
     SetupFunction = {
       Name = "CostumeArmor",
-      Args = { Source = "ManaCostume", BaseAmount = 30 },
+      Args = { Source = "Robe", BaseAmount = 30 },
     },
     RarityLevels = { Common = { Multiplier = 1.0 }, Rare = { Multiplier = 1.5 } },
   },
@@ -123,6 +123,7 @@ local calls = {
   thingProperty = 0,
 }
 local nextId = 100
+local failSetupAfterMutation = false
 
 local function rebuildDictionary()
   CurrentRun.Hero.TraitDictionary = {}
@@ -176,6 +177,10 @@ SetupCostume = function()
       Value = costumes[1],
       DestinationId = CurrentRun.Hero.ObjectId,
     })
+  end
+  if failSetupAfterMutation then
+    failSetupAfterMutation = false
+    error("synthetic Arachne post-mutation setup failure")
   end
 end
 
@@ -247,6 +252,18 @@ local function eq(actual, expected, message)
   end
 end
 
+local function contains(value, needle)
+  return string.find(tostring(value), needle, 1, true) ~= nil
+end
+
+local function expectError(needle, fn)
+  local ok, message = pcall(fn)
+  if ok then fail("expected error containing " .. needle) end
+  if not contains(message, needle) then
+    fail("wrong error; expected '" .. needle .. "', got '" .. tostring(message) .. "'")
+  end
+end
+
 local function status(includeCatalogs)
   return M.dispatch("status", { includeCatalogs = includeCatalogs ~= false })
 end
@@ -307,6 +324,85 @@ eq(row.levelCapability, "none", "costume fabricated level editing")
 eq(row.rarityCapability, "none", "costume fabricated rarity editing")
 eq(row.removalCapability, "singleInstanceForce", "costume removal capability")
 
+-- Capturing a mounted-row identity before replacement must become stale after
+-- the selected costume is replaced by another valid Arachne owner target.
+local staleAgilityRow = row
+
+-- Forced exact acquisition defines replacement semantics for the non-native
+-- case where another Arachne costume is still mounted. The shared "Robe"
+-- source must transfer to the newly selected owner without stacking armor or
+-- leaving the previous appearance/trait alive.
+local replaceResult = M.dispatch("spawn_reward", {
+  reward = "trait:ManaCostume",
+  requestId = "arachne-costume-replace",
+  includeCatalogs = false,
+})
+check(not HeroHasTrait("AgilityCostume"), "old costume survived exact replacement")
+check(HeroHasTrait("ManaCostume"), "replacement costume did not mount")
+check(MapState.HealthBufferSources.AgilityCostume == nil, "old costume armor source survived replacement")
+eq(CurrentRun.Hero.HealthBuffer, 30, "replacement did not own the expected armor")
+eq(CurrentRun.Hero.ActiveCostume, "Texture_Mana", "replacement did not own appearance")
+check(replaceResult.lootObjectId == nil, "costume replacement leaked a trait object")
+
+expectError("no longer present", function()
+  M.dispatch("remove_trait", paramsFrom(staleAgilityRow, "arachne-stale-row"))
+end)
+
+-- A target that was visible in a previously rendered catalog fails closed if
+-- the native Arachne choice context changes before commit.
+PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = {
+  { ItemName = "ManaCostume", Type = "Trait" },
+}
+local beforeMissingContext = calls.add
+expectError("Exact costume target is unavailable", function()
+  M.dispatch("spawn_reward", {
+    reward = "trait:AgilityCostume",
+    requestId = "arachne-missing-owner-context",
+    includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforeMissingContext, "missing owner context reached costume mutation")
+PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = {
+  { ItemName = "AgilityCostume", Type = "Trait" },
+  { ItemName = "ManaCostume", Type = "Trait" },
+}
+
+-- disable_all is not an undo path for one-shot exact acquisition.
+M.dispatch("disable_all", { includeCatalogs = false })
+check(HeroHasTrait("ManaCostume"), "disable_all removed one-shot costume acquisition")
+eq(CurrentRun.Hero.HealthBuffer, 30, "disable_all desynchronized costume armor")
+eq(CurrentRun.Hero.ActiveCostume, "Texture_Mana", "disable_all desynchronized costume appearance")
+
+-- If native presentation/setup mutates and then fails acknowledgement, owner
+-- state stays coherent, the action is outcome-unknown, and the same request
+-- is never replayed.
+failSetupAfterMutation = true
+local beforeUnknownAdd = calls.add
+expectError("MGT_OUTCOME_UNKNOWN", function()
+  M.dispatch("spawn_reward", {
+    reward = "trait:AgilityCostume",
+    requestId = "arachne-outcome-unknown",
+    includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforeUnknownAdd + 1, "outcome-unknown costume mutation did not run exactly once")
+check(HeroHasTrait("AgilityCostume"), "outcome-unknown replacement lost new costume owner")
+check(not HeroHasTrait("ManaCostume"), "outcome-unknown replacement left old costume owner")
+eq(CurrentRun.Hero.HealthBuffer, 20, "outcome-unknown replacement left incoherent armor")
+eq(CurrentRun.Hero.ActiveCostume, "Texture_Agility", "outcome-unknown replacement left incoherent appearance")
+local beforeReplay = calls.add
+expectError("Previous action outcome is unknown; do not retry", function()
+  M.dispatch("spawn_reward", {
+    reward = "trait:AgilityCostume",
+    requestId = "arachne-outcome-unknown",
+    includeCatalogs = false,
+  })
+end)
+eq(calls.add, beforeReplay, "outcome-unknown costume request replayed")
+
+-- Explicit removal restores the default appearance and tears down the selected
+-- costume's armor source through the owner lifecycle.
+row = assert(findRow("AgilityCostume"), "replacement costume row missing")
 local beforeSetup = calls.setupCostume
 M.dispatch("remove_trait", paramsFrom(row, "arachne-costume-remove"))
 check(not HeroHasTrait("AgilityCostume"), "costume trait survived removal")
