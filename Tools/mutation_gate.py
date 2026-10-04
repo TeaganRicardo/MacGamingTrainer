@@ -199,10 +199,12 @@ def manifest() -> list[Mutation]:
             ident="trait-direct-removal-verification",
             invariant="a silently dropped single-instance removal fails closed",
             path=lua,
-            old='            if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then\n',
-            new="            if false then\n",
-            test="tests/test_hades2_live_trait_capability_gating.py",
-            note="#227: single-instance force removal must not report success when the instance survives",
+            old=('      if not ok then error(message) end\n'
+                 '      if stillMounted then error("Direct trait removal left the selected instance mounted") end\n'),
+            new=('      if not ok then error(message) end\n'
+                 '      if false then error("Direct trait removal left the selected instance mounted") end\n'),
+            test="tests/test_hades2_live_trait_management.py",
+            note="#335: direct-special removal now owns exact-instance survival verification",
         ),
         # --- failed removal reported as success ----------------------------
         Mutation(
