@@ -2575,7 +2575,12 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       if not costume then return false end
-      return specialTraitSourceId(name) == "Arachne" or isArachneCostumeChoice(name)
+      if isArachneCostumeChoice(name) then return true end
+      local npc = type(EnemyData) == "table" and EnemyData.NPC_Arachne_01 or nil
+      for _, traitName in pairs(type(npc) == "table" and npc.Traits or {}) do
+        if traitName == name then return true end
+      end
+      return false
     end
 
     local function applyCostume(name)
