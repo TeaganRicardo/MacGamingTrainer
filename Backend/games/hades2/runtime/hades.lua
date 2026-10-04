@@ -2090,7 +2090,7 @@ if __MacGamingTrainerV1 == nil then
       isHammerTrait = isHammerTrait,
       isRuntimeAspect = isRuntimeAspect,
       removalReady = removalReady,
-      applyExact = applyExact,
+      applyExact = applyPreviousRunExact,
       removeMounted = removeMounted,
     }
   end)()
@@ -2187,7 +2187,7 @@ if __MacGamingTrainerV1 == nil then
       }
     end
 
-    local function applyExact(name, rarity)
+    local function applyPreviousRunExact(name, rarity)
       requireFunctions("Echo previous-run exact acquisition", {
         "GetProcessedTraitData", "AddTraitToHero",
       })
