@@ -85,6 +85,13 @@ TraitData = {
     Slot = "Keepsake",
     RemainingUses = 1,
   },
+  LimitedSwapBonusTrait = {
+    Name = "LimitedSwapBonusTrait",
+    InheritFrom = { "ShopTrait" },
+    Uses = 1,
+    ForceSwaps = true,
+    BlockStacking = true,
+  },
 }
 
 local calls = {
@@ -232,6 +239,38 @@ check(keepsakeRow.family ~= "temporary", "RemainingUses misclassified a keepsake
 check(keepsakeRow.canSetRemainingUses ~= true, "keepsake exposed Well duration editing")
 check(keepsakeRow.canExpire ~= true, "keepsake exposed Well expiry semantics")
 RemoveTraitData(CurrentRun.Hero, keepsake, { SkipExpire = true })
+
+-- One real Well effect uses Uses rather than RemainingUses. It shares the
+-- user-facing remaining-count editor, but native exhaustion leaves the trait
+-- mounted/inactive instead of calling RemoveTraitData.
+local limited = AddTraitToHero({ TraitName = "LimitedSwapBonusTrait" })
+local limitedRow = assert(findRow(limited.Name), "Uses-backed Well row missing")
+eq(limitedRow.family, "temporary", "Uses-backed Well owner family")
+eq(limitedRow.remainingUses, 1, "Uses-backed Well count projection")
+check(limitedRow.canSetRemainingUses == true, "Uses-backed Well count edit unavailable")
+check(limitedRow.canExpire == true, "Uses-backed Well expiry unavailable")
+
+local limitedSet = paramsFrom(limitedRow, "temporary-uses-set")
+limitedSet.targetRemainingUses = 3
+M.dispatch("set_trait_remaining_uses", limitedSet)
+eq(limited.Uses, 3, "Uses-backed Well edit did not update native counter")
+check(HeroHasTrait(limited.Name), "Uses-backed Well edit removed owner trait")
+
+limitedRow = assert(findRow(limited.Name), "Uses-backed Well row missing after edit")
+local beforeUsesExpireRemove = calls.remove
+local beforeUsesExpireSideEffect = calls.expiry
+M.dispatch("expire_trait", paramsFrom(limitedRow, "temporary-uses-expire"))
+eq(limited.Uses, 0, "Uses-backed Well expiry did not reach terminal counter")
+check(HeroHasTrait(limited.Name), "Uses-backed Well expiry incorrectly removed owner trait")
+eq(calls.remove, beforeUsesExpireRemove, "Uses-backed Well expiry called RemoveTraitData")
+eq(calls.expiry, beforeUsesExpireSideEffect, "Uses-backed Well expiry fabricated OnExpire")
+
+limitedRow = assert(findRow(limited.Name), "expired Uses-backed Well row disappeared")
+eq(limitedRow.remainingUses, 0, "expired Uses-backed Well projection")
+check(limitedRow.canExpire ~= true, "already-expired Uses-backed Well still exposes Expire Now")
+check(limitedRow.canSetRemainingUses == true, "expired Uses-backed Well cannot be reactivated by count edit")
+M.dispatch("remove_trait", paramsFrom(limitedRow, "temporary-uses-cancel"))
+check(not HeroHasTrait(limited.Name), "explicit cancellation did not remove Uses-backed Well trait")
 
 local staleDurationRow = row
 local setParams = paramsFrom(row, "temporary-set-uses")
