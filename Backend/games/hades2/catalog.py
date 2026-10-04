@@ -72,6 +72,68 @@ _CURRENT_RUN_FAMILY_LABELS = {
     'weaponAspect': ('武器形态效果', 'Weapon Aspect Effect'),
 }
 
+# Current-target (1.143476 / Steam 25481925) mounted TraitData rows that do not
+# have a sufficiently specific standalone native title. Values are Trainer
+# Product Terms derived from the target build's effect data/descriptions. Arcana
+# values are descriptors only; the native card title is prepended at runtime.
+_CURRENT_RUN_DERIVED_NAMES = {
+    # Element essence traits are installed by the matching *Boost consumables.
+    'AirEssence': ('风元素精华', 'Air Essence'),
+    'FireEssence': ('火元素精华', 'Fire Essence'),
+    'EarthEssence': ('土元素精华', 'Earth Essence'),
+    'WaterEssence': ('水元素精华', 'Water Essence'),
+    'ElementalEssence': ('元素精华', 'Elemental Essence'),
+
+    # Direct current-run state/effect traits.
+    'MinorArmorBoon': ('护甲增加', 'Armor Gain'),
+    'RoomRewardMaxHealthTrait': ('最大生命提升', 'Max Life Increase'),
+    'RoomRewardEmptyMaxHealthTrait': ('最大生命提升（不恢复生命）', 'Max Life Increase (No Heal)'),
+    'RoomRewardMaxManaTrait': ('最大魔力提升', 'Max Magick Increase'),
+    'SuitInherentSpeedBoon': ('漆黑战衣 · 冲刺速度提升', 'Black Coat · Sprint Speed Increase'),
+    'VanillaState': ('环境状态 · 常态', 'Environment State · Normal'),
+    'WetState': ('环境状态 · 降雨', 'Environment State · Rain'),
+
+    # Hidden Familiar upgrade traits; names follow target FamiliarData fields.
+    'FamiliarFrogResourceBonus': ('弗利诺斯 · 额外采集概率', 'Frinos · Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('弗利诺斯 · 攻击伤害', 'Frinos · Attack Damage'),
+    'FamiliarCatResourceBonus': ('图拉 · 额外采集概率', 'Toula · Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('图拉 · 攻击次数', 'Toula · Attack Count'),
+    'FamiliarRavenResourceBonus': ('拉奇 · 额外采集概率', 'Raki · Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('拉奇 · 攻击间隔', 'Raki · Attack Interval'),
+    'FamiliarHoundResourceBonus': ('赫库芭 · 额外采集概率', 'Hecuba · Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('赫库芭 · 吠叫间隔', 'Hecuba · Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('加莉 · 额外采集概率', 'Gale · Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('加莉 · 攻击伤害', 'Gale · Attack Damage'),
+
+    # Arcana mounted traits: concise functional descriptors derived from the
+    # official target-build card Description. Native card titles remain sourceName.
+    'ChannelSlowMetaUpgrade': ('Ω蓄力速度', 'Ω Charge Speed'),
+    'DoorHealMetaUpgrade': ('离开房间恢复生命', 'Post-Room Healing'),
+    'LowManaDamageMetaupgrade': ('低魔力攻击/特攻增伤', 'Low-Magick Attack/Special Damage'),
+    'CastDamageMetaUpgrade': ('Ω蓄力时减缓时间', 'Time Slow While Channeling Ω'),
+    'SorceryRegenMetaUpgrade': ('巫咒自动充能', 'Automatic Hex Charge'),
+    'InsideCastBuffMetaUpgrade': ('法阵内伤害', 'Cast-Zone Damage'),
+    'HealthManaBonusMetaUpgrade': ('最大生命与魔力', 'Max Life & Magick'),
+    'DodgeBonusMetaUpgrade': ('法阵无敌与移动速度', 'Cast Invulnerability & Move Speed'),
+    'ManaOverTimeMetaUpgrade': ('每秒恢复魔力', 'Magick Regeneration'),
+    'MagicCritMetaUpgrade': ('Ω招式暴击率', 'Ω-Move Critical Chance'),
+    'SprintShieldMetaUpgrade': ('冲刺速度与穿行', 'Sprint Speed & Phasing'),
+    'LastStandSlowTimeMetaUpgrade': ('死里逃生次数', 'Death Defiance Charges'),
+    'ChamberHealthMetaUpgrade': ('定期提升生命与魔力上限', 'Periodic Max Life/Magick Gain'),
+    'EffectVulnerabilityMetaUpgrade': ('多状态增伤', 'Multi-Status Damage'),
+    'BossShieldMetaUpgrade': ('首领战受击免伤', 'Guardian Hit Blocks'),
+    'DoorRerollMetaUpgrade': ('地点奖励重掷', 'Location Reward Rerolls'),
+    'StartingGoldMetaUpgrade': ('初始金币', 'Starting Gold'),
+    'MetaToRunMetaUpgrade': ('局外奖励转局内奖励', 'Meta-to-Run Reward Conversion'),
+    'RarityBoostMetaUpgrade': ('稀有/传奇祝福概率', 'Rare/Legendary Boon Chance'),
+    'DuoRarityBoostMetaUpgrade': ('双重祝福概率', 'Duo Boon Chance'),
+    'RerollTradeOffMetaUpgrade': ('重掷次数', 'Rerolls'),
+    'PanelRerollMetaUpgrade': ('祝福及选项重掷', 'Boon & Choice Rerolls'),
+    'LowHealthBuffMetaUpgrade': ('无死里逃生时增伤减伤', 'No-Death-Defiance Damage & Defense'),
+    'EpicRarityBoostMetaUpgrade': ('史诗祝福概率', 'Epic Boon Chance'),
+    'BossProgressionMetaUpgrade': ('击败首领激活随机阿卡那', 'Activate Arcana After Guardians'),
+}
+
 
 _LINKED_OFFICIAL_NAME_IDS = {
     # These runtime reward identifiers may resolve through another official
@@ -155,19 +217,6 @@ _PROVISIONAL_NAMES = {
     'RandomLoot': ('随机奥林匹斯祝福', 'Random Olympian Boon'),
     'BoostedRandomLoot': ('强化随机祝福', 'Boosted Random Boon'),
 
-    # Hidden Familiar upgrade traits have no standalone DisplayName in the
-    # supported target build. These product labels are derived from the native
-    # FamiliarData effect fields, never from prettifying the internal trait id.
-    'FamiliarFrogResourceBonus': ('弗利诺斯·额外采集概率', 'Frinos · Bonus Gathering Chance'),
-    'FamiliarFrogDamage': ('弗利诺斯·攻击伤害', 'Frinos · Attack Damage'),
-    'FamiliarCatResourceBonus': ('图拉·额外采集概率', 'Toula · Bonus Gathering Chance'),
-    'FamiliarCatAttacks': ('图拉·攻击次数', 'Toula · Attack Count'),
-    'FamiliarRavenResourceBonus': ('拉奇·额外采集概率', 'Raki · Bonus Gathering Chance'),
-    'FamiliarRavenAttackDuration': ('拉奇·攻击间隔', 'Raki · Attack Interval'),
-    'FamiliarHoundResourceBonus': ('赫库芭·额外采集概率', 'Hecuba · Bonus Gathering Chance'),
-    'FamiliarHoundBarkDuration': ('赫库芭·吠叫间隔', 'Hecuba · Bark Interval'),
-    'FamiliarPolecatResourceBonus': ('加莉·额外采集概率', 'Gale · Bonus Gathering Chance'),
-    'FamiliarPolecatDamage': ('加莉·攻击伤害', 'Gale · Attack Damage'),
 }
 
 
@@ -189,6 +238,9 @@ def _fallback_names(item, identifier, english_name, linked_zh, linked_en):
         base_en=_clean(linked_en.get(base_id))
         if isinstance(base_zh,str) and base_zh:
             return zh_prefix + base_zh, 'provisional_zh', (en_prefix + base_en) if base_en else identifier, ('provisional_en' if base_en else 'identifier')
+    derived=_CURRENT_RUN_DERIVED_NAMES.get(identifier)
+    if derived:
+        return derived[0], 'derived_current_run_zh', derived[1], 'derived_current_run_en'
     provisional=_PROVISIONAL_NAMES.get(identifier)
     if provisional:
         return provisional[0], 'provisional_zh', provisional[1], 'provisional_en'
@@ -386,7 +438,13 @@ def localize_catalog(decoded):
             presentation_id=identifier
         official_zh=_clean(zh.get(presentation_id)) if presentation_id in zh else None
         official_en=_clean(en.get(presentation_id)) if presentation_id in en else None
-        if isinstance(official_zh,str) and official_zh:
+        derived_name=_CURRENT_RUN_DERIVED_NAMES.get(identifier)
+        if derived_name:
+            # The registry is intentionally more specific than either a missing
+            # native title or (for Arcana) an inherited card title. Card/source
+            # identity is retained separately and composed below.
+            display_zh,display_en=derived_name
+        elif isinstance(official_zh,str) and official_zh:
             display_zh=official_zh
             display_en=official_en or ''
         elif isinstance(official_en,str) and official_en:
