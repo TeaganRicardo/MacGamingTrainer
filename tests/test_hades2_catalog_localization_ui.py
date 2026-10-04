@@ -320,6 +320,43 @@ assert familiar_owner['sourceName'] == '拉奇'
 assert familiar_owner['sourceEnglishName'] == 'Raki'
 assert familiar_owner['sourceName'] != familiar_owner['sourceId']
 
+# Arcana runtime rows keep the concrete mounted effect as the item label and
+# expose the exact native card as the bilingual owner/source label. Internal
+# TraitName remains routing identity rather than recognition text.
+original_display_names = localization.official_display_names
+def arcana_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'LowManaDamageMetaupgrade': '低魔力伤害加成',
+            'LowManaDamageBonus': '猎手',
+        },
+        'en': {
+            'LowManaDamageMetaupgrade': 'Low-Mana Damage Bonus',
+            'LowManaDamageBonus': 'The Huntress',
+        },
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = arcana_names
+try:
+    arcana_payload = {
+        'currentRunTraits': [{
+            'name': 'LowManaDamageMetaupgrade',
+            'sourceId': 'LowManaDamageBonus',
+            'family': 'arcana',
+        }]
+    }
+    catalog.localize_catalog(arcana_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+arcana = arcana_payload['currentRunTraits'][0]
+assert arcana['displayName'] == '低魔力伤害加成'
+assert arcana['englishName'] == 'Low-Mana Damage Bonus'
+assert arcana['sourceName'] == '猎手'
+assert arcana['sourceEnglishName'] == 'The Huntress'
+assert arcana['sourceName'] != arcana['sourceId']
+assert arcana['displayName'] != arcana['name']
+
 # The selected Keepsake owner uses the native Keepsake localization identity.
 # Runtime routing may retain the exact trait id, but the user-facing owner label
 # must resolve from official bilingual game text.
