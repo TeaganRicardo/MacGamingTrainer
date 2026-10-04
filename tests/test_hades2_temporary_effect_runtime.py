@@ -231,7 +231,7 @@ local keepsakeRow = assert(findRow(keepsake.Name), "progression-owned keepsake r
 check(keepsakeRow.family ~= "temporary", "RemainingUses misclassified a keepsake as a Well effect")
 check(keepsakeRow.canSetRemainingUses ~= true, "keepsake exposed Well duration editing")
 check(keepsakeRow.canExpire ~= true, "keepsake exposed Well expiry semantics")
-M.dispatch("remove_trait", paramsFrom(keepsakeRow, "cleanup-keepsake"))
+RemoveTraitData(CurrentRun.Hero, keepsake, { SkipExpire = true })
 
 local staleDurationRow = row
 local setParams = paramsFrom(row, "temporary-set-uses")
