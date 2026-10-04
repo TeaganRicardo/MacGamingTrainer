@@ -2870,11 +2870,40 @@ if __MacGamingTrainerV1 == nil then
       return ""
     end
 
+    local function directSpecialEditLifecycleSafe(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string" then return false end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+
+      -- Acquisition callbacks grant state outside the mounted row. Rebuilding
+      -- or levelling that row cannot undo/recompute those one-shot rewards.
+      for _, key in ipairs({ "AcquireFunctionName", "AcquireFunction" }) do
+        if trait[key] ~= nil or definition[key] ~= nil then return false end
+      end
+
+      -- IncreaseTraitLevel/AddRarityToTraits both rebuild with SkipSetup. A
+      -- setup/counter owner is editable only when the game provides its own
+      -- explicit level/rarity reconciliation callback.
+      local hasReconcile = type(definition.OnLevelOrRarityChangeFunctionName) == "string"
+          and definition.OnLevelOrRarityChangeFunctionName ~= ""
+      for _, key in ipairs({
+        "CurrentRoom", "RoomsPerUpgrade", "Uses", "RemainingUses",
+        "OnExpire", "OnExpireFunctionName", "SetupFunction", "SetupFunctions",
+        "PreEquipWeapons", "UseFunctionName", "UseFunctionNames",
+      }) do
+        if (trait[key] ~= nil or definition[key] ~= nil) and not hasReconcile then
+          return false
+        end
+      end
+      return true
+    end
+
     local function directSpecialLevelMeaningful(trait)
       if type(trait) ~= "table" or type(trait.Name) ~= "string"
           or type(IncreaseTraitLevel) ~= "function"
           or type(GetProcessedTraitData) ~= "function"
-          or type(ExtractValues) ~= "function" then
+          or type(ExtractValues) ~= "function"
+          or not directSpecialEditLifecycleSafe(trait) then
         return false
       end
       local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
@@ -2908,21 +2937,9 @@ if __MacGamingTrainerV1 == nil then
       end
       local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
       if type(definition) ~= "table" or type(definition.RarityLevels) ~= "table"
-          or trait.BlockInRunRarify or definition.BlockInRunRarify then
+          or trait.BlockInRunRarify or definition.BlockInRunRarify
+          or not directSpecialEditLifecycleSafe(trait) then
         return false
-      end
-      -- AddRarityToTraits deliberately rebuilds with SkipSetup. Traits whose
-      -- runtime ownership lives in setup/counters need a dedicated owner path
-      -- unless the game declares its own level/rarity reconciliation callback.
-      local hasReconcile = type(definition.OnLevelOrRarityChangeFunctionName) == "string"
-          and definition.OnLevelOrRarityChangeFunctionName ~= ""
-      for _, key in ipairs({
-        "CurrentRoom", "RoomsPerUpgrade", "Uses", "RemainingUses",
-        "OnExpire", "SetupFunction", "SetupFunctions",
-      }) do
-        if (trait[key] ~= nil or definition[key] ~= nil) and not hasReconcile then
-          return false
-        end
       end
       return true
     end
@@ -2946,6 +2963,66 @@ if __MacGamingTrainerV1 == nil then
         if trait[key] ~= nil or definition[key] ~= nil then return false end
       end
       return true
+    end
+
+    local function directSpecialCostumeArmor(trait)
+      if type(trait) ~= "table" or type(trait.Name) ~= "string" then return false end
+      local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+      if type(definition) ~= "table" then return false end
+
+      local function inheritsCostume(value)
+        if type(value) ~= "table" then return false end
+        if value.CostumeTrait == true then return true end
+        for _, parent in pairs(type(value.InheritFrom) == "table" and value.InheritFrom or {}) do
+          if parent == "CostumeTrait" then return true end
+        end
+        return false
+      end
+      if not inheritsCostume(trait) and not inheritsCostume(definition) then return false end
+
+      local function hasCostumeArmor(value)
+        if type(value) ~= "table" then return false end
+        if type(value.SetupFunction) == "table" and value.SetupFunction.Name == "CostumeArmor" then
+          return true
+        end
+        for _, setup in pairs(type(value.SetupFunctions) == "table" and value.SetupFunctions or {}) do
+          if type(setup) == "table" and setup.Name == "CostumeArmor" then return true end
+        end
+        return false
+      end
+      return hasCostumeArmor(trait) or hasCostumeArmor(definition)
+    end
+
+    local function removeDirectSpecial(trait)
+      if type(trait) ~= "table" or trait.Id == nil then
+        error("Trait removal is unavailable for the selected target")
+      end
+      local refreshCostume = directSpecialCostumeArmor(trait)
+      if refreshCostume and type(SetupCostume) ~= "function" then
+        error("Direct costume armor removal is unavailable")
+      end
+      local instanceId = tostring(trait.Id)
+      local ok, message = pcall(
+        RemoveTraitData, CurrentRun.Hero, trait, { Silent = true, SkipExpire = true }
+      )
+      local stillMounted = false
+      for _, candidate in ipairs(CurrentRun.Hero.Traits or {}) do
+        if type(candidate) == "table" and candidate.Id ~= nil
+            and tostring(candidate.Id) == instanceId then
+          stillMounted = true
+          break
+        end
+      end
+
+      -- Native RemoveTraitData already owns armor-source teardown. Costume
+      -- refresh is the remaining owner state and must run even when removal
+      -- acknowledged late, before the request is surfaced outcome-unknown.
+      if not stillMounted and refreshCostume then
+        local setupOk, setupMessage = pcall(SetupCostume)
+        if not setupOk then error(setupMessage) end
+      end
+      if not ok then error(message) end
+      if stillMounted then error("Direct trait removal left the selected instance mounted") end
     end
 
     local function traitSourceId(trait)
@@ -3800,6 +3877,9 @@ if __MacGamingTrainerV1 == nil then
         elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
             and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "directSpecial" and directSpecialCostumeArmor(trait)
+            and type(RemoveTraitData) == "function" and type(SetupCostume) == "function" then
+          removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "directSpecial" and directSpecialRemovalSafe(trait) then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "directSpecial" then
@@ -3989,6 +4069,8 @@ if __MacGamingTrainerV1 == nil then
       familiar = familiarModel,
       keepsake = keepsakeModel,
       arcana = arcanaModel,
+      directSpecialCostumeArmor = directSpecialCostumeArmor,
+      removeDirectSpecial = removeDirectSpecial,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -5560,10 +5642,13 @@ if __MacGamingTrainerV1 == nil then
           })
         elseif removalCapability == "singleInstanceForce" and family == "hammer" then
           requireFunctions("Hammer trait removal", { "RemoveTraitData" })
-          if type(live) == "table" and type(live.PreEquipWeapons) == "table"
-              and next(live.PreEquipWeapons) ~= nil then
+          if type(target) == "table" and type(target.PreEquipWeapons) == "table"
+              and next(target.PreEquipWeapons) ~= nil then
             requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
           end
+        elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
+            and traitManagement.directSpecialCostumeArmor(target) then
+          requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "costume" then
           requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
         elseif removalCapability == "singleInstanceForce" and family == "temporary" then
@@ -5609,6 +5694,8 @@ if __MacGamingTrainerV1 == nil then
           traitManagement.familiar.teardown()
         elseif family == "keepsake" then
           traitManagement.keepsake.teardown()
+        elseif family == "directSpecial" then
+          traitManagement.removeDirectSpecial(live)
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
