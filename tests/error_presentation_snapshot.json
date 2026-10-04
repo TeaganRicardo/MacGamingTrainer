@@ -1125,10 +1125,6 @@
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
     },
-    "advance_trait_lifecycle::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "advance_trait_lifecycle::Trait instance is no longer present": {
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
@@ -1155,6 +1151,10 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "advance_trait_lifecycle::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
@@ -1230,10 +1230,6 @@
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
     },
-    "remove_trait::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
-    },
     "remove_trait::Selene spell removal left owner state mounted": {
       "key": "hades2.error.traitRemovalNoEffect",
       "arguments": []
@@ -1277,6 +1273,10 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
+    "remove_trait::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
     "set_trait_level::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1296,10 +1296,6 @@
     "set_trait_level::Not enough uninvested Path of Stars nodes remain for the requested level": {
       "key": "hades2.error.traitLevelNoLongerEligible",
       "arguments": []
-    },
-    "set_trait_level::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
     },
     "set_trait_level::Selene talent tree changed before the requested level was applied": {
       "key": "hades2.error.traitTargetChanged",
@@ -1348,6 +1344,10 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
+    "set_trait_level::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
     "set_trait_rarity::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1363,10 +1363,6 @@
     "set_trait_rarity::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
-    },
-    "set_trait_rarity::requestId reused for a different action": {
-      "arguments": [],
-      "key": "hades2.error.requestIdReused"
     },
     "set_trait_rarity::Trait instance is no longer present": {
       "arguments": [],
@@ -1402,6 +1398,10 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
+    },
+    "set_trait_rarity::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "spawn_reward::Arachne costume acquisition failed": {
       "arguments": [],
