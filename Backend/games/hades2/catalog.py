@@ -239,9 +239,6 @@ def _fallback_names(item, identifier, english_name, linked_zh, linked_en):
         base_en=_clean(linked_en.get(base_id))
         if isinstance(base_zh,str) and base_zh:
             return zh_prefix + base_zh, 'provisional_zh', (en_prefix + base_en) if base_en else identifier, ('provisional_en' if base_en else 'identifier')
-    derived=_CURRENT_RUN_DERIVED_NAMES.get(identifier)
-    if derived:
-        return derived[0], 'derived_current_run_zh', derived[1], 'derived_current_run_en'
     provisional=_PROVISIONAL_NAMES.get(identifier)
     if provisional:
         return provisional[0], 'provisional_zh', provisional[1], 'provisional_en'
