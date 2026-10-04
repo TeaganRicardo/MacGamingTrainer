@@ -1214,6 +1214,10 @@
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
     },
+    "remove_trait::Arachne costume removal left owner state mounted": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
+    },
     "remove_trait::Direct trait removal left the selected instance mounted": {
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
@@ -1399,6 +1403,14 @@
       "arguments": [],
       "key": "hades2.error.requestIdReused"
     },
+    "spawn_reward::Arachne costume acquisition failed": {
+      "arguments": [],
+      "key": "hades2.error.costumeOwnerFailed"
+    },
+    "spawn_reward::Arachne costume replacement left previous owner mounted": {
+      "arguments": [],
+      "key": "hades2.error.costumeOwnerFailed"
+    },
     "spawn_reward::Chaos exact acquisition failed": {
       "arguments": [],
       "key": "hades2.error.chaosExactFailed"
@@ -1406,6 +1418,10 @@
     "spawn_reward::Chaos exact acquisition is unavailable": {
       "arguments": [],
       "key": "hades2.error.chaosExactUnavailable"
+    },
+    "spawn_reward::Exact costume target is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Mounted Selene talent is unavailable": {
       "key": "hades2.error.exactNotEligible",

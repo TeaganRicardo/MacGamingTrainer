@@ -19,7 +19,13 @@ ResourceData = {}
 ResourceDisplayOrderData = {}
 TraitElementData = {}
 EnemyData = {}
-PresetEventArgs = {}
+PresetEventArgs = {
+  ArachneCostumeChoices = {
+    UpgradeOptions = {
+      { ItemName = "AgilityCostume", Type = "Trait" },
+    },
+  },
+}
 ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
 LootObjects = {}

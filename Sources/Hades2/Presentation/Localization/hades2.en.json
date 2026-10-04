@@ -123,6 +123,7 @@
     "hades2.error.sellNeedsRunRoom": "Pool of Purging can only be opened in a run room.",
     "hades2.error.sellScreenBusy": "Another game screen is open; close it before opening Pool of Purging.",
     "hades2.error.seleneExactFailed": "The selected Selene effect could not be applied coherently to the current Hex state.",
+    "hades2.error.costumeOwnerFailed": "The selected costume could not be applied coherently to the current run.",
     "hades2.error.signingVerificationFailed": "Debug signature verification failed; the game was not modified.",
     "hades2.error.speedMultiplierRange": "Speed multiplier must be from 10 to 1000%.",
     "hades2.error.spellChargeRange": "Hex charge must be between 0 and {0}.",

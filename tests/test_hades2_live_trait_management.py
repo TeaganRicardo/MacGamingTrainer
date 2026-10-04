@@ -55,8 +55,9 @@ def test_owner_family_controls_default_native_paths():
     assert "seleneModel.talentNodes" in LUA
     assert 'family == "hammer"' in capability_block
     assert 'family == "weaponAspect"' in capability_block
+    assert 'family == "costume"' in capability_block
     for family, issue in (
-        ("costume", "239"), ("temporary", "239"), ("directSpecial", "239"),
+        ("temporary", "239"), ("directSpecial", "239"),
         ("familiar", "240"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
