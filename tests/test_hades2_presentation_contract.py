@@ -377,11 +377,13 @@ assert '"\\(option.name) · \\(option.englishName)"' in _exact_label
 assert "if !option.name.isEmpty { return option.name }" in _exact_label
 assert "if !option.englishName.isEmpty { return option.englishName }" in _exact_label
 _exact_filter = _view[
-    _view.index("private var exactBoons"):
+    _view.index("private var genericExactBoons"):
     _view.index("private var material:")
 ]
-assert "$0.name.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
-assert "$0.englishName.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+assert "option.name.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+assert "option.englishName.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+assert "option.sourceName.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
+assert "option.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)" in _exact_filter
 
 # 11d. A Trainer Product Term must be declared in the terminology registry and
 # referenced through it, not spelled out in a table. A hardcoded bilingual pair
