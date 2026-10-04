@@ -135,6 +135,7 @@ local calls = {
   lifePips = 0,
 }
 local failLevelAfterMutation = false
+local failFamiliarDestroyAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
@@ -217,6 +218,10 @@ end
 
 Destroy = function(args)
   calls.familiarDestroy = calls.familiarDestroy + 1
+  if failFamiliarDestroyAfterMutation then
+    failFamiliarDestroyAfterMutation = false
+    error("synthetic Familiar destroy acknowledgement failure")
+  end
 end
 
 FamiliarData = {
@@ -589,6 +594,32 @@ do
   eq(calls.level, beforeLevel + 1, "Familiar level did not use native trait recomputation")
   eq(primary.StackNum, 3, "Familiar target level")
   eq(primary.EffectValue, 200, "Familiar level did not recompute effect sentinel")
+
+  -- The owner survives a room object transition and remains manageable.
+  CurrentRun.CurrentRoom = { Name = "B_TestRoom" }
+  local roomRow = findRow("CritFamiliar", 1301)
+  M.dispatch("set_trait_level", paramsFrom(roomRow, "familiar-room-level", 4))
+  eq(primary.StackNum, 4, "Familiar level failed after room transition")
+
+  -- Replacing the native owner invalidates the old observed selection before
+  -- any mutator can touch the no-longer-owned Raven trait.
+  local staleOwnerRow = findRow("CritFamiliar", 1301)
+  local beforeStaleLevel = calls.level
+  GameState.EquippedFamiliar = "CatFamiliar"
+  MapState.FamiliarUnit = { Name = "CatFamiliar", ObjectId = 7002 }
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_level", paramsFrom(staleOwnerRow, "familiar-owner-stale", 5))
+  end)
+  eq(calls.level, beforeStaleLevel, "stale Familiar owner reached level mutator")
+  GameState.EquippedFamiliar = "RavenFamiliar"
+  MapState.FamiliarUnit = { Name = "RavenFamiliar", ObjectId = 7001 }
+
+  -- Trainer-wide cleanup is not an implicit undo/unequip path for game-owned
+  -- Familiar state.
+  M.dispatch("disable_all", { includeCatalogs = false })
+  eq(GameState.EquippedFamiliar, "RavenFamiliar", "disable_all unequipped Familiar owner")
+  check(MapState.FamiliarUnit ~= nil, "disable_all cleared live Familiar unit")
+  check(findRow("CritFamiliar", 1301).family == "familiar", "disable_all removed Familiar runtime state")
 end
 
 -- Removing any mounted member of the owner bundle tears down the equipped
@@ -627,6 +658,40 @@ do
   local duplicate = M.dispatch("remove_trait", paramsFrom(row, "familiar-owner-remove"))
   check(duplicate.duplicate == true, "Familiar owner teardown replay not deduplicated")
   eq(calls.familiarRemove, removeCalls, "Familiar owner teardown replayed mutation")
+end
+
+-- A post-mutation failure still finishes the distinct owner cleanup steps so
+-- runtime ownership is coherent, then reports outcome-unknown. The same request
+-- can never replay the non-idempotent teardown.
+do
+  GameState.EquippedFamiliar = "RavenFamiliar"
+  MapState.FamiliarUnit = { Name = "RavenFamiliar", ObjectId = 7201 }
+  local primary = newTrait("CritFamiliar", 1501, 1, nil)
+  local resource = newTrait("FamiliarRavenResourceBonus", 1502, 1, nil)
+  local duration = newTrait("FamiliarRavenAttackDuration", 1503, 1, nil)
+  setTraits(primary, resource, duration)
+
+  local row = findRow("CritFamiliar", 1501)
+  local params = paramsFrom(row, "familiar-owner-unknown")
+  local beforeDestroy = calls.familiarDestroy
+  local beforeRemove = calls.familiarRemove
+  failFamiliarDestroyAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(GameState.EquippedFamiliar, nil, "outcome-unknown left Familiar equipped")
+  eq(MapState.FamiliarUnit, nil, "outcome-unknown left live Familiar pointer")
+  eq(#CurrentRun.Hero.Traits, 0, "outcome-unknown left Familiar traits mounted")
+  eq(calls.familiarDestroy, beforeDestroy + 1, "outcome-unknown destroy call count")
+  check(calls.familiarRemove > beforeRemove, "outcome-unknown skipped trait teardown")
+
+  local removeAfterUnknown = calls.familiarRemove
+  local destroyAfterUnknown = calls.familiarDestroy
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.familiarRemove, removeAfterUnknown, "outcome-unknown Familiar request replayed trait teardown")
+  eq(calls.familiarDestroy, destroyAfterUnknown, "outcome-unknown Familiar request replayed entity teardown")
 end
 
 print("hades2_live_trait_runtime_behavior_ok")
