@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 68 then
+if previousModule and previousModule.revision ~= 69 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 68 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 68, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 69, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -2710,6 +2710,7 @@ if __MacGamingTrainerV1 == nil then
     local deferredTraitIssues = {
       costume = 239,
       directSpecial = 239,
+      keepsake = 329,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
@@ -2923,6 +2924,45 @@ if __MacGamingTrainerV1 == nil then
       local linked = type(onExpire) == "table" and onExpire.TraitData or nil
       return type(linked) == "table" and type(linked.Name) == "string" and linked.Name or ""
     end
+
+    local keepsakeModel = (function()
+      local function ownerName()
+        if type(GameState) ~= "table" or type(GameState.LastAwardTrait) ~= "string"
+            or GameState.LastAwardTrait == "" then
+          return ""
+        end
+        local name = GameState.LastAwardTrait
+        if type(TraitData) ~= "table" or type(TraitData[name]) ~= "table" then return "" end
+        return name
+      end
+
+      local function isMounted(trait)
+        local name = ownerName()
+        return name ~= "" and type(trait) == "table" and trait.Name == name
+      end
+
+      local function removalReady()
+        return ownerName() ~= "" and type(UnequipKeepsake) == "function"
+      end
+
+      local function teardownOwner()
+        if not removalReady() then error("Keepsake owner removal is unavailable") end
+        local name = ownerName()
+        UnequipKeepsake(CurrentRun.Hero, name, { AdvanceKeepsakeMoment = true })
+        for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(trait) == "table" and trait.Name == name then
+            error("Keepsake owner removal left the selected trait mounted")
+          end
+        end
+      end
+
+      return {
+        ownerName = ownerName,
+        isMounted = isMounted,
+        removalReady = removalReady,
+        teardown = teardownOwner,
+      }
+    end)()
 
     local familiarModel = (function()
       local function ownerName()
@@ -3199,6 +3239,7 @@ if __MacGamingTrainerV1 == nil then
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
       if hammerModel.isRuntimeAspect(trait) then return "weaponAspect" end
       if hammerModel.isHammerTrait(trait) then return "hammer" end
+      if keepsakeModel.isMounted(trait) then return "keepsake" end
       if familiarModel.isMounted(trait) then return "familiar" end
       if temporaryModel.isManaged(trait) then return "temporary" end
       if type(trait.InheritFrom) == "table" then
@@ -3280,7 +3321,7 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "hammer" or family == "weaponAspect" or family == "costume"
             or family == "temporary" then
           levelReason = "notMeaningful"
-        elseif family == "familiar" then
+        elseif family == "familiar" or family == "keepsake" then
           levelReason = "ownerSpecificLifecycle"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
@@ -3313,6 +3354,8 @@ if __MacGamingTrainerV1 == nil then
           rarityReason = "permanentProgressionOwned"
         elseif family == "costume" or family == "temporary" or family == "familiar" then
           rarityReason = "notMeaningful"
+        elseif family == "keepsake" then
+          rarityReason = "ownerSpecificLifecycle"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -3344,6 +3387,8 @@ if __MacGamingTrainerV1 == nil then
         elseif family == "temporary" and type(RemoveTraitData) == "function" then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "familiar" and familiarModel.removalReady() then
+          removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "keepsake" and keepsakeModel.removalReady() then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
@@ -3390,12 +3435,14 @@ if __MacGamingTrainerV1 == nil then
               or ((family == "hex" or family == "hexTalent") and "Selene"
               or (family == "hammer" and "WeaponUpgrade"
               or (family == "familiar" and familiarModel.ownerName()
-              or (family == "weaponAspect" and "" or traitSourceId(trait))))),
+              or (family == "keepsake" and keepsakeModel.ownerName()
+              or (family == "weaponAspect" and "" or traitSourceId(trait)))))),
             owner = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
               or (family == "hammer" and "WeaponUpgrade"
               or (family == "familiar" and familiarModel.ownerName()
-              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait))))),
+              or (family == "keepsake" and keepsakeModel.ownerName()
+              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait)))))),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
@@ -3529,6 +3576,7 @@ if __MacGamingTrainerV1 == nil then
       teardownSlottedSpell = seleneModel.teardown,
       temporary = temporaryModel,
       familiar = familiarModel,
+      keepsake = keepsakeModel,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -5093,6 +5141,10 @@ if __MacGamingTrainerV1 == nil then
           if not traitManagement.familiar.removalReady() then
             error("Familiar owner removal is unavailable")
           end
+        elseif removalCapability == "singleInstanceForce" and family == "keepsake" then
+          if not traitManagement.keepsake.removalReady() then
+            error("Keepsake owner removal is unavailable")
+          end
         elseif removalCapability == "singleInstanceForce" then
           requireFunctions("direct trait removal", { "RemoveTraitData" })
         else
@@ -5124,6 +5176,8 @@ if __MacGamingTrainerV1 == nil then
           traitManagement.temporary.cancel(live)
         elseif family == "familiar" then
           traitManagement.familiar.teardown()
+        elseif family == "keepsake" then
+          traitManagement.keepsake.teardown()
         elseif family == "hexTalent" then
           local ok, removalError = pcall(
             RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
