@@ -152,6 +152,10 @@
       ],
       "key": "hades2.error.elementRange"
     },
+    "剩余次数必须为 1–999999 的整数。": {
+      "key": "hades2.error.remainingUsesRange",
+      "arguments": []
+    },
     "功能代码过长。": {
       "arguments": [],
       "key": "hades2.error.featureCodeTooLong"
@@ -983,6 +987,10 @@
     "请断开连接并退出游戏后操作。": {
       "arguments": [],
       "key": "hades2.error.disconnectBeforePrepare"
+    },
+    "请选择当前局效果。": {
+      "key": "hades2.error.selectCurrentTrait",
+      "arguments": []
     },
     "请选择当前局祝福。": {
       "arguments": [],
