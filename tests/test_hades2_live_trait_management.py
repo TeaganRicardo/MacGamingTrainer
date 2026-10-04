@@ -63,6 +63,7 @@ def test_owner_family_controls_default_native_paths():
     assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
     assert "directSpecial = 239" not in LUA
+    assert "costume = 239" not in LUA
     assert "other = 221" in LUA
     assert "familiar = 240" not in LUA
     assert "keepsake = 329" not in LUA
