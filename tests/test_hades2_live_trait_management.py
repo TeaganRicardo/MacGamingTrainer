@@ -130,7 +130,7 @@ EnemyData = {
   NPC_Artemis_Field_01 = {
     Traits = {
       "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval",
-      "DynamicDirectOneShot",
+      "DynamicDirectOneShot", "DynamicDirectSetup",
     },
   },
   NPC_Icarus_01 = {
@@ -423,12 +423,18 @@ for _, name in ipairs({
   "DynamicDirectRarity",
   "DynamicDirectRemoval",
   "DynamicDirectOneShot",
+  "DynamicDirectSetup",
 }) do
   defineRarities(name)
 end
 TraitData.DynamicDirectLevel.SyntheticStackEffect = true
 TraitData.DynamicDirectOneShot.SyntheticStackEffect = true
 TraitData.DynamicDirectOneShot.AcquireFunctionName = "SyntheticOneShotAcquire"
+TraitData.DynamicDirectSetup.SyntheticStackEffect = true
+TraitData.DynamicDirectSetup.SetupFunction = {
+  Name = "SyntheticExternalSetup",
+  Args = {},
+}
 TraitData.DynamicIcarusArmor = {
   InheritFrom = { "BaseIcarus", "CostumeTrait" },
   Uses = 1,
@@ -895,6 +901,34 @@ do
   eq(row.levelCapability, "none", "one-shot direct-special level capability")
   eq(row.rarityCapability, "none", "one-shot direct-special rarity capability")
   eq(row.removalCapability, "none", "one-shot direct-special removal capability")
+end
+
+-- Unsupported setup ownership is an explicit not-applicable disposition,
+-- not a deferred #239 bucket. Safe declarative and one-shot rows likewise have
+-- complete supported/not-applicable capability results with no residual issue.
+do
+  local setupTrait = newTrait("DynamicDirectSetup", 1275, 1, "Rare", {
+    SetupFunction = { Name = "SyntheticExternalSetup", Args = {} },
+  })
+  setTraits(setupTrait)
+  local setupRow = findRow("DynamicDirectSetup", 1275)
+  eq(setupRow.family, "directSpecial", "setup direct-special family")
+  eq(setupRow.levelCapability, "none", "setup direct-special level capability")
+  eq(setupRow.rarityCapability, "none", "setup direct-special rarity capability")
+  eq(setupRow.removalCapability, "none", "setup direct-special removal capability")
+  eq(setupRow.deferredIssue, nil, "setup direct-special remained deferred")
+
+  local declarative = newTrait("DynamicDirectRemoval", 1276, 1, "Rare")
+  setTraits(declarative)
+  eq(findRow("DynamicDirectRemoval", 1276).deferredIssue, nil,
+    "safe direct-special remained deferred")
+
+  local oneShot = newTrait("DynamicDirectOneShot", 1277, 1, "Rare", {
+    AcquireFunctionName = "SyntheticOneShotAcquire",
+  })
+  setTraits(oneShot)
+  eq(findRow("DynamicDirectOneShot", 1277).deferredIssue, nil,
+    "one-shot direct-special remained deferred")
 end
 
 -- Familiar ownership comes from the equipped Familiar's declared trait bundle,
