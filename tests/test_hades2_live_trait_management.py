@@ -104,6 +104,20 @@ GameState = {
   FamiliarUpgrades = { PersistentCatUpgrade = true },
   LastAwardTrait = nil,
   KeepsakeChambers = { ReincarnationKeepsake = 42, BonusMoneyKeepsake = 17 },
+  MetaUpgradeState = {
+    LowManaDamageBonus = {
+      Unlocked = true, Equipped = true, Level = 2,
+      AdjacencyBonuses = { CustomMultiplier = 0.5 },
+    },
+    BonusHealth = {
+      Unlocked = true, Equipped = true, Level = 2,
+      AdjacencyBonuses = {},
+    },
+    DoorReroll = {
+      Unlocked = true, Equipped = true, Level = 2,
+      AdjacencyBonuses = {},
+    },
+  },
 }
 ResourceData = {}
 ResourceDisplayOrderData = {}
@@ -114,6 +128,22 @@ ScreenData = {}
 MapState = { RoomRequiredObjects = {} }
 FrameState = {}
 PersistentKeepsakeKeys = { "DoorHealReserve", "CustomTrayText" }
+MetaUpgradeCardData = {
+  LowManaDamageBonus = {
+    TraitName = "LowManaDamageMetaupgrade",
+  },
+  BonusHealth = {
+    TraitName = "HealthManaBonusMetaUpgrade",
+  },
+  DoorReroll = {
+    TraitName = "DoorRerollMetaUpgrade",
+    OnGrantedFunctionName = "GrantMetaUpgradeRerolls",
+    OnUpgradedFunctionName = "UpgradeMetaUpgradeRerolls",
+  },
+}
+TraitRarityData = {
+  RarityUpgradeOrder = { "Common", "Rare", "Epic", "Heroic" },
+}
 round = function(value) return math.floor(value + 0.5) end
 LootObjects = {}
 UpdateTimers = function() end
@@ -146,11 +176,16 @@ local calls = {
   keepsakeUnequip = 0,
   keepsakeEquip = 0,
   traitNumber = 0,
+  arcanaAdd = 0,
+  validateHealth = 0,
+  validateMana = 0,
+  weaponAnim = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
 local failKeepsakeUnequipAfterMutation = false
 local failKeepsakeEquipAfterMutation = false
+local failArcanaAddAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
@@ -210,6 +245,27 @@ RemoveWeaponTrait = function(name, args)
   end
 end
 
+local nextArcanaId = 9000
+AddTraitToHero = function(args)
+  calls.arcanaAdd = calls.arcanaAdd + 1
+  nextArcanaId = nextArcanaId + 1
+  local trait = {
+    Name = args.TraitName,
+    Id = nextArcanaId,
+    StackNum = 1,
+    Rarity = args.Rarity or "Common",
+    EffectValue = rarityValue[args.Rarity or "Common"] * 1000,
+    SourceName = args.SourceName,
+    CustomMultiplier = args.CustomMultiplier,
+  }
+  table.insert(CurrentRun.Hero.Traits, trait)
+  if failArcanaAddAfterMutation then
+    failArcanaAddAfterMutation = false
+    error("synthetic Arcana add acknowledgement failure")
+  end
+  return trait
+end
+
 RemoveTraitData = function(hero, target, args)
   calls.directRemove = calls.directRemove + 1
   lastDirectRemoveArgs = args
@@ -266,8 +322,15 @@ end
 UpdateTraitNumber = function(trait)
   calls.traitNumber = calls.traitNumber + 1
 end
-ValidateMaxMana = function() end
-ValidateMaxHealth = function() end
+ValidateMaxMana = function()
+  calls.validateMana = calls.validateMana + 1
+end
+ValidateMaxHealth = function()
+  calls.validateHealth = calls.validateHealth + 1
+end
+HandleWeaponAnimSwaps = function()
+  calls.weaponAnim = calls.weaponAnim + 1
+end
 AddHealthBuffer = function() end
 IsTraitActive = function() return true end
 
@@ -344,6 +407,19 @@ TraitData.BonusMoneyKeepsake.InheritFrom = { "GiftTrait" }
 TraitData.BonusMoneyKeepsake.RarityLevels = { Common = {}, Rare = {}, Epic = {} }
 TraitData.DoorHealReserveKeepsake.InheritFrom = { "GiftTrait" }
 TraitData.DoorHealReserveKeepsake.RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} }
+
+for _, name in ipairs({
+  "LowManaDamageMetaupgrade",
+  "HealthManaBonusMetaUpgrade",
+  "DoorRerollMetaUpgrade",
+  "UnownedMetaUpgradeTrait",
+}) do
+  TraitData[name] = {
+    InheritFrom = { "MetaUpgradeTrait" },
+    RarityLevels = { Common = {}, Rare = {}, Epic = {}, Heroic = {} },
+  }
+end
+TraitData.DoorRerollMetaUpgrade.RerollCount = { BaseValue = 1 }
 
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
@@ -953,6 +1029,132 @@ do
     M.dispatch("set_trait_rarity", params)
   end)
   eq(calls.keepsakeUnequip, beforeUnequip, "unsupported Keepsake rank mutated owner")
+end
+
+-- Arcana ownership is exact and progression-backed: only an equipped card
+-- whose native TraitName matches the mounted effect owns that row. Inheritance
+-- alone is never sufficient, and runtime removal stays unavailable because the
+-- durable Equipped state would allow the native lifecycle to resurrect it.
+do
+  local owned = newTrait("LowManaDamageMetaupgrade", 2201, 1, "Rare")
+  local inheritedOnly = newTrait("UnownedMetaUpgradeTrait", 2202, 1, "Rare")
+  setTraits(owned, inheritedOnly)
+
+  local row = findRow("LowManaDamageMetaupgrade", 2201)
+  eq(row.family, "arcana", "equipped Arcana owner family")
+  eq(row.sourceId, "LowManaDamageBonus", "Arcana card owner identity")
+  eq(row.owner, "LowManaDamageBonus", "Arcana owner projection")
+  eq(row.levelCapability, "none", "Arcana fabricated StackNum editing")
+  eq(row.rarityCapability, "setExact", "safe Arcana runtime rank capability")
+  eq(row.removalCapability, "none", "Arcana runtime removal must fail closed")
+  check(findRow("UnownedMetaUpgradeTrait", 2202).family ~= "arcana",
+    "MetaUpgradeTrait inheritance fabricated Arcana ownership")
+
+  local durable = GameState.MetaUpgradeState.LowManaDamageBonus
+  local levelBefore = durable.Level
+  local equippedBefore = durable.Equipped
+  local unlockedBefore = durable.Unlocked
+  local adjacencyBefore = durable.AdjacencyBonuses.CustomMultiplier
+  local genericRarityBefore = calls.rarity
+  local nativeRemoveBefore = calls.nativeRemove
+  local addBefore = calls.arcanaAdd
+  local healthBefore = calls.validateHealth
+  local manaBefore = calls.validateMana
+  local animBefore = calls.weaponAnim
+
+  local params = paramsFrom(row, "arcana-runtime-rank")
+  params.rarity = "Epic"
+  local result = M.dispatch("set_trait_rarity", params)
+
+  eq(calls.rarity, genericRarityBefore, "Arcana rank used generic rarity mutator")
+  eq(calls.nativeRemove, nativeRemoveBefore + 1, "Arcana rank skipped owner teardown")
+  eq(calls.arcanaAdd, addBefore + 1, "Arcana rank skipped owner rebuild")
+  eq(calls.validateHealth, healthBefore + 1, "Arcana rank skipped health refresh")
+  eq(calls.validateMana, manaBefore + 1, "Arcana rank skipped mana refresh")
+  eq(calls.weaponAnim, animBefore + 1, "Arcana rank skipped weapon animation refresh")
+  eq(durable.Level, levelBefore, "Arcana runtime rank rewrote durable level")
+  eq(durable.Equipped, equippedBefore, "Arcana runtime rank rewrote equipped state")
+  eq(durable.Unlocked, unlockedBefore, "Arcana runtime rank rewrote unlock state")
+  eq(durable.AdjacencyBonuses.CustomMultiplier, adjacencyBefore,
+    "Arcana runtime rank rewrote adjacency ownership")
+
+  local rebuilt = findMountedTrait("LowManaDamageMetaupgrade")
+  eq(rebuilt.Rarity, "Epic", "Arcana runtime rank target")
+  eq(rebuilt.SourceName, "LowManaDamageBonus", "Arcana rebuild lost card owner")
+  eq(rebuilt.CustomMultiplier, 1.5, "Arcana rebuild lost adjacency multiplier")
+  eq(result.actionOutcome, "completed", "Arcana rank outcome")
+
+  CurrentRun.CurrentRoom = { Name = "F_TestRoom" }
+  eq(findRow("LowManaDamageMetaupgrade").rarity, "Epic",
+    "Arcana runtime rank lost across room transition")
+
+  local removeAfter = calls.nativeRemove
+  local addAfter = calls.arcanaAdd
+  local duplicate = M.dispatch("set_trait_rarity", params)
+  check(duplicate.duplicate == true, "Arcana rank replay was not deduplicated")
+  eq(calls.nativeRemove, removeAfter, "Arcana duplicate replayed owner teardown")
+  eq(calls.arcanaAdd, addAfter, "Arcana duplicate replayed owner rebuild")
+
+  M.dispatch("disable_all", { includeCatalogs = false })
+  eq(findRow("LowManaDamageMetaupgrade").rarity, "Epic",
+    "disable_all reverted game-owned Arcana runtime rank")
+end
+
+-- Changing the native owner after observation invalidates the selection before
+-- any owner rebuild. A card with one-shot grant/upgrade callbacks is recognized
+-- as Arcana but exposes no generic runtime rank mutation.
+do
+  local owned = newTrait("LowManaDamageMetaupgrade", 2301, 1, "Rare")
+  local reroll = newTrait("DoorRerollMetaUpgrade", 2302, 1, "Rare")
+  setTraits(owned, reroll)
+
+  local row = findRow("LowManaDamageMetaupgrade", 2301)
+  local beforeRemove = calls.nativeRemove
+  local beforeAdd = calls.arcanaAdd
+  GameState.MetaUpgradeState.LowManaDamageBonus.Equipped = false
+  local stale = paramsFrom(row, "arcana-stale-owner")
+  stale.rarity = "Epic"
+  expectError("Trait target changed since selection", function()
+    M.dispatch("set_trait_rarity", stale)
+  end)
+  eq(calls.nativeRemove, beforeRemove, "stale Arcana owner reached teardown")
+  eq(calls.arcanaAdd, beforeAdd, "stale Arcana owner reached rebuild")
+  GameState.MetaUpgradeState.LowManaDamageBonus.Equipped = true
+
+  local unsafe = findRow("DoorRerollMetaUpgrade", 2302)
+  eq(unsafe.family, "arcana", "callback Arcana owner classification")
+  eq(unsafe.rarityCapability, "none", "one-shot Arcana exposed rank mutation")
+  eq(unsafe.removalCapability, "none", "one-shot Arcana exposed removal")
+end
+
+-- If owner rebuild mounts the replacement and acknowledges late, the request is
+-- outcome-unknown and never replayed. Durable card progression is still untouched.
+do
+  local owned = newTrait("HealthManaBonusMetaUpgrade", 2401, 1, "Rare")
+  setTraits(owned)
+  local row = findRow("HealthManaBonusMetaUpgrade", 2401)
+  local params = paramsFrom(row, "arcana-rank-unknown")
+  params.rarity = "Epic"
+  local durable = GameState.MetaUpgradeState.BonusHealth
+  local levelBefore = durable.Level
+  local removeBefore = calls.nativeRemove
+  local addBefore = calls.arcanaAdd
+  failArcanaAddAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  eq(findMountedTrait("HealthManaBonusMetaUpgrade").Rarity, "Epic",
+    "unknown Arcana rebuild lost mounted target")
+  eq(durable.Level, levelBefore, "unknown Arcana rebuild rewrote durable level")
+  eq(calls.nativeRemove, removeBefore + 1, "unknown Arcana teardown count")
+  eq(calls.arcanaAdd, addBefore + 1, "unknown Arcana add count")
+  local removeAfter = calls.nativeRemove
+  local addAfter = calls.arcanaAdd
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("set_trait_rarity", params)
+  end)
+  eq(calls.nativeRemove, removeAfter, "unknown Arcana request replayed teardown")
+  eq(calls.arcanaAdd, addAfter, "unknown Arcana request replayed rebuild")
 end
 
 -- If native EquipKeepsake mutates then acknowledges late, restore persistent
