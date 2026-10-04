@@ -117,6 +117,10 @@ GameState = {
       Unlocked = true, Equipped = true, Level = 2,
       AdjacencyBonuses = {},
     },
+    ChanneledBlock = {
+      Unlocked = true, Equipped = true, Level = 2,
+      AdjacencyBonuses = {},
+    },
   },
 }
 ResourceData = {}
@@ -139,6 +143,9 @@ MetaUpgradeCardData = {
     TraitName = "DoorRerollMetaUpgrade",
     OnGrantedFunctionName = "GrantMetaUpgradeRerolls",
     OnUpgradedFunctionName = "UpgradeMetaUpgradeRerolls",
+  },
+  ChanneledBlock = {
+    TraitName = "BossShieldMetaUpgrade",
   },
 }
 TraitRarityData = {
@@ -412,6 +419,7 @@ for _, name in ipairs({
   "LowManaDamageMetaupgrade",
   "HealthManaBonusMetaUpgrade",
   "DoorRerollMetaUpgrade",
+  "BossShieldMetaUpgrade",
   "UnownedMetaUpgradeTrait",
 }) do
   TraitData[name] = {
@@ -420,6 +428,7 @@ for _, name in ipairs({
   }
 end
 TraitData.DoorRerollMetaUpgrade.RerollCount = { BaseValue = 1 }
+TraitData.BossShieldMetaUpgrade.BossEncounterShieldHits = { BaseValue = 1 }
 
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
@@ -1125,6 +1134,13 @@ do
   eq(unsafe.family, "arcana", "callback Arcana owner classification")
   eq(unsafe.rarityCapability, "none", "one-shot Arcana exposed rank mutation")
   eq(unsafe.removalCapability, "none", "one-shot Arcana exposed removal")
+
+  local bossShield = newTrait("BossShieldMetaUpgrade", 2303, 1, "Rare")
+  setTraits(bossShield)
+  local bossRow = findRow("BossShieldMetaUpgrade", 2303)
+  eq(bossRow.family, "arcana", "Boss shield Arcana owner classification")
+  eq(bossRow.rarityCapability, "none",
+    "Arcana rank exposed without synchronizing materialized boss shield state")
 end
 
 -- Adjacency and durable card level may change through native Arcana ownership
