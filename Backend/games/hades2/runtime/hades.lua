@@ -2965,7 +2965,8 @@ if __MacGamingTrainerV1 == nil then
         -- Toula's primary stack also owns a live Last Stand record, and the
         -- damage-modifier helper traits are copied onto the live Familiar unit
         -- at spawn time. Do not expose a half-applied runtime level edit.
-        if trait.Name == "LastStandFamiliar" then return false end
+        if trait.Name == "LastStandFamiliar"
+            or trait.Name == "RestedFamiliarResourceBonus" then return false end
         local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
         local model = type(definition) == "table" and definition or trait
         if type(model.FamiliarDataModifiers) == "table" then return false end
