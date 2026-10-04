@@ -2238,7 +2238,7 @@ if __MacGamingTrainerV1 == nil then
       catalogSignature = catalogSignature,
       eligibleRarity = eligibleRarity,
       hiddenEntry = hiddenEntry,
-      applyExact = applyExact,
+      applyExact = applyPreviousRunExact,
     }
   end)()
 
