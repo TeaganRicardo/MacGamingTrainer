@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 8.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 70.
+- Hades II resident runtime revision: 72.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 71. Revisions 52–71 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 72. Revisions 52–72 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -60,6 +60,7 @@ Current source contains resident revision 71. Revisions 52–71 remain pending t
 - revision 69: the currently selected Keepsake is recognized through `GameState.LastAwardTrait`; forced current-run removal delegates to native `UnequipKeepsake` while preserving durable Keepsake selection and chamber progression. Runtime level/rarity semantics remain explicitly deferred under #329; real-game acceptance remains pending.
 - revision 70: selected Keepsake runtime rank is an exact rarity override rebuilt through native Unequip/Equip owner semantics with `PersistentKeepsakeKeys` preservation and no `KeepsakeChambers` mutation; StackNum-style level remains not meaningful. #329/#332 implementation is complete pending consolidated real-game acceptance.
 - revision 71: mounted Arcana effects are owned only by an exact equipped `MetaUpgradeCardData[card].TraitName` mapping. Safe declarative cards can receive a current-run rank/rarity override through native owner-shaped teardown/rebuild with adjacency and derived health/mana/weapon refreshes, while permanent Arcana state remains read-only; one-shot/setup-state cards and runtime-only removal fail closed. #330 implementation is complete pending automated and consolidated real-game acceptance.
+- revision 72: direct special-NPC mounted management is derived from native source identity and processed runtime semantics rather than a trait allowlist. Meaningful declarative level/rarity/removal operations are exposed; one-shot acquisition and unsupported setup/counter lifecycles fail closed; Icarus CostumeArmor teardown refreshes costume owner state. The residual #239 `directSpecial` deferred bucket is removed.
 
 Automated verification does not replace this manual acceptance.
 
@@ -107,10 +108,11 @@ Planning issue #124 is the sequencing authority.
 - #312 boon-management UX consolidation is complete in this source: Exact Boons keeps its grouped picker/search acquisition flow, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions.
 - #237 Selene Hex / Path of Stars exact acquisition and mounted management is complete in this source at resident revision 63; final real-game acceptance remains part of the consolidated manual pass.
 - #238 weapon/aspect-aware Hammer exact acquisition and mounted-effect management is complete in this source at resident revision 64; final real-game acceptance remains part of the consolidated manual pass.
-- #239 is split into focused owner-lifecycle children: #318 Arachne costumes, #319 Echo previous-run acquisition, and #320 Well/temporary effects.
+- #239 is split into focused owner-lifecycle children: #318 Arachne costumes, #319 Echo previous-run acquisition, #320 Well/temporary effects, and #335 direct special-NPC mounted management.
 - #318 Arachne costume exact acquisition and owner-aware removal is complete in this source at resident revision 65; final real-game acceptance remains part of the consolidated manual pass.
 - #319 Echo previous-run exact acquisition is complete in this source at resident revision 66: concrete eligible previous-run God boons materialize directly without opening the native random choice screen; final real-game acceptance remains part of the consolidated manual pass.
 - #320 Well/temporary lifecycle management is complete in main at resident revision 67; final real-game acceptance remains part of the consolidated manual pass.
+- #335 completes the residual direct special-NPC mounted-management frontier at resident revision 72: native source/processed semantics decide level, rarity and removal capability; one-shot/external/setup-owned effects receive explicit not-applicable dispositions rather than a deferred bucket.
 - #239 implementation children are complete; parent manual acceptance remains pending and is intentionally consolidated with the later resident acceptance pass.
 - #327 implements the equipped Familiar runtime owner at resident revision 68; final real-game acceptance remains part of the consolidated manual pass.
 - #329 selected-Keepsake owner-aware removal is implemented at resident revision 69.
