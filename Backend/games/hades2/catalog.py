@@ -94,17 +94,17 @@ _CURRENT_RUN_DERIVED_NAMES = {
     'VanillaState': ('默认环境', 'Default Environment'),
     'WetState': ('雨天环境', 'Rainy Environment'),
 
-    # Hidden Familiar upgrade traits; names follow target FamiliarData fields.
-    'FamiliarFrogResourceBonus': ('弗利诺斯 · 额外采集概率', 'Frinos · Bonus Gathering Chance'),
-    'FamiliarFrogDamage': ('弗利诺斯 · 攻击伤害', 'Frinos · Attack Damage'),
-    'FamiliarCatResourceBonus': ('图拉 · 额外采集概率', 'Toula · Bonus Gathering Chance'),
-    'FamiliarCatAttacks': ('图拉 · 攻击次数', 'Toula · Attack Count'),
-    'FamiliarRavenResourceBonus': ('拉奇 · 额外采集概率', 'Raki · Bonus Gathering Chance'),
-    'FamiliarRavenAttackDuration': ('拉奇 · 攻击间隔', 'Raki · Attack Interval'),
-    'FamiliarHoundResourceBonus': ('赫库芭 · 额外采集概率', 'Hecuba · Bonus Gathering Chance'),
-    'FamiliarHoundBarkDuration': ('赫库芭 · 吠叫间隔', 'Hecuba · Bark Interval'),
-    'FamiliarPolecatResourceBonus': ('加莉 · 额外采集概率', 'Gale · Bonus Gathering Chance'),
-    'FamiliarPolecatDamage': ('加莉 · 攻击伤害', 'Gale · Attack Damage'),
+    # Hidden Familiar upgrade traits; descriptors follow target FamiliarData fields.\n    # The native Familiar owner name is resolved dynamically and composed at presentation time.
+    'FamiliarFrogResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarFrogDamage': ('攻击伤害', 'Attack Damage'),
+    'FamiliarCatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarCatAttacks': ('攻击次数', 'Attack Count'),
+    'FamiliarRavenResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarRavenAttackDuration': ('攻击间隔', 'Attack Interval'),
+    'FamiliarHoundResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarHoundBarkDuration': ('吠叫间隔', 'Bark Interval'),
+    'FamiliarPolecatResourceBonus': ('额外采集概率', 'Bonus Gathering Chance'),
+    'FamiliarPolecatDamage': ('攻击伤害', 'Attack Damage'),
 
     # Arcana mounted traits: concise functional descriptors derived from the
     # official target-build card Description. Native card titles remain sourceName.
@@ -467,6 +467,8 @@ def localize_catalog(decoded):
                 display_zh=source_zh
             elif display_zh != source_zh:
                 display_zh=f'{source_zh} · {display_zh}'
+        elif family == 'familiar' and derived_name and source_zh:
+            display_zh=f'{source_zh} · {display_zh}'
         elif display_zh == '未命名效果' or not display_zh:
             display_zh=f'{source_zh} · {family_zh}' if source_zh else family_zh
 
@@ -475,6 +477,8 @@ def localize_catalog(decoded):
                 display_en=source_en
             elif display_en != source_en:
                 display_en=f'{source_en} · {display_en}'
+        elif family == 'familiar' and derived_name and source_en:
+            display_en=f'{source_en} · {display_en}'
         elif display_en == 'Unnamed Effect' or not display_en:
             display_en=f'{source_en} · {family_en}' if source_en else family_en
 
