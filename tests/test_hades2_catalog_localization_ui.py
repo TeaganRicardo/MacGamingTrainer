@@ -320,6 +320,36 @@ assert familiar_owner['sourceName'] == '拉奇'
 assert familiar_owner['sourceEnglishName'] == 'Raki'
 assert familiar_owner['sourceName'] != familiar_owner['sourceId']
 
+# The selected Keepsake owner uses the native Keepsake localization identity.
+# Runtime routing may retain the exact trait id, but the user-facing owner label
+# must resolve from official bilingual game text.
+original_display_names = localization.official_display_names
+def keepsake_owner_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {'ReincarnationKeepsake': '更幸运的牙齿'},
+        'en': {'ReincarnationKeepsake': 'Luckier Tooth'},
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = keepsake_owner_names
+try:
+    keepsake_owner_payload = {
+        'currentRunTraits': [{
+            'name': 'ReincarnationKeepsake',
+            'sourceId': 'ReincarnationKeepsake',
+            'family': 'keepsake',
+        }]
+    }
+    catalog.localize_catalog(keepsake_owner_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+keepsake_owner = keepsake_owner_payload['currentRunTraits'][0]
+assert keepsake_owner['displayName'] == '更幸运的牙齿'
+assert keepsake_owner['englishName'] == 'Luckier Tooth'
+assert keepsake_owner['sourceName'] == '更幸运的牙齿'
+assert keepsake_owner['sourceEnglishName'] == 'Luckier Tooth'
+assert keepsake_owner['sourceName'] != keepsake_owner['sourceId']
+
 # Linked Chaos phases use the same official presentation seam; the raw linked
 # trait id remains routing/diagnostic identity and is not a user label.
 original_display_names = localization.official_display_names

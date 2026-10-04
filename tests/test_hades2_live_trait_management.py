@@ -54,14 +54,16 @@ def test_owner_family_controls_default_native_paths():
     assert 'family == "hex"' in capability_block
     assert 'family == "hexTalent"' in capability_block
     assert "seleneModel.talentNodes" in LUA
-    # Hammer/weaponAspect, Arachne costume, temporary-effect, and Familiar
-    # semantics are covered by executable resident suites; pin the owner boundary.
+    # Hammer/weaponAspect, Arachne costume, temporary-effect, Familiar, and
+    # selected-Keepsake ownership have executable resident coverage.
     assert 'family == "temporary"' in capability_block
     assert 'family == "familiar"' in capability_block
+    assert 'family == "keepsake"' in capability_block
     assert "familiarModel.isMounted(trait)" in family_block
+    assert "keepsakeModel.isMounted(trait)" in family_block
     assert 'string.find(name, "Familiar", 1, true)' not in family_block
     for family, issue in (
-        ("directSpecial", "239"), ("other", "221"),
+        ("directSpecial", "239"), ("keepsake", "329"), ("other", "221"),
     ):
         assert f"{family} = {issue}" in LUA
     assert "familiar = 240" not in LUA
@@ -97,6 +99,8 @@ GameState = {
   EquippedFamiliar = nil,
   FamiliarsUnlocked = { CatFamiliar = true, RavenFamiliar = true },
   FamiliarUpgrades = { PersistentCatUpgrade = true },
+  LastAwardTrait = nil,
+  KeepsakeChambers = { ReincarnationKeepsake = 42, BonusMoneyKeepsake = 17 },
 }
 ResourceData = {}
 ResourceDisplayOrderData = {}
@@ -133,9 +137,11 @@ local calls = {
   lastStandRemove = 0,
   familiarDestroy = 0,
   lifePips = 0,
+  keepsakeUnequip = 0,
 }
 local failLevelAfterMutation = false
 local failFamiliarDestroyAfterMutation = false
+local failKeepsakeUnequipAfterMutation = false
 local skipNativeRemoval = false
 local skipDirectRemoval = false
 local lastDirectRemoveArgs = nil
@@ -208,6 +214,21 @@ RemoveTrait = function(hero, name)
   removeMatching(function(trait) return trait.Name == name end)
 end
 
+UnequipKeepsake = function(hero, name, args)
+  calls.keepsakeUnequip = calls.keepsakeUnequip + 1
+  removeMatching(function(trait) return trait.Name == name end)
+  if name == "ReincarnationKeepsake" then
+    RemoveLastStand(hero, "ReincarnationKeepsake")
+    if hero.MaxLastStands and hero.MaxLastStands > 0 then
+      hero.MaxLastStands = hero.MaxLastStands - 1
+    end
+  end
+  if failKeepsakeUnequipAfterMutation then
+    failKeepsakeUnequipAfterMutation = false
+    error("synthetic Keepsake unequip acknowledgement failure")
+  end
+end
+
 RemoveLastStand = function(hero, name)
   calls.lastStandRemove = calls.lastStandRemove + 1
 end
@@ -269,9 +290,13 @@ for _, name in ipairs({
   "FamiliarRavenAttackDuration",
   "RestedFamiliarResourceBonus",
   "DoubleFamiliarTrait",
+  "ReincarnationKeepsake",
+  "BonusMoneyKeepsake",
 }) do
   TraitData[name] = TraitData[name] or {}
 end
+TraitData.ReincarnationKeepsake.InheritFrom = { "GiftTrait" }
+TraitData.BonusMoneyKeepsake.InheritFrom = { "GiftTrait" }
 
 dofile(runtimePath)
 local M = assert(__MacGamingTrainerV1, "resident runtime did not initialize")
@@ -329,12 +354,18 @@ local function status()
   return M.dispatch("status", { includeCatalogs = false })
 end
 
-local function findRow(name, instanceId)
+local function maybeFindRow(name, instanceId)
   for _, row in ipairs(status().currentRunTraits or {}) do
     if row.name == name and (instanceId == nil or row.instanceId == tostring(instanceId)) then
       return row
     end
   end
+  return nil
+end
+
+local function findRow(name, instanceId)
+  local row = maybeFindRow(name, instanceId)
+  if row ~= nil then return row end
   fail("missing observed trait row " .. tostring(name) .. "/" .. tostring(instanceId))
 end
 
@@ -692,6 +723,84 @@ do
   end)
   eq(calls.familiarRemove, removeAfterUnknown, "outcome-unknown Familiar request replayed trait teardown")
   eq(calls.familiarDestroy, destroyAfterUnknown, "outcome-unknown Familiar request replayed entity teardown")
+end
+
+-- Keepsake ownership is the selected native LastAwardTrait, not GiftTrait
+-- inheritance. Runtime force removal delegates to UnequipKeepsake and leaves
+-- permanent Keepsake progression untouched.
+do
+  GameState.LastAwardTrait = "ReincarnationKeepsake"
+  CurrentRun.Hero.MaxLastStands = 2
+  local selected = newTrait("ReincarnationKeepsake", 1601, 1, "Rare")
+  local unselected = newTrait("BonusMoneyKeepsake", 1602, 1, "Epic")
+  setTraits(selected, unselected)
+
+  local row = findRow("ReincarnationKeepsake", 1601)
+  eq(row.family, "keepsake", "selected Keepsake owner family")
+  eq(row.removalCapability, "singleInstanceForce", "Keepsake removal capability")
+  eq(row.levelCapability, "none", "Keepsake fabricated stack-level editing")
+  eq(row.rarityCapability, "none", "Keepsake fabricated runtime rarity editing")
+  check(findRow("BonusMoneyKeepsake", 1602).family ~= "keepsake", "unselected GiftTrait stolen by Keepsake owner")
+
+  -- Room changes do not change the selected owner.
+  CurrentRun.CurrentRoom = { Name = "C_TestRoom" }
+  eq(findRow("ReincarnationKeepsake", 1601).family, "keepsake", "Keepsake owner lost across room transition")
+
+  -- Global trainer cleanup must not silently unequip game-owned Keepsake state.
+  M.dispatch("disable_all", { includeCatalogs = false })
+  eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "disable_all changed selected Keepsake")
+  check(findRow("ReincarnationKeepsake", 1601) ~= nil, "disable_all removed Keepsake")
+
+  -- Native owner replacement invalidates the old observed row before teardown.
+  local staleRow = findRow("ReincarnationKeepsake", 1601)
+  local beforeStaleUnequip = calls.keepsakeUnequip
+  GameState.LastAwardTrait = "BonusMoneyKeepsake"
+  expectError("Trait target changed since selection", function()
+    M.dispatch("remove_trait", paramsFrom(staleRow, "keepsake-stale-owner"))
+  end)
+  eq(calls.keepsakeUnequip, beforeStaleUnequip, "stale Keepsake owner reached native teardown")
+  GameState.LastAwardTrait = "ReincarnationKeepsake"
+
+  local progressBefore = GameState.KeepsakeChambers.ReincarnationKeepsake
+  local beforeUnequip = calls.keepsakeUnequip
+  local result = M.dispatch("remove_trait", paramsFrom(findRow("ReincarnationKeepsake", 1601), "keepsake-remove"))
+  eq(calls.keepsakeUnequip, beforeUnequip + 1, "Keepsake removal did not use native owner teardown")
+  check(maybeFindRow("ReincarnationKeepsake", 1601) == nil, "Keepsake owner remained mounted")
+  eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "runtime Keepsake removal rewrote selected durable owner")
+  eq(GameState.KeepsakeChambers.ReincarnationKeepsake, progressBefore, "runtime Keepsake removal changed progression")
+  eq(CurrentRun.Hero.MaxLastStands, 1, "Keepsake native teardown did not remove linked Last Stand")
+  check(findRow("BonusMoneyKeepsake", 1602) ~= nil, "Keepsake teardown removed unrelated GiftTrait")
+
+  local duplicateUnequip = calls.keepsakeUnequip
+  local duplicate = M.dispatch("remove_trait", paramsFrom(row, "keepsake-remove"))
+  check(duplicate.duplicate == true, "Keepsake removal replay not deduplicated")
+  eq(calls.keepsakeUnequip, duplicateUnequip, "Keepsake removal replayed native teardown")
+  check(result.actionOutcome == "completed", "Keepsake removal outcome")
+end
+
+-- Late native acknowledgement is outcome-unknown and never replayed. The
+-- selected durable owner/progression remain game-owned while the current-run
+-- trait stays removed.
+do
+  GameState.LastAwardTrait = "ReincarnationKeepsake"
+  CurrentRun.Hero.MaxLastStands = 2
+  local selected = newTrait("ReincarnationKeepsake", 1701, 1, "Rare")
+  setTraits(selected)
+  local row = findRow("ReincarnationKeepsake", 1701)
+  local params = paramsFrom(row, "keepsake-remove-unknown")
+  local progressBefore = GameState.KeepsakeChambers.ReincarnationKeepsake
+  failKeepsakeUnequipAfterMutation = true
+  expectError("MGT_OUTCOME_UNKNOWN", function()
+    M.dispatch("remove_trait", params)
+  end)
+  check(maybeFindRow("ReincarnationKeepsake", 1701) == nil, "unknown Keepsake teardown left trait mounted")
+  eq(GameState.LastAwardTrait, "ReincarnationKeepsake", "unknown Keepsake teardown rewrote durable selection")
+  eq(GameState.KeepsakeChambers.ReincarnationKeepsake, progressBefore, "unknown Keepsake teardown changed progression")
+  local afterUnknown = calls.keepsakeUnequip
+  expectError("Previous action outcome is unknown; do not retry", function()
+    M.dispatch("remove_trait", params)
+  end)
+  eq(calls.keepsakeUnequip, afterUnknown, "unknown Keepsake teardown replayed")
 end
 
 print("hades2_live_trait_runtime_behavior_ok")
