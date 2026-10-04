@@ -129,12 +129,13 @@ TraitElementData = {}
 EnemyData = {
   NPC_Artemis_Field_01 = {
     Traits = {
+      "CritBonusBoon",
       "DynamicDirectLevel", "DynamicDirectRarity", "DynamicDirectRemoval",
       "DynamicDirectOneShot", "DynamicDirectSetup",
     },
   },
   NPC_Icarus_01 = {
-    Traits = { "DynamicIcarusArmor" },
+    Traits = { "OmegaExplodeBoon", "DynamicIcarusArmor" },
   },
 }
 PresetEventArgs = {}
@@ -427,6 +428,7 @@ for _, name in ipairs({
 }) do
   defineRarities(name)
 end
+TraitData.CritBonusBoon.SyntheticStackEffect = true
 TraitData.DynamicDirectLevel.SyntheticStackEffect = true
 TraitData.DynamicDirectOneShot.SyntheticStackEffect = true
 TraitData.DynamicDirectOneShot.AcquireFunctionName = "SyntheticOneShotAcquire"
