@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 70. Revisions 52–70 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 71. Revisions 52–71 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -58,7 +58,8 @@ Current source contains resident revision 70. Revisions 52–70 remain pending t
 - revision 67: Well / temporary mounted effects support owner-aware RemainingUses editing, explicit cancellation without expiry side effects, and deliberate immediate expiry through native OnExpire teardown; automated and real-game acceptance remain pending.
 - revision 68: equipped Familiar effects are owned by the active Familiar bundle rather than trait-name heuristics; safe runtime stack edits use native trait recomputation, while forced removal tears down the equipped runtime owner and linked Toula Last Stand without changing Familiar unlocks or purchased upgrades; real-game acceptance remains pending.
 - revision 69: the currently selected Keepsake is recognized through `GameState.LastAwardTrait`; forced current-run removal delegates to native `UnequipKeepsake` while preserving durable Keepsake selection and chamber progression. Runtime level/rarity semantics remain explicitly deferred under #329; real-game acceptance remains pending.
-- revision 70: selected Keepsake runtime rank is an exact rarity override rebuilt through native Unequip/Equip owner semantics with `PersistentKeepsakeKeys` preservation and no `KeepsakeChambers` mutation; StackNum-style level remains not meaningful. #329/#332 implementation is complete pending automated and consolidated real-game acceptance.
+- revision 70: selected Keepsake runtime rank is an exact rarity override rebuilt through native Unequip/Equip owner semantics with `PersistentKeepsakeKeys` preservation and no `KeepsakeChambers` mutation; StackNum-style level remains not meaningful. #329/#332 implementation is complete pending consolidated real-game acceptance.
+- revision 71: mounted Arcana effects are owned only by an exact equipped `MetaUpgradeCardData[card].TraitName` mapping. Safe declarative cards can receive a current-run rank/rarity override through native owner-shaped teardown/rebuild with adjacency and derived health/mana/weapon refreshes, while permanent Arcana state remains read-only; one-shot/setup-state cards and runtime-only removal fail closed. #330 implementation is complete pending automated and consolidated real-game acceptance.
 
 Automated verification does not replace this manual acceptance.
 
@@ -114,8 +115,9 @@ Planning issue #124 is the sequencing authority.
 - #327 implements the equipped Familiar runtime owner at resident revision 68; final real-game acceptance remains part of the consolidated manual pass.
 - #329 selected-Keepsake owner-aware removal is implemented at resident revision 69.
 - #332 completes the meaningful Keepsake runtime upgrade surface at resident revision 70: rank/rarity can be overridden through owner rebuild without advancing durable progression, while a separate StackNum-style level is explicitly not meaningful.
-- **Next selected #240 slice is #330** — model Arcana as its own progression-owned runtime owner; do not fold it into Keepsake or a generic trait mutator.
-- #221 remains the feature parent; later owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
+- #330 implements exact Arcana runtime ownership at resident revision 71. Safe declarative card effects can receive a current-run rank override without changing durable `Unlocked`, `Equipped`, `Level`, adjacency or Grasp ownership; callback/setup-state cards fail closed, and runtime-only removal remains unavailable because durable equipped ownership would reapply it.
+- #240 implementation children are complete; parent real-game acceptance remains intentionally consolidated with the later resident acceptance pass.
+- #221 remains the feature parent; owner/lifecycle families stay explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
 Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
 
