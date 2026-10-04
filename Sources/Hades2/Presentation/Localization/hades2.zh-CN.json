@@ -117,6 +117,7 @@
     "hades2.error.runtimeVerificationFailed": "运行中的游戏函数校验失败：{0}",
     "hades2.error.selectChoiceSource": "请选择支持原生奖励选择界面的角色。",
     "hades2.error.selectCurrentTrait": "请从当前局列表中选择祝福或效果。",
+    "hades2.error.remainingUsesRange": "剩余次数必须为 1–999999 的整数。",
     "hades2.error.selectResource": "请选择资源。",
     "hades2.error.selectReward": "请选择掉落物或祝福。",
     "hades2.error.sellDataUnavailable": "当前游戏状态无法打开{term:officialTerms.purgingPool}。",
