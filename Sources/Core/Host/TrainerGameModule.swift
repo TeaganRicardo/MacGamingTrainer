@@ -12,6 +12,23 @@ struct GameModuleDescriptor: Identifiable, Hashable {
     let supportsSaveManagement: Bool
 }
 
+struct TrainerManagementActions {
+    let openSaveManagement: (() -> Void)?
+
+    static let none = TrainerManagementActions(openSaveManagement: nil)
+}
+
+private struct TrainerManagementActionsKey: EnvironmentKey {
+    static let defaultValue = TrainerManagementActions.none
+}
+
+extension EnvironmentValues {
+    var trainerManagementActions: TrainerManagementActions {
+        get { self[TrainerManagementActionsKey.self] }
+        set { self[TrainerManagementActionsKey.self] = newValue }
+    }
+}
+
 struct TrainerGamePresentation: Hashable {
     let sidebarIconSystemName: String
     let platformLabel: String

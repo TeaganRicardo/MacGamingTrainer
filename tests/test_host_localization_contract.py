@@ -4,19 +4,25 @@ ROOT = Path(__file__).resolve().parents[1]
 localization = (ROOT / "Sources/Core/Host/TrainerLocalization.swift").read_text(encoding="utf-8")
 sidebar = (ROOT / "Sources/Core/UI/TrainerSidebar.swift").read_text(encoding="utf-8")
 host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
+hades_management = (ROOT / "Sources/Hades2/Views/Hades2ManagementViews.swift").read_text(encoding="utf-8")
 app = (ROOT / "Sources/App.swift").read_text(encoding="utf-8")
 build = (ROOT / "build.sh").read_text(encoding="utf-8")
 
 for language in ("zh-CN", "en"):
     source = ROOT / f"Resources/Localization/{language}.lproj/Host.strings"
     assert source.is_file(), f"missing source localization table: {source}"
+    assert '"host.saveManagement"' in source.read_text(encoding="utf-8"), (
+        f"{language} Host table must retain Save Management wording"
+    )
 assert 'source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"' in build
 assert 'cp "$source" "${destination}/Host.strings"' in build
 assert 'packaged.read_bytes() != source.read_bytes()' in build, "build must verify packaged tables match sources"
 
 assert "Bundle.standard" in localization and "url(forResource: language.rawValue, withExtension: \"lproj\")" in localization, "lookup must load the selected table from Bundle.standard"
 assert 'localization.localized("host.gameLibrary")' in sidebar, "sidebar must use shared localization lookup"
-assert 'localization.localized("host.saveManagement")' in host, "Host actions must use shared localization lookup"
+assert 'localization.localized("host.saveManagement")' in hades_management, (
+    "module-composed Save Management entry must use shared Host localization lookup"
+)
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
 assert 'localization.localized("host.connectGame")' in status_controls and 'localization.localized("host.disconnectGame")' in status_controls
 assert "TrainerLanguageCommands(localization: localization)" in app, "language selector must be user reachable in app menu"

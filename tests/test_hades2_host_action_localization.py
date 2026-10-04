@@ -21,6 +21,7 @@ required = {
     "host.shortcutSettings",
     "host.viewRuntimeLog",
     "host.viewLog",
+    "host.saveManagement",
     "host.launchGame",
     "host.refreshStatus",
     "host.disableAll",
@@ -57,8 +58,6 @@ assert not re.search(r"[\u3400-\u9fff]", host_actions), (
 
 for token in (
     '@EnvironmentObject private var localization: TrainerLocalizationStore',
-    'Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")',
-    'Label(localization.localized("host.viewRuntimeLog"), systemImage: "doc.text")',
     'Label(localization.localized("host.launchGame"), systemImage: "play.fill")',
     'CommandMenu(localization.localized("host.trainerMenu"))',
     'Button(localization.localized("host.refreshStatus"))',
@@ -67,6 +66,15 @@ for token in (
     'Button(localization.localized("host.viewLog"))',
 ):
     assert token in host_actions, token
+
+sidebar_actions = host_actions[
+    host_actions.index("struct Hades2SidebarActions"):
+    host_actions.index("struct Hades2HeaderActions")
+]
+assert "EmptyView()" in sidebar_actions
+assert "shortcutSettingsPresented" not in sidebar_actions
+assert "openLog()" not in sidebar_actions
+assert "host.viewRuntimeLog" not in sidebar_actions
 
 # Commands are outside the View environment tree, so the existing Host store is
 # injected explicitly through the game-module seam rather than recreated.
@@ -90,6 +98,9 @@ for token in (
     'localization.localized("host.hotkeys.pressNew")',
     'Text(shortcutIssueText(issue))',
     'localization.localized("host.done")',
+    'Label(localization.localized("host.shortcutSettings"), systemImage: "keyboard")',
+    'Label(localization.localized("host.viewLog"), systemImage: "doc.text.magnifyingglass")',
+    'Label(localization.localized("host.saveManagement"), systemImage: "externaldrive")',
 ):
     assert token in management, token
 
@@ -126,7 +137,7 @@ for token in (
 ):
     assert token in model, token
 assert 'localization.localized("host.disableAll")' in hades_view
-assert 'localization.localized("host.viewLog")' in hades_view
+assert 'localization.localized("host.viewLog")' in management
 
 # The cross-game fixture proves the exact same seam, including in-flight
 # operations rather than only static labels.
