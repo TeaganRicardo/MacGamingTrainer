@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 70 then
+if previousModule and previousModule.revision ~= 71 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 70 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 70, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 71, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -3080,6 +3080,194 @@ if __MacGamingTrainerV1 == nil then
       }
     end)()
 
+    local arcanaModel = (function()
+      local unsafeTraitKeys = {
+        "AcquireFunctionName", "AcquireFunction", "SetupFunction", "SetupFunctions",
+        "OnExpire", "OnExpireFunctionName", "Uses", "RemainingUses", "CurrentRoom",
+        "RerollCount", "BonusMoney", "AddMetaUpgradeLastStands", "MetaConversionUses",
+      }
+
+      local function ownerName(trait)
+        if type(trait) ~= "table" or type(trait.Name) ~= "string" or trait.Name == ""
+            or type(GameState) ~= "table" or type(GameState.MetaUpgradeState) ~= "table"
+            or type(MetaUpgradeCardData) ~= "table" then
+          return ""
+        end
+        local found = ""
+        for cardName, state in pairs(GameState.MetaUpgradeState) do
+          local card = MetaUpgradeCardData[cardName]
+          if type(state) == "table" and state.Equipped
+              and type(card) == "table" and card.TraitName == trait.Name then
+            if found ~= "" and found ~= cardName then return "" end
+            found = cardName
+          end
+        end
+        return found
+      end
+
+      local function ownerState(trait)
+        local name = ownerName(trait)
+        if name == "" then return "", nil, nil end
+        return name, GameState.MetaUpgradeState[name], MetaUpgradeCardData[name]
+      end
+
+      local function mountedTrait(name)
+        local found = nil
+        for _, mounted in ipairs(CurrentRun.Hero.Traits or {}) do
+          if type(mounted) == "table" and mounted.Name == name then
+            if found ~= nil then return nil end
+            found = mounted
+          end
+        end
+        return found
+      end
+
+      local function definitionSafe(trait, card)
+        if type(trait) ~= "table" or type(card) ~= "table" then return false end
+        if card.OnGrantedFunctionName ~= nil or card.OnUpgradedFunctionName ~= nil then
+          return false
+        end
+        local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+        if type(definition) ~= "table" or type(definition.RarityLevels) ~= "table" then
+          return false
+        end
+        for _, key in ipairs(unsafeTraitKeys) do
+          if trait[key] ~= nil or definition[key] ~= nil then return false end
+        end
+        return true
+      end
+
+      local function rarityInNativeOrder(rarity)
+        local order = type(TraitRarityData) == "table" and TraitRarityData.RarityUpgradeOrder or nil
+        if type(order) ~= "table" then return false end
+        for _, value in ipairs(order) do
+          if value == rarity then return true end
+        end
+        return false
+      end
+
+      local function adjacencyMultiplier(state)
+        local bonuses = type(state) == "table" and state.AdjacencyBonuses or nil
+        local custom = type(bonuses) == "table" and bonuses.CustomMultiplier or nil
+        if custom == nil then return 1 end
+        if not finite(custom) then return nil end
+        return 1 + custom
+      end
+
+      local function rankReady(trait)
+        local _, state, card = ownerState(trait)
+        if type(state) ~= "table" or type(card) ~= "table"
+            or type(trait.Rarity) ~= "string"
+            or type(RemoveWeaponTrait) ~= "function" or type(AddTraitToHero) ~= "function"
+            or type(ValidateMaxHealth) ~= "function" or type(ValidateMaxMana) ~= "function"
+            or type(HandleWeaponAnimSwaps) ~= "function"
+            or adjacencyMultiplier(state) == nil then
+          return false
+        end
+        return definitionSafe(trait, card)
+      end
+
+      local function targetRankAvailable(trait, rarity)
+        if not rankReady(trait) or type(rarity) ~= "string" or not rarityInNativeOrder(rarity) then
+          return false
+        end
+        return TraitData[trait.Name].RarityLevels[rarity] ~= nil
+      end
+
+      local function durableSnapshot(state)
+        local adjacency = type(state.AdjacencyBonuses) == "table" and state.AdjacencyBonuses or nil
+        return {
+          state = state,
+          unlocked = state.Unlocked,
+          equipped = state.Equipped,
+          level = state.Level,
+          adjacency = adjacency,
+          adjacencyMultiplier = adjacency and adjacency.CustomMultiplier or nil,
+        }
+      end
+
+      local function durableUnchanged(owner, before)
+        local state = type(GameState) == "table" and type(GameState.MetaUpgradeState) == "table"
+          and GameState.MetaUpgradeState[owner] or nil
+        if state ~= before.state or state.Unlocked ~= before.unlocked
+            or state.Equipped ~= before.equipped or state.Level ~= before.level
+            or state.AdjacencyBonuses ~= before.adjacency then
+          return false
+        end
+        local currentMultiplier = type(state.AdjacencyBonuses) == "table"
+          and state.AdjacencyBonuses.CustomMultiplier or nil
+        return currentMultiplier == before.adjacencyMultiplier
+      end
+
+      local function rebuildRarity(trait, targetRarity)
+        if not targetRankAvailable(trait, targetRarity) then
+          error("Trait rarity editing is unavailable for the selected target")
+        end
+        local owner, state = ownerState(trait)
+        local name = trait.Name
+        local multiplier = adjacencyMultiplier(state)
+        local before = durableSnapshot(state)
+        local firstError = nil
+
+        local function attempt(work)
+          local ok, value = pcall(work)
+          if not ok then
+            if firstError == nil then firstError = tostring(value) end
+            return nil
+          end
+          return value
+        end
+
+        -- Mirror the native pre-run Arcana owner path while keeping
+        -- MetaUpgradeState read-only. A forced rarity changes only this
+        -- mounted run effect and carries the owner's current adjacency state.
+        attempt(function() RemoveWeaponTrait(name, { Silent = true }) end)
+        if mountedTrait(name) ~= nil then
+          if firstError ~= nil then error(firstError) end
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+
+        attempt(function()
+          return AddTraitToHero({
+            SkipNewTraitHighlight = true,
+            TraitName = name,
+            Rarity = targetRarity,
+            CustomMultiplier = multiplier,
+            SourceName = owner,
+          })
+        end)
+        local rebuilt = mountedTrait(name)
+        if type(rebuilt) ~= "table" then
+          if firstError ~= nil then error(firstError) end
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+
+        -- These are the native pre-run derived refreshes that are safe to
+        -- replay for the declarative subset. Cards with one-shot grant/upgrade
+        -- callbacks or mutable setup state never receive this capability.
+        attempt(function() ValidateMaxHealth() end)
+        attempt(function() ValidateMaxMana() end)
+        attempt(function() HandleWeaponAnimSwaps() end)
+
+        if rebuilt.Rarity ~= targetRarity or ownerName(rebuilt) ~= owner then
+          error("Trait rarity recompute did not reach the requested rarity")
+        end
+        if not durableUnchanged(owner, before) then
+          error("Arcana runtime edit changed durable card progression")
+        end
+        if firstError ~= nil then error(firstError) end
+        return rebuilt
+      end
+
+      return {
+        ownerName = ownerName,
+        isMounted = function(trait) return ownerName(trait) ~= "" end,
+        rankReady = rankReady,
+        targetRankAvailable = targetRankAvailable,
+        rebuildRarity = rebuildRarity,
+      }
+    end)()
+
     local familiarModel = (function()
       local function ownerName()
         if type(GameState) ~= "table" or type(GameState.EquippedFamiliar) ~= "string"
@@ -3355,6 +3543,7 @@ if __MacGamingTrainerV1 == nil then
           or string.find(name, "Hex", 1, true) ~= nil then return "hex" end
       if hammerModel.isRuntimeAspect(trait) then return "weaponAspect" end
       if hammerModel.isHammerTrait(trait) then return "hammer" end
+      if arcanaModel.isMounted(trait) then return "arcana" end
       if keepsakeModel.isMounted(trait) then return "keepsake" end
       if familiarModel.isMounted(trait) then return "familiar" end
       if temporaryModel.isManaged(trait) then return "temporary" end
@@ -3439,7 +3628,7 @@ if __MacGamingTrainerV1 == nil then
           levelReason = "notMeaningful"
         elseif family == "familiar" then
           levelReason = "ownerSpecificLifecycle"
-        elseif family == "keepsake" then
+        elseif family == "keepsake" or family == "arcana" then
           levelReason = "notMeaningful"
         elseif type(IncreaseTraitLevel) ~= "function" then
           levelReason = "nativePathUnavailable"
@@ -3476,6 +3665,10 @@ if __MacGamingTrainerV1 == nil then
           rarityCapability, rarityReason = "setExact", ""
         elseif family == "keepsake" then
           rarityReason = "nativePathUnavailable"
+        elseif family == "arcana" and arcanaModel.rankReady(trait) then
+          rarityCapability, rarityReason = "setExact", ""
+        elseif family == "arcana" then
+          rarityReason = "ownerSpecificLifecycle"
         elseif type(AddRarityToTraits) ~= "function" then
           rarityReason = "nativePathUnavailable"
         elseif strategy and strategy.rarity == "setExact" and directSafe then
@@ -3510,6 +3703,8 @@ if __MacGamingTrainerV1 == nil then
           removalCapability, removalReason = "singleInstanceForce", ""
         elseif family == "keepsake" and keepsakeModel.removalReady() then
           removalCapability, removalReason = "singleInstanceForce", ""
+        elseif family == "arcana" then
+          removalReason = "permanentProgressionOwned"
         elseif family == "weaponAspect" then
           removalReason = "permanentProgressionOwned"
         elseif strategy and strategy.removal == "singleInstanceForce" and directSafe
@@ -3556,13 +3751,15 @@ if __MacGamingTrainerV1 == nil then
               or (family == "hammer" and "WeaponUpgrade"
               or (family == "familiar" and familiarModel.ownerName()
               or (family == "keepsake" and keepsakeModel.ownerName()
-              or (family == "weaponAspect" and "" or traitSourceId(trait)))))),
+              or (family == "arcana" and arcanaModel.ownerName(trait)
+              or (family == "weaponAspect" and "" or traitSourceId(trait))))))),
             owner = family == "chaos" and "Chaos"
               or ((family == "hex" or family == "hexTalent") and "Selene"
               or (family == "hammer" and "WeaponUpgrade"
               or (family == "familiar" and familiarModel.ownerName()
               or (family == "keepsake" and keepsakeModel.ownerName()
-              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait)))))),
+              or (family == "arcana" and arcanaModel.ownerName(trait)
+              or (family == "weaponAspect" and "WeaponAspect" or traitSourceId(trait))))))),
             level = traitLevel(trait),
             rarity = traitRarity(trait),
             hasRarity = trait.Rarity ~= nil,
@@ -3697,6 +3894,7 @@ if __MacGamingTrainerV1 == nil then
       temporary = temporaryModel,
       familiar = familiarModel,
       keepsake = keepsakeModel,
+      arcana = arcanaModel,
       hasDirectStrategy = function(name) return directTraitStrategies[name] ~= nil end,
     }
   end)()
@@ -5184,6 +5382,14 @@ if __MacGamingTrainerV1 == nil then
           if not traitManagement.keepsake.targetRankAvailable(target, params.rarity) then
             error("Trait rarity editing is unavailable for the selected target")
           end
+        elseif family == "arcana" then
+          if not traitManagement.arcana.targetRankAvailable(target, params.rarity) then
+            error("Trait rarity editing is unavailable for the selected target")
+          end
+          requireFunctions("Arcana runtime rank editing", {
+            "RemoveWeaponTrait", "AddTraitToHero", "ValidateMaxHealth",
+            "ValidateMaxMana", "HandleWeaponAnimSwaps",
+          })
         else
           requireFunctions("trait rarity editing", { "AddRarityToTraits" })
         end
@@ -5196,6 +5402,8 @@ if __MacGamingTrainerV1 == nil then
           upgraded = traitManagement.rebuildChaosTarget(live, nil, params.rarity)
         elseif family == "keepsake" then
           upgraded = traitManagement.keepsake.rebuildRarity(live, params.rarity)
+        elseif family == "arcana" then
+          upgraded = traitManagement.arcana.rebuildRarity(live, params.rarity)
         else
           upgraded = AddRarityToTraits({}, {
             NumTraits = 1,
