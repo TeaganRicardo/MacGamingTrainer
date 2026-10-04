@@ -2709,7 +2709,6 @@ if __MacGamingTrainerV1 == nil then
     }
     local deferredTraitIssues = {
       costume = 239,
-      directSpecial = 239,
       other = 221,
     }
     local rarityOrder = { "Common", "Rare", "Epic", "Heroic" }
