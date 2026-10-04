@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 
 base = Path(tempfile.mkdtemp(prefix='mgt-runtime-boundary-dev8-'))
 preparation.DATA = base
@@ -60,7 +61,12 @@ assert adapter._runtime_bootstrapped is True
 assert adapter._catalog_initialized is True
 assert first['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert len(transport.sources) == 1
-assert len(transport.sources[0].encode('utf-8')) > 100_000
+first_source_bytes = len(transport.sources[0].encode('utf-8'))
+assert first_source_bytes > 100_000
+assert first_source_bytes <= LUA_TRANSPORT_SOURCE_LIMIT_BYTES, (
+    f'fresh resident bootstrap exceeds transport source cap: {first_source_bytes}'
+)
+assert LUA_TRANSPORT_RESULT_LIMIT_BYTES == 262_144
 revision = runtime_revision(adapter.bootstrap)
 assert f'revision = {revision}' in transport.sources[0]
 assert '["includeCatalogs"]=true' in transport.sources[0]

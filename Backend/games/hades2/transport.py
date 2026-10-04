@@ -10,7 +10,7 @@ sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun','lldb','-P'], text=
 import lldb
 from core.adapter import AdapterError as TransportError
 
-from .config import GAME_SPEC
+from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 
 
 class Hades2LuaTransport:
@@ -229,8 +229,8 @@ class Hades2LuaTransport:
         try:
             th,L=self.boundary()
             payload=source.encode('utf-8')
-            if len(payload)>262144:raise TransportError('invalid_request','功能代码过长。')
-            cap=262144;size=len(payload)+1+cap
+            if len(payload)>LUA_TRANSPORT_SOURCE_LIMIT_BYTES:raise TransportError('invalid_request','功能代码过长。')
+            cap=LUA_TRANSPORT_RESULT_LIMIT_BYTES;size=len(payload)+1+cap
             err=lldb.SBError();scratch=self.process.AllocateMemory(size,lldb.ePermissionsReadable|lldb.ePermissionsWritable,err)
             if err.Fail():raise TransportError('memory_error',str(err))
             if self.process.WriteMemory(scratch,payload+b'\0',err)!=len(payload)+1 or err.Fail():raise TransportError('memory_error',str(err))
