@@ -1595,6 +1595,14 @@
     "remove_trait::Familiar owner removal left the owner equipped": {
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
+    },
+    "remove_trait::Keepsake owner removal is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalUnavailable"
+    },
+    "remove_trait::Keepsake owner removal left the selected trait mounted": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     }
   },
   "runtime_commands": [
