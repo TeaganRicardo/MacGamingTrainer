@@ -2984,8 +2984,8 @@ if __MacGamingTrainerV1 == nil then
         local value = counterValue(trait)
         if not finite(value) or value <= 0 then return false end
         local kind = counterKind(trait)
-        if kind == "remainingUses" then return type(RemoveTraitData) == "function" end
-        return kind == "uses" and type(UpdateTraitNumber) == "function"
+        return (kind == "remainingUses" or kind == "uses")
+          and type(RemoveTraitData) == "function"
       end
 
       local function instanceStillMounted(trait)
@@ -3019,6 +3019,11 @@ if __MacGamingTrainerV1 == nil then
           refreshCounter(trait)
           if trait.Uses ~= 0 then
             error("Temporary effect duration did not reach the requested remaining uses")
+          end
+          requireFunctions("temporary effect expiry", { "RemoveTraitData" })
+          RemoveTraitData(CurrentRun.Hero, trait, { Silent = true })
+          if instanceStillMounted(trait) then
+            error("Temporary effect expiry left the selected instance mounted")
           end
           return
         end
