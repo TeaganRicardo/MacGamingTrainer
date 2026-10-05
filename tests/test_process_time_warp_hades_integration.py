@@ -137,7 +137,7 @@ assert transport.sources == []
 # In a ready scene, the rest of the profile still replays through Lua, but the
 # Lua batch must not carry process-owned gameSpeed.
 adapter.state["status"] = "ready"
-state = adapter._replay_preferences(force_full=True)
+state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert transport.sources
 assert "gameSpeed" not in transport.sources[-1]
 assert adapter.time_warp.speed == 2.0
