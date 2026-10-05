@@ -238,6 +238,26 @@ local duplicate = M.dispatch("acquire_chaos_pair", {
 check(duplicate.duplicate == true, "Chaos pair duplicate request was not deduplicated")
 eq(calls.add, beforePairAdd + 1, "Chaos pair duplicate request mutated twice")
 
+-- Native Chaos eligibility can permit another instance with the same name.
+-- Owning either phase must not replace the native eligibility decision.
+resetTraits()
+local existingBlessing = AddTraitToHero({ TraitName = "ChaosHealthBlessing" })
+local existingCurse = AddTraitToHero({ TraitName = "ChaosDamageCurse" })
+local beforeOwnedPair = calls.add
+M.dispatch("acquire_chaos_pair", {
+  blessing = "ChaosHealthBlessing",
+  curse = "ChaosDamageCurse",
+  requestId = "chaos-pair-native-eligible-owned",
+  includeCatalogs = false,
+})
+eq(calls.add, beforeOwnedPair + 1, "native-eligible owned Chaos pair was not acquired")
+eq(#CurrentRun.Hero.Traits, 3, "owned Chaos instances were replaced")
+eq(CurrentRun.Hero.Traits[1].Id, existingBlessing.Id, "existing blessing identity changed")
+eq(CurrentRun.Hero.Traits[2].Id, existingCurse.Id, "existing curse identity changed")
+local additionalCurse = CurrentRun.Hero.Traits[3]
+check(additionalCurse.Id ~= existingCurse.Id, "additional curse reused the existing instance")
+eq(additionalCurse.OnExpire.TraitData.Name, "ChaosHealthBlessing", "additional curse lost its chosen blessing")
+
 -- Current-pool and eligibility checks are both immediate fail-closed gates.
 resetTraits()
 ineligibleTrait = "ChaosHealthBlessing"

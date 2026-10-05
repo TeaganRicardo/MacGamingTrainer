@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 76 then
+if previousModule and previousModule.revision ~= 77 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 76 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 76, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 77, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -6020,7 +6020,7 @@ if __MacGamingTrainerV1 == nil then
           error("Chaos exact acquisition is unavailable")
         end
         requireFunctions("exact Chaos pair acquisition", {
-          "DeepCopyTable", "HeroHasTrait", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
+          "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
           "GetProcessedTraitData", "AddTraitToHero",
         })
         local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
@@ -6031,9 +6031,6 @@ if __MacGamingTrainerV1 == nil then
             or not containsName(source.PermanentTraits, params.blessing)
             or not containsName(source.TemporaryTraits, params.curse) then
           error("Chaos exact acquisition is unavailable")
-        end
-        if HeroHasTrait(params.blessing) or HeroHasTrait(params.curse) then
-          error("Selected boon is already owned")
         end
         local eligibleBlessings = GetEligibleTransformingTrait({ params.blessing })
         local eligibleCurses = GetEligibleTransformingTrait({ params.curse })
