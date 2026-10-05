@@ -10,7 +10,7 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 
 from . import preparation
-from .command_router import Hades2CommandRouter
+from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
@@ -133,7 +133,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences,self.preference_initialized=self.preference_store.load()
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
         self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
-        self.command_router=Hades2CommandRouter(self)
+        self.command_contract=Hades2CommandContract(self)
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
         # replay is a no-op; if Hades itself restarted, the same profile is
@@ -873,7 +873,7 @@ class Hades2Adapter(GameAdapter):
         return metadata
 
     def dispatch(self, command, params, request_id):
-        return self.command_router.dispatch(command, params, request_id)
+        return self.command_contract.dispatch(command, params, request_id)
 
     def close(self):
         try:
