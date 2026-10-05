@@ -90,6 +90,13 @@ class Hades2ResidentSession:
     def alive(self):
         return self._transport.alive()
 
+    def allows_process_time_warp(self):
+        """Whether the current resident generation makes Host Time Warp safe.
+
+        This exposes the semantic capability, not bootstrap/catalog bookkeeping.
+        """
+        return self._generation_ready
+
     def attach(self, pid):
         self._transport.attach(pid)
         # A debugger reconnect is the synchronization seam for resident source.
