@@ -340,10 +340,9 @@ assert persisted_reward['invincibility'] is True
 print('pending_preference_confirmation_next_room_ok')
 
 
-# A successful runtime replay is not fully confirmed until the durable state can
-# also be persisted. If the confirmation write fails, the error is visible and
-# pending remains true. The already-persisted desired value on disk must remain
-# intact rather than being replaced by a false runtime projection.
+# Reconciliation confirmation never rewrites durable desired state. The value
+# was persisted before the failed runtime application; once the resident later
+# converges, confirmation only clears the pending marker.
 base_persist, transport_persist, adapter_persist = make_pending_adapter(
     'mgt-pending-confirmation-persist-'
 )
@@ -359,44 +358,38 @@ persisted_before = json.loads(
 )
 assert persisted_before['invincibility'] is True
 
-original_persist_save = adapter_persist.preference_store.save
-fail_confirmation_once = True
+confirmation_saves = []
 
 
-def fail_confirmation_save(preferences):
-    global fail_confirmation_once
-    if fail_confirmation_once:
-        fail_confirmation_once = False
-        raise PersistenceError('simulated confirmation persistence failure')
-    return original_persist_save(preferences)
+def forbid_confirmation_save(preferences):
+    confirmation_saves.append(copy.deepcopy(preferences))
+    raise AssertionError('reconciliation confirmation rewrote durable desired state')
 
 
-adapter_persist.preference_store.save = fail_confirmation_save
-try:
-    adapter_persist.dispatch('status', {}, 'status-persist-fail')
-except PersistenceError as error:
-    assert 'simulated confirmation persistence failure' in str(error)
-else:
-    raise AssertionError('confirmation persistence failure was hidden')
+adapter_persist.preference_store.save = forbid_confirmation_save
+reconciles_before = sum(
+    call['kind'] == 'reconcile' for call in transport_persist.calls
+)
+adapter_persist.dispatch('status', {}, 'status-persist-confirm')
+reconciles_after = sum(
+    call['kind'] == 'reconcile' for call in transport_persist.calls
+)
 
+assert reconciles_after == reconciles_before + 1
+assert confirmation_saves == []
 assert transport_persist.state['desiredFeatures']['invincibility'] is True
 assert adapter_persist.preferences['invincibility'] is True
-assert adapter_persist.preference_dirty is True, (
-    'failed confirmation persistence must remain pending'
-)
-persisted_after_failure = json.loads(
-    (base_persist / 'desired-state.json').read_text(encoding='utf-8')
-)
-assert persisted_after_failure['invincibility'] is True
-
-# Once persistence recovers, a later status may confirm the already-applied
-# durable state without replaying any one-shot operation.
-adapter_persist.dispatch('status', {}, 'status-persist-retry')
 assert adapter_persist.preference_dirty is False
-persisted_after_retry = json.loads(
+persisted_after = json.loads(
     (base_persist / 'desired-state.json').read_text(encoding='utf-8')
 )
-assert persisted_after_retry['invincibility'] is True
+assert persisted_after == persisted_before
+
+# A later status observes an already-confirmed state and needs neither another
+# reconciliation boundary nor a durable write.
+adapter_persist.dispatch('status', {}, 'status-persist-clean')
+assert sum(call['kind'] == 'reconcile' for call in transport_persist.calls) == reconciles_after
+assert confirmation_saves == []
 
 print('pending_preference_confirmation_persistence_ok')
 
