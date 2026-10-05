@@ -110,21 +110,25 @@ try:
         "lua_error",
         "[string \"MacGamingTrainer\"]:1: attempt to index global '__MacGamingTrainerV1' (a nil value)",
     )
-    reset_transport = FakeTransport([missing, payload()])
+    reset_transport = FakeTransport([
+        payload(boons=[], rewards=[]),
+        missing,
+        payload(),
+    ])
     reset_session = Hades2ResidentSession(reset_transport, bootstrap="BOOTSTRAP")
-    reset_session._generation_ready = True
-    reset_session._catalog_ready = True
+    reset_session.status()  # establish the first generation through the public seam
     reset_reply = reset_session.status()
     assert reset_reply.generation_reset is True
-    assert len(reset_transport.calls) == 2
-    assert reset_transport.calls[1]["source"].startswith("BOOTSTRAP\n")
+    assert len(reset_transport.calls) == 3
+    assert not reset_transport.calls[1]["source"].startswith("BOOTSTRAP\n")
+    assert reset_transport.calls[2]["source"].startswith("BOOTSTRAP\n")
 
     # The same evidence during a mutation is never replayed automatically.
-    mutation_reset_transport = FakeTransport([missing])
+    mutation_reset_transport = FakeTransport([payload(), missing])
     mutation_reset_session = Hades2ResidentSession(
         mutation_reset_transport, bootstrap="BOOTSTRAP"
     )
-    mutation_reset_session._generation_ready = True
+    mutation_reset_session.status()  # establish the first generation publicly
     try:
         mutation_reset_session.mutate(
             "set_resource", {"resource": "Money", "amount": 10, "requestId": "unsafe"}
@@ -133,7 +137,7 @@ try:
         assert error.original.code == "lua_error"
     else:
         raise AssertionError("mutation was replayed across a missing resident generation")
-    assert len(mutation_reset_transport.calls) == 1
+    assert len(mutation_reset_transport.calls) == 2
 
     # Host decode failure happens after the transport boundary and therefore
     # terminal-taints trust.
