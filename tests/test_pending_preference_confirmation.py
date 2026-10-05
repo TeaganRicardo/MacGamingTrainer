@@ -59,25 +59,35 @@ class PendingTransport:
     def close(self):
         self.live = False
 
-    def execute(self, source):
+    def execute(self, source, *, expression_timeout_seconds=None):
+        def has_command(command):
+            return (
+                'dispatch("' + command + '"' in source
+                or '["command"]="' + command + '"' in source
+            )
+
         for feature in TOGGLES:
             marker = '["feature"]="' + feature + '"'
-            if 'dispatch("set_feature"' not in source or marker not in source:
+            if not has_command('set_feature') or marker not in source:
                 continue
-            value = '["value"]=true' in source[source.index(marker):]
+            fragment = source[source.index(marker):]
+            next_command = fragment.find('["command"]=', len(marker))
+            if next_command >= 0:
+                fragment = fragment[:next_command]
+            value = '["value"]=true' in fragment
             if feature == 'invincibility' and value and self.fail_god_mode_once:
                 self.fail_god_mode_once = False
                 raise TransportError('lua_error', 'simulated durable feature failure')
             self.state['desiredFeatures'][feature] = value
             self.state['activeFeatures'][feature] = value
-        if 'dispatch("set_boon_rarity"' in source:
+        if has_command('set_boon_rarity'):
             self.state['boonRarity'] = {
                 'target': 'Heroic',
                 'multiplier': 250.0,
                 'forceLegendary': True,
                 'forceDuo': False,
             }
-        if 'dispatch("set_next_room_reward"' in source:
+        if has_command('set_next_room_reward'):
             if '["reward"]="WeaponUpgrade"' in source:
                 self.state['nextRoomReward'] = 'WeaponUpgrade'
                 match = re.search(r'\["token"\]="([^"]+)"', source)
@@ -86,7 +96,7 @@ class PendingTransport:
             elif '["reward"]=nil' in source:
                 self.state['nextRoomReward'] = None
                 self.state['runtimeDiagnostics'].pop('nextRoomRewardToken', None)
-        if 'dispatch("set_vital"' in source and '["vital"]="health"' in source:
+        if has_command('set_vital') and '["vital"]="health"' in source:
             field_match = re.search(r'\["field"\]="([^"]+)"', source)
             value_match = re.search(r'\["value"\]=([0-9.]+)', source)
             if field_match and value_match:
@@ -96,7 +106,7 @@ class PendingTransport:
                     self.state['health'] = value
                 elif field == 'max':
                     self.state['maxHealth'] = value
-        if 'dispatch("set_stat"' in source and '["stat"]="enemyHealth"' in source:
+        if has_command('set_stat') and '["stat"]="enemyHealth"' in source:
             locked = '["locked"]=true' in source
             value_match = re.search(r'\["value"\]=([0-9.]+)', source)
             value = float(value_match.group(1)) if value_match else None
@@ -105,7 +115,7 @@ class PendingTransport:
                 'target': value if locked else None,
                 'value': value if value is not None else 100.0,
             }
-        if 'dispatch("spawn_reward"' in source:
+        if has_command('spawn_reward'):
             self.spawn_count += 1
         return json.dumps(self.state)
 

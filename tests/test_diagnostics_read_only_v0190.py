@@ -17,7 +17,11 @@ from games.hades2.preferences import Hades2PreferenceStore
 # terminal action returns observation without restoring desired runtime hooks.
 lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
 dispatch = lua[lua.index('  function M.dispatch(command, params)'):]
-assert dispatch.index('    else synchronize() end') < dispatch.index('    if command == "status" then return state(params.includeCatalogs) end', dispatch.index('    else synchronize() end'))
+sync_guard = '    elseif preferenceReplayDepth == 0 then synchronize() end'
+assert dispatch.index(sync_guard) < dispatch.index(
+    '    if command == "status" then return state(params.includeCatalogs) end',
+    dispatch.index(sync_guard),
+)
 
 
 class FakeTransport:

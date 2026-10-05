@@ -52,11 +52,13 @@ class FakeError:
 
 
 class FakeExpressionOptions:
+    last_timeout_us = None
+
     def SetLanguage(self, value):
         pass
 
     def SetTimeoutInMicroSeconds(self, value):
-        pass
+        type(self).last_timeout_us = value
 
     def SetIgnoreBreakpoints(self, value):
         pass
@@ -145,7 +147,8 @@ large.boundary = lambda: (FakeThread(), 0x2000)
 large.address = lambda name: 0x3000
 large.alive = lambda: False
 large_source = 'x' * 325_841
-assert large.execute(large_source) == '{}'
+assert large.execute(large_source, expression_timeout_seconds=5.0) == '{}'
+assert FakeExpressionOptions.last_timeout_us == 5_000_000
 assert large.process.allocated_size == len(large_source.encode('utf-8')) + 1 + LUA_TRANSPORT_RESULT_LIMIT_BYTES
 
 try:
