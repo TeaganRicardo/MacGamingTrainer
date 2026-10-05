@@ -126,6 +126,14 @@
       "id": "ToolFishingRod",
       "englishValue": "Rod of Fishing",
       "englishSource": "TraitText.en.sjson"
+    },
+    "chaosGate": {
+      "value": "混沌之门",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "HealthGate",
+      "englishValue": "Chaos Gate",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
     }
   },
   "nativeChoiceTitles": {
@@ -401,13 +409,13 @@
     "gatheringNative": {
       "value": "原生 / 默认",
       "englishValue": "Native / Default",
-      "reason": "Trainer setting leaves the native trial probability unchanged.",
+      "reason": "Trainer setting leaves native gathering or room occurrence probability unchanged.",
       "status": "trainer_product_label"
     },
     "gatheringCustom": {
       "value": "自定义",
       "englishValue": "Custom",
-      "reason": "Trainer setting replaces eligible native gathering trial probability.",
+      "reason": "Trainer setting replaces a conditional native gathering trial or room occurrence chance.",
       "status": "trainer_product_label"
     },
     "generateGathering": {
@@ -415,6 +423,12 @@
       "englishValue": "Generate in Current Room",
       "reason": "Trainer one-shot action invokes native setup for one unused authored gathering point.",
       "status": "trainer_product_label"
+    },
+    "chaosGateApply": {
+      "value": "应用出现概率",
+      "englishValue": "Apply Occurrence Chance",
+      "status": "trainer_product_label",
+      "reason": "Trainer action accepts a future-room Chaos Gate conditional chance; it does not create an entrance in the current room."
     }
   },
   "registry": {

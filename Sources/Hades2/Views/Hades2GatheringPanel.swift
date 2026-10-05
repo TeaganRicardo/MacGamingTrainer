@@ -33,7 +33,7 @@ struct Hades2GatheringPanel: View {
                             Text("%").foregroundStyle(.secondary)
                             Button(text("hades2.gathering.apply")) {
                                 model.setGatheringProbability(family, custom: custom[family] == true, text: percentages[family] ?? "100")
-                            }.disabled(!model.canEditDesired || (custom[family] == true && !model.validGatheringPercentage(percentages[family] ?? "")))
+                            }.disabled(!model.canEditDesired || (custom[family] == true && !model.validProbabilityPercentage(percentages[family] ?? "")))
                             Spacer(minLength: 0)
                             Button(text("hades2.gathering.generate")) { model.generateGathering(family) }
                                 .disabled(!model.canGenerateGathering(family))

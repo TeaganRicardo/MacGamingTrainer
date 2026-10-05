@@ -100,6 +100,9 @@ class Hades2CommandRouter:
         elif command=='set_gathering_desired':
             validated=validate_command_params(command,params)
             result=adapter.set_gathering_desired(validated['family'],validated['probability'])
+        elif command=='set_chaos_gate_desired':
+            validated=validate_command_params(command,params)
+            result=adapter.set_chaos_gate_desired(validated['probability'])
         elif command=='list_profiles':
             result={'profiles':adapter.list_profiles()}
         elif command=='save_profile':

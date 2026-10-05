@@ -91,6 +91,18 @@ def validate_gathering_desired(family,probability):
     return probability
 
 
+def normalize_chaos_gate_probability(value):
+    if type(value) in (int,float) and 0<=value<=100 and math.isfinite(value):
+        return float(value)
+    return None
+
+
+def validate_chaos_gate_probability(value):
+    if value is not None and normalize_chaos_gate_probability(value) is None:
+        raise ValueError('概率必须为 0–100。')
+    return value
+
+
 def is_valid_next_room_reward(value):
     return value is None or (isinstance(value,str) and len(value)<=NEXT_ROOM_REWARD_MAX_LENGTH)
 

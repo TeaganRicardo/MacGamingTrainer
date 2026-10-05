@@ -14,6 +14,7 @@ from .schema import (
     is_valid_next_room_reward,
     validate_desired_feature_value,
     validate_gathering_desired,
+    validate_chaos_gate_probability,
 )
 
 
@@ -36,6 +37,11 @@ def validate_command_params(command, params):
             raise ValueError('概率必须为 0–100。')
         probability=validate_gathering_desired(params.get('family'),params['probability'])
         return {'family':params['family'],'probability':probability}
+
+    if command=='set_chaos_gate_desired':
+        if 'probability' not in params:
+            raise ValueError('概率必须为 0–100。')
+        return {'probability':validate_chaos_gate_probability(params['probability'])}
 
     if command=='generate_gathering':
         validate_gathering_desired(params.get('family'),None)
