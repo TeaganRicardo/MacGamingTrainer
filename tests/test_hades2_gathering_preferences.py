@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
 from games.hades2.command_validation import validate_command_params
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
@@ -95,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         calls.append(('save', copy.deepcopy(preferences['gatheringProbabilities'])))
         return original_save(preferences)
     adapter.preference_store.save = save
-    def execute(command, params, **kwargs):
+    def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_gathering_probabilities':
             assert json.loads((base/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
@@ -121,7 +122,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
 
     # Runtime application failure retains desired state for an explicit later
     # reconciliation; it never turns a generation action into a desired field.
-    def failed_apply(command, params, **kwargs): raise TransportError('lua_error', 'fixture unavailable')
+    def failed_apply(command, params): raise TransportError('lua_error', 'fixture unavailable')
     adapter.execute = failed_apply
     try:
         adapter.dispatch('set_gathering_desired', {'family': 'flora', 'probability': 100}, 'pending')
@@ -129,23 +130,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         pass
     assert adapter.preferences['gatheringProbabilities']['flora'] == 100
     assert adapter.preference_dirty is True
-    calls.clear()
-    def replay_execute(command, params, **kwargs):
-        calls.append((command, copy.deepcopy(params), copy.deepcopy(kwargs)))
-        for name, values in kwargs.get('batch', []):
-            if name == 'set_gathering_probabilities': adapter.state['gatheringProbabilities'] = dict(values['probabilities'])
-        return dict(adapter.state)
-    adapter.execute = replay_execute
+    class ConfirmingReconciler:
+        def __init__(self):
+            self.calls = []
+        def reconcile(self, desired, observed, *, force_full=False):
+            self.calls.append((copy.deepcopy(desired), copy.deepcopy(observed), force_full))
+            return DesiredReconciliationOutcome(reply=None, confirmed=True, mismatches=())
+
+    reconciler = ConfirmingReconciler()
+    adapter.desired_reconciler = reconciler
     adapter.state['gatheringProbabilities'] = {}
-    adapter._replay_preferences()
-    batch = calls[0][2]['batch']
-    assert ('set_gathering_probabilities', {'probabilities': valid | {'flora': 100}}) in batch
-    assert all(name != 'generate_gathering' for name, _ in batch)
+    adapter._replay_preferences(copy.deepcopy(adapter.state))
+    assert len(reconciler.calls) == 1
+    assert reconciler.calls[0][0]['gatheringProbabilities'] == valid | {'flora': 100}
     assert adapter.preference_dirty is False
+
     calls.clear()
+    adapter.execute = execute
     preferences = copy.deepcopy(adapter.preferences)
     adapter.dispatch('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room'}, 'generation-request')
-    assert calls == [('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room', 'requestId': 'generation-request'}, {})]
+    assert calls == [('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room', 'requestId': 'generation-request'})]
     assert adapter.preferences == preferences
 
     # Scene/transport invalidation clears ephemeral targets without erasing
@@ -159,11 +163,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     clear_active(observed)
     assert observed['gatheringProbabilities'] == {}
 
-    # An older peer/sparse snapshot cannot silently clear accepted new intent.
-    adapter._capture_runtime_preferences({'status': 'ready'})
+    # Saving a Profile snapshots canonical durable desired state; a stale
+    # runtime/public projection cannot overwrite pending gathering intent.
+    adapter.state['gatheringProbabilities'] = {}
+    adapter.save_profile('Pending Gathering')
     assert adapter.preferences['gatheringProbabilities'] == valid | {'flora': 100}
-    adapter._capture_runtime_preferences({'gatheringProbabilities': {}})
-    assert adapter.preferences['gatheringProbabilities'] == {}
+    saved_pending = json.loads(
+        adapter.profile_service.path('Pending Gathering').read_text()
+    )
+    assert saved_pending['desired']['gatheringProbabilities'] == valid | {'flora': 100}
 
     future = dict(persisted, schemaVersion=8)
     future_path = base/'future-desired.json'

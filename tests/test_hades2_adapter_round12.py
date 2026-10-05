@@ -14,6 +14,7 @@ from core.adapter import AdapterError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
@@ -252,8 +253,8 @@ assert a.delete_profile('模块化测试')['deleted']
 
 # Game-specific validation now lives behind the Hades adapter, not core server.
 calls = []
-def fake_execute(command, params, replay=False, batch=None):
-    calls.append((command, dict(params), replay, batch))
+def fake_execute(command, params):
+    calls.append((command, dict(params)))
     return {'connected': True, 'status': 'ready'}
 a.execute = fake_execute
 assert a.dispatch('set_stat', {'stat':'enemyHealth','locked':True,'value':175}, 'r1')['status'] == 'ready'
@@ -282,23 +283,14 @@ for bad in (
 a.dispatch('set_resource', {'resource':'Money','amount':10}, 'resource-id')
 assert calls[-1][1]['requestId'] == 'resource-id'
 
-# Full desired replay remains adapter-local and covers persistent Hades state.
-a.state={'connected':True,'status':'ready','desiredFeatures':{},'stats':{},'resources':[],'elements':[],
-         'capabilities':{'setFeature':True},'healthLocked':False,'manaLocked':False,'armorLocked':False,
-         'rerollsLocked':False,'nextRoomReward':None}
-a.preferences=a._default_preferences();a.preferences.update(gardenQoL=True,nextRoomReward='WeaponUpgrade')
-a.preferences['statLocks']={'enemyHealth':175,'dashSpeed':140,'manaRegen':12}
-a.preferences['resourceLocks']={'Money':999};a.preferences['rerollsLock']=7;a.preferences['elementLocks']={'Fire':8}
-# _replay_preferences captures runtime preferences before saving, so mark the
-# wanted snapshot dirty and ensure the state starts unlocked/empty.
-a.preference_dirty = True
-transport.live = True
-calls.clear()
-a._replay_preferences(force_full=True)
-assert calls[-1][0] == 'replay_preferences' and calls[-1][2] is True
-replay_batch = calls[-1][3]
-assert any(c=='set_stat' and p.get('stat')=='enemyHealth' for c,p in replay_batch)
-assert any(c=='set_next_room_reward' and p.get('reward')=='WeaponUpgrade' for c,p in replay_batch)
-assert any(c=='lock_resource' and p.get('resource')=='Money' for c,p in replay_batch)
+# Desired replay planning is owned by Hades2DesiredStateReconciler and is
+# exercised through that interface. Adapter's general execution interface no
+# longer accepts synthetic replay/batch controls.
+try:
+    a.execute('status', {}, replay=True)
+except TypeError:
+    pass
+else:
+    raise AssertionError('Adapter.execute still exposes replay implementation controls')
 
 print('hades2_adapter_round12_ok')
