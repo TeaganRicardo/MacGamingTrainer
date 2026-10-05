@@ -25,6 +25,7 @@ EXPECTED_DEFAULTS = {
     "autoMiniGames": False,
     "gardenQoL": False,
     "boonRarityEnabled": False,
+    "forceEnableRerolls": False,
     "moneyMultiplierEnabled": False,
     "resourceMultiplierEnabled": False,
     "damageMultiplier": 2.0,
