@@ -134,6 +134,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var autoMiniGames = false
     @Published var gardenQoL = false
     @Published var boonRarityEnabled = false
+    @Published var forceEnableRerolls = false
     @Published var damageEnabled = false
     @Published var damageMultiplier = 2.0
     @Published var gameSpeed = 1.0
@@ -165,7 +166,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var resourceMultiplierEnabled = false
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
-    @Published private(set) var choiceReroll: Hades2ChoiceRerollSnapshot?
     @Published private(set) var chaosGateProbability: Double?
     @Published private(set) var gatheringProbabilities: [Hades2GatheringFamily: Double] = [:]
     @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
@@ -231,7 +231,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
-    var canRerollCurrentChoice: Bool { canOpenNativeBoonScreen && protocolCompatible && choiceReroll?.available == true }
     var exactBoonOptions: [BoonOption] {
         boons.filter { $0.group == "exact" }
     }
@@ -492,7 +491,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !armorLocked { armor = nil }
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
-        choiceReroll = nil
         gatheringTargets = [:]
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
@@ -580,7 +578,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
-        if patch.choiceReroll.isPresent { choiceReroll = patch.choiceReroll.value }
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
         if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
@@ -686,7 +683,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch command {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
-        case .rerollChoice: title = presentation("hades2.reroll.action")
         case .generateGathering: title = presentation("hades2.gathering.generate")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
@@ -712,7 +708,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
         case .outcomeUnknown:
             noticeToken = nil
-            errorToken = presentation((command == .rerollChoice || command == .generateGathering) ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
+            errorToken = presentation(command == .generateGathering ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
             noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }
@@ -965,11 +961,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func generateGathering(_ family: Hades2GatheringFamily) {
         guard canGenerateGathering(family), let token = gatheringTargets[family]?.scopeToken else { return }
         send(.generateGathering(family: family, scopeToken: token), title: "hades2.gathering.generate", announceSuccess: false)
-    }
-
-    func rerollCurrentChoice() {
-        guard canRerollCurrentChoice, let target = choiceReroll, let token = target.menuToken, let cost = target.cost else { return }
-        send(.rerollChoice(menuToken: token, expectedCost: cost), title: "hades2.reroll.action", announceSuccess: false)
     }
 
     func setStat(_ stat: String, text: String, locked: Bool) {
@@ -1384,6 +1375,7 @@ private extension Hades2FeatureKey {
         case .autoMiniGames: return \.autoMiniGames
         case .gardenQoL: return \.gardenQoL
         case .boonRarityEnabled: return \.boonRarityEnabled
+        case .forceEnableRerolls: return \.forceEnableRerolls
         case .moneyMultiplierEnabled: return \.moneyMultiplierEnabled
         case .resourceMultiplierEnabled: return \.resourceMultiplierEnabled
         }
