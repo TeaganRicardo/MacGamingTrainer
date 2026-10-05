@@ -208,6 +208,8 @@ class Hades2ResidentSession:
                     ) from error
                 if self._runtime_generation_missing(error):
                     self.invalidate_generation()
+                    if command == "status":
+                        raise
                     raise ResidentGenerationInvalidated(error) from error
                 raise
 
