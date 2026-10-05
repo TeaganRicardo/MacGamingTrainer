@@ -6237,8 +6237,8 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function prepareChaos(blessingName, curseName)
-      requireFunctions("exact Chaos acquisition", {
+    local function prepareChaos(blessingName, curseName, requirementLabel)
+      requireFunctions(requirementLabel or "exact Chaos acquisition", {
         "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
         "GetProcessedTraitData", "AddTraitToHero",
       })
@@ -6737,7 +6737,7 @@ if __MacGamingTrainerV1 == nil then
             or type(params.curse) ~= "string" or params.curse == "" then
           error("Chaos exact acquisition is unavailable")
         end
-        return { chaosPlan = prepareChaos(params.blessing, params.curse) }
+        return { chaosPlan = prepareChaos(params.blessing, params.curse, "exact Chaos pair acquisition") }
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
 
