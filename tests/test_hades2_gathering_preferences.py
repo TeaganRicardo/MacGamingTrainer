@@ -136,7 +136,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
             if name == 'set_gathering_probabilities': adapter.state['gatheringProbabilities'] = dict(values['probabilities'])
         return dict(adapter.state)
     adapter.execute = replay_execute
-    adapter._runtime_bootstrapped = False
     adapter.state['gatheringProbabilities'] = {}
     adapter._replay_preferences()
     batch = calls[0][2]['batch']
