@@ -5,9 +5,17 @@ lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text(encoding="utf-
 state = (ROOT / "Sources/Hades2/Hades2BackendState.swift").read_text(encoding="utf-8")
 model = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
 
+def command_block(name):
+    marker = f'if command == "{name}" then'
+    start = lua.index(marker)
+    tail = lua[start:]
+    next_command = tail.find('\n    if command == "', len(marker))
+    return tail if next_command < 0 else tail[:next_command]
+
+
 action = lua[lua.index("local function action("):lua.index("local function editResource")]
-sell = lua[lua.index('if command == "open_sell_traits" then'):lua.index('if command == "open_special_choice" then')]
-special = lua[lua.index('if command == "open_special_choice" then'):lua.index('if command == "spawn_reward" then')]
+sell = command_block("open_sell_traits")
+special = command_block("open_special_choice")
 
 # The resident ledger must compare the full semantics of each current one-shot.
 assert 'open_special_choice = { "source" }' in lua
