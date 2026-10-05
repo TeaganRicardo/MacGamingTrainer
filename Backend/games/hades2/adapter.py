@@ -464,7 +464,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
-            if self.runtime.alive() and self._runtime_bootstrapped:
+            if self.runtime.alive() and self.state.get('status')=='ready':
                 try:
                     self._apply_game_speed(value)
                     self.preference_dirty=was_dirty
@@ -544,10 +544,10 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
         if not self.runtime.alive():return dict(self.state)
-        if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         if self.state.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
+        self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         desired=self.state.get('desiredFeatures') if isinstance(self.state.get('desiredFeatures'),dict) else {}
         pending=[]
         for key in TOGGLES:
@@ -636,8 +636,7 @@ class Hades2Adapter(GameAdapter):
         previous_pid=self.state.get('pid')
         self.state['pid']=pid
         if pid!=previous_pid:
-            self._runtime_bootstrapped=False
-            self._catalog_initialized=False
+            self.runtime.invalidate_generation()
             self._time_warp_speed=1.0;self._time_warp_error=None;self._project_time_warp()
         if not pid:self.state['status']='not_running'
         elif not self.state['connected']:self.state['status']='disconnected'
@@ -656,15 +655,11 @@ class Hades2Adapter(GameAdapter):
                 self.runtime.attach(self.state['pid'])
             finally:
                 profile['attachTotal']=time.monotonic()-phase
-                attach_profile=dict(getattr(self.transport,'last_attach_profile',{}) or {})
-            # A debugger reconnect is the synchronization boundary for the resident
-            # module. Bootstrap once here even when the same game process survived a
-            # manual detach, then use dispatch-only payloads for subsequent calls.
-            self._runtime_bootstrapped=False
+                attach_profile=self.runtime.last_attach_profile
+            # Resident-session attach owns generation/bootstrap invalidation.
             self.state['connected']=True
             if not probe_runtime:
                 outcome='deferred'
-                self._catalog_initialized=False
                 clear_active(self.state,preserve_desired=True)
                 self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
                 self._overlay_preferences()
@@ -704,22 +699,15 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_boundary_duration,self._last_status_json_duration,self._last_status_localize_duration,
             )
 
-    @staticmethod
-    def _runtime_generation_missing(error):
-        message=str(error)
-        return error.code=='lua_error' and '__MacGamingTrainerV1' in message and 'nil value' in message
-
-    @staticmethod
-    def _resident_cleanup_failed(error):
-        return error.code=='lua_error' and 'MGT_RESIDENT_RESTART_REQUIRED:' in str(error)
-
-    def _invalidate_runtime_generation(self):
-        self._runtime_bootstrapped=False
-        self._catalog_initialized=False
+    def _mark_runtime_generation_invalidated(self):
         self.preference_dirty=True
         clear_active(self.state,preserve_desired=True)
         self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
         self._overlay_preferences()
+
+    def _invalidate_runtime_generation(self):
+        self.runtime.invalidate_generation()
+        self._mark_runtime_generation_invalidated()
 
     def runtime_reset(self):
         if not self.runtime.alive() or not self.state.get('connected'):
