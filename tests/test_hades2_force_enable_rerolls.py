@@ -19,7 +19,7 @@ CurrentRun = {
     Traits = {}, TraitDictionary = {}, Elements = {}, BoonData = {} },
   CurrentRoom = {}, NumRerolls = 10, PickedTraits = {}, BannedTraits = {},
 }
-ScreenState = {}; ScreenAnchors = {}; ActiveScreens = {}
+ScreenState = {}; ScreenAnchors = { Reroll = 101 }; ActiveScreens = {}
 RerollCosts = { Boon = 1, Hammer = 1, ReuseIncrement = 1 }
 TraitData = {}
 local function copy(value)
@@ -128,6 +128,7 @@ AttemptPanelReroll = function(screen, button)
   CurrentRun.NumRerolls = CurrentRun.NumRerolls - cost
   CurrentRun.CurrentRoom.SpentRerolls = CurrentRun.CurrentRoom.SpentRerolls or {}
   if button.RerollId then IncrementTableValue(CurrentRun.CurrentRoom.SpentRerolls, button.RerollId, 1) end
+  UpdateRerollUI(CurrentRun.NumRerolls)
   CallFunctionName(button.RerollFunctionName, screen, button)
 end
 
@@ -158,16 +159,35 @@ GetHeroTrait = function(name) return CurrentRun.Hero.TraitDictionary[name] end
 IsGodTrait = function() return true end
 
 for _, name in ipairs({ 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' }) do
-  TraitData[name] = { Name = name, RarityLevels = { Common = {} } }
+  TraitData[name] = { Name = name, RarityLevels = { Common = {}, Epic = {} } }
 end
-EnemyData = { NPC_Arachne_01 = { Name = 'NPC_Arachne_01' } }
-PresetEventArgs = { ArachneCostumeChoices = { UpgradeOptions = {
+local basePool = {
   { ItemName = 'ChoiceA', Type = 'Trait', Rarity = 'Common' },
   { ItemName = 'ChoiceB', Type = 'Trait', Rarity = 'Common' },
   { ItemName = 'ChoiceC', Type = 'Trait', Rarity = 'Common' },
   { ItemName = 'ChoiceD', Type = 'Trait', Rarity = 'Common' },
   { ItemName = 'ChoiceE', Type = 'Trait', Rarity = 'Common' },
-} } }
+}
+EnemyData = {
+  NPC_Arachne_01 = { Name = 'NPC_Arachne_01' },
+  NPC_Narcissus_01 = { Name = 'NPC_Narcissus_01' },
+  NPC_Echo_01 = { Name = 'NPC_Echo_01' },
+  NPC_Medea_01 = { Name = 'NPC_Medea_01' },
+  NPC_Circe_01 = { Name = 'NPC_Circe_01' },
+  NPC_Icarus_01 = { Name = 'NPC_Icarus_01' },
+  NPC_Artemis_Field_01 = { Name = 'NPC_Artemis_Field_01', Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' } },
+  NPC_Athena_01 = { Name = 'NPC_Athena_01', Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' } },
+  NPC_Dionysus_01 = { Name = 'NPC_Dionysus_01', Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' } },
+  NPC_Hades_Field_01 = { Name = 'NPC_Hades_Field_01', Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' } },
+}
+PresetEventArgs = {
+  ArachneCostumeChoices = { UpgradeOptions = copy(basePool) },
+  NarcissusBenefitChoices = { UpgradeOptions = copy(basePool) },
+  EchoBenefitChoices = { UpgradeOptions = copy(basePool) },
+  MedeaCurseChoices = { UpgradeOptions = copy(basePool) },
+  CirceBlessingChoices = { UpgradeOptions = copy(basePool) },
+  IcarusBenefitChoices = { UpgradeOptions = copy(basePool) },
+}
 
 dofile(assert(arg[1])); dofile(assert(arg[2]))
 local M = __MacGamingTrainerV1
@@ -200,31 +220,182 @@ CallFunctionName(ordinaryScreen.Components.RerollButton.OnPressedFunctionName,
   ordinaryScreen, ordinaryScreen.Components.RerollButton)
 assert(CurrentRun.NumRerolls == 9 and nativeRerolls == 1,
   'native AttemptPanelReroll did not own one spend and native regeneration')
+assert(ordinaryScreen.Components.RerollButton.Cost == 2,
+  'native room/source cost history did not escalate through the game-owned button')
 
+-- Every native UpgradeChoice loot owner keeps the native reroll generator.
+for index, name in ipairs({ 'HermesUpgrade', 'StackUpgrade', 'TrialUpgrade' }) do
+  CurrentRun.NumRerolls = 10
+  CurrentRun.CurrentRoom.SpentRerolls = {}
+  local source = {
+    Name = name, ObjectId = 100 + index,
+    Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' },
+    UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) },
+  }
+  local screen = OpenUpgradeChoiceMenu(source)
+  assert(screen.Components.RerollButton.Visible
+    and screen.Components.RerollButton.RerollFunctionName == 'RerollBoonLoot',
+    name .. ' did not retain native UpgradeChoice reroll ownership')
+end
+
+-- Hammer is force-enabled even when the native target reports its normal negative reroll cost.
+RerollCosts.Hammer = -1
 CurrentRun.NumRerolls = 10
 CurrentRun.CurrentRoom.SpentRerolls = {}
-local fixed = copy(EnemyData.NPC_Arachne_01)
-fixed.ObjectId = 77
-fixed.BlockReroll = true
-fixed.UpgradeOptions = {
-  copy(PresetEventArgs.ArachneCostumeChoices.UpgradeOptions[1]),
-  copy(PresetEventArgs.ArachneCostumeChoices.UpgradeOptions[2]),
-  copy(PresetEventArgs.ArachneCostumeChoices.UpgradeOptions[3]),
+local hammer = {
+  Name = 'WeaponUpgrade', ObjectId = 150,
+  Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' },
+  UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) },
 }
-local fixedScreen = OpenUpgradeChoiceMenu(fixed)
-assert(fixedScreen.MovedRerollUIGroup, 'BlockReroll fixed owner did not expose native reroll UI')
-assert(fixedScreen.Components.RerollButton.Visible
-  and fixedScreen.Components.RerollButton.OnPressedFunctionName == 'AttemptPanelReroll',
-  'fixed owner did not retain the native reroll action')
-assert(fixedScreen.Components.RerollButton.RerollFunctionName ~= 'RerollBoonLoot',
-  'fixed owner incorrectly fell through the generic native generator')
-CallFunctionName(fixedScreen.Components.RerollButton.OnPressedFunctionName,
-  fixedScreen, fixedScreen.Components.RerollButton)
-assert(CurrentRun.NumRerolls == 9, 'fixed owner did not spend through native AttemptPanelReroll')
-assert(fixed.UpgradeOptions[3].ItemName == 'ChoiceD',
-  'fixed owner adapter did not generate a changed eligible candidate set')
+local hammerScreen = OpenUpgradeChoiceMenu(hammer)
+assert(hammerScreen.Components.RerollButton.Visible and hammerScreen.Components.RerollButton.Cost == 1
+  and hammerScreen.Components.RerollButton.RerollFunctionName == 'RerollBoonLoot',
+  'force-enabled Hammer did not use the ordinary reroll base cost with native regeneration')
+RerollCosts.Hammer = 1
+
+-- Natural loot special-NPC UpgradeChoice owners keep the native generator.
+for index, npc in ipairs({
+  'NPC_Artemis_Field_01', 'NPC_Athena_01', 'NPC_Dionysus_01', 'NPC_Hades_Field_01',
+}) do
+  CurrentRun.NumRerolls = 10
+  CurrentRun.CurrentRoom.SpentRerolls = {}
+  local source = copy(EnemyData[npc])
+  source.ObjectId = 200 + index
+  source.UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) }
+  local screen = OpenUpgradeChoiceMenu(source)
+  assert(screen.Components.RerollButton.Visible
+    and screen.Components.RerollButton.RerollFunctionName == 'RerollBoonLoot',
+    npc .. ' did not retain native loot reroll ownership')
+end
+
+local fixedOwners = {
+  { 'NPC_Arachne_01', 'ArachneCostumeChoices' },
+  { 'NPC_Narcissus_01', 'NarcissusBenefitChoices' },
+  { 'NPC_Echo_01', 'EchoBenefitChoices' },
+  { 'NPC_Medea_01', 'MedeaCurseChoices' },
+  { 'NPC_Circe_01', 'CirceBlessingChoices' },
+  { 'NPC_Icarus_01', 'IcarusBenefitChoices' },
+}
+for index, row in ipairs(fixedOwners) do
+  CurrentRun.NumRerolls = 10
+  CurrentRun.CurrentRoom.SpentRerolls = {}
+  local fixed = copy(EnemyData[row[1]])
+  fixed.ObjectId = 300 + index
+  fixed.BlockReroll = true
+  fixed.UpgradeOptions = {
+    copy(PresetEventArgs[row[2]].UpgradeOptions[1]),
+    copy(PresetEventArgs[row[2]].UpgradeOptions[2]),
+    copy(PresetEventArgs[row[2]].UpgradeOptions[3]),
+  }
+  local before = fixed.UpgradeOptions[1].ItemName .. fixed.UpgradeOptions[2].ItemName .. fixed.UpgradeOptions[3].ItemName
+  local fixedScreen = OpenUpgradeChoiceMenu(fixed)
+  assert(fixedScreen.MovedRerollUIGroup, row[1] .. ' BlockReroll did not expose native reroll UI')
+  assert(fixedScreen.Components.RerollButton.Visible
+    and fixedScreen.Components.RerollButton.OnPressedFunctionName == 'AttemptPanelReroll',
+    row[1] .. ' did not retain the native reroll action')
+  assert(fixedScreen.Components.RerollButton.RerollFunctionName ~= 'RerollBoonLoot',
+    row[1] .. ' incorrectly fell through the generic native generator')
+  CallFunctionName(fixedScreen.Components.RerollButton.OnPressedFunctionName,
+    fixedScreen, fixedScreen.Components.RerollButton)
+  local after = fixed.UpgradeOptions[1].ItemName .. fixed.UpgradeOptions[2].ItemName .. fixed.UpgradeOptions[3].ItemName
+  assert(CurrentRun.NumRerolls == 9 and before ~= after,
+    row[1] .. ' fixed owner did not spend once and present changed candidates')
+end
+
+-- Echo previous-run is a distinct candidate owner even though it shares the Echo NPC.
+GameState.RunHistory = { { TraitRarityCache = {
+  ChoiceA = 'Common', ChoiceB = 'Common', ChoiceC = 'Common', ChoiceD = 'Common', ChoiceE = 'Common',
+} } }
+CurrentRun.NumRerolls = 10
+CurrentRun.CurrentRoom.SpentRerolls = {}
+local previous = {
+  Name = 'NPC_Echo_01', ObjectId = 390, MenuTitle = 'EchoChoiceMenu_LastRun',
+  OnPressedFunctionNameOverride = 'SelectEchoBoon', BlockReroll = true,
+  UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) },
+}
+local previousBefore = previous.UpgradeOptions[1].ItemName .. previous.UpgradeOptions[2].ItemName .. previous.UpgradeOptions[3].ItemName
+local previousScreen = OpenUpgradeChoiceMenu(previous)
+assert(previousScreen.Components.RerollButton.Visible
+  and previousScreen.Components.RerollButton.RerollFunctionName ~= 'RerollBoonLoot',
+  'Echo previous-run did not use its owner-specific native-button adapter')
+CallFunctionName(previousScreen.Components.RerollButton.OnPressedFunctionName,
+  previousScreen, previousScreen.Components.RerollButton)
+local previousAfter = previous.UpgradeOptions[1].ItemName .. previous.UpgradeOptions[2].ItemName .. previous.UpgradeOptions[3].ItemName
+assert(previousBefore ~= previousAfter and CurrentRun.NumRerolls == 9,
+  'Echo previous-run reroll did not change candidates through native spend')
+
+-- Synthetic special-loot sources keep game selection UI but adapt generation back to the native NPC owner.
+CurrentRun.NumRerolls = 10
+CurrentRun.CurrentRoom.SpentRerolls = {}
+local synthetic = copy(EnemyData.NPC_Artemis_Field_01)
+synthetic.Name = 'MacGamingTrainerSpecial_Artemis'
+synthetic.ObjectId = -1
+synthetic.BlockReroll = true
+synthetic.UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) }
+local syntheticScreen = OpenUpgradeChoiceMenu(synthetic)
+assert(syntheticScreen.Components.RerollButton.Visible
+  and syntheticScreen.Components.RerollButton.RerollFunctionName ~= 'RerollBoonLoot',
+  'synthetic special loot did not route through its native-owner adapter')
+CallFunctionName(syntheticScreen.Components.RerollButton.OnPressedFunctionName,
+  syntheticScreen, syntheticScreen.Components.RerollButton)
+assert(CurrentRun.NumRerolls == 9 and synthetic.UpgradeOptions[3].ItemName == 'ChoiceD',
+  'synthetic special loot reroll did not spend once and regenerate through owner data')
+
+-- A structurally exhausted fixed pool stays non-actionable instead of spending for a fake reroll.
+local fullArachnePool = PresetEventArgs.ArachneCostumeChoices.UpgradeOptions
+PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = {
+  copy(basePool[1]), copy(basePool[2]), copy(basePool[3]),
+}
+CurrentRun.NumRerolls = 10
+local exhausted = copy(EnemyData.NPC_Arachne_01)
+exhausted.ObjectId = 399
+exhausted.BlockReroll = true
+exhausted.UpgradeOptions = {
+  copy(basePool[1]), copy(basePool[2]), copy(basePool[3]),
+}
+local exhaustedScreen = OpenUpgradeChoiceMenu(exhausted)
+assert(not exhaustedScreen.Components.RerollButton.Visible
+  and exhaustedScreen.Components.RerollButton.OnPressedFunctionName == nil,
+  'fixed pool with no alternative exposed a spendable fake reroll')
+assert(CurrentRun.NumRerolls == 10, 'exhausted pool changed reroll currency')
+PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = fullArachnePool
+
+-- Existing reroll lock remains independent: native spend is immediately reconciled to the locked count.
+CurrentRun.NumRerolls = 10
+CurrentRun.CurrentRoom.SpentRerolls = {}
+M.dispatch('lock_rerolls', { requestId = 'lock-count', locked = true, includeCatalogs = false })
+local lockedSource = {
+  Name = 'ZeusUpgrade', ObjectId = 401,
+  Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' },
+  UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) },
+}
+local lockedScreen = OpenUpgradeChoiceMenu(lockedSource)
+CallFunctionName(lockedScreen.Components.RerollButton.OnPressedFunctionName,
+  lockedScreen, lockedScreen.Components.RerollButton)
+assert(CurrentRun.NumRerolls == 10 and M.rerollsLock == 10,
+  'Force Enable Rerolls broke independent reroll-count lock semantics')
+M.dispatch('lock_rerolls', { requestId = 'unlock-count', locked = false, includeCatalogs = false })
+
+-- The durable toggle can also be turned on while a supported native page is already open.
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
+CurrentRun.NumRerolls = 10
+CurrentRun.CurrentRoom.SpentRerolls = {}
+local alreadyOpen = {
+  Name = 'ZeusUpgrade', ObjectId = 450,
+  Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' },
+  UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) },
+}
+local alreadyOpenScreen = OpenUpgradeChoiceMenu(alreadyOpen)
+assert(not alreadyOpenScreen.Components.RerollButton.Visible,
+  'native-disabled page unexpectedly exposed reroll before feature enable')
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
+assert(alreadyOpenScreen.Components.RerollButton.Visible
+  and alreadyOpenScreen.Components.RerollButton.OnPressedFunctionName == 'AttemptPanelReroll',
+  'enabling feature did not activate the already-open supported native page')
 
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
+assert(not alreadyOpenScreen.Components.RerollButton.Visible,
+  'disabling feature did not restore native availability on the current page')
 CurrentRun.NumRerolls = 10
 CurrentRun.CurrentRoom.SpentRerolls = {}
 local disabled = copy(EnemyData.NPC_Arachne_01)
