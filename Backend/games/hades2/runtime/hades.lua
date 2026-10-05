@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 81 then
+if previousModule and previousModule.revision ~= 82 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 81 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 81, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 82, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -1259,7 +1259,7 @@ if __MacGamingTrainerV1 == nil then
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
   end
   local reconcileDesired
-  local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger
+  local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger, integer
   local function synchronize()
     -- Keep already owned hooks on their captured owner. An uncertain native
     -- coroutine must never adopt a new owner or reinstall a replaced hook.
@@ -4032,29 +4032,325 @@ if __MacGamingTrainerV1 == nil then
       return added
     end
 
+    local function mutate(command, params)
+      if command == "set_trait_level" then
+        local function validateLevelTarget()
+          local target, family, sellEligible, count = resolveTraitTarget(params)
+          integer(params.targetLevel, 1)
+          if params.targetLevel <= traitLevel(target) then
+            error("Trait target level must be higher than the current level")
+          end
+          local levelCapability = operationCapabilities(target, family, sellEligible, count)
+          if levelCapability ~= "increaseOne" then
+            error("Trait level editing is unavailable for the selected target")
+          end
+          if family == "chaos" then
+            requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+          elseif family == "hexTalent" then
+            local delta = params.targetLevel - traitLevel(target)
+            if #seleneModel.talentNodes(target.Name, false) < delta then
+              error("Not enough uninvested Path of Stars nodes remain for the requested level")
+            end
+            requireFunctions("Selene talent level editing", {
+              "IncreaseTraitLevel", "UpdateTalentPointInvestedCache",
+            })
+            local base = type(TraitData) == "table" and TraitData[target.Name] or nil
+            if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
+              requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
+            end
+          elseif family == "familiar" then
+            requireFunctions("Familiar trait level editing", { "IncreaseTraitLevel" })
+          elseif family == "directSpecial" then
+            requireFunctions("direct special trait level editing", { "IncreaseTraitLevel" })
+          -- Ordinary God boons are re-checked against the game's real Pom
+          -- eligibility. Direct special traits have their own processed-effect
+          -- capability gate above and never borrow GodLoot eligibility.
+          elseif family == "olympianHermes" then
+            requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
+            local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
+            if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
+              error("Trait is no longer eligible for a meaningful level increase")
+            end
+          else
+            requireFunctions("trait level editing", { "IncreaseTraitLevel" })
+          end
+          return target, family
+        end
+        return actionLedger.run(command, params, function()
+          -- Resolve again immediately before the mutation, after the deterministic
+          -- preflight and after action() has ruled out a duplicate request.
+          local live, family = validateLevelTarget()
+          local upgraded
+          if family == "chaos" then
+            upgraded = rebuildChaosTarget(live, params.targetLevel, nil)
+          elseif family == "hexTalent" then
+            local before = traitLevel(live)
+            local delta = params.targetLevel - before
+            local nodes = seleneModel.talentNodes(live.Name, false)
+            local base = type(TraitData) == "table" and TraitData[live.Name] or nil
+            upgraded = live
+            for index = 1, delta do
+              local selected = nodes[index] and nodes[index].node or nil
+              if type(selected) ~= "table" then
+                error("Selene talent tree changed before the requested level was applied")
+              end
+              selected.Invested = true
+              selected.QueuedInvested = nil
+              local beforeStep = traitLevel(upgraded)
+              local ok, nextTrait = pcall(IncreaseTraitLevel, upgraded)
+              local liveStep = traitLevel(upgraded)
+              if not ok then
+                if liveStep == beforeStep then
+                  selected.Invested = false
+                  selected.QueuedInvested = nil
+                end
+                UpdateTalentPointInvestedCache()
+                error(nextTrait)
+              end
+              if type(nextTrait) ~= "table" or traitLevel(nextTrait) <= beforeStep then
+                if liveStep == beforeStep then
+                  selected.Invested = false
+                  selected.QueuedInvested = nil
+                end
+                UpdateTalentPointInvestedCache()
+                error("Trait level increase did not reach the requested target level")
+              end
+              upgraded = nextTrait
+              if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
+                CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
+              end
+            end
+            UpdateTalentPointInvestedCache()
+          else
+            local before = traitLevel(live)
+            local delta = params.targetLevel - before
+            upgraded = IncreaseTraitLevel(live, delta)
+          end
+          if type(upgraded) ~= "table" or traitLevel(upgraded) ~= params.targetLevel then
+            error("Trait level increase did not reach the requested target level")
+          end
+        end, validateLevelTarget)
+      end
+      if command == "set_trait_rarity" then
+        local function validateRarityTarget()
+          local target, family, sellEligible, count = resolveTraitTarget(params)
+          local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
+          local rarities = availableRarities(target)
+          if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
+              or params.rarity == traitRarity(target) then
+            error("Trait rarity editing is unavailable for the selected target")
+          end
+          if family == "chaos" then
+            requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
+          elseif family == "hexTalent" then
+            requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
+          elseif family == "keepsake" then
+            if not keepsakeModel.targetRankAvailable(target, params.rarity) then
+              error("Trait rarity editing is unavailable for the selected target")
+            end
+          elseif family == "arcana" then
+            if not arcanaModel.targetRankAvailable(target, params.rarity) then
+              error("Trait rarity editing is unavailable for the selected target")
+            end
+            requireFunctions("Arcana runtime rank editing", {
+              "RemoveWeaponTrait", "AddTraitToHero", "ValidateMaxHealth",
+              "ValidateMaxMana", "HandleWeaponAnimSwaps",
+            })
+          else
+            requireFunctions("trait rarity editing", { "AddRarityToTraits" })
+          end
+          return target, family
+        end
+        return actionLedger.run(command, params, function()
+          local live, family = validateRarityTarget()
+          local upgraded
+          if family == "chaos" then
+            upgraded = rebuildChaosTarget(live, nil, params.rarity)
+          elseif family == "keepsake" then
+            upgraded = keepsakeModel.rebuildRarity(live, params.rarity)
+          elseif family == "arcana" then
+            upgraded = arcanaModel.rebuildRarity(live, params.rarity)
+          else
+            upgraded = AddRarityToTraits({}, {
+              NumTraits = 1,
+              ForceUpgrade = { live },
+              TargetRarityName = params.rarity,
+              Silent = true,
+            })
+          end
+          if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
+            error("Trait rarity recompute did not reach the requested rarity")
+          end
+        end, validateRarityTarget)
+      end
+      if command == "set_trait_remaining_uses" then
+        local function validateTemporaryDurationTarget()
+          local target, family = resolveTraitTarget(params)
+          if family ~= "temporary" or not temporaryModel.canSet(target) then
+            error("Temporary effect duration editing is unavailable for the selected target")
+          end
+          integer(params.targetRemainingUses, 1)
+          return target
+        end
+        return actionLedger.run(command, params, function()
+          local live = validateTemporaryDurationTarget()
+          temporaryModel.set(live, params.targetRemainingUses)
+        end, validateTemporaryDurationTarget)
+      end
+      if command == "expire_trait" then
+        local function validateTemporaryExpiryTarget()
+          local target, family = resolveTraitTarget(params)
+          if family ~= "temporary" or not temporaryModel.canExpire(target) then
+            error("Temporary effect expiry is unavailable for the selected target")
+          end
+          return target
+        end
+        return actionLedger.run(command, params, function()
+          local live = validateTemporaryExpiryTarget()
+          temporaryModel.expire(live)
+        end, validateTemporaryExpiryTarget)
+      end
+      if command == "remove_trait" then
+        local function validateRemovalTarget()
+          local target, family, sellEligible, count = resolveTraitTarget(params)
+          local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
+          if removalCapability == "none" then
+            error("Trait removal is unavailable for the selected target")
+          end
+          if removalCapability == "nameLevelAllMatching" then
+            requireFunctions("native trait removal", { "RemoveWeaponTrait" })
+          elseif removalCapability == "singleInstanceForce" and family == "hex" then
+            requireFunctions("Selene spell removal", {
+              "HeroHasTrait", "RemoveTrait", "UnequipWeapon", "UpdateTalentPointInvestedCache",
+            })
+          elseif removalCapability == "singleInstanceForce" and family == "hexTalent" then
+            requireFunctions("Selene talent removal", {
+              "RemoveTraitData", "UpdateTalentPointInvestedCache",
+            })
+          elseif removalCapability == "singleInstanceForce" and family == "hammer" then
+            requireFunctions("Hammer trait removal", { "RemoveTraitData" })
+            if type(target) == "table" and type(target.PreEquipWeapons) == "table"
+                and next(target.PreEquipWeapons) ~= nil then
+              requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
+            end
+          elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
+              and directSpecialCostumeArmor(target) then
+            requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
+          elseif removalCapability == "singleInstanceForce" and family == "costume" then
+            requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
+          elseif removalCapability == "singleInstanceForce" and family == "temporary" then
+            requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
+          elseif removalCapability == "singleInstanceForce" and family == "familiar" then
+            if not familiarModel.removalReady() then
+              error("Familiar owner removal is unavailable")
+            end
+          elseif removalCapability == "singleInstanceForce" and family == "keepsake" then
+            if not keepsakeModel.removalReady() then
+              error("Keepsake owner removal is unavailable")
+            end
+          elseif removalCapability == "singleInstanceForce" then
+            requireFunctions("direct trait removal", { "RemoveTraitData" })
+          else
+            error("Trait removal capability is unknown")
+          end
+          return target, removalCapability, family
+        end
+        return actionLedger.run(command, params, function()
+          local live, removalCapability, family = validateRemovalTarget()
+          if removalCapability == "nameLevelAllMatching" then
+            -- Native SellTraits teardown: deliberately name-level/all-matching.
+            RemoveWeaponTrait(live.Name, { Silent = true })
+            for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+              if type(trait) == "table" and trait.Name == live.Name then
+                error("Native trait removal left a matching instance mounted")
+              end
+            end
+          elseif family == "hex" then
+            seleneModel.teardown()
+            local slotted = seleneModel.currentSpell()
+            if type(slotted) == "table" or HeroHasTrait(live.Name) then
+              error("Selene spell removal left owner state mounted")
+            end
+          elseif family == "hammer" then
+            hammerModel.removeMounted(live)
+          elseif family == "costume" then
+            removeCostume(live)
+          elseif family == "temporary" then
+            temporaryModel.cancel(live)
+          elseif family == "familiar" then
+            familiarModel.teardown()
+          elseif family == "keepsake" then
+            keepsakeModel.teardown()
+          elseif family == "directSpecial" then
+            removeDirectSpecial(live)
+          elseif family == "hexTalent" then
+            local ok, removalError = pcall(
+              RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
+            )
+            local stillMounted = false
+            for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+              if type(trait) == "table" and trait.Name == live.Name then
+                stillMounted = true
+                break
+              end
+            end
+            if not stillMounted then
+              for _, nodeEntry in ipairs(seleneModel.talentNodes(live.Name, true)) do
+                nodeEntry.node.Invested = false
+                nodeEntry.node.QueuedInvested = nil
+              end
+              UpdateTalentPointInvestedCache()
+            end
+            if not ok then error(removalError) end
+            if stillMounted then error("Selene talent removal left the mounted effect present") end
+          else
+            -- Bounded object-level force removal for an audited declarative trait.
+            -- SkipExpire prevents a one-shot/reward expiration path from firing;
+            -- capability projection refuses owner state that cannot be torn down here.
+            RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
+            for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+              if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
+                error("Direct trait removal left the selected instance mounted")
+              end
+            end
+          end
+        end, validateRemovalTarget)
+      end
+      if command == "advance_trait_lifecycle" then
+        local function validateChaosAdvance()
+          local target, family = resolveTraitTarget(params)
+          if family ~= "chaos" or chaosLifecycleState(target) ~= "curse"
+              or chaosLinkedTraitName(target) == "" then
+            error("Chaos lifecycle transition is unavailable")
+          end
+          requireFunctions("Chaos lifecycle transition", { "RemoveTraitData" })
+          return target, chaosLinkedTraitName(target)
+        end
+        return actionLedger.run(command, params, function()
+          local live, linkedName = validateChaosAdvance()
+          RemoveTraitData(CurrentRun.Hero, live, { Silent = true })
+          local replacement = nil
+          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+            if type(trait) == "table" and trait.Id ~= nil
+                and tostring(trait.Id) == params.instanceId then
+              replacement = trait
+              break
+            end
+          end
+          if type(replacement) ~= "table" or replacement.Name ~= linkedName
+              or chaosLifecycleState(replacement) ~= "blessing" then
+            error("Chaos lifecycle transition failed")
+          end
+        end, validateChaosAdvance)
+      end
+      error("Unknown trait mutation command")
+    end
+
     return {
       currentRunTraits = currentRunTraits,
-      resolveTarget = resolveTraitTarget,
-      capabilities = operationCapabilities,
-      availableRarities = availableRarities,
-      targetHasRarity = targetHasRarity,
+      mutate = mutate,
       isArachneCostumeChoice = isArachneCostumeChoice,
-      isArachneCostumeTrait = isArachneCostumeTrait,
       applyCostume = applyCostume,
-      removeCostume = removeCostume,
-      level = traitLevel,
-      rarity = traitRarity,
-      chaosLifecycleState = chaosLifecycleState,
-      chaosLinkedTraitName = chaosLinkedTraitName,
-      rebuildChaosTarget = rebuildChaosTarget,
-      seleneTalentNodes = seleneModel.talentNodes,
-      teardownSlottedSpell = seleneModel.teardown,
-      temporary = temporaryModel,
-      familiar = familiarModel,
-      keepsake = keepsakeModel,
-      arcana = arcanaModel,
-      directSpecialCostumeArmor = directSpecialCostumeArmor,
-      removeDirectSpecial = removeDirectSpecial,
     }
   end)()
 
@@ -5813,7 +6109,7 @@ if __MacGamingTrainerV1 == nil then
       error("Unknown or unsupported resource")
     end
   end
-  local function integer(value, minimum)
+  integer = function(value, minimum)
     if not finite(value) or value % 1 ~= 0 or value < minimum or value > 999999 then
       error("Amount must be an integer " .. minimum .. "..999999")
     end
@@ -6227,315 +6523,10 @@ if __MacGamingTrainerV1 == nil then
         UpdateRerollUI(params.amount)
       end)
     end
-    if command == "set_trait_level" then
-      local function validateLevelTarget()
-        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
-        integer(params.targetLevel, 1)
-        if params.targetLevel <= traitManagement.level(target) then
-          error("Trait target level must be higher than the current level")
-        end
-        local levelCapability = traitManagement.capabilities(target, family, sellEligible, count)
-        if levelCapability ~= "increaseOne" then
-          error("Trait level editing is unavailable for the selected target")
-        end
-        if family == "chaos" then
-          requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
-        elseif family == "hexTalent" then
-          local delta = params.targetLevel - traitManagement.level(target)
-          if #traitManagement.seleneTalentNodes(target.Name, false) < delta then
-            error("Not enough uninvested Path of Stars nodes remain for the requested level")
-          end
-          requireFunctions("Selene talent level editing", {
-            "IncreaseTraitLevel", "UpdateTalentPointInvestedCache",
-          })
-          local base = type(TraitData) == "table" and TraitData[target.Name] or nil
-          if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
-            requireFunctions("Selene talent acquire callback", { "CallFunctionName" })
-          end
-        elseif family == "familiar" then
-          requireFunctions("Familiar trait level editing", { "IncreaseTraitLevel" })
-        elseif family == "directSpecial" then
-          requireFunctions("direct special trait level editing", { "IncreaseTraitLevel" })
-        -- Ordinary God boons are re-checked against the game's real Pom
-        -- eligibility. Direct special traits have their own processed-effect
-        -- capability gate above and never borrow GodLoot eligibility.
-        elseif family == "olympianHermes" then
-          requireFunctions("trait level editing", { "GetAllUpgradeableGodTraits", "IncreaseTraitLevel" })
-          local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
-          if not ok or type(eligible) ~= "table" or not eligible[target.Name] then
-            error("Trait is no longer eligible for a meaningful level increase")
-          end
-        else
-          requireFunctions("trait level editing", { "IncreaseTraitLevel" })
-        end
-        return target, family
-      end
-      return actionLedger.run(command, params, function()
-        -- Resolve again immediately before the mutation, after the deterministic
-        -- preflight and after action() has ruled out a duplicate request.
-        local live, family = validateLevelTarget()
-        local upgraded
-        if family == "chaos" then
-          upgraded = traitManagement.rebuildChaosTarget(live, params.targetLevel, nil)
-        elseif family == "hexTalent" then
-          local before = traitManagement.level(live)
-          local delta = params.targetLevel - before
-          local nodes = traitManagement.seleneTalentNodes(live.Name, false)
-          local base = type(TraitData) == "table" and TraitData[live.Name] or nil
-          upgraded = live
-          for index = 1, delta do
-            local selected = nodes[index] and nodes[index].node or nil
-            if type(selected) ~= "table" then
-              error("Selene talent tree changed before the requested level was applied")
-            end
-            selected.Invested = true
-            selected.QueuedInvested = nil
-            local beforeStep = traitManagement.level(upgraded)
-            local ok, nextTrait = pcall(IncreaseTraitLevel, upgraded)
-            local liveStep = traitManagement.level(upgraded)
-            if not ok then
-              if liveStep == beforeStep then
-                selected.Invested = false
-                selected.QueuedInvested = nil
-              end
-              UpdateTalentPointInvestedCache()
-              error(nextTrait)
-            end
-            if type(nextTrait) ~= "table" or traitManagement.level(nextTrait) <= beforeStep then
-              if liveStep == beforeStep then
-                selected.Invested = false
-                selected.QueuedInvested = nil
-              end
-              UpdateTalentPointInvestedCache()
-              error("Trait level increase did not reach the requested target level")
-            end
-            upgraded = nextTrait
-            if type(base) == "table" and type(base.AcquireFunctionName) == "string" then
-              CallFunctionName(base.AcquireFunctionName, base.AcquireFunctionArgs, upgraded)
-            end
-          end
-          UpdateTalentPointInvestedCache()
-        else
-          local before = traitManagement.level(live)
-          local delta = params.targetLevel - before
-          upgraded = IncreaseTraitLevel(live, delta)
-        end
-        if type(upgraded) ~= "table" or traitManagement.level(upgraded) ~= params.targetLevel then
-          error("Trait level increase did not reach the requested target level")
-        end
-      end, validateLevelTarget)
-    end
-    if command == "set_trait_rarity" then
-      local function validateRarityTarget()
-        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
-        local _, _, rarityCapability = traitManagement.capabilities(target, family, sellEligible, count)
-        local rarities = traitManagement.availableRarities(target)
-        if rarityCapability ~= "setExact" or not traitManagement.targetHasRarity(rarities, params.rarity)
-            or params.rarity == traitManagement.rarity(target) then
-          error("Trait rarity editing is unavailable for the selected target")
-        end
-        if family == "chaos" then
-          requireFunctions("Chaos trait rarity editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
-        elseif family == "hexTalent" then
-          requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
-        elseif family == "keepsake" then
-          if not traitManagement.keepsake.targetRankAvailable(target, params.rarity) then
-            error("Trait rarity editing is unavailable for the selected target")
-          end
-        elseif family == "arcana" then
-          if not traitManagement.arcana.targetRankAvailable(target, params.rarity) then
-            error("Trait rarity editing is unavailable for the selected target")
-          end
-          requireFunctions("Arcana runtime rank editing", {
-            "RemoveWeaponTrait", "AddTraitToHero", "ValidateMaxHealth",
-            "ValidateMaxMana", "HandleWeaponAnimSwaps",
-          })
-        else
-          requireFunctions("trait rarity editing", { "AddRarityToTraits" })
-        end
-        return target, family
-      end
-      return actionLedger.run(command, params, function()
-        local live, family = validateRarityTarget()
-        local upgraded
-        if family == "chaos" then
-          upgraded = traitManagement.rebuildChaosTarget(live, nil, params.rarity)
-        elseif family == "keepsake" then
-          upgraded = traitManagement.keepsake.rebuildRarity(live, params.rarity)
-        elseif family == "arcana" then
-          upgraded = traitManagement.arcana.rebuildRarity(live, params.rarity)
-        else
-          upgraded = AddRarityToTraits({}, {
-            NumTraits = 1,
-            ForceUpgrade = { live },
-            TargetRarityName = params.rarity,
-            Silent = true,
-          })
-        end
-        if type(upgraded) ~= "table" or upgraded.Rarity ~= params.rarity then
-          error("Trait rarity recompute did not reach the requested rarity")
-        end
-      end, validateRarityTarget)
-    end
-    if command == "set_trait_remaining_uses" then
-      local function validateTemporaryDurationTarget()
-        local target, family = traitManagement.resolveTarget(params)
-        if family ~= "temporary" or not traitManagement.temporary.canSet(target) then
-          error("Temporary effect duration editing is unavailable for the selected target")
-        end
-        integer(params.targetRemainingUses, 1)
-        return target
-      end
-      return actionLedger.run(command, params, function()
-        local live = validateTemporaryDurationTarget()
-        traitManagement.temporary.set(live, params.targetRemainingUses)
-      end, validateTemporaryDurationTarget)
-    end
-    if command == "expire_trait" then
-      local function validateTemporaryExpiryTarget()
-        local target, family = traitManagement.resolveTarget(params)
-        if family ~= "temporary" or not traitManagement.temporary.canExpire(target) then
-          error("Temporary effect expiry is unavailable for the selected target")
-        end
-        return target
-      end
-      return actionLedger.run(command, params, function()
-        local live = validateTemporaryExpiryTarget()
-        traitManagement.temporary.expire(live)
-      end, validateTemporaryExpiryTarget)
-    end
-    if command == "remove_trait" then
-      local function validateRemovalTarget()
-        local target, family, sellEligible, count = traitManagement.resolveTarget(params)
-        local _, _, _, _, removalCapability = traitManagement.capabilities(target, family, sellEligible, count)
-        if removalCapability == "none" then
-          error("Trait removal is unavailable for the selected target")
-        end
-        if removalCapability == "nameLevelAllMatching" then
-          requireFunctions("native trait removal", { "RemoveWeaponTrait" })
-        elseif removalCapability == "singleInstanceForce" and family == "hex" then
-          requireFunctions("Selene spell removal", {
-            "HeroHasTrait", "RemoveTrait", "UnequipWeapon", "UpdateTalentPointInvestedCache",
-          })
-        elseif removalCapability == "singleInstanceForce" and family == "hexTalent" then
-          requireFunctions("Selene talent removal", {
-            "RemoveTraitData", "UpdateTalentPointInvestedCache",
-          })
-        elseif removalCapability == "singleInstanceForce" and family == "hammer" then
-          requireFunctions("Hammer trait removal", { "RemoveTraitData" })
-          if type(target) == "table" and type(target.PreEquipWeapons) == "table"
-              and next(target.PreEquipWeapons) ~= nil then
-            requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
-          end
-        elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
-            and traitManagement.directSpecialCostumeArmor(target) then
-          requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
-        elseif removalCapability == "singleInstanceForce" and family == "costume" then
-          requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
-        elseif removalCapability == "singleInstanceForce" and family == "temporary" then
-          requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
-        elseif removalCapability == "singleInstanceForce" and family == "familiar" then
-          if not traitManagement.familiar.removalReady() then
-            error("Familiar owner removal is unavailable")
-          end
-        elseif removalCapability == "singleInstanceForce" and family == "keepsake" then
-          if not traitManagement.keepsake.removalReady() then
-            error("Keepsake owner removal is unavailable")
-          end
-        elseif removalCapability == "singleInstanceForce" then
-          requireFunctions("direct trait removal", { "RemoveTraitData" })
-        else
-          error("Trait removal capability is unknown")
-        end
-        return target, removalCapability, family
-      end
-      return actionLedger.run(command, params, function()
-        local live, removalCapability, family = validateRemovalTarget()
-        if removalCapability == "nameLevelAllMatching" then
-          -- Native SellTraits teardown: deliberately name-level/all-matching.
-          RemoveWeaponTrait(live.Name, { Silent = true })
-          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-            if type(trait) == "table" and trait.Name == live.Name then
-              error("Native trait removal left a matching instance mounted")
-            end
-          end
-        elseif family == "hex" then
-          traitManagement.teardownSlottedSpell()
-          local slotted = seleneModel.currentSpell()
-          if type(slotted) == "table" or HeroHasTrait(live.Name) then
-            error("Selene spell removal left owner state mounted")
-          end
-        elseif family == "hammer" then
-          hammerModel.removeMounted(live)
-        elseif family == "costume" then
-          traitManagement.removeCostume(live)
-        elseif family == "temporary" then
-          traitManagement.temporary.cancel(live)
-        elseif family == "familiar" then
-          traitManagement.familiar.teardown()
-        elseif family == "keepsake" then
-          traitManagement.keepsake.teardown()
-        elseif family == "directSpecial" then
-          traitManagement.removeDirectSpecial(live)
-        elseif family == "hexTalent" then
-          local ok, removalError = pcall(
-            RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
-          )
-          local stillMounted = false
-          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-            if type(trait) == "table" and trait.Name == live.Name then
-              stillMounted = true
-              break
-            end
-          end
-          if not stillMounted then
-            for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
-              nodeEntry.node.Invested = false
-              nodeEntry.node.QueuedInvested = nil
-            end
-            UpdateTalentPointInvestedCache()
-          end
-          if not ok then error(removalError) end
-          if stillMounted then error("Selene talent removal left the mounted effect present") end
-        else
-          -- Bounded object-level force removal for an audited declarative trait.
-          -- SkipExpire prevents a one-shot/reward expiration path from firing;
-          -- capability projection refuses owner state that cannot be torn down here.
-          RemoveTraitData(CurrentRun.Hero, live, { Silent = true, SkipExpire = true })
-          for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-            if type(trait) == "table" and trait.Id ~= nil and tostring(trait.Id) == params.instanceId then
-              error("Direct trait removal left the selected instance mounted")
-            end
-          end
-        end
-      end, validateRemovalTarget)
-    end
-    if command == "advance_trait_lifecycle" then
-      local function validateChaosAdvance()
-        local target, family = traitManagement.resolveTarget(params)
-        if family ~= "chaos" or traitManagement.chaosLifecycleState(target) ~= "curse"
-            or traitManagement.chaosLinkedTraitName(target) == "" then
-          error("Chaos lifecycle transition is unavailable")
-        end
-        requireFunctions("Chaos lifecycle transition", { "RemoveTraitData" })
-        return target, traitManagement.chaosLinkedTraitName(target)
-      end
-      return actionLedger.run(command, params, function()
-        local live, linkedName = validateChaosAdvance()
-        RemoveTraitData(CurrentRun.Hero, live, { Silent = true })
-        local replacement = nil
-        for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
-          if type(trait) == "table" and trait.Id ~= nil
-              and tostring(trait.Id) == params.instanceId then
-            replacement = trait
-            break
-          end
-        end
-        if type(replacement) ~= "table" or replacement.Name ~= linkedName
-            or traitManagement.chaosLifecycleState(replacement) ~= "blessing" then
-          error("Chaos lifecycle transition failed")
-        end
-      end, validateChaosAdvance)
+    if command == "set_trait_level" or command == "set_trait_rarity"
+        or command == "set_trait_remaining_uses" or command == "expire_trait"
+        or command == "remove_trait" or command == "advance_trait_lifecycle" then
+      return traitManagement.mutate(command, params)
     end
     if command == "open_sell_traits" then
       if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end

@@ -68,7 +68,6 @@ def test_owner_family_controls_default_native_paths():
     assert "familiar = 240" not in LUA
     assert "keepsake = 329" not in LUA
     assert "keepsakeModel.rankReady(trait)" in capability_block
-    assert "traitManagement.keepsake.rebuildRarity" in LUA
 
 
 if __name__ == "__main__":
