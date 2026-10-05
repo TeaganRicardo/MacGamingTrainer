@@ -1,5 +1,4 @@
 """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
-import json
 import logging
 import math
 import subprocess
@@ -10,13 +9,12 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 
 from . import preparation
-from .boundary_ledger import execute_with_ledger
-from .catalog import localize_catalog
 from .command_router import Hades2CommandRouter
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
 from .profile_service import Hades2ProfileService
+from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated
 from .schema import (
     MULTIPLIERS,
     STAT_RULES,
@@ -82,26 +80,10 @@ def mark_disconnected(state):
     state['capabilities']=disconnected_capabilities()
 
 
-def lua_value(value):
-    if value is None:return 'nil'
-    if isinstance(value,bool):return 'true' if value else 'false'
-    if isinstance(value,(int,float)):
-        if not math.isfinite(value):raise ValueError('必须输入有限数值。')
-        return str(value)
-    if isinstance(value,str):
-        return '"'+''.join(('\\%03d'%ord(c)) if ord(c)<32 or c in ('"','\\') else c for c in value)+'"'
-    if isinstance(value,dict):return '{'+','.join('['+lua_value(k)+']='+lua_value(v) for k,v in value.items())+'}'
-    raise ValueError('参数类型不支持。')
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
-_TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
-_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
-_TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
-_REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
-
-
 class Hades2Adapter(GameAdapter):
     data_dir = DATA
     def __init__(self, transport=None, context=None):
@@ -119,11 +101,10 @@ class Hades2Adapter(GameAdapter):
         if transport is None:
             from .transport import Hades2LuaTransport
             transport = Hades2LuaTransport()
-        self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
+        self.runtime=Hades2ResidentSession(transport)
         helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
-        self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(self.transport),helper_path,[GAME_SPEC.executable_name])
+        self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name])
         self._time_warp_speed=1.0;self._time_warp_error=None
-        self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
