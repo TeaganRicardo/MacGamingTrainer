@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         calls.append(('save', copy.deepcopy(preferences['gatheringProbabilities'])))
         return original_save(preferences)
     adapter.preference_store.save = save
-    def execute(command, params, **kwargs):
+    def execute(command, params):
         calls.append((command, copy.deepcopy(params)))
         if command == 'set_gathering_probabilities':
             assert json.loads((base/'desired-state.json').read_text())['gatheringProbabilities'] == params['probabilities']
@@ -122,7 +122,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
 
     # Runtime application failure retains desired state for an explicit later
     # reconciliation; it never turns a generation action into a desired field.
-    def failed_apply(command, params, **kwargs): raise TransportError('lua_error', 'fixture unavailable')
+    def failed_apply(command, params): raise TransportError('lua_error', 'fixture unavailable')
     adapter.execute = failed_apply
     try:
         adapter.dispatch('set_gathering_desired', {'family': 'flora', 'probability': 100}, 'pending')
