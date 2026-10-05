@@ -416,6 +416,33 @@ assert first_index("lock_element", element="Water", locked=False) < first_index(
     "set_element", element="Fire", amount=8
 )
 
+release_indexes = [
+    index
+    for index, (command, params) in enumerate(batch)
+    if (
+        command == "set_stat" and params.get("locked") is False
+    ) or (
+        command in ("lock_vital", "lock_resource", "lock_rerolls", "lock_element")
+        and params.get("locked") is False
+    )
+]
+apply_indexes = [
+    index
+    for index, (command, params) in enumerate(batch)
+    if (
+        command == "set_stat" and params.get("locked") is True
+    ) or command in (
+        "set_vital", "set_resource", "set_rerolls", "set_element"
+    ) or (
+        command in ("lock_vital", "lock_resource", "lock_rerolls", "lock_element")
+        and params.get("locked") is True
+    )
+]
+assert release_indexes and apply_indexes
+assert max(release_indexes) < min(apply_indexes), (
+    "all stale locks must release before any desired lock/value is applied"
+)
+
 
 # Request IDs are reconciler-owned and present only on the replay-safe command
 # families that require them.
