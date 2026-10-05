@@ -171,7 +171,7 @@ class Hades2Adapter(GameAdapter):
     def _save_preferences(self):
         try:
             self.preference_store.save(self.preferences)
-        except Exception:
+        except PersistenceError:
             self._preference_persistence_dirty=True
             raise
         self._preference_persistence_dirty=False
