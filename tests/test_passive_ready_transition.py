@@ -5,6 +5,7 @@ model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 host = (ROOT / 'Sources/Core/Host/TrainerHost.swift').read_text()
 contract = (ROOT / 'Sources/Core/Host/TrainerGameModule.swift').read_text()
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
+command_binding = (ROOT / 'Sources/Hades2/Generated/Hades2Command.generated.swift').read_text()
 watcher_path = ROOT / 'Sources/Hades2/Services/Hades2RunLogWatcher.swift'
 assert watcher_path.exists(), 'Hades2 run-log watcher is missing'
 watcher = watcher_path.read_text()
@@ -173,8 +174,7 @@ for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [
 # Propagate that fact to the backend without crossing LLDB, so runtimeReady can
 # bootstrap immediately instead of discovering the missing resident module by
 # executing one doomed status request first.
-assert 'runtimeReset = "runtime_reset"' in api
-assert 'case runtimeReset' in api
+assert 'case runtimeReset = "runtime_reset"' in command_binding
 assert 'send(.runtimeReset' in event_block
 assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
 

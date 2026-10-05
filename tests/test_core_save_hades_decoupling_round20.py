@@ -7,7 +7,7 @@ host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8"
 
 assert not (backend / "save_service.py").exists(), "Hades save service must be removed"
 
-router = (backend / "command_router.py").read_text(encoding="utf-8")
+command_contract = (backend / "command_contract.py").read_text(encoding="utf-8")
 preparation = (backend / "preparation.py").read_text(encoding="utf-8")
 api = (sources / "Hades2API.swift").read_text(encoding="utf-8")
 model = (sources / "Hades2Model.swift").read_text(encoding="utf-8")
@@ -30,7 +30,7 @@ for token in (
     "backup_saves",
     "restore_saves",
 ):
-    assert token not in router, token
+    assert token not in command_contract, token
     assert token not in preparation, token
 
 for token in (
