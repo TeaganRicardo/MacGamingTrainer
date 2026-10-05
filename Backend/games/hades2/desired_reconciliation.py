@@ -7,7 +7,7 @@ execution and post-batch confirmation. It never mutates or persists desired stat
 from dataclasses import dataclass
 import copy
 import logging
-import time
+import uuid
 
 from .resident_session import ResidentReply
 from .schema import MULTIPLIERS, TOGGLES, VITALS
@@ -69,7 +69,7 @@ class Hades2DesiredStateReconciler:
     def __init__(self, resident_session, request_id_factory=None):
         self._resident_session = resident_session
         self._request_id_factory = request_id_factory or (
-            lambda: f"replay-{time.time_ns()}"
+            lambda: f"replay-{uuid.uuid4().hex}"
         )
 
     def reconcile(self, desired, observed, *, force_full=False):
