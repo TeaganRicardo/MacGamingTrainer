@@ -179,6 +179,31 @@ assert '"hades2.spawn.exactSource": "Source"' in en_presentation
 assert '"hades2.spawn.exactTarget": "祝福 / 效果"' in zh_presentation
 assert '"hades2.spawn.exactTarget": "Boon / Effect"' in en_presentation
 
+# #347: Chaos is a dedicated two-sided lifecycle acquisition rather than two
+# independent rows in the generic Exact Boon navigator.
+assert '@ViewState<String> private var chaosBlessingSelection = ""' in view
+assert '@ViewState<String> private var chaosCurseSelection = ""' in view
+assert 'private var chaosBlessingOptions: [BoonOption]' in view
+assert 'private var chaosCurseOptions: [BoonOption]' in view
+assert '$0.acquisitionMode == "chaosBlessing"' in view
+assert '$0.acquisitionMode == "chaosCurse"' in view
+assert 'private func repairChaosPairSelections()' in view
+
+chaos_pair_surface = exact_surface[
+    exact_surface.index('hades2.spawn.chaosPair'):
+    exact_surface.index('hades2.spawn.exactSource')
+]
+assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection)' in chaos_pair_surface
+assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection)' in chaos_pair_surface
+assert 'model.acquireChaosPair(' in chaos_pair_surface
+assert chaos_pair_surface.count('Button(text("hades2.spawn.acquire"))') == 1
+assert '"hades2.spawn.chaosPair": "卡俄斯配对"' in zh_presentation
+assert '"hades2.spawn.chaosPair": "Chaos Pair"' in en_presentation
+assert '"hades2.spawn.chaosBlessing": "祝福"' in zh_presentation
+assert '"hades2.spawn.chaosBlessing": "Blessing"' in en_presentation
+assert '"hades2.spawn.chaosCurse": "诅咒"' in zh_presentation
+assert '"hades2.spawn.chaosCurse": "Curse"' in en_presentation
+
 # Selene exact acquisition uses the official Hex menu title for main spells and
 # the official Path of Stars title for generated current-tree talent targets.
 original_display_names = localization.official_display_names

@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 75 then
+if previousModule and previousModule.revision ~= 77 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 75 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 75, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 77, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -5049,6 +5049,7 @@ if __MacGamingTrainerV1 == nil then
       remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
+      acquire_chaos_pair = { "blessing", "curse" },
       spawn_reward = { "reward" },
     }
     local knownActionStatuses = { completed = true, accepted = true, opened = true, failed = true }
@@ -5961,6 +5962,87 @@ if __MacGamingTrainerV1 == nil then
         end
         thread(runChoice)
         return nil, "accepted"
+      end)
+    end
+    if command == "acquire_chaos_pair" then
+      local pairSource = nil
+      local function containsName(list, wanted)
+        if type(list) ~= "table" then return false end
+        for _, value in pairs(list) do
+          local name = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
+          if name == wanted then return true end
+        end
+        return false
+      end
+      return actionLedger.run(command, params, function()
+        local source = pairSource
+        if type(source) ~= "table" then error("Chaos exact acquisition is unavailable") end
+        SetTraitsOnLoot(source)
+        local option = nil
+        for _, candidate in pairs(source.UpgradeOptions or {}) do
+          if type(candidate) == "table"
+              and candidate.ItemName == params.blessing
+              and candidate.SecondaryItemName == params.curse then
+            option = candidate
+            break
+          end
+        end
+        if type(option) ~= "table" then error("Chaos exact acquisition is unavailable") end
+        local rarity = option.Rarity or "Common"
+        local blessing = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = params.blessing, Rarity = rarity,
+        })
+        local curse = GetProcessedTraitData({
+          Unit = CurrentRun.Hero, TraitName = params.curse, Rarity = rarity,
+        })
+        if type(blessing) ~= "table" or type(curse) ~= "table" then
+          error("Chaos exact acquisition failed")
+        end
+        curse.OnExpire = curse.OnExpire or {}
+        curse.OnExpire.TraitData = blessing
+        curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
+        local added = AddTraitToHero({
+          TraitData = curse,
+          PreProcessedForDisplay = true,
+          FromLoot = true,
+        })
+        if type(added) ~= "table" then error("Chaos exact acquisition failed") end
+        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
+        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
+        return nil
+      end, function()
+        if not ready() or sceneName() ~= "run" then error("Chaos exact acquisition is unavailable") end
+        if type(ScreenState) == "table" and ScreenState.InTransition then
+          error("Chaos exact acquisition is unavailable")
+        end
+        if type(params.blessing) ~= "string" or params.blessing == ""
+            or type(params.curse) ~= "string" or params.curse == "" then
+          error("Chaos exact acquisition is unavailable")
+        end
+        requireFunctions("exact Chaos pair acquisition", {
+          "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
+          "GetProcessedTraitData", "AddTraitToHero",
+        })
+        local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
+        if type(source) ~= "table" or not source.TransformingTraits
+            or type(TraitData) ~= "table"
+            or type(TraitData[params.blessing]) ~= "table"
+            or type(TraitData[params.curse]) ~= "table"
+            or not containsName(source.PermanentTraits, params.blessing)
+            or not containsName(source.TemporaryTraits, params.curse) then
+          error("Chaos exact acquisition is unavailable")
+        end
+        local eligibleBlessings = GetEligibleTransformingTrait({ params.blessing })
+        local eligibleCurses = GetEligibleTransformingTrait({ params.curse })
+        if not containsName(eligibleBlessings, params.blessing)
+            or not containsName(eligibleCurses, params.curse) then
+          error("Chaos exact acquisition is unavailable")
+        end
+        pairSource = DeepCopyTable(source)
+        pairSource.PermanentTraits = { params.blessing }
+        pairSource.TemporaryTraits = { params.curse }
+        pairSource.UpgradeOptions = nil
+        pairSource.Rarity = nil
       end)
     end
     if command == "spawn_reward" then

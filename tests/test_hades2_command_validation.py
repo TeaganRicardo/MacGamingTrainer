@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from games.hades2.command_router import Hades2CommandRouter
 from games.hades2.command_validation import validate_command_params
 
 
@@ -96,6 +97,20 @@ assert validate_command_params(
 assert validate_command_params(
     "spawn_reward", {"reward": "EmptyMaxHealthDrop"}
 ) == {"reward": "EmptyMaxHealthDrop"}
+assert validate_command_params(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"},
+) == {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"}
+expect_error(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing"},
+    "请选择掉落物或祝福。",
+)
+expect_error(
+    "acquire_chaos_pair",
+    {"blessing": "", "curse": "ChaosDamageCurse"},
+    "请选择掉落物或祝福。",
+)
 assert validate_command_params(
     "open_sell_traits", {}
 ) == {}
@@ -217,5 +232,30 @@ expect_error(
 original = {"ignored": "value"}
 validated = validate_command_params("status", original)
 assert validated == original and validated is not original
+
+class RuntimeProbe:
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, command, params):
+        self.calls.append((command, params))
+        return {"ok": True}
+
+probe = RuntimeProbe()
+router = Hades2CommandRouter(probe)
+result = router.dispatch(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"},
+    "chaos-pair-router-request",
+)
+assert result == {"ok": True}
+assert probe.calls == [(
+    "acquire_chaos_pair",
+    {
+        "blessing": "ChaosHealthBlessing",
+        "curse": "ChaosDamageCurse",
+        "requestId": "chaos-pair-router-request",
+    },
+)]
 
 print("hades2_command_validation_ok")

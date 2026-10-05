@@ -153,8 +153,8 @@
       "key": "hades2.error.elementRange"
     },
     "剩余次数必须为 1–999999 的整数。": {
-      "key": "hades2.error.remainingUsesRange",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.remainingUsesRange"
     },
     "功能代码过长。": {
       "arguments": [],
@@ -997,8 +997,8 @@
       "key": "hades2.error.disconnectBeforePrepare"
     },
     "请选择当前局效果。": {
-      "key": "hades2.error.selectCurrentTrait",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.selectCurrentTrait"
     },
     "请选择当前局祝福。": {
       "arguments": [],
@@ -1125,6 +1125,37 @@
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
   "runtime": {
+    "acquire_chaos_pair::Action requires a requestId of 1..128 characters": {
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
+    },
+    "acquire_chaos_pair::Chaos exact acquisition failed": {
+      "arguments": [],
+      "key": "hades2.error.chaosExactFailed"
+    },
+    "acquire_chaos_pair::Chaos exact acquisition is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.chaosExactUnavailable"
+    },
+    "acquire_chaos_pair::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
+    },
+    "acquire_chaos_pair::Selected boon is already owned": {
+      "arguments": [],
+      "key": "hades2.error.exactAlreadyOwned"
+    },
+    "acquire_chaos_pair::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "acquire_chaos_pair::requestId reused for a different action": {
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
+    },
     "advance_trait_lifecycle::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1173,55 +1204,55 @@
       "key": "hades2.error.requestIdReused"
     },
     "expire_trait::Action requires a requestId of 1..128 characters": {
-      "key": "hades2.error.requestIdRequired",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
     },
     "expire_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "key": "hades2.error.outcomeUnknownRuntime",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
     },
     "expire_trait::Temporary effect duration did not reach the requested remaining uses": {
-      "key": "hades2.error.traitDurationNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitDurationNoEffect"
     },
     "expire_trait::Temporary effect expiry is unavailable for the selected target": {
-      "key": "hades2.error.traitExpiryUnavailable",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitExpiryUnavailable"
     },
     "expire_trait::Temporary effect expiry left the selected instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "expire_trait::Trait instance is no longer present": {
-      "key": "hades2.error.traitTargetMissing",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
     },
     "expire_trait::Trait mutation requires an active run room": {
-      "key": "hades2.error.traitMutationNeedsRun",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "expire_trait::Trait selection belongs to a stale run": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "expire_trait::Trait selection belongs to a stale runtime generation": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "expire_trait::Trait target changed since selection": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "expire_trait::Unsupported sample-purpose: missing SampleFunction": {
-      "key": "hades2.error.nativeFunctionMissing",
       "arguments": [
         "sample-purpose",
         "SampleFunction"
-      ]
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     },
     "expire_trait::requestId reused for a different action": {
-      "key": "hades2.error.requestIdReused",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
@@ -1289,6 +1320,26 @@
       "arguments": [],
       "key": "hades2.error.traitRemovalNoEffect"
     },
+    "remove_trait::Familiar owner removal is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalUnavailable"
+    },
+    "remove_trait::Familiar owner removal left a mounted trait": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
+    },
+    "remove_trait::Familiar owner removal left the owner equipped": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
+    },
+    "remove_trait::Keepsake owner removal is unavailable": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalUnavailable"
+    },
+    "remove_trait::Keepsake owner removal left the selected trait mounted": {
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
+    },
     "remove_trait::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
       "arguments": [],
       "key": "hades2.error.outcomeUnknownRuntime"
@@ -1298,16 +1349,16 @@
       "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::Selene spell removal left owner state mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::Selene talent removal left the mounted effect present": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::Temporary effect cancellation left the selected instance mounted": {
-      "key": "hades2.error.traitRemovalNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitRemovalNoEffect"
     },
     "remove_trait::Trait instance is no longer present": {
       "arguments": [],
@@ -1365,12 +1416,12 @@
       "key": "hades2.error.outcomeUnknownRuntime"
     },
     "set_trait_level::Not enough uninvested Path of Stars nodes remain for the requested level": {
-      "key": "hades2.error.traitLevelNoLongerEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitLevelNoLongerEligible"
     },
     "set_trait_level::Selene talent tree changed before the requested level was applied": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "set_trait_level::Trait instance is no longer present": {
       "arguments": [],
@@ -1475,51 +1526,51 @@
       "key": "hades2.error.requestIdReused"
     },
     "set_trait_remaining_uses::Action requires a requestId of 1..128 characters": {
-      "key": "hades2.error.requestIdRequired",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdRequired"
     },
     "set_trait_remaining_uses::MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry": {
-      "key": "hades2.error.outcomeUnknownRuntime",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.outcomeUnknownRuntime"
     },
     "set_trait_remaining_uses::Temporary effect duration did not reach the requested remaining uses": {
-      "key": "hades2.error.traitDurationNoEffect",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitDurationNoEffect"
     },
     "set_trait_remaining_uses::Temporary effect duration editing is unavailable for the selected target": {
-      "key": "hades2.error.traitDurationUnavailable",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitDurationUnavailable"
     },
     "set_trait_remaining_uses::Trait instance is no longer present": {
-      "key": "hades2.error.traitTargetMissing",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetMissing"
     },
     "set_trait_remaining_uses::Trait mutation requires an active run room": {
-      "key": "hades2.error.traitMutationNeedsRun",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitMutationNeedsRun"
     },
     "set_trait_remaining_uses::Trait selection belongs to a stale run": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_remaining_uses::Trait selection belongs to a stale runtime generation": {
-      "key": "hades2.error.traitSelectionStale",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitSelectionStale"
     },
     "set_trait_remaining_uses::Trait target changed since selection": {
-      "key": "hades2.error.traitTargetChanged",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.traitTargetChanged"
     },
     "set_trait_remaining_uses::Unsupported sample-purpose: missing SampleFunction": {
-      "key": "hades2.error.nativeFunctionMissing",
       "arguments": [
         "sample-purpose",
         "SampleFunction"
-      ]
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
     },
     "set_trait_remaining_uses::requestId reused for a different action": {
-      "key": "hades2.error.requestIdReused",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.requestIdReused"
     },
     "spawn_reward::Arachne costume acquisition failed": {
       "arguments": [],
@@ -1550,8 +1601,8 @@
       "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Mounted Selene talent is unavailable": {
-      "key": "hades2.error.exactNotEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Selected boon became unavailable before acquisition": {
       "arguments": [],
@@ -1566,24 +1617,24 @@
       "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Selene spell acquisition failed": {
-      "key": "hades2.error.seleneExactFailed",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.seleneExactFailed"
     },
     "spawn_reward::Selene spell target is unavailable": {
-      "key": "hades2.error.exactNotEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Selene talent acquisition failed": {
-      "key": "hades2.error.seleneExactFailed",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.seleneExactFailed"
     },
     "spawn_reward::Selene talent is no longer available in the current Path of Stars": {
-      "key": "hades2.error.exactNotEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Selene talent is unavailable for the current Path of Stars": {
-      "key": "hades2.error.exactNotEligible",
-      "arguments": []
+      "arguments": [],
+      "key": "hades2.error.exactNotEligible"
     },
     "spawn_reward::Unsupported sample-purpose: missing SampleFunction": {
       "arguments": [
@@ -1591,29 +1642,10 @@
         "SampleFunction"
       ],
       "key": "hades2.error.nativeFunctionMissing"
-    },
-    "remove_trait::Familiar owner removal is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalUnavailable"
-    },
-    "remove_trait::Familiar owner removal left a mounted trait": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNoEffect"
-    },
-    "remove_trait::Familiar owner removal left the owner equipped": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNoEffect"
-    },
-    "remove_trait::Keepsake owner removal is unavailable": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalUnavailable"
-    },
-    "remove_trait::Keepsake owner removal left the selected trait mounted": {
-      "arguments": [],
-      "key": "hades2.error.traitRemovalNoEffect"
     }
   },
   "runtime_commands": [
+    "acquire_chaos_pair",
     "advance_trait_lifecycle",
     "expire_trait",
     "open_sell_traits",
