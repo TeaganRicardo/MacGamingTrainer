@@ -11,6 +11,7 @@ from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
+from games.hades2.schema import TOGGLES
 from core.process_time_warp import ProcessTimeWarpError
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
@@ -42,8 +43,8 @@ class FakeTransport:
             "scene": "run",
             "capabilities": {"setFeature": True},
             "featureSupport": {},
-            "desiredFeatures": {},
-            "activeFeatures": {},
+            "desiredFeatures": {key: False for key in TOGGLES},
+            "activeFeatures": {key: False for key in TOGGLES},
             "dormantFeatures": {},
             "featureErrors": {},
             "damageMultiplier": 2.0,
