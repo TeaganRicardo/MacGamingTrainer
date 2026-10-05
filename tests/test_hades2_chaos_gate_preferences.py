@@ -8,12 +8,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
 from games.hades2.command_validation import validate_command_params
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 assert Hades2PreferenceStore.defaults()['chaosGateProbability'] is None
 assert DESIRED_STATE_SCHEMA_VERSION == 7 and PROFILE_SCHEMA_VERSION == 6
@@ -101,7 +103,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert adapter.preferences['chaosGateProbability'] == 100 and adapter.preference_dirty
     adapter.execute = execute
     adapter.state['chaosGateProbability'] = None
-    adapter._runtime_bootstrapped = False
     adapter._replay_preferences()
     batch = calls[-1][2]['batch']
     assert ('set_chaos_gate_probability', {'probability': 100}) in batch
@@ -143,22 +144,28 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         else: raise AssertionError('future embedded desired schema accepted')
     assert path.read_bytes() == before_bytes and not list(path.parent.glob('*.corrupt*'))
 
-    # Exercise the real adapter execution boundary as well: a prepersisted
-    # native setter must not capture/save a second time after its reply.
-    class ReplyTransport(Transport):
-        live = True
-        last_duration = 0
-        sources = None
-        def __init__(self): self.sources = []
-        def execute(self, source):
-            self.sources.append(source)
-            assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == 0
-            return json.dumps({'status': 'ready', 'scene': 'run', 'chaosGateProbability': 0})
-    reply_transport = ReplyTransport()
-    real = Hades2Adapter(transport=reply_transport)
+    # Exercise the real Adapter -> resident-session boundary as well: a
+    # prepersisted native setter must not save a second time after its reply.
+    session_calls = []
+    def session_handler(session, record):
+        session_calls.append(copy.deepcopy(record))
+        assert record['kind'] == 'mutate'
+        assert record['command'] == 'set_chaos_gate_probability'
+        assert record['params'] == {'probability': 0}
+        assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == 0
+        return {'status': 'ready', 'scene': 'run', 'chaosGateProbability': 0}
+
+    reply_session = FakeResidentSession(
+        {'status': 'ready', 'scene': 'run', 'chaosGateProbability': None},
+        handler=session_handler,
+        pid=123,
+    )
+    real = Hades2Adapter(
+        resident_session=reply_session,
+        time_warp_controller=FakeTimeWarpController(),
+    )
     real.state.update(status='ready', connected=True)
     real.preference_initialized = True
-    real._runtime_bootstrapped = True
     writes = []
     real_save = real.preference_store.save
     def count_save(values):
@@ -167,7 +174,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     real.preference_store.save = count_save
     result = real.dispatch('set_chaos_gate_desired', {'probability': 0}, 'real-boundary')
     assert result['chaosGateProbability'] == 0 and len(writes) == 1
-    assert len(reply_transport.sources) == 1
-    assert '__MacGamingTrainerV1.dispatch("set_chaos_gate_probability",' in reply_transport.sources[0]
+    assert len(session_calls) == 1
+
 
 print('hades2_chaos_gate_preferences_ok')
