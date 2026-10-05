@@ -356,6 +356,14 @@ class Hades2ResidentSession:
             boundary_duration = getattr(self._transport, "last_duration", 0.0)
             if type(boundary_duration) not in (int, float) or boundary_duration <= 0:
                 boundary_duration = time.monotonic() - started
+            metrics = ResidentMetrics(
+                boundary_duration=boundary_duration,
+                json_duration=json_duration,
+                localize_duration=localize_duration,
+                expression_duration=(
+                    getattr(self._transport, "last_expression_duration", 0.0) or 0.0
+                ),
+            )
             if crossed:
                 self._transport.tainted = True
             logging.info(
@@ -367,13 +375,19 @@ class Hades2ResidentSession:
                 bool(replay),
                 bool(read_only),
                 type(error).__name__ if crossed else "none",
-                getattr(self._transport, "last_expression_duration", 0.0) or 0.0,
+                metrics.expression_duration,
             )
             if crossed:
-                raise AdapterError(
+                unknown = AdapterError(
                     "outcome_unknown",
                     "游戏调用结果不明，未自动重试；请检查游戏并重启。",
-                ) from error
+                )
+                unknown.resident_metrics = metrics
+                raise unknown from error
+            try:
+                error.resident_metrics = metrics
+            except Exception:
+                pass
             raise
 
         metrics = ResidentMetrics(
