@@ -72,7 +72,7 @@ try:
     stream.truncate(0)
     transport.fail = AdapterError('waiting', 'simulated wait')
     try:
-        adapter.execute('status', {}, replay=True)
+        adapter.execute('status', {})
     except AdapterError as error:
         assert error.code == 'waiting'
     else:
@@ -82,7 +82,7 @@ try:
     assert 'duration=0.125s' in log
     assert 'outcome=waiting' in log
     assert 'crossed_transport=no' in log
-    assert 'replay=True' in log
+    assert 'replay=False' in log
 
     # A boundary call that returns but violates the host JSON contract records
     # the decode failure rather than claiming the request outcome was successful.
