@@ -258,6 +258,7 @@
     "hades2.receipt.openPurgingPool": "打开{term:officialTerms.purgingPool}",
     "hades2.receipt.opened": "{0}已打开",
     "hades2.receipt.outcomeUnknown": "{0}结果不明，请重新连接后检查游戏状态",
+    "hades2.receipt.rerollOutcomeUnknown": "{0}结果不明，未自动重试；请检查游戏状态并重新启动 Hades II",
     "hades2.receipt.traitLevelAction": "祝福等级修改",
     "hades2.receipt.traitRarityAction": "祝福稀有度修改",
     "hades2.receipt.traitDurationAction": "临时效果次数修改",
@@ -390,7 +391,16 @@
     "hades2.vital.health": "{term:officialTerms.health}",
     "hades2.vital.lockedSuffix": "已锁定",
     "hades2.vital.mana": "{term:officialTerms.mana}",
-    "hades2.vital.runGold": "本局金币"
+    "hades2.vital.runGold": "本局金币",
+    "hades2.reroll.action": "重新随机当前选项",
+    "hades2.reroll.cost": "消耗 {0} 次重塑命运",
+    "hades2.reroll.noMenu": "请打开奖励选择界面后刷新。",
+    "hades2.reroll.unsupported": "当前选项没有已支持的可变候选池。",
+    "hades2.reroll.unavailable": "当前奖励界面无法重新随机，请关闭后刷新。",
+    "hades2.reroll.transition": "等待当前选择操作结束后刷新。",
+    "hades2.reroll.unaffordable": "重塑命运次数不足。",
+    "hades2.reroll.stale": "奖励界面或消耗已变化，请刷新后重试。",
+    "hades2.reroll.empty": "没有足够的不同且符合条件的候选，不会消耗次数。"
   },
   "language": "zh-CN"
 }

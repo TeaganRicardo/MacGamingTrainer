@@ -84,12 +84,13 @@ def test_legacy_aliases_and_internal_terms_are_not_user_facing():
     assert all(not term.user_facing for term in internal)
 
 
-def test_chaos_selector_roles_use_declared_trainer_product_pairs():
+def test_frontend_roles_use_declared_trainer_product_pairs():
     registry = load_hades2_terminology()
     labels = {
-        "chaosPair": "chaosPair",
-        "chaosBlessingSelector": "chaosBlessing",
-        "chaosCurseSelector": "chaosCurse",
+        "chaosPair": "hades2.spawn.chaosPair",
+        "chaosBlessingSelector": "hades2.spawn.chaosBlessing",
+        "chaosCurseSelector": "hades2.spawn.chaosCurse",
+        "rerollCurrentChoices": "hades2.reroll.action",
     }
     tables = {
         language: json.loads(
@@ -101,7 +102,7 @@ def test_chaos_selector_roles_use_declared_trainer_product_pairs():
         term = registry.get(f"productTerms.{term_id}")
         assert term.term_class is TermClass.TRAINER_PRODUCT
         assert term.reason and term.localization_id is None
-        key = f"hades2.spawn.{presentation_id}"
+        key = presentation_id
         assert tables["zh-CN"][key] == term.zh_cn
         assert tables["en"][key] == term.english
 
@@ -211,7 +212,7 @@ for _test in (
     test_native_terms_keep_shared_localization_provenance,
     test_product_terms_are_explicit_trainer_owned_pairs,
     test_legacy_aliases_and_internal_terms_are_not_user_facing,
-    test_chaos_selector_roles_use_declared_trainer_product_pairs,
+    test_frontend_roles_use_declared_trainer_product_pairs,
     test_registry_rejects_native_term_without_provenance,
     test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms,
     test_registry_rejects_mismatched_native_bilingual_source_pair,

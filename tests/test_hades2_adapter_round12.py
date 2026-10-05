@@ -161,10 +161,10 @@ assert len(mutation_transport.sources) == 1
 assert mutation_adapter._runtime_bootstrapped is False
 assert mutation_adapter._catalog_initialized is False
 assert mutation_adapter.preference_dirty is True
-assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 9
+assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 10
 assert a.state['version'] == '1.143476'
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
-assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 9
+assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 10
 
 # A process-query failure is not evidence that Hades stopped. Preserve the
 # existing debugger/session state and surface the query error instead of

@@ -131,9 +131,9 @@ assert 'source.ObjectId = -1' in block, "native selection cleanup needs only a n
 assert 'local syntheticName = "MacGamingTrainerSpecial_" .. params.source' in block
 native_name_assignment = block.index('source.Name = syntheticName')
 assert native_name_assignment > block.index('SetTraitsOnLoot(source)'), "loot-style choices must build from the native source name"
-assert native_name_assignment > block.index('IsGameStateEligible(source, option.GameStateRequirements)'), "fixed choices must evaluate requirements against the native source name"
+assert native_name_assignment > block.index('choiceReroll.fixedPlan(source, definition)'), "fixed choices must evaluate requirements against the native source name"
 assert 'SetupCostume' in block, "Arachne choice must preserve costume application"
-assert 'DoubleFamiliarTrait' in block and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
+assert 'DoubleFamiliarTrait' in lua and 'SessionMapState.OldFamiliarTrait' in block, "Circe choice must preserve native familiar preprocessing"
 assert 'ownerRun.LastReward' in block, "Echo choice must preserve transaction-owned last-reward semantics"
 
 # Echo's synthetic LastReward fallback is transaction-local. It is injected
@@ -157,12 +157,12 @@ assert 'M.specialChoiceOpens = {}' in block
 assert 'M.specialChoiceOpens[params.source] = (M.specialChoiceOpens[params.source] or 0) + 1' in block
 assert 'RandomSynchronize(8 + M.specialChoiceOpens[params.source])' in block
 assert 'RandomSynchronize(9)' not in block
-assert 'option.Type ~= "Trait"' in block
-assert 'type(option.ItemName) == "string"' in block
-assert 'type(TraitData[option.ItemName]) == "table"' in block
-assert 'HeroHasTrait(option.ItemName)' in block
-assert 'CurrentRun.PickedTraits[option.ItemName]' in block
-assert 'IsTraitEligible' not in block, "fixed NPC choices must preserve their native eligibility rules"
+fixed = lua[lua.index('local function fixedOptions'):lua.index('local function previousRarity')]
+assert 'option.Type ~= "Trait"' in fixed
+assert 'type(TraitData[option.ItemName]) == "table"' in fixed
+assert 'HeroHasTrait(option.ItemName)' in fixed
+assert '(target.run.PickedTraits or {})[option.ItemName]' in fixed
+assert 'IsTraitEligible' not in fixed, "fixed NPC choices must preserve their native eligibility rules"
 assert 'AddTraitToHero' not in block
 assert 'hadLootChoiceHistory' in block
 assert 'CurrentRun.LootChoiceHistory = nil' in block

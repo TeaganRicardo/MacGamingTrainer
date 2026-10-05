@@ -40,6 +40,13 @@ struct Hades2PresentationReference: Equatable {
     let arguments: [String]
 }
 
+struct Hades2ChoiceRerollSnapshot {
+    let available: Bool
+    let menuToken: String?
+    let cost: Int?
+    let reason: String?
+}
+
 /// Typed boundary between the untyped JSON transport envelope and Hades UI
 /// state. All backend field names are centralized here instead of being spread
 /// through the ObservableObject and Views.
@@ -66,6 +73,7 @@ struct Hades2StatePatch {
     let nextRoomReward: Hades2FieldPatch<String>
     let rerolls: Hades2FieldPatch<Double>
     let rerollsLocked: Bool?
+    let choiceReroll: Hades2FieldPatch<Hades2ChoiceRerollSnapshot>
 
     let warningText: Hades2FieldPatch<String>
     let boons: [BoonOption]?
@@ -128,6 +136,19 @@ struct Hades2StatePatch {
         nextRoomReward = Self.field(payload, "nextRoomReward", String.self)
         rerolls = Self.numberField(payload, "rerolls")
         rerollsLocked = payload["rerollsLocked"] as? Bool
+        if let row = payload["choiceReroll"] as? [String: Any], let available = row["available"] as? Bool {
+            let token = row["menuToken"] as? String
+            let cost = Self.number(row["cost"]).flatMap { value -> Int? in
+                guard value.isFinite, value >= 1, value <= 999_999, value.rounded() == value else { return nil }
+                return Int(value)
+            }
+            if available && (token?.isEmpty != false || (token?.count ?? 0) > 128 || cost == nil) {
+                choiceReroll = .present(nil)
+            } else {
+                choiceReroll = .present(.init(available: available, menuToken: token,
+                    cost: cost, reason: row["reason"] as? String))
+            }
+        } else { choiceReroll = payload.keys.contains("choiceReroll") ? .present(nil) : .absent }
 
         if let warnings = payload["warnings"] {
             warningText = .present((warnings as? [String])?.joined(separator: "\n"))

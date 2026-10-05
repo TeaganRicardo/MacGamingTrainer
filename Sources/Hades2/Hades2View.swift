@@ -346,6 +346,19 @@ struct Hades2TrainerView: View {
             .buttonStyle(.plain)
         }
         sessionStatsPanel
+        if let reroll = model.choiceReroll {
+            HStack(spacing: 12) {
+                Button(text("hades2.reroll.action")) { model.rerollCurrentChoice() }
+                    .disabled(!model.canRerollCurrentChoice)
+                if let cost = reroll.cost {
+                    Text(Hades2GameModule.presentationText(key: "hades2.reroll.cost", arguments: [String(cost)], language: localization.language))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let reason = reroll.reason {
+                    Text(text(reason)).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private var combatSection: some View {

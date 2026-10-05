@@ -18,7 +18,7 @@ from .runtime_error_presentation import present_runtime_error
 _RUNTIME_COMMANDS = frozenset((
     'status','disable_all','set_desired','set_vital','set_counter','lock_vital',
     'set_stat','set_element','lock_element','set_resource','lock_resource',
-    'set_rerolls','lock_rerolls','spawn_reward','acquire_chaos_pair','open_sell_traits',
+    'set_rerolls','lock_rerolls','reroll_choice','spawn_reward','acquire_chaos_pair','open_sell_traits',
     'open_special_choice','set_trait_level','set_trait_rarity','set_trait_remaining_uses',
     'expire_trait','remove_trait','advance_trait_lifecycle',
 ))
@@ -28,7 +28,7 @@ _RUNTIME_COMMANDS = frozenset((
 # of the same id is deduplicated by the resident runtime, and an outcome-unknown
 # request is never auto-retried.
 _REQUEST_ID_COMMANDS = frozenset((
-    'set_resource','set_rerolls','spawn_reward','acquire_chaos_pair','open_sell_traits',
+    'set_resource','set_rerolls','reroll_choice','spawn_reward','acquire_chaos_pair','open_sell_traits',
     'open_special_choice','lock_resource','lock_rerolls',
     'set_trait_level','set_trait_rarity','set_trait_remaining_uses',
     'expire_trait','remove_trait','advance_trait_lifecycle',

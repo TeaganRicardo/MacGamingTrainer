@@ -107,6 +107,12 @@ def validate_command_params(command, params):
         if not isinstance(source,str) or not source:
             raise ValueError('请选择支持原生奖励选择界面的角色。')
 
+    if command=='reroll_choice':
+        token=params.get('menuToken')
+        cost=params.get('expectedCost')
+        if not isinstance(token,str) or not 1<=len(token)<=128 or type(cost) is not int or not 1<=cost<=MAX_AMOUNT:
+            raise ValueError('请刷新后重新随机当前选项。')
+
     trait_mutations=(
         'set_trait_level','set_trait_rarity','set_trait_remaining_uses',
         'expire_trait','remove_trait','advance_trait_lifecycle',

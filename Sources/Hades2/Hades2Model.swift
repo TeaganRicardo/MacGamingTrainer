@@ -165,6 +165,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var resourceMultiplierEnabled = false
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
+    @Published private(set) var choiceReroll: Hades2ChoiceRerollSnapshot?
     @Published var boons: [BoonOption] = []
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
@@ -227,6 +228,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
+    var canRerollCurrentChoice: Bool { canOpenNativeBoonScreen && protocolCompatible && choiceReroll?.available == true }
     var exactBoonOptions: [BoonOption] {
         boons.filter { $0.group == "exact" }
     }
@@ -487,6 +489,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !armorLocked { armor = nil }
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
+        choiceReroll = nil
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
         if !critLocked { critValue = nil }
@@ -573,6 +576,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
+        if patch.choiceReroll.isPresent { choiceReroll = patch.choiceReroll.value }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons { boons = value }
@@ -675,6 +679,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch command {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
+        case .rerollChoice: title = presentation("hades2.reroll.action")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
         case .setTraitRemainingUses: title = presentation("hades2.receipt.traitDurationAction")
@@ -697,7 +702,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             errorToken = presentation("hades2.receipt.failed", arguments: [title.key])
         case .outcomeUnknown:
             noticeToken = nil
-            errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
+            errorToken = presentation(command == .rerollChoice ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
             noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }
@@ -922,6 +927,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func lockRerolls(_ locked: Bool) {
         guard canSetResource else { return }
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
+    }
+
+    func rerollCurrentChoice() {
+        guard canRerollCurrentChoice, let target = choiceReroll, let token = target.menuToken, let cost = target.cost else { return }
+        send(.rerollChoice(menuToken: token, expectedCost: cost), title: "hades2.reroll.action", announceSuccess: false)
     }
 
     func setStat(_ stat: String, text: String, locked: Bool) {

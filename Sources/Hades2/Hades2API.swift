@@ -13,6 +13,7 @@ enum Hades2Command: String {
     case lockResource = "lock_resource"
     case setRerolls = "set_rerolls"
     case lockRerolls = "lock_rerolls"
+    case rerollChoice = "reroll_choice"
     case setStat = "set_stat"
     case setElement = "set_element"
     case lockElement = "lock_element"
@@ -51,6 +52,7 @@ enum Hades2Request {
     case lockResource(resource: String, locked: Bool)
     case setRerolls(amount: Int)
     case lockRerolls(locked: Bool)
+    case rerollChoice(menuToken: String, expectedCost: Int)
     case setStat(stat: String, locked: Bool, value: Any?)
     case setElement(element: String, amount: Int)
     case lockElement(element: String, locked: Bool)
@@ -91,6 +93,7 @@ enum Hades2Request {
         case .lockResource: return .lockResource
         case .setRerolls: return .setRerolls
         case .lockRerolls: return .lockRerolls
+        case .rerollChoice: return .rerollChoice
         case .setStat: return .setStat
         case .setElement: return .setElement
         case .lockElement: return .lockElement
@@ -196,6 +199,8 @@ enum Hades2Request {
             return ["amount": amount]
         case .lockRerolls(let locked):
             return ["locked": locked]
+        case .rerollChoice(let menuToken, let expectedCost):
+            return ["menuToken": menuToken, "expectedCost": expectedCost]
         case .setStat(let stat, let locked, let value):
             var result: [String: Any] = ["stat": stat, "locked": locked]
             if let value { result["value"] = value }
