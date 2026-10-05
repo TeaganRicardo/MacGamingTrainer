@@ -86,7 +86,7 @@ _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
 ))
 class Hades2Adapter(GameAdapter):
     data_dir = DATA
-    def __init__(self, transport=None, context=None):
+    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None):
         if context is None:
             context = GameAdapterContext(
                 game_id=MODULE_MANIFEST.id,
@@ -98,12 +98,23 @@ class Hades2Adapter(GameAdapter):
                 save_management=MODULE_MANIFEST.save_management,
             )
         super().__init__(context)
-        if transport is None:
-            from .transport import Hades2LuaTransport
-            transport = Hades2LuaTransport()
-        self.runtime=Hades2ResidentSession(transport)
-        helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
-        self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name])
+        if resident_session is None:
+            if transport is None:
+                from .transport import Hades2LuaTransport
+                transport = Hades2LuaTransport()
+            self.runtime=Hades2ResidentSession(transport)
+        else:
+            if transport is not None:
+                raise ValueError('resident_session and transport are mutually exclusive.')
+            self.runtime=resident_session
+        if time_warp_controller is None:
+            if transport is None:
+                raise ValueError('time_warp_controller is required with an injected resident_session.')
+            helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
+            time_warp_controller=ProcessTimeWarpController(
+                LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
+            )
+        self.time_warp=time_warp_controller
         self._time_warp_speed=1.0;self._time_warp_error=None
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
