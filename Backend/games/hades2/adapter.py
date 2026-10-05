@@ -851,6 +851,12 @@ class Hades2Adapter(GameAdapter):
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
         except TransportError as e:
+            if command=='status':
+                metrics=getattr(e,'resident_metrics',None)
+                if metrics is not None:
+                    self._last_status_boundary_duration=metrics.boundary_duration
+                    self._last_status_json_duration=metrics.json_duration
+                    self._last_status_localize_duration=metrics.localize_duration
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
