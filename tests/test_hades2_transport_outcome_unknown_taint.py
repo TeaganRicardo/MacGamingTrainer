@@ -237,33 +237,31 @@ assert resident.target.deleted == [1], 'resident unknown outcome leaked its sync
 import sys as _sys
 _sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
-from games.hades2.boundary_ledger import execute_with_ledger
+from games.hades2.resident_session import Hades2ResidentSession
 
 
 class LedgerFakeTransport:
     def __init__(self):
         self.tainted = False
+        self.pid = 4242
+        self.last_duration = 0.001
+        self.last_expression_duration = 0.0
+
+    def alive(self):
+        return True
 
     def execute(self, source):
         return '{"ok": true'
 
 
-class LedgerFailingTransport:
-    def __init__(self):
-        self.tainted = False
-
+class LedgerFailingTransport(LedgerFakeTransport):
     def execute(self, source):
         raise RuntimeError('transport failed before returning a result')
 
 
-def json_decode(raw):
-    import json
-    return json.loads(raw)
-
-
 ledger_transport = LedgerFakeTransport()
 try:
-    execute_with_ledger(ledger_transport, 'test', 'return 1', json_decode)
+    Hades2ResidentSession(ledger_transport, bootstrap='').status()
 except AdapterError as error:
     assert error.code == 'outcome_unknown', error.code
 else:
@@ -272,7 +270,7 @@ assert ledger_transport.tainted is True, 'decode failure left transport untainte
 
 read_only_transport = LedgerFakeTransport()
 try:
-    execute_with_ledger(read_only_transport, 'test', 'return 1', json_decode, read_only=True)
+    Hades2ResidentSession(read_only_transport, bootstrap='').observe_status()
 except AdapterError as error:
     assert error.code == 'outcome_unknown', error.code
 else:
@@ -281,13 +279,13 @@ assert read_only_transport.tainted is True, 'read_only decode failure left trans
 
 failing_transport = LedgerFailingTransport()
 try:
-    execute_with_ledger(failing_transport, 'test', 'return 1', json_decode)
+    Hades2ResidentSession(failing_transport, bootstrap='').status()
 except RuntimeError:
     pass
 else:
     raise AssertionError('transport failure should raise')
 assert failing_transport.tainted is False, (
-    'transport-side failure was tainted by the ledger; transport owns its own taint semantics'
+    'transport-side failure was tainted by the resident session; transport owns its own taint semantics'
 )
 
 print('hades2_transport_outcome_unknown_taint_ok')
