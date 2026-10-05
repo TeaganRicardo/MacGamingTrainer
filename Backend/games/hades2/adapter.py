@@ -475,7 +475,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
-            if self.runtime.alive() and self.state.get('status')=='ready':
+            if self.runtime.alive() and self.runtime.allows_process_time_warp():
                 try:
                     self._apply_game_speed(value)
                     self.preference_dirty=was_dirty
@@ -555,10 +555,11 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
         if not self.runtime.alive():return dict(self.state)
+        if self.runtime.allows_process_time_warp():
+            self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         if self.state.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
-        self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         desired=self.state.get('desiredFeatures') if isinstance(self.state.get('desiredFeatures'),dict) else {}
         pending=[]
         for key in TOGGLES:
