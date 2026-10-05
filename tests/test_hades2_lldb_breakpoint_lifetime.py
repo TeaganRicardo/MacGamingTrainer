@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import tempfile
@@ -5,6 +6,36 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# GitHub's macOS runner Python is not ABI-matched to Xcode's private _lldb
+# extension. Execute the actual regression inside LLDB's embedded Python, which
+# is also the environment that owns the SB API. Keep an outer hard timeout so a
+# debugger regression cannot stall the whole macOS lane.
+if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
+    path = str(Path(__file__).resolve())
+    embedded = (
+        "script import os,runpy; "
+        "os.environ['MGT_LLDB_EMBEDDED_TEST']='1'; "
+        f"runpy.run_path({path!r}, run_name='__main__')"
+    )
+    try:
+        completed = subprocess.run(
+            ["/usr/bin/xcrun", "lldb", "-b", "-o", embedded, "-o", "quit"],
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AssertionError("LLDB breakpoint-lifetime regression exceeded 30 seconds") from error
+    if completed.returncode != 0 or "hades2_lldb_breakpoint_lifetime_ok" not in completed.stdout:
+        raise AssertionError(
+            "embedded LLDB regression failed:\n"
+            + completed.stdout
+            + completed.stderr
+        )
+    print("hades2_lldb_breakpoint_lifetime_ok")
+    raise SystemExit(0)
+
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import transport as transport_module
