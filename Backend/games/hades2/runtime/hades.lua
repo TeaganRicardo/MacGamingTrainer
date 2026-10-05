@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 80 then
+if previousModule and previousModule.revision ~= 81 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 80 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 80, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 81, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -41,6 +41,7 @@ if __MacGamingTrainerV1 == nil then
   }
   __MacGamingTrainerV1 = M
   local choiceReroll, roomGeneration
+  local preferenceReplayDepth = 0
 
   -- Resource DisplayName values from build 1.139672 Game/Text/zh-CN/HelpText.zh-CN.sjson.
   local names = {
@@ -4816,6 +4817,7 @@ if __MacGamingTrainerV1 == nil then
   end)()
 
   local function state(includeCatalogs)
+    if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
     local boonList, rewardList = nil, nil
@@ -6008,7 +6010,7 @@ if __MacGamingTrainerV1 == nil then
       if command ~= "cleanup" and command ~= "disable_all" then
         error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
       end
-    else synchronize() end
+    elseif preferenceReplayDepth == 0 then synchronize() end
     if command == "status" then return state(params.includeCatalogs) end
     if command == "reroll_choice" then
       local plan
@@ -6022,12 +6024,12 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_chaos_gate_probability" then
       roomGeneration.setChaosProbability(params.probability)
-      synchronize()
+      if preferenceReplayDepth == 0 then synchronize() end
       return state(params.includeCatalogs)
     end
     if command == "set_gathering_probabilities" then
       roomGeneration.setProbabilities(params.probabilities)
-      synchronize()
+      if preferenceReplayDepth == 0 then synchronize() end
       return state(params.includeCatalogs)
     end
     if command == "cleanup" or command == "disable_all" then
@@ -7249,5 +7251,46 @@ if __MacGamingTrainerV1 == nil then
       end, prepareExactReward)
     end
     error("Unknown command")
+  end
+
+  local preferenceReplayCommands = {
+    set_feature = true,
+    set_boon_rarity = true,
+    set_gathering_probabilities = true,
+    set_chaos_gate_probability = true,
+    set_stat = true,
+    set_vital = true,
+    lock_vital = true,
+    set_resource = true,
+    lock_resource = true,
+    set_rerolls = true,
+    lock_rerolls = true,
+    set_element = true,
+    lock_element = true,
+    set_next_room_reward = true,
+  }
+  function M.dispatchBatch(calls)
+    if type(calls) ~= "table" then error("Preference replay batch must be a table") end
+    if preferenceReplayDepth ~= 0 then error("Nested preference replay is unsupported") end
+    if M.terminalActionUnknown then
+      error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+    end
+    synchronize()
+    preferenceReplayDepth = 1
+    local ok, message = pcall(function()
+      for index = 1, #calls do
+        local call = calls[index]
+        if type(call) ~= "table" or not preferenceReplayCommands[call.command] then
+          error("Unsupported preference replay command at index " .. tostring(index))
+        end
+        local params = call.params or {}
+        if type(params) ~= "table" then error("Preference replay params must be a table") end
+        M.dispatch(call.command, params)
+      end
+    end)
+    preferenceReplayDepth = 0
+    if not ok then error(message) end
+    synchronize()
+    return state(false)
   end
 end

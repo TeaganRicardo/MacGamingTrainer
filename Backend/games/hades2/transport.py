@@ -23,7 +23,7 @@ class Hades2LuaTransport:
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
         self.target=None; self.process=None; self.pid=None; self.addresses={}
-        self.last_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
+        self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
 
@@ -224,8 +224,8 @@ class Hades2LuaTransport:
         finally:
             self.target.BreakpointDelete(bp.GetID())
 
-    def execute(self, source):
-        started=time.monotonic(); scratch=None
+    def execute(self, source, *, expression_timeout_seconds=2.0):
+        started=time.monotonic(); scratch=None; self.last_expression_duration=0
         try:
             th,L=self.boundary()
             payload=source.encode('utf-8')
@@ -252,12 +252,22 @@ class Hades2LuaTransport:
                 ((void(*)(void*,int)){a('lua_settop')})(L,top);
                 rc;
             }})'''
+            if type(expression_timeout_seconds) not in (int,float) or not 0 < expression_timeout_seconds <= 30:
+                raise ValueError('expression_timeout_seconds must be within (0, 30].')
             opts=lldb.SBExpressionOptions();opts.SetLanguage(lldb.eLanguageTypeC_plus_plus)
-            opts.SetTimeoutInMicroSeconds(2000000);opts.SetIgnoreBreakpoints(True);opts.SetUnwindOnError(True)
+            opts.SetTimeoutInMicroSeconds(int(expression_timeout_seconds*1000000));opts.SetIgnoreBreakpoints(True);opts.SetUnwindOnError(True)
+            expression_started=time.monotonic()
             result=th.GetFrameAtIndex(0).EvaluateExpression(expression,opts)
+            self.last_expression_duration=time.monotonic()-expression_started
             if result.GetError().Fail():
                 self.tainted=True
-                raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试：'+str(result.GetError()))
+                detail=str(result.GetError())
+                if self.last_expression_duration >= expression_timeout_seconds:
+                    detail=(
+                        f'LLDB expression exceeded {expression_timeout_seconds:g}s budget '
+                        f'after {self.last_expression_duration:.3f}s; '+detail
+                    )
+                raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试：'+detail)
             text=self.process.ReadCStringFromMemory(out,cap,err)
             if err.Fail():
                 self.tainted=True

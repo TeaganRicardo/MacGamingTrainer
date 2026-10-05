@@ -236,16 +236,16 @@ class RuntimeTransport:
     def close(self):
         self.live = False
 
-    def execute(self, source):
+    def execute(self, source, *, expression_timeout_seconds=None):
         self.sources.append(source)
         lock_mutation = any(
             marker in source
             for marker in (
-                'dispatch("set_stat"',
-                'dispatch("lock_vital"',
-                'dispatch("lock_resource"',
-                'dispatch("lock_rerolls"',
-                'dispatch("lock_element"',
+                'dispatch("set_stat"', '["command"]="set_stat"',
+                'dispatch("lock_vital"', '["command"]="lock_vital"',
+                'dispatch("lock_resource"', '["command"]="lock_resource"',
+                'dispatch("lock_rerolls"', '["command"]="lock_rerolls"',
+                'dispatch("lock_element"', '["command"]="lock_element"',
             )
         )
         if self.fail_once and lock_mutation:
@@ -254,7 +254,12 @@ class RuntimeTransport:
                 'lua_error',
                 'simulated known Lua command error before lock release',
             )
-        for command, fields in re.findall(r'dispatch\("([^"]+)",(\{[^}]*\})\)', source):
+        calls = re.findall(r'dispatch\("([^"]+)",(\{[^}]*\})\)', source)
+        calls.extend(re.findall(
+            r'\{\["command"\]="([^"]+)",\["params"\]=(\{[^}]*\})\}',
+            source,
+        ))
+        for command, fields in calls:
             params = {}
             for key, value in re.findall(
                 r'\["([^"]+)"\]=(true|false|nil|"[^"]*"|-?[\d.]+)',

@@ -85,12 +85,15 @@ class ResetTransport(FakeTransport):
     def __init__(self, fail_once=True):
         super().__init__()
         self.pid=4242;self.live=True;self.fail_once=fail_once;self.sources=[];self.god_mode=False
-    def execute(self, source):
+    def execute(self, source, *, expression_timeout_seconds=None):
         self.sources.append(source);self.last_duration=0.001
         if self.fail_once:
             self.fail_once=False
             raise AdapterError('lua_error', '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)')
-        if '__MacGamingTrainerV1.dispatch("set_feature",' in source and 'invincibility' in source:
+        if (
+            '__MacGamingTrainerV1.dispatch("set_feature",' in source
+            or '__MacGamingTrainerV1.dispatchBatch(' in source
+        ) and 'invincibility' in source:
             self.god_mode=True
         return json.dumps(reset_payload(self.god_mode))
 
@@ -110,7 +113,7 @@ recovered=reset_adapter.execute('status', {})
 assert len(reset_transport.sources) == 3
 assert 'local previousModule' not in reset_transport.sources[0]
 assert 'local previousModule' in reset_transport.sources[1]
-assert any('"set_feature"' in source and 'invincibility' in source for source in reset_transport.sources[2:])
+assert any('__MacGamingTrainerV1.dispatchBatch(' in source and 'invincibility' in source for source in reset_transport.sources[2:])
 assert recovered['activeFeatures']['invincibility'] is True
 assert reset_adapter._runtime_bootstrapped is True
 assert reset_adapter._catalog_initialized is True
@@ -140,7 +143,7 @@ assert proactive_adapter.preference_dirty is True
 proactive_recovered=proactive_adapter.execute('status', {})
 assert len(proactive_transport.sources) == 2
 assert 'local previousModule' in proactive_transport.sources[0]
-assert '"set_feature"' in proactive_transport.sources[1] and 'invincibility' in proactive_transport.sources[1]
+assert '__MacGamingTrainerV1.dispatchBatch(' in proactive_transport.sources[1] and 'invincibility' in proactive_transport.sources[1]
 assert proactive_recovered['activeFeatures']['invincibility'] is True
 assert proactive_adapter.preference_dirty is False
 
