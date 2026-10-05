@@ -19,6 +19,7 @@ enum Hades2Command: String {
     case setBoonRarityDesired = "set_boon_rarity_desired"
     case setNextRoomRewardDesired = "set_next_room_reward_desired"
     case spawnReward = "spawn_reward"
+    case acquireChaosPair = "acquire_chaos_pair"
     case openSellTraits = "open_sell_traits"
     case setTraitLevel = "set_trait_level"
     case setTraitRarity = "set_trait_rarity"
@@ -56,6 +57,7 @@ enum Hades2Request {
     case setBoonRarity(target: String, multiplier: Double, forceLegendary: Bool, forceDuo: Bool)
     case setNextRoomReward(String?)
     case spawnReward(String)
+    case acquireChaosPair(blessing: String, curse: String)
     case openSellTraits
     case setTraitLevel(CurrentRunTrait, targetLevel: Int)
     case setTraitRarity(CurrentRunTrait, rarity: String)
@@ -95,6 +97,7 @@ enum Hades2Request {
         case .setBoonRarity: return .setBoonRarityDesired
         case .setNextRoomReward: return .setNextRoomRewardDesired
         case .spawnReward: return .spawnReward
+        case .acquireChaosPair: return .acquireChaosPair
         case .openSellTraits: return .openSellTraits
         case .setTraitLevel: return .setTraitLevel
         case .setTraitRarity: return .setTraitRarity
@@ -207,6 +210,8 @@ enum Hades2Request {
             return ["reward": reward ?? NSNull()]
         case .spawnReward(let reward):
             return ["reward": reward]
+        case .acquireChaosPair(let blessing, let curse):
+            return ["blessing": blessing, "curse": curse]
         case .openSellTraits:
             return [:]
         case .setTraitLevel(let trait, let targetLevel):

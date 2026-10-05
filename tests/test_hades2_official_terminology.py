@@ -37,8 +37,13 @@ assert catalog._OLYMPIAN_BOON_TITLE_ID == reference["officialTerms"]["olympianBo
 assert catalog._CHARACTER_REWARD_CATEGORY == reference["productTerms"]["characterRewards"]["value"]
 assert catalog._CHARACTER_REWARD_CATEGORY_EN == reference["productTerms"]["characterRewards"]["englishValue"]
 assert catalog._OFFICIAL_CATEGORY_TITLE_IDS["卡戎之井"] == reference["officialTerms"]["wellOfCharon"]["id"]
-for row in reference["productTerms"].values():
-    assert catalog._PRODUCT_LABEL_EN_BY_ZH[row["value"]] == row["englishValue"]
+# Catalog translations cover the labels offered by the backend catalog. Other
+# product labels, such as frontend selector roles, do not belong to that map.
+product_pairs = {
+    row["value"]: row["englishValue"] for row in reference["productTerms"].values()
+}
+for chinese, english in catalog._PRODUCT_LABEL_EN_BY_ZH.items():
+    assert product_pairs[chinese] == english
 
 # Current Hades product surfaces must not reintroduce known ad-hoc aliases.
 surface_paths = sorted((ROOT / "Sources/Hades2").rglob("*.swift"))

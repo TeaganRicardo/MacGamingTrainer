@@ -299,6 +299,24 @@
       "status": "trainer_product_label",
       "reason": "Generic Trainer grouping for material resources."
     },
+    "chaosPair": {
+      "value": "卡俄斯配对",
+      "englishValue": "Chaos Pair",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned control that acquires two explicitly selected Chaos phases in one request; it is not a native screen title. Verified selector-role terminology for supported build 1.143476 / Steam 25481925."
+    },
+    "chaosBlessingSelector": {
+      "value": "祝福",
+      "englishValue": "Blessing",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned selector role for TrialUpgrade.PermanentTraits. Supported build 1.143476 / Steam 25481925 exposes the combined native ChaosBlessingFormat title, not a standalone Chaos side-title localization pair. Actual selected item names retain their native localization identities."
+    },
+    "chaosCurseSelector": {
+      "value": "诅咒",
+      "englishValue": "Curse",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned selector role for TrialUpgrade.TemporaryTraits. Supported build 1.143476 / Steam 25481925 exposes the combined native ChaosBlessingFormat title; the native Status label describes enemy status effects and is not this selector. Actual selected item names retain their native localization identities."
+    },
     "invincibility": {
       "value": "无敌模式",
       "englishValue": "Invincibility",

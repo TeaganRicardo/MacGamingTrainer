@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "hades2",
   "displayName": "Hades II",
-  "protocolVersion": 8,
+  "protocolVersion": 9,
   "backend": {
     "adapter": "games.hades2.adapter:Hades2Adapter"
   },

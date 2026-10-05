@@ -267,7 +267,8 @@ func makeBoon(
     kind: String = "trait",
     sourceID: String = "Artemis",
     nativeChoice: Bool = false,
-    acquisitionMode: String = ""
+    acquisitionMode: String = "",
+    targetID: String? = nil
 ) -> BoonOption {
     BoonOption(
         id: id,
@@ -277,7 +278,7 @@ func makeBoon(
         englishCategory: "Character Rewards",
         kind: kind,
         group: group,
-        targetID: id.hasPrefix("trait:") ? String(id.dropFirst("trait:".count)) : id,
+        targetID: targetID ?? (id.hasPrefix("trait:") ? String(id.dropFirst("trait:".count)) : id),
         officialName: true,
         sectionTitle: sourceID,
         englishSectionTitle: sourceID,
@@ -513,6 +514,40 @@ struct Main {
         check(afterExact[4]["command"] as? String == "spawn_reward", "exact acquisition used the wrong command")
         guard let exactParams = afterExact[4]["params"] as? [String: Any] else { fail("exact acquisition params missing") }
         check(exactParams["reward"] as? String == exact.id, "exact acquisition lost reward identity")
+
+        // Deterministic Chaos acquisition carries both native TraitData identities
+        // in one one-shot request; row ids and localized labels never cross the
+        // typed Hades request boundary.
+        let chaosBlessing = makeBoon(
+            id: "chaos:blessing:ChaosHealthBlessing",
+            group: "exact",
+            sourceID: "Chaos",
+            acquisitionMode: "chaosBlessing",
+            targetID: "ChaosHealthBlessing"
+        )
+        let chaosCurse = makeBoon(
+            id: "chaos:curse:ChaosDamageCurse",
+            group: "exact",
+            sourceID: "Chaos",
+            acquisitionMode: "chaosCurse",
+            targetID: "ChaosDamageCurse"
+        )
+        try withModel(expectedNewCommands: 1) { model in
+            model.capabilities["spawnReward"] = true
+            model.boons = [chaosBlessing, chaosCurse]
+            model.acquireChaosPair(
+                blessingReward: chaosBlessing.id,
+                curseReward: chaosCurse.id
+            )
+        }
+        let afterChaosPair = commands(at: commandLog)
+        check(afterChaosPair.count == 6, "Chaos pair acquisition did not emit one command: \(afterChaosPair)")
+        check(afterChaosPair[5]["command"] as? String == "acquire_chaos_pair", "Chaos pair used the wrong command")
+        guard let chaosParams = afterChaosPair[5]["params"] as? [String: Any] else {
+            fail("Chaos pair acquisition params missing")
+        }
+        check(chaosParams["blessing"] as? String == "ChaosHealthBlessing", "Chaos blessing identity drifted")
+        check(chaosParams["curse"] as? String == "ChaosDamageCurse", "Chaos curse identity drifted")
 
         print("hades2_live_trait_model_flow_ok")
     }

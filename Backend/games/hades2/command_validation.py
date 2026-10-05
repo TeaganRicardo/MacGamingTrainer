@@ -97,6 +97,11 @@ def validate_command_params(command, params):
         if not isinstance(params.get('reward'),str) or not params['reward']:
             raise ValueError('请选择掉落物或祝福。')
 
+    if command=='acquire_chaos_pair':
+        blessing=params.get('blessing');curse=params.get('curse')
+        if not isinstance(blessing,str) or not blessing or not isinstance(curse,str) or not curse:
+            raise ValueError('请选择掉落物或祝福。')
+
     if command=='open_special_choice':
         source=params.get('source')
         if not isinstance(source,str) or not source:
