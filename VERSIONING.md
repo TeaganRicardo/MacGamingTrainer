@@ -15,6 +15,8 @@ Git commit SHA is the authoritative identity of development source. Product SemV
 
 Ordinary feature, fix, refactor, catalog, and documentation PRs do not edit `Info.plist` merely because they may be included in a later release. This keeps parallel branches from competing over the same version lines.
 
+Root-cause refactors are classified by product-contract impact, not by diff size or number of seams crossed. A larger internal refactor does not by itself require a MINOR/MAJOR bump; governance-only changes do not change product version.
+
 When a release is deliberately prepared:
 
 1. choose PATCH, MINOR, or MAJOR from the rules below if the product release changes;
