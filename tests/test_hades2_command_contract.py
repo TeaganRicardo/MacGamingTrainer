@@ -15,12 +15,32 @@ class ProbeAdapter:
         self.calls.append(("scan",))
         return {"status": "not_running"}
 
+    def execute(self, command, params):
+        self.calls.append(("execute", command, dict(params)))
+        return {"ok": True}
+
 
 probe = ProbeAdapter()
 contract = Hades2CommandContract(probe)
 
 assert contract.dispatch("scan", {}, "scan-request") == {"status": "not_running"}
 assert probe.calls == [("scan",)]
+
+result = contract.dispatch(
+    "acquire_chaos_pair",
+    {"blessing": "ChaosHealthBlessing", "curse": "ChaosDamageCurse"},
+    "chaos-request",
+)
+assert result == {"ok": True}
+assert probe.calls[-1] == (
+    "execute",
+    "acquire_chaos_pair",
+    {
+        "blessing": "ChaosHealthBlessing",
+        "curse": "ChaosDamageCurse",
+        "requestId": "chaos-request",
+    },
+)
 
 try:
     contract.dispatch("not_a_command", {}, "unknown-request")
