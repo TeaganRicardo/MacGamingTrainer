@@ -73,13 +73,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         calls.append(('save', preferences['chaosGateProbability']))
         original_save(preferences)
     adapter.preference_store.save = save
-    def execute(command, params, **kwargs):
+    def execute(command, params):
         calls.append((command, copy.deepcopy(params), copy.deepcopy(kwargs)))
         if command == 'set_chaos_gate_probability':
             assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
             adapter.state['chaosGateProbability'] = params['probability']
-        for name, values in kwargs.get('batch', []):
-            if name == 'set_chaos_gate_probability': adapter.state['chaosGateProbability'] = values['probability']
         return dict(adapter.state)
     adapter.execute = execute
     transport.live = True
@@ -97,7 +95,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     else: raise AssertionError('runtime applied before failed durable write')
     assert adapter.preferences == before and not calls
     adapter.preference_store.save = original_save
-    def failed_apply(command, params, **kwargs): raise TransportError('lua_error', 'fixture unavailable')
+    def failed_apply(command, params): raise TransportError('lua_error', 'fixture unavailable')
     adapter.execute = failed_apply
     try: adapter.dispatch('set_chaos_gate_desired', {'probability': 100}, 'pending')
     except TransportError: pass
