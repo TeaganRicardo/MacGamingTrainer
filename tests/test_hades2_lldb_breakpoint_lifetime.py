@@ -194,7 +194,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
         focus = transport.process.ReadMemory(
             addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
         )
-        assert error.Success() and focus == b"\\x01", (str(error), focus)
+        assert error.Success() and focus == b"\x01", (str(error), focus)
         transport.resume(time.monotonic() + 2)
     finally:
         cleanup(child, debugger, transport)
