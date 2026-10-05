@@ -1,4 +1,5 @@
 """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
+import copy
 import logging
 import math
 import subprocess
@@ -10,6 +11,7 @@ from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpCon
 
 from . import preparation
 from .command_router import Hades2CommandRouter
+from .desired_reconciliation import Hades2DesiredStateReconciler
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
@@ -115,6 +117,7 @@ class Hades2Adapter(GameAdapter):
                 LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
             )
         self.time_warp=time_warp_controller
+        self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
         self._time_warp_speed=1.0;self._time_warp_error=None
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
@@ -163,44 +166,17 @@ class Hades2Adapter(GameAdapter):
         preferences=self._normalize_preferences(profile['desired'])
         if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
-        observed_locks=None
+        observed_state=None
         if self.runtime.alive() and self.state.get('connected'):
-            self.observe_runtime()
-            observed_locks=self._observed_locks()
+            observed_state=copy.deepcopy(self.observe_runtime())
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.runtime.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
+        if self.runtime.alive():
+            self._replay_preferences(force_full=True,observed_state=observed_state)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
-
-    def _observed_locks(self):
-        stats=self.state.get('stats') if isinstance(self.state.get('stats'),dict) else {}
-        stat_locks={
-            stat for stat,item in stats.items()
-            if isinstance(item,dict) and item.get('locked')
-        }
-        vital_locks={
-            key for key in ('health','mana','armor')
-            if self.state.get(key+'Locked')
-        }
-        resource_locks={
-            item.get('id') for item in self.state.get('resources',[])
-            if isinstance(item,dict) and isinstance(item.get('id'),str) and item.get('locked')
-        }
-        if self.state.get('moneyLocked'):resource_locks.add('Money')
-        element_locks={
-            item.get('id') for item in self.state.get('elements',[])
-            if isinstance(item,dict) and isinstance(item.get('id'),str) and item.get('locked')
-        }
-        return {
-            'stats':stat_locks,
-            'vitals':vital_locks,
-            'resources':resource_locks,
-            'rerolls':bool(self.state.get('rerollsLocked')),
-            'elements':element_locks,
-        }
 
     def _overlay_preferences(self):
         defaults=desired_feature_defaults()
@@ -553,69 +529,52 @@ class Hades2Adapter(GameAdapter):
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
-    def _replay_preferences(self,force_full=False,observed_locks=None):
+    def _replay_preferences(self,force_full=False,observed_state=None):
         if not self.runtime.alive():return dict(self.state)
+
+        speed_target=float(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
+        speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
         if self.runtime.allows_process_time_warp():
-            self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
-        if self.state.get('status')!='ready':
+            if force_full or not speed_confirmed:
+                self._apply_game_speed(speed_target)
+            speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
+
+        observed=observed_state if isinstance(observed_state,dict) else self.state
+        if observed.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
-        desired=self.state.get('desiredFeatures') if isinstance(self.state.get('desiredFeatures'),dict) else {}
-        pending=[]
-        for key in TOGGLES:
-            if force_full or bool(desired.get(key,self.state.get(key,False)))!=bool(self.preferences.get(key,False)):
-                pending.append(('set_feature',{'feature':key,'value':self.preferences[key]}))
-        for key in MULTIPLIERS:
-            if key=='gameSpeed':continue
-            current=self.state.get(key);target=self.preferences[key]
-            if force_full or type(current) not in (int,float) or abs(float(current)-float(target))>1e-6:pending.append(('set_feature',{'feature':key,'value':target}))
-        rarity=self.preferences.get('boonRarity',{})
-        pending.append(('set_boon_rarity',dict(rarity)))
-        gathering=self.preferences.get('gatheringProbabilities',{})
-        if force_full or self.state.get('gatheringProbabilities')!=gathering:
-            pending.append(('set_gathering_probabilities',{'probabilities':dict(gathering)}))
-        chaos_gate=self.preferences.get('chaosGateProbability')
-        if force_full or self.state.get('chaosGateProbability')!=chaos_gate:
-            pending.append(('set_chaos_gate_probability',{'probability':chaos_gate}))
-        # First release stale locks that are not in the desired snapshot. Profile
-        # replacement may already have projected the new desired state into self.state,
-        # so use the pre-projection observed snapshot when one was supplied.
-        current_locks=observed_locks if isinstance(observed_locks,dict) else self._observed_locks()
-        current_stats=current_locks.get('stats',set())
-        wanted_stats=self.preferences.get('statLocks',{})
-        for stat in current_stats-set(wanted_stats):pending.append(('set_stat',{'stat':stat,'locked':False}))
-        for stat,value in wanted_stats.items():pending.append(('set_stat',{'stat':stat,'locked':True,'value':value}))
-        current_vitals=current_locks.get('vitals',set())
-        wanted_vitals=self.preferences.get('vitalLocks',{})
-        for vital in current_vitals-set(wanted_vitals):pending.append(('lock_vital',{'vital':vital,'locked':False}))
-        for vital,row in wanted_vitals.items():
-            if not isinstance(row,dict):continue
-            for field in ('max','current'):
-                value=row.get(field)
-                if field=='max' and vital=='armor':continue
-                if type(value) in (int,float) and not isinstance(value,bool):pending.append(('set_vital',{'vital':vital,'field':field,'value':value}))
-            pending.append(('lock_vital',{'vital':vital,'locked':True}))
-        current_resources=current_locks.get('resources',set())
-        wanted_resources=self.preferences.get('resourceLocks',{})
-        for resource in current_resources-set(wanted_resources):pending.append(('lock_resource',{'resource':resource,'locked':False,'requestId':f'replay-{time.time_ns()}'}))
-        for resource,amount in wanted_resources.items():
-            pending.append(('set_resource',{'resource':resource,'amount':int(amount),'requestId':f'replay-{time.time_ns()}'}));pending.append(('lock_resource',{'resource':resource,'locked':True,'requestId':f'replay-{time.time_ns()}'}))
-        if current_locks.get('rerolls') and self.preferences.get('rerollsLock') is None:pending.append(('lock_rerolls',{'locked':False,'requestId':f'replay-{time.time_ns()}'}))
-        if self.preferences.get('rerollsLock') is not None:
-            amount=int(self.preferences['rerollsLock']);pending.append(('set_rerolls',{'amount':amount,'requestId':f'replay-{time.time_ns()}'}));pending.append(('lock_rerolls',{'locked':True,'requestId':f'replay-{time.time_ns()}'}))
-        current_elements=current_locks.get('elements',set())
-        wanted_elements=self.preferences.get('elementLocks',{})
-        for element in current_elements-set(wanted_elements):pending.append(('lock_element',{'element':element,'locked':False}))
-        for element,amount in wanted_elements.items():pending.append(('set_element',{'element':element,'amount':int(amount)}));pending.append(('lock_element',{'element':element,'locked':True}))
-        reward=self.preferences.get('nextRoomReward')
-        if force_full or self.state.get('nextRoomReward')!=reward:
-            pending.append(('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')}))
-        if pending:
-            logging.info('ReplayPreferences count=%d',len(pending))
-            self.execute('replay_preferences',{},replay=True,batch=pending)
-        self._capture_runtime_preferences(self.state)
-        self._save_preferences()
-        self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
+
+        try:
+            outcome=self.desired_reconciler.reconcile(
+                self.preferences,
+                observed,
+                force_full=force_full,
+            )
+            if outcome.reply is not None:
+                self._merge_resident_reply(outcome.reply)
+                if outcome.reply.outcome_unknown:
+                    raise TransportError(
+                        'outcome_unknown',
+                        '游戏调用结果不明，未自动重试；请检查游戏并重启。',
+                    )
+        except ResidentGenerationInvalidated as invalidated:
+            self._mark_runtime_generation_invalidated()
+            raise invalidated.original
+        except TransportError as error:
+            self._project_runtime_error(error,project_desired=True)
+            raise
+
+        mismatches=list(outcome.mismatches)
+        if not speed_confirmed:mismatches.append('feature:gameSpeed')
+        if not mismatches:
+            self.preference_dirty=False
+            self.state.pop('preferenceApplyError',None)
+        else:
+            self.preference_dirty=True
+            logging.warning(
+                'ReplayPreferences pending mismatches=%s',
+                ','.join(dict.fromkeys(mismatches)),
+            )
         self._overlay_preferences()
         return dict(self.state)
 
@@ -738,14 +697,39 @@ class Hades2Adapter(GameAdapter):
             'status',{},host_observation_only=True,
         )
 
-    def execute(self,command,params,replay=False,batch=None):
+    def execute(self,command,params):
         return self._execute_runtime(
-            command,params,replay=replay,batch=batch,
+            command,params,
             host_observation_only=False,
         )
 
+    def _merge_resident_reply(self,reply):
+        decoded=dict(reply.payload) if isinstance(reply.payload,dict) else {}
+        prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
+        catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
+        if prior_warnings or catalog_warnings:
+            decoded['warnings']=list(dict.fromkeys([*prior_warnings,*catalog_warnings]))
+        capabilities=decoded.get('capabilities')
+        if not isinstance(capabilities,dict):capabilities={}
+        capabilities=dict(disconnected_capabilities(),**capabilities)
+        capabilities['hotBackup']=True;capabilities['hotRestore']=False
+        decoded['capabilities']=capabilities
+        for key in _TRANSIENT_ACTION_RESULT_FIELDS:
+            self.state.pop(key,None)
+        self.state.update(decoded,connected=True,pid=self.runtime.pid)
+        self.state.pop('error',None)
+        return decoded
+
+    def _project_runtime_error(self,error,project_desired):
+        if error.code=='waiting':self.state['status']='waiting'
+        elif error.code=='disconnected':
+            self.state.update(status='disconnected');mark_disconnected(self.state)
+        elif error.code in ('restart_required','outcome_unknown','restore_failed'):
+            self.state['status']='restart_required'
+        if project_desired:self._overlay_preferences()
+
     def _execute_runtime(
-        self,command,params,replay=False,batch=None,
+        self,command,params,
         host_observation_only=False,
     ):
         # Host projection/persistence remains Adapter-owned. The resident session
@@ -783,9 +767,7 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_json_duration=0.0
                 self._last_status_localize_duration=0.0
             try:
-                if batch is not None:
-                    reply=self.runtime.reconcile(batch)
-                elif command=='status':
+                if command=='status':
                     if host_observation_only:
                         reply=self.runtime.observe_status(runtime_params)
                     else:
@@ -799,32 +781,19 @@ class Hades2Adapter(GameAdapter):
                 # The session has already re-bootstraped the new generation.
                 # Adapter only projects that lifecycle evidence into desired/observed state.
                 self._mark_runtime_generation_invalidated()
-            decoded=reply.payload
+            raw_decoded=reply.payload if isinstance(reply.payload,dict) else {}
             if command=='status':
                 self._last_status_boundary_duration=reply.metrics.boundary_duration
                 self._last_status_json_duration=reply.metrics.json_duration
                 self._last_status_localize_duration=reply.metrics.localize_duration
             asynchronous_unknown=reply.outcome_unknown
             if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
-                self._adopt_lua_preferences(decoded)
-            prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
-            catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
-            if prior_warnings or catalog_warnings:
-                decoded['warnings']=list(dict.fromkeys([*prior_warnings,*catalog_warnings]))
-            capabilities=decoded.get('capabilities')
-            if not isinstance(capabilities,dict):capabilities={}
-            capabilities=dict(disconnected_capabilities(),**capabilities)
-            # Backup is server-side and can take a verified stable snapshot while the game is running.
-            capabilities['hotBackup']=True;capabilities['hotRestore']=False
-            decoded['capabilities']=capabilities
-            for key in _TRANSIENT_ACTION_RESULT_FIELDS:
-                self.state.pop(key,None)
-            self.state.update(decoded,connected=True,pid=self.runtime.pid)
-            self.state.pop('error',None)
+                self._adopt_lua_preferences(raw_decoded)
+            decoded=self._merge_resident_reply(reply)
             # Runtime observation skips durable Hades desired-state projection,
             # but Core-owned Process Time Warp remains observable Host state.
             if host_observation_only:self._project_time_warp()
-            if not host_observation_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
+            if not host_observation_only and command=='status' and next_room_reward_consumed(self.preferences,raw_decoded,self.preference_dirty):
                 self.preferences['nextRoomReward']=None
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
@@ -832,9 +801,9 @@ class Hades2Adapter(GameAdapter):
             # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
-            if not host_observation_only and command=='status' and self.preference_dirty and not replay:
-                return self._replay_preferences()
-            if not host_observation_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:
+            if not host_observation_only and command=='status' and self.preference_dirty:
+                return self._replay_preferences(observed_state=copy.deepcopy(self.state))
+            if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
                     try:
                         self._save_preferences()
@@ -855,10 +824,7 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_boundary_duration=e.metrics.boundary_duration
                 self._last_status_json_duration=e.metrics.json_duration
                 self._last_status_localize_duration=e.metrics.localize_duration
-            if e.code=='waiting':self.state['status']='waiting'
-            elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
-            elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
-            if project_desired:self._overlay_preferences()
+            self._project_runtime_error(e,project_desired)
             raise
     def disconnect(self):
         # Manual disconnect is a debugger detach only. The trainer Lua module
