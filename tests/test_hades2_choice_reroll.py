@@ -57,8 +57,10 @@ local function finish()
   end
 end
 local inputBlocked = false
-AddInputBlock = function() inputBlocked = true end
-RemoveInputBlock = function() inputBlocked = false end
+local inputBlocks = {}
+AddInputBlock = function(args) inputBlocks[args.Name] = true; inputBlocked = true end
+RemoveInputBlock = function(args) inputBlocks[args.Name] = nil; inputBlocked = next(inputBlocks) ~= nil end
+IsInputAllowed = function() return not inputBlocked end
 HideTopMenuScreenTooltips = function() end
 UpdateRerollUI = function() end
 InvalidateCheckpoint = function() end
@@ -630,6 +632,7 @@ local originalState = ScreenState
 finish()
 assert(M.requests['foreign-unwind'].status == 'outcome_unknown')
 assert(inputBlocked and originalState.InTransition and ScreenState.InTransition, 'exception unwind cleared input/transition belonging to a foreign owner')
+for name in pairs(inputBlocks) do assert(not name:find('MacGamingTrainerChoiceReroll_', 1, true), 'foreign owner retained the old lease input block') end
 print('hades2_choice_reroll_runtime_ok')
 '''
 
@@ -661,6 +664,60 @@ CASES['native_ban_before_coroutine_spends_nothing'] = CASES['ZeusUpgrade_native_
     "assert(not inputBlocked and not ScreenState.InTransition)",
     "assert(CurrentRun.NumRerolls == 10 and not M.terminalActionUnknown and not inputBlocked and not ScreenState.InTransition)",
 )
+
+CASES['selection_waits_for_complete_native_unwind'] = HARNESS.split('local observed =')[0] + r'''
+local observed = M.dispatch('status', { includeCatalogs = false }).choiceReroll
+M.dispatch('reroll_choice', { requestId = 'selection-window', menuToken = observed.menuToken, expectedCost = 1, includeCatalogs = false })
+-- Native removes only its named block, then waits another .95 seconds.
+while inputBlocks.AttemptPanelReroll do
+  local co = table.remove(pending, 1); assert(co)
+  local ok, message = coroutine.resume(co); assert(ok, message)
+  if coroutine.status(co) ~= 'dead' then table.insert(pending, co) end
+end
+assert(M.requests['selection-window'].status == 'accepted' and source.UpgradeOptions[3].ItemName == 'CostumeD')
+local function selectThroughNativeInput()
+  -- UILogic.HandleScreenInput gates the selector with IsInputAllowed, not
+  -- ScreenState.InTransition. The Trainer lease must cover this native gap.
+  if IsInputAllowed({}) then HandleUpgradeChoiceSelection(screen, screen.UpgradeButtons[3]); return true end
+  return false
+end
+assert(not selectThroughNativeInput() and not CurrentRun.Hero.TraitDictionary.CostumeD,
+  'native input-release window allowed selection before reroll final validation')
+finish()
+assert(M.requests['selection-window'].status == 'completed' and not M.terminalActionUnknown and not inputBlocked and next(inputBlocks) == nil)
+assert(selectThroughNativeInput() and CurrentRun.Hero.TraitDictionary.CostumeD, 'completed native unwind left selection blocked')
+print('hades2_choice_reroll_runtime_ok')
+'''
+
+CASES['unique_input_release_preserves_foreign_block'] = HARNESS.split('local observed =')[0] + r'''
+local observed = M.dispatch('status', { includeCatalogs = false }).choiceReroll
+M.dispatch('reroll_choice', { requestId = 'foreign-named-block', menuToken = observed.menuToken, expectedCost = 1, includeCatalogs = false })
+AddInputBlock({ Name = 'ForeignTransaction' })
+finish()
+assert(M.requests['foreign-named-block'].status == 'completed' and inputBlocks.ForeignTransaction and inputBlocked)
+for name in pairs(inputBlocks) do assert(name == 'ForeignTransaction', 'completed reroll leaked a lease or native block') end
+RemoveInputBlock({ Name = 'ForeignTransaction' })
+assert(IsInputAllowed({}) and not ScreenState.InTransition)
+HandleUpgradeChoiceSelection(screen, screen.UpgradeButtons[3])
+assert(CurrentRun.Hero.TraitDictionary.CostumeD)
+print('hades2_choice_reroll_runtime_ok')
+'''
+
+for command in ('cleanup', 'disable_all'):
+ CASES[f'{command}_releases_unique_input_while_native_unwinds'] = HARNESS.split('local observed =')[0] + r'''
+local observed = M.dispatch('status', { includeCatalogs = false }).choiceReroll
+M.dispatch('reroll_choice', { requestId = 'cancelled-lease', menuToken = observed.menuToken, expectedCost = 1, includeCatalogs = false })
+AddInputBlock({ Name = 'ForeignTransaction' })
+''' + f"M.dispatch('{command}', {{ includeCatalogs = false }})\n" + r'''
+assert(M.requests['cancelled-lease'].status == 'outcome_unknown' and M.terminalActionUnknown)
+assert(inputBlocks.AttemptPanelReroll and inputBlocks.ForeignTransaction, 'cleanup released a native/foreign input block early')
+for name in pairs(inputBlocks) do assert(not name:find('MacGamingTrainerChoiceReroll_', 1, true), 'cleanup leaked the unique lease block') end
+finish()
+assert(source.UpgradeOptions[1].ItemName == 'CostumeA' and not inputBlocks.AttemptPanelReroll and inputBlocks.ForeignTransaction)
+RemoveInputBlock({ Name = 'ForeignTransaction' })
+assert(not inputBlocked and not ScreenState.InTransition)
+print('hades2_choice_reroll_runtime_ok')
+'''
 
 for case, code in CASES.items():
  with tempfile.TemporaryDirectory(prefix='mgt-choice-reroll-') as temporary:

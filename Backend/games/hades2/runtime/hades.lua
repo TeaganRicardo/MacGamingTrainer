@@ -4413,6 +4413,15 @@ if __MacGamingTrainerV1 == nil then
         record.status, record.error = "outcome_unknown", tostring(message)
         M.terminalActionUnknown = true
       end
+      local addInputBlock, removeInputBlock = AddInputBlock, RemoveInputBlock
+      lease.inputName = callbackName .. "_Input"
+      lease.releaseInput = function()
+        if not lease.inputHeld then return end
+        -- This unique name belongs only to this lease, including after owner
+        -- replacement. Never release another name or a foreign transition.
+        local ok, message = pcall(removeInputBlock, { Name = lease.inputName })
+        if ok then lease.inputHeld = false else failUnknown(message) end
+      end
       lease.callback = function(screen)
         if target.costKey == nil then syntheticSpent[target.screen] = number(syntheticSpent[target.screen]) + RerollCosts.ReuseIncrement end
         -- Never throw through native presentation: it still owns the input block.
@@ -4448,8 +4457,18 @@ if __MacGamingTrainerV1 == nil then
             or costFor(target.screen) ~= plan.cost or number(target.run.NumRerolls) < plan.cost then
           record.status, record.error = "failed", "Choice reroll menu is stale"
         else
-          lease.entered = true
-          local ok, message = pcall(AttemptPanelReroll, target.screen, button)
+          -- Native releases its own block before its final .95-second wait.
+          -- Keep selection gated until complete native unwind and validation.
+          lease.inputHeld = true
+          local acquired, acquireMessage = pcall(addInputBlock, { Name = lease.inputName })
+          local ok, message
+          if acquired then
+            lease.entered = true
+            ok, message = pcall(AttemptPanelReroll, target.screen, button)
+          else
+            record.status, record.error = "failed", tostring(acquireMessage)
+            ok = true
+          end
           if not ok then
             failUnknown(message)
             -- Native exceptions can bypass its own unwind. Release only the
@@ -4458,11 +4477,12 @@ if __MacGamingTrainerV1 == nil then
               if type(RemoveInputBlock) == "function" then pcall(RemoveInputBlock, { Name = "AttemptPanelReroll" }) end
               if type(ScreenState) == "table" then ScreenState.InTransition = false end
             end
-          elseif record.status ~= "outcome_unknown" then
+          elseif acquired and record.status ~= "outcome_unknown" then
             local valid, finished = pcall(function() return lease.applied and matches(target, lease) and plannedEligible(plan) end)
             if valid and finished then record.status = "completed" else failUnknown("Choice reroll did not finish on its observed menu") end
           end
         end
+        lease.releaseInput()
         if _G[callbackName] == lease.callback then _G[callbackName] = nil end
         if activeLease == lease then activeLease = nil end
         actionLedger.publish(record)
@@ -4477,6 +4497,7 @@ if __MacGamingTrainerV1 == nil then
         lease.record.status, lease.record.error = "outcome_unknown", "Choice reroll interrupted after spending"
         M.terminalActionUnknown = true
       else lease.record.status, lease.record.error = "failed", "Choice reroll menu is stale" end
+      lease.releaseInput()
       -- Retain our no-op callback until native unwinds; removing it before the
       -- yield resumes would make CallFunctionName throw and skip native cleanup.
       actionLedger.publish(lease.record)
