@@ -40,7 +40,9 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 - Confirm current remote `main` HEAD and work on a branch.
 - Identify authoritative state, durable desired state, observable runtime state and one-shot intent involved in the change.
 - Decide whether an operation is replay-safe before adding retry/recovery behavior.
-- For a demonstrated correctness defect: reproduce RED first, then make the smallest coherent fix at the owning boundary.
+- For a demonstrated correctness defect: reproduce RED first, then identify the root cause and owning seam before choosing implementation scope. Make the smallest coherent fix of the demonstrated root cause, not the smallest diff. If the defect exposes a shallow module, duplicated policy, a wrong seam, or a responsibility split, expand the fix across that owning seam while keeping unrelated cleanup out of scope.
+- Treat defensive guards, fallbacks, retries, fail-closed branches, compatibility aliases and implementation-shape tests as complete fixes only when the failure mode is intrinsically unavoidable at the owning seam. If they merely contain a structural defect, mark the containment incomplete and retain a root-cause successor.
+- Repeated fixes that make several callers or tests understand the same implementation detail are architecture evidence. Prefer deepening the owning module so callers and tests cross one smaller interface instead of adding another caller-side special case.
 - Treat user shorthand as intent, not canonical product terminology. For game-facing names, prefer the supported target build's official localization or catalog/reference terminology; when no official name exists, choose a neutral formal product term and use it consistently across UI, errors, tests and current docs. When both Chinese and English are exposed, an official game term must resolve both `zh-CN` and `en` from the same localization ID; Trainer-only product labels must declare an explicit bilingual pair and must not masquerade as native game terminology.
 - Do not restore code merely because a historical branch is ahead/divergent; squash-merged and superseded branches are common in this repository.
 
@@ -48,7 +50,7 @@ A shared-looking Hades behavior does not move to Core merely because another gam
 
 Verification **scope** and evidence **identity** are separate. Every check claimed as evidence must have run against the exact SHA named by the claim; exact-head evidence does not mean every task runs the full release matrix.
 
-- **Task verification:** pull requests run only the minimum gates owned by the changed seams on the actual final PR head.
+- **Task verification:** pull requests run the minimum gates owned by every changed seam on the actual final PR head. A root-cause refactor that legitimately widens the changed seam widens verification with it.
 - **Integration verification:** any PR-head rewrite/rebase requires the task gates again so evidence binds to the new SHA. If overlapping work or a dependency changes inputs/semantics at the changed seam, also rerun those affected integration gates.
 - **Convergence/release verification:** explicitly dispatch the existing workflows on one selected SHA. This is where mutation testing, retained release/reference artifacts, provenance and checksums belong.
 
@@ -66,6 +68,12 @@ Routing by changed seam:
 - Tests must use temporary fixtures and must never read/write the real user/game save tree.
 - New test files use descriptive subject names (`test_<subject>.py`), not historical epoch tokens such as `roundNN` or `v0xxx`. Existing epoch-named tests are grandfathered and should not be bulk-renamed.
 - Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum produced by explicit convergence/QA dispatch.
+
+## Review and scope discipline
+
+- A focused task has one causal purpose, not an artificially small file count. A coherent root-cause fix may cross several files or existing subsystem seams when those edits are required to restore locality at the owning interface.
+- Review evaluates whether the demonstrated root cause is removed, ownership is improved, and unrelated work stayed out of the change. Do not request scope reduction solely because the correct fix is larger than the originating defect.
+- When a deeper module/interface replaces duplicated caller policy, migrate callers and tests to that interface and remove superseded implementation-shape checks instead of retaining both designs “for safety.”
 
 ## Governance budget
 

@@ -61,6 +61,16 @@ The App/Host supplies the common shell, sidebar, header, connection status, back
 
 - Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS/debugger requirements, and declared app bundle resources belong to the build tooling. Presentation labels/icons/header text remain in Swift.
 
+## Architecture evolution
+
+Module isolation is an ownership rule, not a prohibition on root-cause refactoring.
+
+- A defect that is demonstrably owned inside one game module should be fixed by deepening that game-owned module/interface rather than moving game semantics into Core.
+- A defect may legitimately cross the Core/game seam when the root cause proves that the current ownership is wrong or that a genuinely game-agnostic contract already exists. Such a change must update the reference fixture and module-build evidence for the affected seam.
+- Repeated Hades-only fixes do not by themselves justify a Core abstraction. Two real adapters or independently proven game-agnostic behavior are the evidence for a shared seam.
+- Conversely, do not preserve duplicated Host/Core policy inside a game merely to keep a patch small. When Core is the demonstrated owner, migrate the coherent responsibility and verify both Hades and the reference module.
+- Cross-seam refactors still have one causal purpose. They must not absorb unrelated game features or speculative future-game abstractions.
+
 ## Protocol and timeout rules
 
 The generic Host transports JSON-compatible dictionaries. Each game isolates that untyped edge immediately behind a typed request encoder and state decoder.
