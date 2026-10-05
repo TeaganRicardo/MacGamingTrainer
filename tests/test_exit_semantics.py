@@ -1,9 +1,18 @@
+import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
+
+from games.hades2 import preparation
+from games.hades2.adapter import Hades2Adapter
+from games.hades2.persistence import PersistenceError
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
+
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
 api = (ROOT/'Sources/Hades2/Hades2API.swift').read_text()
-adapter = (ROOT/'Backend/games/hades2/adapter.py').read_text()
 router = (ROOT/'Backend/games/hades2/command_router.py').read_text()
 
 termination = model[model.index('    private var runtimeCleanupRequired'):model.index('    private func finishExit')]
@@ -18,24 +27,104 @@ assert 'sendBarrier(.disableAll' in termination
 assert 'announceSuccess: false' in termination
 assert 'self.finishExit(completion: completion)' in termination
 
-# The exit-only desired reset is a typed Hades command and never needs a Lua boundary.
+# The exit-only desired reset remains a typed Hades command.
 assert 'case resetDesired = "reset_desired"' in api
 assert "elif command=='reset_desired':result=adapter.reset_desired()" in router
-reset_method = adapter[adapter.index('    def reset_desired'):adapter.index('    def _capture_runtime_preferences')]
-assert 'self._reset_preferences()' in reset_method
-assert 'self.transport.attach' not in reset_method
-assert 'mark_disconnected(self.state)' in reset_method
 
-# Normal disable_all still clears durable intent before any reattach/boundary attempt.
-# If durable persistence is explicitly blocked, runtime cleanup remains best-effort
-# and the persistence failure is surfaced only after that boundary attempt.
-execute = adapter[adapter.index('    def execute('):adapter.index('    def disconnect(', adapter.index('    def execute('))]
-reset_pos = execute.index('try:self._reset_preferences()')
-persist_catch_pos = execute.index('except PersistenceError as error:')
-reattach_pos = execute.index("if command in ('disable_all','cleanup') and not self.transport.alive()")
-boundary_pos = execute.index('decoded=execute_with_ledger')
-persist_raise_pos = execute.index('if teardown_persistence_error is not None:raise teardown_persistence_error', boundary_pos)
-assert reset_pos < persist_catch_pos < reattach_pos < boundary_pos < persist_raise_pos
-reset = adapter[adapter.index('    def _reset_preferences'):adapter.index('    def reset_desired')]
-assert reset.index('self.preference_store.save(preferences)') < reset.index('self.preferences=preferences')
+
+def make_adapter(prefix, session=None):
+    base = Path(tempfile.mkdtemp(prefix=prefix))
+    preparation.DATA = base
+    session = session or FakeResidentSession()
+    adapter = Hades2Adapter(
+        resident_session=session,
+        time_warp_controller=FakeTimeWarpController(),
+    )
+    return base, session, adapter
+
+
+# reset_desired is persistence-only. It must not attach, observe, mutate or
+# reconcile the resident session, even when Host state still says connected.
+_, reset_session, reset_adapter = make_adapter('mgt-exit-reset-')
+reset_session.live = False
+reset_adapter.state.update(connected=True, status='ready', scene='run')
+reset_adapter.preferences['invincibility'] = True
+before_invalidations = reset_session.invalidations
+reset_result = reset_adapter.reset_desired()
+assert reset_session.calls == []
+assert reset_session.invalidations == before_invalidations
+assert reset_result['connected'] is False
+assert reset_adapter.preferences['invincibility'] is False
+
+
+# If the durable reset write fails, runtime teardown is still best-effort. The
+# failure must happen before reattach/mutation, and it is surfaced only after
+# the teardown boundary returns.
+events = []
+
+
+class ExitSession(FakeResidentSession):
+    def __init__(self):
+        super().__init__({
+            'status': 'ready',
+            'scene': 'run',
+            'capabilities': {},
+            'desiredFeatures': {},
+            'activeFeatures': {},
+            'dormantFeatures': {},
+            'featureErrors': {},
+            'resources': [],
+            'elements': [],
+            'stats': {},
+            'boonRarity': {},
+            'gatheringProbabilities': {},
+            'chaosGateProbability': None,
+        }, pid=None)
+        self.live = False
+
+    def attach(self, pid):
+        events.append('attach')
+        super().attach(pid)
+
+    def mutate(self, command, params=None):
+        events.append(('mutate', command))
+        return super().mutate(command, params)
+
+
+_, exit_session, exit_adapter = make_adapter('mgt-exit-disable-', ExitSession())
+exit_adapter.state.update(connected=False, pid=None, status='disconnected', scene='unknown')
+exit_adapter.preferences['invincibility'] = True
+original_preferences = dict(exit_adapter.preferences)
+
+
+def failing_save(preferences):
+    events.append('persist-reset')
+    raise PersistenceError('simulated durable reset failure')
+
+
+exit_adapter.preference_store.save = failing_save
+
+
+def fake_scan():
+    events.append('scan')
+    exit_adapter.state['pid'] = 4242
+    exit_adapter.state['status'] = 'disconnected'
+    return dict(exit_adapter.state)
+
+
+exit_adapter.scan = fake_scan
+try:
+    exit_adapter.execute('disable_all', {})
+except PersistenceError as error:
+    assert 'simulated durable reset failure' in str(error)
+else:
+    raise AssertionError('durable teardown failure was hidden')
+
+assert events[0] == 'persist-reset'
+assert events.index('persist-reset') < events.index('attach')
+assert events.index('attach') < events.index(('mutate', 'disable_all'))
+assert exit_adapter.preferences == original_preferences, (
+    'failed durable reset must not pretend in-memory desired state was cleared'
+)
+
 print('exit_semantics_ok')

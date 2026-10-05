@@ -1,32 +1,17 @@
 import copy
-import json
-import re
 import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError
 from games.hades2.preferences import Hades2PreferenceStore
-
-
-class FakeTransport:
-    def __init__(self, live=True):
-        self.pid = 777
-        self.live = live
-        self.last_duration = 0.0
-
-    def alive(self):
-        return self.live
-
-    def detach(self):
-        self.live = False
-
-    def close(self):
-        self.live = False
+from games.hades2.resident_session import ResidentMetrics, ResidentReply
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 
 def seed_observed_locks(adapter):
@@ -75,7 +60,13 @@ def has_call(batch, command, **expected):
 def make_adapter(prefix, live=True):
     base = Path(tempfile.mkdtemp(prefix=prefix))
     preparation.DATA = base
-    return Hades2Adapter(transport=FakeTransport(live=live))
+    session = FakeResidentSession(pid=777)
+    session.live = live
+    adapter = Hades2Adapter(
+        resident_session=session,
+        time_warp_controller=FakeTimeWarpController(),
+    )
+    return adapter
 
 
 # Live Profile replacement must diff the replacement desired state against the
@@ -103,9 +94,13 @@ def fake_execute(command, params, replay=False, batch=None):
 
 adapter.execute = fake_execute
 observations = []
+
+
 def observe_runtime():
     observations.append('runtime')
     return dict(adapter.state)
+
+
 adapter.observe_runtime = observe_runtime
 adapter.load_profile('partial-locks')
 assert observations == ['runtime']
@@ -168,7 +163,7 @@ offline_adapter.profile_service.save('offline-no-locks', Hades2PreferenceStore.d
 offline_adapter.load_profile('offline-no-locks')
 assert offline_adapter.preference_dirty is True
 seed_observed_locks(offline_adapter)
-offline_adapter.transport.live = True
+offline_adapter.runtime.live = True
 offline_batches = []
 
 
@@ -192,17 +187,11 @@ print('profile_lock_reconciliation_ok')
 
 
 # Regression for a failed live Profile replay followed by an immediate second
-# load of the same Profile. This uses production load_profile() and execute();
-# only the LLDB/Lua transport boundary is simulated.
-class RuntimeTransport:
-    pid = 123
-    last_duration = 0.001
-
+# load of the same Profile. This uses production load_profile() and the semantic
+# resident-session interface; the test no longer parses generated Lua source.
+class RuntimeSession(FakeResidentSession):
     def __init__(self):
-        self.live = True
-        self.fail_once = False
-        self.sources = []
-        self.state = {
+        state = {
             'status': 'ready',
             'scene': 'run',
             'capabilities': {'setFeature': True},
@@ -226,47 +215,41 @@ class RuntimeTransport:
             'elements': [{'id': 'Fire', 'locked': True, 'count': 2}],
             'nextRoomReward': None,
         }
+        super().__init__(state, pid=123)
+        self.state = self.payload
+        self.fail_once = False
 
-    def alive(self):
-        return self.live
-
-    def detach(self):
-        self.live = False
-
-    def close(self):
-        self.live = False
-
-    def execute(self, source, *, expression_timeout_seconds=None):
-        self.sources.append(source)
-        lock_mutation = any(
-            marker in source
-            for marker in (
-                'dispatch("set_stat"', '["command"]="set_stat"',
-                'dispatch("lock_vital"', '["command"]="lock_vital"',
-                'dispatch("lock_resource"', '["command"]="lock_resource"',
-                'dispatch("lock_rerolls"', '["command"]="lock_rerolls"',
-                'dispatch("lock_element"', '["command"]="lock_element"',
-            )
+    def observe_status(self, params=None):
+        self.calls.append({
+            'kind': 'observe',
+            'command': 'status',
+            'params': dict(params or {}),
+            'batch': None,
+        })
+        return ResidentReply(
+            payload=copy.deepcopy(self.state),
+            metrics=ResidentMetrics(boundary_duration=0.001),
         )
-        if self.fail_once and lock_mutation:
+
+    def reconcile(self, calls):
+        calls = list(calls)
+        self.calls.append({
+            'kind': 'reconcile',
+            'command': 'replay_preferences',
+            'params': {},
+            'batch': copy.deepcopy(calls),
+        })
+        lock_commands = {
+            'set_stat', 'lock_vital', 'lock_resource', 'lock_rerolls', 'lock_element'
+        }
+        if self.fail_once and any(command in lock_commands for command, _ in calls):
             self.fail_once = False
             raise TransportError(
                 'lua_error',
                 'simulated known Lua command error before lock release',
             )
-        calls = re.findall(r'dispatch\("([^"]+)",(\{[^}]*\})\)', source)
-        calls.extend(re.findall(
-            r'\{\["command"\]="([^"]+)",\["params"\]=(\{[^}]*\})\}',
-            source,
-        ))
-        for command, fields in calls:
-            params = {}
-            for key, value in re.findall(
-                r'\["([^"]+)"\]=(true|false|nil|"[^"]*"|-?[\d.]+)',
-                fields,
-            ):
-                params[key] = None if value == 'nil' else json.loads(value)
-            if command == 'set_stat':
+        for command, params in calls:
+            if command == 'set_stat' and params.get('stat') in self.state['stats']:
                 self.state['stats'][params['stat']]['locked'] = params['locked']
             elif command == 'lock_vital':
                 self.state[params['vital'] + 'Locked'] = params['locked']
@@ -283,7 +266,10 @@ class RuntimeTransport:
                 for item in self.state['elements']:
                     if item['id'] == params['element']:
                         item['locked'] = params['locked']
-        return json.dumps(self.state)
+        return ResidentReply(
+            payload=copy.deepcopy(self.state),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+        )
 
 
 def runtime_locks(state):
@@ -301,17 +287,18 @@ def runtime_locks(state):
 
 retry_base = Path(tempfile.mkdtemp(prefix='mgt-profile-reconcile-retry-'))
 preparation.DATA = retry_base
-retry_transport = RuntimeTransport()
-retry_adapter = Hades2Adapter(transport=retry_transport)
-retry_adapter._runtime_bootstrapped = True
-retry_adapter._catalog_initialized = True
+retry_session = RuntimeSession()
+retry_adapter = Hades2Adapter(
+    resident_session=retry_session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 retry_adapter._apply_game_speed = lambda value: 1
-retry_adapter.state.update(copy.deepcopy(retry_transport.state), connected=True)
+retry_adapter.state.update(copy.deepcopy(retry_session.state), connected=True)
 retry_adapter.preference_initialized = True
-retry_adapter._capture_runtime_preferences(copy.deepcopy(retry_transport.state))
+retry_adapter._capture_runtime_preferences(copy.deepcopy(retry_session.state))
 retry_adapter.profile_service.save('retry-unlocked', retry_adapter._default_preferences())
 
-retry_transport.fail_once = True
+retry_session.fail_once = True
 try:
     retry_adapter.load_profile('retry-unlocked')
 except TransportError as error:
@@ -319,7 +306,7 @@ except TransportError as error:
 else:
     raise AssertionError('expected first Profile replay to fail')
 
-assert all(runtime_locks(retry_transport.state))
+assert all(runtime_locks(retry_session.state))
 assert retry_adapter.preference_dirty is True
 assert retry_adapter.state['status'] == 'ready'
 assert not any(runtime_locks(retry_adapter.state)), (
@@ -327,7 +314,7 @@ assert not any(runtime_locks(retry_adapter.state)), (
 )
 
 second_result = retry_adapter.load_profile('retry-unlocked')
-assert not any(runtime_locks(retry_transport.state)), (
+assert not any(runtime_locks(retry_session.state)), (
     'second Profile load must re-observe runtime locks and release them'
 )
 assert retry_adapter.preference_dirty is False

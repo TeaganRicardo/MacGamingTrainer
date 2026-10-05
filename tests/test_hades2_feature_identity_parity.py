@@ -16,7 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "tests"))
 from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
+from hades2_resident_session_fakes import FakeResidentSession
 
 ECONOMY_TOGGLES = {key for key in TOGGLES if key.endswith("MultiplierEnabled")}
 LUA_MULTIPLIERS = set(MULTIPLIER_RULES) - {"gameSpeed"}
@@ -424,26 +426,6 @@ def exercise_adapter_routes(root, toggles, multipliers):
     """Drive the real router/adapter with isolated preferences, no game or save tree."""
     preparation = importlib.import_module("games.hades2.preparation")
 
-    class Transport:
-        pid = 4242
-        last_duration = 0.001
-
-        def __init__(self):
-            self.sources = []
-
-        def alive(self):
-            return True
-
-        def execute(self, lua_source):
-            self.sources.append(lua_source)
-            return json.dumps({
-                "status": "ready", "scene": "run", "capabilities": {"setFeature": True},
-                "featureSupport": {}, "desiredFeatures": {}, "activeFeatures": {},
-                "dormantFeatures": {}, "featureErrors": {}, "stats": {},
-                "resources": [], "elements": [], "boons": [], "rewards": [],
-                "nextRoomReward": None,
-            })
-
     class TimeWarp:
         def __init__(self):
             self.calls = []
@@ -462,26 +444,38 @@ def exercise_adapter_routes(root, toggles, multipliers):
             setattr(preparation, "DATA", Path(temporary))
             adapter_module = load_python_consumer(root, "adapter.py", "adapter")
             adapter_type = adapter_module.Hades2Adapter
-            transport = Transport()
-            adapter = adapter_type(transport=transport)
+            session = FakeResidentSession({
+                "status": "ready", "scene": "run", "capabilities": {"setFeature": True},
+                "featureSupport": {}, "desiredFeatures": {}, "activeFeatures": {},
+                "dormantFeatures": {}, "featureErrors": {}, "stats": {},
+                "resources": [], "elements": [], "boons": [], "rewards": [],
+                "nextRoomReward": None, "boonRarity": {},
+                "gatheringProbabilities": {}, "chaosGateProbability": None,
+            }, pid=4242)
             time_warp = TimeWarp()
-            adapter.time_warp = time_warp
-            adapter._runtime_bootstrapped = True
+            adapter = adapter_type(
+                resident_session=session,
+                time_warp_controller=time_warp,
+            )
             adapter.preference_initialized = True
             adapter.state.update(connected=True, status="waiting", capabilities={"setFeature": True})
-            lua_value = adapter_module.lua_value
             for index, key in enumerate((*toggles, *(key for key in multipliers if key != "gameSpeed"))):
                 value = True if key in toggles else multipliers[key]["default"]
-                before = len(transport.sources)
+                before = len(session.calls)
                 adapter.dispatch("set_desired", {"feature": key, "value": value}, str(index))
-                assert len(transport.sources) == before + 1, "Lua-bound feature missed Lua: " + key
-                expected = 'dispatch("set_feature",' + lua_value({"feature": key, "value": value})[:-1] + ","
-                assert expected in transport.sources[-1], "Lua-bound feature misrouted: " + key
+                assert len(session.calls) == before + 1, "Lua-bound feature missed resident session: " + key
+                call = session.calls[-1]
+                assert call["kind"] == "mutate" and call["command"] == "set_feature", (
+                    "Lua-bound feature misrouted: " + key
+                )
+                assert call["params"] == {"feature": key, "value": value}, (
+                    "Lua-bound feature payload changed: " + key
+                )
                 assert not time_warp.calls, "Lua-bound feature crossed Core Time Warp: " + key
-            before = len(transport.sources)
+            before = len(session.calls)
             speed = multipliers["gameSpeed"]["default"] + 1.0
             result = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": speed}, "core-speed")
-            assert len(transport.sources) == before, "Core-owned gameSpeed crossed Lua"
+            assert len(session.calls) == before, "Core-owned gameSpeed crossed resident session"
             assert time_warp.calls == [("set_speed", speed)], "Core-owned gameSpeed missed Time Warp"
             assert result["gameSpeed"] == speed, "Core-owned gameSpeed state misrouted"
     finally:

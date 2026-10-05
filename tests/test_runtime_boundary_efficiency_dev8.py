@@ -7,21 +7,25 @@ from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
-from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from games.hades2.resident_session import Hades2ResidentSession
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-runtime-boundary-dev8-'))
 preparation.DATA = base
-adapter_module.localize_catalog = lambda payload: payload
+runtime_source = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
 
 class FakeTransport:
     def __init__(self):
         self.pid = 4242
         self.last_duration = 0.001
+        self.last_expression_duration = 0.0
+        self.tainted = False
         self.sources = []
 
     def alive(self): return True
@@ -53,13 +57,13 @@ class FakeTransport:
         return json.dumps(payload)
 
 
+# Bootstrap/catalog source-shape and boundary size are resident-session concerns.
 transport = FakeTransport()
-adapter = Hades2Adapter(transport=transport)
+session = Hades2ResidentSession(transport, bootstrap=runtime_source)
 
-first = adapter.execute('status', {})
-assert adapter._runtime_bootstrapped is True
-assert adapter._catalog_initialized is True
-assert first['rewards'][0]['id'] == 'RoomMoneyDrop'
+first_reply = session.status()
+assert session.allows_process_time_warp() is True
+assert first_reply.payload['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert len(transport.sources) == 1
 first_source_bytes = len(transport.sources[0].encode('utf-8'))
 assert first_source_bytes > 100_000
@@ -67,23 +71,61 @@ assert first_source_bytes <= LUA_TRANSPORT_SOURCE_LIMIT_BYTES, (
     f'fresh resident bootstrap exceeds transport source cap: {first_source_bytes}'
 )
 assert LUA_TRANSPORT_RESULT_LIMIT_BYTES == 262_144
-revision = runtime_revision(adapter.bootstrap)
+revision = runtime_revision(runtime_source)
 assert f'revision = {revision}' in transport.sources[0]
 assert '["includeCatalogs"]=true' in transport.sources[0]
 
-second = adapter.execute('status', {})
+second_reply = session.status()
 assert len(transport.sources) == 2
 assert len(transport.sources[1].encode('utf-8')) < 2_000
 assert f'revision = {revision}' not in transport.sources[1]
 assert '["includeCatalogs"]=false' in transport.sources[1]
-# The Lua patch omits static catalogs after the first boundary, but the adapter
-# retains them in its authoritative merged state, so Host/UI responses lose no data.
+assert 'rewards' not in second_reply.payload and 'boons' not in second_reply.payload
+
+
+# The Adapter owns merged Host state. Sparse later resident status must not erase
+# the static catalogs materialized by the first generation response.
+status_payloads = [
+    {
+        'status': 'ready', 'scene': 'run', 'capabilities': {},
+        'desiredFeatures': {}, 'activeFeatures': {}, 'dormantFeatures': {},
+        'featureSupport': {}, 'featureErrors': {}, 'boonRarity': {},
+        'gatheringProbabilities': {}, 'chaosGateProbability': None,
+        'resources': [], 'elements': [], 'stats': {},
+        'boons': [{'id': 'ZeusUpgrade', 'name': 'Zeus'}],
+        'rewards': [{'id': 'RoomMoneyDrop', 'name': 'Gold'}],
+    },
+    {
+        'status': 'ready', 'scene': 'run', 'capabilities': {},
+        'desiredFeatures': {}, 'activeFeatures': {}, 'dormantFeatures': {},
+        'featureSupport': {}, 'featureErrors': {}, 'boonRarity': {},
+        'gatheringProbabilities': {}, 'chaosGateProbability': None,
+        'resources': [], 'elements': [], 'stats': {},
+    },
+]
+
+
+def status_handler(fake, record):
+    assert record['kind'] == 'status'
+    return status_payloads.pop(0)
+
+
+adapter_session = FakeResidentSession(handler=status_handler, pid=4242)
+adapter = Hades2Adapter(
+    resident_session=adapter_session,
+    time_warp_controller=FakeTimeWarpController(),
+)
+adapter.preference_initialized = True
+adapter.preference_dirty = False
+first = adapter.execute('status', {})
+second = adapter.execute('status', {})
+assert first['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert second['rewards'][0]['id'] == 'RoomMoneyDrop'
 assert second['boons'][0]['id'] == 'ZeusUpgrade'
 
-# World::Update boundary contract: the live transport must break on the one
-# engine frame boundary we actually need, not on every Lua pcall and then
-# filter callers after repeatedly stopping the game.
+
+# World::Update boundary contract remains transport-owned: the live transport
+# must break on the one engine frame boundary we need, not on every Lua pcall.
 transport_source = (ROOT / 'Backend/games/hades2/transport.py').read_text()
 symbols = json.loads((ROOT / 'Backend/games/hades2/symbols.json').read_text())['symbols']
 world_symbol = '_ZN3sgg5World6UpdateEf'

@@ -5,29 +5,25 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
-import games.hades2.adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-dev8-pref-commit-'))
 preparation.DATA = base
-adapter_module.localize_catalog = lambda payload: payload
-
-class LiveTransport:
-    pid = 123
-    last_duration = 0.001
-    def alive(self): return True
-    def detach(self): pass
-    def close(self): pass
-    def execute(self, source):
-        return json.dumps({
-            'status':'ready', 'scene':'run',
-            'capabilities':{'setFeature':True},
-            'resources':[], 'elements':[], 'stats':{},
-        })
-
-adapter = Hades2Adapter(transport=LiveTransport())
+session = FakeResidentSession({
+    'status':'ready', 'scene':'run',
+    'capabilities':{'setFeature':True},
+    'desiredFeatures':{}, 'activeFeatures':{}, 'dormantFeatures':{},
+    'featureErrors':{}, 'resources':[], 'elements':[], 'stats':{},
+    'boonRarity':{}, 'gatheringProbabilities':{}, 'chaosGateProbability':None,
+}, pid=123)
+adapter = Hades2Adapter(
+    resident_session=session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 adapter.state.update(status='ready', connected=True, capabilities={'setFeature':True})
 
 save_count = 0

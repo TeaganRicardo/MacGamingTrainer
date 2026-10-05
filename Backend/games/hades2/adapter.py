@@ -1,5 +1,4 @@
 """JSONL worker; one request at a time, no network or arbitrary-code endpoint."""
-import json
 import logging
 import math
 import subprocess
@@ -10,13 +9,12 @@ from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 
 from . import preparation
-from .boundary_ledger import execute_with_ledger
-from .catalog import localize_catalog
 from .command_router import Hades2CommandRouter
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
 from .profile_service import Hades2ProfileService
+from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
 from .schema import (
     MULTIPLIERS,
     STAT_RULES,
@@ -82,29 +80,13 @@ def mark_disconnected(state):
     state['capabilities']=disconnected_capabilities()
 
 
-def lua_value(value):
-    if value is None:return 'nil'
-    if isinstance(value,bool):return 'true' if value else 'false'
-    if isinstance(value,(int,float)):
-        if not math.isfinite(value):raise ValueError('必须输入有限数值。')
-        return str(value)
-    if isinstance(value,str):
-        return '"'+''.join(('\\%03d'%ord(c)) if ord(c)<32 or c in ('"','\\') else c for c in value)+'"'
-    if isinstance(value,dict):return '{'+','.join('['+lua_value(k)+']='+lua_value(v) for k,v in value.items())+'}'
-    raise ValueError('参数类型不支持。')
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
     'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
-_TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
-_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
-_TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
-_REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
-
-
 class Hades2Adapter(GameAdapter):
     data_dir = DATA
-    def __init__(self, transport=None, context=None):
+    def __init__(self, transport=None, context=None, resident_session=None, time_warp_controller=None):
         if context is None:
             context = GameAdapterContext(
                 game_id=MODULE_MANIFEST.id,
@@ -116,14 +98,24 @@ class Hades2Adapter(GameAdapter):
                 save_management=MODULE_MANIFEST.save_management,
             )
         super().__init__(context)
-        if transport is None:
-            from .transport import Hades2LuaTransport
-            transport = Hades2LuaTransport()
-        self.transport=transport;self.bootstrap=(Path(__file__).with_name('runtime') / 'hades.lua').read_text()
-        helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
-        self.time_warp=ProcessTimeWarpController(LLDBProcessTimeWarpDriver(self.transport),helper_path,[GAME_SPEC.executable_name])
+        if resident_session is None:
+            if transport is None:
+                from .transport import Hades2LuaTransport
+                transport = Hades2LuaTransport()
+            self.runtime=Hades2ResidentSession(transport)
+        else:
+            if transport is not None:
+                raise ValueError('resident_session and transport are mutually exclusive.')
+            self.runtime=resident_session
+        if time_warp_controller is None:
+            if transport is None:
+                raise ValueError('time_warp_controller is required with an injected resident_session.')
+            helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
+            time_warp_controller=ProcessTimeWarpController(
+                LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
+            )
+        self.time_warp=time_warp_controller
         self._time_warp_speed=1.0;self._time_warp_error=None
-        self._runtime_bootstrapped=False;self._catalog_initialized=False
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
@@ -172,14 +164,14 @@ class Hades2Adapter(GameAdapter):
         if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         observed_locks=None
-        if self.transport.alive() and self.state.get('connected'):
+        if self.runtime.alive() and self.state.get('connected'):
             self.observe_runtime()
             observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.transport.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
+        if self.runtime.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
 
@@ -309,7 +301,7 @@ class Hades2Adapter(GameAdapter):
         # This command is deliberately transport-free.  If the debugger died
         # behind the host's back, report the connection loss rather than trying
         # to reattach during application termination.
-        if self.state.get('connected') and not self.transport.alive():
+        if self.state.get('connected') and not self.runtime.alive():
             mark_disconnected(self.state)
         self._overlay_preferences()
         return dict(self.state)
@@ -483,7 +475,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
-            if self.transport.alive() and self._runtime_bootstrapped:
+            if self.runtime.alive() and self.runtime.allows_process_time_warp():
                 try:
                     self._apply_game_speed(value)
                     self.preference_dirty=was_dirty
@@ -496,7 +488,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_dirty=True
         # Lua-owned desired state remains editable while detached and replays
         # when a compatible scene becomes available.
-        if self.transport.alive() and self.state.get('capabilities',{}).get('setFeature'):
+        if self.runtime.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
                 self.preference_dirty=was_dirty
@@ -514,7 +506,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -529,7 +521,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_gathering_probabilities',{'probabilities':probabilities})
             self.preference_dirty=was_dirty
             return result
@@ -543,7 +535,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_chaos_gate_probability',{'probability':probability})
             self.preference_dirty=was_dirty
             return result
@@ -557,13 +549,14 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
-        if not self.transport.alive():return dict(self.state)
-        if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
+        if not self.runtime.alive():return dict(self.state)
+        if self.runtime.allows_process_time_warp():
+            self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         if self.state.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
@@ -642,10 +635,10 @@ class Hades2Adapter(GameAdapter):
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
         pid=pids[0] if pids else None
-        if self.transport.pid and (pid!=self.transport.pid or not self.transport.alive()):
-            attached_pid=self.transport.pid
+        if self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive()):
+            attached_pid=self.runtime.pid
             same_process=pid is not None and pid==attached_pid
-            self.transport.detach()
+            self.runtime.detach()
             if same_process:mark_disconnected(self.state)
             else:
                 clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
@@ -655,8 +648,7 @@ class Hades2Adapter(GameAdapter):
         previous_pid=self.state.get('pid')
         self.state['pid']=pid
         if pid!=previous_pid:
-            self._runtime_bootstrapped=False
-            self._catalog_initialized=False
+            self.runtime.invalidate_generation()
             self._time_warp_speed=1.0;self._time_warp_error=None;self._project_time_warp()
         if not pid:self.state['status']='not_running'
         elif not self.state['connected']:self.state['status']='disconnected'
@@ -672,20 +664,16 @@ class Hades2Adapter(GameAdapter):
             if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
             phase=time.monotonic()
             try:
-                self.transport.attach(self.state['pid'])
+                self.runtime.attach(self.state['pid'])
             finally:
                 profile['attachTotal']=time.monotonic()-phase
-                attach_profile=dict(getattr(self.transport,'last_attach_profile',{}) or {})
-            # A debugger reconnect is the synchronization boundary for the resident
-            # module. Bootstrap once here even when the same game process survived a
-            # manual detach, then use dispatch-only payloads for subsequent calls.
-            self._runtime_bootstrapped=False
+                attach_profile=self.runtime.last_attach_profile
+            # Resident-session attach owns generation/bootstrap invalidation.
             self.state['connected']=True
             if not probe_runtime:
                 outcome='deferred'
-                self._catalog_initialized=False
                 clear_active(self.state,preserve_desired=True)
-                self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+                self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
                 self._overlay_preferences()
                 return dict(self.state)
             phase=time.monotonic()
@@ -705,7 +693,7 @@ class Hades2Adapter(GameAdapter):
                     result=dict(self.state)
                 else:
                     outcome=e.code
-                    self.transport.detach();mark_disconnected(self.state);raise
+                    self.runtime.detach();mark_disconnected(self.state);raise
             profile['firstStatusTotal']=time.monotonic()-phase
             return result
         except Exception as exc:
@@ -723,25 +711,18 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_boundary_duration,self._last_status_json_duration,self._last_status_localize_duration,
             )
 
-    @staticmethod
-    def _runtime_generation_missing(error):
-        message=str(error)
-        return error.code=='lua_error' and '__MacGamingTrainerV1' in message and 'nil value' in message
-
-    @staticmethod
-    def _resident_cleanup_failed(error):
-        return error.code=='lua_error' and 'MGT_RESIDENT_RESTART_REQUIRED:' in str(error)
-
-    def _invalidate_runtime_generation(self):
-        self._runtime_bootstrapped=False
-        self._catalog_initialized=False
+    def _mark_runtime_generation_invalidated(self):
         self.preference_dirty=True
         clear_active(self.state,preserve_desired=True)
-        self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+        self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
         self._overlay_preferences()
 
+    def _invalidate_runtime_generation(self):
+        self.runtime.invalidate_generation()
+        self._mark_runtime_generation_invalidated()
+
     def runtime_reset(self):
-        if not self.transport.alive() or not self.state.get('connected'):
+        if not self.runtime.alive() or not self.state.get('connected'):
             return dict(self.state)
         self._invalidate_runtime_generation()
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
@@ -767,24 +748,19 @@ class Hades2Adapter(GameAdapter):
         self,command,params,replay=False,batch=None,
         host_observation_only=False,
     ):
-        # host_observation_only suppresses Host adoption/replay/persistence.
-        # Resident status may still perform synchronize() maintenance, so this
-        # path is observation-with-maintenance, not a pure runtime snapshot.
+        # Host projection/persistence remains Adapter-owned. The resident session
+        # owns the debugger/Lua transaction, generation, bootstrap, handoff and trust.
         if host_observation_only and command!='status':
             raise ValueError('runtime observation 仅允许 status。')
         project_desired=not host_observation_only
         teardown=not host_observation_only and command in ('disable_all','cleanup')
-        # Durable intent is reset before any potentially slow debugger attach or
-        # Lua boundary. If that write is explicitly blocked/failed, still make a
-        # best-effort runtime teardown; report the persistence error afterwards
-        # without pretending the durable state was reset.
         teardown_persistence_error=None
         if teardown:
             try:self._reset_preferences()
             except PersistenceError as error:
                 teardown_persistence_error=error
                 logging.warning('Durable teardown reset failed; continuing runtime cleanup: %s',error)
-        if command in ('disable_all','cleanup') and not self.transport.alive():
+        if command in ('disable_all','cleanup') and not self.runtime.alive():
             # Explicit teardown must never be faked. Reattach to the same live
             # process so app exit / “全部关闭” can really clear resident hooks.
             self.scan()
@@ -792,8 +768,8 @@ class Hades2Adapter(GameAdapter):
                 clear_active(self.state);self.state.update(connected=False,status='not_running')
                 if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
-            self.transport.attach(self.state['pid']);self.state['connected']=True
-        if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
+            self.runtime.attach(self.state['pid']);self.state['connected']=True
+        if not self.runtime.alive():raise TransportError('disconnected','请先连接游戏。')
         teardown_speed_error=None
         if teardown:
             try:self._apply_game_speed(1.0)
@@ -802,124 +778,35 @@ class Hades2Adapter(GameAdapter):
                 logging.warning('Time Warp teardown failed; continuing Lua cleanup: %s',error)
         try:
             runtime_params=dict(params or {})
-            if 'includeCatalogs' not in runtime_params:
-                runtime_params['includeCatalogs']=not self._catalog_initialized
-            decode_metrics={}
-            def decode_runtime(raw):
-                phase=time.monotonic()
-                payload=json.loads(raw)
-                decode_metrics['json']=time.monotonic()-phase
-                phase=time.monotonic()
-                payload=localize_catalog(payload)
-                decode_metrics['localize']=time.monotonic()-phase
-                return payload
             if command=='status':
                 self._last_status_boundary_duration=0.0
                 self._last_status_json_duration=0.0
                 self._last_status_localize_duration=0.0
-            recovered_generation=False
-            trait_tray_handoff_started=None
-            trait_tray_handoff_boundaries=0
             try:
-                while True:
-                    if (
-                        trait_tray_handoff_started is not None
-                        and time.monotonic()-trait_tray_handoff_started>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
-                    ):
-                        raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                    if batch is None:
-                        dispatch_value='__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+')'
+                if batch is not None:
+                    reply=self.runtime.reconcile(batch)
+                elif command=='status':
+                    if host_observation_only:
+                        reply=self.runtime.observe_status(runtime_params)
                     else:
-                        calls=[]
-                        for batch_command,batch_params in batch:
-                            item_params=dict(batch_params or {});item_params['includeCatalogs']=False
-                            calls.append(
-                                '{["command"]='+lua_value(batch_command)+',["params"]='+lua_value(item_params)+'}'
-                            )
-                        dispatch_value='__MacGamingTrainerV1.dispatchBatch({'+','.join(calls)+'})'
-                    if command=='status':
-                        dispatch='return __MacGamingTrainerV1.json('+dispatch_value+')'
-                    else:
-                        # Target build 1.143476 already uses this exact game-owned
-                        # coroutine close in CheckLastStand. thread() resumes the
-                        # close routine until its first wait without yielding the
-                        # debugger pcall, then the game's scheduler owns the rest.
-                        dispatch=(
-                            'return __MacGamingTrainerV1.json((function() '
-                            'local __mgtScreen=(type(ActiveScreens)=="table") and ActiveScreens.TraitTrayScreen or nil;'
-                            'if __mgtScreen~=nil then '
-                            'if type(thread)~="function" or type(TraitTrayScreenClose)~="function" then '
-                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="unsupported"} end;'
-                            'if not __mgtScreen.Closing then thread(TraitTrayScreenClose,__mgtScreen) end;'
-                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="closing"} end;'
-                            'return '+dispatch_value+' end)())'
-                        )
-                    code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
-                    boundary_started=time.monotonic()
-                    try:
-                        decoded=execute_with_ledger(
-                            self.transport,command,code,decode_runtime,
-                            replay=replay,read_only=host_observation_only,
-                            expression_timeout_seconds=_REPLAY_EXPRESSION_TIMEOUT_SECONDS if batch is not None else None,
-                        )
-                        handoff=decoded.get(_TRAIT_TRAY_HANDOFF_KEY) if isinstance(decoded,dict) else None
-                        if handoff is not None:
-                            if handoff=='unsupported':
-                                raise TransportError(
-                                    'incompatible',
-                                    '游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。',
-                                )
-                            if handoff!='closing':
-                                raise TransportError('lua_error','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                            if trait_tray_handoff_started is None:
-                                trait_tray_handoff_started=boundary_started
-                            trait_tray_handoff_boundaries+=1
-                            elapsed=time.monotonic()-trait_tray_handoff_started
-                            if elapsed>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS:
-                                raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                            time.sleep(min(
-                                _TRAIT_TRAY_HANDOFF_POLL_SECONDS,
-                                max(0.0,_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS-elapsed),
-                            ))
-                            continue
-                        break
-                    except TransportError as error:
-                        if self._resident_cleanup_failed(error):
-                            raise TransportError(
-                                'restart_required',
-                                'hades2.error.residentCleanupFailed',
-                                diagnostic=str(error),
-                            ) from error
-                        if not self._runtime_generation_missing(error):
-                            raise
-                        self._invalidate_runtime_generation()
-                        if command!='status' or recovered_generation:
-                            raise
-                        recovered_generation=True
-                        runtime_params['includeCatalogs']=True
-                        logging.info('Lua runtime generation reset detected; re-bootstrap status in same debugger attachment')
-                if trait_tray_handoff_started is not None:
-                    logging.info(
-                        'TraitTrayHandoff command=%s duration=%.3fs boundaries=%d',
-                        command,time.monotonic()-trait_tray_handoff_started,trait_tray_handoff_boundaries+1,
-                    )
-            finally:
-                if command=='status':
-                    self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+                        reply=self.runtime.status(runtime_params)
+                else:
+                    reply=self.runtime.mutate(command,runtime_params)
+            except ResidentGenerationInvalidated as invalidated:
+                self._mark_runtime_generation_invalidated()
+                raise invalidated.original
+            if reply.generation_reset:
+                # The session has already re-bootstraped the new generation.
+                # Adapter only projects that lifecycle evidence into desired/observed state.
+                self._mark_runtime_generation_invalidated()
+            decoded=reply.payload
             if command=='status':
-                self._last_status_json_duration=decode_metrics.get('json',0.0)
-                self._last_status_localize_duration=decode_metrics.get('localize',0.0)
-            self._runtime_bootstrapped=True
-            if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
-            last_action=decoded.get('lastAction')
-            asynchronous_unknown=isinstance(last_action,dict) and last_action.get('outcome')=='outcome_unknown'
-            if asynchronous_unknown:self.transport.tainted=True
-            if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
-                logging.warning(
-                    'LuaAction command=%s requestId=%s outcome=failed raw=%s',
-                    last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
-                )
-            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
+                self._last_status_boundary_duration=reply.metrics.boundary_duration
+                self._last_status_json_duration=reply.metrics.json_duration
+                self._last_status_localize_duration=reply.metrics.localize_duration
+            asynchronous_unknown=reply.outcome_unknown
+            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
+                self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
             if prior_warnings or catalog_warnings:
@@ -932,25 +819,17 @@ class Hades2Adapter(GameAdapter):
             decoded['capabilities']=capabilities
             for key in _TRANSIENT_ACTION_RESULT_FIELDS:
                 self.state.pop(key,None)
-            self.state.update(decoded,connected=True,pid=self.transport.pid)
+            self.state.update(decoded,connected=True,pid=self.runtime.pid)
             self.state.pop('error',None)
             # Runtime observation skips durable Hades desired-state projection,
-            # but Core-owned Process Time Warp remains observable Host state and
-            # must stay present in diagnostics/status snapshots.
+            # but Core-owned Process Time Warp remains observable Host state.
             if host_observation_only:self._project_time_warp()
-            # nextRoomReward is a one-shot runtime request. A clean status in
-            # the same backend confirms consumption once the armed runtime value
-            # disappears. Across a backend restart, require Lua's persisted
-            # consumed-token receipt so a command that never reached Lua remains
-            # replayable while an already-consumed one-shot cannot resurrect.
             if not host_observation_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
                 self.preferences['nextRoomReward']=None
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
-            # A game-owned coroutine may become uncertain after its accepted
-            # debugger reply. Retain this observation and proven consumption,
-            # but do not adopt/replay intent or cross another mutation boundary.
+            # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             if not host_observation_only and command=='status' and self.preference_dirty and not replay:
@@ -967,11 +846,15 @@ class Hades2Adapter(GameAdapter):
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
-                         command,reward_context,self.transport.last_duration,self.state.get('scene'),
+                         command,reward_context,reply.metrics.boundary_duration,self.state.get('scene'),
                          self.state.get('desiredFeatures'),self.state.get('activeFeatures'),
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
         except TransportError as e:
+            if command=='status' and isinstance(e,ResidentSessionError):
+                self._last_status_boundary_duration=e.metrics.boundary_duration
+                self._last_status_json_duration=e.metrics.json_duration
+                self._last_status_localize_duration=e.metrics.localize_duration
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
@@ -981,7 +864,7 @@ class Hades2Adapter(GameAdapter):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
-        if self.transport.alive():self.transport.detach()
+        if self.runtime.alive():self.runtime.detach()
         self.state.update(connected=False,status='disconnected')
         mark_disconnected(self.state)
         self._overlay_preferences()
@@ -1004,4 +887,4 @@ class Hades2Adapter(GameAdapter):
         except Exception:
             logging.exception('Graceful %s cleanup failed; attempting debugger detach.', GAME_SPEC.display_name)
         finally:
-            self.transport.close()
+            self.runtime.close()

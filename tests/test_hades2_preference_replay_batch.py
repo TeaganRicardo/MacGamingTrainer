@@ -1,4 +1,3 @@
-import json
 import subprocess
 import sys
 import tempfile
@@ -11,6 +10,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 from lua_runtime_support import require_lua52
 
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
@@ -41,58 +41,32 @@ def payload():
     }
 
 
-class ReplayTransport:
-    def __init__(self):
-        self.pid = 4242
-        self.last_duration = 0.001
-        self.sources = []
-        self.expression_timeouts = []
-        self.tainted = False
-
-    def alive(self):
-        return True
-
-    def execute(self, source, *, expression_timeout_seconds=None):
-        self.sources.append(source)
-        self.expression_timeouts.append(expression_timeout_seconds)
-        return json.dumps(payload())
-
-
 base = Path(tempfile.mkdtemp(prefix="mgt-replay-batch-"))
 preparation.DATA = base
-adapter_module.localize_catalog = lambda value: value
 
-transport = ReplayTransport()
-adapter = Hades2Adapter(transport=transport)
-adapter._runtime_bootstrapped = True
-adapter._catalog_initialized = True
+session = FakeResidentSession(payload())
+adapter = Hades2Adapter(
+    resident_session=session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 adapter.preference_initialized = True
 adapter.preference_dirty = False
-adapter.execute(
-    "replay_preferences",
-    {},
-    replay=True,
-    batch=[
-        ("set_feature", {"feature": "damageMultiplier", "value": 3.0}),
-        ("set_feature", {"feature": "resourceMultiplier", "value": 4.0}),
-        ("set_boon_rarity", {
-            "target": "Heroic",
-            "multiplier": 100.0,
-            "forceLegendary": True,
-            "forceDuo": True,
-        }),
-    ],
-)
+batch = [
+    ("set_feature", {"feature": "damageMultiplier", "value": 3.0}),
+    ("set_feature", {"feature": "resourceMultiplier", "value": 4.0}),
+    ("set_boon_rarity", {
+        "target": "Heroic",
+        "multiplier": 100.0,
+        "forceLegendary": True,
+        "forceDuo": True,
+    }),
+]
+adapter.execute("replay_preferences", {}, replay=True, batch=batch)
 
-assert len(transport.sources) == 1
-source = transport.sources[0]
-assert "__MacGamingTrainerV1.dispatchBatch(" in source, (
-    "durable replay still expands every preference into a full resident dispatch"
-)
-assert '__MacGamingTrainerV1.dispatch("set_feature"' not in source
-assert transport.expression_timeouts == [5.0], (
-    "durable replay did not receive its bounded recovery budget"
-)
+assert len(session.calls) == 1
+assert session.calls[0]["kind"] == "reconcile"
+assert session.calls[0]["batch"] == batch
+assert session.calls[0]["command"] == "replay_preferences"
 
 HARNESS = r'''
 local runtimePath = assert(arg[1], "runtime path required")

@@ -13,7 +13,6 @@ from games.hades2 import preparation
 
 base = Path(tempfile.mkdtemp(prefix='mgt-connect-profile-'))
 preparation.DATA = base
-adapter_module.localize_catalog = lambda payload: payload
 
 
 class FakeTransport:
@@ -264,7 +263,7 @@ assert deferred_transport.execute_count == 0
 assert deferred_result['connected'] is True
 assert deferred_result['status'] == 'waiting'
 assert deferred_result['scene'] == 'loading'
-assert deferred_adapter._runtime_bootstrapped is False
+assert deferred_adapter.runtime.allows_process_time_warp() is False
 deferred_log = deferred_stream.getvalue()
 assert 'ConnectProfile outcome=deferred' in deferred_log
 assert 'firstStatusTotal=0.000s' in deferred_log

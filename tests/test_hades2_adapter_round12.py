@@ -7,12 +7,15 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root/'Backend'))
+sys.path.insert(0, str(root/'tests'))
 
 import games.hades2.adapter as adapter_module
 from core.adapter import AdapterError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
+from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-hades2-adapter-r12-'))
 prep.DATA = base
@@ -81,89 +84,117 @@ def reset_payload(god_mode=False):
         'nextRoomReward':None,'stats':{},'resources':[],'elements':[],'boons':[],'rewards':[],
     }
 
-class ResetTransport(FakeTransport):
-    def __init__(self, fail_once=True):
-        super().__init__()
-        self.pid=4242;self.live=True;self.fail_once=fail_once;self.sources=[];self.god_mode=False
-    def execute(self, source, *, expression_timeout_seconds=None):
-        self.sources.append(source);self.last_duration=0.001
-        if self.fail_once:
-            self.fail_once=False
-            raise AdapterError('lua_error', '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)')
-        if (
-            '__MacGamingTrainerV1.dispatch("set_feature",' in source
-            or '__MacGamingTrainerV1.dispatchBatch(' in source
-        ) and 'invincibility' in source:
-            self.god_mode=True
-        return json.dumps(reset_payload(self.god_mode))
+class ResetSession(FakeResidentSession):
+    def __init__(self, generation_reset=False):
+        super().__init__(reset_payload(False))
+        self.generation_reset = generation_reset
+        self.god_mode = False
 
-# A profile reload destroys/recreates Hades' Lua VM without changing the PID or
-# debugger attachment. A read-only status refresh must recognize the vanished
-# resident module, bootstrap the new Lua generation exactly once, and replay the
-# durable desired profile without requiring a debugger reconnect.
-reset_transport=ResetTransport()
-reset_adapter=Hades2Adapter(transport=reset_transport)
-reset_adapter._runtime_bootstrapped=True
-reset_adapter._catalog_initialized=True
+    def status(self, params=None):
+        self.calls.append({
+            'kind': 'status',
+            'command': 'status',
+            'params': dict(params or {}),
+            'batch': None,
+        })
+        reply = ResidentReply(
+            payload=reset_payload(self.god_mode),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+            generation_reset=self.generation_reset,
+        )
+        self.generation_reset = False
+        return reply
+
+    def reconcile(self, calls):
+        calls = list(calls)
+        self.calls.append({
+            'kind': 'reconcile',
+            'command': 'replay_preferences',
+            'params': {},
+            'batch': calls,
+        })
+        for command, params in calls:
+            if command == 'set_feature' and params.get('feature') == 'invincibility':
+                self.god_mode = bool(params.get('value'))
+        return ResidentReply(
+            payload=reset_payload(self.god_mode),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+        )
+
+
+# A profile reload destroys/recreates Hades' Lua VM without changing the PID.
+# ResidentSession owns re-bootstrap/recovery; Adapter only projects the
+# generation-reset evidence and replays the durable desired profile once.
+reset_session=ResetSession(generation_reset=True)
+reset_adapter=Hades2Adapter(
+    resident_session=reset_session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 reset_adapter.preferences=reset_adapter._default_preferences()
 reset_adapter.preferences['invincibility']=True
 reset_adapter.preference_initialized=True
 reset_adapter.preference_dirty=False
 recovered=reset_adapter.execute('status', {})
-assert len(reset_transport.sources) == 3
-assert 'local previousModule' not in reset_transport.sources[0]
-assert 'local previousModule' in reset_transport.sources[1]
-assert any('__MacGamingTrainerV1.dispatchBatch(' in source and 'invincibility' in source for source in reset_transport.sources[2:])
+assert [call['kind'] for call in reset_session.calls] == ['status', 'reconcile']
+assert any(
+    command == 'set_feature'
+    and params.get('feature') == 'invincibility'
+    and params.get('value') is True
+    for command, params in reset_session.calls[1]['batch']
+)
 assert recovered['activeFeatures']['invincibility'] is True
-assert reset_adapter._runtime_bootstrapped is True
-assert reset_adapter._catalog_initialized is True
 assert reset_adapter.preference_dirty is False
 
-# The run-log watcher knows when Hades has destroyed its Lua generation. That
-# explicit lifecycle signal must invalidate only backend bookkeeping and cross
-# zero Lua boundaries. The next ready status should bootstrap directly, so
-# same-PID recovery uses bootstrap + one batched replay instead of first paying
-# an avoidable failed resident-dispatch boundary.
-proactive_transport=ResetTransport(fail_once=False)
-proactive_adapter=Hades2Adapter(transport=proactive_transport)
+# A run-log reset is lifecycle evidence only: it invalidates the resident
+# generation and projects waiting state without crossing a resident boundary.
+proactive_session=ResetSession()
+proactive_adapter=Hades2Adapter(
+    resident_session=proactive_session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 proactive_adapter.state.update(connected=True,pid=4242,status='ready',scene='run')
-proactive_adapter._runtime_bootstrapped=True
-proactive_adapter._catalog_initialized=True
 proactive_adapter.preferences=proactive_adapter._default_preferences()
 proactive_adapter.preferences['invincibility']=True
 proactive_adapter.preference_initialized=True
 proactive_adapter.preference_dirty=False
+before_invalidations=proactive_session.invalidations
 invalidated=proactive_adapter.dispatch('runtime_reset', {}, 'runtime-reset-signal')
-assert proactive_transport.sources == []
+assert proactive_session.calls == []
+assert proactive_session.invalidations == before_invalidations + 1
 assert invalidated['connected'] is True
 assert invalidated['status'] == 'waiting'
-assert proactive_adapter._runtime_bootstrapped is False
-assert proactive_adapter._catalog_initialized is False
 assert proactive_adapter.preference_dirty is True
 proactive_recovered=proactive_adapter.execute('status', {})
-assert len(proactive_transport.sources) == 2
-assert 'local previousModule' in proactive_transport.sources[0]
-assert '__MacGamingTrainerV1.dispatchBatch(' in proactive_transport.sources[1] and 'invincibility' in proactive_transport.sources[1]
+assert [call['kind'] for call in proactive_session.calls] == ['status', 'reconcile']
 assert proactive_recovered['activeFeatures']['invincibility'] is True
 assert proactive_adapter.preference_dirty is False
 
-# Non-idempotent mutations are never replayed after an outcome error. Mark the
-# cached generation stale so the next status can heal it, but surface this
-# command's failure unchanged.
-mutation_transport=ResetTransport()
-mutation_adapter=Hades2Adapter(transport=mutation_transport)
-mutation_adapter._runtime_bootstrapped=True
-mutation_adapter._catalog_initialized=True
+# Non-idempotent mutations are never replayed across a missing resident
+# generation. Session reports invalidation; Adapter projects waiting state and
+# surfaces the original command failure unchanged.
+missing_error=AdapterError(
+    'lua_error',
+    '[string "MacGamingTrainer"]:1: attempt to index global \'__MacGamingTrainerV1\' (a nil value)',
+)
+def mutation_reset_handler(session, record):
+    if record['kind'] == 'mutate':
+        return ResidentGenerationInvalidated(missing_error)
+    return reset_payload(False)
+
+mutation_session=FakeResidentSession(reset_payload(False), handler=mutation_reset_handler)
+mutation_adapter=Hades2Adapter(
+    resident_session=mutation_session,
+    time_warp_controller=FakeTimeWarpController(),
+)
 try:
     mutation_adapter.execute('spawn_reward', {'reward':'EmptyMaxHealthDrop','requestId':'generation-reset-mutation'})
 except AdapterError as error:
     assert error.code == 'lua_error'
 else:
     raise AssertionError('lost Lua generation unexpectedly replayed spawn_reward')
-assert len(mutation_transport.sources) == 1
-assert mutation_adapter._runtime_bootstrapped is False
-assert mutation_adapter._catalog_initialized is False
+assert len(mutation_session.calls) == 1
 assert mutation_adapter.preference_dirty is True
+assert mutation_adapter.state['status'] == 'waiting'
 assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 12
 assert a.state['version'] == '1.143476'
 assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
