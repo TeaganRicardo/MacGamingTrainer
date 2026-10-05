@@ -27,6 +27,8 @@ from .schema import (
     is_valid_next_room_reward,
     normalize_gathering_probabilities,
     validate_gathering_desired,
+    normalize_chaos_gate_probability,
+    validate_chaos_gate_probability,
 )
 
 # Keep these imports public for established adapter-module consumers. In
@@ -55,6 +57,7 @@ def clear_active(state,preserve_desired=False):
         state['desiredFeatures']={key:defaults[key] for key in TOGGLES}
         state['gameSpeed']=defaults['gameSpeed']
         state['gatheringProbabilities']={}
+        state['chaosGateProbability']=None
     state['gatheringTargets']={}
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
@@ -91,7 +94,7 @@ def lua_value(value):
     raise ValueError('参数类型不支持。')
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
-    'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_gathering_probabilities',
+    'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_gathering_probabilities', 'set_chaos_gate_probability',
 ))
 _TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
 _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
@@ -215,6 +218,7 @@ class Hades2Adapter(GameAdapter):
         self.state['boonRarity']=dict(self.preferences.get('boonRarity',{}))
         self.state['nextRoomReward']=self.preferences.get('nextRoomReward')
         self.state['gatheringProbabilities']=dict(self.preferences.get('gatheringProbabilities',{}))
+        self.state['chaosGateProbability']=self.preferences.get('chaosGateProbability')
         stat_locks=self.preferences.get('statLocks',{}) if isinstance(self.preferences.get('statLocks'),dict) else {}
         stats=self.state.get('stats') if isinstance(self.state.get('stats'),dict) else {}
         for stat,target in stat_locks.items():
@@ -322,6 +326,8 @@ class Hades2Adapter(GameAdapter):
         if isinstance(rarity,dict):self.preferences['boonRarity']=self._normalize_preferences({'boonRarity':rarity})['boonRarity']
         gathering=decoded.get('gatheringProbabilities')
         if isinstance(gathering,dict):self.preferences['gatheringProbabilities']=normalize_gathering_probabilities(gathering)
+        if 'chaosGateProbability' in decoded:
+            self.preferences['chaosGateProbability']=normalize_chaos_gate_probability(decoded['chaosGateProbability'])
         locks={}
         for key,item in (decoded.get('stats') or {}).items() if isinstance(decoded.get('stats'),dict) else []:
             if isinstance(item,dict) and item.get('locked') and type(item.get('target')) in (int,float):locks[key]=item['target']
@@ -528,6 +534,20 @@ class Hades2Adapter(GameAdapter):
             return result
         return dict(self.state)
 
+    def set_chaos_gate_desired(self,probability):
+        validate_chaos_gate_probability(probability)
+        probability=normalize_chaos_gate_probability(probability)
+        preferences=dict(self.preferences,chaosGateProbability=probability)
+        self.preference_store.save(preferences)
+        self.preferences=preferences;self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
+        if self.transport.alive() and self.state.get('status')=='ready':
+            result=self.execute('set_chaos_gate_probability',{'probability':probability})
+            self.preference_dirty=was_dirty
+            return result
+        return dict(self.state)
+
     def set_next_room_reward_desired(self,reward):
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
@@ -560,6 +580,9 @@ class Hades2Adapter(GameAdapter):
         gathering=self.preferences.get('gatheringProbabilities',{})
         if force_full or self.state.get('gatheringProbabilities')!=gathering:
             pending.append(('set_gathering_probabilities',{'probabilities':dict(gathering)}))
+        chaos_gate=self.preferences.get('chaosGateProbability')
+        if force_full or self.state.get('chaosGateProbability')!=chaos_gate:
+            pending.append(('set_chaos_gate_probability',{'probability':chaos_gate}))
         # First release stale locks that are not in the desired snapshot. Profile
         # replacement may already have projected the new desired state into self.state,
         # so use the pre-projection observed snapshot when one was supplied.

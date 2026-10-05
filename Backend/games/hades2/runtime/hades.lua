@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 79 then
+if previousModule and previousModule.revision ~= 80 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 79 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 79, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 80, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -144,6 +144,7 @@ if __MacGamingTrainerV1 == nil then
     MysteryResource = "？？？",
   }
   local arrayMeta = { __trainerJSONArray = true }
+  local jsonNull = {}
   local function finite(n)
     return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge
   end
@@ -159,7 +160,7 @@ if __MacGamingTrainerV1 == nil then
     local seen = {}
     local function encode(v)
       local kind = type(v)
-      if kind == "nil" then return "null" end
+      if kind == "nil" or v == jsonNull then return "null" end
       if kind == "boolean" then return v and "true" or "false" end
       if kind == "number" then
         if not finite(v) then error("Non-finite JSON number") end
@@ -1225,6 +1226,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function clearDesired()
     M.gatheringProbabilities = {}
+    M.chaosGateProbability = nil
     for key in pairs(M.desiredFeatures) do M.desiredFeatures[key] = false end
     M.resourceLocks = {}
     M.vitalLocks = {}
@@ -1243,14 +1245,14 @@ if __MacGamingTrainerV1 == nil then
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
     return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
-      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or next(M.gatheringProbabilities) ~= nil
+      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
   end
   local function anyRuntimeActive()
     return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
       or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
-      or owns("CreateRoom") or owns("GetHarvestPointSpawnChance")
+      or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
@@ -4066,16 +4068,52 @@ if __MacGamingTrainerV1 == nil then
       fishing = { point = "FishingPoint", num = "NumFishingPoints", cache = "FishingPointChoices", allowed = "FishingPointsAllowed", flag = "FishingPointSuccess", usable = "UseableFishingPoint", tool = "ToolFishingRod", data = "FishingData", used = "FishingPointUsed", complex = true, callback = "UseFishingPoint" },
     }
     local frames = setmetatable({}, { __mode = "k" })
+    local chaosRooms = setmetatable({}, { __mode = "k" })
     local function liveFrame(frame)
       return frame ~= nil and not M.terminalActionUnknown and frame.session == SessionState
         and frame.run == CurrentRun and type(CurrentRun) == "table" and frame.hero == CurrentRun.Hero
     end
+    local function enabled() return next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil end
+    local function chaosDestinationAvailable(run, room)
+      if type(RoomData) ~= "table" or type(RoomSets) ~= "table" or type(RoomSets.Chaos) ~= "table"
+          or type(RoomSets[room.RoomSetName]) ~= "table" or room.RoomSetName == "Chaos" or room.UsePreviousRoomSet or room.DoAnomalies then return false end
+      local function eligible(data)
+        return type(data) == "table" and data.RoomSetName == "Chaos" and data.UsePreviousRoomSet and data.PauseBiomeState
+          and IsRoomEligible(run, room, data, { ForceNextRoomSet = "Chaos" })
+      end
+      -- The native chooser gives this global override priority over its requested
+      -- room set. Validate that actual destination before any force consumption.
+      if ForceNextRoom ~= nil and RoomData[ForceNextRoom] ~= nil then
+        local inPool = false
+        for _, name in ipairs(RoomSets.Chaos) do if name == ForceNextRoom then inPool = true; break end end
+        return inPool and eligible(RoomData[ForceNextRoom])
+      end
+      for _, name in ipairs(RoomSets.Chaos) do if eligible(RoomData[name]) then return true end end
+      return false
+    end
     local function release()
       releaseHook("CreateRoom")
       releaseHook("GetHarvestPointSpawnChance")
+      releaseHook("IsSecretDoorEligible")
     end
     local function install()
-      requireFunctions("gathering room generation", { "CreateRoom", "DeepCopyTable", "ShallowCopyTable", "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" })
+      requireFunctions("room generation", { "CreateRoom", "DeepCopyTable", "ShallowCopyTable" })
+      if M.chaosGateProbability ~= nil then
+        requireFunctions("Chaos Gate room generation", { "IsSecretDoorEligible", "IsRoomEligible", "GetIdsByType", "ChooseNextRoomData", "HandleSecretSpawns", "AttemptUseDoor", "GetSecretDoorCost" })
+        installHook("IsSecretDoorEligible", function(original, run, room)
+          local captured = chaosRooms[room]
+          if room.ForceSecretDoor or not liveFrame(captured) or run ~= CurrentRun or room ~= CurrentRun.CurrentRoom then return original(run, room) end
+          -- Zero suppresses uncommitted Hero force before its native owner can
+          -- consume it. Nonzero retains that force source's native eligibility.
+          if captured.probability == 0 then return false end
+          local points = GetIdsByType({ Name = "SecretPoint" })
+          if type(points) ~= "table" or next(points) == nil or not chaosDestinationAvailable(run, room) then return false end
+          return original(run, room)
+        end, "session")
+      else releaseHook("IsSecretDoorEligible") end
+      if next(M.gatheringProbabilities) ~= nil then
+        requireFunctions("gathering room generation", { "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" })
+      end
       local controlsTools = false
       for family, strategy in pairs(strategies) do if strategy.tool and M.gatheringProbabilities[family] ~= nil then controlsTools = true end end
       if controlsTools then
@@ -4097,9 +4135,16 @@ if __MacGamingTrainerV1 == nil then
         end, "session")
       else releaseHook("GetHarvestPointSpawnChance") end
       installHook("CreateRoom", function(original, roomData, args)
-        if M.terminalActionUnknown or type(CurrentRun) ~= "table" or next(M.gatheringProbabilities) == nil then return original(roomData, args) end
+        if M.terminalActionUnknown or type(CurrentRun) ~= "table" or not enabled() then return original(roomData, args) end
         local input, inputArgs = DeepCopyTable(roomData), DeepCopyTable(args or {})
         local probabilities = ShallowCopyTable(M.gatheringProbabilities)
+        local chaos = M.chaosGateProbability
+        local roomSet = type(inputArgs.RoomOverrides) == "table" and inputArgs.RoomOverrides.RoomSetName or input.RoomSetName
+        if chaos ~= nil and roomSet ~= "Chaos" then
+          inputArgs.RoomOverrides = inputArgs.RoomOverrides or {}
+          inputArgs.RoomOverrides.SecretSpawnChance = chaos == 0 and -1 or chaos / 100
+        else chaos = nil
+        end
         local flora = probabilities.flora
         if flora ~= nil then
           local overrides = inputArgs.RoomOverrides
@@ -4122,11 +4167,13 @@ if __MacGamingTrainerV1 == nil then
         end
         local key = coroutine.running()
         local previous = frames[key]
-        frames[key] = { probabilities = probabilities, session = SessionState, run = CurrentRun, hero = CurrentRun.Hero }
+        local frame = { probabilities = probabilities, probability = chaos, session = SessionState, run = CurrentRun, hero = CurrentRun.Hero }
+        frames[key] = frame
         local ok, result = pcall(original, input, inputArgs)
         frames[key] = previous
         if type(args) == "table" then args.RewardStoreName = inputArgs.RewardStoreName end
         if not ok then error(result) end
+        if chaos ~= nil and type(result) == "table" and liveFrame(frame) then chaosRooms[result] = frame end
         return result
       end, "session")
     end
@@ -4138,7 +4185,12 @@ if __MacGamingTrainerV1 == nil then
         normalized[family] = value
       end
       M.gatheringProbabilities = normalized
-      if next(normalized) == nil then release() else install() end
+      if enabled() then install() else release() end
+    end
+    local function setChaosProbability(value)
+      if value ~= nil and (not finite(value) or value < 0 or value > 100) then error("Invalid Chaos Gate probability") end
+      M.chaosGateProbability = value
+      if enabled() then install() else release() end
     end
     local generated = setmetatable({}, { __mode = "k" })
     local observation, serial = nil, 0
@@ -4307,7 +4359,7 @@ if __MacGamingTrainerV1 == nil then
       for family, value in pairs(M.gatheringProbabilities) do result[family] = value end
       return result
     end
-    return { release = release, install = install, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
+    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
   end)()
 
   choiceReroll = (function()
@@ -4859,6 +4911,7 @@ if __MacGamingTrainerV1 == nil then
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
       choiceReroll = choiceReroll.observe(),
       gatheringProbabilities = roomGeneration.snapshot(),
+      chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
       gatheringTargets = roomGeneration.observe(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
@@ -5704,8 +5757,8 @@ if __MacGamingTrainerV1 == nil then
       local desired = entry.desired and entry.desired() or M.desiredFeatures[key]
       run(key, desired, entry)
     end
-    if onlyKey == nil or onlyKey == "gathering" then
-      if not featureAttempt("gathering", next(M.gatheringProbabilities) ~= nil, roomGeneration.install, roomGeneration.release, raiseOnError) then allOk = false end
+    if onlyKey == nil or onlyKey == "gathering" or onlyKey == "chaosGate" then
+      if not featureAttempt("roomGeneration", roomGeneration.enabled(), roomGeneration.install, roomGeneration.release, raiseOnError) then allOk = false end
     end
     if onlyKey == nil or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
       if (M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then
@@ -5966,6 +6019,11 @@ if __MacGamingTrainerV1 == nil then
       local target
       return actionLedger.run(command, params, function(record) return roomGeneration.generate(record, target) end,
         function() target = roomGeneration.prepare(params) end)
+    end
+    if command == "set_chaos_gate_probability" then
+      roomGeneration.setChaosProbability(params.probability)
+      synchronize()
+      return state(params.includeCatalogs)
     end
     if command == "set_gathering_probabilities" then
       roomGeneration.setProbabilities(params.probabilities)

@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 struct Hades2FieldPatch<Value> {
     let isPresent: Bool
@@ -75,6 +76,7 @@ struct Hades2StatePatch {
     let rerollsLocked: Bool?
     let choiceReroll: Hades2FieldPatch<Hades2ChoiceRerollSnapshot>
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
+    let chaosGateProbability: Hades2FieldPatch<Double>
     let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
 
     let warningText: Hades2FieldPatch<String>
@@ -151,6 +153,11 @@ struct Hades2StatePatch {
                     cost: cost, reason: row["reason"] as? String))
             }
         } else { choiceReroll = payload.keys.contains("choiceReroll") ? .present(nil) : .absent }
+
+        if let raw = payload["chaosGateProbability"] {
+            let value = CFGetTypeID(raw as CFTypeRef) == CFBooleanGetTypeID() ? nil : Self.number(raw)
+            chaosGateProbability = .present(value.flatMap { $0.isFinite && (0...100).contains($0) ? $0 : nil })
+        } else { chaosGateProbability = .absent }
 
         if let values = payload["gatheringProbabilities"] as? [String: Any] {
             var decoded: [Hades2GatheringFamily: Double] = [:]

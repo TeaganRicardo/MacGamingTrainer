@@ -431,7 +431,11 @@
     "hades2.gathering.collection.shades": "Tool or linked Familiar: {term:officialTerms.gatheringTablet}",
     "hades2.gathering.collection.fishing": "Tool or linked Familiar: {term:officialTerms.gatheringRod}",
     "hades2.gathering.collection.flora": "Collect by hand or linked Familiar; no tool unlock required.",
-    "hades2.gathering.unavailable.polymorph": "The current polymorph state prevents native collection."
+    "hades2.gathering.unavailable.polymorph": "The current polymorph state prevents native collection.",
+    "hades2.chaosGate.title": "{term:officialTerms.chaosGate}",
+    "hades2.chaosGate.apply": "{term:productTerms.chaosGateApply}",
+    "hades2.chaosGate.explanation": "Controls the conditional occurrence chance for newly created rooms. 100% still requires native room, biome, progression and spacing eligibility; 0% suppresses uncommitted occurrence, including an unconsumed native force effect. Prepared rooms retain their captured roll, and committed entrances remain intact.",
+    "hades2.chaosGate.lifecycle": "Control requires an authored native point, an eligible Chaos destination and a valid return path. Entry retains native Life costs and conditions; insufficient Life blocks entry. Restoring Native / Default restores future generation without rerolling cached rooms or creating a current-room entrance."
   },
   "language": "en"
 }

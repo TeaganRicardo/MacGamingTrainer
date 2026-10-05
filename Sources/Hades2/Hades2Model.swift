@@ -166,6 +166,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
     @Published private(set) var choiceReroll: Hades2ChoiceRerollSnapshot?
+    @Published private(set) var chaosGateProbability: Double?
     @Published private(set) var gatheringProbabilities: [Hades2GatheringFamily: Double] = [:]
     @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
     @Published var boons: [BoonOption] = []
@@ -580,6 +581,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if patch.choiceReroll.isPresent { choiceReroll = patch.choiceReroll.value }
+        if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
         if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
@@ -937,16 +939,23 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
     }
 
-    func validGatheringPercentage(_ text: String) -> Bool {
+    func validProbabilityPercentage(_ text: String) -> Bool {
         guard let value = Double(text), value.isFinite else { return false }
         return (0...100).contains(value)
     }
 
     func setGatheringProbability(_ family: Hades2GatheringFamily, custom: Bool, text: String) {
-        guard canEditDesired, !custom || validGatheringPercentage(text) else { return }
+        guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
         let value = custom ? Double(text) : nil
         guard gatheringProbabilities[family] != value else { return }
         enqueueMutation(key: "gathering.\(family.rawValue)", request: .setGathering(family: family, probability: value), title: "hades2.gathering.apply")
+    }
+
+    func setChaosGateProbability(custom: Bool, text: String) {
+        guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
+        let value = custom ? Double(text) : nil
+        guard chaosGateProbability != value else { return }
+        enqueueMutation(key: "chaosGateProbability", request: .setChaosGate(probability: value), title: "hades2.chaosGate.apply")
     }
 
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {

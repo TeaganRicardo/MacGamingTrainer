@@ -431,7 +431,11 @@
     "hades2.gathering.collection.shades": "工具或对应灵宠：{term:officialTerms.gatheringTablet}",
     "hades2.gathering.collection.fishing": "工具或对应灵宠：{term:officialTerms.gatheringRod}",
     "hades2.gathering.collection.flora": "手工采集或对应灵宠；无需工具解锁。",
-    "hades2.gathering.unavailable.polymorph": "当前变形状态禁止原生采集。"
+    "hades2.gathering.unavailable.polymorph": "当前变形状态禁止原生采集。",
+    "hades2.chaosGate.title": "{term:officialTerms.chaosGate}",
+    "hades2.chaosGate.apply": "{term:productTerms.chaosGateApply}",
+    "hades2.chaosGate.explanation": "仅控制新创建房间的条件出现概率。100% 仍受原生房间、区域、进度和间隔条件限制；0% 禁止尚未提交的出现判定，包括尚未消耗的原生强制出现效果。已准备房间保留原有判定，已提交的入口不受影响。",
+    "hades2.chaosGate.lifecycle": "只有原生点位、可用混沌目的地和返回路径完整时才应用控制。进入仍使用原生生命值费用与条件；生命值不足会阻止进入。恢复原生 / 默认只改变未来生成行为，不重新掷骰或创建当前房间入口。"
   },
   "language": "zh-CN"
 }
