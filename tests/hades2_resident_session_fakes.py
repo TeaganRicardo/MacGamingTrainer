@@ -28,15 +28,20 @@ class FakeResidentSession:
         self.live = True
         self.calls = []
         self.invalidations = 0
+        self.process_time_warp_allowed = True
         self.last_attach_profile = {}
 
     def alive(self):
         return self.live
 
+    def allows_process_time_warp(self):
+        return self.process_time_warp_allowed
+
     def attach(self, pid):
         self.pid = pid
         self.live = True
         self.invalidations += 1
+        self.process_time_warp_allowed = False
 
     def detach(self):
         self.live = False
@@ -46,6 +51,7 @@ class FakeResidentSession:
 
     def invalidate_generation(self):
         self.invalidations += 1
+        self.process_time_warp_allowed = False
 
     def status(self, params=None):
         return self._reply("status", "status", params or {}, None)
@@ -75,6 +81,7 @@ class FakeResidentSession:
         if isinstance(result, ResidentReply):
             return result
         payload = copy.deepcopy(self.payload if result is None else result)
+        self.process_time_warp_allowed = True
         return ResidentReply(
             payload=payload,
             metrics=ResidentMetrics(boundary_duration=0.001),
