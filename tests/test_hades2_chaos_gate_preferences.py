@@ -125,10 +125,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     clear_active(observed)
     assert observed['chaosGateProbability'] is None
     adapter.dispatch('set_chaos_gate_desired', {'probability': 60}, 'capture')
-    adapter._capture_runtime_preferences({'status': 'ready'})
+    adapter.state['chaosGateProbability'] = None
+    adapter.save_profile('Pending Chaos')
     assert adapter.preferences['chaosGateProbability'] == 60
-    adapter._capture_runtime_preferences({'chaosGateProbability': None})
-    assert adapter.preferences['chaosGateProbability'] is None
+    saved_pending = json.loads(
+        adapter.profile_service.path('Pending Chaos').read_text()
+    )
+    assert saved_pending['desired']['chaosGateProbability'] == 60
 
     future_path = base/'future-desired.json'
     future_path.write_text(json.dumps(dict(persisted, schemaVersion=8)))
