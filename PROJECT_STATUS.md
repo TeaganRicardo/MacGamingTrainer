@@ -33,6 +33,8 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 Recent governance simplification (#277, #279, #281, #283) changed verification/test structure only, not product/runtime semantics: recurring PR verification is leaner, redundant evidence/meta-tests were removed, CI/provenance contracts were consolidated, and one historical regression grab-bag was moved into owning tests.
 
+The 2026-10-05 architecture correction adopts root-cause-first scope discipline. Correctness work remains RED-first, then scopes to the demonstrated root cause and owning seam rather than the smallest diff. A coherent refactor may cross several files/seams when required to deepen the owning module; unrelated cleanup remains excluded. Defensive containment that only masks a structural cause is not considered complete.
+
 ## Real-game acceptance baseline
 
 The latest Hades resident source accepted in the real game is **revision 51**, accepted on 2026-09-28 from commit `a6cf37b41639229bd64938d9587a9735fb16dd91`.
@@ -134,7 +136,7 @@ Planning issue #124 is the sequencing authority.
 - #240 implementation children are complete; parent real-game acceptance remains intentionally consolidated with the later resident acceptance pass.
 - #221 remains the feature parent; owner/lifecycle families stay explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
 
-Do not start another global governance phase before the selected feature queue. New governance work may preempt only when concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence requires it.
+The selected feature queue is complete enough for the admitted governance correction #364. #364 changes development/review scope rules only and does not change product/runtime semantics. Future governance work still requires concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence; root-cause-first is not authorization for open-ended cleanup.
 
 The user authorizes independently reviewed, automated-green merges before one consolidated final manual acceptance after the selected index work. Missing gameplay/visual verification alone does not block unrelated eligible development, but unexecuted manual checks remain pending and must not be described as accepted.
 
