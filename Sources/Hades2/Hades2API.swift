@@ -257,6 +257,7 @@ final class Hades2API {
         operationArguments: [String] = [],
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
+        reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         session.send(
@@ -267,6 +268,7 @@ final class Hades2API {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: request.timeout,
+            reply: reply,
             completion: completion
         )
     }

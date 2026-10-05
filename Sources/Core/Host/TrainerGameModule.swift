@@ -86,6 +86,7 @@ protocol TrainerGameModule {
     associatedtype ContentView: View
     associatedtype SidebarActions: View
     associatedtype HeaderActions: View
+    associatedtype FeedbackView: View = EmptyView
     associatedtype ManagementCommands: Commands
 
     static var descriptor: GameModuleDescriptor { get }
@@ -94,6 +95,7 @@ protocol TrainerGameModule {
     static func makeContent(model: Model) -> ContentView
     static func makeSidebarActions(model: Model) -> SidebarActions
     static func makeHeaderActions(model: Model) -> HeaderActions
+    static func makeFeedback(model: Model) -> FeedbackView
     static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> ManagementCommands
 
     /// Key namespace this module owns. Registering it lets the Host resolve the
@@ -112,6 +114,10 @@ protocol TrainerGameModule {
 extension TrainerGameModule {
     /// A module without its own namespace has no module-owned text to resolve.
     public static var presentationKeyPrefix: String { "" }
+
+    /// Modules opt into viewport feedback without changing the shared Host or
+    /// adding another session. The default contributes no view or empty space.
+    static func makeFeedback(model: Model) -> EmptyView { EmptyView() }
 }
 
 struct TrainerEmptyCommands: Commands {
