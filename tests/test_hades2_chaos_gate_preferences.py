@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         original_save(preferences)
     adapter.preference_store.save = save
     def execute(command, params):
-        calls.append((command, copy.deepcopy(params), copy.deepcopy(kwargs)))
+        calls.append((command, copy.deepcopy(params)))
         if command == 'set_chaos_gate_probability':
             assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
             adapter.state['chaosGateProbability'] = params['probability']
