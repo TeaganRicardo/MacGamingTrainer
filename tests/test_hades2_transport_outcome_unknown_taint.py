@@ -94,6 +94,23 @@ class FakeThread:
         return FakeFrame(self.value)
 
 
+class FakeBreakpoint:
+    def __init__(self, breakpoint_id=1):
+        self.breakpoint_id = breakpoint_id
+
+    def GetID(self):
+        return self.breakpoint_id
+
+
+class FakeTarget:
+    def __init__(self):
+        self.deleted = []
+
+    def BreakpointDelete(self, breakpoint_id):
+        self.deleted.append(breakpoint_id)
+        return True
+
+
 class FakeProcess:
     def AllocateMemory(self, size, permissions, error):
         return 0x1000
@@ -141,15 +158,16 @@ class SuccessfulProcess(FakeProcess):
 large = Transport.__new__(Transport)
 large.tainted = False
 large.process = SuccessfulProcess()
-large.target = object()
+large.target = FakeTarget()
 large.last_duration = 0
-large.boundary = lambda: (FakeThread(), 0x2000)
+large.boundary = lambda: (FakeThread(), 0x2000, FakeBreakpoint())
 large.address = lambda name: 0x3000
 large.alive = lambda: False
 large_source = 'x' * 325_841
 assert large.execute(large_source, expression_timeout_seconds=5.0) == '{}'
 assert FakeExpressionOptions.last_timeout_us == 5_000_000
 assert large.process.allocated_size == len(large_source.encode('utf-8')) + 1 + LUA_TRANSPORT_RESULT_LIMIT_BYTES
+assert large.target.deleted == [1], 'successful expression leaked its synchronization breakpoint'
 
 try:
     large.execute('x' * (LUA_TRANSPORT_SOURCE_LIMIT_BYTES + 1))
@@ -157,14 +175,15 @@ except FakeTransportError as error:
     assert error.code == 'invalid_request'
 else:
     raise AssertionError('Lua source transport accepted an over-budget payload')
+assert large.target.deleted == [1, 1], 'pre-expression validation leaked its synchronization breakpoint'
 
 
 transport = Transport.__new__(Transport)
 transport.tainted = False
 transport.process = FakeProcess()
-transport.target = object()
+transport.target = FakeTarget()
 transport.last_duration = 0
-transport.boundary = lambda: (FakeThread(), 0x2000)
+transport.boundary = lambda: (FakeThread(), 0x2000, FakeBreakpoint())
 transport.address = lambda name: 0x3000
 transport.alive = lambda: False
 
@@ -176,6 +195,7 @@ else:
     raise AssertionError('simulated result-read failure did not surface outcome_unknown')
 
 assert transport.tainted is True, 'outcome_unknown result-read failure left transport reusable'
+assert transport.target.deleted == [1], 'outcome-unknown result read leaked its synchronization breakpoint'
 
 try:
     Transport.boundary(transport)
@@ -195,9 +215,9 @@ class ResidentOutcomeUnknownProcess(FakeProcess):
 resident = Transport.__new__(Transport)
 resident.tainted = False
 resident.process = ResidentOutcomeUnknownProcess()
-resident.target = object()
+resident.target = FakeTarget()
 resident.last_duration = 0
-resident.boundary = lambda: (FakeThread(1), 0x2000)
+resident.boundary = lambda: (FakeThread(1), 0x2000, FakeBreakpoint())
 resident.address = lambda name: 0x3000
 resident.alive = lambda: False
 
@@ -209,6 +229,7 @@ else:
     raise AssertionError('resident outcome-unknown marker did not surface outcome_unknown')
 
 assert resident.tainted is True, 'resident outcome-unknown marker left transport reusable'
+assert resident.target.deleted == [1], 'resident unknown outcome leaked its synchronization breakpoint'
 
 # A host decode failure after Lua returned is an unknown outcome, even for
 # status: the read-only flag suppresses host adoption but status may perform

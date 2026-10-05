@@ -205,6 +205,7 @@ class Hades2LuaTransport:
         self.focus_original=original
         if self.process.WriteMemory(focus,b'\x00',error)!=1 or error.Fail():raise TransportError('memory_error',str(error))
         bp=self.target.BreakpointCreateByAddress(self.address('_ZN3sgg5World6UpdateEf'))
+        leased=False
         try:
             self.resume(deadline,breakpoint_expected=True)
             while time.monotonic()<deadline:
@@ -218,16 +219,23 @@ class Hades2LuaTransport:
                 th=matching[0]
                 err=lldb.SBError()
                 L=self.process.ReadPointerFromMemory(self.address('_ZN3sgg13ScriptManager12LuaInterfaceE'),err)
-                if th.GetName()=='MainThread' and L and err.Success():return th,L
+                if th.GetName()=='MainThread' and L and err.Success():
+                    # Preserve the stop-reason breakpoint identity through LLDB
+                    # expression evaluation. Disable it so the expression cannot
+                    # hit the synchronization point; execute() deletes it after
+                    # evaluation/unwind has finished.
+                    bp.SetEnabled(False)
+                    leased=True
+                    return th,L,bp
                 self.resume(deadline,breakpoint_expected=True)
             raise TransportError('waiting','等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。')
         finally:
-            self.target.BreakpointDelete(bp.GetID())
+            if not leased:self.target.BreakpointDelete(bp.GetID())
 
     def execute(self, source, *, expression_timeout_seconds=2.0):
-        started=time.monotonic(); scratch=None; self.last_expression_duration=0
+        started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0
         try:
-            th,L=self.boundary()
+            th,L,bp=self.boundary()
             payload=source.encode('utf-8')
             if len(payload)>LUA_TRANSPORT_SOURCE_LIMIT_BYTES:raise TransportError('invalid_request','功能代码过长。')
             cap=LUA_TRANSPORT_RESULT_LIMIT_BYTES;size=len(payload)+1+cap
@@ -281,6 +289,8 @@ class Hades2LuaTransport:
                 raise TransportError('lua_error',text or 'Lua 执行失败')
             return text
         finally:
+            if bp is not None and self.target:
+                self.target.BreakpointDelete(bp.GetID())
             if self.process and self.alive():
                 try:
                     self.stop(time.monotonic()+3)
