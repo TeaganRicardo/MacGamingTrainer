@@ -14,7 +14,7 @@ from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
 from .profile_service import Hades2ProfileService
-from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated
+from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
 from .schema import (
     MULTIPLIERS,
     STAT_RULES,
@@ -851,12 +851,10 @@ class Hades2Adapter(GameAdapter):
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
         except TransportError as e:
-            if command=='status':
-                metrics=getattr(e,'resident_metrics',None)
-                if metrics is not None:
-                    self._last_status_boundary_duration=metrics.boundary_duration
-                    self._last_status_json_duration=metrics.json_duration
-                    self._last_status_localize_duration=metrics.localize_duration
+            if command=='status' and isinstance(e,ResidentSessionError):
+                self._last_status_boundary_duration=e.metrics.boundary_duration
+                self._last_status_json_duration=e.metrics.json_duration
+                self._last_status_localize_duration=e.metrics.localize_duration
             if e.code=='waiting':self.state['status']='waiting'
             elif e.code=='disconnected':self.state.update(status='disconnected');mark_disconnected(self.state)
             elif e.code in ('restart_required','outcome_unknown','restore_failed'):self.state['status']='restart_required'
