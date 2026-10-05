@@ -1240,7 +1240,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         switch action {
         case .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
              .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
-             .moneyMultiplierEnabled, .resourceMultiplierEnabled:
+             .forceEnableRerolls, .moneyMultiplierEnabled, .resourceMultiplierEnabled:
             guard canEditDesired, let key = action.featureKey else { return }
             performFeatureShortcut(key)
         case .forceLegendary:
