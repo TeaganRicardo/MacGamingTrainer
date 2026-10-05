@@ -4178,7 +4178,7 @@ if __MacGamingTrainerV1 == nil then
       if GetConfigOptionValue({ Name = "EditingMode" }) or not finite(room[strategy.num]) or type(CurrentRun.BiomeHarvestPointsSeen) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
       if type(ObstacleData) ~= "table" or type(ObstacleData[strategy.point]) ~= "table" or ObstacleData[strategy.point].OnUsedFunctionName ~= strategy.callback then return nil, "hades2.gathering.unavailable.native" end
       local familiarTool = strategy.tool or strategy.familiarTool
-      if HasFamiliarTool(familiarTool) and (type(MapState.FamiliarUnit) ~= "table" or not finite(MapState.FamiliarUnit.ObjectId) or MapState.FamiliarUnit.ObjectId <= 0 or MapState.FamiliarUnit.IsDead) then return nil, "hades2.gathering.unavailable.familiar" end
+      if HasFamiliarTool(familiarTool) and (type(MapState.FamiliarUnit) ~= "table" or not finite(MapState.FamiliarUnit.ObjectId) or MapState.FamiliarUnit.ObjectId <= 0) then return nil, "hades2.gathering.unavailable.familiar" end
       if strategy.tool and (type(HasAccessToTool) ~= "function" or not HasAccessToTool(strategy.tool)) then return nil, "hades2.gathering.unavailable.tool" end
       if strategy.complex and (type(IsComplexHarvestAllowed) ~= "function" or not IsComplexHarvestAllowed()) then return nil, "hades2.gathering.unavailable.complex" end
       if family == "fishing" and type(ScreenAnchors) == "table" and ScreenAnchors.LavaVignetteId then return nil, "hades2.gathering.unavailable.lava" end
@@ -4292,7 +4292,7 @@ if __MacGamingTrainerV1 == nil then
       if not ok then error(failure) end
       if not ownerMatches(target) then error("Gathering owner changed after native activation") end
       if MapState.FamiliarUnit ~= target.familiar or (type(MapState.FamiliarUnit) == "table" and MapState.FamiliarUnit.ObjectId or nil) ~= target.familiarId
-          or target.familiarLinked and (not finite(target.familiarId) or target.familiar.IsDead) or HasFamiliarTool(strategy.tool or strategy.familiarTool) ~= target.familiarLinked
+          or target.familiarLinked and not finite(target.familiarId) or HasFamiliarTool(strategy.tool or strategy.familiarTool) ~= target.familiarLinked
           or MapState.HostilePolymorph or strategy.tool and not HasAccessToTool(strategy.tool)
           or strategy.complex and not IsComplexHarvestAllowed()
           or family == "fishing" and ScreenAnchors.LavaVignetteId then error("Native gathering access changed after activation") end
