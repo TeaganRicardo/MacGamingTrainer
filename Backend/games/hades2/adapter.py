@@ -153,14 +153,14 @@ class Hades2Adapter(GameAdapter):
         if preferences.get('nextRoomReward') is not None:
             preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())
         observed_locks=None
-        if self.transport.alive() and self.state.get('connected'):
+        if self.runtime.alive() and self.state.get('connected'):
             self.observe_runtime()
             observed_locks=self._observed_locks()
         self.preference_store.save(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.transport.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
+        if self.runtime.alive():self._replay_preferences(force_full=True,observed_locks=observed_locks)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
 
@@ -290,7 +290,7 @@ class Hades2Adapter(GameAdapter):
         # This command is deliberately transport-free.  If the debugger died
         # behind the host's back, report the connection loss rather than trying
         # to reattach during application termination.
-        if self.state.get('connected') and not self.transport.alive():
+        if self.state.get('connected') and not self.runtime.alive():
             mark_disconnected(self.state)
         self._overlay_preferences()
         return dict(self.state)
@@ -464,7 +464,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
-            if self.transport.alive() and self._runtime_bootstrapped:
+            if self.runtime.alive() and self._runtime_bootstrapped:
                 try:
                     self._apply_game_speed(value)
                     self.preference_dirty=was_dirty
@@ -477,7 +477,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_dirty=True
         # Lua-owned desired state remains editable while detached and replays
         # when a compatible scene becomes available.
-        if self.transport.alive() and self.state.get('capabilities',{}).get('setFeature'):
+        if self.runtime.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
                 self.preference_dirty=was_dirty
@@ -495,7 +495,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -510,7 +510,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_gathering_probabilities',{'probabilities':probabilities})
             self.preference_dirty=was_dirty
             return result
@@ -524,7 +524,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_chaos_gate_probability',{'probability':probability})
             self.preference_dirty=was_dirty
             return result
@@ -538,12 +538,12 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.transport.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and self.state.get('status')=='ready':
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
     def _replay_preferences(self,force_full=False,observed_locks=None):
-        if not self.transport.alive():return dict(self.state)
+        if not self.runtime.alive():return dict(self.state)
         if self._runtime_bootstrapped:self._apply_game_speed(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         if self.state.get('status')!='ready':
             self._overlay_preferences()
@@ -623,10 +623,10 @@ class Hades2Adapter(GameAdapter):
         pids=[] if result.returncode==1 else [int(x) for x in result.stdout.split()]
         if len(pids)>1:raise RuntimeError(f'检测到多个 {GAME_SPEC.display_name} 进程，请保留一个。')
         pid=pids[0] if pids else None
-        if self.transport.pid and (pid!=self.transport.pid or not self.transport.alive()):
-            attached_pid=self.transport.pid
+        if self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive()):
+            attached_pid=self.runtime.pid
             same_process=pid is not None and pid==attached_pid
-            self.transport.detach()
+            self.runtime.detach()
             if same_process:mark_disconnected(self.state)
             else:
                 clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
@@ -653,7 +653,7 @@ class Hades2Adapter(GameAdapter):
             if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
             phase=time.monotonic()
             try:
-                self.transport.attach(self.state['pid'])
+                self.runtime.attach(self.state['pid'])
             finally:
                 profile['attachTotal']=time.monotonic()-phase
                 attach_profile=dict(getattr(self.transport,'last_attach_profile',{}) or {})
@@ -666,7 +666,7 @@ class Hades2Adapter(GameAdapter):
                 outcome='deferred'
                 self._catalog_initialized=False
                 clear_active(self.state,preserve_desired=True)
-                self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+                self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
                 self._overlay_preferences()
                 return dict(self.state)
             phase=time.monotonic()
@@ -686,7 +686,7 @@ class Hades2Adapter(GameAdapter):
                     result=dict(self.state)
                 else:
                     outcome=e.code
-                    self.transport.detach();mark_disconnected(self.state);raise
+                    self.runtime.detach();mark_disconnected(self.state);raise
             profile['firstStatusTotal']=time.monotonic()-phase
             return result
         except Exception as exc:
@@ -718,11 +718,11 @@ class Hades2Adapter(GameAdapter):
         self._catalog_initialized=False
         self.preference_dirty=True
         clear_active(self.state,preserve_desired=True)
-        self.state.update(connected=True,pid=self.transport.pid,status='waiting',scene='loading')
+        self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
         self._overlay_preferences()
 
     def runtime_reset(self):
-        if not self.transport.alive() or not self.state.get('connected'):
+        if not self.runtime.alive() or not self.state.get('connected'):
             return dict(self.state)
         self._invalidate_runtime_generation()
         logging.info('Lua runtime generation invalidated from run-log lifecycle signal')
@@ -765,7 +765,7 @@ class Hades2Adapter(GameAdapter):
             except PersistenceError as error:
                 teardown_persistence_error=error
                 logging.warning('Durable teardown reset failed; continuing runtime cleanup: %s',error)
-        if command in ('disable_all','cleanup') and not self.transport.alive():
+        if command in ('disable_all','cleanup') and not self.runtime.alive():
             # Explicit teardown must never be faked. Reattach to the same live
             # process so app exit / “全部关闭” can really clear resident hooks.
             self.scan()
@@ -773,8 +773,8 @@ class Hades2Adapter(GameAdapter):
                 clear_active(self.state);self.state.update(connected=False,status='not_running')
                 if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
-            self.transport.attach(self.state['pid']);self.state['connected']=True
-        if not self.transport.alive():raise TransportError('disconnected','请先连接游戏。')
+            self.runtime.attach(self.state['pid']);self.state['connected']=True
+        if not self.runtime.alive():raise TransportError('disconnected','请先连接游戏。')
         teardown_speed_error=None
         if teardown:
             try:self._apply_game_speed(1.0)
@@ -894,7 +894,7 @@ class Hades2Adapter(GameAdapter):
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             last_action=decoded.get('lastAction')
             asynchronous_unknown=isinstance(last_action,dict) and last_action.get('outcome')=='outcome_unknown'
-            if asynchronous_unknown:self.transport.tainted=True
+            if asynchronous_unknown:self.runtime.tainted=True
             if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
                 logging.warning(
                     'LuaAction command=%s requestId=%s outcome=failed raw=%s',
@@ -913,7 +913,7 @@ class Hades2Adapter(GameAdapter):
             decoded['capabilities']=capabilities
             for key in _TRANSIENT_ACTION_RESULT_FIELDS:
                 self.state.pop(key,None)
-            self.state.update(decoded,connected=True,pid=self.transport.pid)
+            self.state.update(decoded,connected=True,pid=self.runtime.pid)
             self.state.pop('error',None)
             # Runtime observation skips durable Hades desired-state projection,
             # but Core-owned Process Time Warp remains observable Host state and
@@ -948,7 +948,7 @@ class Hades2Adapter(GameAdapter):
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
-                         command,reward_context,self.transport.last_duration,self.state.get('scene'),
+                         command,reward_context,self.runtime.last_duration,self.state.get('scene'),
                          self.state.get('desiredFeatures'),self.state.get('activeFeatures'),
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
@@ -962,7 +962,7 @@ class Hades2Adapter(GameAdapter):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
-        if self.transport.alive():self.transport.detach()
+        if self.runtime.alive():self.runtime.detach()
         self.state.update(connected=False,status='disconnected')
         mark_disconnected(self.state)
         self._overlay_preferences()
@@ -985,4 +985,4 @@ class Hades2Adapter(GameAdapter):
         except Exception:
             logging.exception('Graceful %s cleanup failed; attempting debugger detach.', GAME_SPEC.display_name)
         finally:
-            self.transport.close()
+            self.runtime.close()
