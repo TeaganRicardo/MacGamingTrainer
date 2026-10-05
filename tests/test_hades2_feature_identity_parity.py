@@ -4,7 +4,6 @@ Backend/games/hades2/schema.py is the canonical identity source. This contract
 checks real consumers and dispatch boundaries without adding another schema.
 """
 import importlib
-import importlib.util
 import json
 import re
 import shutil
@@ -419,7 +418,7 @@ def exercise_adapter_routes(root, toggles, multipliers):
     try:
         with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary:
             setattr(preparation, "DATA", Path(temporary))
-            adapter_module = load_python_consumer(root, "adapter.py", "adapter")
+            adapter_module = importlib.import_module("games.hades2.adapter")
             adapter_type = adapter_module.Hades2Adapter
             session = FakeResidentSession({
                 "status": "ready", "scene": "run", "capabilities": {"setFeature": True},
