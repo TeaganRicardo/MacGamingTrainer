@@ -267,3 +267,110 @@ assert failing_transport.tainted is False, (
 )
 
 print('hades2_transport_outcome_unknown_taint_ok')
+
+# A valid status response can observe an asynchronous one-shot becoming
+# unknown after its accepted debugger reply. The adapter must stop trust before
+# adopting desired state, while retaining the received runtime evidence.
+import json
+import tempfile
+from games.hades2 import preparation
+from games.hades2.adapter import Hades2Adapter
+from games.hades2.preferences import Hades2PreferenceStore
+
+
+class AsyncUnknownTransport:
+    def __init__(self):
+        self.tainted = False
+        self.pid = 4242
+        self.last_duration = 0.001
+        self.calls = []
+        self.payload = {
+            'status': 'ready', 'scene': 'run', 'rerolls': 4,
+            'lastAction': {'requestId': 'async-reroll', 'command': 'reroll_choice',
+                           'outcome': 'outcome_unknown', 'duplicate': False,
+                           'error': 'menu changed after spending'},
+        }
+
+    def alive(self):
+        return True
+
+    def execute(self, source):
+        if self.tainted:
+            raise AdapterError('restart_required', 'tainted transport')
+        self.calls.append(source)
+        return json.dumps(self.payload)
+
+
+with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
+    prior_data, prior_game, prior_saves = preparation.DATA, preparation.GAME, preparation.SAVES
+    try:
+        preparation.DATA = Path(temporary) / 'data'
+        preparation.GAME = Path(temporary) / 'Hades II.app'
+        preparation.SAVES = Path(temporary) / 'Saves'
+        async_transport = AsyncUnknownTransport()
+        adapter = Hades2Adapter(transport=async_transport)
+        try:
+            adapter.execute('status', {})
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown', error.code
+        else:
+            raise AssertionError('decoded asynchronous unknown action did not stop transport trust')
+        assert async_transport.tainted
+        assert len(async_transport.calls) == 1, 'unknown status automatically crossed another Lua boundary'
+        assert not (preparation.DATA / 'desired-state.json').exists(), 'unknown status adopted preferences'
+        assert adapter.state['status'] == 'restart_required'
+        assert adapter.state['rerolls'] == 4
+        assert adapter.state['lastAction']['requestId'] == 'async-reroll'
+        try:
+            adapter.execute('set_rerolls', {'amount': 99, 'requestId': 'unsafe-after-unknown'})
+        except AdapterError as error:
+            assert error.code == 'restart_required', error.code
+        else:
+            raise AssertionError('a later mutation reused the unknown transport')
+        assert len(async_transport.calls) == 1
+
+        # A persisted profile remains pending, while a separately proven
+        # one-shot consumption must still prevent resurrection after restart.
+        desired = Hades2PreferenceStore.defaults()
+        desired.update(invincibility=True, nextRoomReward='RoomMoneyDrop', nextRoomRewardToken='consumed-room')
+        store = Hades2PreferenceStore(preparation.DATA / 'desired-state.json')
+        store.save(desired)
+        dirty_transport = AsyncUnknownTransport()
+        dirty_transport.payload.update(nextRoomReward=None, runtimeDiagnostics={'lastConsumedNextRoomRewardToken': 'consumed-room'})
+        dirty_adapter = Hades2Adapter(transport=dirty_transport)
+        try:
+            dirty_adapter.execute('status', {})
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown', error.code
+        else:
+            raise AssertionError('dirty desired intent bypassed asynchronous unknown')
+        assert dirty_transport.tainted and len(dirty_transport.calls) == 1
+        saved, initialized = store.load()
+        assert initialized and saved['invincibility'] is True, 'unknown status overwrote durable desired intent'
+        assert saved['nextRoomReward'] is None and saved['nextRoomRewardToken'] is None
+        assert dirty_adapter.preference_dirty, 'unknown status pretended replay completed'
+        assert dirty_adapter.state['lastAction']['outcome'] == 'outcome_unknown'
+        assert dirty_adapter.state['runtimeDiagnostics']['lastConsumedNextRoomRewardToken'] == 'consumed-room'
+
+        # Observation-only status has the same trust rule without adopting the
+        # runtime's desired state, and known failures do not taint the session.
+        observation_transport = AsyncUnknownTransport()
+        observation_adapter = Hades2Adapter(transport=observation_transport)
+        try:
+            observation_adapter.observe_runtime()
+        except AdapterError as error:
+            assert error.code == 'outcome_unknown', error.code
+        else:
+            raise AssertionError('observation-only unknown left transport reusable')
+        assert observation_transport.tainted and len(observation_transport.calls) == 1
+        for outcome in ('accepted', 'completed', 'failed'):
+            known_transport = AsyncUnknownTransport()
+            known_transport.payload['lastAction']['outcome'] = outcome
+            known_adapter = Hades2Adapter(transport=known_transport)
+            result = known_adapter.observe_runtime()
+            assert not known_transport.tainted and len(known_transport.calls) == 1
+            assert result['lastAction']['outcome'] == outcome
+    finally:
+        preparation.DATA, preparation.GAME, preparation.SAVES = prior_data, prior_game, prior_saves
+
+print('hades2_async_action_unknown_taint_ok')

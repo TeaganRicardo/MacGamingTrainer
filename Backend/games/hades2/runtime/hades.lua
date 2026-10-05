@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 77 then
+if previousModule and previousModule.revision ~= 78 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 77 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 77, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 78, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -33,12 +33,14 @@ if __MacGamingTrainerV1 == nil then
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
-    lastActionReceipt = nil,
+    lastActionReceipt = previousModule and previousModule.terminalActionUnknown and previousModule.lastActionReceipt or nil,
+    terminalActionUnknown = previousModule and previousModule.terminalActionUnknown or false,
     -- Ephemeral install identity used only to reject stale UI selections. It is
     -- intentionally neither saved nor carried across a resident replacement.
     traitInventoryGeneration = tostring({}),
   }
   __MacGamingTrainerV1 = M
+  local choiceReroll
 
   -- Resource DisplayName values from build 1.139672 Game/Text/zh-CN/HelpText.zh-CN.sjson.
   local names = {
@@ -1231,6 +1233,7 @@ if __MacGamingTrainerV1 == nil then
     M.nextRoomRewardToken = nil
   end
   local function disable()
+    if choiceReroll ~= nil then choiceReroll.cleanup() end
     clearDesired()
     deactivateRuntime()
     releaseGuard()
@@ -1252,6 +1255,9 @@ if __MacGamingTrainerV1 == nil then
   local reconcileDesired
   local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger
   local function synchronize()
+    -- Keep already owned hooks on their captured owner. An uncertain native
+    -- coroutine must never adopt a new owner or reinstall a replaced hook.
+    if M.terminalActionUnknown then return end
     local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
     if M.session ~= SessionState or M.run ~= CurrentRun or M.hero ~= hero then
       deactivateRuntime()
@@ -1366,6 +1372,8 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   local function enforceLocks()
+    if M.terminalActionUnknown and (M.session ~= SessionState or M.run ~= CurrentRun
+        or M.hero ~= (type(CurrentRun) == "table" and CurrentRun.Hero or nil)) then return end
     -- Save-backed inventory locks are meaningful in the Crossroads too; keep
     -- those invariants before applying Hero-only combat locks.
     if type(GameState) == "table" and type(GameState.Resources) == "table" then
@@ -1384,6 +1392,7 @@ if __MacGamingTrainerV1 == nil then
       if refillHex() then M.featureErrors.hexAlwaysReady = nil end
     end
     if M.rerollsLock ~= nil and finite(CurrentRun.NumRerolls)
+        and (not M.terminalActionUnknown or owns("UpdateRerollUI"))
         and CurrentRun.NumRerolls ~= M.rerollsLock and type(UpdateRerollUI) == "function" then
       CurrentRun.NumRerolls = M.rerollsLock
       UpdateRerollUI(M.rerollsLock)
@@ -4043,6 +4052,459 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  choiceReroll = (function()
+    local observation, activeLease
+    local serial = 0
+    local leaseSerial = 0
+    local syntheticSpent = setmetatable({}, { __mode = "k" })
+    local npcOwners = {}
+    for id, definition in pairs(nativeSpecialChoiceDefinitions) do
+      npcOwners[definition.npc] = definition
+      npcOwners["MacGamingTrainerSpecial_" .. id] = definition
+    end
+    local function candidateKey(option)
+      return tostring(option.Type) .. ":" .. tostring(option.ItemName)
+        .. ":" .. tostring(option.SecondaryItemName) .. ":" .. tostring(option.Rarity)
+    end
+    local function candidatesKey(options)
+      if type(options) ~= "table" then return "" end
+      local keys = {}
+      for _, option in ipairs(options) do
+        keys[#keys + 1] = candidateKey(option)
+      end
+      -- Reordering the same choices is not a new usable reroll.
+      table.sort(keys)
+      return table.concat(keys, "|")
+    end
+    local function renderedKey(screen)
+      if type(screen.UpgradeButtons) ~= "table" then return nil end
+      local visible, set = {}, {}
+      for index, option in ipairs(screen.Source.UpgradeOptions or {}) do
+        local button = screen.UpgradeButtons[index]
+        local data = type(button) == "table" and button.Data
+        if type(data) ~= "table" or button.OnPressedFunctionName ~= (screen.Source.OnPressedFunctionNameOverride or "HandleUpgradeChoiceSelection") then return nil end
+        if option.Type == "TransformingTrait" then
+          local linked = type(data.OnExpire) == "table" and data.OnExpire.TraitData
+          if data.Name ~= option.SecondaryItemName or type(linked) ~= "table" or linked.Name ~= option.ItemName then return nil end
+        elseif data.Name ~= option.ItemName then return nil end
+        if not option.Blocked then visible[#visible + 1] = option; set[candidateKey(option)] = true end
+      end
+      if #visible == 0 then return nil end
+      return candidatesKey(visible), set
+    end
+    local function owner(source)
+      if source.Name == "NPC_Echo_01" and source.MenuTitle == "EchoChoiceMenu_LastRun"
+          and source.OnPressedFunctionNameOverride == "SelectEchoBoon" then return "echoPrevious" end
+      local definition = npcOwners[source.Name]
+      if definition ~= nil then return definition.choices and "fixed" or "loot", definition end
+      if source.Name == "WeaponUpgrade" or source.Name == "TrialUpgrade" or source.Name == "StackUpgrade" or source.Name == "HermesUpgrade" then return "loot" end
+      if type(LootData) == "table" and type(LootData[source.Name]) == "table"
+          and LootData[source.Name].GodLoot then return "loot" end
+    end
+    local function currentScreen()
+      local screen = type(ScreenAnchors) == "table" and ScreenAnchors.ChoiceScreen
+      if type(screen) ~= "table" or screen.Name ~= "UpgradeChoice" or screen.ChoiceMade or screen.TraitTrayOpened or screen.Closing or screen.KeepOpen == false
+          or type(ActiveScreens) ~= "table" or ActiveScreens.UpgradeChoice ~= screen
+          or type(screen.Source) ~= "table" then return nil end
+      for name, other in pairs(ActiveScreens) do if name ~= "UpgradeChoice" and other then return nil end end
+      return screen
+    end
+    local function nativeSource(source, definition)
+      if definition ~= nil and source.Name ~= definition.npc then
+        local original = ShallowCopyTable(source)
+        original.Name = definition.npc
+        return original
+      end
+      return source
+    end
+    local function sourceKey(source)
+      return tostring(source.Name) .. ":" .. tostring(source.MenuTitle) .. ":" .. tostring(source.OnPressedFunctionNameOverride)
+        .. ":" .. tostring(source.StackOnly) .. ":" .. tostring(source.TransformingTraits)
+    end
+    local function eligibilityKey(source, kind, definition)
+      local keys = {}
+      for _, trait in ipairs(CurrentRun.Hero.Traits or {}) do
+        keys[#keys + 1] = tostring(trait) .. ":" .. tostring(trait.Name) .. ":" .. tostring(trait.StackNum) .. ":" .. tostring(trait.Rarity)
+          .. ":" .. tostring(trait.FamiliarLastStandHealAmount)
+      end
+      for name in pairs(CurrentRun.Hero.Weapons or {}) do keys[#keys + 1] = "weapon:" .. tostring(name) end
+      for name in pairs(CurrentRun.Hero.TraitDictionary or {}) do keys[#keys + 1] = "owned:" .. tostring(name) end
+      if kind == "fixed" and type(PresetEventArgs) == "table" then
+        for name, picked in pairs(CurrentRun.PickedTraits or {}) do if picked then keys[#keys + 1] = "picked:" .. tostring(name) end end
+        local data = PresetEventArgs[definition.choices] or {}
+        local eligibilitySource = nativeSource(source, definition)
+        for _, option in pairs(data.UpgradeOptions or {}) do
+          local eligible = option.GameStateRequirements == nil or (type(IsGameStateEligible) == "function" and IsGameStateEligible(eligibilitySource, option.GameStateRequirements))
+          keys[#keys + 1] = tostring(option.ItemName) .. ":eligible:" .. tostring(eligible)
+        end
+      end
+      table.sort(keys)
+      return table.concat(keys, "|")
+    end
+    local function previewSnapshot()
+      local map = type(SessionMapState) == "table" and SessionMapState or {}
+      return { old = map.OldFamiliarTrait, new = map.NewFamiliarTrait, statLine = map.StatLine }
+    end
+    local function costFor(screen)
+      if type(RerollCosts) ~= "table" or not finite(RerollCosts.Boon) or RerollCosts.Boon < 1 or RerollCosts.Boon % 1 ~= 0
+          or not finite(RerollCosts.ReuseIncrement) or RerollCosts.ReuseIncrement < 0 or RerollCosts.ReuseIncrement % 1 ~= 0 then return nil end
+      local source = screen.Source
+      local spent = CurrentRun.CurrentRoom.SpentRerolls or {}
+      -- Synthetic NPC sources all use -1. Native history must not merge them.
+      local key = source.ObjectId ~= nil and source.ObjectId ~= -1 and source.ObjectId or nil
+      local cost = RerollCosts.Boon + number(key and spent[key] or syntheticSpent[screen])
+      if cost > 999999 or cost % 1 ~= 0 then return nil end
+      return cost, key
+    end
+    local function observe()
+      local screen = currentScreen()
+      if not ready() or sceneName() ~= "run" or screen == nil then
+        observation = nil
+        return { available = false, reason = "hades2.reroll.noMenu" }
+      end
+      local source = screen.Source
+      local kind, definition = owner(source)
+      if kind == nil then return { available = false, reason = "hades2.reroll.unsupported" } end
+      local cost, key = costFor(screen)
+      if cost == nil or type(ScreenState) ~= "table" or type(screen.Components) ~= "table" or type(screen.Components.RerollButton) ~= "table"
+          or not finite(screen.Components.RerollButton.Id) or type(screen.Components.RerollIcon) ~= "table" or not finite(screen.Components.RerollIcon.Id)
+          or type(AttemptPanelReroll) ~= "function" or type(thread) ~= "function" then
+        return { available = false, reason = "hades2.reroll.unavailable" }
+      end
+      local fingerprint = candidatesKey(source.UpgradeOptions)
+      local rendered, visibleCandidates = renderedKey(screen)
+      if rendered == nil then return { available = false, reason = "hades2.reroll.unavailable" } end
+      local eligibility = eligibilityKey(source, kind, definition)
+      if observation == nil or observation.run ~= CurrentRun or observation.room ~= CurrentRun.CurrentRoom
+          or observation.hero ~= CurrentRun.Hero or observation.session ~= SessionState
+          or observation.screen ~= screen or observation.source ~= source or observation.fingerprint ~= fingerprint
+          or observation.options ~= source.UpgradeOptions or observation.sourceKey ~= sourceKey(source)
+          or observation.rendered ~= rendered
+          or observation.buttons ~= screen.UpgradeButtons or observation.screenState ~= ScreenState
+          or observation.rerollButton ~= screen.Components.RerollButton or observation.rerollIcon ~= screen.Components.RerollIcon
+          or observation.eligibility ~= eligibility then
+        serial = serial + 1
+        observation = { token = M.traitInventoryGeneration .. ":choice:" .. serial, session = SessionState,
+          run = CurrentRun, room = CurrentRun.CurrentRoom, hero = CurrentRun.Hero, screen = screen,
+          source = source, sourceKey = sourceKey(source), options = source.UpgradeOptions, fingerprint = fingerprint,
+          rendered = rendered,
+          visibleCandidates = visibleCandidates,
+          buttons = screen.UpgradeButtons, screenState = ScreenState,
+          rerollButton = screen.Components.RerollButton, rerollIcon = screen.Components.RerollIcon,
+          eligibility = eligibility, kind = kind, definition = definition, costKey = key,
+          previewMap = SessionMapState, preview = previewSnapshot() }
+      end
+      local reason = nil
+      if M.terminalActionUnknown then reason = "hades2.error.outcomeUnknownGeneric"
+      elseif activeLease ~= nil or (type(ScreenState) == "table" and ScreenState.InTransition) then reason = "hades2.reroll.transition"
+      elseif number(CurrentRun.NumRerolls) < cost then reason = "hades2.reroll.unaffordable" end
+      return { available = reason == nil, menuToken = observation.token, cost = cost, reason = reason }
+    end
+    local function matches(target, committed)
+      local kind, definition = owner(target.source)
+      local expected = committed or target
+      local currentPreview, expectedPreview = previewSnapshot(), expected.preview
+      return __MacGamingTrainerV1 == M and SessionState == target.session and CurrentRun == target.run
+        and CurrentRun.CurrentRoom == target.room and CurrentRun.Hero == target.hero
+        and currentScreen() == target.screen and target.screen.Source == target.source
+        and ScreenState == target.screenState and target.screen.Components.RerollButton == target.rerollButton
+        and target.screen.Components.RerollIcon == target.rerollIcon and target.screen.UpgradeButtons == expected.buttons
+        and sourceKey(target.source) == target.sourceKey and kind == target.kind and definition == target.definition
+        and target.source.UpgradeOptions == expected.options
+        and eligibilityKey(target.source, kind, definition) == target.eligibility
+        and (not (definition and definition.circe) or (SessionMapState == target.previewMap
+          and currentPreview.old == expectedPreview.old and currentPreview.new == expectedPreview.new and currentPreview.statLine == expectedPreview.statLine))
+        and candidatesKey(target.source.UpgradeOptions) == expected.fingerprint
+    end
+    local function ownsUnwind(target, lease)
+      -- A closing/covered parent is no longer actionable, but can still own
+      -- this native attempt's input block and transition during exception unwind.
+      return activeLease == lease and __MacGamingTrainerV1 == M and SessionState == target.session
+        and CurrentRun == target.run and CurrentRun.Hero == target.hero and CurrentRun.CurrentRoom == target.room
+        and type(ScreenAnchors) == "table" and ScreenAnchors.ChoiceScreen == target.screen
+        and type(ActiveScreens) == "table" and ActiveScreens.UpgradeChoice == target.screen
+        and ScreenState == target.screenState
+    end
+    local function fixedOptions(target, excluded)
+      local definition = target.definition
+      local data = type(PresetEventArgs) == "table" and PresetEventArgs[definition.choices]
+      if type(data) ~= "table" or type(data.UpgradeOptions) ~= "table" then error("Choice reroll source is unavailable") end
+      requireFunctions("fixed choice reroll", { "IsGameStateEligible", "RemoveRandomValue", "PassRarityCheck", "ShallowCopyTable", "HeroHasTrait" })
+      local priority, eligible, result = {}, {}, {}
+      local eligibilitySource = nativeSource(target.source, definition)
+      for _, option in pairs(data.UpgradeOptions) do
+        if type(option) == "table" and option.ItemName ~= excluded
+            and (option.Type ~= "Trait" or (type(option.ItemName) == "string" and type(TraitData) == "table" and type(TraitData[option.ItemName]) == "table"
+              and not HeroHasTrait(option.ItemName) and not (target.run.PickedTraits or {})[option.ItemName]))
+            and (option.GameStateRequirements == nil or IsGameStateEligible(eligibilitySource, option.GameStateRequirements)) then
+          local candidate = ShallowCopyTable(option)
+          if definition.rarity then candidate.Rarity = definition.rarity end
+          local pool = candidate.PriorityRequirements ~= nil and IsGameStateEligible(eligibilitySource, candidate.PriorityRequirements)
+            and priority or eligible
+          pool[#pool + 1] = candidate
+        end
+      end
+      for _ = 1, 3 do
+        local option
+        if #priority > 0 then
+          option = RemoveRandomValue(priority)
+          if option then option.SlotEntranceAnimation = option.PrioritySlotEntranceAnimation end
+        elseif #eligible > 0 then
+          option = RemoveRandomValue(eligible)
+          if option and definition.rarity == nil and option.Rarity and #eligible > 0 and not PassRarityCheck(option.Rarity) then
+            option = RemoveRandomValue(eligible)
+          end
+        end
+        if option then result[#result + 1] = option end
+      end
+      if target.run.IsDreamRun and type(TraitRarityData) == "table" then
+        local order = TraitRarityData.RarityUpgradeOrder or {}
+        for _, option in ipairs(result) do option.Rarity = order[target.run.EnteredBiomes] or option.Rarity end
+      end
+      return result
+    end
+    local function previousRarity(name)
+      local history = type(GameState.RunHistory) == "table" and GameState.RunHistory
+      local previous = history and history[#history]
+      local rarity = type(previous) == "table" and type(previous.TraitRarityCache) == "table" and previous.TraitRarityCache[name]
+      local trait = type(TraitData) == "table" and TraitData[name]
+      if rarity == nil or type(trait) ~= "table" or HeroHasTrait(name)
+          or not IsGodTrait(name, { ForShop = true, ForLastRunBoon = true }) or not IsTraitEligible(trait)
+          or (trait.Slot and HeroSlotFilled(trait.Slot)) or trait.ExcludeTraitFromLastRunBoonPool then return nil end
+      local floor = GetHeroTrait("ElementalRarityUpgradeBoon")
+      if floor and floor.Activated and rarity == "Common" then rarity = "Rare" end
+      return rarity
+    end
+    local function previousOptions(target, excluded)
+      requireFunctions("Echo previous-run reroll", { "HeroHasTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled", "GetHeroTrait", "RemoveRandomValue" })
+      local history = type(GameState.RunHistory) == "table" and GameState.RunHistory
+      local previous = history and history[#history]
+      if type(previous) ~= "table" then error("Choice reroll pool has no changed eligible candidates") end
+      local pool, result = {}, {}
+      for name in pairs(previous.TraitRarityCache or {}) do
+        local rarity = previousRarity(name)
+        if name ~= excluded and rarity ~= nil then pool[#pool + 1] = { ItemName = name, Type = "Trait", Rarity = rarity } end
+      end
+      for _ = 1, 3 do if #pool > 0 then result[#result + 1] = RemoveRandomValue(pool) end end
+      return result
+    end
+    local function plannedEligible(plan)
+      if plan.target.kind == "echoPrevious" then
+        for _, option in ipairs(plan.planned.UpgradeOptions) do
+          if previousRarity(option.ItemName) ~= option.Rarity then return false end
+        end
+      elseif plan.target.kind == "loot" then
+        local source = nativeSource(plan.target.source, plan.target.definition)
+        local function namesSet(names)
+          local set = {}; for _, name in pairs(names or {}) do set[name] = true end; return set
+        end
+        if source.TransformingTraits then
+          requireFunctions("Chaos choice reroll", { "GetEligibleTransformingTrait" })
+          local permanent = namesSet(GetEligibleTransformingTrait(source.PermanentTraits))
+          local temporary = namesSet(GetEligibleTransformingTrait(source.TemporaryTraits))
+          for _, option in ipairs(plan.planned.UpgradeOptions) do
+            if option.Type ~= "TransformingTrait" or not permanent[option.ItemName] or not temporary[option.SecondaryItemName] then return false end
+          end
+        else
+          requireFunctions("native choice eligibility", { "GetEligibleUpgrades", "IsTraitEligible", "HeroHasTrait", "HeroSlotFilled" })
+          local eligible = {}
+          -- These native filters are deterministic; never generate/reroll again
+          -- while validating the candidate plan across a presentation yield.
+          for _, option in pairs(GetEligibleUpgrades({}, source, source)) do eligible[option.ItemName] = true end
+          local priority = namesSet(source.PriorityUpgrades)
+          for _, option in ipairs(plan.planned.UpgradeOptions) do
+            local trait = type(TraitData) == "table" and TraitData[option.ItemName]
+            if type(trait) ~= "table" then return false end
+            if option.TraitToReplace ~= nil then
+              requireFunctions("native swap eligibility", { "GetUpgradedRarity", "GetRarityValue" })
+              if not priority[option.ItemName] or HeroHasTrait(option.ItemName) or not IsTraitEligible(trait) then return false end
+              local occupied
+              for _, owned in ipairs(plan.target.hero.Traits or {}) do
+                if owned.Slot ~= nil and owned.Slot == trait.Slot and (occupied == nil or GetRarityValue(owned.Rarity) > GetRarityValue(occupied.Rarity)) then occupied = owned end
+              end
+              if occupied == nil or occupied.Name ~= option.TraitToReplace or occupied.Rarity ~= option.OldRarity
+                  or GetUpgradedRarity(occupied.Rarity) ~= option.Rarity then return false end
+            elseif not eligible[option.ItemName] then
+              if source.StackOnly or not priority[option.ItemName] or HeroHasTrait(option.ItemName)
+                  or (not source.StripRequirements and not IsTraitEligible(trait))
+                  or (trait.Slot and HeroSlotFilled(trait.Slot)) then return false end
+            end
+          end
+        end
+      end
+      return true
+    end
+    local function familiarPreview(target, options)
+      if not (target.definition and target.definition.circe) then return nil end
+      local preview = {}
+      for _, option in ipairs(options) do
+        if option.ItemName == "DoubleFamiliarTrait" then
+          requireFunctions("Circe familiar reroll", { "GetProcessedTraitData", "SetTraitTextData" })
+          local familiar
+          for _, trait in ipairs(target.hero.Traits or {}) do if trait.FamiliarTrait then familiar = trait end end
+          local rarityData = type(TraitData.DoubleFamiliarTrait) == "table" and TraitData.DoubleFamiliarTrait.RarityLevels
+          rarityData = rarityData and rarityData[option.Rarity or "Common"]
+          if familiar == nil or type(rarityData) ~= "table" or not finite(rarityData.Multiplier) then error("Choice reroll source is unavailable") end
+          local multiplier = rarityData.Multiplier + 1
+          local traitData = TraitData[familiar.Name] or {}
+          preview.old = DeepCopyTable(familiar)
+          preview.new = GetProcessedTraitData({ Unit = target.hero, TraitName = familiar.Name,
+            StackNum = (familiar.StackNum or 1) * multiplier + (traitData.CirceBonusStacks or 0) * (multiplier - 1) })
+          if type(preview.new) ~= "table" then error("Choice reroll source is unavailable") end
+          SetTraitTextData(preview.old); SetTraitTextData(preview.new)
+          if familiar.FamiliarLastStandHealAmount ~= nil then
+            preview.old.ExtractData.TooltipLastStandAmount = 1
+            preview.new.ExtractData.TooltipLastStandAmount = multiplier
+          end
+          preview.statLine = traitData.CirceStatLine
+        end
+      end
+      return preview
+    end
+    local function fixedPlan(source, definition, excluded)
+      local target = { source = source, definition = definition, run = CurrentRun, hero = CurrentRun.Hero }
+      local options = fixedOptions(target, excluded)
+      if #options == 0 then error("No eligible special blessings are available") end
+      return options, familiarPreview(target, options)
+    end
+    local function prepare(params)
+      local visible = observe()
+      if observation == nil or params.menuToken ~= observation.token or not matches(observation) then error("Choice reroll menu is stale") end
+      if not visible.available then
+        if visible.reason == "hades2.reroll.unaffordable" then error("Choice reroll count is insufficient") end
+        error("Choice reroll source is unavailable")
+      end
+      if params.expectedCost ~= visible.cost then error("Choice reroll cost is stale") end
+      requireFunctions("native choice reroll", { "DeepCopyTable", "ShallowCopyTable", "DestroyBoonLootButtons", "CreateBoonLootButtons", "ModifyTextBox",
+        "AddInputBlock", "RemoveInputBlock", "UpdateRerollUI", "RandomSynchronize", "InvalidateCheckpoint", "PreRerollPanelPresentation",
+        "PostRerollPanelPresentation", "CallFunctionName", "HideTopMenuScreenTooltips", "IncrementTableValue", "wait" })
+      local target = observation
+      local original = target.source
+      local excluded
+      for _, option in ipairs(original.UpgradeOptions or {}) do if not option.Blocked then excluded = option.ItemName; break end end
+      local planned = DeepCopyTable(original)
+      local preview
+      if target.kind == "fixed" then planned.UpgradeOptions, preview = fixedPlan(original, target.definition, excluded)
+      elseif target.kind == "echoPrevious" then planned.UpgradeOptions = previousOptions(target, excluded)
+      else
+        requireFunctions("native loot reroll", { "SetTraitsOnLoot" })
+        planned.Name = target.definition and target.definition.npc or original.Name
+        planned.UpgradeOptions = nil
+        SetTraitsOnLoot(planned, { BoonRaritiesOverride = original.RarityChances,
+          IgnoreAllRarityBonus = true, IgnoreRoomRarityBonus = true, ExclusionNames = { excluded } })
+        planned.Name = original.Name
+      end
+      if type(planned.UpgradeOptions) ~= "table" or #planned.UpgradeOptions < math.min(3, #(original.UpgradeOptions or {}))
+          or #planned.UpgradeOptions == 0 or candidatesKey(planned.UpgradeOptions) == target.fingerprint then
+        error("Choice reroll pool has no changed eligible candidates")
+      end
+      local plan = { target = target, planned = planned, preview = preview, cost = visible.cost }
+      if not plannedEligible(plan) then error("Choice reroll pool has no changed eligible candidates") end
+      return plan
+    end
+    local function run(record, plan)
+      local target = plan.target
+      leaseSerial = leaseSerial + 1
+      local callbackName = "MacGamingTrainerChoiceReroll_" .. M.traitInventoryGeneration .. "_" .. leaseSerial
+      local lease = { record = record, target = target, name = callbackName }
+      local button = ShallowCopyTable(target.screen.Components.RerollButton)
+      button.Cost, button.RerollId, button.LootData, button.RerollFunctionName = plan.cost, target.costKey, target.source, callbackName
+      local function failUnknown(message)
+        record.status, record.error = "outcome_unknown", tostring(message)
+        M.terminalActionUnknown = true
+      end
+      local addInputBlock, removeInputBlock = AddInputBlock, RemoveInputBlock
+      lease.inputName = callbackName .. "_Input"
+      lease.releaseInput = function()
+        if not lease.inputHeld then return end
+        -- This unique name belongs only to this lease, including after owner
+        -- replacement. Never release another name or a foreign transition.
+        local ok, message = pcall(removeInputBlock, { Name = lease.inputName })
+        if ok then lease.inputHeld = false else failUnknown(message) end
+      end
+      lease.callback = function(screen)
+        if target.costKey == nil then syntheticSpent[target.screen] = number(syntheticSpent[target.screen]) + RerollCosts.ReuseIncrement end
+        -- Never throw through native presentation: it still owns the input block.
+        local ok, message = pcall(function()
+          if activeLease ~= lease or screen ~= target.screen or not matches(target) or not plannedEligible(plan) then error("Choice reroll menu changed after spending") end
+          if plan.preview then
+            SessionMapState.OldFamiliarTrait, SessionMapState.NewFamiliarTrait, SessionMapState.StatLine = plan.preview.old, plan.preview.new, plan.preview.statLine
+          end
+          DestroyBoonLootButtons(screen, target.source)
+          for _, key in ipairs({ "UpgradeOptions", "Rarity", "RarityChances", "BoonRaritiesOverride", "ForceCommon", "ForceCommonWithoutCurse", "UseSwapTrait" }) do
+            target.source[key] = plan.planned[key]
+          end
+          ModifyTextBox({ Id = screen.Components.RerollIcon.Id, Text = target.run.NumRerolls, AutoSetDataProperties = false })
+          CreateBoonLootButtons(screen, target.source, true)
+          local rendered, visible = renderedKey(screen)
+          local changed = false
+          for key in pairs(visible or {}) do if not target.visibleCandidates[key] then changed = true end end
+          if rendered == nil or not changed then error("Choice reroll did not present changed usable candidates") end
+          lease.applied = true
+          lease.fingerprint = candidatesKey(target.source.UpgradeOptions)
+          lease.options = target.source.UpgradeOptions
+          lease.preview = previewSnapshot()
+          lease.buttons = screen.UpgradeButtons
+        end)
+        if not ok then failUnknown(message) end
+      end
+      activeLease = lease
+      _G[callbackName] = lease.callback
+      record.status = "accepted"
+      thread(function()
+        local valid, eligible = pcall(function() return matches(target) and plannedEligible(plan) end)
+        if not valid or not eligible or activeLease ~= lease or (ScreenState and ScreenState.InTransition)
+            or costFor(target.screen) ~= plan.cost or number(target.run.NumRerolls) < plan.cost then
+          record.status, record.error = "failed", "Choice reroll menu is stale"
+        else
+          -- Native releases its own block before its final .95-second wait.
+          -- Keep selection gated until complete native unwind and validation.
+          lease.inputHeld = true
+          local acquired, acquireMessage = pcall(addInputBlock, { Name = lease.inputName })
+          local ok, message
+          if acquired then
+            lease.entered = true
+            ok, message = pcall(AttemptPanelReroll, target.screen, button)
+          else
+            record.status, record.error = "failed", tostring(acquireMessage)
+            ok = true
+          end
+          if not ok then
+            failUnknown(message)
+            -- Native exceptions can bypass its own unwind. Release only the
+            -- transition/input block still belonging to this run/menu lease.
+            if ownsUnwind(target, lease) then
+              if type(RemoveInputBlock) == "function" then pcall(RemoveInputBlock, { Name = "AttemptPanelReroll" }) end
+              if type(ScreenState) == "table" then ScreenState.InTransition = false end
+            end
+          elseif acquired and record.status ~= "outcome_unknown" then
+            local valid, finished = pcall(function() return lease.applied and matches(target, lease) and plannedEligible(plan) end)
+            if valid and finished then record.status = "completed" else failUnknown("Choice reroll did not finish on its observed menu") end
+          end
+        end
+        lease.releaseInput()
+        if _G[callbackName] == lease.callback then _G[callbackName] = nil end
+        if activeLease == lease then activeLease = nil end
+        actionLedger.publish(record)
+      end)
+      return nil, record.status
+    end
+    local function cleanup()
+      local lease = activeLease
+      if lease == nil then return end
+      activeLease = nil
+      if lease.entered then
+        lease.record.status, lease.record.error = "outcome_unknown", "Choice reroll interrupted after spending"
+        M.terminalActionUnknown = true
+      else lease.record.status, lease.record.error = "failed", "Choice reroll menu is stale" end
+      lease.releaseInput()
+      -- Retain our no-op callback until native unwinds; removing it before the
+      -- yield resumes would make CallFunctionName throw and skip native cleanup.
+      actionLedger.publish(lease.record)
+    end
+    return { observe = observe, prepare = prepare, run = run, cleanup = cleanup, fixedPlan = fixedPlan }
+  end)()
+
   local function state(includeCatalogs)
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
@@ -4137,6 +4599,7 @@ if __MacGamingTrainerV1 == nil then
       spellCharge = number(CurrentRun and CurrentRun.SpellCharge), spellChargeCost = spellChargeCost,
       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
+      choiceReroll = choiceReroll.observe(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
@@ -5049,6 +5512,7 @@ if __MacGamingTrainerV1 == nil then
       remove_trait = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
+      reroll_choice = { "menuToken", "expectedCost" },
       acquire_chaos_pair = { "blessing", "curse" },
       spawn_reward = { "reward" },
     }
@@ -5076,6 +5540,7 @@ if __MacGamingTrainerV1 == nil then
       }
     end
     local function publishActionReceipt(record)
+      if record.command == "reroll_choice" and record.status == "outcome_unknown" then M.terminalActionUnknown = true end
       M.lastActionReceipt = actionReceipt(record, record.requestId, false)
     end
     local function action(command, params, work, preflight)
@@ -5116,7 +5581,7 @@ if __MacGamingTrainerV1 == nil then
         publishActionReceipt(record)
         error("MGT_OUTCOME_UNKNOWN: " .. record.error)
       end
-      if record.status == "outcome_unknown" then record.status = outcome or "completed" end
+      if record.status == "outcome_unknown" and record.error == nil then record.status = outcome or "completed" end
       record.lootObjectId = value
       publishActionReceipt(record)
       local result = state(params.includeCatalogs)
@@ -5216,10 +5681,23 @@ if __MacGamingTrainerV1 == nil then
     refreshHealth()
   end
   function M.dispatch(command, params)
-    synchronize()
     params = params or {}
     if type(params) ~= "table" then error("Parameters must be a table") end
+    -- A yielding native action can become uncertain between Host observations.
+    -- Close the resident mutation boundary immediately, before reconciliation
+    -- can restore desired hooks or a different request can spend again.
+    if M.terminalActionUnknown then
+      if command == "status" then return state(params.includeCatalogs) end
+      if command ~= "cleanup" and command ~= "disable_all" then
+        error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
+      end
+    else synchronize() end
     if command == "status" then return state(params.includeCatalogs) end
+    if command == "reroll_choice" then
+      local plan
+      return actionLedger.run(command, params, function(record) return choiceReroll.run(record, plan) end,
+        function() plan = choiceReroll.prepare(params) end)
+    end
     if command == "cleanup" or command == "disable_all" then
       local hadMana = M.infiniteMana
       disable()
@@ -5836,86 +6314,10 @@ if __MacGamingTrainerV1 == nil then
           args = ShallowCopyTable(choiceData)
           args.PortraitShift = nil
 
-          local priorityOptions, eligibleOptions = {}, {}
-          for _, option in pairs(choiceData.UpgradeOptions) do
-            local traitAvailable = type(option) == "table" and
-              (option.Type ~= "Trait" or
-                (type(option.ItemName) == "string"
-                  and type(TraitData[option.ItemName]) == "table"
-                  and not HeroHasTrait(option.ItemName)
-                  and (type(CurrentRun.PickedTraits) ~= "table" or not CurrentRun.PickedTraits[option.ItemName])))
-            if type(option) == "table" and traitAvailable
-                and (option.GameStateRequirements == nil or IsGameStateEligible(source, option.GameStateRequirements)) then
-              local candidate = ShallowCopyTable(option)
-              if definition.rarity ~= nil then candidate.Rarity = definition.rarity end
-              if candidate.PriorityRequirements ~= nil and IsGameStateEligible(source, candidate.PriorityRequirements) then
-                priorityOptions[#priorityOptions + 1] = candidate
-              else
-                eligibleOptions[#eligibleOptions + 1] = candidate
-              end
-            end
-          end
-          if #priorityOptions + #eligibleOptions == 0 then error("No eligible special blessings are available") end
-
-          source.UpgradeOptions = {}
-          for _ = 1, 3 do
-            local option = nil
-            if #priorityOptions > 0 then
-              option = RemoveRandomValue(priorityOptions)
-              if option ~= nil then option.SlotEntranceAnimation = option.PrioritySlotEntranceAnimation end
-            elseif #eligibleOptions > 0 then
-              option = RemoveRandomValue(eligibleOptions)
-              if option ~= nil and definition.rarity == nil and option.Rarity
-                  and #eligibleOptions > 0 and not PassRarityCheck(option.Rarity) then
-                option = RemoveRandomValue(eligibleOptions)
-              end
-            end
-            if option ~= nil then source.UpgradeOptions[#source.UpgradeOptions + 1] = option end
-          end
-
-          if CurrentRun.IsDreamRun and type(TraitRarityData) == "table"
-              and type(TraitRarityData.RarityUpgradeOrder) == "table" then
-            for _, option in ipairs(source.UpgradeOptions) do
-              option.Rarity = TraitRarityData.RarityUpgradeOrder[CurrentRun.EnteredBiomes] or option.Rarity
-            end
-          end
-
-          if definition.circe then
-            for _, option in ipairs(source.UpgradeOptions) do
-              if option.ItemName == "DoubleFamiliarTrait" then
-                local familiarTrait = nil
-                for _, traitData in ipairs(CurrentRun.Hero.Traits or {}) do
-                  if traitData.FamiliarTrait then familiarTrait = traitData; break end
-                end
-                if familiarTrait == nil then error("Circe familiar choice requires an active familiar trait") end
-                local rarity = option.Rarity or "Common"
-                local rarityLevels = type(TraitData.DoubleFamiliarTrait) == "table"
-                  and TraitData.DoubleFamiliarTrait.RarityLevels or nil
-                local rarityData = type(rarityLevels) == "table" and rarityLevels[rarity] or nil
-                if type(rarityData) ~= "table" or not finite(rarityData.Multiplier) then
-                  error("Circe familiar choice rarity data is unavailable")
-                end
-                SetTraitTextData(familiarTrait)
-                SessionMapState.OldFamiliarTrait = familiarTrait
-                local multiplier = rarityData.Multiplier + 1
-                local bonusStacks = type(TraitData[familiarTrait.Name]) == "table"
-                  and (TraitData[familiarTrait.Name].CirceBonusStacks or 0) or 0
-                local newFamiliarTrait = GetProcessedTraitData({
-                  Unit = CurrentRun.Hero, TraitName = familiarTrait.Name,
-                  StackNum = (familiarTrait.StackNum or 1) * multiplier + bonusStacks * (multiplier - 1),
-                })
-                SetTraitTextData(newFamiliarTrait)
-                SessionMapState.NewFamiliarTrait = newFamiliarTrait
-                if familiarTrait.FamiliarLastStandHealAmount ~= nil then
-                  SessionMapState.OldFamiliarTrait.ExtractData.TooltipLastStandAmount = 1
-                  SessionMapState.NewFamiliarTrait.ExtractData.TooltipLastStandAmount = multiplier
-                end
-                if type(TraitData[familiarTrait.Name]) == "table"
-                    and TraitData[familiarTrait.Name].CirceStatLine then
-                  SessionMapState.StatLine = TraitData[familiarTrait.Name].CirceStatLine
-                end
-              end
-            end
+          local preview
+          source.UpgradeOptions, preview = choiceReroll.fixedPlan(source, definition)
+          if preview ~= nil then
+            SessionMapState.OldFamiliarTrait, SessionMapState.NewFamiliarTrait, SessionMapState.StatLine = preview.old, preview.new, preview.statLine
           end
         end
 

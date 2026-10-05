@@ -13,10 +13,11 @@ from games.hades2.preferences import Hades2PreferenceStore
 
 
 # Source-boundary evidence for the real resident contract: status enters the
-# same dispatch path as mutations and synchronize() runs before command routing.
+# same dispatch path as mutations; normal status synchronizes, but an uncertain
+# terminal action returns observation without restoring desired runtime hooks.
 lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
 dispatch = lua[lua.index('  function M.dispatch(command, params)'):]
-assert dispatch.index('    synchronize()') < dispatch.index('    if command == "status"')
+assert dispatch.index('    else synchronize() end') < dispatch.index('    if command == "status" then return state(params.includeCatalogs) end', dispatch.index('    else synchronize() end'))
 
 
 class FakeTransport:
