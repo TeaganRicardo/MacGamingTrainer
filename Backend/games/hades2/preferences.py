@@ -39,7 +39,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 7
+DESIRED_STATE_SCHEMA_VERSION = 8
 
 
 def _finite_number(value):
@@ -190,6 +190,8 @@ def normalize_persisted_desired(raw, schema_version):
         migrated.pop('gatheringProbabilities',None)
     if schema_version < 7 and isinstance(migrated,dict):
         migrated.pop('chaosGateProbability',None)
+    if schema_version < 8 and isinstance(migrated,dict):
+        migrated.pop('forceEnableRerolls',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
