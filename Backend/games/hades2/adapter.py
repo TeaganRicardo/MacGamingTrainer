@@ -165,7 +165,7 @@ class Hades2Adapter(GameAdapter):
         # Candidate writes happen before adopting new in-memory desired state.
         # A successful full-document write also resolves any older persistence
         # pending state carried by the current desired snapshot.
-        self._persist_preferences_candidate(preferences)
+        self.preference_store.save(preferences)
         self._preference_persistence_dirty=False
 
     def _save_preferences(self):
