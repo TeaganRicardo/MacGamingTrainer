@@ -1,19 +1,5 @@
 import SwiftUI
 
-/// Hades wire families. Native generation and collection strategy stays in Lua.
-enum Hades2GatheringFamily: String, CaseIterable, Identifiable {
-    case flora, mining, digging, shades, fishing
-    var id: String { rawValue }
-    var titleKey: String { "hades2.gathering.family.\(rawValue)" }
-    var collectionKey: String { "hades2.gathering.collection.\(rawValue)" }
-}
-
-struct Hades2GatheringTarget {
-    let available: Bool
-    let scopeToken: String?
-    let reason: String?
-}
-
 struct Hades2GatheringPanel: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
