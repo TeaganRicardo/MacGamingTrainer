@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-04
+Updated: 2026-10-05
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -62,6 +62,7 @@ Current source contains resident revision 76. Revisions 52–76 remain pending t
 - revision 71: mounted Arcana effects are owned only by an exact equipped `MetaUpgradeCardData[card].TraitName` mapping. Safe declarative cards can receive a current-run rank/rarity override through native owner-shaped teardown/rebuild with adjacency and derived health/mana/weapon refreshes, while permanent Arcana state remains read-only; one-shot/setup-state cards and runtime-only removal fail closed. #330 implementation is complete pending automated and consolidated real-game acceptance.
 - revision 72: direct special-NPC mounted management is derived from native source identity and processed runtime semantics rather than a trait allowlist. Meaningful declarative level/rarity/removal operations are exposed; one-shot acquisition and unsupported setup/counter lifecycles fail closed; Icarus CostumeArmor teardown refreshes costume owner state. The residual #239 `directSpecial` deferred bucket is removed.
 - revision 73: final #236–#240 convergence removes the stale closed-#239 Arachne costume deferral marker; no mutation capability or durable progression semantics change.
+- revision 75: Trainer mutations close an open native Trait Tray through its owner lifecycle before handing off the operation; an unsuccessful close refuses the mutation. This supersedes the earlier fail-closed Trait Tray behavior. Real-game acceptance remains pending.
 - revision 76: deterministic Chaos acquisition accepts an explicit current-build blessing + curse pair in one non-replayable request, revalidates both against the live TrialUpgrade pools/eligibility immediately before mutation, mounts exactly the selected curse, and queues exactly the selected blessing through the native curse lifecycle shape. Real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
@@ -108,6 +109,8 @@ Planning issue #124 is the sequencing authority.
 - #230 pickup-compatible infinite-ammo correction is complete in this source.
 - #236 Chaos lifecycle acquisition and mounted management is complete in this source.
 - #344–#347 manual-QA follow-ups are implemented in this source: recognizable current-run effect labels, stable Boon Management geometry, compact two-level Exact Boon navigation, and deterministic Chaos blessing + curse pair acquisition. Resident revision 76 still requires the consolidated user-run exact-build acceptance.
+- #348 native Trait Tray close/handoff is implemented in this source; the earlier #341 fail-closed shipping behavior is superseded. Consolidated real-game acceptance remains pending.
+- #232 game-related shortcut settings, module log access and optional Save Management are composed in the game's management area. Host retains the single Save manager and backend session; consolidated visual acceptance remains pending.
 - #312 boon-management UX consolidation is complete in this source: Exact Boons uses a compact source → boon/effect navigation flow with search, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions. Chaos acquisition is intentionally separated into its dedicated blessing + curse pair control.
 - #237 Selene Hex / Path of Stars exact acquisition and mounted management is complete in this source at resident revision 63; final real-game acceptance remains part of the consolidated manual pass.
 - #238 weapon/aspect-aware Hammer exact acquisition and mounted-effect management is complete in this source at resident revision 64; final real-game acceptance remains part of the consolidated manual pass.
