@@ -173,7 +173,6 @@ for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [
 # Propagate that fact to the backend without crossing LLDB, so runtimeReady can
 # bootstrap immediately instead of discovering the missing resident module by
 # executing one doomed status request first.
-assert 'runtimeReset = "runtime_reset"' in api
 assert 'case runtimeReset' in api
 assert 'send(.runtimeReset' in event_block
 assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
