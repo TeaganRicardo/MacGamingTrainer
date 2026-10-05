@@ -11,7 +11,6 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
-from games.hades2.command_validation import validate_command_params
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
@@ -33,24 +32,6 @@ for version in range(6):
     assert migrated['gatheringProbabilities'] == {}, 'older schemas must migrate to Native'
 assert normalize_persisted_desired({'gatheringProbabilities': valid}, 6)['gatheringProbabilities'] == valid
 
-for family in FAMILIES:
-    for probability in (None, 0, 100, 37.5):
-        assert validate_command_params('set_gathering_desired', {'family': family, 'probability': probability}) == {'family': family, 'probability': probability}
-    assert validate_command_params('generate_gathering', {'family': family, 'scopeToken': 'observed-room'}) == {'family': family, 'scopeToken': 'observed-room'}
-for command, params in (
-    ('set_gathering_desired', {'family': 'other', 'probability': 10}),
-    ('set_gathering_desired', {'family': [], 'probability': 10}),
-    ('set_gathering_desired', {'family': 'flora'}),
-    *[('set_gathering_desired', {'family': 'flora', 'probability': x}) for x in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {})],
-    *[('generate_gathering', {'family': 'flora', 'scopeToken': x}) for x in (None, '', True, 1, [], {}, 'x'*129)],
-    ('generate_gathering', {'family': 'other', 'scopeToken': 'room'}),
-):
-    try:
-        validate_command_params(command, params)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError(f'invalid gathering request accepted: {command} {params!r}')
 
 class Transport:
     pid = 123
@@ -63,6 +44,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     preparation.DATA = base
     transport = Transport()
     adapter = Hades2Adapter(transport=transport)
+    # Host request validation is owned by the command-contract dispatch seam.
+    for command, params in (
+        ('set_gathering_desired', {'family': 'other', 'probability': 10}),
+        ('set_gathering_desired', {'family': [], 'probability': 10}),
+        ('set_gathering_desired', {'family': 'flora'}),
+        *[('set_gathering_desired', {'family': 'flora', 'probability': x})
+          for x in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {})],
+        *[('generate_gathering', {'family': 'flora', 'scopeToken': x})
+          for x in (None, '', True, 1, [], {}, 'x'*129)],
+        ('generate_gathering', {'family': 'other', 'scopeToken': 'room'}),
+    ):
+        try:
+            adapter.dispatch(command, params, 'invalid')
+        except Exception:
+            pass
+        else:
+            raise AssertionError(
+                f'invalid gathering request accepted: {command} {params!r}'
+            )
+
     for family, percentage in valid.items():
         result = adapter.dispatch('set_gathering_desired', {'family': family, 'probability': percentage}, 'desired-'+family)
         assert result['gatheringProbabilities'][family] == percentage

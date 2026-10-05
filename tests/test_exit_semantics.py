@@ -12,8 +12,6 @@ from games.hades2.persistence import PersistenceError
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
-api = (ROOT/'Sources/Hades2/Hades2API.swift').read_text()
-router = (ROOT/'Backend/games/hades2/command_router.py').read_text()
 
 termination = model[model.index('    private var runtimeCleanupRequired'):model.index('    private func finishExit')]
 assert 'failExit' not in termination
@@ -27,9 +25,8 @@ assert 'sendBarrier(.disableAll' in termination
 assert 'announceSuccess: false' in termination
 assert 'self.finishExit(completion: completion)' in termination
 
-# The exit-only desired reset remains a typed Hades command.
-assert 'case resetDesired = "reset_desired"' in api
-assert "elif command=='reset_desired':result=adapter.reset_desired()" in router
+# reset_desired command identity/routing is covered at the Hades Host
+# command-contract seam. This test owns only exit/reset behavior.
 
 
 def make_adapter(prefix, session=None):

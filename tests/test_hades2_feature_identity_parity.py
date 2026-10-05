@@ -3,9 +3,7 @@
 Backend/games/hades2/schema.py is the canonical identity source. This contract
 checks real consumers and dispatch boundaries without adding another schema.
 """
-import ast
 import importlib
-import importlib.util
 import json
 import re
 import shutil
@@ -368,40 +366,10 @@ def validate_swift_consumers(root, toggles):
         assert contains_tokens(panel, expected), "Swift gameSpeed panel misroutes its Core-owned input"
 
 
-def python_router_source(root):
-    tree = ast.parse(source(root, "Backend/games/hades2/command_router.py"))
-    dispatch = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "_dispatch")
-    for node in ast.walk(dispatch):
-        test = getattr(node, "test", None)
-        if not isinstance(test, ast.Compare) or not isinstance(test.left, ast.Name) or test.left.id != "command":
-            continue
-        if not any(isinstance(op, ast.Eq) for op in test.ops):
-            continue
-        if not any(isinstance(value, ast.Constant) and value.value == "set_desired" for value in test.comparators):
-            continue
-        calls = [child for child in ast.walk(node) if isinstance(child, ast.Call)
-                 and isinstance(child.func, ast.Attribute) and child.func.attr == "set_desired"]
-        assert len(calls) == 1, "Python set_desired router must have one adapter consumer"
-        expected = [ast.Subscript(value=ast.Name(id="params", ctx=ast.Load()), slice=ast.Constant(value=name), ctx=ast.Load())
-                    for name in ("feature", "value")]
-        assert [ast.dump(arg, include_attributes=False) for arg in calls[0].args] == [
-            ast.dump(arg, include_attributes=False) for arg in expected
-        ], "Python router must preserve params.feature and params.value"
-        return
-    raise AssertionError("Python router has no set_desired dispatch branch")
-
-
-def load_python_consumer(root, filename, name):
-    path = root / "Backend/games/hades2" / filename
-    spec = importlib.util.spec_from_file_location("games.hades2._feature_identity_" + name, path)
-    assert spec and spec.loader, "Python consumer loader missing: " + filename
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def exercise_python_router(root, toggles, multipliers):
-    router_type = load_python_consumer(root, "command_router.py", "router").Hades2CommandRouter
+def exercise_python_contract(root, toggles, multipliers):
+    contract_type = importlib.import_module(
+        "games.hades2.command_contract"
+    ).Hades2CommandContract
 
     class Probe:
         def __init__(self):
@@ -412,14 +380,22 @@ def exercise_python_router(root, toggles, multipliers):
             return {"feature": feature, "value": value}
 
     probe = Probe()
-    router = router_type(probe)
+    contract = contract_type(probe)
     cases = [(key, True) for key in toggles] + [
         (key, rule["default"]) for key, rule in multipliers.items()
     ]
     for index, (key, value) in enumerate(cases):
-        result = router.dispatch("set_desired", {"feature": key, "value": value}, str(index))
-        assert result == {"feature": key, "value": value}, "Python router misrouted " + key
-    assert probe.received == cases, "Python router changed a durable feature identity"
+        result = contract.dispatch(
+            "set_desired",
+            {"feature": key, "value": value},
+            str(index),
+        )
+        assert result == {"feature": key, "value": value}, (
+            "Python command contract misrouted " + key
+        )
+    assert probe.received == cases, (
+        "Python command contract changed a durable feature identity"
+    )
 
 
 def exercise_adapter_routes(root, toggles, multipliers):
@@ -442,7 +418,7 @@ def exercise_adapter_routes(root, toggles, multipliers):
     try:
         with tempfile.TemporaryDirectory(prefix="mgt-feature-preferences-") as temporary:
             setattr(preparation, "DATA", Path(temporary))
-            adapter_module = load_python_consumer(root, "adapter.py", "adapter")
+            adapter_module = importlib.import_module("games.hades2.adapter")
             adapter_type = adapter_module.Hades2Adapter
             session = FakeResidentSession({
                 "status": "ready", "scene": "run", "capabilities": {"setFeature": True},
@@ -683,8 +659,7 @@ def lua_dispatch_source(root, toggles, multipliers):
 
 
 def validate_python_consumers(root):
-    python_router_source(root)
-    exercise_python_router(root, tuple(TOGGLES), dict(MULTIPLIER_RULES))
+    exercise_python_contract(root, tuple(TOGGLES), dict(MULTIPLIER_RULES))
 
 
 def validate_core_speed(root):

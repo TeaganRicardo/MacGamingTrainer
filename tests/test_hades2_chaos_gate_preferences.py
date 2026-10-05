@@ -11,7 +11,6 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 sys.path.insert(0, str(ROOT / 'tests'))
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
-from games.hades2.command_validation import validate_command_params
 from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
@@ -21,16 +20,9 @@ from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpContr
 assert Hades2PreferenceStore.defaults()['chaosGateProbability'] is None
 assert DESIRED_STATE_SCHEMA_VERSION == 7 and PROFILE_SCHEMA_VERSION == 6
 for value in (None, 0, 100, 32.5):
-    assert validate_command_params('set_chaos_gate_desired', {'probability': value}) == {'probability': value}
     assert Hades2PreferenceStore.normalize({'chaosGateProbability': value})['chaosGateProbability'] == value
 for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
     assert Hades2PreferenceStore.normalize({'chaosGateProbability': value})['chaosGateProbability'] is None
-    try: validate_command_params('set_chaos_gate_desired', {'probability': value})
-    except ValueError: pass
-    else: raise AssertionError('invalid probability accepted')
-try: validate_command_params('set_chaos_gate_desired', {})
-except ValueError: pass
-else: raise AssertionError('missing probability silently restored Native')
 for version in range(7):
     migrated = normalize_persisted_desired({'chaosGateProbability': 100, 'gatheringProbabilities': {'flora': 25}}, version)
     assert migrated['chaosGateProbability'] is None
@@ -47,6 +39,23 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     preparation.DATA = base
     transport = Transport()
     adapter = Hades2Adapter(transport=transport)
+    # Host input validation is observed only through the public command seam.
+    for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
+        try:
+            adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'invalid')
+        except ValueError:
+            pass
+        except Exception as error:
+            assert getattr(error, 'diagnostic', None) == '概率必须为 0–100。'
+        else:
+            raise AssertionError('invalid probability accepted')
+    try:
+        adapter.dispatch('set_chaos_gate_desired', {}, 'missing')
+    except Exception:
+        pass
+    else:
+        raise AssertionError('missing probability silently restored Native')
+
     adapter.dispatch('set_gathering_desired', {'family': 'flora', 'probability': 25}, 'gathering')
     for value in (0, 100, 32.5, None, 80):
         result = adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'desired')

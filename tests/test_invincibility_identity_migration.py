@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.command_validation import validate_command_params
+from games.hades2.command_contract import Hades2CommandContract
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
     Hades2PreferenceStore,
@@ -29,13 +29,27 @@ current = normalize_persisted_desired(
 assert current["invincibility"] is False
 assert "godMode" not in current
 
-assert validate_command_params(
-    "set_desired", {"feature": "invincibility", "value": True}
+class DesiredProbe:
+    def __init__(self):
+        self.calls = []
+
+    def set_desired(self, feature, value):
+        self.calls.append((feature, value))
+        return {"feature": feature, "value": value}
+
+
+probe = DesiredProbe()
+contract = Hades2CommandContract(probe)
+assert contract.dispatch(
+    "set_desired", {"feature": "invincibility", "value": True}, "current"
 ) == {"feature": "invincibility", "value": True}
+assert probe.calls == [("invincibility", True)]
 try:
-    validate_command_params("set_desired", {"feature": "godMode", "value": True})
-except ValueError as error:
-    assert str(error) == "未知功能。"
+    contract.dispatch(
+        "set_desired", {"feature": "godMode", "value": True}, "legacy"
+    )
+except Exception as error:
+    assert (getattr(error, "diagnostic", None) or str(error)) == "未知功能。"
 else:
     raise AssertionError("legacy godMode remained a live current-protocol alias")
 

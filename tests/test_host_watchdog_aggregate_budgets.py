@@ -1,14 +1,13 @@
 import ast
-import re
 import sys
 from functools import lru_cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SWIFT_API = (ROOT / "Sources/Hades2/Hades2API.swift").read_text(encoding="utf-8")
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2 import operation_budgets as budgets, preparation
+from games.hades2.command_contract import command_metadata
 
 
 def _maximum_subprocess_calls(function):
@@ -69,19 +68,13 @@ assert _maximum_subprocess_calls("prepare") <= budgets.PREPARATION_MAX_SUBPROCES
 assert _maximum_subprocess_calls("restore") <= budgets.RESTORE_MAX_SUBPROCESS_CALLS
 
 
-def request_timeout(case):
-    timeout_switch = SWIFT_API[SWIFT_API.index("var timeout"):]
-    case_match = re.search(rf"^\s*case \.{re.escape(case)}:\s*$", timeout_switch, re.MULTILINE)
-    assert case_match, f"Hades2API must define a timeout for {case}"
-    case_body = re.split(
-        r"^\s*(?:case\s+|default\s*:)",
-        timeout_switch[case_match.end():],
-        maxsplit=1,
-        flags=re.MULTILINE,
-    )[0]
-    return_match = re.search(r"\breturn\s+([0-9]+(?:\.[0-9]+)?)", case_body)
-    assert return_match, f"Hades2API timeout for {case} must be numeric"
-    return float(return_match.group(1))
+def request_timeout(command):
+    timeouts = {
+        row["name"]: float(row["timeoutSeconds"])
+        for row in command_metadata()
+    }
+    assert command in timeouts, f"Hades Host command contract missing {command}"
+    return timeouts[command]
 
 
 # Keep worst-case aggregate budgets explicit and compare the Swift request
@@ -117,7 +110,7 @@ assert budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS == (
     budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS + budgets.EXPORT_REVEAL_TIMEOUT_SECONDS
 )
 assert request_timeout("diagnostics") > budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS
-assert request_timeout("exportDiagnostics") > budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS
+assert request_timeout("export_diagnostics") > budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS
 assert budgets.DIAGNOSTICS_OPERATION_BUDGET_SECONDS == 65
 assert budgets.EXPORT_DIAGNOSTICS_OPERATION_BUDGET_SECONDS == 75
 

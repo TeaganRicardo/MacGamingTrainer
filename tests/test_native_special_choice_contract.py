@@ -6,7 +6,7 @@ from runtime_revision_support import runtime_revision
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
-from games.hades2.command_router import Hades2CommandRouter
+from games.hades2.command_contract import Hades2CommandContract
 from games.hades2.error_presentation import Hades2PresentationError
 
 api = (ROOT / 'Sources/Hades2/Hades2API.swift').read_text()
@@ -21,7 +21,7 @@ assert runtime_revision(lua) >= 42
 assert 'specialChoiceOpens = {}' in lua
 assert 'specialChoiceRun = nil' in lua
 
-for token in ('openSpecialChoice = "open_special_choice"', 'case openSpecialChoice(source: String)', 'case .openSpecialChoice: return .openSpecialChoice'):
+for token in ('case openSpecialChoice(source: String)', 'case .openSpecialChoice: return .openSpecialChoice'):
     assert token in api, token
 assert 'return ["source": source]' in api
 
@@ -35,8 +35,8 @@ class NativeChoiceRouterProbe:
 
 
 router_probe = NativeChoiceRouterProbe()
-command_router = Hades2CommandRouter(router_probe)
-routed = command_router.dispatch(
+command_contract = Hades2CommandContract(router_probe)
+routed = command_contract.dispatch(
     "open_special_choice",
     {"source": "Zeus"},
     "native-choice-request",
@@ -50,14 +50,14 @@ assert router_probe.calls == [
 ]
 
 try:
-    command_router.dispatch("open_special_choice", {}, "invalid-native-choice")
+    command_contract.dispatch("open_special_choice", {}, "invalid-native-choice")
 except Hades2PresentationError as error:
     # Player-facing copy is a language-neutral key resolved by the module tables.
     assert error.code == "invalid_request", error.code
     assert error.presentation == "hades2.error.selectChoiceSource", error.presentation
     assert error.diagnostic == "请选择支持原生奖励选择界面的角色。", error.diagnostic
 else:
-    raise AssertionError("router bypassed native special-choice validation")
+    raise AssertionError("command contract bypassed native special-choice validation")
 assert len(router_probe.calls) == 1
 replay = adapter[adapter.index('def _replay_preferences'):adapter.index('def scan(', adapter.index('def _replay_preferences'))]
 assert 'open_special_choice' not in replay
