@@ -12,8 +12,6 @@ import copy
 import math
 import subprocess
 
-from core.adapter import AdapterError
-
 from . import preparation
 from .config import STEAM_SPEC
 from .diagnostics import build_diagnostics, export_diagnostics
