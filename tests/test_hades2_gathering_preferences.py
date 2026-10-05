@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'Backend'))
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
 from games.hades2.command_validation import validate_command_params
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
@@ -129,23 +130,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         pass
     assert adapter.preferences['gatheringProbabilities']['flora'] == 100
     assert adapter.preference_dirty is True
-    calls.clear()
-    def replay_execute(command, params, **kwargs):
-        calls.append((command, copy.deepcopy(params), copy.deepcopy(kwargs)))
-        for name, values in kwargs.get('batch', []):
-            if name == 'set_gathering_probabilities': adapter.state['gatheringProbabilities'] = dict(values['probabilities'])
-        return dict(adapter.state)
-    adapter.execute = replay_execute
+    class ConfirmingReconciler:
+        def __init__(self):
+            self.calls = []
+        def reconcile(self, desired, observed, *, force_full=False):
+            self.calls.append((copy.deepcopy(desired), copy.deepcopy(observed), force_full))
+            return DesiredReconciliationOutcome(reply=None, confirmed=True, mismatches=())
+
+    reconciler = ConfirmingReconciler()
+    adapter.desired_reconciler = reconciler
     adapter.state['gatheringProbabilities'] = {}
     adapter._replay_preferences()
-    batch = calls[0][2]['batch']
-    assert ('set_gathering_probabilities', {'probabilities': valid | {'flora': 100}}) in batch
-    assert all(name != 'generate_gathering' for name, _ in batch)
+    assert len(reconciler.calls) == 1
+    assert reconciler.calls[0][0]['gatheringProbabilities'] == valid | {'flora': 100}
     assert adapter.preference_dirty is False
+
     calls.clear()
+    adapter.execute = execute
     preferences = copy.deepcopy(adapter.preferences)
     adapter.dispatch('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room'}, 'generation-request')
-    assert calls == [('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room', 'requestId': 'generation-request'}, {})]
+    assert calls == [('generate_gathering', {'family': 'mining', 'scopeToken': 'observed-room', 'requestId': 'generation-request'})]
     assert adapter.preferences == preferences
 
     # Scene/transport invalidation clears ephemeral targets without erasing
