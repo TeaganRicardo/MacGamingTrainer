@@ -163,11 +163,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     clear_active(observed)
     assert observed['gatheringProbabilities'] == {}
 
-    # An older peer/sparse snapshot cannot silently clear accepted new intent.
-    adapter._capture_runtime_preferences({'status': 'ready'})
+    # Saving a Profile snapshots canonical durable desired state; a stale
+    # runtime/public projection cannot overwrite pending gathering intent.
+    adapter.state['gatheringProbabilities'] = {}
+    adapter.save_profile('Pending Gathering')
     assert adapter.preferences['gatheringProbabilities'] == valid | {'flora': 100}
-    adapter._capture_runtime_preferences({'gatheringProbabilities': {}})
-    assert adapter.preferences['gatheringProbabilities'] == {}
+    saved_pending = json.loads(
+        adapter.profile_service.path('Pending Gathering').read_text()
+    )
+    assert saved_pending['desired']['gatheringProbabilities'] == valid | {'flora': 100}
 
     future = dict(persisted, schemaVersion=8)
     future_path = base/'future-desired.json'
