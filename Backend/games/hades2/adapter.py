@@ -736,17 +736,12 @@ class Hades2Adapter(GameAdapter):
         self,command,params,replay=False,batch=None,
         host_observation_only=False,
     ):
-        # host_observation_only suppresses Host adoption/replay/persistence.
-        # Resident status may still perform synchronize() maintenance, so this
-        # path is observation-with-maintenance, not a pure runtime snapshot.
+        # Host projection/persistence remains Adapter-owned. The resident session
+        # owns the debugger/Lua transaction, generation, bootstrap, handoff and trust.
         if host_observation_only and command!='status':
             raise ValueError('runtime observation 仅允许 status。')
         project_desired=not host_observation_only
         teardown=not host_observation_only and command in ('disable_all','cleanup')
-        # Durable intent is reset before any potentially slow debugger attach or
-        # Lua boundary. If that write is explicitly blocked/failed, still make a
-        # best-effort runtime teardown; report the persistence error afterwards
-        # without pretending the durable state was reset.
         teardown_persistence_error=None
         if teardown:
             try:self._reset_preferences()
@@ -771,124 +766,35 @@ class Hades2Adapter(GameAdapter):
                 logging.warning('Time Warp teardown failed; continuing Lua cleanup: %s',error)
         try:
             runtime_params=dict(params or {})
-            if 'includeCatalogs' not in runtime_params:
-                runtime_params['includeCatalogs']=not self._catalog_initialized
-            decode_metrics={}
-            def decode_runtime(raw):
-                phase=time.monotonic()
-                payload=json.loads(raw)
-                decode_metrics['json']=time.monotonic()-phase
-                phase=time.monotonic()
-                payload=localize_catalog(payload)
-                decode_metrics['localize']=time.monotonic()-phase
-                return payload
             if command=='status':
                 self._last_status_boundary_duration=0.0
                 self._last_status_json_duration=0.0
                 self._last_status_localize_duration=0.0
-            recovered_generation=False
-            trait_tray_handoff_started=None
-            trait_tray_handoff_boundaries=0
             try:
-                while True:
-                    if (
-                        trait_tray_handoff_started is not None
-                        and time.monotonic()-trait_tray_handoff_started>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS
-                    ):
-                        raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                    if batch is None:
-                        dispatch_value='__MacGamingTrainerV1.dispatch('+lua_value(command)+','+lua_value(runtime_params)+')'
+                if batch is not None:
+                    reply=self.runtime.reconcile(batch)
+                elif command=='status':
+                    if host_observation_only:
+                        reply=self.runtime.observe_status(runtime_params)
                     else:
-                        calls=[]
-                        for batch_command,batch_params in batch:
-                            item_params=dict(batch_params or {});item_params['includeCatalogs']=False
-                            calls.append(
-                                '{["command"]='+lua_value(batch_command)+',["params"]='+lua_value(item_params)+'}'
-                            )
-                        dispatch_value='__MacGamingTrainerV1.dispatchBatch({'+','.join(calls)+'})'
-                    if command=='status':
-                        dispatch='return __MacGamingTrainerV1.json('+dispatch_value+')'
-                    else:
-                        # Target build 1.143476 already uses this exact game-owned
-                        # coroutine close in CheckLastStand. thread() resumes the
-                        # close routine until its first wait without yielding the
-                        # debugger pcall, then the game's scheduler owns the rest.
-                        dispatch=(
-                            'return __MacGamingTrainerV1.json((function() '
-                            'local __mgtScreen=(type(ActiveScreens)=="table") and ActiveScreens.TraitTrayScreen or nil;'
-                            'if __mgtScreen~=nil then '
-                            'if type(thread)~="function" or type(TraitTrayScreenClose)~="function" then '
-                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="unsupported"} end;'
-                            'if not __mgtScreen.Closing then thread(TraitTrayScreenClose,__mgtScreen) end;'
-                            'return {["'+_TRAIT_TRAY_HANDOFF_KEY+'"]="closing"} end;'
-                            'return '+dispatch_value+' end)())'
-                        )
-                    code=(self.bootstrap+'\n'+dispatch) if not self._runtime_bootstrapped else dispatch
-                    boundary_started=time.monotonic()
-                    try:
-                        decoded=execute_with_ledger(
-                            self.transport,command,code,decode_runtime,
-                            replay=replay,read_only=host_observation_only,
-                            expression_timeout_seconds=_REPLAY_EXPRESSION_TIMEOUT_SECONDS if batch is not None else None,
-                        )
-                        handoff=decoded.get(_TRAIT_TRAY_HANDOFF_KEY) if isinstance(decoded,dict) else None
-                        if handoff is not None:
-                            if handoff=='unsupported':
-                                raise TransportError(
-                                    'incompatible',
-                                    '游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。',
-                                )
-                            if handoff!='closing':
-                                raise TransportError('lua_error','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                            if trait_tray_handoff_started is None:
-                                trait_tray_handoff_started=boundary_started
-                            trait_tray_handoff_boundaries+=1
-                            elapsed=time.monotonic()-trait_tray_handoff_started
-                            if elapsed>=_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS:
-                                raise TransportError('waiting','游戏内祝福菜单未能及时关闭，修改尚未执行。')
-                            time.sleep(min(
-                                _TRAIT_TRAY_HANDOFF_POLL_SECONDS,
-                                max(0.0,_TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS-elapsed),
-                            ))
-                            continue
-                        break
-                    except TransportError as error:
-                        if self._resident_cleanup_failed(error):
-                            raise TransportError(
-                                'restart_required',
-                                'hades2.error.residentCleanupFailed',
-                                diagnostic=str(error),
-                            ) from error
-                        if not self._runtime_generation_missing(error):
-                            raise
-                        self._invalidate_runtime_generation()
-                        if command!='status' or recovered_generation:
-                            raise
-                        recovered_generation=True
-                        runtime_params['includeCatalogs']=True
-                        logging.info('Lua runtime generation reset detected; re-bootstrap status in same debugger attachment')
-                if trait_tray_handoff_started is not None:
-                    logging.info(
-                        'TraitTrayHandoff command=%s duration=%.3fs boundaries=%d',
-                        command,time.monotonic()-trait_tray_handoff_started,trait_tray_handoff_boundaries+1,
-                    )
-            finally:
-                if command=='status':
-                    self._last_status_boundary_duration=getattr(self.transport,'last_duration',0.0) or 0.0
+                        reply=self.runtime.status(runtime_params)
+                else:
+                    reply=self.runtime.mutate(command,runtime_params)
+            except ResidentGenerationInvalidated as invalidated:
+                self._mark_runtime_generation_invalidated()
+                raise invalidated.original
+            if reply.generation_reset:
+                # The session has already re-bootstraped the new generation.
+                # Adapter only projects that lifecycle evidence into desired/observed state.
+                self._mark_runtime_generation_invalidated()
+            decoded=reply.payload
             if command=='status':
-                self._last_status_json_duration=decode_metrics.get('json',0.0)
-                self._last_status_localize_duration=decode_metrics.get('localize',0.0)
-            self._runtime_bootstrapped=True
-            if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
-            last_action=decoded.get('lastAction')
-            asynchronous_unknown=isinstance(last_action,dict) and last_action.get('outcome')=='outcome_unknown'
-            if asynchronous_unknown:self.runtime.tainted=True
-            if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
-                logging.warning(
-                    'LuaAction command=%s requestId=%s outcome=failed raw=%s',
-                    last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
-                )
-            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
+                self._last_status_boundary_duration=reply.metrics.boundary_duration
+                self._last_status_json_duration=reply.metrics.json_duration
+                self._last_status_localize_duration=reply.metrics.localize_duration
+            asynchronous_unknown=reply.outcome_unknown
+            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
+                self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
             if prior_warnings or catalog_warnings:
@@ -904,22 +810,14 @@ class Hades2Adapter(GameAdapter):
             self.state.update(decoded,connected=True,pid=self.runtime.pid)
             self.state.pop('error',None)
             # Runtime observation skips durable Hades desired-state projection,
-            # but Core-owned Process Time Warp remains observable Host state and
-            # must stay present in diagnostics/status snapshots.
+            # but Core-owned Process Time Warp remains observable Host state.
             if host_observation_only:self._project_time_warp()
-            # nextRoomReward is a one-shot runtime request. A clean status in
-            # the same backend confirms consumption once the armed runtime value
-            # disappears. Across a backend restart, require Lua's persisted
-            # consumed-token receipt so a command that never reached Lua remains
-            # replayable while an already-consumed one-shot cannot resurrect.
             if not host_observation_only and command=='status' and next_room_reward_consumed(self.preferences,decoded,self.preference_dirty):
                 self.preferences['nextRoomReward']=None
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
-            # A game-owned coroutine may become uncertain after its accepted
-            # debugger reply. Retain this observation and proven consumption,
-            # but do not adopt/replay intent or cross another mutation boundary.
+            # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             if not host_observation_only and command=='status' and self.preference_dirty and not replay:
@@ -936,7 +834,7 @@ class Hades2Adapter(GameAdapter):
             if teardown_persistence_error is not None:raise teardown_persistence_error
             reward_context = f" reward={runtime_params.get('reward')}" if command == 'spawn_reward' else ''
             logging.info('Lua %s%s %.3fs scene=%s desired=%s active=%s featureErrors=%s diagnostics=%s',
-                         command,reward_context,self.runtime.last_duration,self.state.get('scene'),
+                         command,reward_context,reply.metrics.boundary_duration,self.state.get('scene'),
                          self.state.get('desiredFeatures'),self.state.get('activeFeatures'),
                          self.state.get('featureErrors'),self.state.get('runtimeDiagnostics'))
             return dict(self.state)
