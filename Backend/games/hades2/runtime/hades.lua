@@ -1259,7 +1259,7 @@ if __MacGamingTrainerV1 == nil then
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
   end
   local reconcileDesired
-  local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger
+  local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger, integer
   local function synchronize()
     -- Keep already owned hooks on their captured owner. An uncertain native
     -- coroutine must never adopt a new owner or reinstall a replaced hook.
@@ -6109,7 +6109,7 @@ if __MacGamingTrainerV1 == nil then
       error("Unknown or unsupported resource")
     end
   end
-  local function integer(value, minimum)
+  integer = function(value, minimum)
     if not finite(value) or value % 1 ~= 0 or value < minimum or value > 999999 then
       error("Amount must be an integer " .. minimum .. "..999999")
     end
