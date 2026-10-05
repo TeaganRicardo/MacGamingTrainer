@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.adapter import GameAdapter, GameAdapterContext
 from core.protocol import JsonlRequestRouter
 from games.hades2 import error_presentation
-from games.hades2.command_router import Hades2CommandRouter
+from games.hades2.command_contract import Hades2CommandContract
 
 
 class RouterHarnessAdapter(GameAdapter):
@@ -22,11 +22,11 @@ class RouterHarnessAdapter(GameAdapter):
             public_metadata={},
         ))
         self.state = {"connected": False, "scene": "test"}
-        self.command_router = Hades2CommandRouter(self)
+        self.command_contract = Hades2CommandContract(self)
         self.mutation_called = False
 
     def dispatch(self, command, params, request_id):
-        return self.command_router.dispatch(command, params, request_id)
+        return self.command_contract.dispatch(command, params, request_id)
 
     def set_desired(self, feature, value):
         self.mutation_called = True
