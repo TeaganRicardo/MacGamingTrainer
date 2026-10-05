@@ -14,6 +14,7 @@ from core.adapter import AdapterError
 from games.hades2 import preparation as prep
 from games.hades2.adapter import STAT_RULES, TOGGLES, Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.resident_session import ResidentGenerationInvalidated, ResidentMetrics, ResidentReply
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
