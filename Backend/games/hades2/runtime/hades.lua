@@ -4882,6 +4882,47 @@ if __MacGamingTrainerV1 == nil then
       return { options = options, preview = preview }
     end
 
+    local function hasAlternative(source, kind, definition)
+      local current = {}
+      for _, option in ipairs(source.UpgradeOptions or {}) do
+        if type(option) == "table" and not option.Blocked then current[option.ItemName] = true end
+      end
+      local excluded = firstVisibleName(source)
+      local wanted = math.min(3, #(source.UpgradeOptions or {}))
+      local count, changed = 0, false
+      if kind == "fixed" then
+        local data = type(PresetEventArgs) == "table" and PresetEventArgs[definition.choices]
+        if type(data) ~= "table" or type(data.UpgradeOptions) ~= "table" then return false end
+        local eligibilitySource = nativeSource(source, definition)
+        for _, option in pairs(data.UpgradeOptions) do
+          if type(option) == "table" and option.ItemName ~= excluded
+              and (option.Type ~= "Trait" or (type(option.ItemName) == "string"
+                and type(TraitData) == "table" and type(TraitData[option.ItemName]) == "table"
+                and not HeroHasTrait(option.ItemName)
+                and not (CurrentRun.PickedTraits or {})[option.ItemName]))
+              and (option.GameStateRequirements == nil
+                or (type(IsGameStateEligible) == "function"
+                  and IsGameStateEligible(eligibilitySource, option.GameStateRequirements))) then
+            count = count + 1
+            if not current[option.ItemName] then changed = true end
+          end
+        end
+      elseif kind == "echoPrevious" then
+        local history = type(GameState.RunHistory) == "table" and GameState.RunHistory
+        local previous = history and history[#history]
+        if type(previous) ~= "table" then return false end
+        for name in pairs(previous.TraitRarityCache or {}) do
+          if name ~= excluded and previousRarity(name) ~= nil then
+            count = count + 1
+            if not current[name] then changed = true end
+          end
+        end
+      else
+        return true
+      end
+      return count >= wanted and changed
+    end
+
     local function forcedCost(screen, source)
       if type(RerollCosts) ~= "table" or not finite(RerollCosts.Boon)
           or RerollCosts.Boon < 1 or RerollCosts.Boon % 1 ~= 0
@@ -4944,7 +4985,7 @@ if __MacGamingTrainerV1 == nil then
         return false
       end
       if (kind == "fixed" or kind == "echoPrevious")
-          and changedPlan(source, kind, definition) == nil then
+          and not hasAlternative(source, kind, definition) then
         button.OnPressedFunctionName = nil
         button.RerollFunctionName = nil
         button.Cost = -1
