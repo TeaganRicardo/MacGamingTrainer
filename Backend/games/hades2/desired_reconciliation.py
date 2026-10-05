@@ -108,6 +108,8 @@ class Hades2DesiredStateReconciler:
 
     def _diff(self, desired, observed, *, force_full):
         actions = []
+        lock_releases = []
+        lock_updates = []
         desired_features = _mapping(observed.get("desiredFeatures"))
 
         for key in TOGGLES:
@@ -181,7 +183,7 @@ class Hades2DesiredStateReconciler:
             if isinstance(row, dict) and row.get("locked")
         }
         for stat in sorted(locked_stats - set(wanted_stats)):
-            actions.append(
+            lock_releases.append(
                 _Action(
                     "set_stat",
                     {"stat": stat, "locked": False},
@@ -196,7 +198,7 @@ class Hades2DesiredStateReconciler:
                 and _number_equal(row.get("target"), value)
             )
             if force_full or not matches:
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "set_stat",
                         {"stat": stat, "locked": True, "value": value},
@@ -207,7 +209,7 @@ class Hades2DesiredStateReconciler:
         wanted_vitals = _mapping(desired.get("vitalLocks"))
         for vital in VITALS:
             if bool(observed.get(vital + "Locked")) and vital not in wanted_vitals:
-                actions.append(
+                lock_releases.append(
                     _Action(
                         "lock_vital",
                         {"vital": vital, "locked": False},
@@ -223,7 +225,7 @@ class Hades2DesiredStateReconciler:
                 value = row.get(field)
                 state_key = vital if field == "current" else "max" + vital.capitalize()
                 if force_full or not _number_equal(observed.get(state_key), value):
-                    actions.append(
+                    lock_updates.append(
                         _Action(
                             "set_vital",
                             {"vital": vital, "field": field, "value": value},
@@ -231,7 +233,7 @@ class Hades2DesiredStateReconciler:
                         )
                     )
             if force_full or not bool(observed.get(vital + "Locked")):
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "lock_vital",
                         {"vital": vital, "locked": True},
@@ -249,7 +251,7 @@ class Hades2DesiredStateReconciler:
         if observed.get("moneyLocked"):
             locked_resources.add("Money")
         for resource in sorted(locked_resources - set(wanted_resources)):
-            actions.append(
+            lock_releases.append(
                 _Action(
                     "lock_resource",
                     {"resource": resource, "locked": False},
@@ -269,7 +271,7 @@ class Hades2DesiredStateReconciler:
                 else bool(_mapping(resource_rows.get(resource)).get("locked"))
             )
             if force_full or not _number_equal(observed_amount, amount):
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "set_resource",
                         {"resource": resource, "amount": int(amount)},
@@ -278,7 +280,7 @@ class Hades2DesiredStateReconciler:
                     )
                 )
             if force_full or not observed_locked:
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "lock_resource",
                         {"resource": resource, "locked": True},
@@ -291,7 +293,7 @@ class Hades2DesiredStateReconciler:
         observed_rerolls_locked = bool(observed.get("rerollsLocked"))
         if wanted_rerolls is None:
             if observed_rerolls_locked:
-                actions.append(
+                lock_releases.append(
                     _Action(
                         "lock_rerolls",
                         {"locked": False},
@@ -303,7 +305,7 @@ class Hades2DesiredStateReconciler:
             if force_full or not _number_equal(
                 observed.get("rerolls"), wanted_rerolls
             ):
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "set_rerolls",
                         {"amount": int(wanted_rerolls)},
@@ -312,7 +314,7 @@ class Hades2DesiredStateReconciler:
                     )
                 )
             if force_full or not observed_rerolls_locked:
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "lock_rerolls",
                         {"locked": True},
@@ -329,7 +331,7 @@ class Hades2DesiredStateReconciler:
             if bool(row.get("locked"))
         }
         for element in sorted(locked_elements - set(wanted_elements)):
-            actions.append(
+            lock_releases.append(
                 _Action(
                     "lock_element",
                     {"element": element, "locked": False},
@@ -339,7 +341,7 @@ class Hades2DesiredStateReconciler:
         for element, amount in wanted_elements.items():
             row = _mapping(element_rows.get(element))
             if force_full or not _number_equal(row.get("count"), amount):
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "set_element",
                         {"element": element, "amount": int(amount)},
@@ -347,13 +349,18 @@ class Hades2DesiredStateReconciler:
                     )
                 )
             if force_full or not bool(row.get("locked")):
-                actions.append(
+                lock_updates.append(
                     _Action(
                         "lock_element",
                         {"element": element, "locked": True},
                         f"element:{element}",
                     )
                 )
+
+        # Lock reconciliation is deliberately two-phase across all lock families:
+        # first release every stale owner, then apply desired values/locks.
+        actions.extend(lock_releases)
+        actions.extend(lock_updates)
 
         wanted_reward = desired.get("nextRoomReward")
         wanted_token = desired.get("nextRoomRewardToken")
