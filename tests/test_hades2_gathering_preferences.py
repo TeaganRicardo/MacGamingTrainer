@@ -140,7 +140,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     reconciler = ConfirmingReconciler()
     adapter.desired_reconciler = reconciler
     adapter.state['gatheringProbabilities'] = {}
-    adapter._replay_preferences()
+    adapter._replay_preferences(copy.deepcopy(adapter.state))
     assert len(reconciler.calls) == 1
     assert reconciler.calls[0][0]['gatheringProbabilities'] == valid | {'flora': 100}
     assert adapter.preference_dirty is False
