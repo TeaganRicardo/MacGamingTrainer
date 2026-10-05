@@ -34,7 +34,7 @@ class FakeTransport:
     def alive(self):
         return self.live
 
-    def execute(self, source):
+    def execute(self, source, *, expression_timeout_seconds=None):
         self.sources.append(source)
         return json.dumps({
             "status": "ready",

@@ -62,11 +62,12 @@ class TraitTrayTransport:
     def close(self):
         pass
 
-    def execute(self, source):
+    def execute(self, source, *, expression_timeout_seconds=None):
         self.sources.append(source)
         dispatch_count = source.count("__MacGamingTrainerV1.dispatch(")
+        has_batch_dispatch = "__MacGamingTrainerV1.dispatchBatch(" in source
         has_status_dispatch = 'dispatch("status"' in source or "dispatch(\"status\"" in source
-        is_mutation = dispatch_count > 1 or (dispatch_count == 1 and not has_status_dispatch)
+        is_mutation = has_batch_dispatch or dispatch_count > 1 or (dispatch_count == 1 and not has_status_dispatch)
 
         if self.close_requested and self.tray_active:
             self.post_close_boundaries += 1

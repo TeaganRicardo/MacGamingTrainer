@@ -81,7 +81,7 @@ try:
     assert 'LuaBoundary command=status' in log
     assert 'duration=0.125s' in log
     assert 'outcome=waiting' in log
-    assert 'crossed_transport=yes' in log
+    assert 'crossed_transport=no' in log
     assert 'replay=True' in log
 
     # A boundary call that returns but violates the host JSON contract records

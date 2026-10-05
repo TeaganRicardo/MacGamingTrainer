@@ -99,6 +99,7 @@ _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
 _TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
 _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
 _TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
+_REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
 
 
 class Hades2Adapter(GameAdapter):
@@ -616,7 +617,9 @@ class Hades2Adapter(GameAdapter):
         reward=self.preferences.get('nextRoomReward')
         if force_full or self.state.get('nextRoomReward')!=reward:
             pending.append(('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')}))
-        if pending:self.execute('replay_preferences',{},replay=True,batch=pending)
+        if pending:
+            logging.info('ReplayPreferences count=%d',len(pending))
+            self.execute('replay_preferences',{},replay=True,batch=pending)
         self._capture_runtime_preferences(self.state)
         self._save_preferences()
         self.preference_dirty=False;self.state.pop('preferenceApplyError',None)
@@ -830,9 +833,10 @@ class Hades2Adapter(GameAdapter):
                         calls=[]
                         for batch_command,batch_params in batch:
                             item_params=dict(batch_params or {});item_params['includeCatalogs']=False
-                            calls.append('__MacGamingTrainerV1.dispatch('+lua_value(batch_command)+','+lua_value(item_params)+')')
-                        calls.append('return __MacGamingTrainerV1.dispatch("status",{["includeCatalogs"]=false})')
-                        dispatch_value='(function() '+ ';'.join(calls) +' end)()'
+                            calls.append(
+                                '{["command"]='+lua_value(batch_command)+',["params"]='+lua_value(item_params)+'}'
+                            )
+                        dispatch_value='__MacGamingTrainerV1.dispatchBatch({'+','.join(calls)+'})'
                     if command=='status':
                         dispatch='return __MacGamingTrainerV1.json('+dispatch_value+')'
                     else:
@@ -856,6 +860,7 @@ class Hades2Adapter(GameAdapter):
                         decoded=execute_with_ledger(
                             self.transport,command,code,decode_runtime,
                             replay=replay,read_only=host_observation_only,
+                            expression_timeout_seconds=_REPLAY_EXPRESSION_TIMEOUT_SECONDS if batch is not None else None,
                         )
                         handoff=decoded.get(_TRAIT_TRAY_HANDOFF_KEY) if isinstance(decoded,dict) else None
                         if handoff is not None:
