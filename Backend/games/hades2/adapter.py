@@ -180,7 +180,9 @@ class Hades2Adapter(GameAdapter):
         return self.profile_service.list()
 
     def save_profile(self,name,shortcuts=None):
-        if self.state.get('connected'): self._capture_runtime_preferences(self.state)
+        # Profiles snapshot canonical durable desired state. Runtime/public
+        # projection may lag while reconciliation is pending and must never
+        # overwrite that intent merely because the user saves a Profile.
         return self.profile_service.save(name,self.preferences,shortcuts)
 
     def delete_profile(self,name):
@@ -307,7 +309,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         return dict(self.state)
 
-    def _capture_runtime_preferences(self,decoded):
+    def _adopt_runtime_preferences(self,decoded):
         if not isinstance(decoded,dict):return
         desired=decoded.get('desiredFeatures') if isinstance(decoded.get('desiredFeatures'),dict) else {}
         for key in TOGGLES:
@@ -345,7 +347,7 @@ class Hades2Adapter(GameAdapter):
             self.preferences['nextRoomRewardToken']=token if reward is not None and isinstance(token,str) and token else None
 
     def _adopt_lua_preferences(self,decoded):
-        self._capture_runtime_preferences(decoded)
+        self._adopt_runtime_preferences(decoded)
         self.preference_initialized=True;self.preference_dirty=False
         self._save_preferences()
 
