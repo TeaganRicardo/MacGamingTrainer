@@ -111,7 +111,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     adapter.desired_reconciler = reconciler
     adapter.execute = execute
     adapter.state['chaosGateProbability'] = None
-    adapter._replay_preferences()
+    adapter._replay_preferences(copy.deepcopy(adapter.state))
     assert len(reconciler.calls) == 1
     assert reconciler.calls[0][0]['chaosGateProbability'] == 100
     assert adapter.preference_dirty is False
