@@ -477,8 +477,14 @@ persisted_lock_failure = json.loads(
 )
 assert persisted_lock_failure['statLocks'] == {}
 
+reconciles_before = sum(
+    call['kind'] == 'reconcile' for call in transport_lock_persist.calls
+)
 adapter_lock_persist.dispatch('status', {}, 'lock-persist-retry')
 assert adapter_lock_persist.preference_dirty is False
+assert sum(
+    call['kind'] == 'reconcile' for call in transport_lock_persist.calls
+) == reconciles_before, 'persistence-only retry crossed resident reconciliation'
 persisted_lock_retry = json.loads(
     (base_lock_persist / 'desired-state.json').read_text(encoding='utf-8')
 )
