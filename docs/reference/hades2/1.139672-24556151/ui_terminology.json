@@ -63,6 +63,69 @@
       "id": "WellShop_Title",
       "englishValue": "Well of Charon",
       "englishSource": "ScreenText.en.sjson"
+    },
+    "gatheringFlora": {
+      "value": "植物",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "HarvestPoint",
+      "englishValue": "Flora",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringMining": {
+      "value": "矿藏",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "PickaxePoint",
+      "englishValue": "Outcropping",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringDigging": {
+      "value": "挖掘点",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "DiggingPoint",
+      "englishValue": "Digging Spot",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringShades": {
+      "value": "迷途暗灵",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "ExorcismPointPlural",
+      "englishValue": "Lost Shades",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringFishing": {
+      "value": "钓鱼点",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "FishingPoint",
+      "englishValue": "Fishing Point",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringPickaxe": {
+      "value": "月牙镐",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolPickaxe",
+      "englishValue": "Crescent Pick",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringShovel": {
+      "value": "银辉铲",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolShovel",
+      "englishValue": "Silver Spade",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringTablet": {
+      "value": "安魂石板",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolExorcismBook",
+      "englishValue": "Tablet of Peace",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringRod": {
+      "value": "钓鱼竿",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolFishingRod",
+      "englishValue": "Rod of Fishing",
+      "englishSource": "TraitText.en.sjson"
     }
   },
   "nativeChoiceTitles": {
@@ -328,6 +391,30 @@
       "englishValue": "Reroll current choices",
       "status": "trainer_product_label",
       "reason": "Trainer-owned action for the currently observed native UpgradeChoice candidates, including forced special-choice rerolls; not a native game menu title."
+    },
+    "gatheringPanel": {
+      "value": "采集点",
+      "englishValue": "Gathering Points",
+      "reason": "Trainer panel grouping five native collection families.",
+      "status": "trainer_product_label"
+    },
+    "gatheringNative": {
+      "value": "原生 / 默认",
+      "englishValue": "Native / Default",
+      "reason": "Trainer setting leaves the native trial probability unchanged.",
+      "status": "trainer_product_label"
+    },
+    "gatheringCustom": {
+      "value": "自定义",
+      "englishValue": "Custom",
+      "reason": "Trainer setting replaces eligible native gathering trial probability.",
+      "status": "trainer_product_label"
+    },
+    "generateGathering": {
+      "value": "当前房间生成",
+      "englishValue": "Generate in Current Room",
+      "reason": "Trainer one-shot action invokes native setup for one unused authored gathering point.",
+      "status": "trainer_product_label"
     }
   },
   "registry": {

@@ -18,7 +18,7 @@ from games.hades2.profile_service import (
 FIXTURES = ROOT / "tests/fixtures/hades2/profiles"
 assert PROFILE_SCHEMA_VERSION == 6
 assert PROFILE_COMPATIBILITY_FLOOR == 3
-assert DESIRED_STATE_SCHEMA_VERSION == 5
+assert DESIRED_STATE_SCHEMA_VERSION == 6
 
 fixture_paths = sorted(FIXTURES.glob("profile-v*.json"))
 fixture_versions = {

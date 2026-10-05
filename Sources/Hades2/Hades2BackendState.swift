@@ -74,6 +74,8 @@ struct Hades2StatePatch {
     let rerolls: Hades2FieldPatch<Double>
     let rerollsLocked: Bool?
     let choiceReroll: Hades2FieldPatch<Hades2ChoiceRerollSnapshot>
+    let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
+    let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
 
     let warningText: Hades2FieldPatch<String>
     let boons: [BoonOption]?
@@ -149,6 +151,26 @@ struct Hades2StatePatch {
                     cost: cost, reason: row["reason"] as? String))
             }
         } else { choiceReroll = payload.keys.contains("choiceReroll") ? .present(nil) : .absent }
+
+        if let values = payload["gatheringProbabilities"] as? [String: Any] {
+            var decoded: [Hades2GatheringFamily: Double] = [:]
+            var valid = true
+            for (key, raw) in values {
+                guard let family = Hades2GatheringFamily(rawValue: key), let value = Self.number(raw), (0...100).contains(value) else { valid = false; break }
+                decoded[family] = value
+            }
+            gatheringProbabilities = .present(valid ? decoded : nil)
+        } else { gatheringProbabilities = payload.keys.contains("gatheringProbabilities") ? .present(nil) : .absent }
+        if let values = payload["gatheringTargets"] as? [String: Any] {
+            var decoded: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
+            for (key, raw) in values {
+                guard let family = Hades2GatheringFamily(rawValue: key), let row = raw as? [String: Any], let available = row["available"] as? Bool else { continue }
+                let token = row["scopeToken"] as? String
+                guard !available || (token?.isEmpty == false && (token?.count ?? 0) <= 128) else { continue }
+                decoded[family] = .init(available: available, scopeToken: token, reason: row["reason"] as? String)
+            }
+            gatheringTargets = .present(decoded)
+        } else { gatheringTargets = payload.keys.contains("gatheringTargets") ? .present(nil) : .absent }
 
         if let warnings = payload["warnings"] {
             warningText = .present((warnings as? [String])?.joined(separator: "\n"))

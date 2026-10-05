@@ -25,6 +25,8 @@ from .schema import (
     desired_feature_defaults,
     disconnected_capabilities,
     is_valid_next_room_reward,
+    normalize_gathering_probabilities,
+    validate_gathering_desired,
 )
 
 # Keep these imports public for established adapter-module consumers. In
@@ -52,6 +54,8 @@ def clear_active(state,preserve_desired=False):
         state.update({key:defaults[key] for key in TOGGLES})
         state['desiredFeatures']={key:defaults[key] for key in TOGGLES}
         state['gameSpeed']=defaults['gameSpeed']
+        state['gatheringProbabilities']={}
+    state['gatheringTargets']={}
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
@@ -67,6 +71,7 @@ def clear_active(state,preserve_desired=False):
 def mark_disconnected(state):
     """Lose transport verification without pretending the Lua session was cleared."""
     state.update(connected=False, scene='unknown')
+    state['gatheringTargets']={}
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
@@ -86,7 +91,7 @@ def lua_value(value):
     raise ValueError('参数类型不支持。')
 
 _PREPERSISTED_RUNTIME_COMMANDS = frozenset((
-    'set_feature', 'set_boon_rarity', 'set_next_room_reward',
+    'set_feature', 'set_boon_rarity', 'set_next_room_reward', 'set_gathering_probabilities',
 ))
 _TRAIT_TRAY_HANDOFF_KEY = '__trainerTraitTrayHandoff'
 _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
@@ -119,7 +124,7 @@ class Hades2Adapter(GameAdapter):
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
                     **desired_defaults,
-                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None,
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None, 'gatheringProbabilities':{}, 'gatheringTargets':{},
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
@@ -209,6 +214,7 @@ class Hades2Adapter(GameAdapter):
         for key in MULTIPLIERS:self.state[key]=self.preferences.get(key,defaults[key])
         self.state['boonRarity']=dict(self.preferences.get('boonRarity',{}))
         self.state['nextRoomReward']=self.preferences.get('nextRoomReward')
+        self.state['gatheringProbabilities']=dict(self.preferences.get('gatheringProbabilities',{}))
         stat_locks=self.preferences.get('statLocks',{}) if isinstance(self.preferences.get('statLocks'),dict) else {}
         stats=self.state.get('stats') if isinstance(self.state.get('stats'),dict) else {}
         for stat,target in stat_locks.items():
@@ -314,6 +320,8 @@ class Hades2Adapter(GameAdapter):
             if type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value):self.preferences[key]=float(value)
         rarity=decoded.get('boonRarity')
         if isinstance(rarity,dict):self.preferences['boonRarity']=self._normalize_preferences({'boonRarity':rarity})['boonRarity']
+        gathering=decoded.get('gatheringProbabilities')
+        if isinstance(gathering,dict):self.preferences['gatheringProbabilities']=normalize_gathering_probabilities(gathering)
         locks={}
         for key,item in (decoded.get('stats') or {}).items() if isinstance(decoded.get('stats'),dict) else []:
             if isinstance(item,dict) and item.get('locked') and type(item.get('target')) in (int,float):locks[key]=item['target']
@@ -504,6 +512,22 @@ class Hades2Adapter(GameAdapter):
         return dict(self.state)
 
 
+    def set_gathering_desired(self,family,probability):
+        validate_gathering_desired(family,probability)
+        probabilities=dict(self.preferences.get('gatheringProbabilities',{}))
+        if probability is None:probabilities.pop(family,None)
+        else:probabilities[family]=float(probability)
+        preferences=dict(self.preferences,gatheringProbabilities=probabilities)
+        self.preference_store.save(preferences)
+        self.preferences=preferences;self.preference_initialized=True
+        was_dirty=self.preference_dirty
+        self.preference_dirty=True;self._overlay_preferences()
+        if self.transport.alive() and self.state.get('status')=='ready':
+            result=self.execute('set_gathering_probabilities',{'probabilities':probabilities})
+            self.preference_dirty=was_dirty
+            return result
+        return dict(self.state)
+
     def set_next_room_reward_desired(self,reward):
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
@@ -533,6 +557,9 @@ class Hades2Adapter(GameAdapter):
             if force_full or type(current) not in (int,float) or abs(float(current)-float(target))>1e-6:pending.append(('set_feature',{'feature':key,'value':target}))
         rarity=self.preferences.get('boonRarity',{})
         pending.append(('set_boon_rarity',dict(rarity)))
+        gathering=self.preferences.get('gatheringProbabilities',{})
+        if force_full or self.state.get('gatheringProbabilities')!=gathering:
+            pending.append(('set_gathering_probabilities',{'probabilities':dict(gathering)}))
         # First release stale locks that are not in the desired snapshot. Profile
         # replacement may already have projected the new desired state into self.state,
         # so use the pre-projection observed snapshot when one was supplied.

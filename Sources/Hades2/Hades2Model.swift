@@ -166,6 +166,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
     @Published private(set) var choiceReroll: Hades2ChoiceRerollSnapshot?
+    @Published private(set) var gatheringProbabilities: [Hades2GatheringFamily: Double] = [:]
+    @Published private(set) var gatheringTargets: [Hades2GatheringFamily: Hades2GatheringTarget] = [:]
     @Published var boons: [BoonOption] = []
     @Published var selectedOlympianReward = ""
     @Published var selectedPickupReward = ""
@@ -490,6 +492,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
         choiceReroll = nil
+        gatheringTargets = [:]
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
         if !critLocked { critValue = nil }
@@ -577,6 +580,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if patch.choiceReroll.isPresent { choiceReroll = patch.choiceReroll.value }
+        if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
+        if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons { boons = value }
@@ -680,6 +685,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         case .rerollChoice: title = presentation("hades2.reroll.action")
+        case .generateGathering: title = presentation("hades2.gathering.generate")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
         case .setTraitRemainingUses: title = presentation("hades2.receipt.traitDurationAction")
@@ -699,10 +705,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             noticeToken = presentation("hades2.receipt.opened", arguments: [title.key])
         case .failed:
             noticeToken = nil
-            errorToken = presentation("hades2.receipt.failed", arguments: [title.key])
+            if command == .generateGathering, let error = receipt.error, error.hasPrefix("hades2.gathering.unavailable.") {
+                errorToken = presentation(error)
+            } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
         case .outcomeUnknown:
             noticeToken = nil
-            errorToken = presentation(command == .rerollChoice ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
+            errorToken = presentation((command == .rerollChoice || command == .generateGathering) ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
             noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }
@@ -927,6 +935,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func lockRerolls(_ locked: Bool) {
         guard canSetResource else { return }
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
+    }
+
+    func validGatheringPercentage(_ text: String) -> Bool {
+        guard let value = Double(text), value.isFinite else { return false }
+        return (0...100).contains(value)
+    }
+
+    func setGatheringProbability(_ family: Hades2GatheringFamily, custom: Bool, text: String) {
+        guard canEditDesired, !custom || validGatheringPercentage(text) else { return }
+        let value = custom ? Double(text) : nil
+        guard gatheringProbabilities[family] != value else { return }
+        enqueueMutation(key: "gathering.\(family.rawValue)", request: .setGathering(family: family, probability: value), title: "hades2.gathering.apply")
+    }
+
+    func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
+        canOpenNativeBoonScreen && protocolCompatible && gatheringTargets[family]?.available == true
+    }
+
+    func generateGathering(_ family: Hades2GatheringFamily) {
+        guard canGenerateGathering(family), let token = gatheringTargets[family]?.scopeToken else { return }
+        send(.generateGathering(family: family, scopeToken: token), title: "hades2.gathering.generate", announceSuccess: false)
     }
 
     func rerollCurrentChoice() {

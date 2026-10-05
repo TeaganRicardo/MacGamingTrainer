@@ -222,7 +222,9 @@ def manifest() -> list[Mutation]:
             path=ROOT / "Sources/Hades2/Hades2Model.swift",
             old=('        case .failed:\n'
                  '            noticeToken = nil\n'
-                 '            errorToken = presentation("hades2.receipt.failed", arguments: [title.key])'),
+                 '            if command == .generateGathering, let error = receipt.error, error.hasPrefix("hades2.gathering.unavailable.") {\n'
+                 '                errorToken = presentation(error)\n'
+                 '            } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }'),
             new=('        case .failed:\n'
                  '            noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])\n'
                  '            errorToken = nil'),

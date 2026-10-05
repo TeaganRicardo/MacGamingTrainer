@@ -323,6 +323,7 @@ struct Hades2TrainerView: View {
             combatSection
             buildSection
             resourceSection
+            Hades2GatheringPanel(model: model)
             spawnSection
             management
         }

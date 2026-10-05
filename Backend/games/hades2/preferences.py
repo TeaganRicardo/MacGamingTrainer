@@ -22,6 +22,7 @@ from .schema import (
     desired_feature_defaults,
     is_valid_next_room_reward,
     normalize_desired_feature_value,
+    normalize_gathering_probabilities,
 )
 
 NEXT_ROOM_REWARD_MIGRATIONS = {
@@ -37,7 +38,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 5
+DESIRED_STATE_SCHEMA_VERSION = 6
 
 
 def _finite_number(value):
@@ -183,6 +184,9 @@ def normalize_persisted_desired(raw, schema_version):
         migrated=migrate_legacy_next_room_reward(migrated)
     if schema_version < 5:
         migrated=migrate_legacy_invincibility_identity(migrated)
+    if schema_version < 6 and isinstance(migrated,dict):
+        # This field did not have accepted semantics in older documents.
+        migrated.pop('gatheringProbabilities',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
@@ -197,7 +201,7 @@ class Hades2PreferenceStore:
         values=desired_feature_defaults()
         values.update(
             boonRarity=default_boon_rarity(),
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,gatheringProbabilities={},
         )
         return values
 
@@ -219,6 +223,7 @@ class Hades2PreferenceStore:
         result['vitalLocks']=_normalize_vital_locks(raw.get('vitalLocks'))
         result['resourceLocks']=_normalize_resource_locks(raw.get('resourceLocks'))
         result['elementLocks']=_normalize_element_locks(raw.get('elementLocks'))
+        result['gatheringProbabilities']=normalize_gathering_probabilities(raw.get('gatheringProbabilities'))
         value=_normalize_amount(raw.get('rerollsLock'))
         if value is not None:result['rerollsLock']=value
         reward=raw.get('nextRoomReward')

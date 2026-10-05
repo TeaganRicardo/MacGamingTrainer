@@ -13,6 +13,7 @@ from .schema import (
     is_known_element,
     is_valid_next_room_reward,
     validate_desired_feature_value,
+    validate_gathering_desired,
 )
 
 
@@ -29,6 +30,19 @@ def validate_command_params(command, params):
         feature=params.get('feature')
         value=validate_desired_feature_value(feature,params.get('value'))
         return {'feature':feature,'value':value}
+
+    if command=='set_gathering_desired':
+        if 'probability' not in params:
+            raise ValueError('概率必须为 0–100。')
+        probability=validate_gathering_desired(params.get('family'),params['probability'])
+        return {'family':params['family'],'probability':probability}
+
+    if command=='generate_gathering':
+        validate_gathering_desired(params.get('family'),None)
+        token=params.get('scopeToken')
+        if not isinstance(token,str) or not 1<=len(token)<=128:
+            raise ValueError('请刷新当前房间后再生成采集点。')
+        return {'family':params['family'],'scopeToken':token}
 
     if command=='set_vital':
         vital=params.get('vital');field=params.get('field');value=params.get('value')
