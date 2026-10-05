@@ -1,72 +1,16 @@
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "Backend"))
-sys.path.insert(0, str(ROOT / "tests"))
-
-from games.hades2 import adapter as adapter_module
-from games.hades2 import preparation
-from games.hades2.adapter import Hades2Adapter
-from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 from lua_runtime_support import require_lua52
 
+ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
 LUA = require_lua52("durable preference replay batch behavior")
 
-
-def payload():
-    return {
-        "status": "ready",
-        "scene": "run",
-        "capabilities": {},
-        "desiredFeatures": {},
-        "activeFeatures": {},
-        "dormantFeatures": {},
-        "featureSupport": {},
-        "featureErrors": {},
-        "resources": [],
-        "elements": [],
-        "stats": {},
-        "boonRarity": {
-            "target": "Epic",
-            "multiplier": 100.0,
-            "forceLegendary": False,
-            "forceDuo": False,
-        },
-        "gatheringProbabilities": {},
-        "chaosGateProbability": None,
-    }
-
-
-base = Path(tempfile.mkdtemp(prefix="mgt-replay-batch-"))
-preparation.DATA = base
-
-session = FakeResidentSession(payload())
-adapter = Hades2Adapter(
-    resident_session=session,
-    time_warp_controller=FakeTimeWarpController(),
-)
-adapter.preference_initialized = True
-adapter.preference_dirty = False
-batch = [
-    ("set_feature", {"feature": "damageMultiplier", "value": 3.0}),
-    ("set_feature", {"feature": "resourceMultiplier", "value": 4.0}),
-    ("set_boon_rarity", {
-        "target": "Heroic",
-        "multiplier": 100.0,
-        "forceLegendary": True,
-        "forceDuo": True,
-    }),
-]
-adapter.execute("replay_preferences", {}, replay=True, batch=batch)
-
-assert len(session.calls) == 1
-assert session.calls[0]["kind"] == "reconcile"
-assert session.calls[0]["batch"] == batch
-assert session.calls[0]["command"] == "replay_preferences"
+# Adapter/reconciliation planning is covered at the desired-reconciliation
+# interface. This test retains only the resident-owned guarantee that a durable
+# batch applies all calls and materializes full resident state once.
 
 HARNESS = r'''
 local runtimePath = assert(arg[1], "runtime path required")

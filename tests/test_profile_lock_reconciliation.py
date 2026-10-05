@@ -11,68 +11,266 @@ from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
+from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 
-def seed_observed_locks(adapter):
-    adapter.state.update({
-        'connected': True,
+def default_runtime_state():
+    defaults = Hades2PreferenceStore.defaults()
+    state = {
         'status': 'ready',
-        'desiredFeatures': {},
-        'stats': {
-            'grasp': {'locked': True, 'target': 30, 'value': 30},
-            'enemyHealth': {'locked': True, 'target': 175, 'value': 175},
-        },
-        'healthLocked': True,
-        'health': 120,
-        'maxHealth': 160,
-        'manaLocked': True,
+        'scene': 'run',
+        'capabilities': {'setFeature': True},
+        'desiredFeatures': {key: bool(defaults[key]) for key in TOGGLES},
+        'activeFeatures': {key: False for key in TOGGLES},
+        'dormantFeatures': {},
+        'featureErrors': {},
+        'boonRarity': copy.deepcopy(default_boon_rarity()),
+        'gatheringProbabilities': {},
+        'chaosGateProbability': None,
+        'stats': {},
+        'healthLocked': False,
+        'health': 100,
+        'maxHealth': 100,
+        'manaLocked': False,
         'mana': 50,
-        'maxMana': 90,
-        'armorLocked': True,
-        'armor': 25,
-        # Money is intentionally absent from resources. Runtime observation
-        # reports its lock through dedicated moneyLocked/money fields.
-        'moneyLocked': True,
-        'money': 999,
-        'resources': [
-            {'id': 'MetaCurrency', 'locked': True, 'count': 12},
-            {'id': 'Bones', 'locked': True, 'count': 5},
-        ],
-        'rerollsLocked': True,
-        'rerolls': 7,
-        'elements': [
-            {'id': 'Fire', 'locked': True, 'count': 8},
-            {'id': 'Water', 'locked': True, 'count': 4},
-        ],
+        'maxMana': 50,
+        'armorLocked': False,
+        'armor': 0,
+        'moneyLocked': False,
+        'money': 0,
+        'rerollsLocked': False,
+        'rerolls': 0,
+        'resources': [],
+        'elements': [],
         'nextRoomReward': None,
-    })
+        'runtimeDiagnostics': {},
+    }
+    for key in MULTIPLIERS:
+        if key != 'gameSpeed':
+            state[key] = defaults[key]
+    return state
 
 
-def has_call(batch, command, **expected):
-    return any(
-        item_command == command
-        and all(params.get(key) == value for key, value in expected.items())
-        for item_command, params in batch
+def seed_stale_locks(state):
+    state['stats'] = {
+        'grasp': {'locked': True, 'target': 30, 'value': 30},
+        'enemyHealth': {'locked': True, 'target': 175, 'value': 175},
+    }
+    state.update(
+        healthLocked=True,
+        health=120,
+        maxHealth=160,
+        manaLocked=True,
+        mana=50,
+        maxMana=90,
+        armorLocked=True,
+        armor=25,
+        moneyLocked=True,
+        money=999,
+        rerollsLocked=True,
+        rerolls=7,
     )
+    state['resources'] = [
+        {'id': 'MetaCurrency', 'locked': True, 'count': 12},
+        {'id': 'Bones', 'locked': True, 'count': 5},
+    ]
+    state['elements'] = [
+        {'id': 'Fire', 'locked': True, 'count': 8},
+        {'id': 'Water', 'locked': True, 'count': 4},
+    ]
 
 
-def make_adapter(prefix, live=True):
+class ProfileSession(FakeResidentSession):
+    def __init__(self, state=None, *, live=True):
+        super().__init__(state or default_runtime_state(), pid=123)
+        self.state = self.payload
+        self.live = live
+        self.fail_once = False
+
+    def _reply_state(self):
+        return ResidentReply(
+            payload=copy.deepcopy(self.state),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+        )
+
+    def status(self, params=None):
+        self.calls.append({
+            'kind': 'status',
+            'command': 'status',
+            'params': copy.deepcopy(params or {}),
+            'batch': None,
+        })
+        return self._reply_state()
+
+    def observe_status(self, params=None):
+        self.calls.append({
+            'kind': 'observe',
+            'command': 'status',
+            'params': copy.deepcopy(params or {}),
+            'batch': None,
+        })
+        return self._reply_state()
+
+    def reconcile(self, calls):
+        calls = copy.deepcopy(list(calls))
+        self.calls.append({
+            'kind': 'reconcile',
+            'command': 'replay_preferences',
+            'params': {},
+            'batch': calls,
+        })
+        if self.fail_once:
+            self.fail_once = False
+            raise TransportError(
+                'lua_error',
+                'simulated known Lua command error before reconciliation',
+            )
+        for command, params in calls:
+            self._apply(command, params)
+        return self._reply_state()
+
+    def _apply(self, command, params):
+        if command == 'set_feature':
+            feature = params['feature']
+            if feature in TOGGLES:
+                self.state['desiredFeatures'][feature] = bool(params['value'])
+            else:
+                self.state[feature] = float(params['value'])
+            return
+        if command == 'set_boon_rarity':
+            self.state['boonRarity'] = copy.deepcopy(params)
+            return
+        if command == 'set_gathering_probabilities':
+            self.state['gatheringProbabilities'] = copy.deepcopy(params['probabilities'])
+            return
+        if command == 'set_chaos_gate_probability':
+            self.state['chaosGateProbability'] = params['probability']
+            return
+        if command == 'set_stat':
+            stat = params['stat']
+            row = self.state['stats'].setdefault(
+                stat, {'locked': False, 'target': None, 'value': 0}
+            )
+            row['locked'] = bool(params['locked'])
+            row['target'] = params.get('value') if params['locked'] else None
+            if 'value' in params:
+                row['value'] = params['value']
+            return
+        if command == 'set_vital':
+            vital = params['vital']
+            field = params['field']
+            key = vital if field == 'current' else 'max' + vital.capitalize()
+            self.state[key] = params['value']
+            return
+        if command == 'lock_vital':
+            self.state[params['vital'] + 'Locked'] = bool(params['locked'])
+            return
+        if command == 'set_resource':
+            resource = params['resource']
+            amount = int(params['amount'])
+            if resource == 'Money':
+                self.state['money'] = amount
+            else:
+                row = next(
+                    (item for item in self.state['resources'] if item.get('id') == resource),
+                    None,
+                )
+                if row is None:
+                    row = {'id': resource, 'locked': False, 'count': 0}
+                    self.state['resources'].append(row)
+                row['count'] = amount
+            return
+        if command == 'lock_resource':
+            resource = params['resource']
+            locked = bool(params['locked'])
+            if resource == 'Money':
+                self.state['moneyLocked'] = locked
+            else:
+                row = next(
+                    (item for item in self.state['resources'] if item.get('id') == resource),
+                    None,
+                )
+                if row is None:
+                    row = {'id': resource, 'locked': False, 'count': 0}
+                    self.state['resources'].append(row)
+                row['locked'] = locked
+            return
+        if command == 'set_rerolls':
+            self.state['rerolls'] = int(params['amount'])
+            return
+        if command == 'lock_rerolls':
+            self.state['rerollsLocked'] = bool(params['locked'])
+            return
+        if command == 'set_element':
+            element = params['element']
+            row = next(
+                (item for item in self.state['elements'] if item.get('id') == element),
+                None,
+            )
+            if row is None:
+                row = {'id': element, 'locked': False, 'count': 0}
+                self.state['elements'].append(row)
+            row['count'] = int(params['amount'])
+            return
+        if command == 'lock_element':
+            element = params['element']
+            row = next(
+                (item for item in self.state['elements'] if item.get('id') == element),
+                None,
+            )
+            if row is None:
+                row = {'id': element, 'locked': False, 'count': 0}
+                self.state['elements'].append(row)
+            row['locked'] = bool(params['locked'])
+            return
+        if command == 'set_next_room_reward':
+            self.state['nextRoomReward'] = params['reward']
+            diagnostics = self.state.setdefault('runtimeDiagnostics', {})
+            if params['reward'] is None:
+                diagnostics.pop('nextRoomRewardToken', None)
+            else:
+                diagnostics['nextRoomRewardToken'] = params.get('token')
+            return
+        raise AssertionError('unexpected reconciliation command: ' + command)
+
+
+def make_adapter(prefix, session):
     base = Path(tempfile.mkdtemp(prefix=prefix))
     preparation.DATA = base
-    session = FakeResidentSession(pid=777)
-    session.live = live
     adapter = Hades2Adapter(
         resident_session=session,
         time_warp_controller=FakeTimeWarpController(),
     )
+    adapter.state.update(copy.deepcopy(session.state), connected=session.live)
+    adapter.preference_initialized = True
+    adapter.preference_dirty = False
     return adapter
 
 
-# Live Profile replacement must diff the replacement desired state against the
-# real observed locks that existed before desired projection.
-adapter = make_adapter('mgt-profile-reconcile-')
-seed_observed_locks(adapter)
+def locks_are_clear(state):
+    return (
+        not any(
+            isinstance(row, dict) and row.get('locked')
+            for row in state.get('stats', {}).values()
+        )
+        and not state.get('healthLocked')
+        and not state.get('manaLocked')
+        and not state.get('armorLocked')
+        and not state.get('moneyLocked')
+        and not state.get('rerollsLocked')
+        and not any(row.get('locked') for row in state.get('resources', []))
+        and not any(row.get('locked') for row in state.get('elements', []))
+    )
+
+
+# Live Profile replacement must reconcile against the full pre-projection
+# observation. If Adapter projected the new profile first and then planned from
+# its public state, the stale runtime locks below would survive.
+live_state = default_runtime_state()
+seed_stale_locks(live_state)
+live_session = ProfileSession(live_state)
+adapter = make_adapter('mgt-profile-reconcile-', live_session)
 desired = Hades2PreferenceStore.defaults()
 desired.update({
     'statLocks': {'enemyHealth': 200},
@@ -82,221 +280,59 @@ desired.update({
     'elementLocks': {'Fire': 9},
 })
 adapter.profile_service.save('partial-locks', desired)
+result = adapter.load_profile('partial-locks')
 
-batches = []
+assert [call['kind'] for call in live_session.calls] == ['observe', 'reconcile']
+assert live_session.state['stats']['grasp']['locked'] is False
+assert live_session.state['stats']['enemyHealth']['locked'] is True
+assert live_session.state['stats']['enemyHealth']['target'] == 200
+assert live_session.state['healthLocked'] is False
+assert live_session.state['armorLocked'] is False
+assert live_session.state['manaLocked'] is True
+assert live_session.state['mana'] == 40
+assert live_session.state['maxMana'] == 90
+assert live_session.state['moneyLocked'] is False
+assert next(row for row in live_session.state['resources'] if row['id'] == 'Bones')['locked'] is False
+meta = next(row for row in live_session.state['resources'] if row['id'] == 'MetaCurrency')
+assert meta['locked'] is True and meta['count'] == 20
+assert live_session.state['rerollsLocked'] is False
+assert next(row for row in live_session.state['elements'] if row['id'] == 'Water')['locked'] is False
+fire = next(row for row in live_session.state['elements'] if row['id'] == 'Fire')
+assert fire['locked'] is True and fire['count'] == 9
+assert adapter.preference_dirty is False
+assert result['loadedProfile'] == 'partial-locks'
 
-
-def fake_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        batches.append(list(batch or []))
-    return dict(adapter.state)
-
-
-adapter.execute = fake_execute
-observations = []
-
-
-def observe_runtime():
-    observations.append('runtime')
-    return dict(adapter.state)
-
-
-adapter.observe_runtime = observe_runtime
-adapter.load_profile('partial-locks')
-assert observations == ['runtime']
-assert len(batches) == 1
-batch = batches[0]
-
-# Stale locks must be released.
-assert has_call(batch, 'set_stat', stat='grasp', locked=False)
-assert has_call(batch, 'lock_vital', vital='health', locked=False)
-assert has_call(batch, 'lock_vital', vital='armor', locked=False)
-assert has_call(batch, 'lock_resource', resource='Bones', locked=False)
-assert has_call(batch, 'lock_resource', resource='Money', locked=False)
-assert has_call(batch, 'lock_rerolls', locked=False)
-assert has_call(batch, 'lock_element', element='Water', locked=False)
-
-# Desired locks must be retained/updated, not spuriously released.
-assert not has_call(batch, 'set_stat', stat='enemyHealth', locked=False)
-assert has_call(batch, 'set_stat', stat='enemyHealth', locked=True, value=200)
-assert not has_call(batch, 'lock_vital', vital='mana', locked=False)
-assert has_call(batch, 'lock_vital', vital='mana', locked=True)
-assert not has_call(batch, 'lock_resource', resource='MetaCurrency', locked=False)
-assert has_call(batch, 'set_resource', resource='MetaCurrency', amount=20)
-assert has_call(batch, 'lock_resource', resource='MetaCurrency', locked=True)
-assert not has_call(batch, 'lock_element', element='Fire', locked=False)
-assert has_call(batch, 'set_element', element='Fire', amount=9)
-assert has_call(batch, 'lock_element', element='Fire', locked=True)
-
-# A no-lock Profile must release every observed lock family.
-no_lock_adapter = make_adapter('mgt-profile-reconcile-empty-')
-seed_observed_locks(no_lock_adapter)
-no_lock_adapter.profile_service.save('no-locks', Hades2PreferenceStore.defaults())
-no_lock_batches = []
+print('profile_lock_reconciliation_live_ok')
 
 
-def fake_no_lock_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        no_lock_batches.append(list(batch or []))
-    return dict(no_lock_adapter.state)
-
-
-no_lock_adapter.execute = fake_no_lock_execute
-no_lock_adapter.observe_runtime = lambda: dict(no_lock_adapter.state)
-no_lock_adapter.load_profile('no-locks')
-assert len(no_lock_batches) == 1
-empty_batch = no_lock_batches[0]
-for stat in ('grasp', 'enemyHealth'):
-    assert has_call(empty_batch, 'set_stat', stat=stat, locked=False)
-for vital in ('health', 'mana', 'armor'):
-    assert has_call(empty_batch, 'lock_vital', vital=vital, locked=False)
-for resource in ('MetaCurrency', 'Bones', 'Money'):
-    assert has_call(empty_batch, 'lock_resource', resource=resource, locked=False)
-assert has_call(empty_batch, 'lock_rerolls', locked=False)
-for element in ('Fire', 'Water'):
-    assert has_call(empty_batch, 'lock_element', element=element, locked=False)
-
-# Offline Profile load remains pending. A later ready observation must still
-# reconcile dedicated Money plus the other observed lock families.
-offline_adapter = make_adapter('mgt-profile-reconcile-offline-', live=False)
+# Offline Profile load remains pending. The first later status provides the real
+# observation and one semantic reconciliation clears the stale runtime locks.
+offline_state = default_runtime_state()
+seed_stale_locks(offline_state)
+offline_session = ProfileSession(offline_state, live=False)
+offline_adapter = make_adapter('mgt-profile-reconcile-offline-', offline_session)
 offline_adapter.profile_service.save('offline-no-locks', Hades2PreferenceStore.defaults())
 offline_adapter.load_profile('offline-no-locks')
 assert offline_adapter.preference_dirty is True
-seed_observed_locks(offline_adapter)
-offline_adapter.runtime.live = True
-offline_batches = []
+assert offline_session.calls == []
+
+offline_session.live = True
+offline_adapter.state.update(connected=True, status='ready')
+offline_adapter.execute('status', {})
+assert [call['kind'] for call in offline_session.calls] == ['status', 'reconcile']
+assert locks_are_clear(offline_session.state)
+assert offline_adapter.preference_dirty is False
+
+print('profile_lock_reconciliation_offline_ok')
 
 
-def fake_offline_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        offline_batches.append(list(batch or []))
-    return dict(offline_adapter.state)
-
-
-offline_adapter.execute = fake_offline_execute
-offline_adapter._replay_preferences(force_full=True)
-assert len(offline_batches) == 1
-offline_batch = offline_batches[0]
-assert has_call(offline_batch, 'set_stat', stat='grasp', locked=False)
-assert has_call(offline_batch, 'lock_vital', vital='health', locked=False)
-assert has_call(offline_batch, 'lock_resource', resource='Money', locked=False)
-assert has_call(offline_batch, 'lock_rerolls', locked=False)
-assert has_call(offline_batch, 'lock_element', element='Water', locked=False)
-
-print('profile_lock_reconciliation_ok')
-
-
-# Regression for a failed live Profile replay followed by an immediate second
-# load of the same Profile. This uses production load_profile() and the semantic
-# resident-session interface; the test no longer parses generated Lua source.
-class RuntimeSession(FakeResidentSession):
-    def __init__(self):
-        state = {
-            'status': 'ready',
-            'scene': 'run',
-            'capabilities': {'setFeature': True},
-            'desiredFeatures': {},
-            'activeFeatures': {},
-            'featureErrors': {},
-            'stats': {'grasp': {'locked': True, 'target': 30, 'value': 30}},
-            'healthLocked': True,
-            'health': 120,
-            'maxHealth': 160,
-            'manaLocked': True,
-            'mana': 50,
-            'maxMana': 90,
-            'armorLocked': True,
-            'armor': 25,
-            'moneyLocked': True,
-            'money': 500,
-            'rerollsLocked': True,
-            'rerolls': 2,
-            'resources': [{'id': 'MetaCurrency', 'locked': True, 'count': 10}],
-            'elements': [{'id': 'Fire', 'locked': True, 'count': 2}],
-            'nextRoomReward': None,
-        }
-        super().__init__(state, pid=123)
-        self.state = self.payload
-        self.fail_once = False
-
-    def observe_status(self, params=None):
-        self.calls.append({
-            'kind': 'observe',
-            'command': 'status',
-            'params': dict(params or {}),
-            'batch': None,
-        })
-        return ResidentReply(
-            payload=copy.deepcopy(self.state),
-            metrics=ResidentMetrics(boundary_duration=0.001),
-        )
-
-    def reconcile(self, calls):
-        calls = list(calls)
-        self.calls.append({
-            'kind': 'reconcile',
-            'command': 'replay_preferences',
-            'params': {},
-            'batch': copy.deepcopy(calls),
-        })
-        lock_commands = {
-            'set_stat', 'lock_vital', 'lock_resource', 'lock_rerolls', 'lock_element'
-        }
-        if self.fail_once and any(command in lock_commands for command, _ in calls):
-            self.fail_once = False
-            raise TransportError(
-                'lua_error',
-                'simulated known Lua command error before lock release',
-            )
-        for command, params in calls:
-            if command == 'set_stat' and params.get('stat') in self.state['stats']:
-                self.state['stats'][params['stat']]['locked'] = params['locked']
-            elif command == 'lock_vital':
-                self.state[params['vital'] + 'Locked'] = params['locked']
-            elif command == 'lock_rerolls':
-                self.state['rerollsLocked'] = params['locked']
-            elif command == 'lock_resource':
-                if params['resource'] == 'Money':
-                    self.state['moneyLocked'] = params['locked']
-                else:
-                    for item in self.state['resources']:
-                        if item['id'] == params['resource']:
-                            item['locked'] = params['locked']
-            elif command == 'lock_element':
-                for item in self.state['elements']:
-                    if item['id'] == params['element']:
-                        item['locked'] = params['locked']
-        return ResidentReply(
-            payload=copy.deepcopy(self.state),
-            metrics=ResidentMetrics(boundary_duration=0.001),
-        )
-
-
-def runtime_locks(state):
-    return [
-        state['stats']['grasp']['locked'],
-        state['healthLocked'],
-        state['manaLocked'],
-        state['armorLocked'],
-        state['moneyLocked'],
-        state['rerollsLocked'],
-        state['resources'][0]['locked'],
-        state['elements'][0]['locked'],
-    ]
-
-
-retry_base = Path(tempfile.mkdtemp(prefix='mgt-profile-reconcile-retry-'))
-preparation.DATA = retry_base
-retry_session = RuntimeSession()
-retry_adapter = Hades2Adapter(
-    resident_session=retry_session,
-    time_warp_controller=FakeTimeWarpController(),
-)
-retry_adapter._apply_game_speed = lambda value: 1
-retry_adapter.state.update(copy.deepcopy(retry_session.state), connected=True)
-retry_adapter.preference_initialized = True
-retry_adapter._capture_runtime_preferences(copy.deepcopy(retry_session.state))
-retry_adapter.profile_service.save('retry-unlocked', retry_adapter._default_preferences())
+# A failed live reconciliation must remain pending. Loading the same Profile a
+# second time re-observes the untouched runtime and can then converge.
+retry_state = default_runtime_state()
+seed_stale_locks(retry_state)
+retry_session = ProfileSession(retry_state)
+retry_adapter = make_adapter('mgt-profile-reconcile-retry-', retry_session)
+retry_adapter.profile_service.save('retry-unlocked', Hades2PreferenceStore.defaults())
 
 retry_session.fail_once = True
 try:
@@ -304,21 +340,20 @@ try:
 except TransportError as error:
     assert error.code == 'lua_error'
 else:
-    raise AssertionError('expected first Profile replay to fail')
+    raise AssertionError('expected first Profile reconciliation to fail')
 
-assert all(runtime_locks(retry_session.state))
+assert not locks_are_clear(retry_session.state)
 assert retry_adapter.preference_dirty is True
-assert retry_adapter.state['status'] == 'ready'
-assert not any(runtime_locks(retry_adapter.state)), (
-    'failed replay may still project desired UI state, but must remain pending'
+assert locks_are_clear(retry_adapter.state), (
+    'failed reconciliation may project desired UI state, but must remain pending'
 )
 
 second_result = retry_adapter.load_profile('retry-unlocked')
-assert not any(runtime_locks(retry_session.state)), (
-    'second Profile load must re-observe runtime locks and release them'
-)
+assert locks_are_clear(retry_session.state)
 assert retry_adapter.preference_dirty is False
-assert not any(runtime_locks(second_result))
-assert not any(runtime_locks(retry_adapter.state))
+assert locks_are_clear(second_result)
+assert [call['kind'] for call in retry_session.calls] == [
+    'observe', 'reconcile', 'observe', 'reconcile'
+]
 
 print('profile_lock_reconciliation_retry_ok')

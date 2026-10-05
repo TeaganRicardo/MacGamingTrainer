@@ -110,6 +110,7 @@ print('preferences_schema_v0180_ok')
 # adapter's reconnect replay fail before it reaches the transport boundary.
 from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 
 adapter_base = Path(tempfile.mkdtemp(prefix='mgt-preference-adapter-'))
 prep.DATA = adapter_base
@@ -143,20 +144,34 @@ adapter.state.update({
     'rerollsLocked': False,
     'nextRoomReward': None,
 })
-replay_calls = []
-def fake_execute(command, params, replay=False, batch=None):
-    replay_calls.append((command, dict(params), replay, batch))
-    return dict(adapter.state)
-adapter.execute = fake_execute
-adapter._replay_preferences(force_full=True)
-assert replay_calls[-1][0] == 'replay_preferences' and replay_calls[-1][2] is True
-replay_batch = replay_calls[-1][3]
-assert any(command == 'set_feature' and params.get('feature') == 'gardenQoL' and params.get('value') is True
-           for command, params in replay_batch)
-assert not any(command in ('set_resource', 'set_element', 'set_rerolls', 'set_stat')
-               for command, _ in replay_batch)
+class RecordingReconciler:
+    def __init__(self):
+        self.calls = []
+    def reconcile(self, desired, observed, *, force_full=False):
+        self.calls.append((
+            json.loads(json.dumps(desired)),
+            json.loads(json.dumps(observed)),
+            force_full,
+        ))
+        return DesiredReconciliationOutcome(
+            reply=None,
+            confirmed=True,
+            mismatches=(),
+        )
 
-print('preferences_schema_adapter_replay_ok')
+recorder = RecordingReconciler()
+adapter.desired_reconciler = recorder
+adapter._replay_preferences(dict(adapter.state), force_full=True)
+assert len(recorder.calls) == 1
+canonical_desired, _, force_full = recorder.calls[0]
+assert force_full is True
+assert canonical_desired['gardenQoL'] is True
+assert canonical_desired['resourceLocks'] == {}
+assert canonical_desired['elementLocks'] == {}
+assert canonical_desired['statLocks'] == {}
+assert canonical_desired['rerollsLock'] is None
+
+print('preferences_schema_adapter_reconciliation_ok')
 
 
 # ProfileService deliberately owns only the file envelope. Hades semantic desired

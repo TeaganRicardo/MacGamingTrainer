@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import tempfile
@@ -10,6 +11,7 @@ from games.hades2 import preparation as prep
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.error_presentation import Hades2PresentationError
 from games.hades2.preferences import Hades2PreferenceStore
+from games.hades2.schema import TOGGLES
 from core.process_time_warp import ProcessTimeWarpError
 
 base = Path(tempfile.mkdtemp(prefix="mgt-time-warp-hades-"))
@@ -41,8 +43,8 @@ class FakeTransport:
             "scene": "run",
             "capabilities": {"setFeature": True},
             "featureSupport": {},
-            "desiredFeatures": {},
-            "activeFeatures": {},
+            "desiredFeatures": {key: False for key in TOGGLES},
+            "activeFeatures": {key: False for key in TOGGLES},
             "dormantFeatures": {},
             "featureErrors": {},
             "damageMultiplier": 2.0,
@@ -127,7 +129,7 @@ assert adapter.preference_dirty is True
 adapter.runtime.status()
 transport.sources.clear()
 adapter.state["status"] = "waiting"
-state = adapter._replay_preferences(force_full=True)
+state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert adapter.time_warp.speed == 2.0
 assert state["activeFeatures"]["gameSpeed"] is True
 assert adapter.preference_dirty is True
@@ -136,7 +138,7 @@ assert transport.sources == []
 # In a ready scene, the rest of the profile still replays through Lua, but the
 # Lua batch must not carry process-owned gameSpeed.
 adapter.state["status"] = "ready"
-state = adapter._replay_preferences(force_full=True)
+state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert transport.sources
 assert "gameSpeed" not in transport.sources[-1]
 assert adapter.time_warp.speed == 2.0

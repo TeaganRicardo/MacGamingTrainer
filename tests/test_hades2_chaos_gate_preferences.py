@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
 from games.hades2.command_validation import validate_command_params
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
@@ -72,13 +73,11 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         calls.append(('save', preferences['chaosGateProbability']))
         original_save(preferences)
     adapter.preference_store.save = save
-    def execute(command, params, **kwargs):
-        calls.append((command, copy.deepcopy(params), copy.deepcopy(kwargs)))
+    def execute(command, params):
+        calls.append((command, copy.deepcopy(params)))
         if command == 'set_chaos_gate_probability':
             assert json.loads((base/'desired-state.json').read_text())['chaosGateProbability'] == params['probability']
             adapter.state['chaosGateProbability'] = params['probability']
-        for name, values in kwargs.get('batch', []):
-            if name == 'set_chaos_gate_probability': adapter.state['chaosGateProbability'] = values['probability']
         return dict(adapter.state)
     adapter.execute = execute
     transport.live = True
@@ -96,17 +95,25 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     else: raise AssertionError('runtime applied before failed durable write')
     assert adapter.preferences == before and not calls
     adapter.preference_store.save = original_save
-    def failed_apply(command, params, **kwargs): raise TransportError('lua_error', 'fixture unavailable')
+    def failed_apply(command, params): raise TransportError('lua_error', 'fixture unavailable')
     adapter.execute = failed_apply
     try: adapter.dispatch('set_chaos_gate_desired', {'probability': 100}, 'pending')
     except TransportError: pass
     assert adapter.preferences['chaosGateProbability'] == 100 and adapter.preference_dirty
+    class ConfirmingReconciler:
+        def __init__(self):
+            self.calls = []
+        def reconcile(self, desired, observed, *, force_full=False):
+            self.calls.append((copy.deepcopy(desired), copy.deepcopy(observed), force_full))
+            return DesiredReconciliationOutcome(reply=None, confirmed=True, mismatches=())
+
+    reconciler = ConfirmingReconciler()
+    adapter.desired_reconciler = reconciler
     adapter.execute = execute
     adapter.state['chaosGateProbability'] = None
-    adapter._replay_preferences()
-    batch = calls[-1][2]['batch']
-    assert ('set_chaos_gate_probability', {'probability': 100}) in batch
-    assert all(name not in ('generate_gathering', 'spawn_reward', 'use_door') for name, _ in batch)
+    adapter._replay_preferences(copy.deepcopy(adapter.state))
+    assert len(reconciler.calls) == 1
+    assert reconciler.calls[0][0]['chaosGateProbability'] == 100
     assert adapter.preference_dirty is False
     adapter.dispatch('set_chaos_gate_desired', {'probability': None}, 'native')
     assert calls[-1][1] == {'probability': None}
@@ -118,10 +125,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     clear_active(observed)
     assert observed['chaosGateProbability'] is None
     adapter.dispatch('set_chaos_gate_desired', {'probability': 60}, 'capture')
-    adapter._capture_runtime_preferences({'status': 'ready'})
+    adapter.state['chaosGateProbability'] = None
+    adapter.save_profile('Pending Chaos')
     assert adapter.preferences['chaosGateProbability'] == 60
-    adapter._capture_runtime_preferences({'chaosGateProbability': None})
-    assert adapter.preferences['chaosGateProbability'] is None
+    saved_pending = json.loads(
+        adapter.profile_service.path('Pending Chaos').read_text()
+    )
+    assert saved_pending['desired']['chaosGateProbability'] == 60
 
     future_path = base/'future-desired.json'
     future_path.write_text(json.dumps(dict(persisted, schemaVersion=8)))
