@@ -90,7 +90,7 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
         "chaosPair": "hades2.spawn.chaosPair",
         "chaosBlessingSelector": "hades2.spawn.chaosBlessing",
         "chaosCurseSelector": "hades2.spawn.chaosCurse",
-        "rerollCurrentChoices": "hades2.reroll.action",
+        "forceEnableRerolls": "hades2.feature.forceEnableRerolls",
     }
     tables = {
         language: json.loads(
