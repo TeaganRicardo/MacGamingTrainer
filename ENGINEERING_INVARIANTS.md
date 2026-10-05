@@ -141,15 +141,24 @@ pending staged-restore.json
 - indeterminate state is surfaced and blocks automatic replay/deletion assumptions.
 - tests use temporary save roots only. Never point automated tests at real Hades/user saves.
 
-## 6. File boundaries and cognitive-load rules
+## 6. Root-cause correction, module depth, and file boundaries
 
-File size alone is not a refactor reason.
+A demonstrated correctness defect starts RED-first. Before choosing implementation scope, identify the root cause, the owning module, and the seam through which callers should exercise it.
 
-- `runtime/hades.lua` intentionally co-locates resident state, hook ownership, reconciliation and dispatch. Do not split it until a multi-file loader is proven in the real Hades II runtime. Any source change requires a resident revision bump and real-game verification.
-- `Hades2Model.swift` currently co-locates the Hades observable projection, lifecycle response, command scheduling and exit cleanup. Extract only a responsibility that already has a clear independent owner/interface; do not create pass-through stores merely to reduce line count.
-- `Hades2View.swift` may be sliced only where presentation responsibility is genuinely independent; reusable visual language belongs in Core/UI while Hades meaning stays in Hades.
-- `Hades2Adapter` is the synchronization boundary between persistence, transport and resident state. Prefer extracting already-independent services, not fragmenting the state machine across files.
-- Core Save snapshot/service/restore files are separate transaction responsibilities and should remain game-agnostic.
+- “Smallest coherent fix” means the smallest coherent fix of the demonstrated root cause, not the smallest textual diff.
+- If a defect exposes a shallow module, duplicated policy, a misplaced seam, or a responsibility split, the fix may expand across that owning seam. Keep unrelated cleanup and unrelated product work out of the change.
+- Defensive guards, fallbacks, retries, fail-closed branches and compatibility aliases are complete solutions only when the failure mode is intrinsically unavoidable at the owning seam. Containment that merely masks a structural cause is explicitly incomplete.
+- Repeated fixes that make several callers or tests know the same implementation detail are evidence that the interface is too shallow. Deepen the module so the implementation absorbs that knowledge and callers gain leverage.
+- The interface is the preferred test surface. When a deeper interface supersedes caller-side policy or implementation-shape checks, migrate the owning behavior tests and delete the superseded checks instead of accumulating both mechanisms.
+- A focused change has one causal purpose; it does not require an artificially small file count. Review judges root-cause removal, ownership, locality and verification coverage rather than diff size.
+
+File size alone is not a refactor reason, and splitting a file is not the same as deepening a module.
+
+- `runtime/hades.lua` remains one resident source file until a multi-file loader is proven in the real Hades II runtime. Within that constraint, proven native owners/lifecycles may and should become deeper internal modules when repeated changes leak the same policy across dispatch branches. Any source change still requires a resident revision bump and real-game verification.
+- `Hades2Model.swift` may continue to co-locate Hades observable projection, lifecycle response, command scheduling and exit cleanup while those responsibilities genuinely share one owner. When repeated fixes establish an independent owner and smaller interface, extract/deepen that responsibility even if several call sites must migrate; do not create pass-through stores merely to reduce line count.
+- `Hades2View.swift` may be sliced when presentation responsibility is genuinely independent or repeated fixes demonstrate that product presentation policy is leaking through one giant view. Reusable visual language belongs in Core/UI while Hades meaning stays in Hades.
+- `Hades2Adapter` is currently the synchronization owner between persistence, transport and resident state. Do not fragment it into pass-through helpers, but if repeated defects show transaction/reconciliation knowledge leaking across callers, introduce a deeper owning interface and migrate the whole coherent seam rather than adding another special case.
+- Core Save snapshot/service/restore files are separate transaction responsibilities and should remain game-agnostic. A root-cause refactor may still cross those files when one Save transaction invariant is demonstrably split across them; verify the full affected transaction seam.
 
 ## 7. Executable architecture contracts
 
@@ -171,7 +180,7 @@ Source-text contracts remain acceptable where they enforce a structural boundary
 
 Verification depth is selected by risk and changed seam; evidence identity is always exact.
 
-1. **Task verification** proves the focused change on the actual final PR head. PR workflows are the recurring gate.
+1. **Task verification** proves the focused change on the actual final PR head. PR workflows are the recurring gate. If a root-cause fix widens the changed seam, task verification widens to every affected owning interface rather than forcing the implementation back into a smaller diff.
 2. **Integration verification** reruns task gates after a PR-head rewrite/rebase and adds only affected gates when an overlapping dependency changes the relevant seam.
 3. **Convergence/release verification** is an explicit `workflow_dispatch` on the selected SHA. Missing diff scope intentionally fails closed, so Linux, macOS and reference-module behavior/build lanes execute. Diff-only gates such as resident revision comparison remain PR-owned; mutation testing and retained RC/reference artifacts with provenance/checksums run here.
 
@@ -197,7 +206,7 @@ The verification system must stay shallower than the product system it protects.
 - A new always-on workflow/check, global source-text/parity scan or mutation class requires a concrete escaped defect or a real cross-cutting seam that local behavior tests cannot protect.
 - Do not build a test-to-source routing database for ordinary Linux tests; broad portable execution is simpler and cheap enough.
 - Release packaging/provenance and mutation sensitivity are convergence concerns unless a task directly changes those mechanisms.
-- When a new mechanism subsumes an older one, remove the older mechanism rather than preserving both “for safety.”
+- When a new mechanism subsumes an older one, remove the older mechanism rather than preserving both “for safety.” The same rule applies to tests that only encode the superseded implementation shape.
 - Status documentation is operational state, not a merge ledger. Ordinary feature merges do not require a dedicated reconciliation PR unless they materially change the operational gate/version/acceptance baseline.
 
 ## 9. Terminology governance
