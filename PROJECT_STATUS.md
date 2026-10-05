@@ -17,10 +17,10 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 - Product release identity: `Info.plist` owns SemVer `0.2.1` and bundle build `5`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
-- Hades II module protocol: 11.
-- Hades II desired-state schema: 6.
+- Hades II module protocol: 12.
+- Hades II desired-state schema: 7.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 79.
+- Hades II resident runtime revision: 80.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 79. Revisions 52–79 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 80. Revisions 52–80 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -68,6 +68,8 @@ Current source contains resident revision 79. Revisions 52–79 remain pending t
 
 - revision 78: observed UpgradeChoice rerolls support fixed NPC pools, native loot/Hammer/Chaos/Stack owners and Echo previous-run selection through one leased native yielding reroll action. Opening and rerolling share fixed-pool eligibility/preview rules; opaque menu snapshots and expected costs reject stale targets, and native planned-candidate eligibility is revalidated across the presentation yield. A uniquely named Trainer input block prevents selection until the complete native unwind and terminal validation, including the native wait after releasing its own input block. Asynchronous uncertain outcomes block new unsafe requests, automatic reconciliation/reinstallation and replay into new owners; already-owned durable hooks may retain their effects on the original owner. Transport is tainted before desired-state adoption/replay, and reroll recovery requires checking the game state and restarting Hades II. Selene Path of Stars and Nemesis outer transactions remain separate work (#357/#358); real-game acceptance remains pending.
 - revision 79: five native gathering families share one room-generation owner with durable Native/default or conditional 0–100% trials for newly created rooms. Native force, eligibility, Familiar quota/bonus, RNG trial count and cross-family arbitration remain owned by the game. A separate observed-scope Generate action invokes native setup for one unused authored placement in the actual current room, retains native collection rewards and refuses already appeared/used/generated families. Partial activation faults retain native results, block further unsafe requests and require a game restart; Generate is never persisted or replayed. Module protocol 11 and desired schema 6 add sparse gathering probabilities; Profile envelope 6 remains compatible and older desired schemas migrate to Native defaults. Real-game acceptance remains pending.
+
+- revision 80: future-room Chaos Gate occurrence extends the shared room-generation owner with Native/default or conditional 0–100% control. Strict zero suppresses uncommitted Hero force sources before consumption; native qualification, prepared rolls, committed entrances, health payment and Chaos return routing remain owned by the game. Destination/return conflicts refuse controlled attempts before force consumption. Desired schema 7 and module protocol 12 add an optional probability; Profile envelope 6 remains compatible and older desired schemas migrate to Native. Real-game occurrence, entry/return, disable and Save/load reconstruction remain pending.
 
 Automated verification does not replace this manual acceptance.
 

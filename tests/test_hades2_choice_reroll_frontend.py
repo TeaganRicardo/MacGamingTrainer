@@ -34,7 +34,7 @@ for raw in sys.stdin:
         state['choiceReroll'] = {'available': True, 'menuToken': 'next-menu', 'cost': 2}
         state['lastAction'] = {'requestId': reroll, 'command': 'reroll_choice', 'outcome': 'completed'}
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
-             'moduleProtocolVersion': 11, 'gameID': args.game, 'ok': True, 'result': state}
+             'moduleProtocolVersion': 12, 'gameID': args.game, 'ok': True, 'result': state}
     if observations > 1:
         state['status'] = 'restart_required'
         state['choiceReroll'] = {'available': False, 'reason': 'hades2.error.outcomeUnknownGeneric'}

@@ -1493,6 +1493,17 @@
       ],
       "key": "hades2.error.nativeFunctionMissing"
     },
+    "set_chaos_gate_probability::Invalid Chaos Gate probability": {
+      "arguments": [],
+      "key": "hades2.error.percentRange"
+    },
+    "set_chaos_gate_probability::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
     "set_trait_level::Action requires a requestId of 1..128 characters": {
       "arguments": [],
       "key": "hades2.error.requestIdRequired"
@@ -1747,6 +1758,7 @@
     "open_special_choice",
     "remove_trait",
     "reroll_choice",
+    "set_chaos_gate_probability",
     "set_trait_level",
     "set_trait_rarity",
     "set_trait_remaining_uses",
