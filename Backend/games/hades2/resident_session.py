@@ -40,6 +40,31 @@ class ResidentReply:
     outcome_unknown: bool = False
 
 
+class ResidentSessionError(AdapterError):
+    """Semantic resident-session failure with transaction diagnostics."""
+
+    def __init__(
+        self, code, presentation, metrics, *, diagnostic=None, arguments=()
+    ):
+        super().__init__(
+            code,
+            presentation,
+            diagnostic=diagnostic,
+            arguments=arguments,
+        )
+        self.metrics = metrics
+
+    @classmethod
+    def from_adapter_error(cls, error, metrics):
+        return cls(
+            error.code,
+            error.presentation,
+            metrics,
+            diagnostic=error.diagnostic,
+            arguments=error.arguments,
+        )
+
+
 class ResidentGenerationInvalidated(Exception):
     """A non-status call discovered that the resident generation disappeared."""
 
@@ -155,9 +180,10 @@ class Hades2ResidentSession:
                 return reply
             except TransportError as error:
                 if self._resident_cleanup_failed(error):
-                    raise TransportError(
+                    raise ResidentSessionError(
                         "restart_required",
                         "hades2.error.residentCleanupFailed",
+                        getattr(error, "metrics", ResidentMetrics()),
                         diagnostic=str(error),
                     ) from error
                 if not self._runtime_generation_missing(error):
@@ -208,9 +234,10 @@ class Hades2ResidentSession:
                 )
             except TransportError as error:
                 if self._resident_cleanup_failed(error):
-                    raise TransportError(
+                    raise ResidentSessionError(
                         "restart_required",
                         "hades2.error.residentCleanupFailed",
+                        getattr(error, "metrics", ResidentMetrics()),
                         diagnostic=str(error),
                     ) from error
                 if self._runtime_generation_missing(error):
@@ -378,16 +405,13 @@ class Hades2ResidentSession:
                 metrics.expression_duration,
             )
             if crossed:
-                unknown = AdapterError(
+                raise ResidentSessionError(
                     "outcome_unknown",
                     "游戏调用结果不明，未自动重试；请检查游戏并重启。",
-                )
-                unknown.resident_metrics = metrics
-                raise unknown from error
-            try:
-                error.resident_metrics = metrics
-            except Exception:
-                pass
+                    metrics,
+                ) from error
+            if isinstance(error, AdapterError):
+                raise ResidentSessionError.from_adapter_error(error, metrics) from error
             raise
 
         metrics = ResidentMetrics(
