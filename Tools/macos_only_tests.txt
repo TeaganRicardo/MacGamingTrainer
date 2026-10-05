@@ -8,7 +8,7 @@ test_shortcut_chord_semantics.py
 test_trainer_log_sink_shared_append.py
 test_hades2_view_state_flow.py
 test_viewport_feedback.py
-test_hades2_choice_reroll_frontend.py
+test_hades2_force_enable_rerolls_frontend.py
 test_hades2_gathering_frontend.py
 test_hades2_chaos_gate_frontend.py
 test_hades2_backend_state_cleanup.py

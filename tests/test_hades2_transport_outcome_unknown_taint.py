@@ -308,7 +308,7 @@ class AsyncUnknownTransport:
         self.calls = []
         self.payload = {
             'status': 'ready', 'scene': 'run', 'rerolls': 4,
-            'lastAction': {'requestId': 'async-reroll', 'command': 'reroll_choice',
+            'lastAction': {'requestId': 'async-special-choice', 'command': 'open_special_choice',
                            'outcome': 'outcome_unknown', 'duplicate': False,
                            'error': 'menu changed after spending'},
         }
@@ -342,7 +342,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-async-action-trust-') as temporary:
         assert not (preparation.DATA / 'desired-state.json').exists(), 'unknown status adopted preferences'
         assert adapter.state['status'] == 'restart_required'
         assert adapter.state['rerolls'] == 4
-        assert adapter.state['lastAction']['requestId'] == 'async-reroll'
+        assert adapter.state['lastAction']['requestId'] == 'async-special-choice'
         try:
             adapter.execute('set_rerolls', {'amount': 99, 'requestId': 'unsafe-after-unknown'})
         except AdapterError as error:

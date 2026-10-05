@@ -14,7 +14,7 @@ from games.hades2.preferences import (
 )
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
 
-assert DESIRED_STATE_SCHEMA_VERSION == 7
+assert DESIRED_STATE_SCHEMA_VERSION == 8
 assert PROFILE_SCHEMA_VERSION == 6
 
 legacy_desired = {"godMode": True, "gardenQoL": True}

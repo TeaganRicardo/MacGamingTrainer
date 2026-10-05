@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 84 then
+if previousModule and previousModule.revision ~= 85 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,9 +15,10 @@ if previousModule and previousModule.revision ~= 84 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 84, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 85, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
+    forceEnableRerolls = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
     resourceMultiplier = 2, resourceMultiplierEnabled = false,
     -- true means force one currently eligible special boon into the native pool.
@@ -1221,6 +1222,7 @@ if __MacGamingTrainerV1 == nil then
     releaseGardenQoL()
     releaseBoonRarity()
     if forceRerolls ~= nil then forceRerolls.release() end
+    M.forceEnableRerolls = false
     releaseNextRoomReward()
     releaseEconomyRuntime()
     releaseRerollsRuntime()
@@ -5952,6 +5954,15 @@ if __MacGamingTrainerV1 == nil then
       error("Unsupported dodge lock: SetLifeProperty failed")
     end
   end
+  local function installForceEnableRerolls()
+    forceRerolls.install()
+    M.forceEnableRerolls = true
+  end
+  local function releaseForceEnableRerolls()
+    forceRerolls.release()
+    M.forceEnableRerolls = false
+  end
+
   featureOrder = {
     "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
     "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
@@ -6010,9 +6021,9 @@ if __MacGamingTrainerV1 == nil then
       active = function() return M.boonRarityEnabled and owns("GetRarityChances") and owns("SetTraitsOnLoot") end,
     },
     forceEnableRerolls = {
-      install = forceRerolls.install, release = forceRerolls.release,
+      install = installForceEnableRerolls, release = releaseForceEnableRerolls,
       support = forceRerolls.supported,
-      active = forceRerolls.active,
+      active = function() return M.forceEnableRerolls and forceRerolls.active() end,
     },
   }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }

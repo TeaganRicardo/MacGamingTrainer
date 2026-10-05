@@ -26,7 +26,7 @@ for line in sys.stdin:
           'chaosGateProbability': probability, 'gatheringProbabilities': {'mining': 25}}
  if req['command'] == 'status': state.pop('chaosGateProbability')
  if req['command'] == 'reset_desired': probability = None; state['chaosGateProbability'] = None
- print(json.dumps({'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 12,
+ print(json.dumps({'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 13,
                    'gameID': args.game, 'ok': True, 'result': state}), flush=True)
 '''
 HARNESS = r'''

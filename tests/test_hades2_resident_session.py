@@ -155,8 +155,8 @@ try:
     # Session taints trust before returning the evidence to Adapter.
     async_transport = FakeTransport([
         payload(lastAction={
-            "requestId": "reroll-1",
-            "command": "reroll_choice",
+            "requestId": "special-choice-1",
+            "command": "open_special_choice",
             "outcome": "outcome_unknown",
         }),
     ])
@@ -175,7 +175,7 @@ try:
     known_transport = FakeTransport([
         payload(lastAction={
             "requestId": "known-1",
-            "command": "reroll_choice",
+            "command": "open_special_choice",
             "outcome": "failed",
             "error": "native refusal",
         }),
