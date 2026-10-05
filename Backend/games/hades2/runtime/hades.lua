@@ -4035,20 +4035,20 @@ if __MacGamingTrainerV1 == nil then
     local function mutate(command, params)
       if command == "set_trait_level" then
         local function validateLevelTarget()
-          local target, family, sellEligible, count = traitManagement.resolveTarget(params)
+          local target, family, sellEligible, count = resolveTraitTarget(params)
           integer(params.targetLevel, 1)
-          if params.targetLevel <= traitManagement.level(target) then
+          if params.targetLevel <= traitLevel(target) then
             error("Trait target level must be higher than the current level")
           end
-          local levelCapability = traitManagement.capabilities(target, family, sellEligible, count)
+          local levelCapability = operationCapabilities(target, family, sellEligible, count)
           if levelCapability ~= "increaseOne" then
             error("Trait level editing is unavailable for the selected target")
           end
           if family == "chaos" then
             requireFunctions("Chaos trait level editing", { "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "DeepCopyTable" })
           elseif family == "hexTalent" then
-            local delta = params.targetLevel - traitManagement.level(target)
-            if #traitManagement.seleneTalentNodes(target.Name, false) < delta then
+            local delta = params.targetLevel - traitLevel(target)
+            if #seleneModel.talentNodes(target.Name, false) < delta then
               error("Not enough uninvested Path of Stars nodes remain for the requested level")
             end
             requireFunctions("Selene talent level editing", {
@@ -4082,11 +4082,11 @@ if __MacGamingTrainerV1 == nil then
           local live, family = validateLevelTarget()
           local upgraded
           if family == "chaos" then
-            upgraded = traitManagement.rebuildChaosTarget(live, params.targetLevel, nil)
+            upgraded = rebuildChaosTarget(live, params.targetLevel, nil)
           elseif family == "hexTalent" then
-            local before = traitManagement.level(live)
+            local before = traitLevel(live)
             local delta = params.targetLevel - before
-            local nodes = traitManagement.seleneTalentNodes(live.Name, false)
+            local nodes = seleneModel.talentNodes(live.Name, false)
             local base = type(TraitData) == "table" and TraitData[live.Name] or nil
             upgraded = live
             for index = 1, delta do
@@ -4096,9 +4096,9 @@ if __MacGamingTrainerV1 == nil then
               end
               selected.Invested = true
               selected.QueuedInvested = nil
-              local beforeStep = traitManagement.level(upgraded)
+              local beforeStep = traitLevel(upgraded)
               local ok, nextTrait = pcall(IncreaseTraitLevel, upgraded)
-              local liveStep = traitManagement.level(upgraded)
+              local liveStep = traitLevel(upgraded)
               if not ok then
                 if liveStep == beforeStep then
                   selected.Invested = false
@@ -4107,7 +4107,7 @@ if __MacGamingTrainerV1 == nil then
                 UpdateTalentPointInvestedCache()
                 error(nextTrait)
               end
-              if type(nextTrait) ~= "table" or traitManagement.level(nextTrait) <= beforeStep then
+              if type(nextTrait) ~= "table" or traitLevel(nextTrait) <= beforeStep then
                 if liveStep == beforeStep then
                   selected.Invested = false
                   selected.QueuedInvested = nil
@@ -4122,22 +4122,22 @@ if __MacGamingTrainerV1 == nil then
             end
             UpdateTalentPointInvestedCache()
           else
-            local before = traitManagement.level(live)
+            local before = traitLevel(live)
             local delta = params.targetLevel - before
             upgraded = IncreaseTraitLevel(live, delta)
           end
-          if type(upgraded) ~= "table" or traitManagement.level(upgraded) ~= params.targetLevel then
+          if type(upgraded) ~= "table" or traitLevel(upgraded) ~= params.targetLevel then
             error("Trait level increase did not reach the requested target level")
           end
         end, validateLevelTarget)
       end
       if command == "set_trait_rarity" then
         local function validateRarityTarget()
-          local target, family, sellEligible, count = traitManagement.resolveTarget(params)
-          local _, _, rarityCapability = traitManagement.capabilities(target, family, sellEligible, count)
-          local rarities = traitManagement.availableRarities(target)
-          if rarityCapability ~= "setExact" or not traitManagement.targetHasRarity(rarities, params.rarity)
-              or params.rarity == traitManagement.rarity(target) then
+          local target, family, sellEligible, count = resolveTraitTarget(params)
+          local _, _, rarityCapability = operationCapabilities(target, family, sellEligible, count)
+          local rarities = availableRarities(target)
+          if rarityCapability ~= "setExact" or not targetHasRarity(rarities, params.rarity)
+              or params.rarity == traitRarity(target) then
             error("Trait rarity editing is unavailable for the selected target")
           end
           if family == "chaos" then
@@ -4145,11 +4145,11 @@ if __MacGamingTrainerV1 == nil then
           elseif family == "hexTalent" then
             requireFunctions("Selene talent rarity editing", { "AddRarityToTraits" })
           elseif family == "keepsake" then
-            if not traitManagement.keepsake.targetRankAvailable(target, params.rarity) then
+            if not keepsakeModel.targetRankAvailable(target, params.rarity) then
               error("Trait rarity editing is unavailable for the selected target")
             end
           elseif family == "arcana" then
-            if not traitManagement.arcana.targetRankAvailable(target, params.rarity) then
+            if not arcanaModel.targetRankAvailable(target, params.rarity) then
               error("Trait rarity editing is unavailable for the selected target")
             end
             requireFunctions("Arcana runtime rank editing", {
@@ -4165,11 +4165,11 @@ if __MacGamingTrainerV1 == nil then
           local live, family = validateRarityTarget()
           local upgraded
           if family == "chaos" then
-            upgraded = traitManagement.rebuildChaosTarget(live, nil, params.rarity)
+            upgraded = rebuildChaosTarget(live, nil, params.rarity)
           elseif family == "keepsake" then
-            upgraded = traitManagement.keepsake.rebuildRarity(live, params.rarity)
+            upgraded = keepsakeModel.rebuildRarity(live, params.rarity)
           elseif family == "arcana" then
-            upgraded = traitManagement.arcana.rebuildRarity(live, params.rarity)
+            upgraded = arcanaModel.rebuildRarity(live, params.rarity)
           else
             upgraded = AddRarityToTraits({}, {
               NumTraits = 1,
@@ -4185,8 +4185,8 @@ if __MacGamingTrainerV1 == nil then
       end
       if command == "set_trait_remaining_uses" then
         local function validateTemporaryDurationTarget()
-          local target, family = traitManagement.resolveTarget(params)
-          if family ~= "temporary" or not traitManagement.temporary.canSet(target) then
+          local target, family = resolveTraitTarget(params)
+          if family ~= "temporary" or not temporaryModel.canSet(target) then
             error("Temporary effect duration editing is unavailable for the selected target")
           end
           integer(params.targetRemainingUses, 1)
@@ -4194,26 +4194,26 @@ if __MacGamingTrainerV1 == nil then
         end
         return actionLedger.run(command, params, function()
           local live = validateTemporaryDurationTarget()
-          traitManagement.temporary.set(live, params.targetRemainingUses)
+          temporaryModel.set(live, params.targetRemainingUses)
         end, validateTemporaryDurationTarget)
       end
       if command == "expire_trait" then
         local function validateTemporaryExpiryTarget()
-          local target, family = traitManagement.resolveTarget(params)
-          if family ~= "temporary" or not traitManagement.temporary.canExpire(target) then
+          local target, family = resolveTraitTarget(params)
+          if family ~= "temporary" or not temporaryModel.canExpire(target) then
             error("Temporary effect expiry is unavailable for the selected target")
           end
           return target
         end
         return actionLedger.run(command, params, function()
           local live = validateTemporaryExpiryTarget()
-          traitManagement.temporary.expire(live)
+          temporaryModel.expire(live)
         end, validateTemporaryExpiryTarget)
       end
       if command == "remove_trait" then
         local function validateRemovalTarget()
-          local target, family, sellEligible, count = traitManagement.resolveTarget(params)
-          local _, _, _, _, removalCapability = traitManagement.capabilities(target, family, sellEligible, count)
+          local target, family, sellEligible, count = resolveTraitTarget(params)
+          local _, _, _, _, removalCapability = operationCapabilities(target, family, sellEligible, count)
           if removalCapability == "none" then
             error("Trait removal is unavailable for the selected target")
           end
@@ -4234,18 +4234,18 @@ if __MacGamingTrainerV1 == nil then
               requireFunctions("Hammer helper weapon removal", { "UnequipWeapon" })
             end
           elseif removalCapability == "singleInstanceForce" and family == "directSpecial"
-              and traitManagement.directSpecialCostumeArmor(target) then
+              and directSpecialCostumeArmor(target) then
             requireFunctions("direct costume armor removal", { "RemoveTraitData", "SetupCostume" })
           elseif removalCapability == "singleInstanceForce" and family == "costume" then
             requireFunctions("Arachne costume removal", { "RemoveTraitData", "SetupCostume" })
           elseif removalCapability == "singleInstanceForce" and family == "temporary" then
             requireFunctions("temporary effect cancellation", { "RemoveTraitData" })
           elseif removalCapability == "singleInstanceForce" and family == "familiar" then
-            if not traitManagement.familiar.removalReady() then
+            if not familiarModel.removalReady() then
               error("Familiar owner removal is unavailable")
             end
           elseif removalCapability == "singleInstanceForce" and family == "keepsake" then
-            if not traitManagement.keepsake.removalReady() then
+            if not keepsakeModel.removalReady() then
               error("Keepsake owner removal is unavailable")
             end
           elseif removalCapability == "singleInstanceForce" then
@@ -4266,7 +4266,7 @@ if __MacGamingTrainerV1 == nil then
               end
             end
           elseif family == "hex" then
-            traitManagement.teardownSlottedSpell()
+            seleneModel.teardown()
             local slotted = seleneModel.currentSpell()
             if type(slotted) == "table" or HeroHasTrait(live.Name) then
               error("Selene spell removal left owner state mounted")
@@ -4274,15 +4274,15 @@ if __MacGamingTrainerV1 == nil then
           elseif family == "hammer" then
             hammerModel.removeMounted(live)
           elseif family == "costume" then
-            traitManagement.removeCostume(live)
+            removeCostume(live)
           elseif family == "temporary" then
-            traitManagement.temporary.cancel(live)
+            temporaryModel.cancel(live)
           elseif family == "familiar" then
-            traitManagement.familiar.teardown()
+            familiarModel.teardown()
           elseif family == "keepsake" then
-            traitManagement.keepsake.teardown()
+            keepsakeModel.teardown()
           elseif family == "directSpecial" then
-            traitManagement.removeDirectSpecial(live)
+            removeDirectSpecial(live)
           elseif family == "hexTalent" then
             local ok, removalError = pcall(
               RemoveTraitData, CurrentRun.Hero, live, { Silent = true, SkipExpire = true }
@@ -4295,7 +4295,7 @@ if __MacGamingTrainerV1 == nil then
               end
             end
             if not stillMounted then
-              for _, nodeEntry in ipairs(traitManagement.seleneTalentNodes(live.Name, true)) do
+              for _, nodeEntry in ipairs(seleneModel.talentNodes(live.Name, true)) do
                 nodeEntry.node.Invested = false
                 nodeEntry.node.QueuedInvested = nil
               end
@@ -4318,13 +4318,13 @@ if __MacGamingTrainerV1 == nil then
       end
       if command == "advance_trait_lifecycle" then
         local function validateChaosAdvance()
-          local target, family = traitManagement.resolveTarget(params)
-          if family ~= "chaos" or traitManagement.chaosLifecycleState(target) ~= "curse"
-              or traitManagement.chaosLinkedTraitName(target) == "" then
+          local target, family = resolveTraitTarget(params)
+          if family ~= "chaos" or chaosLifecycleState(target) ~= "curse"
+              or chaosLinkedTraitName(target) == "" then
             error("Chaos lifecycle transition is unavailable")
           end
           requireFunctions("Chaos lifecycle transition", { "RemoveTraitData" })
-          return target, traitManagement.chaosLinkedTraitName(target)
+          return target, chaosLinkedTraitName(target)
         end
         return actionLedger.run(command, params, function()
           local live, linkedName = validateChaosAdvance()
@@ -4338,7 +4338,7 @@ if __MacGamingTrainerV1 == nil then
             end
           end
           if type(replacement) ~= "table" or replacement.Name ~= linkedName
-              or traitManagement.chaosLifecycleState(replacement) ~= "blessing" then
+              or chaosLifecycleState(replacement) ~= "blessing" then
             error("Chaos lifecycle transition failed")
           end
         end, validateChaosAdvance)
