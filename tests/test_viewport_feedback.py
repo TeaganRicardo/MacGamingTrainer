@@ -127,15 +127,32 @@ struct Main {
         window.contentView = host
         host.frame = NSRect(x: 0, y: 0, width: 1200, height: 900)
         host.layoutSubtreeIfNeeded()
-        pump(0.10)
+        wait { editor.window === window && editor.bounds.width > 0 && editor.bounds.height > 0
+            && editor.visibleRect.intersects(editor.bounds) }
         guard let scroll = findScroll(host) else { fatalError("real shell has no scroll viewport") }
-        let viewport = host.convert(scroll.contentView.bounds, from: scroll.contentView)
-        let editorPoint = host.convert(NSPoint(x: 12, y: 12), from: editor)
-        let originalHit = host.hitTest(editorPoint)
-        check(originalHit === editor || originalHit?.isDescendant(of: editor) == true,
-              "click fixture did not reach the underlying editor")
         check(window.makeFirstResponder(editor), "could not establish editor focus")
         let focused = window.firstResponder
+        var previousViewport = NSRect.zero
+        var stableFrames = 0
+        wait {
+            host.layoutSubtreeIfNeeded()
+            let frame = host.convert(scroll.contentView.bounds, from: scroll.contentView)
+            stableFrames = frame == previousViewport ? stableFrames + 1 : 0
+            previousViewport = frame
+            return stableFrames >= 3
+        }
+        let viewport = host.convert(scroll.contentView.bounds, from: scroll.contentView)
+        let editorCenter = NSPoint(x: editor.bounds.midX, y: editor.bounds.midY)
+        check(viewport.contains(host.convert(editorCenter, from: editor)),
+              "click fixture editor was outside the scroll viewport")
+        guard let parent = host.superview else { fatalError("hosting view has no parent coordinate space") }
+        // NSView.hitTest takes its superview's coordinates. The hosting view
+        // is flipped, while the window frame is not.
+        let editorPoint = parent.convert(editorCenter, from: editor)
+        let originalHit = host.hitTest(editorPoint)
+        check(originalHit === editor || originalHit?.isDescendant(of: editor) == true,
+              "click fixture did not reach the underlying editor: point=\(editorPoint) editor=\(editor.frame) visible=\(editor.visibleRect) host=\(host.bounds) scroll=\(scroll.frame) hit=\(String(describing: originalHit)) ancestry=\(String(describing: originalHit?.superview))")
+        FileHandle.standardOutput.write(Data("viewport_feedback_click_target=\(String(describing: originalHit))\n".utf8))
         var feedbackEvents: [UUID] = []
         let observation = model.$feedbackNotice.compactMap { $0 }.sink { feedbackEvents.append($0.id) }
 
@@ -150,7 +167,7 @@ struct Main {
             host.layoutSubtreeIfNeeded()
             pump(0.05)
             check(host.convert(scroll.contentView.bounds, from: scroll.contentView) == viewport,
-                  "showing feedback moved or obscured the editor viewport")
+                  "showing feedback moved or obscured the editor viewport: baseline=\(viewport) actual=\(host.convert(scroll.contentView.bounds, from: scroll.contentView))")
             check(window.firstResponder === focused, "feedback stole keyboard focus")
             return notice
         }
@@ -255,7 +272,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
     generated = td / "ActiveGame.generated.swift"
     subprocess.run([PYTHON, str(ROOT / "Tools/generate_game_binding.py"), "hades2", str(generated)], check=True)
     sources = sorted((ROOT / "Sources/Core").rglob("*.swift")) + sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
-    subprocess.run([SWIFTC, "-parse-as-library", *map(str, sources),
+    subprocess.run([SWIFTC, "-parse-as-library", "-whole-module-optimization", *map(str, sources),
                     str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
                     str(generated), str(main), "-o", str(binary)], check=True, cwd=ROOT)
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
