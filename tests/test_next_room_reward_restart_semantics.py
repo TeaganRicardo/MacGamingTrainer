@@ -7,9 +7,13 @@ from runtime_revision_support import runtime_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
+from games.hades2.schema import MULTIPLIERS, TOGGLES, default_boon_rarity
+from games.hades2.resident_session import ResidentMetrics, ResidentReply
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 from games.hades2.preferences import (
     DESIRED_STATE_SCHEMA_VERSION,
     Hades2PreferenceStore,
@@ -72,20 +76,9 @@ assert next_room_reward_consumed(preferences, not_delivered, preference_dirty=Tr
 # confirmed even before a restart.
 assert next_room_reward_consumed(preferences, not_delivered, preference_dirty=False) is True
 
-adapter = (ROOT / 'Backend/games/hades2/adapter.py').read_text()
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 
-assert "preferences['nextRoomRewardToken']=" in adapter
-load_profile = adapter[adapter.index('    def load_profile'):adapter.index('    def _overlay_preferences')]
-assert "if preferences.get('nextRoomReward') is not None:" in load_profile
-assert "preferences['nextRoomRewardToken']='profile-'+str(time.time_ns())" in load_profile
-assert "preferences.get('nextRoomRewardToken') is None" not in load_profile
-assert "'token':self.preferences.get('nextRoomRewardToken')" in adapter
-assert 'next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)' in adapter
-assert adapter.index('next_room_reward_consumed(self.preferences,decoded,self.preference_dirty)') < adapter.index(
-    "if not host_observation_only and command=='status' and self.preference_dirty and not replay:"
-)
-
+# The resident runtime owns the durable one-shot receipt identity.
 assert runtime_revision(lua) >= 42
 assert 'nextRoomRewardToken = nil' in lua
 assert 'lastConsumedNextRoomRewardToken = nil' in lua
@@ -95,52 +88,148 @@ assert 'lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken' in 
 assert 'nextRoomRewardToken = M.nextRoomRewardToken' in lua
 assert 'params.token' in lua
 
-# Once a delivered one-shot disappears from a clean status response, the
-# adapter clears persistence instead of resurrecting it from desired state.
-class StatusTransport:
-    pid = 4242
-    last_duration = 0.0
 
-    def alive(self):
-        return True
+def status_payload(*, reward=None, token=None, consumed_token=None):
+    defaults = Hades2PreferenceStore.defaults()
+    payload = {
+        'status': 'ready',
+        'scene': 'run',
+        'capabilities': {},
+        'desiredFeatures': {key: bool(defaults[key]) for key in TOGGLES},
+        'activeFeatures': {key: False for key in TOGGLES},
+        'dormantFeatures': {},
+        'featureErrors': {},
+        'boonRarity': default_boon_rarity(),
+        'gatheringProbabilities': {},
+        'chaosGateProbability': None,
+        'stats': {},
+        'resources': [],
+        'elements': [],
+        'healthLocked': False,
+        'manaLocked': False,
+        'armorLocked': False,
+        'moneyLocked': False,
+        'rerollsLocked': False,
+        'nextRoomReward': reward,
+        'runtimeDiagnostics': {
+            'nextRoomRewardToken': token,
+            'lastConsumedNextRoomRewardToken': consumed_token,
+        },
+    }
+    for key in MULTIPLIERS:
+        if key != 'gameSpeed':
+            payload[key] = defaults[key]
+    return payload
 
-    def execute(self, code):
-        return json.dumps({
-            'connected': True,
-            'status': 'ready',
-            'scene': 'run',
-            'capabilities': {},
-            'desiredFeatures': {},
-            'activeFeatures': {},
-            'dormantFeatures': {},
-            'featureErrors': {},
-            'resources': [],
-            'rewards': [],
-            'stats': {},
-            'statSupport': {},
-            'statAvailable': {},
-            'elements': [],
+
+class RewardSession(FakeResidentSession):
+    def __init__(self, payload):
+        super().__init__(payload, pid=4242)
+        self.state = self.payload
+
+    def status(self, params=None):
+        self.calls.append({
+            'kind': 'status',
+            'command': 'status',
+            'params': dict(params or {}),
+            'batch': None,
         })
+        return ResidentReply(
+            payload=json.loads(json.dumps(self.state)),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+        )
 
-    def detach(self):
-        pass
-
-    def close(self):
-        pass
+    def reconcile(self, calls):
+        calls = list(calls)
+        self.calls.append({
+            'kind': 'reconcile',
+            'command': 'replay_preferences',
+            'params': {},
+            'batch': json.loads(json.dumps(calls)),
+        })
+        for command, params in calls:
+            if command == 'set_next_room_reward':
+                self.state['nextRoomReward'] = params.get('reward')
+                diagnostics = self.state.setdefault('runtimeDiagnostics', {})
+                if params.get('reward') is None:
+                    diagnostics.pop('nextRoomRewardToken', None)
+                else:
+                    diagnostics['nextRoomRewardToken'] = params.get('token')
+            else:
+                raise AssertionError('unexpected reconciliation during reward test: ' + command)
+        return ResidentReply(
+            payload=json.loads(json.dumps(self.state)),
+            metrics=ResidentMetrics(boundary_duration=0.001),
+        )
 
 
 old_data = preparation.DATA
 try:
+    # A matching consumption receipt must clear durable intent before any
+    # reconciliation plan is built. Otherwise the just-consumed reward would be
+    # immediately resurrected after reconnect.
     preparation.DATA = Path(tempfile.mkdtemp(prefix='mgt-next-room-consumed-'))
-    live = Hades2Adapter(transport=StatusTransport())
-    live.preferences = live._default_preferences()
-    live.preferences['nextRoomReward'] = 'MaxHealthDrop'
-    live.preference_initialized = True
-    live.preference_dirty = False
-    live.state.update(connected=True, status='ready', nextRoomReward='MaxHealthDrop')
-    state = live.execute('status', {})
-    assert live.preferences['nextRoomReward'] is None
+    consumed_session = RewardSession(status_payload(
+        reward=None,
+        consumed_token='one-shot-token',
+    ))
+    consumed_adapter = Hades2Adapter(
+        resident_session=consumed_session,
+        time_warp_controller=FakeTimeWarpController(),
+    )
+    consumed_adapter.preferences = consumed_adapter._default_preferences()
+    consumed_adapter.preferences['nextRoomReward'] = 'MaxHealthDrop'
+    consumed_adapter.preferences['nextRoomRewardToken'] = 'one-shot-token'
+    consumed_adapter.preference_store.save(consumed_adapter.preferences)
+    consumed_adapter.preference_initialized = True
+    consumed_adapter.preference_dirty = True
+    state = consumed_adapter.execute('status', {})
+    assert consumed_adapter.preferences['nextRoomReward'] is None
+    assert consumed_adapter.preferences['nextRoomRewardToken'] is None
     assert state['nextRoomReward'] is None
+    assert [call['kind'] for call in consumed_session.calls] == ['status']
+    persisted = json.loads(
+        (preparation.DATA / 'desired-state.json').read_text(encoding='utf-8')
+    )
+    assert persisted['nextRoomReward'] is None
+    assert persisted['nextRoomRewardToken'] is None
+
+    # Without a matching receipt, a missing runtime value is only evidence that
+    # the old backend may not have delivered the durable one-shot. The status
+    # reconciliation must re-arm the exact existing token, once.
+    preparation.DATA = Path(tempfile.mkdtemp(prefix='mgt-next-room-redeliver-'))
+    pending_session = RewardSession(status_payload(
+        reward=None,
+        consumed_token=None,
+    ))
+    pending_adapter = Hades2Adapter(
+        resident_session=pending_session,
+        time_warp_controller=FakeTimeWarpController(),
+    )
+    pending_adapter.preferences = pending_adapter._default_preferences()
+    pending_adapter.preferences['nextRoomReward'] = 'WeaponUpgrade'
+    pending_adapter.preferences['nextRoomRewardToken'] = 'one-shot-token'
+    pending_adapter.preference_store.save(pending_adapter.preferences)
+    pending_adapter.preference_initialized = True
+    pending_adapter.preference_dirty = True
+    state = pending_adapter.execute('status', {})
+    assert [call['kind'] for call in pending_session.calls] == ['status', 'reconcile']
+    reward_calls = [
+        params
+        for command, params in pending_session.calls[-1]['batch']
+        if command == 'set_next_room_reward'
+    ]
+    assert reward_calls == [{
+        'reward': 'WeaponUpgrade',
+        'token': 'one-shot-token',
+        'includeCatalogs': False,
+    }]
+    assert pending_session.state['nextRoomReward'] == 'WeaponUpgrade'
+    assert pending_session.state['runtimeDiagnostics']['nextRoomRewardToken'] == 'one-shot-token'
+    assert pending_adapter.preferences['nextRoomReward'] == 'WeaponUpgrade'
+    assert pending_adapter.preferences['nextRoomRewardToken'] == 'one-shot-token'
+    assert pending_adapter.preference_dirty is False
+    assert state['nextRoomReward'] == 'WeaponUpgrade'
 finally:
     preparation.DATA = old_data
 
