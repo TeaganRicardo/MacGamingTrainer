@@ -173,8 +173,8 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.runtime.alive():
-            self._replay_preferences(force_full=True,observed_state=observed_state)
+        if self.runtime.alive() and isinstance(observed_state,dict):
+            self._replay_preferences(observed_state,force_full=True)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
 
@@ -529,7 +529,7 @@ class Hades2Adapter(GameAdapter):
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
-    def _replay_preferences(self,force_full=False,observed_state=None):
+    def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.alive():return dict(self.state)
 
         speed_target=float(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
@@ -539,7 +539,8 @@ class Hades2Adapter(GameAdapter):
                 self._apply_game_speed(speed_target)
             speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
 
-        observed=observed_state if isinstance(observed_state,dict) else self.state
+        if not isinstance(observed_state,dict):raise TypeError('reconciliation requires a runtime observation.')
+        observed=observed_state
         if observed.get('status')!='ready':
             self._overlay_preferences()
             return dict(self.state)
@@ -802,7 +803,7 @@ class Hades2Adapter(GameAdapter):
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             if not host_observation_only and command=='status' and self.preference_dirty:
-                return self._replay_preferences(observed_state=copy.deepcopy(self.state))
+                return self._replay_preferences(copy.deepcopy(self.state))
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
                     try:
