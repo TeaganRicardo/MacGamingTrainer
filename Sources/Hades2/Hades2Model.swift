@@ -39,6 +39,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var backendStatus = TrainerBackendStatus()
     private let backendSession: TrainerBackendSession
     private let logSink: TrainerLogSink
+    private let backendScriptURL: URL?
+    private let runLogDirectoryURL: URL?
     private lazy var api = Hades2API(session: backendSession)
     var backendAvailable: Bool { backendStatus.backendAvailable }
     var backendProtocolVersion: Int? { backendStatus.backendProtocolVersion }
@@ -61,8 +63,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // Hades-owned notice/error are language-neutral tokens. Core-owned failures
     // still arrive as backendStatus strings, which the Host resolves; anything
     // Hades produces itself is a token so it can be re-resolved live.
-    @Published private var noticeToken: TrainerTextToken?
-    @Published private var errorToken: TrainerTextToken?
+    @Published private var noticeToken: TrainerTextToken? {
+        didSet { if let noticeToken { presentFeedback(noticeToken, tone: .success) } }
+    }
+    @Published private var errorToken: TrainerTextToken? {
+        didSet { if let errorToken { presentFeedback(errorToken, tone: .warning) } }
+    }
+    @Published private(set) var feedbackNotice: TrainerFeedbackNotice?
+    private var receiptPresentedDuringReply = false
     @Published private var runtimeIssueToken: TrainerTextToken?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
     private var runtimeFeatureErrors: [String: String] = [:]
@@ -74,7 +82,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         set {
             // A Core-owned error is newer than anything the model has presented,
             // so a stale Hades-owned token must not keep winning the banner.
-            if !newValue.isEmpty { errorToken = nil }
+            if !newValue.isEmpty {
+                errorToken = nil
+                if newValue != backendStatus.error {
+                    presentFeedback(TrainerTextToken(key: newValue), tone: .warning)
+                }
+            }
             backendStatus.error = newValue
         }
     }
@@ -83,7 +96,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var notice: String {
         get { backendStatus.notice }
         set {
-            if !newValue.isEmpty { noticeToken = nil }
+            if !newValue.isEmpty {
+                noticeToken = nil
+                if newValue != backendStatus.notice {
+                    presentFeedback(TrainerTextToken(key: newValue), tone: .success)
+                }
+            }
             backendStatus.notice = newValue
         }
     }
@@ -194,7 +212,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var shortcutSettingsPresented = false
 
     private let mutationScheduler = Hades2MutationScheduler()
-    private lazy var runLogWatcher = Hades2RunLogWatcher { [weak self] event in
+    private lazy var runLogWatcher = Hades2RunLogWatcher(directoryURL: runLogDirectoryURL) { [weak self] event in
         self?.handleRunLogEvent(event)
     }
     private var pendingRunReadySignal = false
@@ -285,9 +303,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    init(session: TrainerBackendSession, logSink: TrainerLogSink) {
+    init(session: TrainerBackendSession, logSink: TrainerLogSink,
+         backendScriptURL: URL? = nil, runLogDirectoryURL: URL? = nil) {
         backendSession = session
         self.logSink = logSink
+        self.backendScriptURL = backendScriptURL
+        self.runLogDirectoryURL = runLogDirectoryURL
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.runLogWatcher.start()
@@ -397,11 +418,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         do {
             try backendSession.start(
                 descriptor: Hades2GameModule.descriptor,
+                backendScriptURL: backendScriptURL,
                 applyPayload: { [weak self] payload in self?.apply(payload) },
                 resetGameState: { [weak self] in self?.resetAfterBackendTermination() },
                 log: { [weak self] line in self?.appendLog(line) },
                 onStatusChange: { [weak self] status in
-                    self?.backendStatus = status
+                    self?.applyBackendStatus(status)
                     if !status.busy {
                         self?.consumeRunLogReadySignalIfPossible()
                     }
@@ -416,6 +438,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func resetAfterBackendTermination() {
+        feedbackNotice = nil
         connected = false
         scene = "unknown"
         capabilities = [:]
@@ -660,6 +683,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         default: return
         }
 
+        // The session may next publish a generic success/error envelope for the
+        // same reply. This specific receipt owns the feedback meaning once.
+        receiptPresentedDuringReply = true
+
         switch receipt.outcome {
         case .accepted:
             noticeToken = presentation("hades2.receipt.accepted", arguments: [title.key])
@@ -674,6 +701,36 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .completed:
             noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }
+    }
+
+    private func applyBackendStatus(_ status: TrainerBackendStatus) {
+        let previous = backendStatus
+        if status.busy { receiptPresentedDuringReply = false }
+        let hasReceiptFeedback = receiptPresentedDuringReply
+        if !status.busy { receiptPresentedDuringReply = false }
+        backendStatus = status
+        if !hasReceiptFeedback {
+            if !status.error.isEmpty,
+               status.error != previous.error || status.errorArguments != previous.errorArguments {
+                errorToken = nil
+                presentFeedback(backendErrorText, tone: .warning)
+            } else if !status.notice.isEmpty, status.notice != previous.notice {
+                noticeToken = nil
+                presentFeedback(TrainerTextToken(key: status.notice), tone: .information)
+            }
+        }
+    }
+
+    private func presentFeedback(_ text: TrainerTextToken, tone: TrainerFeedbackTone) {
+        guard !text.key.isEmpty else { return }
+        feedbackNotice = TrainerFeedbackNotice(text: text, tone: tone)
+    }
+
+    /// Consume only the transient presentation event. Errors, receipts and
+    /// recovery instructions retain their existing model/session ownership.
+    func dismissFeedback(_ id: UUID) {
+        guard feedbackNotice?.id == id else { return }
+        feedbackNotice = nil
     }
 
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
@@ -696,6 +753,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             operationArguments: titleArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
+            // Session has now applied the payload and any generic envelope.
+            // Even a receipt with no generic publication ends its suppression
+            // here, so a later transport/recovery failure is a new event.
+            reply: { [weak self] _ in self?.receiptPresentedDuringReply = false },
             completion: completion
         )
     }

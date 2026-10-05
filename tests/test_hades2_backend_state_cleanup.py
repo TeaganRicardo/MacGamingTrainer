@@ -281,14 +281,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-state-cleanup-") as td:
     model_source = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
     model_source = model_source.replace("private func apply(_ payload:", "func apply(_ payload:")
     model_source = model_source.replace("private func resetAfterBackendTermination()", "func resetAfterBackendTermination()")
-    # The presented-copy token is private state; expose a clear for the harness
-    # so a test can reset what it just consumed.
-    model_source = model_source.replace(
-        "    @Published private var noticeToken: TrainerTextToken?",
-        "    @Published var noticeToken: TrainerTextToken?\n"
-        "    func clearPresentedNoticeForTest() { noticeToken = nil }\n"
-        "    func clearPresentedErrorForTest() { errorToken = nil }",
-    )
+    # Same-file helpers can clear private tokens without rewriting their
+    # declarations or property observers in the production model.
+    model_source += """
+
+extension Hades2TrainerModel {
+    func clearPresentedNoticeForTest() { noticeToken = nil }
+    func clearPresentedErrorForTest() { errorToken = nil }
+}
+"""
     testable_model = td / "Hades2Model.swift"
     testable_model.write_text(model_source, encoding="utf-8")
 

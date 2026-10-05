@@ -50,6 +50,9 @@ struct Hades2GameModule: TrainerGameModule {
     static func makeContent(model: Hades2TrainerModel) -> Hades2TrainerView { Hades2TrainerView(model: model) }
     static func makeSidebarActions(model: Hades2TrainerModel) -> Hades2SidebarActions { Hades2SidebarActions(model: model) }
     static func makeHeaderActions(model: Hades2TrainerModel) -> Hades2HeaderActions { Hades2HeaderActions(model: model) }
+    static func makeFeedback(model: Hades2TrainerModel) -> Hades2OperationFeedback {
+        Hades2OperationFeedback(model: model)
+    }
     static func makeManagementCommands(
         model: Hades2TrainerModel,
         localization: TrainerLocalizationStore

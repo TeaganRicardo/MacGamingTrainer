@@ -1637,10 +1637,6 @@ struct Hades2TrainerView: View {
                 TrainerMessageBanner(text: model.warning, icon: "exclamationmark.shield", color: theme.warning)
             } else if model.status == "incompatible" {
                 TrainerMessageBanner(text: text("hades2.status.unverifiedBanner"), icon: "exclamationmark.shield", color: theme.warning)
-            } else if !model.noticeText.key.isEmpty {
-                TrainerMessageBanner(text: resolved(model.noticeText), icon: "checkmark.circle.fill", color: theme.success)
-            } else if !model.notice.isEmpty {
-                TrainerMessageBanner(text: model.notice, icon: "checkmark.circle.fill", color: theme.success)
             }
         }.frame(height: 52)
     }
