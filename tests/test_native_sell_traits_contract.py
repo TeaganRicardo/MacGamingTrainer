@@ -8,7 +8,15 @@ lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 
 assert "'open_sell_traits'" not in adapter[adapter.index('def _replay_preferences'):adapter.index('def scan(', adapter.index('def _replay_preferences'))]
 
-block = lua[lua.index('if command == "open_sell_traits" then'):lua.index('if command == "spawn_reward" then')]
+def command_block(name):
+    marker = f'if command == "{name}" then'
+    start = lua.index(marker)
+    tail = lua[start:]
+    next_command = tail.find('\n    if command == "', len(marker))
+    return tail if next_command < 0 else tail[:next_command]
+
+
+block = command_block("open_sell_traits")
 for token in (
     'sceneName() ~= "run"',
     'AreScreensActive',

@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 12.
 - Hades II desired-state schema: 7.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 82.
+- Hades II resident runtime revision: 83.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -43,7 +43,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 82. Revisions 52–82 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 83. Revisions 52–83 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -74,6 +74,7 @@ Current source contains resident revision 82. Revisions 52–82 remain pending t
 - revision 80: future-room Chaos Gate occurrence extends the shared room-generation owner with Native/default or conditional 0–100% control. Strict zero suppresses uncommitted Hero force sources before consumption; native qualification, prepared rolls, committed entrances, health payment and Chaos return routing remain owned by the game. Destination/return conflicts refuse controlled attempts before force consumption. Desired schema 7 and module protocol 12 add an optional probability; Profile envelope 6 remains compatible and older desired schemas migrate to Native. Real-game occurrence, entry/return, disable and Save/load reconstruction remain pending.
 - revision 81: durable preference replay uses one resident batch boundary that suppresses intermediate full-state materialization and redundant dispatch-entry synchronization, while preserving command validation/reconciliation and unknown-outcome taint semantics. Host replay receives a separate bounded 5-second LLDB expression budget and boundary logs now distinguish transport return from pre-return failure. Real-game reconnect/replay acceptance remains pending.
 - revision 82: selected current-run trait mutation ownership is deepened inside the single resident Lua module. `set_trait_level`, `set_trait_rarity`, `set_trait_remaining_uses`, `expire_trait`, `remove_trait`, and `advance_trait_lifecycle` now delegate from resident dispatch into one `traitManagement.mutate` interface; family/capability/native owner teardown and post-mutation verification stay private to the trait owner. This is an ownership refactor with no intended user-visible semantic change; consolidated real-game acceptance remains pending.
+- revision 83: resident reward/exact-acquisition ownership is deepened behind one private `rewardAcquisition` interface. `spawn_reward` and `acquire_chaos_pair` dispatch now only compose the generic action ledger with reward preparation/execution; reward lookup, exact eligibility, owner-specific prerequisites, ordinary store/loot spawning and postconditions stay private to the reward owner. Chaos single-target exact acquisition and explicit blessing+curse pair acquisition share one eligibility, pairing and curse→blessing construction path. This is an ownership refactor with no intended user-visible semantic change; consolidated real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
