@@ -37,17 +37,11 @@ for retired in (
 assert 'room.ChosenRewardType = rewardType' in lua
 assert 'return "Boon", wanted' in lua
 
-# Selene has two distinct native reward paths. SpellDrop chooses a Hex; TalentDrop
-# is the official Path of Stars consumable used to add points to the current Hex.
+# Selene catalog identity keeps SpellDrop (Hex choice) distinct from TalentDrop
+# (Path of Stars points). Runtime spawning semantics are exercised through
+# production M.dispatch in test_hades2_store_reward_spawn_semantics.py.
 assert '{ id = "TalentDrop", name = "繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene"' in lua
 assert 'sourceId = "Selene", sourceName = "塞勒涅"' in lua
-spawn = lua[lua.index('if command == "spawn_reward" then'):lua.index('requireFunctions("loot spawning"', lua.index('if command == "spawn_reward" then'))]
-assert spawn.index('if entry.kind == "consumable" then') < spawn.index('if rewardId == "SpellDrop" then')
-assert 'CreateConsumableItem(objectId, rewardId, 0' in spawn
-assert 'if rewardId == "TalentDrop"' not in spawn
-assert 'if rewardId == "SpellDrop" then' in lua
-assert 'requireFunctions("Selene room reward spawning", { "SpawnRoomReward" })' in lua
-assert 'RewardOverride = "SpellDrop"' in lua
 
 # Shortcut defaults follow the visible action order: 1...9, then A...J. All
 # static toggle/apply/spawn actions are represented, and nil slots do not reserve
