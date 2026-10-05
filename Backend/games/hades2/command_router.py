@@ -20,7 +20,7 @@ _RUNTIME_COMMANDS = frozenset((
     'set_stat','set_element','lock_element','set_resource','lock_resource',
     'set_rerolls','lock_rerolls','reroll_choice','spawn_reward','acquire_chaos_pair','open_sell_traits',
     'open_special_choice','set_trait_level','set_trait_rarity','set_trait_remaining_uses',
-    'expire_trait','remove_trait','advance_trait_lifecycle',
+    'expire_trait','remove_trait','advance_trait_lifecycle','generate_gathering',
 ))
 
 
@@ -31,7 +31,7 @@ _REQUEST_ID_COMMANDS = frozenset((
     'set_resource','set_rerolls','reroll_choice','spawn_reward','acquire_chaos_pair','open_sell_traits',
     'open_special_choice','lock_resource','lock_rerolls',
     'set_trait_level','set_trait_rarity','set_trait_remaining_uses',
-    'expire_trait','remove_trait','advance_trait_lifecycle',
+    'expire_trait','remove_trait','advance_trait_lifecycle','generate_gathering',
 ))
 
 
@@ -97,6 +97,9 @@ class Hades2CommandRouter:
         elif command=='set_next_room_reward_desired':
             validated=validate_command_params(command,params)
             result=adapter.set_next_room_reward_desired(validated['reward'])
+        elif command=='set_gathering_desired':
+            validated=validate_command_params(command,params)
+            result=adapter.set_gathering_desired(validated['family'],validated['probability'])
         elif command=='list_profiles':
             result={'profiles':adapter.list_profiles()}
         elif command=='save_profile':

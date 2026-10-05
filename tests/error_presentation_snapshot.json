@@ -996,6 +996,10 @@
       "arguments": [],
       "key": "hades2.reroll.stale"
     },
+    "请刷新当前房间后再生成采集点。": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.stale"
+    },
     "请断开连接并退出游戏后操作。": {
       "arguments": [],
       "key": "hades2.error.disconnectBeforePrepare"
@@ -1019,6 +1023,10 @@
     "请选择资源。": {
       "arguments": [],
       "key": "hades2.error.selectResource"
+    },
+    "请选择采集类型。": {
+      "arguments": [],
+      "key": "hades2.error.selectGatheringFamily"
     },
     "调试签名校验失败；未修改游戏。": {
       "arguments": [],
@@ -1257,6 +1265,57 @@
     "expire_trait::requestId reused for a different action": {
       "arguments": [],
       "key": "hades2.error.requestIdReused"
+    },
+    "generate_gathering::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "generate_gathering::hades2.gathering.unavailable.complex": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.complex"
+    },
+    "generate_gathering::hades2.gathering.unavailable.existing": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.existing"
+    },
+    "generate_gathering::hades2.gathering.unavailable.familiar": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.familiar"
+    },
+    "generate_gathering::hades2.gathering.unavailable.lava": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.lava"
+    },
+    "generate_gathering::hades2.gathering.unavailable.native": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.native"
+    },
+    "generate_gathering::hades2.gathering.unavailable.placement": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.placement"
+    },
+    "generate_gathering::hades2.gathering.unavailable.polymorph": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.polymorph"
+    },
+    "generate_gathering::hades2.gathering.unavailable.pool": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.pool"
+    },
+    "generate_gathering::hades2.gathering.unavailable.scene": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.scene"
+    },
+    "generate_gathering::hades2.gathering.unavailable.stale": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.stale"
+    },
+    "generate_gathering::hades2.gathering.unavailable.tool": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.tool"
     },
     "open_sell_traits::Boon selling requires an active run room": {
       "arguments": [],
@@ -1683,6 +1742,7 @@
     "acquire_chaos_pair",
     "advance_trait_lifecycle",
     "expire_trait",
+    "generate_gathering",
     "open_sell_traits",
     "open_special_choice",
     "remove_trait",

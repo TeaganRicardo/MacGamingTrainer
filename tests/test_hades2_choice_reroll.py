@@ -433,13 +433,14 @@ assert(_G[callbackName] == foreign and source.UpgradeOptions[1].ItemName == 'Cos
 print('hades2_choice_reroll_runtime_ok')
 '''
 CASES['unknown_carry_after_revision_cleanup'] = HARNESS + r'''
-M.revision = 77
+local expectedRevision = M.revision
+M.revision = expectedRevision - 1
 -- A terminal status does not reconcile a pending counter lock.
 M.rerollsLock = 50
 local value = CurrentRun.NumRerolls
 M.dispatch('status', { includeCatalogs = false }); assert(CurrentRun.NumRerolls == value)
 dofile(arg[1]); M = __MacGamingTrainerV1
-assert(M.revision == 78 and M.terminalActionUnknown and M.dispatch('status', { includeCatalogs = false }).lastAction.outcome == 'outcome_unknown')
+assert(M.revision == expectedRevision and M.terminalActionUnknown and M.dispatch('status', { includeCatalogs = false }).lastAction.outcome == 'outcome_unknown')
 local ok, errorText = pcall(M.dispatch, 'set_rerolls', { requestId = 'new-revision-mutation', amount = 50 })
 assert(not ok and tostring(errorText):find('MGT_OUTCOME_UNKNOWN', 1, true))
 '''

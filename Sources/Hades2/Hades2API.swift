@@ -14,6 +14,8 @@ enum Hades2Command: String {
     case setRerolls = "set_rerolls"
     case lockRerolls = "lock_rerolls"
     case rerollChoice = "reroll_choice"
+    case setGatheringDesired = "set_gathering_desired"
+    case generateGathering = "generate_gathering"
     case setStat = "set_stat"
     case setElement = "set_element"
     case lockElement = "lock_element"
@@ -53,6 +55,8 @@ enum Hades2Request {
     case setRerolls(amount: Int)
     case lockRerolls(locked: Bool)
     case rerollChoice(menuToken: String, expectedCost: Int)
+    case setGathering(family: Hades2GatheringFamily, probability: Double?)
+    case generateGathering(family: Hades2GatheringFamily, scopeToken: String)
     case setStat(stat: String, locked: Bool, value: Any?)
     case setElement(element: String, amount: Int)
     case lockElement(element: String, locked: Bool)
@@ -94,6 +98,8 @@ enum Hades2Request {
         case .setRerolls: return .setRerolls
         case .lockRerolls: return .lockRerolls
         case .rerollChoice: return .rerollChoice
+        case .setGathering: return .setGatheringDesired
+        case .generateGathering: return .generateGathering
         case .setStat: return .setStat
         case .setElement: return .setElement
         case .lockElement: return .lockElement
@@ -201,6 +207,10 @@ enum Hades2Request {
             return ["locked": locked]
         case .rerollChoice(let menuToken, let expectedCost):
             return ["menuToken": menuToken, "expectedCost": expectedCost]
+        case .setGathering(let family, let probability):
+            return ["family": family.rawValue, "probability": probability.map { $0 as Any } ?? NSNull()]
+        case .generateGathering(let family, let scopeToken):
+            return ["family": family.rawValue, "scopeToken": scopeToken]
         case .setStat(let stat, let locked, let value):
             var result: [String: Any] = ["stat": stat, "locked": locked]
             if let value { result["value"] = value }
