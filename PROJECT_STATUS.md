@@ -43,7 +43,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 82. Revisions 52–82 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 83. Revisions 52–83 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
