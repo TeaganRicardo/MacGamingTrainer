@@ -1,47 +1,5 @@
 import Foundation
 
-enum Hades2Command: String {
-    case scan, status, connect, disconnect, launch
-    case disableAll = "disable_all"
-    case runtimeReset = "runtime_reset"
-    case resetDesired = "reset_desired"
-    case setDesired = "set_desired"
-    case setVital = "set_vital"
-    case setCounter = "set_counter"
-    case lockVital = "lock_vital"
-    case setResource = "set_resource"
-    case lockResource = "lock_resource"
-    case setRerolls = "set_rerolls"
-    case lockRerolls = "lock_rerolls"
-    case rerollChoice = "reroll_choice"
-    case setGatheringDesired = "set_gathering_desired"
-    case setChaosGateDesired = "set_chaos_gate_desired"
-    case generateGathering = "generate_gathering"
-    case setStat = "set_stat"
-    case setElement = "set_element"
-    case lockElement = "lock_element"
-    case setBoonRarityDesired = "set_boon_rarity_desired"
-    case setNextRoomRewardDesired = "set_next_room_reward_desired"
-    case spawnReward = "spawn_reward"
-    case acquireChaosPair = "acquire_chaos_pair"
-    case openSellTraits = "open_sell_traits"
-    case setTraitLevel = "set_trait_level"
-    case setTraitRarity = "set_trait_rarity"
-    case setTraitRemainingUses = "set_trait_remaining_uses"
-    case expireTrait = "expire_trait"
-    case removeTrait = "remove_trait"
-    case advanceTraitLifecycle = "advance_trait_lifecycle"
-    case openSpecialChoice = "open_special_choice"
-    case listProfiles = "list_profiles"
-    case saveProfile = "save_profile"
-    case loadProfile = "load_profile"
-    case deleteProfile = "delete_profile"
-    case diagnostics
-    case exportDiagnostics = "export_diagnostics"
-    case prepare
-    case restore
-}
-
 /// Typed Hades module request boundary. Command spelling and JSON parameter
 /// keys live here rather than being duplicated through the store and views.
 enum Hades2Request {
@@ -129,47 +87,6 @@ enum Hades2Request {
         }
     }
 
-
-    var timeout: TimeInterval {
-        switch self {
-        case .scan:
-            // pgrep is normally quick, but historical successful scans can exceed
-            // four seconds while Steam/game process state is settling.
-            return 15.0
-        case .status:
-            // A live status request can spend up to ~3 s waiting for the Lua
-            // boundary, then still needs debugger stop/focus-restore/resume
-            // cleanup. Keep the host watchdog outside those transport deadlines
-            // so it never SIGTERMs the debugger owner mid-cleanup.
-            return 15.0
-        case .connect(_):
-            // LLDB attach + symbol validation + first Lua bootstrap is the slow
-            // path. Real successful Hades II connections have taken >50 s on
-            // the target Mac; a 12 s watchdog incorrectly killed healthy attach.
-            return 90.0
-        case .disconnect:
-            return 12.0
-        case .launch:
-            return 10.0
-        case .prepare:
-            // Longest prepare branch has 16 bounded commands plus compatibility
-            // and process scans. Keep this above the explicit 515 s budget.
-            return 560.0
-        case .restore:
-            // Longest restore branch has 6 bounded commands plus compatibility
-            // and process scans. Keep this above the explicit 215 s budget.
-            return 240.0
-        case .diagnostics:
-            // Includes compatibility and up to two status boundaries during
-            // runtime recovery, plus LLDB probes; explicit budget is 65 s.
-            return 70.0
-        case .exportDiagnostics:
-            // Diagnostics plus the separately bounded Finder reveal; budget is 75 s.
-            return 85.0
-        default:
-            return 6.0
-        }
-    }
 
     private static func traitTargetParams(_ trait: CurrentRunTrait) -> [String: Any] {
         var params: [String: Any] = [
@@ -287,7 +204,7 @@ final class Hades2API {
             operationArguments: operationArguments,
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
-            timeout: request.timeout,
+            timeout: request.command.timeout,
             reply: reply,
             completion: completion
         )
