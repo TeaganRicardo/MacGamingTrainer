@@ -69,6 +69,8 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                     .environment(\.trainerManagementActions, managementActions)
             }
             .frame(minWidth: theme.contentMinWidth, maxWidth: theme.pageMaxWidth, minHeight: theme.contentMinHeight, alignment: .topLeading)
+        } feedback: {
+            Module.makeFeedback(model: model)
         }
         .onAppear {
             registerModulePresentation(localization)
