@@ -207,9 +207,9 @@ class Hades2ResidentSession:
                         diagnostic=str(error),
                     ) from error
                 if self._runtime_generation_missing(error):
-                    self.invalidate_generation()
                     if command == "status":
                         raise
+                    self.invalidate_generation()
                     raise ResidentGenerationInvalidated(error) from error
                 raise
 
