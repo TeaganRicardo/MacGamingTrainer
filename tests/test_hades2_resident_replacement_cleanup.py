@@ -49,7 +49,7 @@ try:
     session.status()
 except AdapterError as error:
     assert error.code == "restart_required"
-    assert error.message == "hades2.error.residentCleanupFailed"
+    assert error.presentation == "hades2.error.residentCleanupFailed"
     assert "MGT_RESIDENT_RESTART_REQUIRED" in (error.diagnostic or "")
 else:
     raise AssertionError("resident replacement cleanup failure was not translated")
