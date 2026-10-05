@@ -138,7 +138,10 @@ class Hades2Adapter(GameAdapter):
         # fresh backend process. If the resident Lua module already matches it,
         # replay is a no-op; if Hades itself restarted, the same profile is
         # automatically restored on the first ready connection.
-        self.preference_dirty=self.preference_initialized and not self.preference_write_blocked
+        self._preference_runtime_dirty=(
+            self.preference_initialized and not self.preference_write_blocked
+        )
+        self._preference_persistence_dirty=False
         self._overlay_preferences()
 
     @staticmethod
@@ -148,8 +151,30 @@ class Hades2Adapter(GameAdapter):
     def _normalize_preferences(self,raw):
         return Hades2PreferenceStore.normalize(raw)
 
+    @property
+    def preference_dirty(self):
+        return self._preference_runtime_dirty or self._preference_persistence_dirty
+
+    @preference_dirty.setter
+    def preference_dirty(self,value):
+        # Existing callers/tests use this as the runtime-reconciliation flag.
+        # Durable-write pending is owned separately and cannot be cleared here.
+        self._preference_runtime_dirty=bool(value)
+
+    def _persist_preferences_candidate(self,preferences):
+        # Candidate writes happen before adopting new in-memory desired state.
+        # A successful full-document write also resolves any older persistence
+        # pending state carried by the current desired snapshot.
+        self._persist_preferences_candidate(preferences)
+        self._preference_persistence_dirty=False
+
     def _save_preferences(self):
-        self.preference_store.save(self.preferences)
+        try:
+            self.preference_store.save(self.preferences)
+        except Exception:
+            self._preference_persistence_dirty=True
+            raise
+        self._preference_persistence_dirty=False
 
     def list_profiles(self):
         return self.profile_service.list()
@@ -169,7 +194,7 @@ class Hades2Adapter(GameAdapter):
         observed_state=None
         if self.runtime.alive() and self.state.get('connected'):
             observed_state=copy.deepcopy(self.observe_runtime())
-        self.preference_store.save(preferences)
+        self._persist_preferences_candidate(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
@@ -267,7 +292,7 @@ class Hades2Adapter(GameAdapter):
         # changing in-memory state or crossing the Lua boundary so an exit-time
         # cleanup that later returns waiting cannot resurrect enabled features
         # on the next trainer launch.
-        self.preference_store.save(preferences)
+        self._persist_preferences_candidate(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=False
         self._overlay_preferences()
@@ -444,7 +469,7 @@ class Hades2Adapter(GameAdapter):
 
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
-        self.preference_store.save(preferences)
+        self._persist_preferences_candidate(preferences)
         self.preferences=preferences
         self.preference_initialized=True
         was_dirty=self.preference_dirty
@@ -478,7 +503,7 @@ class Hades2Adapter(GameAdapter):
     def set_boon_rarity_desired(self,config):
         normalized=self._normalize_preferences({'boonRarity':config})['boonRarity']
         preferences=dict(self.preferences);preferences['boonRarity']=normalized
-        self.preference_store.save(preferences);self.preferences=preferences
+        self._persist_preferences_candidate(preferences);self.preferences=preferences
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
@@ -493,7 +518,7 @@ class Hades2Adapter(GameAdapter):
         if probability is None:probabilities.pop(family,None)
         else:probabilities[family]=float(probability)
         preferences=dict(self.preferences,gatheringProbabilities=probabilities)
-        self.preference_store.save(preferences)
+        self._persist_preferences_candidate(preferences)
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
@@ -507,7 +532,7 @@ class Hades2Adapter(GameAdapter):
         validate_chaos_gate_probability(probability)
         probability=normalize_chaos_gate_probability(probability)
         preferences=dict(self.preferences,chaosGateProbability=probability)
-        self.preference_store.save(preferences)
+        self._persist_preferences_candidate(preferences)
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
@@ -521,7 +546,7 @@ class Hades2Adapter(GameAdapter):
         if not is_valid_next_room_reward(reward):raise ValueError('下一房奖励无效。')
         preferences=dict(self.preferences);preferences['nextRoomReward']=reward
         preferences['nextRoomRewardToken']=None if reward is None else 'next-room-'+str(time.time_ns())
-        self.preference_store.save(preferences);self.preferences=preferences
+        self._persist_preferences_candidate(preferences);self.preferences=preferences
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
@@ -531,6 +556,10 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.alive():return dict(self.state)
+        if self._preference_persistence_dirty:
+            # Current in-memory desired is authoritative. Retry its failed
+            # durable write before crossing another runtime mutation boundary.
+            self._save_preferences()
 
         speed_target=float(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
         speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
@@ -806,11 +835,7 @@ class Hades2Adapter(GameAdapter):
                 return self._replay_preferences(copy.deepcopy(self.state))
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
-                    try:
-                        self._save_preferences()
-                    except PersistenceError:
-                        self.preference_dirty=True
-                        raise
+                    self._save_preferences()
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
