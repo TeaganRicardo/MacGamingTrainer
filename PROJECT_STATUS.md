@@ -17,10 +17,10 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 - Product release identity: `Info.plist` owns SemVer `0.2.1` and bundle build `5`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
-- Hades II module protocol: 9.
+- Hades II module protocol: 10.
 - Hades II desired-state schema: 5.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 77.
+- Hades II resident runtime revision: 78.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -41,7 +41,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 77. Revisions 52–77 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 78. Revisions 52–78 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -65,6 +65,8 @@ Current source contains resident revision 77. Revisions 52–77 remain pending t
 - revision 75: Trainer mutations close an open native Trait Tray through its owner lifecycle before handing off the operation; an unsuccessful close refuses the mutation. This supersedes the earlier fail-closed Trait Tray behavior. Real-game acceptance remains pending.
 - revision 76: deterministic Chaos acquisition accepts an explicit current-build blessing + curse pair in one non-replayable request, revalidates both against the live TrialUpgrade pools/eligibility immediately before mutation, mounts exactly the selected curse, and queues exactly the selected blessing through the native curse lifecycle shape. Real-game acceptance remains pending.
 - revision 77: deterministic Chaos pair acquisition delegates repeat-instance eligibility to the native transforming-trait rules instead of rejecting every already-owned phase. Existing instances keep their identities; request deduplication remains separate from trait ownership. Real-game acceptance remains pending.
+
+- revision 78: observed UpgradeChoice rerolls support fixed NPC pools, native loot/Hammer/Chaos/Stack owners and Echo previous-run selection through one leased native yielding reroll action. Opening and rerolling share fixed-pool eligibility/preview rules; opaque menu snapshots and expected costs reject stale targets, and native planned-candidate eligibility is revalidated across the presentation yield. Asynchronous uncertain outcomes block new unsafe requests, automatic reconciliation/reinstallation and replay into new owners; already-owned durable hooks may retain their effects on the original owner. Transport is tainted before desired-state adoption/replay, and reroll recovery requires checking the game state and restarting Hades II. Selene Path of Stars and Nemesis outer transactions remain separate work (#357/#358); real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
@@ -109,7 +111,7 @@ Planning issue #124 is the sequencing authority.
 - #306 corrective current-run boon manager work is complete in this source.
 - #230 pickup-compatible infinite-ammo correction is complete in this source.
 - #236 Chaos lifecycle acquisition and mounted management is complete in this source.
-- #344–#347 manual-QA follow-ups are implemented in this source: recognizable current-run effect labels, stable Boon Management geometry, compact two-level Exact Boon navigation, and deterministic Chaos blessing + curse pair acquisition. Resident revision 77 still requires the consolidated user-run exact-build acceptance.
+- #344–#347 manual-QA follow-ups are implemented in this source: recognizable current-run effect labels, stable Boon Management geometry, compact two-level Exact Boon navigation, and deterministic Chaos blessing + curse pair acquisition. Resident revisions 52–78 still require the consolidated user-run exact-build acceptance.
 - #348 native Trait Tray close/handoff is implemented in this source; the earlier #341 fail-closed shipping behavior is superseded. Consolidated real-game acceptance remains pending.
 - #232 game-related shortcut settings, module log access and optional Save Management are composed in the game's management area. Host retains the single Save manager and backend session; consolidated visual acceptance remains pending.
 - #312 boon-management UX consolidation is complete in this source: Exact Boons uses a compact source → boon/effect navigation flow with search, while mounted effects use one two-row grouped selector/editor with stable common controls and Hades-owned contextual actions. Chaos acquisition is intentionally separated into its dedicated blessing + curse pair control.

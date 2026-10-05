@@ -100,6 +100,17 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [
+ {'match': 'literal', 'message': '请刷新后重新随机当前选项。', 'key': 'hades2.reroll.stale'},
+ {'match': 'literal', 'message': 'Choice reroll menu is stale', 'key': 'hades2.reroll.stale',
+  'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
+ {'match': 'literal', 'message': 'Choice reroll cost is stale', 'key': 'hades2.reroll.stale',
+  'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
+ {'match': 'literal', 'message': 'Choice reroll count is insufficient', 'key': 'hades2.reroll.unaffordable',
+  'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
+ {'match': 'literal', 'message': 'Choice reroll source is unavailable', 'key': 'hades2.reroll.unavailable',
+  'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
+ {'match': 'literal', 'message': 'Choice reroll pool has no changed eligible candidates', 'key': 'hades2.reroll.empty',
+  'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
  {'match': 'literal',
   'message': '游戏内祝福菜单缺少受支持的关闭流程，无法安全继续修改。',
   'key': 'hades2.error.traitTrayCloseUnsupported'},
@@ -420,7 +431,7 @@ REGISTRY = [
   'message': 'No eligible special blessings are available',
   'key': 'hades2.error.noEligibleSpecialRewards',
   'runtime_only': True,
-  'runtime': {'commands': ['open_special_choice'], 'producer': {'kind': 'command', 'name': 'open_special_choice'}}},
+  'runtime': {'commands': ['open_special_choice', 'reroll_choice'], 'producer': {'kind': 'helper', 'name': 'fixedPlan'}}},
  {'match': 'regex',
   'pattern': r'^Unsupported (?P<purpose>.+?): missing (?P<missing>.+)$',
   'key': 'hades2.error.nativeFunctionMissing',

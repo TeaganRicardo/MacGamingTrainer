@@ -857,12 +857,14 @@ class Hades2Adapter(GameAdapter):
             self._runtime_bootstrapped=True
             if 'boons' in decoded and 'rewards' in decoded:self._catalog_initialized=True
             last_action=decoded.get('lastAction')
+            asynchronous_unknown=isinstance(last_action,dict) and last_action.get('outcome')=='outcome_unknown'
+            if asynchronous_unknown:self.transport.tainted=True
             if isinstance(last_action,dict) and last_action.get('outcome')=='failed' and last_action.get('error'):
                 logging.warning(
                     'LuaAction command=%s requestId=%s outcome=failed raw=%s',
                     last_action.get('command'),last_action.get('requestId'),last_action.get('error'),
                 )
-            if not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
+            if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:self._adopt_lua_preferences(decoded)
             prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
             catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
             if prior_warnings or catalog_warnings:
@@ -891,6 +893,11 @@ class Hades2Adapter(GameAdapter):
                 self.preferences['nextRoomRewardToken']=None
                 self.state['nextRoomReward']=None
                 self._save_preferences()
+            # A game-owned coroutine may become uncertain after its accepted
+            # debugger reply. Retain this observation and proven consumption,
+            # but do not adopt/replay intent or cross another mutation boundary.
+            if asynchronous_unknown:
+                raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             if not host_observation_only and command=='status' and self.preference_dirty and not replay:
                 return self._replay_preferences()
             if not host_observation_only and command not in ('status',) and not replay and command not in _PREPERSISTED_RUNTIME_COMMANDS:

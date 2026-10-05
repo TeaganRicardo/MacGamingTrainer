@@ -93,6 +93,10 @@ assert validate_command_params(
 assert validate_command_params(
     "lock_rerolls", {"locked": True}
 ) == {"locked": True}
+assert validate_command_params("reroll_choice", {"menuToken": "observed-menu", "expectedCost": 2}) == {"menuToken": "observed-menu", "expectedCost": 2}
+for invalid in ({}, {"menuToken": "", "expectedCost": 1}, {"menuToken": "x", "expectedCost": -1},
+                {"menuToken": "x", "expectedCost": True}, {"menuToken": "x", "expectedCost": 1.5}):
+    expect_error("reroll_choice", invalid, "请刷新后重新随机当前选项。")
 
 assert validate_command_params(
     "spawn_reward", {"reward": "EmptyMaxHealthDrop"}
@@ -257,5 +261,7 @@ assert probe.calls == [(
         "requestId": "chaos-pair-router-request",
     },
 )]
+router.dispatch("reroll_choice", {"menuToken": "observed-menu", "expectedCost": 2}, "reroll-router-request")
+assert probe.calls[-1] == ("reroll_choice", {"menuToken": "observed-menu", "expectedCost": 2, "requestId": "reroll-router-request"})
 
 print("hades2_command_validation_ok")
