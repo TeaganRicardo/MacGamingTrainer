@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.command_contract import Hades2CommandContract
+from games.hades2.error_presentation import Hades2PresentationError
 
 
 class ProbeAdapter:
@@ -44,8 +45,9 @@ assert probe.calls[-1] == (
 
 try:
     contract.dispatch("not_a_command", {}, "unknown-request")
-except ValueError as error:
-    assert str(error) == "未知命令。"
+except Hades2PresentationError as error:
+    assert error.presentation == "hades2.error.invalidCommand"
+    assert error.diagnostic == "未知命令。"
 else:
     raise AssertionError("unknown Host command was accepted")
 
