@@ -1,3 +1,4 @@
+import copy
 import json
 import sys
 import tempfile
@@ -127,7 +128,7 @@ assert adapter.preference_dirty is True
 adapter.runtime.status()
 transport.sources.clear()
 adapter.state["status"] = "waiting"
-state = adapter._replay_preferences(force_full=True)
+state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert adapter.time_warp.speed == 2.0
 assert state["activeFeatures"]["gameSpeed"] is True
 assert adapter.preference_dirty is True
