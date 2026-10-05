@@ -81,7 +81,6 @@ adapter = Hades2Adapter(transport=transport)
 adapter.time_warp = FakeTimeWarp()
 adapter.preference_initialized = True
 adapter.preference_dirty = False
-adapter._runtime_bootstrapped = True
 adapter.state.update(connected=True, status="waiting", scene="loading", capabilities={"setFeature": False})
 
 # A status-only runtime observation must retain the Core-owned Time Warp
@@ -115,7 +114,7 @@ assert adapter.time_warp.speed == 1.0
 
 # Before the new Lua generation is known, persist the desired factor but avoid
 # layering Time Warp over a possible resident r40 Lua speed implementation.
-adapter._runtime_bootstrapped = False
+adapter.runtime.invalidate_generation()
 adapter.preference_dirty = False
 state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 2.0}, "speed-pending")
 assert state["gameSpeed"] == 2.0
@@ -125,7 +124,8 @@ assert adapter.preference_dirty is True
 
 # Once the r41 generation is established, speed applies even in a non-ready
 # scene; Lua-only desired state remains pending until the scene is ready.
-adapter._runtime_bootstrapped = True
+adapter.runtime.status()
+transport.sources.clear()
 adapter.state["status"] = "waiting"
 state = adapter._replay_preferences(force_full=True)
 assert adapter.time_warp.speed == 2.0
@@ -171,7 +171,7 @@ failing = Hades2Adapter(transport=FakeTransport())
 failing.time_warp = FailingTimeWarp()
 failing.preference_initialized = True
 failing.preference_dirty = False
-failing._runtime_bootstrapped = True
+failing.runtime.status()
 failing.state.update(connected=True, status="ready", scene="run", capabilities={"setFeature": True})
 failed_state = failing.dispatch("set_desired", {"feature": "gameSpeed", "value": 2.0}, "speed-fails")
 assert "gameSpeed" not in failed_state.get("featureErrors", {}), failed_state.get("featureErrors")
