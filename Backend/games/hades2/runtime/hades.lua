@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 82 then
+if previousModule and previousModule.revision ~= 83 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 82 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 82, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 83, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -6215,6 +6215,559 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  local rewardAcquisition = (function()
+    local function listContains(list, wanted)
+      if type(list) ~= "table" then return false end
+      for _, value in pairs(list) do
+        local name = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
+        if name == wanted then return true end
+      end
+      return false
+    end
+
+    local function singleTargetList(list, wanted)
+      return listContains(list, wanted) and { wanted } or {}
+    end
+
+    local function findTargetOption(options, wanted)
+      if type(options) ~= "table" then return nil end
+      for _, option in pairs(options) do
+        if type(option) == "table" and option.ItemName == wanted then return option end
+      end
+      return nil
+    end
+
+    local function prepareChaos(blessingName, curseName)
+      requireFunctions("exact Chaos acquisition", {
+        "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
+        "GetProcessedTraitData", "AddTraitToHero",
+      })
+      local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
+      if type(source) ~= "table" or not source.TransformingTraits then
+        error("Chaos exact acquisition is unavailable")
+      end
+
+      if blessingName ~= nil then
+        if type(blessingName) ~= "string" or blessingName == ""
+            or type(TraitData) ~= "table" or type(TraitData[blessingName]) ~= "table"
+            or not listContains(source.PermanentTraits, blessingName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+        local eligibleBlessings = GetEligibleTransformingTrait({ blessingName })
+        if not listContains(eligibleBlessings, blessingName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+      else
+        local eligibleBlessings = GetEligibleTransformingTrait(source.PermanentTraits)
+        if type(eligibleBlessings) ~= "table" or next(eligibleBlessings) == nil then
+          error("Chaos exact acquisition is unavailable")
+        end
+      end
+
+      if curseName ~= nil then
+        if type(curseName) ~= "string" or curseName == ""
+            or type(TraitData) ~= "table" or type(TraitData[curseName]) ~= "table"
+            or not listContains(source.TemporaryTraits, curseName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+        local eligibleCurses = GetEligibleTransformingTrait({ curseName })
+        if not listContains(eligibleCurses, curseName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+      else
+        local eligibleCurses = GetEligibleTransformingTrait(source.TemporaryTraits)
+        if type(eligibleCurses) ~= "table" or next(eligibleCurses) == nil then
+          error("Chaos exact acquisition is unavailable")
+        end
+      end
+
+      source = DeepCopyTable(source)
+      if blessingName ~= nil then source.PermanentTraits = { blessingName } end
+      if curseName ~= nil then source.TemporaryTraits = { curseName } end
+      source.UpgradeOptions = nil
+      source.Rarity = nil
+      return {
+        mode = "chaos",
+        source = source,
+        blessing = blessingName,
+        curse = curseName,
+      }
+    end
+
+    local function runChaos(plan)
+      local source = plan.source
+      SetTraitsOnLoot(source)
+      local option = nil
+      for _, candidate in pairs(source.UpgradeOptions or {}) do
+        if type(candidate) == "table"
+            and (plan.blessing == nil or candidate.ItemName == plan.blessing)
+            and (plan.curse == nil or candidate.SecondaryItemName == plan.curse) then
+          option = candidate
+          break
+        end
+      end
+      if type(option) ~= "table" then error("Chaos exact acquisition is unavailable") end
+      if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
+        error("Chaos exact acquisition failed")
+      end
+      local rarity = option.Rarity or "Common"
+      local blessing = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = option.ItemName, Rarity = rarity,
+      })
+      local curse = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
+      })
+      if type(blessing) ~= "table" or type(curse) ~= "table" then
+        error("Chaos exact acquisition failed")
+      end
+      curse.OnExpire = curse.OnExpire or {}
+      curse.OnExpire.TraitData = blessing
+      curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
+      local added = AddTraitToHero({
+        TraitData = curse,
+        PreProcessedForDisplay = true,
+        FromLoot = true,
+      })
+      if type(added) ~= "table" then error("Chaos exact acquisition failed") end
+      if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
+      if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
+      return nil
+    end
+
+    local function prepareExactReward(entry)
+      if entry.kind ~= "trait" or entry.group ~= "exact" then return nil end
+      if type(entry.trait) ~= "string" or type(TraitData) ~= "table"
+          or type(TraitData[entry.trait]) ~= "table" then
+        error("Exact boon target is unavailable")
+      end
+      requireFunctions("exact boon ownership", { "HeroHasTrait" })
+      if entry.acquisitionMode ~= "seleneTalent" and HeroHasTrait(entry.trait) then
+        error("Selected boon is already owned")
+      end
+
+      if entry.acquisitionMode == "chaosBlessing" then
+        return prepareChaos(entry.trait, nil)
+      end
+      if entry.acquisitionMode == "chaosCurse" then
+        return prepareChaos(nil, entry.trait)
+      end
+      if entry.acquisitionMode == "seleneSpell" then
+        local spellData = type(SpellData) == "table" and SpellData[entry.spellName] or nil
+        if type(spellData) ~= "table" or spellData.TraitName ~= entry.trait
+            or spellData.Skip
+            or (type(spellData.GameStateRequirements) == "table"
+              and spellData.GameStateRequirements.Skip) then
+          error("Selene spell target is unavailable")
+        end
+        local spellRequirements = {
+          "DeepCopyTable", "CreateTalentTree", "AddTraitToHero", "RemoveTrait",
+          "UnequipWeapon", "UpdateTalentPointInvestedCache", "thread",
+        }
+        if spellData.CheckSpellReadyOnAcquire then
+          spellRequirements[#spellRequirements + 1] = "CallFunctionName"
+        else
+          spellRequirements[#spellRequirements + 1] = "SpellReadyPresentation"
+        end
+        requireFunctions("exact Selene spell acquisition", spellRequirements)
+        return { mode = "seleneSpell", spellName = entry.spellName }
+      end
+      if entry.acquisitionMode == "hammerNative" then
+        requireFunctions("exact Hammer acquisition", {
+          "GetEligibleUpgrades", "GetProcessedTraitData", "AddTraitToHero",
+        })
+        local source = type(LootData) == "table" and LootData.WeaponUpgrade or nil
+        if type(source) ~= "table" then error("Selected boon is not currently eligible") end
+        local eligible = GetEligibleUpgrades({}, source, source)
+        if findTargetOption(eligible, entry.trait) == nil then
+          error("Selected boon is not currently eligible")
+        end
+        return { mode = "hammerNative" }
+      end
+      if entry.acquisitionMode == "seleneTalent" then
+        local slotted = seleneModel.currentSpell()
+        if type(slotted) ~= "table" or slotted.Name ~= entry.spellName
+            or #seleneModel.talentNodes(entry.trait, false) == 0 then
+          error("Selene talent is unavailable for the current Path of Stars")
+        end
+        local talentRequirements = {
+          "HeroHasTrait", "GetHeroTrait", "AddTraitToHero", "IncreaseTraitLevel",
+          "UpdateTalentPointInvestedCache",
+        }
+        local base = type(TraitData) == "table" and TraitData[entry.trait] or nil
+        if HeroHasTrait(entry.trait) and type(base) == "table"
+            and type(base.AcquireFunctionName) == "string" then
+          talentRequirements[#talentRequirements + 1] = "CallFunctionName"
+        end
+        requireFunctions("exact Selene talent acquisition", talentRequirements)
+        return { mode = "seleneTalent", spellName = entry.spellName }
+      end
+      if entry.acquisitionMode == "echoLastRunExact" then
+        requireFunctions("Echo previous-run exact eligibility", {
+          "HeroHasTrait", "GetHeroTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled",
+          "GetProcessedTraitData", "AddTraitToHero", "GetLootSourceName",
+        })
+        local eligible, rarity = echoModel.eligibleRarity(entry.trait)
+        if not eligible then error("Echo previous-run boon is no longer eligible") end
+        return { mode = "echoLastRunExact", rarity = rarity }
+      end
+      if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
+        requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
+        if entry.acquisitionMode == "costume" then
+          if entry.sourceId ~= "Arachne" or not traitManagement.isArachneCostumeChoice(entry.trait) then
+            error("Exact costume target is unavailable")
+          end
+          requireFunctions("exact costume acquisition", { "SetupCostume" })
+        end
+        return { mode = entry.acquisitionMode }
+      end
+      if entry.acquisitionMode ~= "ordinaryNative" then
+        error("Exact boon acquisition strategy is unavailable")
+      end
+
+      requireFunctions("exact Olympian boon acquisition", {
+        "DeepCopyTable", "GetReplacementTraits", "GetEligibleUpgrades",
+        "GetProcessedTraitData", "GetTraitCount", "GetTotalHeroTraitValue",
+        "RemoveWeaponTrait", "AddTraitToHero", "SetTraitsOnLoot",
+      })
+      local source = type(LootData) == "table" and LootData[entry.sourceId] or nil
+      if type(source) ~= "table" then error("Exact boon source is unavailable") end
+      source = DeepCopyTable(source)
+      source.PriorityUpgrades = singleTargetList(source.PriorityUpgrades, entry.trait)
+      source.WeaponUpgrades = singleTargetList(source.WeaponUpgrades, entry.trait)
+      source.Traits = singleTargetList(source.Traits, entry.trait)
+      source.UpgradeOptions = nil
+      source.Rarity = nil
+
+      local replacement = findTargetOption(GetReplacementTraits({ entry.trait }), entry.trait)
+      if replacement and replacement.TraitToReplace then
+        return { mode = "ordinaryReplacement", source = source, option = replacement }
+      end
+
+      local eligible = GetEligibleUpgrades({}, source, source)
+      if findTargetOption(eligible, entry.trait) == nil then
+        error("Selected boon is not currently eligible")
+      end
+      return { mode = "ordinaryNative", source = source }
+    end
+
+    local function addOrdinaryExact(entry, exactPlan)
+      local source = exactPlan.source
+      local option
+      if exactPlan.mode == "ordinaryReplacement" then
+        option = exactPlan.option
+      else
+        SetTraitsOnLoot(source)
+        option = findTargetOption(source.UpgradeOptions, entry.trait)
+        if option == nil then error("Selected boon became unavailable before acquisition") end
+      end
+
+      local rarity = option.Rarity or "Common"
+      local stackNum = nil
+      if option.TraitToReplace then
+        local existingNum = GetTraitCount(CurrentRun.Hero, { Name = option.TraitToReplace })
+        stackNum = existingNum + GetTotalHeroTraitValue("ExchangeLevelBonus")
+      end
+      local processed = GetProcessedTraitData({
+        Unit = CurrentRun.Hero, TraitName = entry.trait, Rarity = rarity, StackNum = stackNum,
+      })
+      if type(processed) ~= "table" then error("Exact boon processing failed") end
+      if option.TraitToReplace then
+        processed.TraitToReplace = option.TraitToReplace
+        processed.OldRarity = option.OldRarity
+        RemoveWeaponTrait(option.TraitToReplace)
+      end
+      local added = AddTraitToHero({
+        TraitData = processed,
+        PreProcessedForDisplay = option.TraitToReplace == nil,
+        FromLoot = true,
+      })
+      if type(added) ~= "table" then error("Exact boon acquisition did not return a trait") end
+      if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[entry.trait] = true end
+      if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = entry.trait end
+      if type(CheckNewTraitManaReserveShrineUpgrade) == "function" then
+        CheckNewTraitManaReserveShrineUpgrade(added, { IsGodLoot = true })
+      end
+      if type(CheckAndAddOlympianDuo) == "function" then CheckAndAddOlympianDuo(source) end
+      return nil
+    end
+
+    local function addStoreTrait(entry)
+      requireFunctions("store trait spawning", { "GetProcessedTraitData", "AddTraitToHero" })
+      local traitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = entry.trait })
+      if type(traitData) ~= "table" then error("Store trait processing failed") end
+      if type(RecalculateStoreTraitDurations) == "function" then RecalculateStoreTraitDurations(traitData) end
+      local extension = nil
+      if type(HeroHasTrait) == "function" and HeroHasTrait("ExtendedShopTrait") then
+        requireFunctions("extended store trait eligibility", { "GetHeroTrait", "IsTraitActive" })
+        extension = GetHeroTrait("ExtendedShopTrait")
+        if type(extension) == "table"
+            and type(extension.ValidPermanentItemsLookup) == "table"
+            and extension.ValidPermanentItemsLookup[entry.trait]
+            and IsTraitActive(extension) then
+          traitData.MakePermanent = true
+        end
+      end
+      if traitData.MakePermanent and type(extension) == "table" and finite(extension.BossExtension) then
+        requireFunctions("extended store trait", { "UseHeroTraitsWithValue" })
+        traitData.UsesAsEncounters = false
+        traitData.UsesAsRooms = false
+        traitData.UsesAsBosses = true
+        traitData.RemainingUses = extension.BossExtension
+        traitData.StatLines = { "ExtendedStoreUsesRemainingDisplay1" }
+        if traitData.CustomStatLinesWithShrineUpgrade ~= nil then
+          requireFunctions("extended store trait shrine display", { "GetNumShrineUpgrades" })
+          if GetNumShrineUpgrades(traitData.CustomStatLinesWithShrineUpgrade.ShrineUpgradeName) > 0 then
+            traitData.CustomStatLinesWithShrineUpgrade.StatLines[1] = "ExtendedStoreUsesRemainingDisplay1"
+          end
+        end
+        UseHeroTraitsWithValue("BossExtension", true)
+      end
+      if traitData.IncreaseUsesOnStack and type(HeroHasTrait) == "function" and HeroHasTrait(entry.trait) then
+        requireFunctions("store trait stacking", { "GetHeroTrait", "UpdateTraitNumber" })
+        local currentTrait = GetHeroTrait(entry.trait)
+        if type(currentTrait) ~= "table" then error("Existing store trait is unavailable") end
+        currentTrait.RemainingUses = number(currentTrait.RemainingUses) + number(traitData.RemainingUses)
+        UpdateTraitNumber(currentTrait)
+      else
+        AddTraitToHero({ TraitData = traitData, SkipQuestStatusCheck = true, SkipAddToHUD = true })
+      end
+      if traitData.StoreCostMultiplier
+          and type(CurrentRun.CurrentRoom) == "table"
+          and type(CurrentRun.CurrentRoom.Store) == "table"
+          and type(CurrentRun.CurrentRoom.Store.StoreOptions) == "table" then
+        requireFunctions("store cost refresh", { "ShallowCopyTable" })
+        for _, currentUpgradeData in pairs(CurrentRun.CurrentRoom.Store.StoreOptions) do
+          if type(currentUpgradeData) == "table" then
+            currentUpgradeData.Processed = nil
+            currentUpgradeData.DataOverrides = ShallowCopyTable(currentUpgradeData)
+            currentUpgradeData.DataOverrides.ResourceCosts = nil
+          end
+        end
+      end
+      return nil
+    end
+
+    local function addTraitReward(entry, exactPlan)
+      if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then
+        error("Trait reward is unavailable")
+      end
+      if exactPlan and exactPlan.mode == "chaos" then return runChaos(exactPlan) end
+      if exactPlan and exactPlan.mode == "seleneSpell" then
+        seleneModel.applySpell(exactPlan.spellName)
+        return nil
+      end
+      if exactPlan and exactPlan.mode == "seleneTalent" then
+        seleneModel.applyTalent(entry.trait)
+        return nil
+      end
+      if exactPlan and exactPlan.mode == "hammerNative" then
+        hammerModel.applyExact(entry.trait)
+        return nil
+      end
+      if exactPlan and exactPlan.mode == "echoLastRunExact" then
+        echoModel.applyExact(entry.trait, exactPlan.rarity)
+        return nil
+      end
+      if exactPlan and exactPlan.mode == "costume" then
+        traitManagement.applyCostume(entry.trait)
+        return nil
+      end
+      if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
+        return addOrdinaryExact(entry, exactPlan)
+      end
+      if entry.storeTrait then return addStoreTrait(entry) end
+
+      requireFunctions("special blessing", { "AddTraitToHero" })
+      AddTraitToHero({ TraitName = entry.trait, FromLoot = true })
+      if entry.sourceId == "Arachne" then
+        requireFunctions("Arachne costume spawning", { "SetupCostume" })
+        SetupCostume()
+      end
+      return nil
+    end
+
+    local function spawnConsumable(rewardId)
+      requireFunctions("consumable spawning", { "SpawnObstacle", "CreateConsumableItem" })
+      local objectId = SpawnObstacle({
+        Name = rewardId, DestinationId = CurrentRun.Hero.ObjectId, Group = "Standing", OffsetX = 100,
+      })
+      if not finite(objectId) then error("Consumable spawn did not return an object ID") end
+      local item = CreateConsumableItem(objectId, rewardId, 0, {
+        IgnoreSounds = true, RunProgressUpgradeEligible = true, AutoLoadPackages = true, IgnoreAssert = true,
+      })
+      if item == nil then error("Consumable initialization failed") end
+      if type(item) == "table" then
+        item.DoesNotBlockExit = true
+        item.IgnorePurchase = true
+        item.PurchaseRequirements = nil
+      end
+      return objectId
+    end
+
+    local function spawnGenericLoot(rewardId)
+      if rewardId == "SpellDrop" then
+        requireFunctions("Selene room reward spawning", { "SpawnRoomReward" })
+        local loot = SpawnRoomReward(CurrentRun.CurrentRoom, {
+          RewardOverride = "SpellDrop",
+          SpawnRewardOnId = CurrentRun.Hero.ObjectId, AutoLoadPackages = true,
+        })
+        if type(loot) ~= "table" or not finite(loot.ObjectId) then
+          error("Selene loot spawn did not return an object ID")
+        end
+        return loot.ObjectId
+      end
+
+      requireFunctions("loot spawning", { "CreateLoot" })
+      if type(MapState) ~= "table" or type(MapState.RoomRequiredObjects) ~= "table"
+          or type(LootObjects) ~= "table" then
+        error("Unsupported loot spawning: scene loot tables unavailable")
+      end
+      local lootData = LootData[rewardId]
+      local packages, packageSeen = {}, {}
+      local function addPackage(value)
+        if type(value) == "string" and value ~= "" then
+          if not packageSeen[value] then
+            packageSeen[value] = true
+            packages[#packages + 1] = value
+          end
+        elseif type(value) == "table" then
+          if type(value.Name) == "string" then addPackage(value.Name) end
+          if type(value.Names) == "table" then addPackage(value.Names) end
+          for key, item in pairs(value) do
+            if key ~= "Name" and key ~= "Names"
+                and (type(item) == "string" or type(item) == "table") then
+              addPackage(item)
+            end
+          end
+        end
+      end
+      addPackage(lootData.RequiredPackage)
+      addPackage(lootData.RequiredPackages)
+      if type(GameData) == "table" and type(GameData.MissingPackages) == "table" then
+        addPackage(GameData.MissingPackages[rewardId])
+      end
+      if #packages > 0 then
+        requireFunctions("loot package loading", { "LoadPackages" })
+        local ok, message = pcall(LoadPackages, { Names = packages })
+        if not ok then error("Loot package loading failed: " .. tostring(message)) end
+      end
+      local setup = lootData.SetupEvents
+      if setup ~= nil then
+        if type(setup) ~= "table" then error("Unsupported loot setup events") end
+        for _, event in ipairs(setup) do
+          local fn = event.FunctionName
+          if fn ~= "SilenceForDreamRun" and fn ~= "PregenerateSpells" then
+            error("Unsupported loot setup event: " .. tostring(fn))
+          end
+          requireFunctions("loot setup", { fn })
+          if event.Args and (event.Args.BlockInteract or event.Args.ForceTextLines) then
+            error("Unsupported loot setup arguments")
+          end
+        end
+      end
+      local loot = CreateLoot({
+        Name = rewardId, SpawnPoint = CurrentRun.Hero.ObjectId,
+        OffsetX = 100, AutoLoadPackages = true, DoesNotBlockExit = true,
+      })
+      if type(loot) ~= "table" or not finite(loot.ObjectId) then
+        error("Loot spawn did not return an object ID")
+      end
+      return loot.ObjectId
+    end
+
+    local function runReward(plan)
+      local entry, rewardId, exactPlan = plan.entry, plan.rewardId, plan.exactPlan
+      if entry.spawnMode == "weapon_loot" then
+        requireFunctions("shop hammer spawning", { "CreateWeaponLoot" })
+        local loot = CreateWeaponLoot({
+          SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+          DoesNotBlockExit = true, SuppressSpawnSounds = true,
+        })
+        if type(loot) ~= "table" or not finite(loot.ObjectId) then
+          error("Daedalus Hammer shop spawn did not return an object ID")
+        end
+        return loot.ObjectId
+      end
+      if entry.spawnMode == "hermes_loot" then
+        requireFunctions("shop Hermes spawning", { "CreateHermesLoot" })
+        local loot = CreateHermesLoot({
+          SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+          DoesNotBlockExit = true, SuppressSpawnSounds = true, BoughtFromShop = true,
+        })
+        if type(loot) ~= "table" or not finite(loot.ObjectId) then
+          error("Hermes shop spawn did not return an object ID")
+        end
+        loot.CanReceiveGift = false
+        return loot.ObjectId
+      end
+      if entry.spawnMode == "random_loot" or entry.spawnMode == "boosted_random_loot" then
+        requireFunctions("random shop boon spawning", { "GetEligibleInteractedGod", "GiveLoot" })
+        local forceLootName = GetEligibleInteractedGod()
+        if type(forceLootName) ~= "string" or forceLootName == "" then
+          error("No eligible Olympian boon is available")
+        end
+        local lootArgs = {
+          ForceLootName = forceLootName, SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
+          BoughtFromShop = true, DoesNotBlockExit = true, AutoLoadPackages = true,
+        }
+        if entry.spawnMode == "boosted_random_loot" then
+          lootArgs.AddBoostedAnimation = true
+          lootArgs.BoonRaritiesOverride = { Legendary = 0.1, Epic = 0.25, Rare = 0.90 }
+        end
+        local loot = GiveLoot(lootArgs)
+        if type(loot) ~= "table" or not finite(loot.ObjectId) then
+          error("Random shop boon spawn did not return an object ID")
+        end
+        loot.CanReceiveGift = false
+        if lootArgs.BoonRaritiesOverride ~= nil then
+          loot.BoonRaritiesOverride = lootArgs.BoonRaritiesOverride
+        end
+        return loot.ObjectId
+      end
+      if entry.kind == "trait" then return addTraitReward(entry, exactPlan) end
+      if entry.kind == "consumable" then return spawnConsumable(rewardId) end
+      return spawnGenericLoot(rewardId)
+    end
+
+    local function prepare(command, params)
+      if command == "acquire_chaos_pair" then
+        if not ready() or sceneName() ~= "run"
+            or (type(ScreenState) == "table" and ScreenState.InTransition)
+            or type(params.blessing) ~= "string" or params.blessing == ""
+            or type(params.curse) ~= "string" or params.curse == "" then
+          error("Chaos exact acquisition is unavailable")
+        end
+        return { chaosPlan = prepareChaos(params.blessing, params.curse) }
+      end
+      if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
+
+      if not ready() or sceneName() ~= "run" then
+        error("Reward spawning requires an active run room")
+      end
+      local _, allowed = rewards()
+      local rewardId = params.reward
+      local entry = type(rewardId) == "string" and allowed[rewardId] or nil
+      if not entry then entry = echoModel.hiddenEntry(rewardId) end
+      if not entry then error("Unknown or unsupported reward") end
+      if type(ScreenState) == "table" and ScreenState.InTransition then
+        error("Cannot spawn a reward during a transition")
+      end
+      return {
+        rewardId = rewardId,
+        entry = entry,
+        exactPlan = prepareExactReward(entry),
+      }
+    end
+
+    local function run(command, _, plan)
+      if command == "acquire_chaos_pair" then return runChaos(plan.chaosPlan) end
+      if command == "spawn_reward" then return runReward(plan) end
+      error("Unknown reward acquisition command")
+    end
+
+    return { prepare = prepare, run = run }
+  end)()
+
   local function editResource(id, target)
     local current = number(GameState.Resources[id])
     if M.resourceLocks[id] ~= nil then M.resourceLocks[id] = target end
@@ -6317,6 +6870,12 @@ if __MacGamingTrainerV1 == nil then
       local target
       return actionLedger.run(command, params, function(record) return roomGeneration.generate(record, target) end,
         function() target = roomGeneration.prepare(params) end)
+    end
+    if command == "spawn_reward" or command == "acquire_chaos_pair" then
+      local plan
+      return actionLedger.run(command, params,
+        function(record) return rewardAcquisition.run(command, record, plan) end,
+        function() plan = rewardAcquisition.prepare(command, params) end)
     end
     if command == "set_chaos_gate_probability" then
       roomGeneration.setChaosProbability(params.probability)
@@ -6690,556 +7249,6 @@ if __MacGamingTrainerV1 == nil then
         thread(runChoice)
         return nil, "accepted"
       end)
-    end
-    if command == "acquire_chaos_pair" then
-      local pairSource = nil
-      local function containsName(list, wanted)
-        if type(list) ~= "table" then return false end
-        for _, value in pairs(list) do
-          local name = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
-          if name == wanted then return true end
-        end
-        return false
-      end
-      return actionLedger.run(command, params, function()
-        local source = pairSource
-        if type(source) ~= "table" then error("Chaos exact acquisition is unavailable") end
-        SetTraitsOnLoot(source)
-        local option = nil
-        for _, candidate in pairs(source.UpgradeOptions or {}) do
-          if type(candidate) == "table"
-              and candidate.ItemName == params.blessing
-              and candidate.SecondaryItemName == params.curse then
-            option = candidate
-            break
-          end
-        end
-        if type(option) ~= "table" then error("Chaos exact acquisition is unavailable") end
-        local rarity = option.Rarity or "Common"
-        local blessing = GetProcessedTraitData({
-          Unit = CurrentRun.Hero, TraitName = params.blessing, Rarity = rarity,
-        })
-        local curse = GetProcessedTraitData({
-          Unit = CurrentRun.Hero, TraitName = params.curse, Rarity = rarity,
-        })
-        if type(blessing) ~= "table" or type(curse) ~= "table" then
-          error("Chaos exact acquisition failed")
-        end
-        curse.OnExpire = curse.OnExpire or {}
-        curse.OnExpire.TraitData = blessing
-        curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
-        local added = AddTraitToHero({
-          TraitData = curse,
-          PreProcessedForDisplay = true,
-          FromLoot = true,
-        })
-        if type(added) ~= "table" then error("Chaos exact acquisition failed") end
-        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
-        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
-        return nil
-      end, function()
-        if not ready() or sceneName() ~= "run" then error("Chaos exact acquisition is unavailable") end
-        if type(ScreenState) == "table" and ScreenState.InTransition then
-          error("Chaos exact acquisition is unavailable")
-        end
-        if type(params.blessing) ~= "string" or params.blessing == ""
-            or type(params.curse) ~= "string" or params.curse == "" then
-          error("Chaos exact acquisition is unavailable")
-        end
-        requireFunctions("exact Chaos pair acquisition", {
-          "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
-          "GetProcessedTraitData", "AddTraitToHero",
-        })
-        local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
-        if type(source) ~= "table" or not source.TransformingTraits
-            or type(TraitData) ~= "table"
-            or type(TraitData[params.blessing]) ~= "table"
-            or type(TraitData[params.curse]) ~= "table"
-            or not containsName(source.PermanentTraits, params.blessing)
-            or not containsName(source.TemporaryTraits, params.curse) then
-          error("Chaos exact acquisition is unavailable")
-        end
-        local eligibleBlessings = GetEligibleTransformingTrait({ params.blessing })
-        local eligibleCurses = GetEligibleTransformingTrait({ params.curse })
-        if not containsName(eligibleBlessings, params.blessing)
-            or not containsName(eligibleCurses, params.curse) then
-          error("Chaos exact acquisition is unavailable")
-        end
-        pairSource = DeepCopyTable(source)
-        pairSource.PermanentTraits = { params.blessing }
-        pairSource.TemporaryTraits = { params.curse }
-        pairSource.UpgradeOptions = nil
-        pairSource.Rarity = nil
-      end)
-    end
-    if command == "spawn_reward" then
-      if not ready() or sceneName() ~= "run" then error("Reward spawning requires an active run room") end
-      local _, allowed = rewards()
-      local rewardId = params.reward
-      local entry = type(rewardId) == "string" and allowed[rewardId] or nil
-      if not entry then entry = echoModel.hiddenEntry(rewardId) end
-      if not entry then error("Unknown or unsupported reward") end
-      if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot spawn a reward during a transition") end
-
-      local exactPlan = nil
-      local function listContains(list, wanted)
-        if type(list) ~= "table" then return false end
-        for _, value in pairs(list) do
-          local name = type(value) == "table" and (value.ItemName or value.TraitName or value.Name) or value
-          if name == wanted then return true end
-        end
-        return false
-      end
-      local function singleTargetList(list, wanted)
-        return listContains(list, wanted) and { wanted } or {}
-      end
-      local function findTargetOption(options, wanted)
-        if type(options) ~= "table" then return nil end
-        for _, option in pairs(options) do
-          if type(option) == "table" and option.ItemName == wanted then return option end
-        end
-        return nil
-      end
-      local function prepareExactReward()
-        if entry.kind ~= "trait" or entry.group ~= "exact" then return end
-        if type(entry.trait) ~= "string" or type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then
-          error("Exact boon target is unavailable")
-        end
-        requireFunctions("exact boon ownership", { "HeroHasTrait" })
-        if entry.acquisitionMode ~= "seleneTalent" and HeroHasTrait(entry.trait) then
-          error("Selected boon is already owned")
-        end
-
-        if entry.acquisitionMode == "chaosBlessing" or entry.acquisitionMode == "chaosCurse" then
-          requireFunctions("exact Chaos acquisition", {
-            "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
-            "GetProcessedTraitData", "AddTraitToHero",
-          })
-          local source = type(LootData) == "table" and LootData.TrialUpgrade or nil
-          if type(source) ~= "table" or not source.TransformingTraits then
-            error("Chaos exact acquisition is unavailable")
-          end
-          local selectedPool = entry.acquisitionMode == "chaosBlessing"
-            and source.PermanentTraits or source.TemporaryTraits
-          if not listContains(selectedPool, entry.trait) then
-            error("Chaos exact acquisition is unavailable")
-          end
-          local eligibleSelected = GetEligibleTransformingTrait({ entry.trait })
-          if not listContains(eligibleSelected, entry.trait) then
-            error("Chaos exact acquisition is unavailable")
-          end
-          local counterpartPool = entry.acquisitionMode == "chaosBlessing"
-            and source.TemporaryTraits or source.PermanentTraits
-          local eligibleCounterparts = GetEligibleTransformingTrait(counterpartPool)
-          if type(eligibleCounterparts) ~= "table" or next(eligibleCounterparts) == nil then
-            error("Chaos exact acquisition is unavailable")
-          end
-          source = DeepCopyTable(source)
-          if entry.acquisitionMode == "chaosBlessing" then
-            source.PermanentTraits = { entry.trait }
-          else
-            source.TemporaryTraits = { entry.trait }
-          end
-          source.UpgradeOptions = nil
-          source.Rarity = nil
-          exactPlan = { mode = entry.acquisitionMode, source = source }
-          return
-        end
-        if entry.acquisitionMode == "seleneSpell" then
-          local spellData = type(SpellData) == "table" and SpellData[entry.spellName] or nil
-          if type(spellData) ~= "table" or spellData.TraitName ~= entry.trait
-              or spellData.Skip
-              or (type(spellData.GameStateRequirements) == "table"
-                and spellData.GameStateRequirements.Skip) then
-            error("Selene spell target is unavailable")
-          end
-          local spellRequirements = {
-            "DeepCopyTable", "CreateTalentTree", "AddTraitToHero", "RemoveTrait",
-            "UnequipWeapon", "UpdateTalentPointInvestedCache", "thread",
-          }
-          if spellData.CheckSpellReadyOnAcquire then
-            spellRequirements[#spellRequirements + 1] = "CallFunctionName"
-          else
-            spellRequirements[#spellRequirements + 1] = "SpellReadyPresentation"
-          end
-          requireFunctions("exact Selene spell acquisition", spellRequirements)
-          exactPlan = { mode = "seleneSpell", spellName = entry.spellName }
-          return
-        end
-        if entry.acquisitionMode == "hammerNative" then
-          requireFunctions("exact Hammer acquisition", {
-            "GetEligibleUpgrades", "GetProcessedTraitData", "AddTraitToHero",
-          })
-          local source = type(LootData) == "table" and LootData.WeaponUpgrade or nil
-          if type(source) ~= "table" then error("Selected boon is not currently eligible") end
-          local eligible = GetEligibleUpgrades({}, source, source)
-          if findTargetOption(eligible, entry.trait) == nil then
-            error("Selected boon is not currently eligible")
-          end
-          exactPlan = { mode = "hammerNative" }
-          return
-        end
-        if entry.acquisitionMode == "seleneTalent" then
-          local slotted = seleneModel.currentSpell()
-          if type(slotted) ~= "table" or slotted.Name ~= entry.spellName
-              or #seleneModel.talentNodes(entry.trait, false) == 0 then
-            error("Selene talent is unavailable for the current Path of Stars")
-          end
-          local talentRequirements = {
-            "HeroHasTrait", "GetHeroTrait", "AddTraitToHero", "IncreaseTraitLevel",
-            "UpdateTalentPointInvestedCache",
-          }
-          local base = type(TraitData) == "table" and TraitData[entry.trait] or nil
-          if HeroHasTrait(entry.trait) and type(base) == "table"
-              and type(base.AcquireFunctionName) == "string" then
-            talentRequirements[#talentRequirements + 1] = "CallFunctionName"
-          end
-          requireFunctions("exact Selene talent acquisition", talentRequirements)
-          exactPlan = { mode = "seleneTalent", spellName = entry.spellName }
-          return
-        end
-        if entry.acquisitionMode == "echoLastRunExact" then
-          requireFunctions("Echo previous-run exact eligibility", {
-            "HeroHasTrait", "GetHeroTrait", "IsGodTrait", "IsTraitEligible", "HeroSlotFilled",
-            "GetProcessedTraitData", "AddTraitToHero", "GetLootSourceName",
-          })
-          local eligible, rarity = echoModel.eligibleRarity(entry.trait)
-          if not eligible then error("Echo previous-run boon is no longer eligible") end
-          exactPlan = { mode = "echoLastRunExact", rarity = rarity }
-          return
-        end
-        if entry.acquisitionMode == "direct" or entry.acquisitionMode == "costume" then
-          requireFunctions("exact special boon acquisition", { "AddTraitToHero" })
-          if entry.acquisitionMode == "costume" then
-            if entry.sourceId ~= "Arachne" or not traitManagement.isArachneCostumeChoice(entry.trait) then
-              error("Exact costume target is unavailable")
-            end
-            requireFunctions("exact costume acquisition", { "SetupCostume" })
-          end
-          exactPlan = { mode = entry.acquisitionMode }
-          return
-        end
-        if entry.acquisitionMode ~= "ordinaryNative" then
-          error("Exact boon acquisition strategy is unavailable")
-        end
-
-        requireFunctions("exact Olympian boon acquisition", {
-          "DeepCopyTable", "GetReplacementTraits", "GetEligibleUpgrades",
-          "GetProcessedTraitData", "GetTraitCount", "GetTotalHeroTraitValue",
-          "RemoveWeaponTrait", "AddTraitToHero", "SetTraitsOnLoot",
-        })
-        local source = type(LootData) == "table" and LootData[entry.sourceId] or nil
-        if type(source) ~= "table" then error("Exact boon source is unavailable") end
-        source = DeepCopyTable(source)
-        source.PriorityUpgrades = singleTargetList(source.PriorityUpgrades, entry.trait)
-        source.WeaponUpgrades = singleTargetList(source.WeaponUpgrades, entry.trait)
-        source.Traits = singleTargetList(source.Traits, entry.trait)
-        source.UpgradeOptions = nil
-        source.Rarity = nil
-
-        local replacement = findTargetOption(GetReplacementTraits({ entry.trait }), entry.trait)
-        if replacement and replacement.TraitToReplace then
-          exactPlan = { mode = "ordinaryReplacement", source = source, option = replacement }
-          return
-        end
-
-        local eligible = GetEligibleUpgrades({}, source, source)
-        if findTargetOption(eligible, entry.trait) == nil then
-          error("Selected boon is not currently eligible")
-        end
-        exactPlan = { mode = "ordinaryNative", source = source }
-      end
-      local function addChaosExact()
-        local source = exactPlan.source
-        SetTraitsOnLoot(source)
-        local option = nil
-        for _, candidate in pairs(source.UpgradeOptions or {}) do
-          if type(candidate) == "table" then
-            if exactPlan.mode == "chaosBlessing" and candidate.ItemName == entry.trait then
-              option = candidate
-              break
-            elseif exactPlan.mode == "chaosCurse" and candidate.SecondaryItemName == entry.trait then
-              option = candidate
-              break
-            end
-          end
-        end
-        if type(option) ~= "table" then
-          error("Chaos exact acquisition is unavailable")
-        end
-        if type(option.ItemName) ~= "string" or type(option.SecondaryItemName) ~= "string" then
-          error("Chaos exact acquisition failed")
-        end
-        local rarity = option.Rarity or "Common"
-        local blessing = GetProcessedTraitData({
-          Unit = CurrentRun.Hero, TraitName = option.ItemName, Rarity = rarity,
-        })
-        local curse = GetProcessedTraitData({
-          Unit = CurrentRun.Hero, TraitName = option.SecondaryItemName, Rarity = rarity,
-        })
-        if type(blessing) ~= "table" or type(curse) ~= "table" then
-          error("Chaos exact acquisition failed")
-        end
-        curse.OnExpire = curse.OnExpire or {}
-        curse.OnExpire.TraitData = blessing
-        curse.TraitTitle = "ChaosCombo_" .. curse.Name .. "_" .. blessing.Name
-        local added = AddTraitToHero({
-          TraitData = curse,
-          PreProcessedForDisplay = true,
-          FromLoot = true,
-        })
-        if type(added) ~= "table" then error("Chaos exact acquisition failed") end
-        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[curse.Name] = true end
-        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = curse.Name end
-        return nil
-      end
-
-      local function addOrdinaryExact()
-        local source = exactPlan.source
-        local option
-        if exactPlan.mode == "ordinaryReplacement" then
-          option = exactPlan.option
-        else
-          SetTraitsOnLoot(source)
-          option = findTargetOption(source.UpgradeOptions, entry.trait)
-          if option == nil then error("Selected boon became unavailable before acquisition") end
-        end
-
-        local rarity = option.Rarity or "Common"
-        local stackNum = nil
-        if option.TraitToReplace then
-          local existingNum = GetTraitCount(CurrentRun.Hero, { Name = option.TraitToReplace })
-          stackNum = existingNum + GetTotalHeroTraitValue("ExchangeLevelBonus")
-        end
-        local processed = GetProcessedTraitData({
-          Unit = CurrentRun.Hero, TraitName = entry.trait, Rarity = rarity, StackNum = stackNum,
-        })
-        if type(processed) ~= "table" then error("Exact boon processing failed") end
-        if option.TraitToReplace then
-          processed.TraitToReplace = option.TraitToReplace
-          processed.OldRarity = option.OldRarity
-          RemoveWeaponTrait(option.TraitToReplace)
-        end
-        local added = AddTraitToHero({
-          TraitData = processed,
-          PreProcessedForDisplay = option.TraitToReplace == nil,
-          FromLoot = true,
-        })
-        if type(added) ~= "table" then error("Exact boon acquisition did not return a trait") end
-        if type(CurrentRun.PickedTraits) == "table" then CurrentRun.PickedTraits[entry.trait] = true end
-        if type(SessionMapState) == "table" then SessionMapState.LastUpgradeChoice = entry.trait end
-        if type(CheckNewTraitManaReserveShrineUpgrade) == "function" then
-          CheckNewTraitManaReserveShrineUpgrade(added, { IsGodLoot = true })
-        end
-        if type(CheckAndAddOlympianDuo) == "function" then CheckAndAddOlympianDuo(source) end
-        return nil
-      end
-
-      return actionLedger.run(command, params, function()
-        if entry.spawnMode == "weapon_loot" then
-          requireFunctions("shop hammer spawning", { "CreateWeaponLoot" })
-          local loot = CreateWeaponLoot({
-            SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
-            DoesNotBlockExit = true, SuppressSpawnSounds = true,
-          })
-          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Daedalus Hammer shop spawn did not return an object ID") end
-          return loot.ObjectId
-        end
-        if entry.spawnMode == "hermes_loot" then
-          requireFunctions("shop Hermes spawning", { "CreateHermesLoot" })
-          local loot = CreateHermesLoot({
-            SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
-            DoesNotBlockExit = true, SuppressSpawnSounds = true, BoughtFromShop = true,
-          })
-          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Hermes shop spawn did not return an object ID") end
-          loot.CanReceiveGift = false
-          return loot.ObjectId
-        end
-        if entry.spawnMode == "random_loot" or entry.spawnMode == "boosted_random_loot" then
-          requireFunctions("random shop boon spawning", { "GetEligibleInteractedGod", "GiveLoot" })
-          local forceLootName = GetEligibleInteractedGod()
-          if type(forceLootName) ~= "string" or forceLootName == "" then error("No eligible Olympian boon is available") end
-          local lootArgs = {
-            ForceLootName = forceLootName, SpawnPoint = CurrentRun.Hero.ObjectId, OffsetX = 100,
-            BoughtFromShop = true, DoesNotBlockExit = true, AutoLoadPackages = true,
-          }
-          if entry.spawnMode == "boosted_random_loot" then
-            lootArgs.AddBoostedAnimation = true
-            lootArgs.BoonRaritiesOverride = { Legendary = 0.1, Epic = 0.25, Rare = 0.90 }
-          end
-          local loot = GiveLoot(lootArgs)
-          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Random shop boon spawn did not return an object ID") end
-          loot.CanReceiveGift = false
-          if lootArgs.BoonRaritiesOverride ~= nil then loot.BoonRaritiesOverride = lootArgs.BoonRaritiesOverride end
-          return loot.ObjectId
-        end
-        if entry.kind == "trait" then
-          if type(TraitData) ~= "table" or type(TraitData[entry.trait]) ~= "table" then error("Trait reward is unavailable") end
-          if exactPlan and (exactPlan.mode == "chaosBlessing" or exactPlan.mode == "chaosCurse") then
-            return addChaosExact()
-          end
-          if exactPlan and exactPlan.mode == "seleneSpell" then
-            seleneModel.applySpell(exactPlan.spellName)
-            return nil
-          end
-          if exactPlan and exactPlan.mode == "seleneTalent" then
-            seleneModel.applyTalent(entry.trait)
-            return nil
-          end
-          if exactPlan and exactPlan.mode == "hammerNative" then
-            hammerModel.applyExact(entry.trait)
-            return nil
-          end
-          if exactPlan and exactPlan.mode == "echoLastRunExact" then
-            echoModel.applyExact(entry.trait, exactPlan.rarity)
-            return nil
-          end
-          if exactPlan and exactPlan.mode == "costume" then
-            traitManagement.applyCostume(entry.trait)
-            return nil
-          end
-          if exactPlan and (exactPlan.mode == "ordinaryNative" or exactPlan.mode == "ordinaryReplacement") then
-            return addOrdinaryExact()
-          end
-          if entry.storeTrait then
-            requireFunctions("store trait spawning", { "GetProcessedTraitData", "AddTraitToHero" })
-            local traitData = GetProcessedTraitData({ Unit = CurrentRun.Hero, TraitName = entry.trait })
-            if type(traitData) ~= "table" then error("Store trait processing failed") end
-            if type(RecalculateStoreTraitDurations) == "function" then RecalculateStoreTraitDurations(traitData) end
-            local extension = nil
-            if type(HeroHasTrait) == "function" and HeroHasTrait("ExtendedShopTrait") then
-              requireFunctions("extended store trait eligibility", { "GetHeroTrait", "IsTraitActive" })
-              extension = GetHeroTrait("ExtendedShopTrait")
-              if type(extension) == "table"
-                  and type(extension.ValidPermanentItemsLookup) == "table"
-                  and extension.ValidPermanentItemsLookup[entry.trait]
-                  and IsTraitActive(extension) then
-                traitData.MakePermanent = true
-              end
-            end
-            if traitData.MakePermanent and type(extension) == "table" and finite(extension.BossExtension) then
-              requireFunctions("extended store trait", { "UseHeroTraitsWithValue" })
-              traitData.UsesAsEncounters = false
-              traitData.UsesAsRooms = false
-              traitData.UsesAsBosses = true
-              traitData.RemainingUses = extension.BossExtension
-              traitData.StatLines = { "ExtendedStoreUsesRemainingDisplay1" }
-              if traitData.CustomStatLinesWithShrineUpgrade ~= nil then
-                requireFunctions("extended store trait shrine display", { "GetNumShrineUpgrades" })
-                if GetNumShrineUpgrades(traitData.CustomStatLinesWithShrineUpgrade.ShrineUpgradeName) > 0 then
-                  traitData.CustomStatLinesWithShrineUpgrade.StatLines[1] = "ExtendedStoreUsesRemainingDisplay1"
-                end
-              end
-              UseHeroTraitsWithValue("BossExtension", true)
-            end
-            if traitData.IncreaseUsesOnStack and type(HeroHasTrait) == "function" and HeroHasTrait(entry.trait) then
-              requireFunctions("store trait stacking", { "GetHeroTrait", "UpdateTraitNumber" })
-              local currentTrait = GetHeroTrait(entry.trait)
-              if type(currentTrait) ~= "table" then error("Existing store trait is unavailable") end
-              currentTrait.RemainingUses = number(currentTrait.RemainingUses) + number(traitData.RemainingUses)
-              UpdateTraitNumber(currentTrait)
-            else
-              AddTraitToHero({ TraitData = traitData, SkipQuestStatusCheck = true, SkipAddToHUD = true })
-            end
-            if traitData.StoreCostMultiplier
-                and type(CurrentRun.CurrentRoom) == "table"
-                and type(CurrentRun.CurrentRoom.Store) == "table"
-                and type(CurrentRun.CurrentRoom.Store.StoreOptions) == "table" then
-              requireFunctions("store cost refresh", { "ShallowCopyTable" })
-              for _, currentUpgradeData in pairs(CurrentRun.CurrentRoom.Store.StoreOptions) do
-                if type(currentUpgradeData) == "table" then
-                  currentUpgradeData.Processed = nil
-                  currentUpgradeData.DataOverrides = ShallowCopyTable(currentUpgradeData)
-                  currentUpgradeData.DataOverrides.ResourceCosts = nil
-                end
-              end
-            end
-          else
-            requireFunctions("special blessing", { "AddTraitToHero" })
-            AddTraitToHero({ TraitName = entry.trait, FromLoot = true })
-            if entry.sourceId == "Arachne" then
-              requireFunctions("Arachne costume spawning", { "SetupCostume" })
-              SetupCostume()
-            end
-          end
-          return nil
-        end
-        if entry.kind == "consumable" then
-          requireFunctions("consumable spawning", { "SpawnObstacle", "CreateConsumableItem" })
-          local objectId = SpawnObstacle({ Name = rewardId, DestinationId = CurrentRun.Hero.ObjectId, Group = "Standing", OffsetX = 100 })
-          if not finite(objectId) then error("Consumable spawn did not return an object ID") end
-          local item = CreateConsumableItem(objectId, rewardId, 0, {
-            IgnoreSounds = true, RunProgressUpgradeEligible = true, AutoLoadPackages = true, IgnoreAssert = true,
-          })
-          if item == nil then error("Consumable initialization failed") end
-          if type(item) == "table" then
-            item.DoesNotBlockExit = true
-            item.IgnorePurchase = true
-            item.PurchaseRequirements = nil
-          end
-          return objectId
-        end
-        if rewardId == "SpellDrop" then
-          -- SpellDrop is itself a native room-reward type. SpawnRoomReward's
-          -- generic reward branch creates it through CreateConsumableItem,
-          -- which intentionally accepts LootData entries, runs SetupEvents
-          -- (PregenerateSpells), and preserves OpenSpellScreen/gift behavior.
-          -- Do not coerce it into a generic Boon/GiveLoot object.
-          requireFunctions("Selene room reward spawning", { "SpawnRoomReward" })
-          local loot = SpawnRoomReward(CurrentRun.CurrentRoom, {
-            RewardOverride = "SpellDrop",
-            SpawnRewardOnId = CurrentRun.Hero.ObjectId, AutoLoadPackages = true,
-          })
-          if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Selene loot spawn did not return an object ID") end
-          return loot.ObjectId
-        end
-        requireFunctions("loot spawning", { "CreateLoot" })
-        if type(MapState) ~= "table" or type(MapState.RoomRequiredObjects) ~= "table"
-            or type(LootObjects) ~= "table" then error("Unsupported loot spawning: scene loot tables unavailable") end
-        local lootData = LootData[rewardId]
-        local packages, packageSeen = {}, {}
-        local function addPackage(value)
-          if type(value) == "string" and value ~= "" then
-            if not packageSeen[value] then packageSeen[value] = true; packages[#packages + 1] = value end
-          elseif type(value) == "table" then
-            if type(value.Name) == "string" then addPackage(value.Name) end
-            if type(value.Names) == "table" then addPackage(value.Names) end
-            for key, item in pairs(value) do
-              if key ~= "Name" and key ~= "Names" then
-                if type(item) == "string" or type(item) == "table" then addPackage(item) end
-              end
-            end
-          end
-        end
-        addPackage(lootData.RequiredPackage)
-        addPackage(lootData.RequiredPackages)
-        if type(GameData) == "table" and type(GameData.MissingPackages) == "table" then
-          addPackage(GameData.MissingPackages[rewardId])
-        end
-        if #packages > 0 then
-          requireFunctions("loot package loading", { "LoadPackages" })
-          local ok, message = pcall(LoadPackages, { Names = packages })
-          if not ok then error("Loot package loading failed: " .. tostring(message)) end
-        end
-        local setup = lootData.SetupEvents
-        if setup ~= nil then
-          if type(setup) ~= "table" then error("Unsupported loot setup events") end
-          for _, event in ipairs(setup) do
-            local fn = event.FunctionName
-            if fn ~= "SilenceForDreamRun" and fn ~= "PregenerateSpells" then
-              error("Unsupported loot setup event: " .. tostring(fn))
-            end
-            requireFunctions("loot setup", { fn })
-            if event.Args and (event.Args.BlockInteract or event.Args.ForceTextLines) then
-              error("Unsupported loot setup arguments")
-            end
-          end
-        end
-        local loot = CreateLoot({ Name = rewardId, SpawnPoint = CurrentRun.Hero.ObjectId,
-          OffsetX = 100, AutoLoadPackages = true, DoesNotBlockExit = true })
-        if type(loot) ~= "table" or not finite(loot.ObjectId) then error("Loot spawn did not return an object ID") end
-        return loot.ObjectId
-      end, prepareExactReward)
     end
     error("Unknown command")
   end
