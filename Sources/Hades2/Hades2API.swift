@@ -1,7 +1,8 @@
 import Foundation
 
-/// Typed Hades module request boundary. Command spelling and JSON parameter
-/// keys live here rather than being duplicated through the store and views.
+/// Typed Hades Host-command caller adapter. Wire command identity and Host
+/// timeout metadata are generated from the backend command contract; Hades
+/// domain request shapes and JSON parameter construction stay type-safe here.
 enum Hades2Request {
     case scan, status, disconnect, launch, disableAll, runtimeReset, resetDesired
     case connect(probeRuntime: Bool)
