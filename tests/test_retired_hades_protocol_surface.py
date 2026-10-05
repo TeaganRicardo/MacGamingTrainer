@@ -6,7 +6,7 @@ paths = (
     "Sources/Hades2/Hades2Model.swift",
     "Sources/Hades2/Hades2BackendState.swift",
     "Backend/games/hades2/adapter.py",
-    "Backend/games/hades2/command_router.py",
+    "Backend/games/hades2/command_contract.py",
     "Backend/games/hades2/runtime/hades.lua",
 )
 product_text = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in paths)
