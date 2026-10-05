@@ -348,19 +348,6 @@ struct Hades2TrainerView: View {
             .buttonStyle(.plain)
         }
         sessionStatsPanel
-        if let reroll = model.choiceReroll {
-            HStack(spacing: 12) {
-                Button(text("hades2.reroll.action")) { model.rerollCurrentChoice() }
-                    .disabled(!model.canRerollCurrentChoice)
-                if let cost = reroll.cost {
-                    Text(Hades2GameModule.presentationText(key: "hades2.reroll.cost", arguments: [String(cost)], language: localization.language))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                if let reason = reroll.reason {
-                    Text(text(reason)).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
     }
 
     private var combatSection: some View {
@@ -398,6 +385,10 @@ struct Hades2TrainerView: View {
     private var buildSection: some View {
         TrainerSection(title: text("hades2.section.build"), icon: "chart.bar.xaxis") {
             metaStatPanel
+            VStack(spacing: 1) {
+                featureRow(text("hades2.feature.forceEnableRerolls"), key: .forceEnableRerolls, icon: "arrow.triangle.2.circlepath", enabled: model.forceEnableRerolls, shortcut: .forceEnableRerolls) { model.feature(.forceEnableRerolls, value: !model.forceEnableRerolls) }
+            }
+            .trainerGroupedRows()
             boonRarityPanel
         }
     }
