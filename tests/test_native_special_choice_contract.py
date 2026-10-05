@@ -110,10 +110,18 @@ for source in ('Artemis', 'Athena', 'Dionysus', 'Hades'):
 for source in ('Arachne', 'Narcissus', 'Echo', 'Medea', 'Circe', 'Icarus'):
     assert source + ' = { npc = ' in definitions and 'choices = ' in definitions
 
-block_start = lua.index('if command == "open_special_choice" then')
-block_tail = lua[block_start:]
-next_command = block_tail.index('\n    if command == "', 1)
-block = block_tail[:next_command]
+def command_block(name):
+    marker = f'if command == "{name}" then'
+    start = lua.index(marker)
+    tail = lua[start:]
+    next_command = tail.find('\n    if command == "', len(marker))
+    if next_command >= 0:
+        return tail[:next_command]
+    dispatch_end = tail.index('\n    error("Unknown command")')
+    return tail[:dispatch_end]
+
+
+block = command_block("open_special_choice")
 assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in block
 assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
 assert 'type(EnemyData) ~= "table"' in block
