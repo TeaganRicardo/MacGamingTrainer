@@ -403,7 +403,7 @@ def _launch(adapter, params):
 
 def _stopped_operation(name):
     def invoke(adapter, params):
-        if adapter.transport.alive():
+        if adapter.runtime.alive():
             raise ValueError("请断开连接并退出游戏后操作。")
         info = {"prepare": preparation.prepare, "restore": preparation.restore}[name]()
         return dict(adapter.scan(), operation=info)
