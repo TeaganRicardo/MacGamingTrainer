@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 85 then
+if previousModule and previousModule.revision ~= 86 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 85 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 85, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 86, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -5013,6 +5013,23 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
+    local function restoreRerollPresentation(screen, hideIcon)
+      if screen.MovedRerollUIGroup then
+        screen.MovedRerollUIGroup = nil
+        if type(ScreenAnchors) == "table" and finite(ScreenAnchors.Reroll)
+            and type(RemoveFromGroup) == "function" and type(AddToGroup) == "function" then
+          RemoveFromGroup({ Id = ScreenAnchors.Reroll, Names = { "Combat_Menu_Overlay" } })
+          AddToGroup({ Id = ScreenAnchors.Reroll, Name = "Combat_UI", DrawGroup = true })
+        end
+      end
+      if hideIcon and type(screen.Components) == "table" then
+        local icon = screen.Components.RerollIcon
+        if type(icon) == "table" and finite(icon.Id) and type(SetAlpha) == "function" then
+          SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
+        end
+      end
+    end
+
     local function restoreCurrentNative()
       local screen = currentScreen()
       if screen == nil or type(screen.Components) ~= "table" then return end
@@ -5028,6 +5045,7 @@ if __MacGamingTrainerV1 == nil then
         button.RerollFunctionName = nil
         button.Cost = -1
         setButtonVisible(button, false)
+        restoreRerollPresentation(screen, true)
         return
       end
       local spent = type(CurrentRun.CurrentRoom.SpentRerolls) == "table"

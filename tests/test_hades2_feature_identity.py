@@ -14,13 +14,14 @@ import Foundation
 let expected = Set([
     "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
     "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
-    "moneyMultiplierEnabled", "resourceMultiplierEnabled",
+    "forceEnableRerolls", "moneyMultiplierEnabled", "resourceMultiplierEnabled",
 ])
 precondition(Set(Hades2FeatureKey.allCases.map(\.rawValue)) == expected)
 
 precondition(ShortcutAction.invincibility.featureKey == .invincibility)
 precondition(ShortcutAction.infiniteHealth.featureKey == .infiniteHealth)
 precondition(ShortcutAction.boonRarityEnabled.featureKey == .boonRarityEnabled)
+precondition(ShortcutAction.forceEnableRerolls.featureKey == .forceEnableRerolls)
 precondition(ShortcutAction.moneyMultiplierEnabled.featureKey == .moneyMultiplierEnabled)
 precondition(ShortcutAction.resourceMultiplierEnabled.featureKey == .resourceMultiplierEnabled)
 precondition(ShortcutAction.forceLegendary.featureKey == nil)

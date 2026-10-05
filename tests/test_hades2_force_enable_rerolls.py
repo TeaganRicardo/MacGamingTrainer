@@ -35,9 +35,17 @@ RandomSynchronize = function() end
 InvalidateCheckpoint = function() end
 HideTopMenuScreenTooltips = function() end
 ModifyTextBox = function() end
-SetAlpha = function() end
-RemoveFromGroup = function() end
-AddToGroup = function() end
+local rerollIconAlpha = 0
+local rerollGroup = 'Combat_UI'
+SetAlpha = function(args)
+  if args.Id == 100 then rerollIconAlpha = args.Fraction end
+end
+RemoveFromGroup = function(args)
+  if args.Id == ScreenAnchors.Reroll then rerollGroup = nil end
+end
+AddToGroup = function(args)
+  if args.Id == ScreenAnchors.Reroll then rerollGroup = args.Name end
+end
 UpdateRerollUI = function() end
 IncrementTableValue = function(values, key, amount) values[key] = (values[key] or 0) + amount end
 AddInputBlock = function() end
@@ -392,10 +400,15 @@ M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includ
 assert(alreadyOpenScreen.Components.RerollButton.Visible
   and alreadyOpenScreen.Components.RerollButton.OnPressedFunctionName == 'AttemptPanelReroll',
   'enabling feature did not activate the already-open supported native page')
+assert(rerollGroup == 'Combat_Menu_Overlay' and rerollIconAlpha == 1.0,
+  'enabling feature did not move and reveal the native reroll UI')
 
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 assert(not alreadyOpenScreen.Components.RerollButton.Visible,
   'disabling feature did not restore native availability on the current page')
+assert(rerollGroup == 'Combat_UI' and rerollIconAlpha == 0.0
+  and alreadyOpenScreen.MovedRerollUIGroup == nil,
+  'disabling feature left forced reroll UI presentation active on the current page')
 CurrentRun.NumRerolls = 10
 CurrentRun.CurrentRoom.SpentRerolls = {}
 local disabled = copy(EnemyData.NPC_Arachne_01)
