@@ -21,7 +21,7 @@ class TransportProbe:
 class ProbeAdapter:
     def __init__(self):
         self.calls = []
-        self.transport = TransportProbe()
+        self.runtime = TransportProbe()
 
     def _record(self, name, *args):
         self.calls.append((name, *copy.deepcopy(args)))
@@ -485,14 +485,14 @@ try:
     assert system_events[-1][0] == ["/usr/bin/open", command_contract_module.STEAM_SPEC.launch_url]
     assert probe.calls == [("scan",)]
 
-    probe.transport.live = False
+    probe.runtime.live = False
     probe.calls.clear()
     prepared = contract.dispatch("prepare", {}, "prepare")
     assert prepared == {"route": "scan", "args": (), "operation": {"prepared": True}}
     probe.calls.clear()
     restored = contract.dispatch("restore", {}, "restore")
     assert restored == {"route": "scan", "args": (), "operation": {"restored": True}}
-    probe.transport.live = True
+    probe.runtime.live = True
     expect_error("prepare", {}, "请断开连接并退出游戏后操作。")
 finally:
     command_contract_module.build_diagnostics = old_build_diagnostics
