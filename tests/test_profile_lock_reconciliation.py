@@ -4,321 +4,187 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'Backend'))
-sys.path.insert(0, str(ROOT / 'tests'))
+sys.path.insert(0, str(ROOT / "Backend"))
+sys.path.insert(0, str(ROOT / "tests"))
 
+from core.adapter import AdapterError
 from games.hades2 import preparation
-from games.hades2.adapter import Hades2Adapter, TransportError
+from games.hades2.adapter import Hades2Adapter
+from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.preferences import Hades2PreferenceStore
-from games.hades2.resident_session import ResidentMetrics, ResidentReply
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 
-def seed_observed_locks(adapter):
-    adapter.state.update({
-        'connected': True,
-        'status': 'ready',
-        'desiredFeatures': {},
-        'stats': {
-            'grasp': {'locked': True, 'target': 30, 'value': 30},
-            'enemyHealth': {'locked': True, 'target': 175, 'value': 175},
+def observed_runtime_with_locks():
+    return {
+        "status": "ready",
+        "scene": "run",
+        "capabilities": {"setFeature": True},
+        "desiredFeatures": {},
+        "activeFeatures": {},
+        "dormantFeatures": {},
+        "featureSupport": {},
+        "featureErrors": {},
+        "boonRarity": {
+            "target": "Epic",
+            "multiplier": 100.0,
+            "forceLegendary": False,
+            "forceDuo": False,
         },
-        'healthLocked': True,
-        'health': 120,
-        'maxHealth': 160,
-        'manaLocked': True,
-        'mana': 50,
-        'maxMana': 90,
-        'armorLocked': True,
-        'armor': 25,
-        # Money is intentionally absent from resources. Runtime observation
-        # reports its lock through dedicated moneyLocked/money fields.
-        'moneyLocked': True,
-        'money': 999,
-        'resources': [
-            {'id': 'MetaCurrency', 'locked': True, 'count': 12},
-            {'id': 'Bones', 'locked': True, 'count': 5},
+        "gatheringProbabilities": {},
+        "chaosGateProbability": None,
+        "stats": {
+            "grasp": {"locked": True, "target": 30, "value": 30},
+            "enemyHealth": {"locked": True, "target": 175, "value": 175},
+        },
+        "healthLocked": True,
+        "health": 120,
+        "maxHealth": 160,
+        "manaLocked": True,
+        "mana": 50,
+        "maxMana": 90,
+        "armorLocked": True,
+        "armor": 25,
+        "moneyLocked": True,
+        "money": 999,
+        "resources": [
+            {"id": "MetaCurrency", "locked": True, "count": 12},
+            {"id": "Bones", "locked": True, "count": 5},
         ],
-        'rerollsLocked': True,
-        'rerolls': 7,
-        'elements': [
-            {'id': 'Fire', 'locked': True, 'count': 8},
-            {'id': 'Water', 'locked': True, 'count': 4},
+        "rerollsLocked": True,
+        "rerolls": 7,
+        "elements": [
+            {"id": "Fire", "locked": True, "count": 8},
+            {"id": "Water", "locked": True, "count": 4},
         ],
-        'nextRoomReward': None,
-    })
+        "nextRoomReward": None,
+    }
 
 
-def has_call(batch, command, **expected):
-    return any(
-        item_command == command
-        and all(params.get(key) == value for key, value in expected.items())
-        for item_command, params in batch
-    )
+class RecordingReconciler:
+    def __init__(self, fail_once=False):
+        self.calls = []
+        self.fail_once = fail_once
+
+    def reconcile(self, desired, observed, *, force_full=False):
+        self.calls.append({
+            "desired": copy.deepcopy(desired),
+            "observed": copy.deepcopy(observed),
+            "force_full": bool(force_full),
+        })
+        if self.fail_once:
+            self.fail_once = False
+            raise AdapterError(
+                "lua_error",
+                "simulated known resident reconciliation failure",
+            )
+        return DesiredReconciliationOutcome(
+            reply=None,
+            confirmed=True,
+            mismatches=(),
+        )
 
 
-def make_adapter(prefix, live=True):
-    base = Path(tempfile.mkdtemp(prefix=prefix))
-    preparation.DATA = base
-    session = FakeResidentSession(pid=777)
-    session.live = live
+def make_adapter(prefix, runtime=None):
+    preparation.DATA = Path(tempfile.mkdtemp(prefix=prefix))
+    runtime = runtime or FakeResidentSession(observed_runtime_with_locks(), pid=777)
     adapter = Hades2Adapter(
-        resident_session=session,
+        resident_session=runtime,
         time_warp_controller=FakeTimeWarpController(),
     )
-    return adapter
+    adapter.state.update(connected=True, pid=runtime.pid, status="ready", scene="run")
+    return runtime, adapter
 
 
-# Live Profile replacement must diff the replacement desired state against the
-# real observed locks that existed before desired projection.
-adapter = make_adapter('mgt-profile-reconcile-')
-seed_observed_locks(adapter)
+# Profile replacement must hand the reconciler the real runtime observation
+# captured before the replacement desired snapshot is projected into Adapter
+# state. Per-family lock planning is owned and tested by the reconciler itself.
+runtime, adapter = make_adapter("mgt-profile-reconcile-")
+reconciler = RecordingReconciler()
+adapter.desired_reconciler = reconciler
+
 desired = Hades2PreferenceStore.defaults()
 desired.update({
-    'statLocks': {'enemyHealth': 200},
-    'vitalLocks': {'mana': {'current': 40, 'max': 90}},
-    'resourceLocks': {'MetaCurrency': 20},
-    'rerollsLock': None,
-    'elementLocks': {'Fire': 9},
+    "statLocks": {"enemyHealth": 200},
+    "vitalLocks": {"mana": {"current": 40, "max": 90}},
+    "resourceLocks": {"MetaCurrency": 20},
+    "rerollsLock": None,
+    "elementLocks": {"Fire": 9},
 })
-adapter.profile_service.save('partial-locks', desired)
+adapter.profile_service.save("partial-locks", desired)
 
-batches = []
+result = adapter.load_profile("partial-locks")
+assert result["loadedProfile"] == "partial-locks"
+assert len(reconciler.calls) == 1
+call = reconciler.calls[0]
+assert call["force_full"] is True
+observed = call["observed"]
+assert observed["stats"]["grasp"]["locked"] is True
+assert observed["stats"]["enemyHealth"]["target"] == 175
+assert observed["healthLocked"] is True
+assert observed["armorLocked"] is True
+assert observed["moneyLocked"] is True
+assert next(row for row in observed["resources"] if row["id"] == "Bones")["locked"] is True
+assert observed["rerollsLocked"] is True
+assert next(row for row in observed["elements"] if row["id"] == "Water")["locked"] is True
 
-
-def fake_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        batches.append(list(batch or []))
-    return dict(adapter.state)
-
-
-adapter.execute = fake_execute
-observations = []
-
-
-def observe_runtime():
-    observations.append('runtime')
-    return dict(adapter.state)
-
-
-adapter.observe_runtime = observe_runtime
-adapter.load_profile('partial-locks')
-assert observations == ['runtime']
-assert len(batches) == 1
-batch = batches[0]
-
-# Stale locks must be released.
-assert has_call(batch, 'set_stat', stat='grasp', locked=False)
-assert has_call(batch, 'lock_vital', vital='health', locked=False)
-assert has_call(batch, 'lock_vital', vital='armor', locked=False)
-assert has_call(batch, 'lock_resource', resource='Bones', locked=False)
-assert has_call(batch, 'lock_resource', resource='Money', locked=False)
-assert has_call(batch, 'lock_rerolls', locked=False)
-assert has_call(batch, 'lock_element', element='Water', locked=False)
-
-# Desired locks must be retained/updated, not spuriously released.
-assert not has_call(batch, 'set_stat', stat='enemyHealth', locked=False)
-assert has_call(batch, 'set_stat', stat='enemyHealth', locked=True, value=200)
-assert not has_call(batch, 'lock_vital', vital='mana', locked=False)
-assert has_call(batch, 'lock_vital', vital='mana', locked=True)
-assert not has_call(batch, 'lock_resource', resource='MetaCurrency', locked=False)
-assert has_call(batch, 'set_resource', resource='MetaCurrency', amount=20)
-assert has_call(batch, 'lock_resource', resource='MetaCurrency', locked=True)
-assert not has_call(batch, 'lock_element', element='Fire', locked=False)
-assert has_call(batch, 'set_element', element='Fire', amount=9)
-assert has_call(batch, 'lock_element', element='Fire', locked=True)
-
-# A no-lock Profile must release every observed lock family.
-no_lock_adapter = make_adapter('mgt-profile-reconcile-empty-')
-seed_observed_locks(no_lock_adapter)
-no_lock_adapter.profile_service.save('no-locks', Hades2PreferenceStore.defaults())
-no_lock_batches = []
+# The desired state given to reconciliation is the replacement Profile, not a
+# runtime-adopted snapshot. Successful semantic confirmation clears pending.
+assert call["desired"]["statLocks"] == {"enemyHealth": 200}
+assert call["desired"]["vitalLocks"] == {"mana": {"current": 40, "max": 90}}
+assert call["desired"]["resourceLocks"] == {"MetaCurrency": 20}
+assert call["desired"]["elementLocks"] == {"Fire": 9}
+assert adapter.preference_dirty is False
 
 
-def fake_no_lock_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        no_lock_batches.append(list(batch or []))
-    return dict(no_lock_adapter.state)
+# Offline Profile load remains pending. The next explicit status observation is
+# the point where reconciliation receives a fresh runtime snapshot.
+offline_runtime, offline = make_adapter("mgt-profile-reconcile-offline-")
+offline_runtime.live = False
+offline.state.update(connected=False, status="disconnected")
+offline_reconciler = RecordingReconciler()
+offline.desired_reconciler = offline_reconciler
+offline.profile_service.save("offline-no-locks", Hades2PreferenceStore.defaults())
+
+offline.load_profile("offline-no-locks")
+assert offline.preference_dirty is True
+assert offline_reconciler.calls == []
+
+offline_runtime.live = True
+offline.state.update(connected=True, pid=offline_runtime.pid, status="ready")
+offline.execute("status", {})
+assert len(offline_reconciler.calls) == 1
+assert offline_reconciler.calls[0]["observed"]["moneyLocked"] is True
+assert offline.preference_dirty is False
 
 
-no_lock_adapter.execute = fake_no_lock_execute
-no_lock_adapter.observe_runtime = lambda: dict(no_lock_adapter.state)
-no_lock_adapter.load_profile('no-locks')
-assert len(no_lock_batches) == 1
-empty_batch = no_lock_batches[0]
-for stat in ('grasp', 'enemyHealth'):
-    assert has_call(empty_batch, 'set_stat', stat=stat, locked=False)
-for vital in ('health', 'mana', 'armor'):
-    assert has_call(empty_batch, 'lock_vital', vital=vital, locked=False)
-for resource in ('MetaCurrency', 'Bones', 'Money'):
-    assert has_call(empty_batch, 'lock_resource', resource=resource, locked=False)
-assert has_call(empty_batch, 'lock_rerolls', locked=False)
-for element in ('Fire', 'Water'):
-    assert has_call(empty_batch, 'lock_element', element=element, locked=False)
+# A failed live Profile reconciliation must not make Adapter trust its projected
+# desired UI state as runtime truth. Loading the same Profile again re-observes
+# the resident and supplies the still-locked runtime snapshot a second time.
+retry_runtime, retry = make_adapter("mgt-profile-reconcile-retry-")
+retry_reconciler = RecordingReconciler(fail_once=True)
+retry.desired_reconciler = retry_reconciler
+retry.profile_service.save("retry-unlocked", Hades2PreferenceStore.defaults())
 
-# Offline Profile load remains pending. A later ready observation must still
-# reconcile dedicated Money plus the other observed lock families.
-offline_adapter = make_adapter('mgt-profile-reconcile-offline-', live=False)
-offline_adapter.profile_service.save('offline-no-locks', Hades2PreferenceStore.defaults())
-offline_adapter.load_profile('offline-no-locks')
-assert offline_adapter.preference_dirty is True
-seed_observed_locks(offline_adapter)
-offline_adapter.runtime.live = True
-offline_batches = []
-
-
-def fake_offline_execute(command, params, replay=False, batch=None):
-    if command == 'replay_preferences':
-        offline_batches.append(list(batch or []))
-    return dict(offline_adapter.state)
-
-
-offline_adapter.execute = fake_offline_execute
-offline_adapter._replay_preferences(force_full=True)
-assert len(offline_batches) == 1
-offline_batch = offline_batches[0]
-assert has_call(offline_batch, 'set_stat', stat='grasp', locked=False)
-assert has_call(offline_batch, 'lock_vital', vital='health', locked=False)
-assert has_call(offline_batch, 'lock_resource', resource='Money', locked=False)
-assert has_call(offline_batch, 'lock_rerolls', locked=False)
-assert has_call(offline_batch, 'lock_element', element='Water', locked=False)
-
-print('profile_lock_reconciliation_ok')
-
-
-# Regression for a failed live Profile replay followed by an immediate second
-# load of the same Profile. This uses production load_profile() and the semantic
-# resident-session interface; the test no longer parses generated Lua source.
-class RuntimeSession(FakeResidentSession):
-    def __init__(self):
-        state = {
-            'status': 'ready',
-            'scene': 'run',
-            'capabilities': {'setFeature': True},
-            'desiredFeatures': {},
-            'activeFeatures': {},
-            'featureErrors': {},
-            'stats': {'grasp': {'locked': True, 'target': 30, 'value': 30}},
-            'healthLocked': True,
-            'health': 120,
-            'maxHealth': 160,
-            'manaLocked': True,
-            'mana': 50,
-            'maxMana': 90,
-            'armorLocked': True,
-            'armor': 25,
-            'moneyLocked': True,
-            'money': 500,
-            'rerollsLocked': True,
-            'rerolls': 2,
-            'resources': [{'id': 'MetaCurrency', 'locked': True, 'count': 10}],
-            'elements': [{'id': 'Fire', 'locked': True, 'count': 2}],
-            'nextRoomReward': None,
-        }
-        super().__init__(state, pid=123)
-        self.state = self.payload
-        self.fail_once = False
-
-    def observe_status(self, params=None):
-        self.calls.append({
-            'kind': 'observe',
-            'command': 'status',
-            'params': dict(params or {}),
-            'batch': None,
-        })
-        return ResidentReply(
-            payload=copy.deepcopy(self.state),
-            metrics=ResidentMetrics(boundary_duration=0.001),
-        )
-
-    def reconcile(self, calls):
-        calls = list(calls)
-        self.calls.append({
-            'kind': 'reconcile',
-            'command': 'replay_preferences',
-            'params': {},
-            'batch': copy.deepcopy(calls),
-        })
-        lock_commands = {
-            'set_stat', 'lock_vital', 'lock_resource', 'lock_rerolls', 'lock_element'
-        }
-        if self.fail_once and any(command in lock_commands for command, _ in calls):
-            self.fail_once = False
-            raise TransportError(
-                'lua_error',
-                'simulated known Lua command error before lock release',
-            )
-        for command, params in calls:
-            if command == 'set_stat' and params.get('stat') in self.state['stats']:
-                self.state['stats'][params['stat']]['locked'] = params['locked']
-            elif command == 'lock_vital':
-                self.state[params['vital'] + 'Locked'] = params['locked']
-            elif command == 'lock_rerolls':
-                self.state['rerollsLocked'] = params['locked']
-            elif command == 'lock_resource':
-                if params['resource'] == 'Money':
-                    self.state['moneyLocked'] = params['locked']
-                else:
-                    for item in self.state['resources']:
-                        if item['id'] == params['resource']:
-                            item['locked'] = params['locked']
-            elif command == 'lock_element':
-                for item in self.state['elements']:
-                    if item['id'] == params['element']:
-                        item['locked'] = params['locked']
-        return ResidentReply(
-            payload=copy.deepcopy(self.state),
-            metrics=ResidentMetrics(boundary_duration=0.001),
-        )
-
-
-def runtime_locks(state):
-    return [
-        state['stats']['grasp']['locked'],
-        state['healthLocked'],
-        state['manaLocked'],
-        state['armorLocked'],
-        state['moneyLocked'],
-        state['rerollsLocked'],
-        state['resources'][0]['locked'],
-        state['elements'][0]['locked'],
-    ]
-
-
-retry_base = Path(tempfile.mkdtemp(prefix='mgt-profile-reconcile-retry-'))
-preparation.DATA = retry_base
-retry_session = RuntimeSession()
-retry_adapter = Hades2Adapter(
-    resident_session=retry_session,
-    time_warp_controller=FakeTimeWarpController(),
-)
-retry_adapter._apply_game_speed = lambda value: 1
-retry_adapter.state.update(copy.deepcopy(retry_session.state), connected=True)
-retry_adapter.preference_initialized = True
-retry_adapter._capture_runtime_preferences(copy.deepcopy(retry_session.state))
-retry_adapter.profile_service.save('retry-unlocked', retry_adapter._default_preferences())
-
-retry_session.fail_once = True
 try:
-    retry_adapter.load_profile('retry-unlocked')
-except TransportError as error:
-    assert error.code == 'lua_error'
+    retry.load_profile("retry-unlocked")
+except AdapterError as error:
+    assert error.code == "lua_error"
 else:
-    raise AssertionError('expected first Profile replay to fail')
+    raise AssertionError("expected first Profile reconciliation to fail")
 
-assert all(runtime_locks(retry_session.state))
-assert retry_adapter.preference_dirty is True
-assert retry_adapter.state['status'] == 'ready'
-assert not any(runtime_locks(retry_adapter.state)), (
-    'failed replay may still project desired UI state, but must remain pending'
-)
+assert retry.preference_dirty is True
+assert len(retry_reconciler.calls) == 1
+assert retry_reconciler.calls[0]["observed"]["healthLocked"] is True
+# Projection may show the requested Profile after failure, but it is never used
+# as confirmation evidence.
+assert retry.state["healthLocked"] is False
 
-second_result = retry_adapter.load_profile('retry-unlocked')
-assert not any(runtime_locks(retry_session.state)), (
-    'second Profile load must re-observe runtime locks and release them'
-)
-assert retry_adapter.preference_dirty is False
-assert not any(runtime_locks(second_result))
-assert not any(runtime_locks(retry_adapter.state))
+second = retry.load_profile("retry-unlocked")
+assert second["loadedProfile"] == "retry-unlocked"
+assert len(retry_reconciler.calls) == 2
+assert retry_reconciler.calls[1]["observed"]["healthLocked"] is True
+assert retry_reconciler.calls[1]["observed"]["moneyLocked"] is True
+assert retry.preference_dirty is False
 
-print('profile_lock_reconciliation_retry_ok')
+print("profile_lock_reconciliation_ok")
