@@ -430,7 +430,8 @@
     "hades2.gathering.collection.digging": "工具或对应灵宠：{term:officialTerms.gatheringShovel}",
     "hades2.gathering.collection.shades": "工具或对应灵宠：{term:officialTerms.gatheringTablet}",
     "hades2.gathering.collection.fishing": "工具或对应灵宠：{term:officialTerms.gatheringRod}",
-    "hades2.gathering.collection.flora": "手工采集或对应灵宠；无需工具解锁。"
+    "hades2.gathering.collection.flora": "手工采集或对应灵宠；无需工具解锁。",
+    "hades2.gathering.unavailable.polymorph": "当前变形状态禁止原生采集。"
   },
   "language": "zh-CN"
 }

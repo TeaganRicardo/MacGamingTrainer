@@ -141,6 +141,8 @@ for family, definition in pairs(definitions) do
   reset(); familiar = definition.tool or 'ToolHarvest'
   assert(not M.dispatch('status', { includeCatalogs = false }).gatheringTargets[family].available, family .. ' linked Familiar missing was accepted')
   MapState.FamiliarUnit = {}
+  assert(not M.dispatch('status', { includeCatalogs = false }).gatheringTargets[family].available, 'incomplete Familiar native unit accepted')
+  MapState.FamiliarUnit = { ObjectId = 50 }
   assert(M.dispatch('status', { includeCatalogs = false }).gatheringTargets[family].available)
 end
 familiar = nil; reset(); complexAllowed = false
@@ -191,9 +193,9 @@ for _, mutate in ipairs({
  function() SessionState = {} end,
  function() HarvestData.WeightedOptions[1].AddResources.PlantFMoly = 2 end,
  function() inactive.HarvestPoint = {} end,
- function() CurrentRun.Hero.HostilePolymorph = true end,
+ function() MapState.HostilePolymorph = true end,
 }) do
- reset(); CurrentRun.Hero.HostilePolymorph = nil; HarvestData.WeightedOptions[1].AddResources.PlantFMoly = 1
+ reset(); MapState.HostilePolymorph = nil; HarvestData.WeightedOptions[1].AddResources.PlantFMoly = 1
  local target = M.dispatch('status', { includeCatalogs = false }).gatheringTargets.flora
  local before = setupCalls
  mutate()
@@ -281,6 +283,20 @@ for _, family in ipairs({ 'fishing', 'shades' }) do
  _G[object.OnUsedFunctionName](object)
  assert(GameState.Resources[definition.resource] == 1, 'native minigame collection reward not retained')
 end
+print('gathering_generation_ok')
+''')
+CASES.append(BASE + r'''
+reset(); MapState.HostilePolymorph = true
+for family in pairs(definitions) do
+ local target = M.dispatch('status', { includeCatalogs = false }).gatheringTargets[family]
+ assert(not target.available and target.reason == 'hades2.gathering.unavailable.polymorph', 'native polymorph owner bypassed')
+end
+assert(setupCalls == 0)
+reset(); local target = M.dispatch('status', { includeCatalogs = false }).gatheringTargets.flora
+local nativeSetup = SetupHarvestPoints
+SetupHarvestPoints = function(room) nativeSetup(room); MapState.HostilePolymorph = true end
+local ok, errorText = pcall(M.dispatch, 'generate_gathering', { requestId = 'polymorph-after-activation', family = 'flora', scopeToken = target.scopeToken, includeCatalogs = false })
+assert(not ok and tostring(errorText):find('MGT_OUTCOME_UNKNOWN') and M.terminalActionUnknown and next(MapState.ActiveObstacles) ~= nil, 'postactivation polymorph falsely completed or removed native result')
 print('gathering_generation_ok')
 ''')
 for code in CASES:

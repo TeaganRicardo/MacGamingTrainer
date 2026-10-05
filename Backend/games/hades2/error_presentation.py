@@ -100,6 +100,7 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.polymorph', 'key': 'hades2.gathering.unavailable.polymorph', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
  {'match': 'literal', 'message': 'hades2.gathering.unavailable.scene', 'key': 'hades2.gathering.unavailable.scene', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
  {'match': 'literal', 'message': 'hades2.gathering.unavailable.native', 'key': 'hades2.gathering.unavailable.native', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
  {'match': 'literal', 'message': 'hades2.gathering.unavailable.familiar', 'key': 'hades2.gathering.unavailable.familiar', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},

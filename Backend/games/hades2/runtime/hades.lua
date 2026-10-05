@@ -4170,14 +4170,15 @@ if __MacGamingTrainerV1 == nil then
       local strategy = strategies[family]
       if not strategy or M.terminalActionUnknown or not ready() or sceneName() ~= "run" or type(MapState) ~= "table" or type(MapState.ActiveObstacles) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
       local room, hero = CurrentRun.CurrentRoom, CurrentRun.Hero
-      if hero.HostilePolymorph or (type(ScreenState) == "table" and ScreenState.InTransition) or next(ActiveScreens or {}) ~= nil then return nil, "hades2.gathering.unavailable.scene" end
+      if MapState.HostilePolymorph then return nil, "hades2.gathering.unavailable.polymorph" end
+      if (type(ScreenState) == "table" and ScreenState.InTransition) or next(ActiveScreens or {}) ~= nil then return nil, "hades2.gathering.unavailable.scene" end
       for _, name in ipairs({ "SetupHarvestPoints", "GetInactiveIdsByType", "Activate", "SetupObstacle", "IsUseable", "IsGameStateEligible", "HasFamiliarTool", "DeepCopyTable", "GetConfigOptionValue", "IsEmpty", "RemoveRandomValue", strategy.callback }) do
         if type(_G[name]) ~= "function" then return nil, "hades2.gathering.unavailable.native" end
       end
       if GetConfigOptionValue({ Name = "EditingMode" }) or not finite(room[strategy.num]) or type(CurrentRun.BiomeHarvestPointsSeen) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
       if type(ObstacleData) ~= "table" or type(ObstacleData[strategy.point]) ~= "table" or ObstacleData[strategy.point].OnUsedFunctionName ~= strategy.callback then return nil, "hades2.gathering.unavailable.native" end
       local familiarTool = strategy.tool or strategy.familiarTool
-      if HasFamiliarTool(familiarTool) and type(MapState.FamiliarUnit) ~= "table" then return nil, "hades2.gathering.unavailable.familiar" end
+      if HasFamiliarTool(familiarTool) and (type(MapState.FamiliarUnit) ~= "table" or not finite(MapState.FamiliarUnit.ObjectId) or MapState.FamiliarUnit.ObjectId <= 0 or MapState.FamiliarUnit.IsDead) then return nil, "hades2.gathering.unavailable.familiar" end
       if strategy.tool and (type(HasAccessToTool) ~= "function" or not HasAccessToTool(strategy.tool)) then return nil, "hades2.gathering.unavailable.tool" end
       if strategy.complex and (type(IsComplexHarvestAllowed) ~= "function" or not IsComplexHarvestAllowed()) then return nil, "hades2.gathering.unavailable.complex" end
       if family == "fishing" and type(ScreenAnchors) == "table" and ScreenAnchors.LavaVignetteId then return nil, "hades2.gathering.unavailable.lava" end
@@ -4208,11 +4209,11 @@ if __MacGamingTrainerV1 == nil then
           .. ":" .. tostring(option.Name) .. ":" .. tostring(option.ResourceName) .. ":" .. tostring(option.MaxHealth) .. ":" .. table.concat(payload, ",")
       end
       table.sort(keys)
-      return { family = family, strategy = strategy, session = SessionState, run = CurrentRun, hero = hero, room = room, map = MapState, familiar = MapState.FamiliarUnit, familiarLinked = HasFamiliarTool(familiarTool), roomName = room.Name, biome = room.RoomSetName, id = id, pool = pool, poolKey = table.concat(keys, "|") }
+      return { family = family, strategy = strategy, session = SessionState, run = CurrentRun, hero = hero, room = room, map = MapState, familiar = MapState.FamiliarUnit, familiarId = type(MapState.FamiliarUnit) == "table" and MapState.FamiliarUnit.ObjectId or nil, familiarLinked = HasFamiliarTool(familiarTool), roomName = room.Name, biome = room.RoomSetName, id = id, pool = pool, poolKey = table.concat(keys, "|") }
     end
     local function sameTarget(left, right)
       return left ~= nil and right ~= nil and left.session == right.session and left.run == right.run and left.hero == right.hero
-        and left.room == right.room and left.map == right.map and left.familiar == right.familiar and left.familiarLinked == right.familiarLinked and left.roomName == right.roomName and left.biome == right.biome and left.id == right.id and left.poolKey == right.poolKey
+        and left.room == right.room and left.map == right.map and left.familiar == right.familiar and left.familiarId == right.familiarId and left.familiarLinked == right.familiarLinked and left.roomName == right.roomName and left.biome == right.biome and left.id == right.id and left.poolKey == right.poolKey
     end
     local function observe()
       local targets, prior = {}, observation or {}
@@ -4290,8 +4291,9 @@ if __MacGamingTrainerV1 == nil then
       generated[room] = generated[room] or {}; generated[room][family] = true
       if not ok then error(failure) end
       if not ownerMatches(target) then error("Gathering owner changed after native activation") end
-      if MapState.FamiliarUnit ~= target.familiar or HasFamiliarTool(strategy.tool or strategy.familiarTool) ~= target.familiarLinked
-          or target.hero.HostilePolymorph or strategy.tool and not HasAccessToTool(strategy.tool)
+      if MapState.FamiliarUnit ~= target.familiar or (type(MapState.FamiliarUnit) == "table" and MapState.FamiliarUnit.ObjectId or nil) ~= target.familiarId
+          or target.familiarLinked and (not finite(target.familiarId) or target.familiar.IsDead) or HasFamiliarTool(strategy.tool or strategy.familiarTool) ~= target.familiarLinked
+          or MapState.HostilePolymorph or strategy.tool and not HasAccessToTool(strategy.tool)
           or strategy.complex and not IsComplexHarvestAllowed()
           or family == "fishing" and ScreenAnchors.LavaVignetteId then error("Native gathering access changed after activation") end
       local object = MapState.ActiveObstacles[target.id]

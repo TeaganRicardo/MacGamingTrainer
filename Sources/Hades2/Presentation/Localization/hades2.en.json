@@ -430,7 +430,8 @@
     "hades2.gathering.collection.digging": "Tool or linked Familiar: {term:officialTerms.gatheringShovel}",
     "hades2.gathering.collection.shades": "Tool or linked Familiar: {term:officialTerms.gatheringTablet}",
     "hades2.gathering.collection.fishing": "Tool or linked Familiar: {term:officialTerms.gatheringRod}",
-    "hades2.gathering.collection.flora": "Collect by hand or linked Familiar; no tool unlock required."
+    "hades2.gathering.collection.flora": "Collect by hand or linked Familiar; no tool unlock required.",
+    "hades2.gathering.unavailable.polymorph": "The current polymorph state prevents native collection."
   },
   "language": "en"
 }

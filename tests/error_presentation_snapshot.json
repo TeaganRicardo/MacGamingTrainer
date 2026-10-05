@@ -1297,6 +1297,10 @@
       "arguments": [],
       "key": "hades2.gathering.unavailable.placement"
     },
+    "generate_gathering::hades2.gathering.unavailable.polymorph": {
+      "arguments": [],
+      "key": "hades2.gathering.unavailable.polymorph"
+    },
     "generate_gathering::hades2.gathering.unavailable.pool": {
       "arguments": [],
       "key": "hades2.gathering.unavailable.pool"
