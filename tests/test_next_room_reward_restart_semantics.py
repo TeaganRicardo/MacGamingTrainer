@@ -222,7 +222,6 @@ try:
     assert reward_calls == [{
         'reward': 'WeaponUpgrade',
         'token': 'one-shot-token',
-        'includeCatalogs': False,
     }]
     assert pending_session.state['nextRoomReward'] == 'WeaponUpgrade'
     assert pending_session.state['runtimeDiagnostics']['nextRoomRewardToken'] == 'one-shot-token'
