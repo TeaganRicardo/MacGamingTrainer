@@ -6260,22 +6260,30 @@ if __MacGamingTrainerV1 == nil then
         error("Chaos exact acquisition is unavailable")
       end
 
-      local eligibleBlessings = blessingName ~= nil
-        and GetEligibleTransformingTrait({ blessingName })
-        or GetEligibleTransformingTrait(source.PermanentTraits)
-      if (blessingName ~= nil and not listContains(eligibleBlessings, blessingName))
-          or (blessingName == nil
-            and (type(eligibleBlessings) ~= "table" or next(eligibleBlessings) == nil)) then
-        error("Chaos exact acquisition is unavailable")
+      local eligibleBlessings
+      if blessingName ~= nil then
+        eligibleBlessings = GetEligibleTransformingTrait({ blessingName })
+        if not listContains(eligibleBlessings, blessingName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+      else
+        eligibleBlessings = GetEligibleTransformingTrait(source.PermanentTraits)
+        if type(eligibleBlessings) ~= "table" or next(eligibleBlessings) == nil then
+          error("Chaos exact acquisition is unavailable")
+        end
       end
 
-      local eligibleCurses = curseName ~= nil
-        and GetEligibleTransformingTrait({ curseName })
-        or GetEligibleTransformingTrait(source.TemporaryTraits)
-      if (curseName ~= nil and not listContains(eligibleCurses, curseName))
-          or (curseName == nil
-            and (type(eligibleCurses) ~= "table" or next(eligibleCurses) == nil)) then
-        error("Chaos exact acquisition is unavailable")
+      local eligibleCurses
+      if curseName ~= nil then
+        eligibleCurses = GetEligibleTransformingTrait({ curseName })
+        if not listContains(eligibleCurses, curseName) then
+          error("Chaos exact acquisition is unavailable")
+        end
+      else
+        eligibleCurses = GetEligibleTransformingTrait(source.TemporaryTraits)
+        if type(eligibleCurses) ~= "table" or next(eligibleCurses) == nil then
+          error("Chaos exact acquisition is unavailable")
+        end
       end
 
       source = DeepCopyTable(source)
