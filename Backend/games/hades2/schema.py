@@ -67,6 +67,29 @@ MAX_AMOUNT = 999999
 BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
 NEXT_ROOM_REWARD_MAX_LENGTH = 128
 
+# Wire identities only. Native generation/collection strategy is Lua-owned.
+GATHERING_FAMILIES = frozenset(('flora','mining','digging','shades','fishing'))
+
+
+def normalize_gathering_probabilities(raw):
+    if not isinstance(raw,dict):return {}
+    return {
+        family:float(value) for family,value in raw.items()
+        if family in GATHERING_FAMILIES and type(value) in (int,float)
+        and 0<=value<=100 and math.isfinite(value)
+    }
+
+
+def validate_gathering_desired(family,probability):
+    if not isinstance(family,str) or family not in GATHERING_FAMILIES:
+        raise ValueError('请选择采集类型。')
+    if probability is not None and (
+        type(probability) not in (int,float) or not 0<=probability<=100
+        or not math.isfinite(probability)
+    ):
+        raise ValueError('概率必须为 0–100。')
+    return probability
+
 
 def is_valid_next_room_reward(value):
     return value is None or (isinstance(value,str) and len(value)<=NEXT_ROOM_REWARD_MAX_LENGTH)

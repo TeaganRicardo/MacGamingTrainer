@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 78 then
+if previousModule and previousModule.revision ~= 79 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 78 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 78, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 79, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
@@ -29,7 +29,7 @@ if __MacGamingTrainerV1 == nil then
       instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
       moneyMultiplierEnabled = false, resourceMultiplierEnabled = false,
     },
-    resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {},
+    resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {}, gatheringProbabilities = {},
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
     requestOrder = previousModule and previousModule.requestOrder or {},
@@ -40,7 +40,7 @@ if __MacGamingTrainerV1 == nil then
     traitInventoryGeneration = tostring({}),
   }
   __MacGamingTrainerV1 = M
-  local choiceReroll
+  local choiceReroll, roomGeneration
 
   -- Resource DisplayName values from build 1.139672 Game/Text/zh-CN/HelpText.zh-CN.sjson.
   local names = {
@@ -1207,6 +1207,7 @@ if __MacGamingTrainerV1 == nil then
     M.guardWrapper, M.originalUpdateTimers = nil, nil
   end
   local function deactivateRuntime()
+    if roomGeneration ~= nil then roomGeneration.release() end
     releaseInvincibility()
     releaseHealth()
     releaseMana()
@@ -1223,6 +1224,7 @@ if __MacGamingTrainerV1 == nil then
     releaseStatsRuntime()
   end
   local function clearDesired()
+    M.gatheringProbabilities = {}
     for key in pairs(M.desiredFeatures) do M.desiredFeatures[key] = false end
     M.resourceLocks = {}
     M.vitalLocks = {}
@@ -1241,13 +1243,14 @@ if __MacGamingTrainerV1 == nil then
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
     return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
-      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil
+      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or next(M.gatheringProbabilities) ~= nil
   end
   local function anyRuntimeActive()
     return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
       or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
+      or owns("CreateRoom") or owns("GetHarvestPointSpawnChance")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
@@ -4052,6 +4055,259 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  roomGeneration = (function()
+    -- The single Hades gathering strategy declaration. Wire enums name these
+    -- families; native source, cache, tool and collection meaning lives here.
+    local strategies = {
+      flora = { point = "HarvestPoint", num = "NumHarvestPoints", cache = "HarvestPointChoicesIds", allowed = "HarvestPointsAllowed", usable = "UseableHarvestPoint", familiarTool = "ToolHarvest", data = "HarvestData", callback = "UseHarvestPoint" },
+      mining = { point = "PickaxePoint", num = "NumPickaxePoints", cache = "PickaxePointChoices", allowed = "PickaxePointsAllowed", flag = "PickaxePointSuccess", usable = "UseablePickaxePoint", tool = "ToolPickaxe", data = "PickaxePointData", chosen = "ChosenPickaxePointData", callback = "UsePickaxePoint" },
+      digging = { point = "ShovelPoint", num = "NumShovelPoints", cache = "ShovelPointChoices", allowed = "ShovelPointsAllowed", flag = "ShovelPointSuccess", usable = "UseableShovelPoint", tool = "ToolShovel", data = "ShovelPointData", callback = "UseShovelPoint" },
+      shades = { point = "ExorcismPoint", num = "NumExorcismPoints", cache = "ExorcismPointChoices", allowed = "ExorcismPointsAllowed", flag = "ExorcismPointSuccess", usable = "UseableExorcismPoint", tool = "ToolExorcismBook", data = "ExorcismData", chosen = "ChosenExorcismPointData", used = "ExorcismPointUsed", complex = true, callback = "UseExorcismPoint" },
+      fishing = { point = "FishingPoint", num = "NumFishingPoints", cache = "FishingPointChoices", allowed = "FishingPointsAllowed", flag = "FishingPointSuccess", usable = "UseableFishingPoint", tool = "ToolFishingRod", data = "FishingData", used = "FishingPointUsed", complex = true, callback = "UseFishingPoint" },
+    }
+    local frames = setmetatable({}, { __mode = "k" })
+    local function liveFrame(frame)
+      return frame ~= nil and not M.terminalActionUnknown and frame.session == SessionState
+        and frame.run == CurrentRun and type(CurrentRun) == "table" and frame.hero == CurrentRun.Hero
+    end
+    local function release()
+      releaseHook("CreateRoom")
+      releaseHook("GetHarvestPointSpawnChance")
+    end
+    local function install()
+      requireFunctions("gathering room generation", { "CreateRoom", "DeepCopyTable", "ShallowCopyTable", "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" })
+      local controlsTools = false
+      for family, strategy in pairs(strategies) do if strategy.tool and M.gatheringProbabilities[family] ~= nil then controlsTools = true end end
+      if controlsTools then
+        requireFunctions("gathering chance", { "GetHarvestPointSpawnChance" })
+        installHook("GetHarvestPointSpawnChance", function(original, data, room)
+          local frame = frames[coroutine.running()]
+          if not liveFrame(frame) then return original(data, room) end
+          local family
+          for name, entry in pairs(strategies) do if entry.tool and _G[entry.data] == data then family = name; break end end
+          local percentage = frame.probabilities[family]
+          if percentage == nil then return original(data, room) end
+          if room[data.RoomChanceName] == 0 then return -1 end
+          if HasFamiliarTool(data.ToolName) and (type(CurrentRun.Hero) ~= "table" or type(CurrentRun.Hero.Traits) ~= "table") then return original(data, room) end
+          local quotaProbe = DeepCopyTable(room)
+          quotaProbe[data.RoomChanceName] = 1
+          local nativeChance = original(data, quotaProbe)
+          if not finite(nativeChance) or nativeChance <= 0 or percentage == 0 then return -1 end
+          return percentage / 100
+        end, "session")
+      else releaseHook("GetHarvestPointSpawnChance") end
+      installHook("CreateRoom", function(original, roomData, args)
+        if M.terminalActionUnknown or type(CurrentRun) ~= "table" or next(M.gatheringProbabilities) == nil then return original(roomData, args) end
+        local input, inputArgs = DeepCopyTable(roomData), DeepCopyTable(args or {})
+        local probabilities = ShallowCopyTable(M.gatheringProbabilities)
+        local flora = probabilities.flora
+        if flora ~= nil then
+          local overrides = inputArgs.RoomOverrides
+          local effective = ShallowCopyTable(input)
+          for key, value in pairs(type(overrides) == "table" and overrides or {}) do effective[key] = value end
+          local familiar = HasFamiliarTool("ToolHarvest")
+          -- Native eligibility/force checks run exactly once in CreateRoom.
+          -- The pure bonus read is safe only with the native Hero trait owner;
+          -- early rooms without that owner retain their native arrays.
+          local ordinary = not CurrentRun.ActiveBounty and not CurrentRun.IsDreamRun and effective.HasHarvestPoint
+          local canProject = not familiar or (type(CurrentRun.Hero) == "table" and type(CurrentRun.Hero.Traits) == "table")
+          if ordinary and canProject then
+            local chances = effective.HarvestPointChances or HarvestData.DefaultSpawnChances
+            local bonus = familiar and GetTotalHeroTraitValue("FamiliarResourceBonusChance") or 0
+            local projected = {}
+            for index in ipairs(chances) do projected[index] = (flora == 0 and -1 or flora / 100) - bonus end
+            if type(overrides) == "table" and overrides.HarvestPointChances ~= nil then overrides.HarvestPointChances = projected
+            else input.HarvestPointChances = projected end
+          end
+        end
+        local key = coroutine.running()
+        local previous = frames[key]
+        frames[key] = { probabilities = probabilities, session = SessionState, run = CurrentRun, hero = CurrentRun.Hero }
+        local ok, result = pcall(original, input, inputArgs)
+        frames[key] = previous
+        if type(args) == "table" then args.RewardStoreName = inputArgs.RewardStoreName end
+        if not ok then error(result) end
+        return result
+      end, "session")
+    end
+    local function setProbabilities(values)
+      if type(values) ~= "table" then error("Invalid gathering probability") end
+      local normalized = {}
+      for family, value in pairs(values) do
+        if strategies[family] == nil or not finite(value) or value < 0 or value > 100 then error("Invalid gathering probability") end
+        normalized[family] = value
+      end
+      M.gatheringProbabilities = normalized
+      if next(normalized) == nil then release() else install() end
+    end
+    local generated = setmetatable({}, { __mode = "k" })
+    local observation, serial = nil, 0
+    local function resourcesUsable(values)
+      if type(values) ~= "table" or next(values) == nil then return false end
+      for name, amount in pairs(values) do if type(ResourceData) ~= "table" or ResourceData[name] == nil or not finite(amount) or amount <= 0 then return false end end
+      return true
+    end
+    local function eligiblePool(family, room)
+      local strategy = strategies[family]
+      local data = _G[strategy.data]
+      if type(data) ~= "table" then return {} end
+      local pool = {}
+      if family == "fishing" then
+        if type(GetCurrentFishingBiomeName) ~= "function" or type(data.BiomeFish) ~= "table" or type(data.FishValues) ~= "table" then return pool end
+        for index, option in ipairs(data.BiomeFish[GetCurrentFishingBiomeName()] or data.BiomeFish.Defaults or {}) do
+          if data.FishValues[option.Name] ~= nil and IsGameStateEligible(option, option.GameStateRequirements) then pool[index] = option end
+        end
+      else
+        for index, option in ipairs(data.WeightedOptions or {}) do
+          local usable = family == "mining" and finite(option.MaxHealth) and option.MaxHealth > 0 and type(ResourceData) == "table" and ResourceData[option.ResourceName] ~= nil
+            or family ~= "mining" and not option.ConsumableName and resourcesUsable(option.AddResources)
+          if usable and IsGameStateEligible(option, option.GameStateRequirements, { RoomSetName = room.RoomSetName }) then pool[index] = option end
+        end
+      end
+      return pool
+    end
+    local function inspect(family)
+      local strategy = strategies[family]
+      if not strategy or M.terminalActionUnknown or not ready() or sceneName() ~= "run" or type(MapState) ~= "table" or type(MapState.ActiveObstacles) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
+      local room, hero = CurrentRun.CurrentRoom, CurrentRun.Hero
+      if hero.HostilePolymorph or (type(ScreenState) == "table" and ScreenState.InTransition) or next(ActiveScreens or {}) ~= nil then return nil, "hades2.gathering.unavailable.scene" end
+      for _, name in ipairs({ "SetupHarvestPoints", "GetInactiveIdsByType", "Activate", "SetupObstacle", "IsUseable", "IsGameStateEligible", "HasFamiliarTool", "DeepCopyTable", "GetConfigOptionValue", "IsEmpty", "RemoveRandomValue", strategy.callback }) do
+        if type(_G[name]) ~= "function" then return nil, "hades2.gathering.unavailable.native" end
+      end
+      if GetConfigOptionValue({ Name = "EditingMode" }) or not finite(room[strategy.num]) or type(CurrentRun.BiomeHarvestPointsSeen) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
+      if type(ObstacleData) ~= "table" or type(ObstacleData[strategy.point]) ~= "table" or ObstacleData[strategy.point].OnUsedFunctionName ~= strategy.callback then return nil, "hades2.gathering.unavailable.native" end
+      local familiarTool = strategy.tool or strategy.familiarTool
+      if HasFamiliarTool(familiarTool) and type(MapState.FamiliarUnit) ~= "table" then return nil, "hades2.gathering.unavailable.familiar" end
+      if strategy.tool and (type(HasAccessToTool) ~= "function" or not HasAccessToTool(strategy.tool)) then return nil, "hades2.gathering.unavailable.tool" end
+      if strategy.complex and (type(IsComplexHarvestAllowed) ~= "function" or not IsComplexHarvestAllowed()) then return nil, "hades2.gathering.unavailable.complex" end
+      if family == "fishing" and type(ScreenAnchors) == "table" and ScreenAnchors.LavaVignetteId then return nil, "hades2.gathering.unavailable.lava" end
+      if number(room[strategy.num]) > 0 or room[strategy.usable] or strategy.used and room[strategy.used]
+          or type(room[strategy.cache]) == "table" and next(room[strategy.cache]) ~= nil
+          or strategy.chosen and room[strategy.chosen] ~= nil or generated[room] and generated[room][family] then return nil, "hades2.gathering.unavailable.existing" end
+      for _, object in pairs(MapState.ActiveObstacles) do if type(object) == "table" and object.Name == strategy.point then return nil, "hades2.gathering.unavailable.existing" end end
+      local id
+      for _, candidate in ipairs(GetInactiveIdsByType({ Name = strategy.point }) or {}) do
+        if finite(candidate) and candidate > 0 and MapState.ActiveObstacles[candidate] == nil then id = candidate; break end
+      end
+      if id == nil then return nil, "hades2.gathering.unavailable.placement" end
+      local pool = eligiblePool(family, room)
+      if next(pool) == nil then return nil, "hades2.gathering.unavailable.pool" end
+      local functions = { "OverwriteTableKeys" }
+      if family == "flora" then functions[#functions + 1] = "GetRandomValueFromWeightedList"; functions[#functions + 1] = "ChangeDrawGroup"
+      elseif family == "mining" or family == "shades" then functions[#functions + 1] = "GetRandomEligibleValueFromWeightedList" end
+      if family == "shades" then for _, name in ipairs({ "RestoreMapStateObject", "CreateAnimation", "ExorcismGenerateMoveSequence", "ExorcismPointChosenPresentation", "SetAnimation" }) do functions[#functions + 1] = name end end
+      if family == "fishing" then functions[#functions + 1] = "SetAnimation" end
+      if family == "mining" then functions[#functions + 1] = "SetGeometry" end
+      for _, name in ipairs(functions) do if type(_G[name]) ~= "function" then return nil, "hades2.gathering.unavailable.native" end end
+      local keys = {}
+      for index, option in pairs(pool) do
+        local payload = {}
+        for name, amount in pairs(option.AddResources or {}) do payload[#payload + 1] = name .. ":" .. tostring(amount) end
+        table.sort(payload)
+        keys[#keys + 1] = tostring(index) .. ":" .. tostring(option) .. ":" .. tostring(option.Weight)
+          .. ":" .. tostring(option.Name) .. ":" .. tostring(option.ResourceName) .. ":" .. tostring(option.MaxHealth) .. ":" .. table.concat(payload, ",")
+      end
+      table.sort(keys)
+      return { family = family, strategy = strategy, session = SessionState, run = CurrentRun, hero = hero, room = room, map = MapState, familiar = MapState.FamiliarUnit, familiarLinked = HasFamiliarTool(familiarTool), roomName = room.Name, biome = room.RoomSetName, id = id, pool = pool, poolKey = table.concat(keys, "|") }
+    end
+    local function sameTarget(left, right)
+      return left ~= nil and right ~= nil and left.session == right.session and left.run == right.run and left.hero == right.hero
+        and left.room == right.room and left.map == right.map and left.familiar == right.familiar and left.familiarLinked == right.familiarLinked and left.roomName == right.roomName and left.biome == right.biome and left.id == right.id and left.poolKey == right.poolKey
+    end
+    local function observe()
+      local targets, prior = {}, observation or {}
+      local nextObservation = {}
+      for family in pairs(strategies) do
+        local ok, target, reason = pcall(inspect, family)
+        if not ok then target, reason = nil, "hades2.gathering.unavailable.native" end
+        if target then
+          if sameTarget(prior[family], target) then target.token = prior[family].token
+          else serial = serial + 1; target.token = M.traitInventoryGeneration .. ":gathering:" .. tostring(serial) end
+          nextObservation[family] = target
+          targets[family] = { available = true, scopeToken = target.token }
+        else targets[family] = { available = false, reason = reason } end
+      end
+      observation = nextObservation
+      return targets
+    end
+    local function prepare(params)
+      local previous = observation and observation[params.family]
+      local target, reason = inspect(params.family)
+      if type(params.scopeToken) ~= "string" or previous == nil or params.scopeToken ~= previous.token or not sameTarget(previous, target) then error(reason or "hades2.gathering.unavailable.stale") end
+      return target
+    end
+    local function ownerMatches(target)
+      return SessionState == target.session and CurrentRun == target.run and CurrentRun.Hero == target.hero
+        and CurrentRun.CurrentRoom == target.room and MapState == target.map
+    end
+    local function generate(record, target)
+      local room, strategy, family = target.room, target.strategy, target.family
+      if not sameTarget(target, inspect(family)) then record.status = "failed"; record.error = "hades2.gathering.unavailable.stale"; return nil, "failed" end
+      -- Let native RNG choose from the validated native pool before changing any
+      -- room field. A chooser failure has not activated an authored point.
+      local choice
+      if family == "flora" then
+        local weights = {}; for index, option in pairs(target.pool) do weights[index] = option.Weight or 1 end
+        local ok, selected = pcall(GetRandomValueFromWeightedList, weights)
+        if not ok or target.pool[selected] == nil then record.status = "failed"; record.error = "hades2.gathering.unavailable.pool"; return nil, "failed" end
+        choice = selected
+      elseif strategy.chosen then
+        local ok, selected = pcall(GetRandomEligibleValueFromWeightedList, target.pool, { RoomSetName = room.RoomSetName })
+        local member = false; for _, option in pairs(target.pool) do if option == selected then member = true end end
+        if not ok or not member then record.status = "failed"; record.error = "hades2.gathering.unavailable.pool"; return nil, "failed" end
+        choice = selected
+      end
+      if not ownerMatches(target) then record.status = "failed"; record.error = "hades2.gathering.unavailable.stale"; return nil, "failed" end
+      local originalValues, masked = {}, {}
+      local function stage(key, value) if not masked[key] then originalValues[key] = { value = room[key] }; masked[key] = true end; room[key] = value end
+      for name, entry in pairs(strategies) do
+        if name == family then stage(entry.allowed, 1); if entry.flag then stage(entry.flag, true) end
+        else if entry.flag then stage(entry.flag, false) else stage(entry.allowed, 0) end end
+      end
+      stage(strategy.cache, { target.id })
+      if family == "flora" then stage("HarvestPointChoicesOptions", { choice })
+      elseif strategy.chosen then stage(strategy.chosen, choice) end
+      local originalActivate, entered = Activate, false
+      local activateLease = function(args)
+        if args.Id == target.id then
+          if not ownerMatches(target) then error("hades2.gathering.unavailable.stale") end
+          entered = true
+        end
+        return originalActivate(args)
+      end
+      Activate = activateLease
+      local ok, failure = pcall(SetupHarvestPoints, room)
+      if Activate == activateLease then Activate = originalActivate end
+      -- Restore unrelated native fields even on failure, including absent fields.
+      for key, saved in pairs(originalValues) do
+        local selected = key == strategy.allowed or key == strategy.flag or key == strategy.cache or key == strategy.chosen or family == "flora" and key == "HarvestPointChoicesOptions"
+        if not selected or not entered then room[key] = saved.value end
+      end
+      if not entered then
+        record.status = "failed"; record.error = ok and "hades2.gathering.unavailable.placement" or tostring(failure)
+        return nil, "failed"
+      end
+      generated[room] = generated[room] or {}; generated[room][family] = true
+      if not ok then error(failure) end
+      if not ownerMatches(target) then error("Gathering owner changed after native activation") end
+      if MapState.FamiliarUnit ~= target.familiar or HasFamiliarTool(strategy.tool or strategy.familiarTool) ~= target.familiarLinked
+          or target.hero.HostilePolymorph or strategy.tool and not HasAccessToTool(strategy.tool)
+          or strategy.complex and not IsComplexHarvestAllowed()
+          or family == "fishing" and ScreenAnchors.LavaVignetteId then error("Native gathering access changed after activation") end
+      local object = MapState.ActiveObstacles[target.id]
+      if type(object) ~= "table" or object.Name ~= strategy.point or object.OnUsedFunctionName ~= strategy.callback or not room[strategy.usable] or not IsUseable({ Id = target.id }) then error("Native gathering point is not usable") end
+      if family == "flora" or family == "shades" then if not resourcesUsable(object.AddResources) then error("Native gathering reward is unavailable") end
+      elseif family == "mining" then if not finite(object.Health) or object.Health <= 0 or not ResourceData[object.ResourceName] then error("Native mining point is not collectible") end end
+      return target.id, "completed"
+    end
+    local function snapshot()
+      local result = {}
+      for family, value in pairs(M.gatheringProbabilities) do result[family] = value end
+      return result
+    end
+    return { release = release, install = install, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
+  end)()
+
   choiceReroll = (function()
     local observation, activeLease
     local serial = 0
@@ -4600,6 +4856,8 @@ if __MacGamingTrainerV1 == nil then
       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
       choiceReroll = choiceReroll.observe(),
+      gatheringProbabilities = roomGeneration.snapshot(),
+      gatheringTargets = roomGeneration.observe(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
@@ -5444,6 +5702,9 @@ if __MacGamingTrainerV1 == nil then
       local desired = entry.desired and entry.desired() or M.desiredFeatures[key]
       run(key, desired, entry)
     end
+    if onlyKey == nil or onlyKey == "gathering" then
+      if not featureAttempt("gathering", next(M.gatheringProbabilities) ~= nil, roomGeneration.install, roomGeneration.release, raiseOnError) then allOk = false end
+    end
     if onlyKey == nil or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
       if (M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then
         releaseEconomyRuntime(); M.featureErrors.economy = nil
@@ -5513,6 +5774,7 @@ if __MacGamingTrainerV1 == nil then
       advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
       reroll_choice = { "menuToken", "expectedCost" },
+      generate_gathering = { "family", "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse" },
       spawn_reward = { "reward" },
     }
@@ -5540,7 +5802,7 @@ if __MacGamingTrainerV1 == nil then
       }
     end
     local function publishActionReceipt(record)
-      if record.command == "reroll_choice" and record.status == "outcome_unknown" then M.terminalActionUnknown = true end
+      if (record.command == "reroll_choice" or record.command == "generate_gathering") and record.status == "outcome_unknown" then M.terminalActionUnknown = true end
       M.lastActionReceipt = actionReceipt(record, record.requestId, false)
     end
     local function action(command, params, work, preflight)
@@ -5697,6 +5959,16 @@ if __MacGamingTrainerV1 == nil then
       local plan
       return actionLedger.run(command, params, function(record) return choiceReroll.run(record, plan) end,
         function() plan = choiceReroll.prepare(params) end)
+    end
+    if command == "generate_gathering" then
+      local target
+      return actionLedger.run(command, params, function(record) return roomGeneration.generate(record, target) end,
+        function() target = roomGeneration.prepare(params) end)
+    end
+    if command == "set_gathering_probabilities" then
+      roomGeneration.setProbabilities(params.probabilities)
+      synchronize()
+      return state(params.includeCatalogs)
     end
     if command == "cleanup" or command == "disable_all" then
       local hadMana = M.infiniteMana

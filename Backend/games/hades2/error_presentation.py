@@ -100,6 +100,18 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.scene', 'key': 'hades2.gathering.unavailable.scene', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.native', 'key': 'hades2.gathering.unavailable.native', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.familiar', 'key': 'hades2.gathering.unavailable.familiar', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.tool', 'key': 'hades2.gathering.unavailable.tool', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.complex', 'key': 'hades2.gathering.unavailable.complex', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.lava', 'key': 'hades2.gathering.unavailable.lava', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.existing', 'key': 'hades2.gathering.unavailable.existing', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.placement', 'key': 'hades2.gathering.unavailable.placement', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.pool', 'key': 'hades2.gathering.unavailable.pool', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'inspect'}}},
+ {'match': 'literal', 'message': 'hades2.gathering.unavailable.stale', 'key': 'hades2.gathering.unavailable.stale', 'runtime_only': True, 'runtime': {'commands': ['generate_gathering'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
+ {'match': 'literal', 'message': '请选择采集类型。', 'key': 'hades2.error.selectGatheringFamily'},
+ {'match': 'literal', 'message': '请刷新当前房间后再生成采集点。', 'key': 'hades2.gathering.unavailable.stale'},
  {'match': 'literal', 'message': '请刷新后重新随机当前选项。', 'key': 'hades2.reroll.stale'},
  {'match': 'literal', 'message': 'Choice reroll menu is stale', 'key': 'hades2.reroll.stale',
   'runtime_only': True, 'runtime': {'commands': ['reroll_choice'], 'producer': {'kind': 'helper', 'name': 'prepare'}}},
