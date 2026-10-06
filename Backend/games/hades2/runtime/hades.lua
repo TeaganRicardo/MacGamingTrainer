@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 90 then
+if previousModule and previousModule.revision ~= 91 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 90 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 90, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 91, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4738,6 +4738,15 @@ if __MacGamingTrainerV1 == nil then
       return screen
     end
 
+    local function screenDataPresent(name)
+      return type(ScreenData) == "table" and type(ScreenData[name]) == "table"
+    end
+
+    local function storePanelPresent()
+      return screenDataPresent("WellShop") or screenDataPresent("SellTraits")
+        or type(UpdateStoreReroll) == "function"
+    end
+
     local function storePanelSupported()
       return type(UpdateStoreReroll) == "function"
     end
@@ -4758,6 +4767,13 @@ if __MacGamingTrainerV1 == nil then
       if not storePanelSupported() then return end
       updateCurrentStorePanel("WellShop")
       updateCurrentStorePanel("SellTraits")
+    end
+
+    local function doorPresent()
+      return type(HasHeroTraitValue) == "function"
+        or type(AssignRoomToExitDoor) == "function"
+        or type(CheckSpecialDoorRequirement) == "function"
+        or type(RefreshUseButton) == "function"
     end
 
     local function doorSupported()
@@ -4887,6 +4903,11 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    local function surfaceShopPresent()
+      return screenDataPresent("SurfaceShop")
+        or (type(StoreData) == "table" and type(StoreData.SurfaceShop) == "table")
+    end
+
     local function surfaceShopSupported()
       local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
       local surface = type(ScreenData) == "table" and ScreenData.SurfaceShop or nil
@@ -4905,6 +4926,10 @@ if __MacGamingTrainerV1 == nil then
         and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
         and type(surface) == "table" and type(surface.ComponentData) == "table"
         and type(data) == "table" and type(data.GroupsOf) == "table"
+    end
+
+    local function selenePresent()
+      return screenDataPresent("SpellScreen") or screenDataPresent("TalentScreen")
     end
 
     local function seleneSupported()
@@ -5418,11 +5443,12 @@ if __MacGamingTrainerV1 == nil then
 
     local function rerollSpellScreen(screen)
       local plan = spellPlan(screen)
-      if plan == nil then error("Force reroll pool has no changed eligible candidates") end
+      if plan == nil then return false end
       destroySpellButtons(screen)
       SessionMapState.SelectedSpells = ShallowCopyTable(plan)
       updateSpellDuoEligibility(screen, plan)
       CreateSpellButtons(screen)
+      return true
     end
 
     local function treeShapeKey(tree)
@@ -5533,7 +5559,7 @@ if __MacGamingTrainerV1 == nil then
 
     local function rerollTalentScreen(screen)
       local candidate = talentPlan(screen)
-      if candidate == nil then error("Force reroll pool has no changed eligible candidates") end
+      if candidate == nil then return false end
       local slotted = seleneModel.currentSpell()
       for depth, column in ipairs(slotted.Talents) do
         for slot, node in pairs(type(column) == "table" and column or {}) do
@@ -5545,6 +5571,7 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       rebuildTalentScreen(screen)
+      return true
     end
 
     local function needsAdapter(source, kind, definition)
@@ -5579,6 +5606,57 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    local function clearRerollControl(screen, hideIcon)
+      local components = type(screen) == "table" and screen.Components or nil
+      local button = type(components) == "table" and components.RerollButton or nil
+      if type(button) == "table" then
+        button.OnPressedFunctionName = nil
+        button.RerollFunctionName = nil
+        button.Cost = -1
+        setButtonVisible(button, false)
+      end
+      local icon = type(components) == "table" and components.RerollIcon or nil
+      if hideIcon and type(icon) == "table" and finite(icon.Id) and type(SetAlpha) == "function" then
+        SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
+      end
+    end
+
+    local function configureRerollControl(screen, args)
+      local components = type(screen) == "table" and screen.Components or nil
+      local button = type(components) == "table" and components.RerollButton or nil
+      local icon = type(components) == "table" and components.RerollIcon or nil
+      if type(args) ~= "table" or not finite(args.cost)
+          or type(button) ~= "table" or not finite(button.Id)
+          or type(icon) ~= "table" or not finite(icon.Id)
+          or type(AttemptPanelReroll) ~= "function" then
+        return false
+      end
+      if args.moveUI then
+        moveRerollUI(screen)
+      elseif args.showIcon then
+        if type(ModifyTextBox) == "function" then
+          ModifyTextBox({ Id = icon.Id, Text = CurrentRun.NumRerolls, AutoSetDataProperties = false })
+        end
+        if type(SetAlpha) == "function" then
+          SetAlpha({ Id = icon.Id, Fraction = 1.0, Duration = 0.2 })
+        end
+      end
+      button.Cost = args.cost
+      button.RerollColor = args.color
+      button.RerollId = args.rerollId
+      if args.lootData ~= nil then button.LootData = args.lootData end
+      button.OnPressedFunctionName = "AttemptPanelReroll"
+      button.RerollFunctionName = args.callback
+      if type(ModifyTextBox) == "function" then
+        ModifyTextBox({
+          Id = button.Id, Text = "Boon_Reroll",
+          LuaKey = "TempTextData", LuaValue = { Amount = args.cost },
+        })
+      end
+      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= args.cost)
+      return true
+    end
+
     local function configure(screen, source)
       if not M.desiredFeatures.forceEnableRerolls or type(screen) ~= "table"
           or type(source) ~= "table" or type(screen.Components) ~= "table" then
@@ -5595,29 +5673,19 @@ if __MacGamingTrainerV1 == nil then
       end
       if (kind == "fixed" or kind == "echoPrevious")
           and not hasAlternative(source, kind, definition) then
-        button.OnPressedFunctionName = nil
-        button.RerollFunctionName = nil
-        button.Cost = -1
-        setButtonVisible(button, false)
+        clearRerollControl(screen, true)
         return false
       end
       local cost, key = forcedCost(screen, source)
       if cost == nil then return false end
-      moveRerollUI(screen)
-      button.Cost = cost
-      button.RerollColor = source.LootColor
-      button.RerollId = key
-      button.LootData = source
-      button.OnPressedFunctionName = "AttemptPanelReroll"
-      button.RerollFunctionName = needsAdapter(source, kind, definition) and callbackName or "RerollBoonLoot"
-      if type(ModifyTextBox) == "function" then
-        ModifyTextBox({
-          Id = button.Id, Text = "Boon_Reroll",
-          LuaKey = "TempTextData", LuaValue = { Amount = cost },
-        })
-      end
-      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= cost)
-      return true
+      return configureRerollControl(screen, {
+        cost = cost,
+        color = source.LootColor,
+        rerollId = key,
+        lootData = source,
+        callback = needsAdapter(source, kind, definition) and callbackName or "RerollBoonLoot",
+        moveUI = true,
+      })
     end
 
     local function surfaceShopState()
@@ -5774,13 +5842,14 @@ if __MacGamingTrainerV1 == nil then
 
     local function rerollSurfaceShop(screen)
       local replacements = surfaceShopPlan()
-      if replacements == nil then error("Force reroll pool has no changed eligible candidates") end
+      if replacements == nil then return false end
       local _, _, options = surfaceShopState()
       if type(options) ~= "table" then error("Force reroll source changed") end
       destroySurfaceShopRows(screen)
       for index, option in pairs(replacements) do options[index] = option end
       if type(UpdateStoreOptionsDictionary) == "function" then UpdateStoreOptionsDictionary() end
       CreateSurfaceShopButtons(screen)
+      return true
     end
 
     local function surfaceShopCost(screen)
@@ -5813,34 +5882,16 @@ if __MacGamingTrainerV1 == nil then
       end
       local cost = surfaceShopCanReroll() and surfaceShopCost(screen) or nil
       if cost == nil then
-        button.OnPressedFunctionName = nil
-        button.RerollFunctionName = nil
-        button.Cost = -1
-        setButtonVisible(button, false)
-        if type(SetAlpha) == "function" and finite(icon.Id) then
-          SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
-        end
+        clearRerollControl(screen, true)
         return false
       end
-      button.Cost = cost
-      button.RerollColor = { 48, 25, 83, 255 }
-      button.RerollId = screen.Name
-      button.OnPressedFunctionName = "AttemptPanelReroll"
-      button.RerollFunctionName = surfaceShopCallbackName
-      if type(ModifyTextBox) == "function" then
-        ModifyTextBox({
-          Id = button.Id, Text = "Boon_Reroll",
-          LuaKey = "TempTextData", LuaValue = { Amount = cost },
-        })
-        ModifyTextBox({
-          Id = icon.Id, Text = CurrentRun.NumRerolls, AutoSetDataProperties = false,
-        })
-      end
-      if type(SetAlpha) == "function" and finite(icon.Id) then
-        SetAlpha({ Id = icon.Id, Fraction = 1.0, Duration = 0.2 })
-      end
-      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= cost)
-      return true
+      return configureRerollControl(screen, {
+        cost = cost,
+        color = { 48, 25, 83, 255 },
+        rerollId = screen.Name,
+        callback = surfaceShopCallbackName,
+        showIcon = true,
+      })
     end
 
     local function configureSelene(screen)
@@ -5864,31 +5915,21 @@ if __MacGamingTrainerV1 == nil then
       local available = isSpell and spellHasAlternative(screen)
         or (isTalent and talentHasMutableNode(screen))
       if not available then
-        button.OnPressedFunctionName = nil
-        button.RerollFunctionName = nil
-        button.Cost = -1
-        setButtonVisible(button, false)
+        clearRerollControl(screen, true)
         return false
       end
 
       local source = type(screen.Source) == "table" and screen.Source or {}
       local cost, key = forcedCost(screen, source)
       if cost == nil then return false end
-      moveRerollUI(screen)
-      button.Cost = cost
-      button.RerollColor = source.LootColor
-      button.RerollId = key
-      button.LootData = source
-      button.OnPressedFunctionName = "AttemptPanelReroll"
-      button.RerollFunctionName = seleneCallbackName
-      if type(ModifyTextBox) == "function" then
-        ModifyTextBox({
-          Id = button.Id, Text = "Boon_Reroll",
-          LuaKey = "TempTextData", LuaValue = { Amount = cost },
-        })
-      end
-      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= cost)
-      return true
+      return configureRerollControl(screen, {
+        cost = cost,
+        color = source.LootColor,
+        rerollId = key,
+        lootData = source,
+        callback = seleneCallbackName,
+        moveUI = true,
+      })
     end
 
     local function restoreRerollPresentation(screen, hideIcon)
@@ -5912,13 +5953,7 @@ if __MacGamingTrainerV1 == nil then
       for _, name in ipairs({ "SpellScreen", "TalentScreen" }) do
         local screen = currentNamedScreen(name)
         if screen ~= nil and type(screen.Components) == "table" then
-          local button = screen.Components.RerollButton
-          if type(button) == "table" then
-            button.OnPressedFunctionName = nil
-            button.RerollFunctionName = nil
-            button.Cost = -1
-            setButtonVisible(button, false)
-          end
+          clearRerollControl(screen, true)
           restoreRerollPresentation(screen, true)
         end
       end
@@ -5927,17 +5962,7 @@ if __MacGamingTrainerV1 == nil then
     local function restoreCurrentSurfaceShop()
       local screen = currentNamedScreen("SurfaceShop")
       if screen == nil or type(screen.Components) ~= "table" then return end
-      local button = screen.Components.RerollButton
-      if type(button) == "table" then
-        button.OnPressedFunctionName = nil
-        button.RerollFunctionName = nil
-        button.Cost = -1
-        setButtonVisible(button, false)
-      end
-      local icon = screen.Components.RerollIcon
-      if type(icon) == "table" and finite(icon.Id) and type(SetAlpha) == "function" then
-        SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
-      end
+      clearRerollControl(screen, true)
     end
 
     local function restoreCurrentNative()
@@ -5969,6 +5994,38 @@ if __MacGamingTrainerV1 == nil then
       setButtonVisible(button, number(CurrentRun.NumRerolls) >= cost)
     end
 
+    local function rollbackPanelSpend(screen, button)
+      local run = type(CurrentRun) == "table" and CurrentRun or nil
+      local room = type(run) == "table" and run.CurrentRoom or nil
+      local cost = type(button) == "table" and button.Cost or nil
+      if type(room) ~= "table" or not finite(cost) or cost < 0 or not finite(run.NumRerolls) then
+        return false
+      end
+      if M.rerollsLock ~= nil then
+        run.NumRerolls = M.rerollsLock
+      else
+        run.NumRerolls = run.NumRerolls + cost
+      end
+      local rerollId = button.RerollId
+      local spent = room.SpentRerolls
+      if rerollId ~= nil and type(spent) == "table" then
+        local count = number(spent[rerollId])
+        if count > 0 then
+          count = count - 1
+          spent[rerollId] = count > 0 and count or nil
+        end
+      end
+      if type(UpdateRerollUI) == "function" then pcall(UpdateRerollUI, run.NumRerolls) end
+      return true
+    end
+
+    local function failNoPlanAfterSpend(screen, button)
+      if not rollbackPanelSpend(screen, button) then
+        error("Force reroll pool changed after native spend; rollback unavailable")
+      end
+      error("Force reroll pool has no changed eligible candidates")
+    end
+
     callback = function(screen, button)
       local ok, message = pcall(function()
         local source = type(button) == "table" and button.LootData
@@ -5977,9 +6034,7 @@ if __MacGamingTrainerV1 == nil then
         if kind == nil or type(screen) ~= "table" or screen.Source ~= source then
           error("Force reroll source changed")
         end
-        if source.ObjectId == nil or source.ObjectId == -1 then
-          syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
-        end
+        local synthetic = source.ObjectId == nil or source.ObjectId == -1
         if kind == "loot" then
           local native = nativeSource(source, definition)
           if native == source then
@@ -6002,7 +6057,10 @@ if __MacGamingTrainerV1 == nil then
           })
           if type(planned.UpgradeOptions) ~= "table" or #planned.UpgradeOptions == 0
               or candidatesKey(planned.UpgradeOptions) == candidatesKey(source.UpgradeOptions) then
-            error("Force reroll pool has no changed eligible candidates")
+            failNoPlanAfterSpend(screen, button)
+          end
+          if synthetic then
+            syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
           end
           DestroyBoonLootButtons(screen, source)
           for _, key in ipairs({
@@ -6016,7 +6074,10 @@ if __MacGamingTrainerV1 == nil then
         end
 
         local plan = changedPlan(source, kind, definition)
-        if plan == nil then error("Force reroll pool has no changed eligible candidates") end
+        if plan == nil then failNoPlanAfterSpend(screen, button) end
+        if synthetic then
+          syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
+        end
         if plan.preview then
           SessionMapState.OldFamiliarTrait = plan.preview.old
           SessionMapState.NewFamiliarTrait = plan.preview.new
@@ -6047,15 +6108,17 @@ if __MacGamingTrainerV1 == nil then
         local live = currentNamedScreen(screen.Name)
         if live ~= screen then error("Force reroll source changed") end
         local source = type(screen.Source) == "table" and screen.Source or {}
-        if source.ObjectId == nil or source.ObjectId == -1 then
-          syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
-        end
+        local applied
         if screen.Name == "SpellScreen" then
-          rerollSpellScreen(screen)
+          applied = rerollSpellScreen(screen)
         elseif screen.Name == "TalentScreen" then
-          rerollTalentScreen(screen)
+          applied = rerollTalentScreen(screen)
         else
           error("Force reroll source changed")
+        end
+        if not applied then failNoPlanAfterSpend(screen, button) end
+        if source.ObjectId == nil or source.ObjectId == -1 then
+          syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
         end
       end)
       if not ok and type(DebugPrint) == "function" then
@@ -6071,7 +6134,7 @@ if __MacGamingTrainerV1 == nil then
             or currentNamedScreen("SurfaceShop") ~= screen then
           error("Force reroll source changed")
         end
-        rerollSurfaceShop(screen)
+        if not rerollSurfaceShop(screen) then failNoPlanAfterSpend(screen, button) end
       end)
       if not ok and type(DebugPrint) == "function" then
         DebugPrint({ Text = "MacGamingTrainer SurfaceShop force reroll failed after native spend: " .. tostring(message) })
@@ -6247,28 +6310,30 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function supported()
-      return type(HeroHasTrait) == "function"
+      local base = type(HeroHasTrait) == "function"
         and type(OpenUpgradeChoiceMenu) == "function"
         and type(CreateBoonLootButtons) == "function"
         and type(AttemptPanelReroll) == "function"
         and type(RerollBoonLoot) == "function"
         and type(DestroyBoonLootButtons) == "function"
+      return base
+        and (not selenePresent() or seleneSupported())
+        and (not storePanelPresent() or storePanelSupported())
+        and (not surfaceShopPresent() or surfaceShopSupported())
+        and (not doorPresent() or doorSupported())
     end
 
     local function active()
-      local seleneActive = true
-      if seleneSupported() then
-        seleneActive = owns("CreateSpellButtons") and owns("UpdateTalentButtons")
-          and _G[seleneCallbackName] == seleneCallback
-      end
-      local storePanelActive = not storePanelSupported() or owns("UpdateStoreReroll")
-      local surfaceShopActive = not surfaceShopSupported()
+      if not supported() then return false end
+      local seleneActive = not selenePresent()
+        or (owns("CreateSpellButtons") and owns("UpdateTalentButtons")
+          and _G[seleneCallbackName] == seleneCallback)
+      local storePanelActive = not storePanelPresent() or owns("UpdateStoreReroll")
+      local surfaceShopActive = not surfaceShopPresent()
         or (owns("CreateSurfaceShopButtons") and owns("HandleSurfaceShopAction")
           and _G[surfaceShopCallbackName] == surfaceShopCallback)
-      local doorActive = true
-      if doorSupported() then
-        doorActive = owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor")
-      end
+      local doorActive = not doorPresent()
+        or (owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor"))
       return M.desiredFeatures.forceEnableRerolls
         and owns("HeroHasTrait") and owns("OpenUpgradeChoiceMenu")
         and owns("CreateBoonLootButtons") and _G[callbackName] == callback
