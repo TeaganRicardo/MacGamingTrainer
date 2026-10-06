@@ -19,7 +19,9 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
         # Execute in LLDB's existing interpreter namespace without replacing
         # its __main__ module. runpy either replaced __main__ (breaking LLDB's
         # run_one_line helper) or isolated the test in a second namespace that
-        # could deadlock SB callbacks on the macOS runner.
+        # could deadlock SB callbacks on the macOS runner. Set __file__ explicitly
+        # because runpy used to provide it for the embedded script.
+        f"globals()['__file__']={path!r}; "
         f"exec(compile(open({path!r}, 'rb').read(), {path!r}, 'exec'), globals(), globals())"
     )
     try:
