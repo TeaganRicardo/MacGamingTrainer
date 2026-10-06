@@ -74,6 +74,11 @@ jobs:
         if: needs.scope.outputs.needs_module == 'true'
         run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
+      - uses: actions/setup-python@v5
+        if: needs.scope.outputs.needs_module == 'true'
+        with:
+          python-version: '3.14'
+
       - name: Install reference fixture
         if: needs.scope.outputs.needs_module == 'true'
         run: |
