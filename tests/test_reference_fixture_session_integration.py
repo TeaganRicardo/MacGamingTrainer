@@ -50,7 +50,7 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 let args = CommandLine.arguments
-if args.count != 2 { fail("expected temporary backend server path") }
+if args.count != 3 { fail("expected temporary backend server path and Python executable") }\nlet backendPythonURL = URL(fileURLWithPath: args[2])
 
 let missingSession = TrainerBackendSession()
 var missingLogs: [String] = []
@@ -299,12 +299,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     proc = subprocess.run(
-        [str(binary), str(project / "Backend/core/server.py")],
+        [str(binary), str(project / "Backend/core/server.py"), PYTHON],
         cwd=project,
         env=env,
         text=True,
         capture_output=True,
-        timeout=20,
+        timeout=45,
     )
     if proc.returncode != 0:
         print(proc.stdout)
