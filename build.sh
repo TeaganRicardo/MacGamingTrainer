@@ -173,6 +173,44 @@ grep -q "typealias ActiveGameModule = ${FRONTEND_MODULE_TYPE}" "$GENERATED_SWIFT
 rm -rf "$APP"
 mkdir -p "${CONTENTS}/MacOS" "$BACKEND" "${CONTENTS}/Resources"
 cp "$ROOT/Info.plist" "${CONTENTS}/Info.plist"
+
+PYTHON_RESOURCES="${CONTENTS}/Resources/Python"
+mkdir -p "$PYTHON_RESOURCES"
+for arch in "${ARCHITECTURES[@]}"; do
+    runtime_root="$GENERATED_DIR/python-runtime/$arch/python"
+    destination="$PYTHON_RESOURCES/$arch"
+    mkdir -p "$destination"
+    cp -R "$runtime_root/." "$destination/"
+done
+"$PYTHON" - "$PYTHON_RUNTIME_MANIFEST" "$PYTHON_RESOURCES/runtime.json" "${ARCHITECTURES[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+architectures = sys.argv[3:]
+source = json.loads(source_path.read_text(encoding="utf-8"))
+distributions = source.get("distributions", {})
+selected = {}
+for architecture in architectures:
+    declaration = distributions.get(architecture)
+    if not isinstance(declaration, dict):
+        raise SystemExit(f"Missing bundled Python declaration for {architecture}")
+    selected[architecture] = declaration
+metadata = {
+    "schemaVersion": source.get("schemaVersion"),
+    "provider": source.get("provider"),
+    "release": source.get("release"),
+    "version": source.get("version"),
+    "architectures": architectures,
+    "distributions": selected,
+}
+output_path.write_text(
+    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
 for language in en zh-CN; do
     source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"
     [[ -f "$source" ]] || { echo "Missing Host localization table: $source" >&2; exit 1; }
@@ -262,23 +300,21 @@ for item in manifest.get('appResources', []):
         raise SystemExit(f"App resource was not packaged: {item['destination']}")
 PY
 
-# Import the packaged adapter with the exact Python selected for production.
-# This catches import-time syntax/type-evaluation failures before a signed app ships.
-PYTHONPATH="$BACKEND" "$PYTHON" - "$NORMALIZED_MANIFEST" <<'PY'
-import importlib
-import json
+# Construct the packaged adapter with the pinned application Python.
+# HOME is isolated so build verification cannot touch developer or runner state.
+BACKEND_SMOKE_HOME="$GENERATED_DIR/backend-smoke-home"
+mkdir -p "$BACKEND_SMOKE_HOME"
+PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "$ACTIVE_GAME_ID" <<'PY'
 import sys
-from pathlib import Path
+from core.registry import create_adapter
 
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-adapter = manifest.get("backend", {}).get("adapter", "")
-module_name, separator, class_name = adapter.partition(":")
-if not module_name or not separator or not class_name:
-    raise SystemExit(f"Invalid backend adapter declaration: {adapter!r}")
-module = importlib.import_module(module_name)
-adapter_type = getattr(module, class_name, None)
-if not isinstance(adapter_type, type):
-    raise SystemExit(f"Backend adapter is not a class: {adapter}")
+adapter = create_adapter(sys.argv[1])
+try:
+    metadata = adapter.metadata()
+    if metadata.get("id") != sys.argv[1]:
+        raise SystemExit(f"Backend adapter identity mismatch: {metadata!r}")
+finally:
+    adapter.close()
 PY
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
@@ -363,6 +399,14 @@ plutil -lint "${CONTENTS}/Info.plist" >/dev/null
 # Remove only the two attached-data classes that codesign rejects. Keep
 # com.apple.provenance and file-provider provenance/fpfs attributes untouched.
 "$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
+
+# The bundled runtime contains nested Mach-O interpreters, libpython and extension
+# modules. Sign nested code before signing the outer app bundle.
+while IFS= read -r runtime_code; do
+    if file "$runtime_code" | grep -q 'Mach-O'; then
+        codesign --force --sign - --timestamp=none "$runtime_code"
+    fi
+done < <(find "$PYTHON_RESOURCES" -type f \( -name 'python3*' -o -name '*.so' -o -name '*.dylib' \) | sort)
 
 if [[ -n "$ENTITLEMENTS_REL" ]]; then
     ENTITLEMENTS="$ROOT/$ENTITLEMENTS_REL"
