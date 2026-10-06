@@ -10,6 +10,35 @@ WORKFLOW = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 MANIFEST_PATH = ROOT / 'Backend/games/hades2/module.json'
 MANIFEST = json.loads(MANIFEST_PATH.read_text())
 VERIFY = ROOT / 'Tools/verify_module_build.py'
+PYTHON_RUNTIME_SOURCE = json.loads((ROOT / 'Tools/python_runtime.json').read_text())
+
+def install_runtime_fixture(resources, architectures=('arm64',)):
+    runtime = resources / 'Python'
+    runtime.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        'schemaVersion': PYTHON_RUNTIME_SOURCE['schemaVersion'],
+        'provider': PYTHON_RUNTIME_SOURCE['provider'],
+        'release': PYTHON_RUNTIME_SOURCE['release'],
+        'version': PYTHON_RUNTIME_SOURCE['version'],
+        'architectures': list(architectures),
+        'distributions': {
+            arch: PYTHON_RUNTIME_SOURCE['distributions'][arch]
+            for arch in architectures
+        },
+    }
+    (runtime / 'runtime.json').write_text(json.dumps(metadata))
+    python_line = '.'.join(PYTHON_RUNTIME_SOURCE['version'].split('.')[:2])
+    for arch in architectures:
+        bin_dir = runtime / arch / 'bin'
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        versioned = bin_dir / f'python{python_line}'
+        versioned.write_text('#!/bin/sh\nexit 0\n')
+        versioned.chmod(0o755)
+        unversioned = bin_dir / 'python3'
+        if unversioned.exists() or unversioned.is_symlink():
+            unversioned.unlink()
+        unversioned.symlink_to(versioned.name)
+
 
 # A stale app alphabetically before the selected target must not win discovery.
 assert 'Tools/verify_module_build.py' in WORKFLOW
@@ -40,10 +69,44 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     binary = app / 'Contents/MacOS' / info['CFBundleExecutable']
     binary.parent.mkdir()
     binary.write_bytes(b'temporary executable fixture')
+    install_runtime_fixture(resources)
+
+    # The package verifier owns the bundled-runtime contract. Missing runtime
+    # metadata or interpreter must fail before app selection can be accepted.
+    runtime_manifest = resources / 'Python/runtime.json'
+    runtime_manifest.unlink()
+    missing_runtime = subprocess.run(
+        [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist)],
+        text=True,
+        capture_output=True,
+    )
+    assert missing_runtime.returncode != 0
+    assert 'Python runtime' in missing_runtime.stderr
+    install_runtime_fixture(resources)
 
     command = [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist), '--print-app']
     selected = subprocess.check_output(command, text=True).strip()
     assert selected == str(app.resolve()), selected
+
+    # python-build-standalone exposes python3 as an in-tree symlink to the
+    # versioned interpreter. That is safe only while the resolved target stays
+    # inside the packaged runtime.
+    runtime_python = resources / 'Python/arm64/bin/python3'
+    versioned_python = runtime_python.resolve()
+    outside_python = Path(temporary) / 'outside-python'
+    outside_python.write_text('#!/bin/sh\nexit 0\n')
+    outside_python.chmod(0o755)
+    runtime_python.unlink()
+    runtime_python.symlink_to(outside_python)
+    escaped_runtime = subprocess.run(
+        [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist)],
+        text=True,
+        capture_output=True,
+    )
+    assert escaped_runtime.returncode != 0
+    assert 'escapes package' in escaped_runtime.stderr
+    runtime_python.unlink()
+    runtime_python.symlink_to(versioned_python.name)
 
     # A stale app alone is not an acceptable fallback when the target is absent.
     with tempfile.TemporaryDirectory(prefix='mgt-stale-only-') as stale_only:

@@ -257,6 +257,101 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertEqual(json.loads(self.provenance_path().read_text())['residentRuntime']['packagedPath'],
                          packaged)
 
+    def test_python_runtime_provenance_binds_tracked_declaration_to_package(self):
+        module = self.root / 'Backend/games/hades2'
+        module.mkdir(parents=True)
+        (module / 'module.json').write_text(json.dumps({
+            'id': 'hades2', 'displayName': 'Hades II',
+            'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
+        }))
+        tools = self.root / 'Tools'
+        tools.mkdir()
+        source_runtime = {
+            'schemaVersion': 1,
+            'provider': 'astral-sh/python-build-standalone',
+            'release': '20261003',
+            'version': '3.15.0rc3',
+            'distributions': {
+                'arm64': {
+                    'target': 'aarch64-apple-darwin',
+                    'url': 'https://example.invalid/python-arm64.tar.gz',
+                    'sha256': 'a' * 64,
+                },
+                'x86_64': {
+                    'target': 'x86_64-apple-darwin',
+                    'url': 'https://example.invalid/python-x86_64.tar.gz',
+                    'sha256': 'b' * 64,
+                },
+            },
+        }
+        source_path = tools / 'python_runtime.json'
+        source_path.write_text(json.dumps(source_runtime, indent=2) + '\n')
+        subprocess.run(['git', 'add', 'Backend', 'Tools'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'runtime'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+
+        resources = 'Test.app/Contents/Resources'
+        packaged_runtime = {
+            'schemaVersion': source_runtime['schemaVersion'],
+            'provider': source_runtime['provider'],
+            'release': source_runtime['release'],
+            'version': source_runtime['version'],
+            'architectures': ['arm64'],
+            'distributions': {
+                'arm64': source_runtime['distributions']['arm64'],
+            },
+        }
+
+        def package(runtime):
+            runtime_bytes = (json.dumps(runtime, indent=2, sort_keys=True) + '\n').encode()
+            with zipfile.ZipFile(self.artifact, 'w') as archive:
+                archive.writestr('Test.app/Contents/Info.plist', self.packaged_info())
+                archive.writestr('Test.app/Contents/MacOS/TestTrainer', b'binary')
+                archive.writestr(f'{resources}/ACTIVE_GAME_ID', 'hades2\n')
+                archive.writestr(
+                    f'{resources}/Backend/games/hades2/module.json',
+                    (module / 'module.json').read_bytes(),
+                )
+                archive.writestr(f'{resources}/Python/runtime.json', runtime_bytes)
+            return runtime_bytes
+
+        packaged_bytes = package(packaged_runtime)
+        result = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        runtime = manifest['pythonRuntime']
+        self.assertEqual(runtime['provider'], source_runtime['provider'])
+        self.assertEqual(runtime['release'], '20261003')
+        self.assertEqual(runtime['version'], '3.15.0rc3')
+        self.assertEqual(runtime['architectures'], ['arm64'])
+        self.assertEqual(
+            runtime['distributions'],
+            {'arm64': source_runtime['distributions']['arm64']},
+        )
+        self.assertEqual(
+            runtime['sourceSha256'],
+            hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            runtime['packagedMetadataSha256'],
+            hashlib.sha256(packaged_bytes).hexdigest(),
+        )
+
+        mismatched = dict(packaged_runtime, version='3.15.0')
+        package(mismatched)
+        mismatch = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn('Python runtime version differs', mismatch.stderr)
+
+        mismatched = dict(packaged_runtime)
+        mismatched['distributions'] = {
+            'arm64': {**source_runtime['distributions']['arm64'], 'sha256': 'c' * 64},
+        }
+        package(mismatched)
+        mismatch = self.run_tool('--local', '--module-id', 'hades2')
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn('Python runtime distributions differ', mismatch.stderr)
+
     def test_module_id_must_match_packaged_marker_and_manifest(self):
         modules = self.root / 'Backend/games'
         for game_id in ('hades2', 'reference_fixture'):

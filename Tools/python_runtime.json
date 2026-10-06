@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "provider": "astral-sh/python-build-standalone",
+  "release": "20261003",
+  "version": "3.15.0rc3",
+  "distributions": {
+    "arm64": {
+      "target": "aarch64-apple-darwin",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.15.0rc3%2B20261003-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "01a70164895bd551e81f8ad966eb24a55f06c67537b926737b8bfd0dcc24585e"
+    },
+    "x86_64": {
+      "target": "x86_64-apple-darwin",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.15.0rc3%2B20261003-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "17b48a85c3293dd0af3bdff5b0c7799727996b6c8c31b08c3bb148b28419947c"
+    }
+  }
+}

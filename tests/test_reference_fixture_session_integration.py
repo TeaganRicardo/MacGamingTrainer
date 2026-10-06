@@ -50,9 +50,12 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 let args = CommandLine.arguments
-if args.count != 2 { fail("expected temporary backend server path") }
+if args.count != 3 { fail("expected temporary backend server path and Python executable") }
+let backendPythonURL = URL(fileURLWithPath: args[2])
 
-let missingSession = TrainerBackendSession()
+let missingSession = TrainerBackendSession(
+    client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
+)
 var missingLogs: [String] = []
 let missingModel = ReferenceFixtureModel(
     session: missingSession,
@@ -76,7 +79,9 @@ if !missingLogs.contains(where: { $0.contains("/definitely/missing") }) {
 // preferences directory; a real suite there cannot be cleaned up afterwards.
 let localizationDefaults = InMemoryDefaults()
 
-let session = TrainerBackendSession()
+let session = TrainerBackendSession(
+    client: BackendClient(process: BackendProcess(executableURL: backendPythonURL))
+)
 var capturedLogs: [String] = []
 let model = ReferenceFixtureModel(
     session: session,
@@ -299,12 +304,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     proc = subprocess.run(
-        [str(binary), str(project / "Backend/core/server.py")],
+        [str(binary), str(project / "Backend/core/server.py"), PYTHON],
         cwd=project,
         env=env,
         text=True,
         capture_output=True,
-        timeout=20,
+        timeout=45,
     )
     if proc.returncode != 0:
         print(proc.stdout)
