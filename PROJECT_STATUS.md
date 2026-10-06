@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 13.
 - Hades II desired-state schema: 8.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 89.
+- Hades II resident runtime revision: 90.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -43,7 +43,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 89. Revisions 52–89 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 90. Revisions 52–90 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -79,6 +79,7 @@ Current source contains resident revision 89. Revisions 52–89 remain pending t
 - revision 87: **强制启用重骰 / Force Enable Rerolls** extends to Selene's non-UpgradeChoice owners without restoring the retired Trainer-issued reroll transaction. `SpellScreen` receives the same Hades contextual reroll control and regenerates a genuinely changed eligible Hex shortlist in place before native selection; writable `TalentScreen` regenerates only uninvested Path of Stars nodes on the existing topology, preserves invested/queued node identity and point accounting, then rebuilds the native tree controls without reopening the pickup owner. Read-only Path of Stars remains non-rerollable. Native `AttemptPanelReroll` continues to own spend, escalation, RNG synchronization and input lifecycle. Reward-door force-enablement remains subsequent serialized work; consolidated real-game acceptance remains pending.
 - revision 88: enabling **强制启用重骰 / Force Enable Rerolls** while a Selene `SpellScreen` or writable `TalentScreen` is already open now materializes the same Hades contextual reroll icon/button directly into the existing native ActionBar using the game's component/alignment helpers. No owner reopen, pickup replay, talent-point mutation or counterfeit screen is introduced; disable still removes availability immediately. consolidated real-game acceptance remains pending.
 - revision 89: **强制启用重骰 / Force Enable Rerolls** extends to native reward-route rerolls. While enabled, the resident answers the game's `HasHeroTraitValue("AllowDoorReroll")` capability query without adding or upgrading the Door Reroll Arcana, and force-enables only concrete native reward owners backed by `AttemptRerollDoor`, `AttemptRerollFieldsDoor`, or `AttemptRerollShipWheel`. Ordinary exits, Fields cages and ship wheels keep native one-reroll spend, RNG, reward-store exclusion and preview/update ownership. A genuine reward owner may ignore an authored `AllowReroll=false`, but `NoReroll` Story/Boss rooms, Shop exits, special-requirement/encounter-locked doors and no-reward exits remain non-rerollable. Enabling reconciles already-offered owners; disabling is idempotent and restores the actual native `AllowDoorReroll` baseline, including packaged trials where the capability is absent. No permanent MetaUpgrade/Arcana state or reroll currency is changed; consolidated real-game acceptance remains pending.
+- revision 90: **强制启用重骰 / Force Enable Rerolls** extends store-choice coverage to the Well of Charon `WellShop`, Pool of Purging `SellTraits`, and Shrine of Hermes `SurfaceShop` owners. Well/Sell continue through native `UpdateStoreReroll` with only a scoped `PanelRerollMetaUpgrade` lease; `AttemptPanelReroll`, `RerollStore`, and `SellTraitScreenReroll` retain spend, escalating cost and option ownership. SurfaceShop has no native reroll control, so the resident injects the same contextual control and regenerates only unpurchased SurfaceShop offers through the native `StoreData.SurfaceShop` / `FillInShopOptions` owner while preserving purchased pending-delivery orders. Already-open screens are reconciled immediately, exhausted pools remain unavailable, and disable restores the real native baseline without changing Arcana or Hero trait ownership. Consolidated real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 
