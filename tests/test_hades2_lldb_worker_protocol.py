@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
+from core.sidecar import SidecarStartError, SidecarTerminalError
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import _LLDBWorkerClient
 
@@ -126,61 +127,109 @@ assert replies[6]["error"] == {
 assert replies[6]["state"]["tainted"] is True
 
 
-class _InterruptingInput:
-    def write(self, value):
-        return len(value)
+class FakeSidecar:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+        self.marked_unknown = []
+        self.started = True
+        self.terminal = False
+        self.closed = False
 
-    def flush(self):
-        pass
+    def request(self, method, params=None, *, outcome_unknown_on_loss=False):
+        self.calls.append((method, dict(params or {}), outcome_unknown_on_loss))
+        if not self.responses:
+            raise AssertionError(f"unexpected sidecar request: {method}")
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            self.terminal = True
+            self.started = False
+            raise response
+        return response
+
+    def invalidate(self, detail, *, outcome_unknown=False):
+        self.terminal = True
+        self.started = False
+        raise SidecarTerminalError(detail, outcome_unknown=outcome_unknown)
+
+    def mark_outcome_unknown(self, detail):
+        self.marked_unknown.append(detail)
+        self.terminal = True
+        self.started = False
 
     def close(self):
-        pass
+        self.closed = True
+        self.started = False
 
 
-class _InterruptingOutput:
-    def readline(self):
-        raise KeyboardInterrupt()
+# Hades owns the worker handshake, method risk classification and presentation
+# mapping while Core owns the underlying request/reply transport mechanics.
+healthy_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": 4242}},
+])
+healthy_client = _LLDBWorkerClient(sidecar=healthy_sidecar)
+assert healthy_client.call("transport.alive") == (True, {"pid": 4242})
+assert healthy_sidecar.calls == [
+    ("hello", {}, False),
+    ("transport.alive", {}, False),
+]
 
-
-class _InterruptedSidecar:
-    def __init__(self):
-        self.stdin = _InterruptingInput()
-        self.stdout = _InterruptingOutput()
-        self.terminated = False
-        self.killed = False
-
-    def poll(self):
-        return -15 if self.terminated or self.killed else None
-
-    def terminate(self):
-        self.terminated = True
-
-    def kill(self):
-        self.killed = True
-
-    def wait(self, timeout=None):
-        return self.poll()
-
-
-# BackendProcess sends SIGTERM on a Host timeout. core.server converts that
-# signal to KeyboardInterrupt so its adapter can clean up. If that interrupt
-# lands while the bundled backend is blocked waiting for the LLDB sidecar,
-# the sidecar must be terminated before the interrupt escapes; otherwise the
-# Host can restart a new backend while an orphan debugger still owns the game.
-interrupted_process = _InterruptedSidecar()
-interrupted_client = _LLDBWorkerClient()
-interrupted_client._process = interrupted_process
+lost_mutation_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    SidecarTerminalError("lost LLDB acknowledgement", outcome_unknown=True),
+])
+lost_mutation_client = _LLDBWorkerClient(sidecar=lost_mutation_sidecar)
 try:
-    interrupted_client.call("transport.alive")
-except KeyboardInterrupt:
-    pass
+    lost_mutation_client.call("transport.execute", {"source": "return true"})
+except AdapterError as error:
+    assert error.code == "outcome_unknown", error.code
+    assert error.presentation == "hades2.error.outcomeUnknownGeneric"
 else:
-    raise AssertionError("simulated backend termination did not interrupt sidecar exchange")
-assert interrupted_process.terminated or interrupted_process.killed, (
-    "interrupted sidecar exchange left the debugger child running"
-)
-assert not interrupted_client.started, (
-    "interrupted sidecar exchange remained owned after backend termination"
-)
+    raise AssertionError("lost mutating LLDB reply was not outcome-unknown")
+assert lost_mutation_sidecar.calls[-1][2] is True
+try:
+    lost_mutation_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "outcome_unknown", "terminal trust failure was not sticky"
+else:
+    raise AssertionError("terminal LLDB sidecar was reused")
+
+reported_unknown_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {
+        "id": "2",
+        "error": {
+            "code": "outcome_unknown",
+            "presentation": "hades2.error.outcomeUnknownGeneric",
+            "diagnostic": "worker lost mutation acknowledgement",
+            "arguments": [],
+        },
+        "state": {"tainted": True},
+    },
+])
+reported_unknown_client = _LLDBWorkerClient(sidecar=reported_unknown_sidecar)
+try:
+    reported_unknown_client.call("transport.execute", {"source": "return true"})
+except AdapterError as error:
+    assert error.code == "outcome_unknown"
+else:
+    raise AssertionError("worker outcome_unknown was accepted")
+assert reported_unknown_sidecar.marked_unknown == [
+    "worker lost mutation acknowledgement"
+]
+assert reported_unknown_client.terminal
+
+unavailable_sidecar = FakeSidecar([
+    SidecarStartError("xcrun python3 unavailable", outcome_unknown=False),
+])
+unavailable_client = _LLDBWorkerClient(sidecar=unavailable_sidecar)
+try:
+    unavailable_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "debugger_unavailable", error.code
+    assert error.presentation == "hades2.error.debuggerUnavailable"
+else:
+    raise AssertionError("sidecar start failure lost Hades debugger presentation")
 
 print("hades2_lldb_worker_protocol_ok")
