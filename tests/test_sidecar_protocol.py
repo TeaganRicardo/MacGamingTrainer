@@ -143,6 +143,21 @@ except SidecarTerminalError as error:
 else:
     raise AssertionError("sidecar reply timeout was not enforced")
 
+partial_process = PipeProcess()
+os.write(partial_process.write_fd, b'{"id":"1"')
+partial = JsonLineSidecarClient(
+    ["fake"],
+    process_factory=factory_for(partial_process),
+    reply_timeout_seconds=0.01,
+)
+try:
+    partial.request("observe")
+except SidecarTerminalError as error:
+    assert error.outcome_unknown is False
+    assert "timed out" in str(error)
+else:
+    raise AssertionError("partial sidecar reply escaped the total frame timeout")
+
 
 def unavailable_factory(*args, **kwargs):
     raise OSError("runtime missing")
