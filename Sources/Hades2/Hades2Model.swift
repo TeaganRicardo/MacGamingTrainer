@@ -232,7 +232,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && !busy && !exiting }
     var exactBoonOptions: [BoonOption] {
-        boons.filter { $0.group == "exact" }
+        boons.filter {
+            $0.group == "exact" && $0.acquisitionMode != "echoLastRunExact"
+        }
     }
 
     var specialRewardOptions: [BoonOption] {
