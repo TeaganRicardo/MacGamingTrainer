@@ -16,7 +16,10 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
     embedded = (
         "script import os,runpy; "
         "os.environ['MGT_LLDB_EMBEDDED_TEST']='1'; "
-        f"runpy.run_path({path!r}, run_name='__main__')"
+        # Keep LLDB's own __main__ module intact: its command interpreter owns
+        # helpers such as run_one_line there, and replacing that namespace while
+        # this regression drives SB APIs can make LLDB's callbacks fail.
+        f"runpy.run_path({path!r}, run_name='mgt_lldb_embedded_test')"
     )
     try:
         completed = subprocess.run(
