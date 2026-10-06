@@ -17,7 +17,8 @@ App
             -> game model/API
             -> game backend adapter/router
             -> game transport/persistence
-            -> resident runtime when applicable
+            -> optional game-owned runtime adapter
+                 -> debugger sidecar / native helper / engine runtime / no sidecar
 ```
 
 ### Core / Host owns
@@ -26,23 +27,25 @@ App
 - generic hotkey capture/registration and generic feedback vocabulary;
 - target-process observation and automatic/manual connection policy;
 - the single backend worker session, JSONL request ordering, queueing, timeout and protocol verification;
-- generic Process Time Warp mechanics;
+- generic optional-sidecar process lifecycle, bounded JSONL framing/request identity, reply timeout, interruption cleanup, crash handling and terminal outcome-unknown trust semantics;
+- debugger-agnostic Process Time Warp controller mechanics;
 - optional cross-game save snapshot/restore/rollback/staging infrastructure;
 - module discovery/build/package contract.
 
-Core/Host does not own Hades command names, Hades desired/active/dormant semantics, boon/resource meaning, Hades save schema or LLDB/Lua policy.
+Core/Host does not own Hades command names, Hades desired/active/dormant semantics, boon/resource meaning, Hades save schema, sidecar method vocabulary, debugger launch/configuration, or LLDB/Lua policy.
 
 ### A game module owns
 
 - command and payload semantics;
 - typed decoding of its opaque backend payload;
-- game-specific transport/debugger policy;
+- game-specific transport/debugger policy, including concrete debugger/runtime drivers;
+- optional runtime-sidecar launch command, handshake/method vocabulary, risk classification, error presentation and engine/debugger semantics;
 - durable game preferences/Profile semantics;
 - runtime observation and game-specific lifecycle evidence;
 - save codec/schema/edit semantics and game-specific save provider behavior;
 - game-specific UI composition.
 
-`reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs.
+`reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs, LLDB, Lua, or an optional sidecar.
 
 ## 2. State sources of truth
 

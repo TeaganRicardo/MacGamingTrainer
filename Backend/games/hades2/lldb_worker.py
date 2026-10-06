@@ -6,13 +6,15 @@ exposes a small JSONL RPC surface over stdio.
 """
 from __future__ import annotations
 
-import json
 import sys
 import traceback
 from pathlib import Path
 
 from core.adapter import AdapterError
-from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
+from core.process_time_warp import ProcessTimeWarpController
+from core.sidecar import serve_jsonl_requests
+
+from .lldb_time_warp import LLDBProcessTimeWarpDriver
 
 
 WORKER_PROTOCOL_VERSION = 1
@@ -150,33 +152,13 @@ class Hades2LLDBWorker:
 
 
 def serve_requests(input_stream, output_stream, worker):
-    for raw in input_stream:
-        request_id = None
-        try:
-            request = json.loads(raw)
-            if not isinstance(request, dict):
-                raise ValueError("worker request must be an object")
-            request_id = request.get("id")
-            method = request.get("method")
-            params = request.get("params", {})
-            if not isinstance(request_id, str) or not request_id:
-                raise ValueError("worker request id must be a non-empty string")
-            if not isinstance(method, str) or not method:
-                raise ValueError("worker method must be a non-empty string")
-            result = worker.dispatch(method, params)
-            response = {
-                "id": request_id,
-                "result": result,
-                "state": worker.state(),
-            }
-        except Exception as error:
-            response = {
-                "id": request_id,
-                "error": _error_payload(error),
-                "state": worker.state(),
-            }
-        output_stream.write(json.dumps(response, ensure_ascii=False) + "\n")
-        output_stream.flush()
+    return serve_jsonl_requests(
+        input_stream,
+        output_stream,
+        worker.dispatch,
+        error_payload=_error_payload,
+        state=worker.state,
+    )
 
 
 def main():

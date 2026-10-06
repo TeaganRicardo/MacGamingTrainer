@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
-from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
+from core.process_time_warp import ProcessTimeWarpController
 
 from . import preparation
 from .command_contract import Hades2CommandContract
@@ -119,6 +119,7 @@ class Hades2Adapter(GameAdapter):
                     helper_path,[GAME_SPEC.executable_name]
                 )
             else:
+                from .lldb_time_warp import LLDBProcessTimeWarpDriver
                 time_warp_controller=ProcessTimeWarpController(
                     LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
                 )
