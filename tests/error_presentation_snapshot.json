@@ -992,10 +992,6 @@
       ],
       "key": "hades2.error.prepareWhileRunning"
     },
-    "请刷新后重新随机当前选项。": {
-      "arguments": [],
-      "key": "hades2.reroll.stale"
-    },
     "请刷新当前房间后再生成采集点。": {
       "arguments": [],
       "key": "hades2.gathering.unavailable.stale"
@@ -1462,37 +1458,6 @@
       "arguments": [],
       "key": "hades2.error.requestIdReused"
     },
-    "reroll_choice::Choice reroll cost is stale": {
-      "arguments": [],
-      "key": "hades2.reroll.stale"
-    },
-    "reroll_choice::Choice reroll count is insufficient": {
-      "arguments": [],
-      "key": "hades2.reroll.unaffordable"
-    },
-    "reroll_choice::Choice reroll menu is stale": {
-      "arguments": [],
-      "key": "hades2.reroll.stale"
-    },
-    "reroll_choice::Choice reroll pool has no changed eligible candidates": {
-      "arguments": [],
-      "key": "hades2.reroll.empty"
-    },
-    "reroll_choice::Choice reroll source is unavailable": {
-      "arguments": [],
-      "key": "hades2.reroll.unavailable"
-    },
-    "reroll_choice::No eligible special blessings are available": {
-      "arguments": [],
-      "key": "hades2.error.noEligibleSpecialRewards"
-    },
-    "reroll_choice::Unsupported sample-purpose: missing SampleFunction": {
-      "arguments": [
-        "sample-purpose",
-        "SampleFunction"
-      ],
-      "key": "hades2.error.nativeFunctionMissing"
-    },
     "set_chaos_gate_probability::Invalid Chaos Gate probability": {
       "arguments": [],
       "key": "hades2.error.percentRange"
@@ -1757,7 +1722,6 @@
     "open_sell_traits",
     "open_special_choice",
     "remove_trait",
-    "reroll_choice",
     "set_chaos_gate_probability",
     "set_trait_level",
     "set_trait_rarity",

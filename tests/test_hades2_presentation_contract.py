@@ -63,16 +63,32 @@ for language, entries in TABLES.items():
             assert REGISTRY[group][term_key].get("englishValue"), f"{language} {key} term {term} en"
 
 # 3. Compatibility aliases and internal domain terms cannot reach user surfaces.
-FORBIDDEN = {
+# A canonical Trainer Product Term may intentionally contain the character
+# sequence of a compatibility alias (for example the explicitly registered
+# 强制启用重骰 label). Exact registered product labels are canonical surfaces,
+# so the alias substring heuristic must not reject them. Internal terms remain
+# forbidden unconditionally.
+FORBIDDEN_ALIASES = {
     entry["value"]
-    for group in ("compatibilityAliases", "internalTerms")
-    for entry in REGISTRY[group].values()
+    for entry in REGISTRY["compatibilityAliases"].values()
     if isinstance(entry.get("value"), str)
+}
+FORBIDDEN_INTERNAL = {
+    entry["value"]
+    for entry in REGISTRY["internalTerms"].values()
+    if isinstance(entry.get("value"), str)
+}
+PRODUCT_VALUES = {
+    "zh-CN": {entry["value"] for entry in REGISTRY["productTerms"].values()},
+    "en": {entry["englishValue"] for entry in REGISTRY["productTerms"].values()},
 }
 for language, entries in TABLES.items():
     for key, value in entries.items():
-        for term in FORBIDDEN:
-            assert term not in value, f"{language} {key} leaks non-canonical term {term!r}"
+        for term in FORBIDDEN_INTERNAL:
+            assert term not in value, f"{language} {key} leaks internal term {term!r}"
+        if value not in PRODUCT_VALUES[language]:
+            for term in FORBIDDEN_ALIASES:
+                assert term not in value, f"{language} {key} leaks non-canonical term {term!r}"
 
 # 4. Every backend presentation key resolves in every language. Runtime
 # refusals live in the same registry; only the generic fallback is separate

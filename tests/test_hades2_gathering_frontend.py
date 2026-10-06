@@ -37,7 +37,7 @@ for raw in sys.stdin:
   state['status'] = 'restart_required'
   state['gatheringTargets'] = {}
   state['lastAction'] = {'requestId': generated, 'command': 'generate_gathering', 'outcome': 'outcome_unknown'}
- reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 12, 'gameID': args.game, 'ok': True, 'result': state}
+ reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 13, 'gameID': args.game, 'ok': True, 'result': state}
  print(json.dumps(reply), flush=True)
 '''
 HARNESS = r'''

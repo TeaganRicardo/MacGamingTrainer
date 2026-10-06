@@ -14,7 +14,6 @@ enum Hades2Request {
     case lockResource(resource: String, locked: Bool)
     case setRerolls(amount: Int)
     case lockRerolls(locked: Bool)
-    case rerollChoice(menuToken: String, expectedCost: Int)
     case setGathering(family: Hades2GatheringFamily, probability: Double?)
     case setChaosGate(probability: Double?)
     case generateGathering(family: Hades2GatheringFamily, scopeToken: String)
@@ -58,7 +57,6 @@ enum Hades2Request {
         case .lockResource: return .lockResource
         case .setRerolls: return .setRerolls
         case .lockRerolls: return .lockRerolls
-        case .rerollChoice: return .rerollChoice
         case .setGathering: return .setGatheringDesired
         case .setChaosGate: return .setChaosGateDesired
         case .generateGathering: return .generateGathering
@@ -126,8 +124,6 @@ enum Hades2Request {
             return ["amount": amount]
         case .lockRerolls(let locked):
             return ["locked": locked]
-        case .rerollChoice(let menuToken, let expectedCost):
-            return ["menuToken": menuToken, "expectedCost": expectedCost]
         case .setChaosGate(let probability):
             return ["probability": probability.map { $0 as Any } ?? NSNull()]
         case .setGathering(let family, let probability):
