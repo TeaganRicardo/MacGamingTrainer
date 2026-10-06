@@ -81,7 +81,7 @@ class _LLDBWorkerClient:
                 raise
             raise AdapterError(
                 "debugger_unavailable",
-                "无法启动 LLDB 调试后端。",
+                "hades2.error.debuggerUnavailable",
                 diagnostic=str(error),
             ) from error
 
@@ -93,7 +93,7 @@ class _LLDBWorkerClient:
             self._terminate()
             raise AdapterError(
                 "debugger_protocol",
-                "LLDB 调试后端协议不兼容。",
+                "hades2.error.debuggerProtocol",
                 diagnostic=f"worker hello={result!r}",
             )
 
@@ -102,13 +102,13 @@ class _LLDBWorkerClient:
         if method in _RISKY_METHODS:
             error = AdapterError(
                 "outcome_unknown",
-                "游戏调用结果不明，未自动重试；请检查游戏并重启。",
+                "hades2.error.outcomeUnknownGeneric",
                 diagnostic=detail,
             )
         else:
             error = AdapterError(
                 "restart_required",
-                "LLDB 调试后端已退出；请重新连接游戏。",
+                "hades2.error.debuggerExited",
                 diagnostic=detail,
             )
         self._terminal_error = error
@@ -165,7 +165,7 @@ class _LLDBWorkerClient:
                 self._communication_failure(method, f"Malformed worker error: {error!r}")
             raised = AdapterError(
                 str(error.get("code") or "debugger_error"),
-                str(error.get("presentation") or "LLDB 调试后端调用失败。"),
+                str(error.get("presentation") or "hades2.error.debuggerCallFailed"),
                 diagnostic=(
                     str(error["diagnostic"])
                     if error.get("diagnostic") is not None
