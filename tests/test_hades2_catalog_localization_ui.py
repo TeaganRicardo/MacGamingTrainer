@@ -12,6 +12,7 @@ from games.hades2 import catalog, localization
 lua = (ROOT / 'Backend/games/hades2/runtime/hades.lua').read_text()
 card = (ROOT / 'Sources/Core/UI/Primitives/TrainerCard.swift').read_text()
 view = (ROOT / 'Sources/Hades2/Hades2View.swift').read_text()
+model = (ROOT / 'Sources/Hades2/Hades2Model.swift').read_text()
 zh_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.zh-CN.json').read_text()
 en_presentation = (ROOT / 'Sources/Hades2/Presentation/Localization/hades2.en.json').read_text()
 
@@ -257,6 +258,51 @@ assert hex_row['sectionTitle'] == '巫咒' and hex_row['englishSectionTitle'] ==
 assert talent_row['name'] == '毁灭之星' and talent_row['englishName'] == 'Gloaming'
 assert talent_row['sectionTitle'] == '繁星之路'
 assert talent_row['englishSectionTitle'] == 'Path of Stars'
+
+# Echo direct exact targets use the native Echo reward-page title rather than
+# the character name. The previous-run owner stays a separate backend concern.
+original_display_names = localization.official_display_names
+def echo_direct_names(identifiers, language='zh-CN', game_path=None):
+    table = {
+        'zh-CN': {
+            'EchoDoubleLevelBoon': '再来一次',
+            'NPC_Echo_01': '回声',
+            'EchoChoiceMenu_Title': '凄楚回声',
+        },
+        'en': {
+            'EchoDoubleLevelBoon': 'Encore',
+            'NPC_Echo_01': 'Echo',
+            'EchoChoiceMenu_Title': 'Plaintive Echoes',
+        },
+    }
+    return {key: table.get(language, {}).get(key) for key in identifiers if table.get(language, {}).get(key)}
+localization.official_display_names = echo_direct_names
+try:
+    echo_direct_payload = {
+        'rewards': [{
+            'id': 'trait:EchoDoubleLevelBoon', 'name': 'EchoDoubleLevelBoon',
+            'trait': 'EchoDoubleLevelBoon', 'kind': 'trait', 'group': 'exact',
+            'sourceId': 'Echo', 'sourceName': '回声',
+            'sectionTitle': '回声', 'category': '角色奖励',
+            'nativeChoice': True, 'acquisitionMode': 'direct',
+        }]
+    }
+    catalog.localize_catalog(echo_direct_payload)
+finally:
+    localization.official_display_names = original_display_names
+
+echo_direct = echo_direct_payload['rewards'][0]
+assert echo_direct['sourceName'] == '回声' and echo_direct['sourceEnglishName'] == 'Echo'
+assert echo_direct['sectionTitle'] == '凄楚回声'
+assert echo_direct['englishSectionTitle'] == 'Plaintive Echoes'
+
+# Echo's previous-run exact pool remains available to the backend owner but is
+# intentionally absent from the user-facing Exact Boons collection.
+exact_boon_options = model[
+    model.index('var exactBoonOptions: [BoonOption]'):
+    model.index('var specialRewardOptions: [BoonOption]')
+]
+assert 'acquisitionMode != "echoLastRunExact"' in exact_boon_options
 
 # Echo previous-run exact targets use the concrete boon identity, Echo as the
 # source identity, and the native previous-run choice title as their section.

@@ -387,6 +387,14 @@ def localize_catalog(decoded):
                     item['nativeChoiceTitle']=official_title
                 if isinstance(official_title_en,str) and official_title_en:
                     item['nativeChoiceEnglishTitle']=official_title_en
+                # Echo's ordinary exact targets are presented under the native
+                # reward-page identity rather than the character name. The
+                # previous-run Echo owner is intentionally a separate concern.
+                if group=='exact' and source_id=='Echo' and item.get('acquisitionMode')=='direct':
+                    if isinstance(official_title,str) and official_title:
+                        item['sectionTitle']=official_title
+                    if isinstance(official_title_en,str) and official_title_en:
+                        item['englishSectionTitle']=official_title_en
     for item in resources:
         if not isinstance(item,dict) or not isinstance(item.get('id'),str):continue
         identifier=item['id']
