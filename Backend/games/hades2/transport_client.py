@@ -58,7 +58,11 @@ class _LLDBWorkerClient:
 
     @property
     def started(self):
-        return self._sidecar.started
+        # Preserve the Hades transport's established-session meaning: once the
+        # worker handshake succeeded, a child that exits between requests may
+        # be recreated safely by the next call. Terminal in-flight failures are
+        # tracked separately and remain non-recoverable.
+        return self._hello_complete
 
     @property
     def terminal(self):
