@@ -134,6 +134,12 @@ class _LLDBWorkerClient:
             process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
             process.stdin.flush()
             raw = process.stdout.readline()
+        except (KeyboardInterrupt, SystemExit):
+            # Backend shutdown must not leave the Xcode-Python debugger child
+            # attached after the bundled worker exits. Preserve the terminating
+            # exception after releasing sidecar ownership.
+            self._terminate()
+            raise
         except (BrokenPipeError, OSError) as error:
             return self._communication_failure(method, str(error))
         if not raw:
