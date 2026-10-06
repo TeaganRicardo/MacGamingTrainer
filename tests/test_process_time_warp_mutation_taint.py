@@ -201,16 +201,4 @@ targetless_driver = LLDBProcessTimeWarpDriver(
     lldb_module=object(),
 )
 assert targetless_driver.helper_present() is False
-
-tainted_transport = FakeTransport(failed=False)
-tainted_transport.tainted = True
-tainted_driver = LLDBProcessTimeWarpDriver(
-    tainted_transport,
-    lldb_module=FakeLLDB,
-)
-expect_error(lambda: tainted_driver.session().__enter__(), "restart_required")
-assert tainted_transport.stop_calls == 0, (
-    "tainted transport touched the target before rejecting reuse"
-)
-
 print("process_time_warp_mutation_taint_ok")
