@@ -201,6 +201,25 @@ for item in manifest.get('appResources', []):
         raise SystemExit(f"App resource was not packaged: {item['destination']}")
 PY
 
+# Import the packaged adapter with the exact Python selected for production.
+# This catches import-time syntax/type-evaluation failures before a signed app ships.
+PYTHONPATH="$BACKEND" "$PYTHON" - "$NORMALIZED_MANIFEST" <<'PY'
+import importlib
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+adapter = manifest.get("backend", {}).get("adapter", "")
+module_name, separator, class_name = adapter.partition(":")
+if not module_name or not separator or not class_name:
+    raise SystemExit(f"Invalid backend adapter declaration: {adapter!r}")
+module = importlib.import_module(module_name)
+adapter_type = getattr(module, class_name, None)
+if not isinstance(adapter_type, type):
+    raise SystemExit(f"Backend adapter is not a class: {adapter}")
+PY
+
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
 TIME_WARP_SOURCE="$TIME_WARP_ROOT/ProcessTimeWarp.c"
 TIME_WARP_FISHHOOK="$TIME_WARP_ROOT/vendor/fishhook/fishhook.c"
