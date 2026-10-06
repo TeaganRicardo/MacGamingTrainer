@@ -286,6 +286,22 @@ HandleSurfaceShopAction(surface, surface.Components.PurchaseButton3)
 assert(not surface.Components.RerollButton.Visible,
   'fully purchased Shrine of Hermes still exposed a spendable reroll')
 
+-- A group must have enough new eligible offers for every still-mutable slot;
+-- otherwise the button stays unavailable before native spend.
+CurrentRun.CurrentRoom.Store.StoreOptions = {
+  { Name = 'StoreD', Purchased = true },
+  { Name = 'StoreB' },
+  { Name = 'StoreC' },
+}
+local fullSurfaceGroupTwo = StoreData.SurfaceShop.GroupsOf[2].OptionsData
+StoreData.SurfaceShop.GroupsOf[2].OptionsData = {
+  { Name = 'StoreB' }, { Name = 'StoreC' }, { Name = 'StoreE' },
+}
+CreateSurfaceShopButtons(surface)
+assert(not surface.Components.RerollButton.Visible,
+  'insufficient Shrine of Hermes replacement pool exposed a spendable reroll')
+StoreData.SurfaceShop.GroupsOf[2].OptionsData = fullSurfaceGroupTwo
+
 local beforeSpend = CurrentRun.NumRerolls
 CallFunctionName(well.Components.RerollButton.OnPressedFunctionName, well, well.Components.RerollButton)
 assert(CurrentRun.NumRerolls == beforeSpend - 1 and storeRerolls == 1,
