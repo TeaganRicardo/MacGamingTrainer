@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 91 then
+if previousModule and previousModule.revision ~= 92 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 91 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 91, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 92, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4668,11 +4668,15 @@ if __MacGamingTrainerV1 == nil then
     local callbackName = "MacGamingTrainerForceRerollChoice"
     local seleneCallbackName = "MacGamingTrainerForceRerollSelene"
     local surfaceShopCallbackName = "MacGamingTrainerForceRerollSurfaceShop"
+    local nemesisTradeCallbackName = "MacGamingTrainerForceRerollNemesisTrade"
     local callback
     local seleneCallback
     local surfaceShopCallback
+    local nemesisTradeCallback
     local storePanelDepth = 0
     local screenPatches = {}
+    local nemesisTradeArgs = setmetatable({}, { __mode = "k" })
+    local nemesisTradeScreens = setmetatable({}, { __mode = "k" })
     local forcedSources = setmetatable({}, { __mode = "k" })
     local forcedDoorBaselines = setmetatable({}, { __mode = "k" })
     local nativeDoorCapability
@@ -5053,7 +5057,7 @@ if __MacGamingTrainerV1 == nil then
     local function ensureInjectedRerollComponents(screen)
       if type(screen) ~= "table" or type(screen.Components) ~= "table"
           or (screen.Name ~= "SpellScreen" and screen.Name ~= "TalentScreen"
-            and screen.Name ~= "SurfaceShop") then
+            and screen.Name ~= "SurfaceShop" and screen.Name ~= "TradeScreen") then
         return false
       end
       if type(screen.Components.RerollIcon) == "table"
@@ -5337,6 +5341,140 @@ if __MacGamingTrainerV1 == nil then
       local key = source.ObjectId ~= nil and source.ObjectId ~= -1 and source.ObjectId or nil
       local count = key ~= nil and number(spent and spent[key]) or number(syntheticSpent[screen])
       return panelRerollCost(RerollCosts.Boon, count, RerollCosts.ReuseIncrement), key
+    end
+
+    local nemesisTradeFamilies = {
+      NemesisBuyItemChoices = "money",
+      NemesisTakeDamageForItemChoices = "damage",
+      NemesisGiveTraitForItemChoices = "traitSale",
+    }
+
+    local function nemesisTradeFamily(args)
+      if type(args) ~= "table" or type(PresetEventArgs) ~= "table" then return nil end
+      for key, family in pairs(nemesisTradeFamilies) do
+        if PresetEventArgs[key] == args then return family end
+      end
+      return nil
+    end
+
+    local function nemesisTradePresent()
+      if type(PresetEventArgs) == "table" then
+        for key in pairs(nemesisTradeFamilies) do
+          if type(PresetEventArgs[key]) == "table" then return true end
+        end
+      end
+      return type(NemesisTradeChoice) == "function"
+        or type(ScreenData) == "table" and type(ScreenData.TradeScreen) == "table"
+    end
+
+    local function nemesisTradeSupported()
+      return type(DeepCopyTable) == "function"
+        and type(IsGameStateEligible) == "function"
+        and type(GetRandomValue) == "function"
+        and type(NemesisTradeChoice) == "function"
+        and type(OpenTradeScreen) == "function"
+        and type(HandleScreenInput) == "function"
+        and type(CloseTradeScreen) == "function"
+        and type(Destroy) == "function"
+        and type(CreateComponentFromData) == "function"
+        and type(Attach) == "function"
+        and type(GetDisplayName) == "function"
+        and type(ApproximateStringWidth) == "function"
+        and rerollScreenData("TradeScreen") ~= nil
+    end
+
+    local function eligibleNemesisTradeOptions(options)
+      local result = {}
+      for _, option in ipairs(type(options) == "table" and options or {}) do
+        if type(option) == "table"
+            and (option.GameStateRequirements == nil
+              or IsGameStateEligible(CurrentRun, option, option.GameStateRequirements)) then
+          result[#result + 1] = option
+        end
+      end
+      return result
+    end
+
+    local function nemesisTradeOptionKey(option)
+      if type(option) ~= "table" then return tostring(option) end
+      return table.concat({
+        tostring(option.Name),
+        tostring(option.DisplayName),
+        tostring(not not option.UseGetCost),
+        tostring(not not option.UseGetDamage),
+        tostring(not not option.SellTrait),
+        tostring(option.CostResourceName),
+        tostring(option.CostResourceMin),
+        tostring(option.CostResourceMax),
+        tostring(option.DamageAmountMin),
+        tostring(option.DamageAmountMax),
+      }, "|")
+    end
+
+    local function nemesisTradePlanKey(giveOption, getOption)
+      return nemesisTradeOptionKey(giveOption) .. "=>" .. nemesisTradeOptionKey(getOption)
+    end
+
+    local function changedNemesisTradePlan(owner, giveOption, getOption)
+      if type(owner) ~= "table" or type(owner.args) ~= "table" then return nil end
+      local currentKey = nemesisTradePlanKey(giveOption, getOption)
+      local candidates, seen = {}, {}
+      local giveOptions = eligibleNemesisTradeOptions(owner.args.GiveOptions)
+      local getOptions = eligibleNemesisTradeOptions(owner.args.GetOptions)
+      for _, give in ipairs(giveOptions) do
+        for _, get in ipairs(getOptions) do
+          local key = nemesisTradePlanKey(give, get)
+          if key ~= currentKey and not seen[key] then
+            seen[key] = true
+            candidates[#candidates + 1] = { give = give, get = get }
+          end
+        end
+      end
+      if #candidates == 0 then return nil end
+      local selected = GetRandomValue(candidates)
+      if type(selected) ~= "table" then return nil end
+      return {
+        give = DeepCopyTable(selected.give),
+        get = DeepCopyTable(selected.get),
+      }
+    end
+
+    local function configureNemesisTrade(screen)
+      if not M.desiredFeatures.forceEnableRerolls
+          or type(screen) ~= "table" or screen.Name ~= "TradeScreen"
+          or type(screen.Source) ~= "table"
+          or screen.Source.Name ~= "NPC_Nemesis_01"
+          or not ensureInjectedRerollComponents(screen) then
+        return false
+      end
+      local owner = nemesisTradeArgs[screen.Args]
+      if type(owner) ~= "table" or owner.source ~= screen.Source
+          or owner.run ~= CurrentRun then
+        return false
+      end
+      nemesisTradeScreens[screen] = owner
+      if changedNemesisTradePlan(owner, screen.ChosenGiveOption, screen.ChosenGetOption) == nil then
+        clearRerollControl(screen, true)
+        return false
+      end
+      local cost, key = forcedCost(screen, screen.Source)
+      if cost == nil then
+        clearRerollControl(screen, true)
+        return false
+      end
+      return configureRerollControl(screen, {
+        cost = cost,
+        rerollId = key,
+        callback = nemesisTradeCallbackName,
+        showIcon = true,
+      })
+    end
+
+    local function restoreCurrentNemesisTrade()
+      local screen = currentNamedScreen("TradeScreen")
+      if screen ~= nil and type(screen.Components) == "table" then
+        clearRerollControl(screen, true)
+      end
     end
 
     local function visibleSpellNames(screen)
@@ -6160,6 +6298,30 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    nemesisTradeCallback = function(screen, button)
+      local ok, message = pcall(function()
+        local owner = nemesisTradeScreens[screen]
+        if type(screen) ~= "table" or screen.Name ~= "TradeScreen"
+            or type(button) ~= "table"
+            or button.RerollFunctionName ~= nemesisTradeCallbackName
+            or type(owner) ~= "table"
+            or owner.source ~= screen.Source
+            or owner.args ~= screen.Args
+            or owner.run ~= CurrentRun then
+          failNoPlanAfterSpend(screen, button)
+        end
+        local plan = changedNemesisTradePlan(
+          owner, screen.ChosenGiveOption, screen.ChosenGetOption
+        )
+        if plan == nil then failNoPlanAfterSpend(screen, button) end
+        owner.nextPlan = plan
+        CloseTradeScreen(screen, button)
+      end)
+      if not ok and type(DebugPrint) == "function" then
+        DebugPrint({ Text = "MacGamingTrainer Nemesis trade force reroll failed after native spend: " .. tostring(message) })
+      end
+    end
+
     local function install()
       requireFunctions("Force Enable Rerolls", {
         "HeroHasTrait", "OpenUpgradeChoiceMenu", "CreateBoonLootButtons",
@@ -6175,6 +6337,10 @@ if __MacGamingTrainerV1 == nil then
           and _G[surfaceShopCallbackName] ~= surfaceShopCallback then
         error("Force Enable Rerolls SurfaceShop callback name is already owned")
       end
+      if _G[nemesisTradeCallbackName] ~= nil
+          and _G[nemesisTradeCallbackName] ~= nemesisTradeCallback then
+        error("Force Enable Rerolls Nemesis trade callback name is already owned")
+      end
       _G[callbackName] = callback
       if seleneSupported() then
         _G[seleneCallbackName] = seleneCallback
@@ -6184,6 +6350,10 @@ if __MacGamingTrainerV1 == nil then
       if surfaceShopSupported() then
         _G[surfaceShopCallbackName] = surfaceShopCallback
         patchRerollScreenData("SurfaceShop")
+      end
+      if nemesisTradeSupported() then
+        _G[nemesisTradeCallbackName] = nemesisTradeCallback
+        patchRerollScreenData("TradeScreen")
       end
 
       if doorSupported() then
@@ -6247,6 +6417,65 @@ if __MacGamingTrainerV1 == nil then
         end)
       end
 
+      if nemesisTradeSupported() then
+        installHook("NemesisTradeChoice", function(original, source, args, screen, ...)
+          local family = M.desiredFeatures.forceEnableRerolls
+            and source and source.Name == "NPC_Nemesis_01" and nemesisTradeFamily(args) or nil
+          if family == nil then return original(source, args, screen, ...) end
+
+          local copiedArgs = DeepCopyTable(args)
+          local owner = {
+            source = source,
+            args = copiedArgs,
+            family = family,
+            run = CurrentRun,
+          }
+          nemesisTradeArgs[copiedArgs] = owner
+          local ok, result = pcall(original, source, copiedArgs, screen, ...)
+          if ok and source.Accepted and owner.finalPlan ~= nil then
+            copiedArgs.ChosenGiveOption = owner.finalPlan.give
+            copiedArgs.ChosenGetOption = owner.finalPlan.get
+          end
+          nemesisTradeArgs[copiedArgs] = nil
+          if not ok then error(result) end
+          return result
+        end)
+
+        installHook("OpenTradeScreen", function(original, source, args, giveOption, getOption, ...)
+          local owner = M.desiredFeatures.forceEnableRerolls
+            and type(args) == "table" and nemesisTradeArgs[args] or nil
+          if type(owner) ~= "table" or owner.source ~= source or owner.run ~= CurrentRun then
+            return original(source, args, giveOption, getOption, ...)
+          end
+
+          local currentGive = DeepCopyTable(giveOption)
+          local currentGet = DeepCopyTable(getOption)
+          while true do
+            owner.nextPlan = nil
+            local ok, result = pcall(original, source, args, currentGive, currentGet, ...)
+            if not ok then error(result) end
+            local nextPlan = owner.nextPlan
+            if nextPlan == nil then
+              owner.finalPlan = { give = currentGive, get = currentGet }
+              return result
+            end
+            currentGive = nextPlan.give
+            currentGet = nextPlan.get
+          end
+        end)
+
+        installHook("HandleScreenInput", function(original, screen, ...)
+          if M.desiredFeatures.forceEnableRerolls
+              and type(screen) == "table" and screen.Name == "TradeScreen"
+              and nemesisTradeArgs[screen.Args] ~= nil then
+            configureNemesisTrade(screen)
+          end
+          local result = original(screen, ...)
+          nemesisTradeScreens[screen] = nil
+          return result
+        end)
+      end
+
       installHook("OpenUpgradeChoiceMenu", function(original, source, ...)
         local kind = M.desiredFeatures.forceEnableRerolls and owner(source) or nil
         if kind == nil then return original(source, ...) end
@@ -6305,6 +6534,9 @@ if __MacGamingTrainerV1 == nil then
       end
       releaseHook("HandleSurfaceShopAction")
       releaseHook("CreateSurfaceShopButtons")
+      releaseHook("HandleScreenInput")
+      releaseHook("OpenTradeScreen")
+      releaseHook("NemesisTradeChoice")
       releaseHook("UpdateTalentButtons")
       releaseHook("CreateSpellButtons")
       releaseHook("CreateBoonLootButtons")
@@ -6322,8 +6554,14 @@ if __MacGamingTrainerV1 == nil then
       if _G[surfaceShopCallbackName] == surfaceShopCallback then
         _G[surfaceShopCallbackName] = nil
       end
+      if _G[nemesisTradeCallbackName] == nemesisTradeCallback then
+        _G[nemesisTradeCallbackName] = nil
+      end
+      for args in pairs(nemesisTradeArgs) do nemesisTradeArgs[args] = nil end
+      for screen in pairs(nemesisTradeScreens) do nemesisTradeScreens[screen] = nil end
       restoreCurrentSelene()
       restoreCurrentSurfaceShop()
+      restoreCurrentNemesisTrade()
       restoreRerollScreenData()
       restoreCurrentNative()
     end
@@ -6339,6 +6577,7 @@ if __MacGamingTrainerV1 == nil then
         and (not selenePresent() or seleneSupported())
         and (not storePanelPresent() or storePanelSupported())
         and (not surfaceShopPresent() or surfaceShopSupported())
+        and (not nemesisTradePresent() or nemesisTradeSupported())
         and (not doorPresent() or doorSupported())
     end
 
@@ -6351,12 +6590,17 @@ if __MacGamingTrainerV1 == nil then
       local surfaceShopActive = not surfaceShopPresent()
         or (owns("CreateSurfaceShopButtons") and owns("HandleSurfaceShopAction")
           and _G[surfaceShopCallbackName] == surfaceShopCallback)
+      local nemesisTradeActive = not nemesisTradePresent()
+        or (owns("NemesisTradeChoice") and owns("OpenTradeScreen")
+          and owns("HandleScreenInput")
+          and _G[nemesisTradeCallbackName] == nemesisTradeCallback)
       local doorActive = not doorPresent()
         or (owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor"))
       return M.desiredFeatures.forceEnableRerolls
         and owns("HeroHasTrait") and owns("OpenUpgradeChoiceMenu")
         and owns("CreateBoonLootButtons") and _G[callbackName] == callback
-        and seleneActive and storePanelActive and surfaceShopActive and doorActive
+        and seleneActive and storePanelActive and surfaceShopActive
+        and nemesisTradeActive and doorActive
     end
 
     return {
