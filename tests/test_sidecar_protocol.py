@@ -67,6 +67,33 @@ restart_first.terminated = True
 assert restartable.request("observe")["result"] == "second"
 assert not restart_processes
 
+# A caller with its own handshake must be able to forbid a transparent restart
+# between handshake and method dispatch. Losing that established child is then
+# a terminal request-seam failure rather than a method sent to an unverified child.
+handshake_first = FakeProcess(b'{"id":"1","result":"hello"}\n')
+handshake_second = FakeProcess(b'{"id":"2","result":"must-not-run"}\n')
+handshake_processes = [handshake_first, handshake_second]
+
+
+def handshake_factory(*args, **kwargs):
+    return handshake_processes.pop(0)
+
+
+handshaken = JsonLineSidecarClient(
+    ["fake"],
+    reply_timeout_seconds=1.0,
+    process_factory=handshake_factory,
+)
+assert handshaken.request("hello")["result"] == "hello"
+handshake_first.terminated = True
+try:
+    handshaken.request("mutate", outcome_unknown_on_loss=True, allow_start=False)
+except SidecarTerminalError as error:
+    assert error.outcome_unknown is True
+else:
+    raise AssertionError("handshake-protected request restarted an unverified child")
+assert len(handshake_processes) == 1, "allow_start=False still spawned a replacement child"
+
 mismatch_process = FakeProcess(b'{"id":"wrong","result":true}\n')
 mismatch = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=factory_for(mismatch_process))
 try:

@@ -102,6 +102,7 @@ class _LLDBWorkerClient:
                 method,
                 params or {},
                 outcome_unknown_on_loss=method in _RISKY_METHODS,
+                allow_start=False,
             )
         except (SidecarStartError, SidecarTerminalError) as error:
             self._raise_sidecar_failure(error)

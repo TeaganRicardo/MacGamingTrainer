@@ -165,7 +165,14 @@ class JsonLineSidecarClient:
             selector.close()
         return b"".join(chunks)
 
-    def request(self, method, params=None, *, outcome_unknown_on_loss=False):
+    def request(
+        self,
+        method,
+        params=None,
+        *,
+        outcome_unknown_on_loss=False,
+        allow_start=True,
+    ):
         if self._terminal_error is not None:
             raise self._terminal_error
         if not isinstance(method, str) or not method:
@@ -174,7 +181,10 @@ class JsonLineSidecarClient:
             params = {}
         if not isinstance(params, dict):
             raise ValueError("sidecar params must be an object")
-        self.start()
+        if type(allow_start) is not bool:
+            raise ValueError("sidecar allow_start must be boolean")
+        if allow_start:
+            self.start()
         process = self._process
         if process is None or process.poll() is not None:
             status = None if process is None else process.poll()

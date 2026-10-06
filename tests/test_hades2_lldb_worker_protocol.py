@@ -136,8 +136,17 @@ class FakeSidecar:
         self.terminal = False
         self.closed = False
 
-    def request(self, method, params=None, *, outcome_unknown_on_loss=False):
-        self.calls.append((method, dict(params or {}), outcome_unknown_on_loss))
+    def request(
+        self,
+        method,
+        params=None,
+        *,
+        outcome_unknown_on_loss=False,
+        allow_start=True,
+    ):
+        self.calls.append(
+            (method, dict(params or {}), outcome_unknown_on_loss, allow_start)
+        )
         if not self.responses:
             raise AssertionError(f"unexpected sidecar request: {method}")
         response = self.responses.pop(0)
@@ -172,8 +181,8 @@ healthy_sidecar = FakeSidecar([
 healthy_client = _LLDBWorkerClient(sidecar=healthy_sidecar)
 assert healthy_client.call("transport.alive") == (True, {"pid": 4242})
 assert healthy_sidecar.calls == [
-    ("hello", {}, False),
-    ("transport.alive", {}, False),
+    ("hello", {}, False, True),
+    ("transport.alive", {}, False, False),
 ]
 
 recoverable_sidecar = FakeSidecar([
@@ -189,11 +198,17 @@ assert recoverable_client.started, (
     "an established Hades worker must remain restartable after a between-request child exit"
 )
 assert recoverable_client.call("transport.alive")[0] is True
-assert [method for method, _, _ in recoverable_sidecar.calls] == [
+assert [method for method, _, _, _ in recoverable_sidecar.calls] == [
     "hello",
     "transport.alive",
     "hello",
     "transport.alive",
+]
+assert [allow_start for _, _, _, allow_start in recoverable_sidecar.calls] == [
+    True,
+    False,
+    True,
+    False,
 ]
 recoverable_sidecar.started = False
 calls_before_close = list(recoverable_sidecar.calls)
@@ -215,6 +230,7 @@ except AdapterError as error:
 else:
     raise AssertionError("lost mutating LLDB reply was not outcome-unknown")
 assert lost_mutation_sidecar.calls[-1][2] is True
+assert lost_mutation_sidecar.calls[-1][3] is False
 try:
     lost_mutation_client.call("transport.alive")
 except AdapterError as error:
