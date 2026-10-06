@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 89 then
+if previousModule and previousModule.revision ~= 90 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 89 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 89, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 90, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1255,6 +1255,7 @@ if __MacGamingTrainerV1 == nil then
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
       or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("HeroHasTrait") or owns("OpenUpgradeChoiceMenu") or owns("CreateBoonLootButtons")
+      or owns("UpdateStoreReroll") or owns("CreateSurfaceShopButtons") or owns("HandleSurfaceShopAction")
       or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
@@ -4666,8 +4667,11 @@ if __MacGamingTrainerV1 == nil then
   forceRerolls = (function()
     local callbackName = "MacGamingTrainerForceRerollChoice"
     local seleneCallbackName = "MacGamingTrainerForceRerollSelene"
+    local surfaceShopCallbackName = "MacGamingTrainerForceRerollSurfaceShop"
     local callback
     local seleneCallback
+    local surfaceShopCallback
+    local storePanelDepth = 0
     local screenPatches = {}
     local forcedSources = setmetatable({}, { __mode = "k" })
     local forcedDoorBaselines = setmetatable({}, { __mode = "k" })
@@ -4734,6 +4738,27 @@ if __MacGamingTrainerV1 == nil then
       return screen
     end
 
+    local function storePanelSupported()
+      return type(UpdateStoreReroll) == "function"
+    end
+
+    local function updateCurrentStorePanel(name)
+      local screen = currentNamedScreen(name)
+      if screen == nil then return end
+      if name == "WellShop" then
+        UpdateStoreReroll(screen)
+      elseif name == "SellTraits" then
+        local room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
+        local options = type(room) == "table" and room.SellOptions or nil
+        UpdateStoreReroll(screen, options, "SellTraitScreenReroll")
+      end
+    end
+
+    local function updateCurrentStorePanels()
+      if not storePanelSupported() then return end
+      updateCurrentStorePanel("WellShop")
+      updateCurrentStorePanel("SellTraits")
+    end
 
     local function doorSupported()
       return type(HasHeroTraitValue) == "function"
@@ -4862,6 +4887,26 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    local function surfaceShopSupported()
+      local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
+      local surface = type(ScreenData) == "table" and ScreenData.SurfaceShop or nil
+      local data = type(StoreData) == "table" and StoreData.SurfaceShop or nil
+      return type(DeepCopyTable) == "function"
+        and type(FillInShopOptions) == "function"
+        and type(StoreItemEligible) == "function"
+        and type(IsGameStateEligible) == "function"
+        and type(CreateSurfaceShopButtons) == "function"
+        and type(HandleSurfaceShopAction) == "function"
+        and type(Destroy) == "function"
+        and type(CreateComponentFromData) == "function"
+        and type(Attach) == "function"
+        and type(GetDisplayName) == "function"
+        and type(ApproximateStringWidth) == "function"
+        and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
+        and type(surface) == "table" and type(surface.ComponentData) == "table"
+        and type(data) == "table" and type(data.GroupsOf) == "table"
+    end
+
     local function seleneSupported()
       local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
       local spell = type(ScreenData) == "table" and ScreenData.SpellScreen or nil
@@ -4881,7 +4926,7 @@ if __MacGamingTrainerV1 == nil then
         and type(talent) == "table" and type(talent.ComponentData) == "table"
     end
 
-    local function patchSeleneScreenData(name)
+    local function patchRerollScreenData(name)
       if screenPatches[name] ~= nil then return end
       local screenData = ScreenData[name]
       local root = type(screenData) == "table" and screenData.ComponentData or nil
@@ -4921,7 +4966,7 @@ if __MacGamingTrainerV1 == nil then
       actionBar.ChildrenOrder = injectedOrder
     end
 
-    local function restoreSeleneScreenData()
+    local function restoreRerollScreenData()
       for name, patch in pairs(screenPatches) do
         local actionBar = type(patch.root) == "table" and patch.root.ActionBar or nil
         if patch.root.RerollIcon == patch.injectedIcon then
@@ -4980,9 +5025,10 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
-    local function ensureSeleneComponents(screen)
+    local function ensureInjectedRerollComponents(screen)
       if type(screen) ~= "table" or type(screen.Components) ~= "table"
-          or (screen.Name ~= "SpellScreen" and screen.Name ~= "TalentScreen") then
+          or (screen.Name ~= "SpellScreen" and screen.Name ~= "TalentScreen"
+            and screen.Name ~= "SurfaceShop") then
         return false
       end
       if type(screen.Components.RerollIcon) == "table"
@@ -5574,6 +5620,229 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
+    local function surfaceShopState()
+      local room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil
+      local store = type(room) == "table" and room.Store or nil
+      local options = type(store) == "table" and store.StoreOptions or nil
+      local data = type(StoreData) == "table" and StoreData.SurfaceShop or nil
+      if type(room) ~= "table" or type(store) ~= "table"
+          or type(options) ~= "table" or type(data) ~= "table"
+          or type(data.GroupsOf) ~= "table" then
+        return nil
+      end
+      return room, store, options, data
+    end
+
+    local function surfaceShopLayout(options, data)
+      local groups, totalMutable, slot = {}, 0, 1
+      for groupIndex, group in ipairs(data.GroupsOf or {}) do
+        local offers = math.max(0, math.floor(number(group.Offers)))
+        local indexes = {}
+        for _ = 1, offers do
+          local option = options[slot]
+          if type(option) == "table" and not option.Purchased then
+            indexes[#indexes + 1] = slot
+            totalMutable = totalMutable + 1
+          end
+          slot = slot + 1
+        end
+        groups[groupIndex] = { indexes = indexes, source = group }
+      end
+      return groups, totalMutable, slot - 1
+    end
+
+    local function surfaceShopCurrentNames(options)
+      local names, lookup = {}, {}
+      for _, option in pairs(options or {}) do
+        if type(option) == "table" and type(option.Name) == "string" then
+          names[#names + 1] = option.Name
+          lookup[option.Name] = true
+        end
+      end
+      return names, lookup
+    end
+
+    local function surfaceShopItemEligible(item, group, args, excluded)
+      local itemData = type(item) == "table" and item or { Name = item }
+      local name = itemData.Name
+      if type(name) ~= "string" or excluded[name] then return false end
+      local source = type(ConsumableData) == "table" and ConsumableData[name] or nil
+      if source == nil and type(LootData) == "table" then source = LootData[name] end
+      if type(source) ~= "table" then return false end
+      if itemData.AdditionalRequirements ~= nil
+          and not IsGameStateEligible(itemData, itemData.AdditionalRequirements) then
+        return false
+      end
+      if itemData.ReplaceRequirements ~= nil then
+        return IsGameStateEligible(itemData, itemData.ReplaceRequirements)
+      end
+      if group.SkipRequirements then return true end
+      return StoreItemEligible(DeepCopyTable(source), args)
+    end
+
+    local function surfaceShopEligibleCount(group, args, excluded)
+      local count, seen = 0, {}
+      for _, item in pairs(group.OptionsData or {}) do
+        local name = type(item) == "table" and item.Name or item
+        if not seen[name] and surfaceShopItemEligible(item, group, args, excluded) then
+          seen[name] = true
+          count = count + 1
+        end
+      end
+      for _, name in pairs(group.Options or {}) do
+        if not seen[name] and surfaceShopItemEligible(name, group, args, excluded) then
+          seen[name] = true
+          count = count + 1
+        end
+      end
+      return count
+    end
+
+    local function surfaceShopCanReroll()
+      local room, _, options, data = surfaceShopState()
+      if room == nil then return false end
+      local groups, totalMutable = surfaceShopLayout(options, data)
+      if totalMutable == 0 then return false end
+      local names, excluded = surfaceShopCurrentNames(options)
+      local args = { StoreData = data, RoomName = room.Name, ExclusionNames = names }
+      for index, state in ipairs(groups) do
+        if #state.indexes > 0
+            and surfaceShopEligibleCount(data.GroupsOf[index], args, excluded) < #state.indexes then
+          return false
+        end
+      end
+      return true
+    end
+
+    local function surfaceShopPlan()
+      local room, _, options, data = surfaceShopState()
+      if room == nil or not surfaceShopCanReroll() then return nil end
+      local groups, totalMutable = surfaceShopLayout(options, data)
+      local names, current = surfaceShopCurrentNames(options)
+      local rerollData = DeepCopyTable(data)
+      for index, state in ipairs(groups) do
+        rerollData.GroupsOf[index].Offers = #state.indexes
+      end
+      local generated = FillInShopOptions({
+        StoreData = rerollData,
+        RoomName = room.Name,
+        ExclusionNames = names,
+      })
+      generated = type(generated) == "table" and generated.StoreOptions or nil
+      if type(generated) ~= "table" or #generated ~= totalMutable then return nil end
+      local replacements, cursor = {}, 1
+      for _, state in ipairs(groups) do
+        for _, slot in ipairs(state.indexes) do
+          local option = generated[cursor]
+          if type(option) ~= "table" or type(option.Name) ~= "string"
+              or current[option.Name] then
+            return nil
+          end
+          replacements[slot] = option
+          cursor = cursor + 1
+        end
+      end
+      return replacements
+    end
+
+    local function destroySurfaceShopRows(screen)
+      local _, store, options, data = surfaceShopState()
+      if store == nil or type(screen) ~= "table" or type(screen.Components) ~= "table" then return end
+      local _, _, maxSlots = surfaceShopLayout(options, data)
+      local ids = {}
+      for index = 1, maxSlots do
+        for _, key in ipairs({
+          "PurchaseButton" .. index,
+          "PurchaseButton" .. index .. "Highlight",
+          "PurchaseButton" .. index .. "QuestIcon",
+          "Icon" .. index,
+          "IconBacking" .. index,
+          "Backing" .. index,
+          "HermesSpeedUp" .. index,
+          "PurchaseButtonCost" .. index,
+          "PurchaseButtonTitle" .. index,
+          "PurchaseButtonDelivery" .. index,
+        }) do
+          local component = screen.Components[key]
+          if type(component) == "table" and finite(component.Id) then ids[#ids + 1] = component.Id end
+          screen.Components[key] = nil
+        end
+      end
+      if #ids > 0 then Destroy({ Ids = ids }) end
+      store.Buttons = {}
+    end
+
+    local function rerollSurfaceShop(screen)
+      local replacements = surfaceShopPlan()
+      if replacements == nil then error("Force reroll pool has no changed eligible candidates") end
+      local _, _, options = surfaceShopState()
+      if type(options) ~= "table" then error("Force reroll source changed") end
+      destroySurfaceShopRows(screen)
+      for index, option in pairs(replacements) do options[index] = option end
+      if type(UpdateStoreOptionsDictionary) == "function" then UpdateStoreOptionsDictionary() end
+      CreateSurfaceShopButtons(screen)
+    end
+
+    local function surfaceShopCost(screen)
+      if type(RerollCosts) ~= "table" or not finite(RerollCosts.Shop)
+          or RerollCosts.Shop < 1 or RerollCosts.Shop % 1 ~= 0
+          or not finite(RerollCosts.ReuseIncrement) or RerollCosts.ReuseIncrement < 0 then
+        return nil
+      end
+      local spent = type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table"
+        and CurrentRun.CurrentRoom.SpentRerolls or nil
+      local increment = type(spent) == "table" and number(spent[screen.Name]) or 0
+      local cost = RerollCosts.Shop + increment
+      if cost < 1 or cost > 999999 or cost % 1 ~= 0 then return nil end
+      return cost
+    end
+
+    local function configureSurfaceShop(screen)
+      if not M.desiredFeatures.forceEnableRerolls or not surfaceShopSupported()
+          or type(screen) ~= "table" or screen.Name ~= "SurfaceShop"
+          or type(screen.Components) ~= "table" then
+        return false
+      end
+      if not ensureInjectedRerollComponents(screen) then return false end
+      local button = screen.Components.RerollButton
+      local icon = screen.Components.RerollIcon
+      if type(button) ~= "table" or not finite(button.Id)
+          or type(icon) ~= "table" or not finite(icon.Id)
+          or type(AttemptPanelReroll) ~= "function" then
+        return false
+      end
+      local cost = surfaceShopCanReroll() and surfaceShopCost(screen) or nil
+      if cost == nil then
+        button.OnPressedFunctionName = nil
+        button.RerollFunctionName = nil
+        button.Cost = -1
+        setButtonVisible(button, false)
+        if type(SetAlpha) == "function" and finite(icon.Id) then
+          SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
+        end
+        return false
+      end
+      button.Cost = cost
+      button.RerollColor = { 48, 25, 83, 255 }
+      button.RerollId = screen.Name
+      button.OnPressedFunctionName = "AttemptPanelReroll"
+      button.RerollFunctionName = surfaceShopCallbackName
+      if type(ModifyTextBox) == "function" then
+        ModifyTextBox({
+          Id = button.Id, Text = "Boon_Reroll",
+          LuaKey = "TempTextData", LuaValue = { Amount = cost },
+        })
+        ModifyTextBox({
+          Id = icon.Id, Text = CurrentRun.NumRerolls, AutoSetDataProperties = false,
+        })
+      end
+      if type(SetAlpha) == "function" and finite(icon.Id) then
+        SetAlpha({ Id = icon.Id, Fraction = 1.0, Duration = 0.2 })
+      end
+      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= cost)
+      return true
+    end
+
     local function configureSelene(screen)
       if not M.desiredFeatures.forceEnableRerolls or type(screen) ~= "table"
           or type(screen.Components) ~= "table" then
@@ -5583,7 +5852,7 @@ if __MacGamingTrainerV1 == nil then
       local isTalent = screen.Name == "TalentScreen"
       if not isSpell and not isTalent then return false end
 
-      if not ensureSeleneComponents(screen) then return false end
+      if not ensureInjectedRerollComponents(screen) then return false end
       local button = screen.Components.RerollButton
       local icon = screen.Components.RerollIcon
       if type(button) ~= "table" or not finite(button.Id)
@@ -5652,6 +5921,22 @@ if __MacGamingTrainerV1 == nil then
           end
           restoreRerollPresentation(screen, true)
         end
+      end
+    end
+
+    local function restoreCurrentSurfaceShop()
+      local screen = currentNamedScreen("SurfaceShop")
+      if screen == nil or type(screen.Components) ~= "table" then return end
+      local button = screen.Components.RerollButton
+      if type(button) == "table" then
+        button.OnPressedFunctionName = nil
+        button.RerollFunctionName = nil
+        button.Cost = -1
+        setButtonVisible(button, false)
+      end
+      local icon = screen.Components.RerollIcon
+      if type(icon) == "table" and finite(icon.Id) and type(SetAlpha) == "function" then
+        SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
       end
     end
 
@@ -5778,6 +6063,21 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    surfaceShopCallback = function(screen, button)
+      local ok, message = pcall(function()
+        if type(screen) ~= "table" or screen.Name ~= "SurfaceShop"
+            or type(button) ~= "table"
+            or button.RerollFunctionName ~= surfaceShopCallbackName
+            or currentNamedScreen("SurfaceShop") ~= screen then
+          error("Force reroll source changed")
+        end
+        rerollSurfaceShop(screen)
+      end)
+      if not ok and type(DebugPrint) == "function" then
+        DebugPrint({ Text = "MacGamingTrainer SurfaceShop force reroll failed after native spend: " .. tostring(message) })
+      end
+    end
+
     local function install()
       requireFunctions("Force Enable Rerolls", {
         "HeroHasTrait", "OpenUpgradeChoiceMenu", "CreateBoonLootButtons",
@@ -5789,11 +6089,19 @@ if __MacGamingTrainerV1 == nil then
       if _G[seleneCallbackName] ~= nil and _G[seleneCallbackName] ~= seleneCallback then
         error("Force Enable Rerolls Selene callback name is already owned")
       end
+      if _G[surfaceShopCallbackName] ~= nil
+          and _G[surfaceShopCallbackName] ~= surfaceShopCallback then
+        error("Force Enable Rerolls SurfaceShop callback name is already owned")
+      end
       _G[callbackName] = callback
       if seleneSupported() then
         _G[seleneCallbackName] = seleneCallback
-        patchSeleneScreenData("SpellScreen")
-        patchSeleneScreenData("TalentScreen")
+        patchRerollScreenData("SpellScreen")
+        patchRerollScreenData("TalentScreen")
+      end
+      if surfaceShopSupported() then
+        _G[surfaceShopCallbackName] = surfaceShopCallback
+        patchRerollScreenData("SurfaceShop")
       end
 
       if doorSupported() then
@@ -5821,11 +6129,41 @@ if __MacGamingTrainerV1 == nil then
 
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
+          if storePanelDepth > 0 then return true end
           local screen = currentScreen()
           if screen ~= nil and owner(screen.Source) ~= nil then return true end
         end
         return original(name, ...)
       end)
+
+      if storePanelSupported() then
+        installHook("UpdateStoreReroll", function(original, screen, options, rerollFunctionName, ...)
+          if not M.desiredFeatures.forceEnableRerolls then
+            return original(screen, options, rerollFunctionName, ...)
+          end
+          storePanelDepth = storePanelDepth + 1
+          local ok, result = pcall(original, screen, options, rerollFunctionName, ...)
+          storePanelDepth = storePanelDepth - 1
+          if not ok then error(result) end
+          return result
+        end)
+      end
+
+      if surfaceShopSupported() then
+        installHook("CreateSurfaceShopButtons", function(original, screen, ...)
+          local result = original(screen, ...)
+          if M.desiredFeatures.forceEnableRerolls then configureSurfaceShop(screen) end
+          return result
+        end)
+        installHook("HandleSurfaceShopAction", function(original, screen, button, ...)
+          local result = original(screen, button, ...)
+          if M.desiredFeatures.forceEnableRerolls
+              and currentNamedScreen("SurfaceShop") == screen then
+            configureSurfaceShop(screen)
+          end
+          return result
+        end)
+      end
 
       installHook("OpenUpgradeChoiceMenu", function(original, source, ...)
         local kind = M.desiredFeatures.forceEnableRerolls and owner(source) or nil
@@ -5869,29 +6207,42 @@ if __MacGamingTrainerV1 == nil then
       if spellScreen ~= nil then configureSelene(spellScreen) end
       local talentScreen = currentNamedScreen("TalentScreen")
       if talentScreen ~= nil then configureSelene(talentScreen) end
+      local surfaceScreen = currentNamedScreen("SurfaceShop")
+      if surfaceScreen ~= nil then configureSurfaceShop(surfaceScreen) end
+      if storePanelSupported() then updateCurrentStorePanels() end
       if doorSupported() then configureCurrentDoorOwners() end
     end
 
     local function release()
+      local hadStorePanelRuntime = owns("UpdateStoreReroll")
       local hadDoorRuntime = nativeDoorCapability ~= nil
         or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       for source, saved in pairs(forcedSources) do
         source.BlockReroll = saved.hadValue and saved.value or nil
         forcedSources[source] = nil
       end
+      releaseHook("HandleSurfaceShopAction")
+      releaseHook("CreateSurfaceShopButtons")
       releaseHook("UpdateTalentButtons")
       releaseHook("CreateSpellButtons")
       releaseHook("CreateBoonLootButtons")
       releaseHook("OpenUpgradeChoiceMenu")
+      releaseHook("UpdateStoreReroll")
       releaseHook("HeroHasTrait")
       releaseHook("AssignRoomToExitDoor")
       releaseHook("HasHeroTraitValue")
+      storePanelDepth = 0
+      if hadStorePanelRuntime then updateCurrentStorePanels() end
       if hadDoorRuntime then restoreCurrentDoorOwners() end
       nativeDoorCapability = nil
       if _G[callbackName] == callback then _G[callbackName] = nil end
       if _G[seleneCallbackName] == seleneCallback then _G[seleneCallbackName] = nil end
+      if _G[surfaceShopCallbackName] == surfaceShopCallback then
+        _G[surfaceShopCallbackName] = nil
+      end
       restoreCurrentSelene()
-      restoreSeleneScreenData()
+      restoreCurrentSurfaceShop()
+      restoreRerollScreenData()
       restoreCurrentNative()
     end
 
@@ -5910,6 +6261,10 @@ if __MacGamingTrainerV1 == nil then
         seleneActive = owns("CreateSpellButtons") and owns("UpdateTalentButtons")
           and _G[seleneCallbackName] == seleneCallback
       end
+      local storePanelActive = not storePanelSupported() or owns("UpdateStoreReroll")
+      local surfaceShopActive = not surfaceShopSupported()
+        or (owns("CreateSurfaceShopButtons") and owns("HandleSurfaceShopAction")
+          and _G[surfaceShopCallbackName] == surfaceShopCallback)
       local doorActive = true
       if doorSupported() then
         doorActive = owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor")
@@ -5917,7 +6272,7 @@ if __MacGamingTrainerV1 == nil then
       return M.desiredFeatures.forceEnableRerolls
         and owns("HeroHasTrait") and owns("OpenUpgradeChoiceMenu")
         and owns("CreateBoonLootButtons") and _G[callbackName] == callback
-        and seleneActive and doorActive
+        and seleneActive and storePanelActive and surfaceShopActive and doorActive
     end
 
     return {
