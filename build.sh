@@ -5,17 +5,17 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
-for tool in xcrun xcode-select codesign plutil grep find uname xattr; do
+for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 SWIFTC="$(xcrun --find swiftc)"
 CLANG="$(xcrun --find clang 2>/dev/null || true)"
-PYTHON="$(xcrun --find python3 2>/dev/null || true)"
 [[ -n "$CLANG" ]] || { echo "Xcode developer tools must provide clang." >&2; exit 1; }
-[[ -n "$PYTHON" ]] || { echo "Xcode developer tools must provide python3." >&2; exit 1; }
 [[ -x "$MODULE_VALIDATOR" && -x "$BINDING_GENERATOR" ]] || { echo "Missing game module build tools under Tools/." >&2; exit 1; }
+PYTHON_RUNTIME_MANIFEST="${ROOT}/Tools/python_runtime.json"
+[[ -f "$PYTHON_RUNTIME_MANIFEST" ]] || { echo "Missing pinned Python runtime manifest: $PYTHON_RUNTIME_MANIFEST" >&2; exit 1; }
 CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
 [[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
 
@@ -29,6 +29,66 @@ fi
 
 GENERATED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mgt-build.XXXXXX")"
 trap 'rm -rf "$GENERATED_DIR"' EXIT
+
+python_runtime_field() {
+    plutil -extract "$1" raw -o - "$PYTHON_RUNTIME_MANIFEST"
+}
+
+prepare_python_runtime() {
+    local arch="$1"
+    local destination="$GENERATED_DIR/python-runtime/$arch"
+    local runtime="$destination/python"
+    if [[ -x "$runtime/bin/python3" ]]; then
+        printf '%s\n' "$runtime"
+        return
+    fi
+
+    local version release url sha cache_root archive temporary actual
+    version="$(python_runtime_field version)"
+    release="$(python_runtime_field release)"
+    url="$(python_runtime_field "distributions.$arch.url")"
+    sha="$(python_runtime_field "distributions.$arch.sha256")"
+    [[ -n "$version" && -n "$release" && -n "$url" && "$sha" =~ ^[0-9a-f]{64}$ ]] || {
+        echo "Invalid Python runtime declaration for $arch." >&2
+        exit 1
+    }
+
+    cache_root="${MGT_PYTHON_RUNTIME_CACHE_DIR:-${HOME:-${TMPDIR:-/tmp}}/Library/Caches/MacGamingTrainer/python-runtime}"
+    mkdir -p "$cache_root"
+    archive="$cache_root/cpython-${version}+${release}-${arch}-apple-darwin-install_only.tar.gz"
+    if [[ -f "$archive" ]] && ! printf '%s  %s\n' "$sha" "$archive" | shasum -a 256 -c - >/dev/null 2>&1; then
+        rm -f "$archive"
+    fi
+    if [[ ! -f "$archive" ]]; then
+        temporary="$archive.tmp.$"
+        rm -f "$temporary"
+        curl -fL --retry 3 --retry-delay 1 -o "$temporary" "$url"
+        printf '%s  %s\n' "$sha" "$temporary" | shasum -a 256 -c - >/dev/null
+        mv "$temporary" "$archive"
+    fi
+
+    mkdir -p "$destination"
+    tar -xzf "$archive" -C "$destination"
+    [[ -x "$runtime/bin/python3" ]] || {
+        echo "Pinned Python runtime is missing bin/python3 for $arch." >&2
+        exit 1
+    }
+    actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
+    [[ "$actual" == "$version" ]] || {
+        echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
+        exit 1
+    }
+    printf '%s\n' "$runtime"
+}
+
+HOST_ARCH="$(uname -m)"
+case "$HOST_ARCH" in
+    arm64|x86_64) ;;
+    *) echo "Unsupported build-host architecture for bundled Python: $HOST_ARCH" >&2; exit 1 ;;
+esac
+HOST_PYTHON_ROOT="$(prepare_python_runtime "$HOST_ARCH")"
+PYTHON="$HOST_PYTHON_ROOT/bin/python3"
+
 NORMALIZED_MANIFEST="$GENERATED_DIR/module.normalized.json"
 "$PYTHON" "$MODULE_VALIDATOR" "$ACTIVE_GAME_ID" --json > "$NORMALIZED_MANIFEST"
 
@@ -76,6 +136,7 @@ for arch in "${ARCHITECTURES[@]}"; do
         arm64|x86_64) ;;
         *) echo "Unsupported frontend architecture: $arch" >&2; exit 1 ;;
     esac
+    prepare_python_runtime "$arch" >/dev/null
 done
 
 DIST="${GENERATED_DIR}/dist"
@@ -112,6 +173,44 @@ grep -q "typealias ActiveGameModule = ${FRONTEND_MODULE_TYPE}" "$GENERATED_SWIFT
 rm -rf "$APP"
 mkdir -p "${CONTENTS}/MacOS" "$BACKEND" "${CONTENTS}/Resources"
 cp "$ROOT/Info.plist" "${CONTENTS}/Info.plist"
+
+PYTHON_RESOURCES="${CONTENTS}/Resources/Python"
+mkdir -p "$PYTHON_RESOURCES"
+for arch in "${ARCHITECTURES[@]}"; do
+    runtime_root="$GENERATED_DIR/python-runtime/$arch/python"
+    destination="$PYTHON_RESOURCES/$arch"
+    mkdir -p "$destination"
+    cp -R "$runtime_root/." "$destination/"
+done
+"$PYTHON" - "$PYTHON_RUNTIME_MANIFEST" "$PYTHON_RESOURCES/runtime.json" "${ARCHITECTURES[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+architectures = sys.argv[3:]
+source = json.loads(source_path.read_text(encoding="utf-8"))
+distributions = source.get("distributions", {})
+selected = {}
+for architecture in architectures:
+    declaration = distributions.get(architecture)
+    if not isinstance(declaration, dict):
+        raise SystemExit(f"Missing bundled Python declaration for {architecture}")
+    selected[architecture] = declaration
+metadata = {
+    "schemaVersion": source.get("schemaVersion"),
+    "provider": source.get("provider"),
+    "release": source.get("release"),
+    "version": source.get("version"),
+    "architectures": architectures,
+    "distributions": selected,
+}
+output_path.write_text(
+    json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+    encoding="utf-8",
+)
+PY
 for language in en zh-CN; do
     source="${LOCALIZATION_ROOT}/${language}.lproj/Host.strings"
     [[ -f "$source" ]] || { echo "Missing Host localization table: $source" >&2; exit 1; }
@@ -201,23 +300,21 @@ for item in manifest.get('appResources', []):
         raise SystemExit(f"App resource was not packaged: {item['destination']}")
 PY
 
-# Import the packaged adapter with the exact Python selected for production.
-# This catches import-time syntax/type-evaluation failures before a signed app ships.
-PYTHONPATH="$BACKEND" "$PYTHON" - "$NORMALIZED_MANIFEST" <<'PY'
-import importlib
-import json
+# Construct the packaged adapter with the pinned application Python.
+# HOME is isolated so build verification cannot touch developer or runner state.
+BACKEND_SMOKE_HOME="$GENERATED_DIR/backend-smoke-home"
+mkdir -p "$BACKEND_SMOKE_HOME"
+PYTHONPATH="$BACKEND" HOME="$BACKEND_SMOKE_HOME" "$PYTHON" - "$ACTIVE_GAME_ID" <<'PY'
 import sys
-from pathlib import Path
+from core.registry import create_adapter
 
-manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-adapter = manifest.get("backend", {}).get("adapter", "")
-module_name, separator, class_name = adapter.partition(":")
-if not module_name or not separator or not class_name:
-    raise SystemExit(f"Invalid backend adapter declaration: {adapter!r}")
-module = importlib.import_module(module_name)
-adapter_type = getattr(module, class_name, None)
-if not isinstance(adapter_type, type):
-    raise SystemExit(f"Backend adapter is not a class: {adapter}")
+adapter = create_adapter(sys.argv[1])
+try:
+    metadata = adapter.metadata()
+    if metadata.get("id") != sys.argv[1]:
+        raise SystemExit(f"Backend adapter identity mismatch: {metadata!r}")
+finally:
+    adapter.close()
 PY
 
 TIME_WARP_ROOT="$ROOT/Native/ProcessTimeWarp"
@@ -302,6 +399,14 @@ plutil -lint "${CONTENTS}/Info.plist" >/dev/null
 # Remove only the two attached-data classes that codesign rejects. Keep
 # com.apple.provenance and file-provider provenance/fpfs attributes untouched.
 "$PYTHON" "$CLEAN_SIGNING_METADATA" "$APP" --staging-root "$DIST"
+
+# The bundled runtime contains nested Mach-O interpreters, libpython and extension
+# modules. Sign nested code before signing the outer app bundle.
+while IFS= read -r runtime_code; do
+    if file "$runtime_code" | grep -q 'Mach-O'; then
+        codesign --force --sign - --timestamp=none "$runtime_code"
+    fi
+done < <(find "$PYTHON_RESOURCES" -type f \( -name 'python3*' -o -name '*.so' -o -name '*.dylib' \) | sort)
 
 if [[ -n "$ENTITLEMENTS_REL" ]]; then
     ENTITLEMENTS="$ROOT/$ENTITLEMENTS_REL"

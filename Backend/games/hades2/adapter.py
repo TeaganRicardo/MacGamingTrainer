@@ -102,7 +102,7 @@ class Hades2Adapter(GameAdapter):
         super().__init__(context)
         if resident_session is None:
             if transport is None:
-                from .transport import Hades2LuaTransport
+                from .transport_client import Hades2LuaTransport
                 transport = Hades2LuaTransport()
             self.runtime=Hades2ResidentSession(transport)
         else:
@@ -113,9 +113,15 @@ class Hades2Adapter(GameAdapter):
             if transport is None:
                 raise ValueError('time_warp_controller is required with an injected resident_session.')
             helper_path=Path(__file__).resolve().parents[2]/'core/native/libMGTTimeWarp.dylib'
-            time_warp_controller=ProcessTimeWarpController(
-                LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
-            )
+            create_remote_time_warp=getattr(transport,'create_time_warp_controller',None)
+            if callable(create_remote_time_warp):
+                time_warp_controller=create_remote_time_warp(
+                    helper_path,[GAME_SPEC.executable_name]
+                )
+            else:
+                time_warp_controller=ProcessTimeWarpController(
+                    LLDBProcessTimeWarpDriver(transport),helper_path,[GAME_SPEC.executable_name]
+                )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
         self._time_warp_speed=1.0;self._time_warp_error=None

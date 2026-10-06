@@ -20,13 +20,31 @@ final class BackendProcess {
     private let maxStdoutBufferBytes: Int
     private let forceKillDelay: TimeInterval
 
+    private static var bundledPythonExecutableURL: URL {
+        guard let resources = Bundle.main.resourceURL else {
+            preconditionFailure("Application resources are unavailable.")
+        }
+        #if arch(arm64)
+        let architecture = "arm64"
+        #elseif arch(x86_64)
+        let architecture = "x86_64"
+        #else
+        preconditionFailure("Unsupported architecture for bundled Python runtime.")
+        #endif
+        return resources
+            .appendingPathComponent("Python", isDirectory: true)
+            .appendingPathComponent(architecture, isDirectory: true)
+            .appendingPathComponent("bin", isDirectory: true)
+            .appendingPathComponent("python3", isDirectory: false)
+    }
+
     init(
-        executableURL: URL = URL(fileURLWithPath: "/usr/bin/xcrun"),
-        argumentsPrefix: [String] = ["python3", "-u"],
+        executableURL: URL? = nil,
+        argumentsPrefix: [String] = ["-u"],
         maxStdoutBufferBytes: Int = 1_048_576,
         forceKillDelay: TimeInterval = 1.5
     ) {
-        self.executableURL = executableURL
+        self.executableURL = executableURL ?? Self.bundledPythonExecutableURL
         self.argumentsPrefix = argumentsPrefix
         self.maxStdoutBufferBytes = max(4_096, maxStdoutBufferBytes)
         self.forceKillDelay = max(0.1, forceKillDelay)

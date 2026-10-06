@@ -2,6 +2,7 @@
 import argparse
 import json
 import plistlib
+import platform
 import sys
 from pathlib import Path
 
@@ -18,6 +19,42 @@ from module_support import load_manifest
 def expected_app_path(game_id, dist_dir):
     manifest = load_manifest(game_id)
     return Path(dist_dir).resolve() / f'{manifest.app.display_name}.app', manifest
+
+
+def verify_python_runtime(resources, manifest):
+    source_path = ROOT / 'Tools/python_runtime.json'
+    runtime_root = resources / 'Python'
+    metadata_path = runtime_root / 'runtime.json'
+    if runtime_root.is_symlink() or not metadata_path.is_file() or metadata_path.is_symlink():
+        raise ValueError(f'Python runtime metadata is missing or unsafe: {metadata_path}')
+    source = json.loads(source_path.read_text(encoding='utf-8'))
+    packaged = json.loads(metadata_path.read_text(encoding='utf-8'))
+    architectures = list(manifest.frontend.architectures) or [platform.machine()]
+    if any(arch not in ('arm64', 'x86_64') for arch in architectures):
+        raise ValueError(f'Python runtime has unsupported target architecture: {architectures}')
+    expected = {
+        'schemaVersion': source.get('schemaVersion'),
+        'provider': source.get('provider'),
+        'release': source.get('release'),
+        'version': source.get('version'),
+        'architectures': architectures,
+        'distributions': {
+            arch: source.get('distributions', {}).get(arch)
+            for arch in architectures
+        },
+    }
+    if packaged != expected:
+        raise ValueError(f'Python runtime metadata differs from pinned build input: {metadata_path}')
+    for arch in architectures:
+        executable = runtime_root / arch / 'bin/python3'
+        if not executable.is_file():
+            raise ValueError(f'Python runtime interpreter is missing or unsafe: {executable}')
+        try:
+            executable.resolve().relative_to(runtime_root.resolve())
+        except ValueError as error:
+            raise ValueError(f'Python runtime interpreter escapes package: {executable}') from error
+        if executable.stat().st_mode & 0o111 == 0:
+            raise ValueError(f'Python runtime interpreter is not executable: {executable}')
 
 
 def verify_module_build(game_id, dist_dir):
@@ -54,6 +91,7 @@ def verify_module_build(game_id, dist_dir):
     module_manifests = list(games_dir.rglob('module.json'))
     if module_manifests != [manifest_path]:
         raise ValueError(f'Expected exactly the selected module manifest in {app}; found {module_manifests}')
+    verify_python_runtime(resources, manifest)
     return app
 
 

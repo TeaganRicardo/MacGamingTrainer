@@ -167,6 +167,76 @@ def resident_identity(repo_root: Path, artifact: Path, module_id: str,
     }
 
 
+def python_runtime_identity(repo_root: Path, artifact: Path,
+                            app_root: str) -> dict[str, object] | None:
+    """Bind bundled Python provenance to the tracked declaration and ZIP metadata."""
+    source_path = repo_root / "Tools/python_runtime.json"
+    if not source_path.is_file() or source_path.is_symlink():
+        return None
+
+    source_bytes = source_path.read_bytes()
+    source = json.loads(source_bytes)
+    if not isinstance(source, dict):
+        raise RuntimeError("Python runtime source manifest must be an object")
+
+    packaged_path = f"{app_root}/Contents/Resources/Python/runtime.json"
+    with zipfile.ZipFile(artifact) as archive:
+        if archive.namelist().count(packaged_path) != 1:
+            raise RuntimeError(
+                f"selected app must contain exactly one Python runtime manifest: {packaged_path}"
+            )
+        packaged_bytes = archive.read(packaged_path)
+    packaged = json.loads(packaged_bytes)
+    if not isinstance(packaged, dict):
+        raise RuntimeError("packaged Python runtime manifest must be an object")
+
+    for field in ("schemaVersion", "provider", "release", "version"):
+        if packaged.get(field) != source.get(field):
+            raise RuntimeError(
+                f"packaged Python runtime {field} differs from tracked declaration"
+            )
+
+    architectures = packaged.get("architectures")
+    if (
+        not isinstance(architectures, list)
+        or not architectures
+        or any(not isinstance(arch, str) or not arch for arch in architectures)
+        or len(set(architectures)) != len(architectures)
+    ):
+        raise RuntimeError("packaged Python runtime architectures are invalid")
+
+    source_distributions = source.get("distributions")
+    packaged_distributions = packaged.get("distributions")
+    if not isinstance(source_distributions, dict) or not isinstance(packaged_distributions, dict):
+        raise RuntimeError("Python runtime distributions must be objects")
+    try:
+        selected_distributions = {
+            arch: source_distributions[arch]
+            for arch in architectures
+        }
+    except KeyError as error:
+        raise RuntimeError(
+            f"packaged Python runtime architecture is not declared: {error.args[0]}"
+        ) from error
+    if packaged_distributions != selected_distributions:
+        raise RuntimeError(
+            "packaged Python runtime distributions differ from tracked declaration"
+        )
+
+    return {
+        "manifest": "Tools/python_runtime.json",
+        "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
+        "packagedPath": packaged_path,
+        "packagedMetadataSha256": hashlib.sha256(packaged_bytes).hexdigest(),
+        "schemaVersion": source.get("schemaVersion"),
+        "provider": source.get("provider"),
+        "release": source.get("release"),
+        "version": source.get("version"),
+        "architectures": architectures,
+        "distributions": selected_distributions,
+    }
+
+
 def require_packaged_module_identity(repo_root: Path, artifact: Path, module_id: str,
                                      source_plist: dict[str, object]) -> str:
     """Bind the claimed module and product identity to the packaged app."""
@@ -291,6 +361,9 @@ def build_manifest(
     if module_id:
         app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
+        python_runtime = python_runtime_identity(repo_root, artifact, app_root)
+        if python_runtime is not None:
+            manifest["pythonRuntime"] = python_runtime
         resident = resident_identity(repo_root, artifact, module_id, app_root)
         if resident is not None:
             manifest["residentRuntime"] = resident
