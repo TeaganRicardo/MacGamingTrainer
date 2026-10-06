@@ -50,7 +50,8 @@ func waitUntil(_ seconds: TimeInterval, _ predicate: @escaping () -> Bool) -> Bo
 }
 
 let args = CommandLine.arguments
-if args.count != 3 { fail("expected temporary backend server path and Python executable") }\nlet backendPythonURL = URL(fileURLWithPath: args[2])
+if args.count != 3 { fail("expected temporary backend server path and Python executable") }
+let backendPythonURL = URL(fileURLWithPath: args[2])
 
 let missingSession = TrainerBackendSession()
 var missingLogs: [String] = []
