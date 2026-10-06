@@ -266,6 +266,25 @@ assert(CurrentRun.CurrentRoom.Store.StoreOptions[1].Name == 'StoreD'
 assert(surface.Components.RerollButton.Cost == 2,
   'Shrine of Hermes reroll cost did not escalate through native SpentRerolls')
 
+-- If the eligible pool changes after presentation but before the native click,
+-- candidate planning can legitimately fail. That failure must not consume the
+-- already-charged native reroll cost/history.
+local savedSurfaceGroupOne = StoreData.SurfaceShop.GroupsOf[1].OptionsData
+local savedSurfaceGroupTwo = StoreData.SurfaceShop.GroupsOf[2].OptionsData
+StoreData.SurfaceShop.GroupsOf[1].OptionsData = { { Name = 'StoreD' } }
+StoreData.SurfaceShop.GroupsOf[2].OptionsData = { { Name = 'StoreE' }, { Name = 'StoreF' } }
+local missBeforeRerolls = CurrentRun.NumRerolls
+local missBeforeSpent = CurrentRun.CurrentRoom.SpentRerolls.SurfaceShop or 0
+CallFunctionName(surface.Components.RerollButton.OnPressedFunctionName,
+  surface, surface.Components.RerollButton)
+assert(CurrentRun.NumRerolls == missBeforeRerolls,
+  'failed Shrine candidate generation consumed reroll currency')
+assert((CurrentRun.CurrentRoom.SpentRerolls.SurfaceShop or 0) == missBeforeSpent,
+  'failed Shrine candidate generation retained native reroll cost history')
+StoreData.SurfaceShop.GroupsOf[1].OptionsData = savedSurfaceGroupOne
+StoreData.SurfaceShop.GroupsOf[2].OptionsData = savedSurfaceGroupTwo
+CreateSurfaceShopButtons(surface)
+
 -- Purchased/pending-delivery slots are transaction state, not reroll candidates.
 HandleSurfaceShopAction(surface, surface.Components.PurchaseButton1)
 assert(CurrentRun.CurrentRoom.Store.StoreOptions[1].Purchased,

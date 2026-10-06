@@ -297,6 +297,21 @@ assert(talentScreen.Components.TalentObject2_1.Data == mutableNode
   and talentScreen.Components.TalentObject2_1.Data.Name == mutableNode.Name,
   'TalentScreen UI no longer points at the regenerated owner node')
 
+-- A late candidate-generation miss must not turn a valid native click into a
+-- paid no-op. Simulate the native tree generator producing only the current
+-- layout/content after the button was already exposed.
+local originalCreateTalentTree = CreateTalentTree
+CreateTalentTree = function() return copy(CurrentRun.Hero.SlottedSpell.Talents) end
+local missBeforeRerolls = CurrentRun.NumRerolls
+local missBeforeSpent = CurrentRun.CurrentRoom.SpentRerolls[talentSource.ObjectId] or 0
+CallFunctionName(talentScreen.Components.RerollButton.OnPressedFunctionName,
+  talentScreen, talentScreen.Components.RerollButton)
+assert(CurrentRun.NumRerolls == missBeforeRerolls,
+  'failed TalentScreen candidate generation consumed reroll currency')
+assert((CurrentRun.CurrentRoom.SpentRerolls[talentSource.ObjectId] or 0) == missBeforeSpent,
+  'failed TalentScreen candidate generation retained native reroll cost history')
+CreateTalentTree = originalCreateTalentTree
+
 local readOnly = OpenTalentScreen({ Name = 'TalentDrop', ObjectId = 602 }, true)
 assert(not readOnly.Components.RerollButton.Visible,
   'read-only TalentScreen exposed a spendable reroll action')
@@ -340,6 +355,16 @@ assert(type(talentBeforeEnable.Components.RerollButton) == 'table'
   and type(talentBeforeEnable.Components.RerollIcon) == 'table'
   and talentBeforeEnable.Components.RerollButton.Visible,
   'enabling Force Enable Rerolls did not activate an already-open writable TalentScreen')
+
+-- Runtime status must fail closed if an applicable owner family loses a
+-- required native seam instead of reporting the aggregate feature active.
+local savedCreateTalentTree = CreateTalentTree
+CreateTalentTree = nil
+local degraded = M.dispatch('status', { includeCatalogs = false })
+assert(not degraded.activeFeatures.forceEnableRerolls,
+  'partial Selene seam loss still reported Force Enable Rerolls active')
+CreateTalentTree = savedCreateTalentTree
+
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 '''
 
