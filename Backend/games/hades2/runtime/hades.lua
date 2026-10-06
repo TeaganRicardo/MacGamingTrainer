@@ -4908,9 +4908,25 @@ if __MacGamingTrainerV1 == nil then
         or (type(StoreData) == "table" and type(StoreData.SurfaceShop) == "table")
     end
 
-    local function surfaceShopSupported()
+    local function rerollScreenData(name)
+      local screenData = type(ScreenData) == "table" and ScreenData[name] or nil
+      local root = type(screenData) == "table" and screenData.ComponentData or nil
+      local actionBar = type(root) == "table" and root.ActionBar or nil
+      local children = type(actionBar) == "table" and actionBar.Children or nil
       local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
-      local surface = type(ScreenData) == "table" and ScreenData.SurfaceShop or nil
+      local template = type(upgrade) == "table" and upgrade.ComponentData or nil
+      local templateActionBar = type(template) == "table" and template.ActionBar or nil
+      local templateChildren = type(templateActionBar) == "table" and templateActionBar.Children or nil
+      if type(root) ~= "table" or type(actionBar) ~= "table" or type(children) ~= "table"
+          or type(template) ~= "table" or type(template.RerollIcon) ~= "table"
+          or type(templateChildren) ~= "table"
+          or type(templateChildren.RerollButton) ~= "table" then
+        return nil
+      end
+      return root, actionBar, children, template, templateChildren
+    end
+
+    local function surfaceShopSupported()
       local data = type(StoreData) == "table" and StoreData.SurfaceShop or nil
       return type(DeepCopyTable) == "function"
         and type(FillInShopOptions) == "function"
@@ -4923,8 +4939,7 @@ if __MacGamingTrainerV1 == nil then
         and type(Attach) == "function"
         and type(GetDisplayName) == "function"
         and type(ApproximateStringWidth) == "function"
-        and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
-        and type(surface) == "table" and type(surface.ComponentData) == "table"
+        and rerollScreenData("SurfaceShop") ~= nil
         and type(data) == "table" and type(data.GroupsOf) == "table"
     end
 
@@ -4933,9 +4948,6 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function seleneSupported()
-      local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
-      local spell = type(ScreenData) == "table" and ScreenData.SpellScreen or nil
-      local talent = type(ScreenData) == "table" and ScreenData.TalentScreen or nil
       return type(DeepCopyTable) == "function"
         and type(CreateSpellButtons) == "function"
         and type(CreateTalentTree) == "function"
@@ -4946,26 +4958,14 @@ if __MacGamingTrainerV1 == nil then
         and type(Attach) == "function"
         and type(GetDisplayName) == "function"
         and type(ApproximateStringWidth) == "function"
-        and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
-        and type(spell) == "table" and type(spell.ComponentData) == "table"
-        and type(talent) == "table" and type(talent.ComponentData) == "table"
+        and rerollScreenData("SpellScreen") ~= nil
+        and rerollScreenData("TalentScreen") ~= nil
     end
 
     local function patchRerollScreenData(name)
       if screenPatches[name] ~= nil then return end
-      local screenData = ScreenData[name]
-      local root = type(screenData) == "table" and screenData.ComponentData or nil
-      local actionBar = type(root) == "table" and root.ActionBar or nil
-      local children = type(actionBar) == "table" and actionBar.Children or nil
-      local template = ScreenData.UpgradeChoice.ComponentData
-      local templateChildren = type(template.ActionBar) == "table"
-        and template.ActionBar.Children or nil
-      if type(root) ~= "table" or type(actionBar) ~= "table" or type(children) ~= "table"
-          or type(template.RerollIcon) ~= "table"
-          or type(templateChildren) ~= "table"
-          or type(templateChildren.RerollButton) ~= "table" then
-        return
-      end
+      local root, actionBar, children, template, templateChildren = rerollScreenData(name)
+      if root == nil then return end
 
       local injectedIcon = DeepCopyTable(template.RerollIcon)
       local injectedButton = DeepCopyTable(templateChildren.RerollButton)
