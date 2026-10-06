@@ -49,6 +49,24 @@ request = json.loads(process.stdin.getvalue())
 assert request == {"id": "1", "method": "ping", "params": {"value": 7}}
 assert client.started
 
+# A child that exits between requests has no in-flight result to distrust. Reap
+# it and start a fresh child instead of turning a known crash into a terminal
+# request outcome.
+restart_first = FakeProcess(b'{"id":"1","result":"first"}\n')
+restart_second = FakeProcess(b'{"id":"2","result":"second"}\n')
+restart_processes = [restart_first, restart_second]
+
+
+def restart_factory(*args, **kwargs):
+    return restart_processes.pop(0)
+
+
+restartable = JsonLineSidecarClient(["fake"], process_factory=restart_factory)
+assert restartable.request("observe")["result"] == "first"
+restart_first.terminated = True
+assert restartable.request("observe")["result"] == "second"
+assert not restart_processes
+
 mismatch_process = FakeProcess(b'{"id":"wrong","result":true}\n')
 mismatch = JsonLineSidecarClient(["fake"], process_factory=factory_for(mismatch_process))
 try:
