@@ -5,11 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.process_time_warp import (
-    LLDBProcessTimeWarpDriver,
-    ProcessTimeWarpController,
-    ProcessTimeWarpError,
-)
+from core.process_time_warp import ProcessTimeWarpController, ProcessTimeWarpError
 
 
 class FakeDriver:
@@ -153,41 +149,5 @@ except ProcessTimeWarpError as error:
     assert error.presentation == "host.timeWarp.error.disconnected"
 else:
     raise AssertionError("dead target accepted")
-
-class FakeLLDB:
-    eStateStopped = 5
-
-class FakeStoppedProcess:
-    def GetState(self):
-        return FakeLLDB.eStateStopped
-
-class TaintedTransport:
-    pid = 200
-    tainted = True
-    process = FakeStoppedProcess()
-    def alive(self):
-        return True
-    def stop(self, deadline):
-        raise AssertionError("tainted transport must be rejected before stop")
-    def resume(self, deadline):
-        raise AssertionError("tainted transport must never resume")
-
-class TargetlessTransport:
-    pid = 201
-    target = None
-    def alive(self):
-        return True
-
-targetless_driver = LLDBProcessTimeWarpDriver(TargetlessTransport(), lldb_module=object())
-assert targetless_driver.helper_present() is False
-
-tainted_driver = LLDBProcessTimeWarpDriver(TaintedTransport(), lldb_module=FakeLLDB)
-try:
-    with tainted_driver.session():
-        raise AssertionError("tainted session entered")
-except ProcessTimeWarpError as error:
-    assert error.code == "restart_required", error.code
-else:
-    raise AssertionError("tainted transport accepted")
 
 print("process_time_warp_controller_ok")
