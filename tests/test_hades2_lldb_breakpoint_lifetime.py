@@ -7,35 +7,39 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# GitHub's macOS runner Python is not ABI-matched to Xcode's private _lldb
-# extension. Execute the actual regression inside LLDB's embedded Python, which
-# is also the environment that owns the SB API. Keep an outer hard timeout so a
-# debugger regression cannot stall the whole macOS lane.
+# GitHub's runner Python is not ABI-matched to Xcode's private _lldb
+# extension. Run the regression under the same Xcode Python + LLDB module path
+# used by the production Hades sidecar. Do not nest a second SBDebugger inside
+# LLDB's own command-interpreter Python: that re-entrant harness can deadlock.
 if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
     path = str(Path(__file__).resolve())
-    embedded = (
-        "script import os; "
-        "os.environ['MGT_LLDB_EMBEDDED_TEST']='1'; "
-        # Execute in LLDB's existing interpreter namespace without replacing
-        # its __main__ module. runpy either replaced __main__ (breaking LLDB's
-        # run_one_line helper) or isolated the test in a second namespace that
-        # could deadlock SB callbacks on the macOS runner. Set __file__ explicitly
-        # because runpy used to provide it for the embedded script.
-        f"globals()['__file__']={path!r}; "
-        f"exec(compile(open({path!r}, 'rb').read(), {path!r}, 'exec'), globals(), globals())"
+    environment = dict(os.environ)
+    environment["MGT_LLDB_EMBEDDED_TEST"] = "1"
+    lldb_python_path = subprocess.check_output(
+        ["/usr/bin/xcrun", "lldb", "-P"],
+        text=True,
+    ).strip()
+    existing_pythonpath = environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = (
+        lldb_python_path
+        if not existing_pythonpath
+        else lldb_python_path + os.pathsep + existing_pythonpath
     )
     try:
         completed = subprocess.run(
-            ["/usr/bin/xcrun", "lldb", "-b", "-o", embedded, "-o", "quit"],
+            ["/usr/bin/xcrun", "python3", path],
+            env=environment,
             text=True,
             capture_output=True,
             timeout=30,
         )
     except subprocess.TimeoutExpired as error:
-        raise AssertionError("LLDB breakpoint-lifetime regression exceeded 30 seconds") from error
+        raise AssertionError(
+            "Xcode-Python LLDB breakpoint-lifetime regression exceeded 30 seconds"
+        ) from error
     if completed.returncode != 0 or "hades2_lldb_breakpoint_lifetime_ok" not in completed.stdout:
         raise AssertionError(
-            "embedded LLDB regression failed:\n"
+            "Xcode-Python LLDB regression failed:\n"
             + completed.stdout
             + completed.stderr
         )
