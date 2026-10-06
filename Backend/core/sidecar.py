@@ -74,10 +74,9 @@ class JsonLineSidecarClient:
         if self.started:
             return
         if self._process is not None:
-            self._fail_terminal(
-                f"sidecar exited with status {self._process.poll()!r}.",
-                outcome_unknown=False,
-            )
+            # The previous child exited between requests, so no request outcome
+            # is in doubt. Reap it and allow a fresh process to be started.
+            self._terminate_process()
         try:
             self._process = self._process_factory(
                 list(self.command),
