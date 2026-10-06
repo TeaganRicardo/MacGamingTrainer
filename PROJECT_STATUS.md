@@ -29,6 +29,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Core Save Management is optional cross-game infrastructure. Hades save schema/codec/provider semantics remain Hades-owned.
 - `ContractFixtures/reference_module` remains the executable proof that shared Core/build paths do not require Hades-shaped semantics.
 - Process Time Warp mechanics are Core-owned; Hades owns its desired meaning/persistence and runtime integration.
+- Application backend execution is pinned to bundled CPython 3.14.8 (`Tools/python_runtime.json`, Astral standalone release 20261003). Hades II keeps Xcode Python/LLDB behind its game-owned JSONL sidecar; Xcode Python no longer hosts the main Backend worker.
 - Runtime observation distinguishes durable desired state from observed active/dormant state. Outcome-unknown non-idempotent mutations are never blindly replayed.
 
 Recent governance simplification (#277, #279, #281, #283) changed verification/test structure only, not product/runtime semantics: recurring PR verification is leaner, redundant evidence/meta-tests were removed, CI/provenance contracts were consolidated, and one historical regression grab-bag was moved into owning tests.
