@@ -47,7 +47,7 @@ def verify_python_runtime(resources, manifest):
         raise ValueError(f'Python runtime metadata differs from pinned build input: {metadata_path}')
     for arch in architectures:
         executable = runtime_root / arch / 'bin/python3'
-        if executable.is_symlink() or not executable.is_file():
+        if not executable.is_file():
             raise ValueError(f'Python runtime interpreter is missing or unsafe: {executable}')
         try:
             executable.resolve().relative_to(runtime_root.resolve())
