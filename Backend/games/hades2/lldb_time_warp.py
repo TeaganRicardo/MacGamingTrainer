@@ -42,7 +42,7 @@ class LLDBProcessTimeWarpDriver:
             raise ProcessTimeWarpError(
                 "restart_required",
                 "host.timeWarp.error.restartRequired",
-                diagnostic="调试连接状态不明；请先重启后端或重新连接游戏。",
+                diagnostic="Debugger connection state is unknown; restart the backend or reconnect to the game.",
             )
         lldb = self._lldb()
         process = self.transport.process
@@ -50,7 +50,7 @@ class LLDBProcessTimeWarpDriver:
             raise ProcessTimeWarpError(
                 "disconnected",
                 "host.timeWarp.error.disconnected",
-                diagnostic="调试进程不存在。",
+                diagnostic="Debugger process is unavailable.",
             )
         state = process.GetState()
         resume_after = state != lldb.eStateStopped
@@ -69,7 +69,7 @@ class LLDBProcessTimeWarpDriver:
                 raise ProcessTimeWarpError(
                     "disconnected",
                     "host.timeWarp.error.disconnected",
-                    diagnostic="调试目标不存在。",
+                    diagnostic="Debugger target is unavailable.",
                 )
             return None
         addresses = set()
@@ -85,12 +85,12 @@ class LLDBProcessTimeWarpDriver:
         if len(addresses) == 1:
             return addresses.pop()
         if required:
-            detail = "未找到" if not addresses else "匹配不唯一"
+            detail = "not found" if not addresses else "resolved ambiguously"
             raise ProcessTimeWarpError(
                 "time_warp_symbol",
                 "host.timeWarp.error.symbolUnavailable",
-                arguments=(name, detail),
-                diagnostic=f"Time Warp 导出符号 {name} {detail}。",
+                arguments=(name,),
+                diagnostic=f"Time Warp export {name} was {detail}.",
             )
         return None
 
@@ -106,7 +106,7 @@ class LLDBProcessTimeWarpDriver:
                 "time_warp_helper_missing",
                 "host.timeWarp.error.helperMissing",
                 arguments=(str(path),),
-                diagnostic=f"Time Warp helper 不存在：{path}",
+                diagnostic=f"Time Warp helper is missing: {path}",
             )
         lldb = self._lldb()
         error = lldb.SBError()
@@ -116,13 +116,13 @@ class LLDBProcessTimeWarpDriver:
                 "time_warp_load_failed",
                 "host.timeWarp.error.loadFailed",
                 arguments=(str(error),),
-                diagnostic="Time Warp helper 加载失败：" + str(error),
+                diagnostic="Time Warp helper load failed: " + str(error),
             )
         if not self.helper_present():
             raise ProcessTimeWarpError(
                 "time_warp_load_failed",
                 "host.timeWarp.error.loadedSymbolsMissing",
-                diagnostic="Time Warp helper 已加载但导出符号不可见。",
+                diagnostic="Time Warp helper loaded but its exported symbols are unavailable.",
             )
 
     def _frame(self):
@@ -136,7 +136,7 @@ class LLDBProcessTimeWarpDriver:
         raise ProcessTimeWarpError(
             "time_warp_call_failed",
             "host.timeWarp.error.noCallableThread",
-            diagnostic="暂停后找不到可执行 Time Warp 调用的线程。",
+            diagnostic="No callable thread is available while the target is paused.",
         )
 
     def _evaluate_int(self, expression, *, mutation=False):
@@ -154,13 +154,13 @@ class LLDBProcessTimeWarpDriver:
                     "outcome_unknown",
                     "host.timeWarp.error.outcomeUnknown",
                     arguments=(str(result.GetError()),),
-                    diagnostic="Time Warp 修改结果不明，未自动重试；请重启后端或重新连接游戏：" + str(result.GetError()),
+                    diagnostic="Time Warp mutation outcome is unknown; no retry was attempted. Restart the backend or reconnect: " + str(result.GetError()),
                 )
             raise ProcessTimeWarpError(
                 "time_warp_call_failed",
                 "host.timeWarp.error.callFailed",
                 arguments=(str(result.GetError()),),
-                diagnostic="Time Warp helper 调用失败：" + str(result.GetError()),
+                diagnostic="Time Warp helper call failed: " + str(result.GetError()),
             )
         return result.GetValueAsSigned()
 
@@ -194,7 +194,7 @@ class LLDBProcessTimeWarpDriver:
             raise ProcessTimeWarpError(
                 "time_warp_memory",
                 "host.timeWarp.error.memoryAllocationFailed",
-                diagnostic="无法为 Time Warp image allowlist 分配目标内存。",
+                diagnostic="Unable to allocate target memory for the Time Warp image allowlist.",
             )
         try:
             payload = image_names + b"\0"
@@ -203,7 +203,7 @@ class LLDBProcessTimeWarpDriver:
                 raise ProcessTimeWarpError(
                     "time_warp_memory",
                     "host.timeWarp.error.memoryWriteFailed",
-                    diagnostic="无法写入 Time Warp image allowlist。",
+                    diagnostic="Unable to write the Time Warp image allowlist.",
                 )
             address = self._export_address("MGTTimeWarpInstall")
             return self._evaluate_int(
