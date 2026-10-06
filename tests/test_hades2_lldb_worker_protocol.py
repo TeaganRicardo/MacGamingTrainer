@@ -175,6 +175,26 @@ assert healthy_sidecar.calls == [
     ("transport.alive", {}, False),
 ]
 
+recoverable_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": 4242}},
+    {"id": "3", "result": {"protocolVersion": 1}},
+    {"id": "4", "result": True, "state": {"pid": None}},
+])
+recoverable_client = _LLDBWorkerClient(sidecar=recoverable_sidecar)
+assert recoverable_client.call("transport.alive")[0] is True
+recoverable_sidecar.started = False
+assert recoverable_client.started, (
+    "an established Hades worker must remain restartable after a between-request child exit"
+)
+assert recoverable_client.call("transport.alive")[0] is True
+assert [method for method, _, _ in recoverable_sidecar.calls] == [
+    "hello",
+    "transport.alive",
+    "hello",
+    "transport.alive",
+]
+
 lost_mutation_sidecar = FakeSidecar([
     {"id": "1", "result": {"protocolVersion": 1}},
     SidecarTerminalError("lost LLDB acknowledgement", outcome_unknown=True),
