@@ -5,17 +5,17 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_VALIDATOR="${ROOT}/Tools/validate_game_module.py"
 BINDING_GENERATOR="${ROOT}/Tools/generate_game_binding.py"
 
-for tool in xcrun xcode-select codesign plutil grep find uname xattr; do
+for tool in xcrun xcode-select codesign plutil grep find uname xattr curl shasum tar file; do
     command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
 
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 SWIFTC="$(xcrun --find swiftc)"
 CLANG="$(xcrun --find clang 2>/dev/null || true)"
-PYTHON="$(xcrun --find python3 2>/dev/null || true)"
 [[ -n "$CLANG" ]] || { echo "Xcode developer tools must provide clang." >&2; exit 1; }
-[[ -n "$PYTHON" ]] || { echo "Xcode developer tools must provide python3." >&2; exit 1; }
 [[ -x "$MODULE_VALIDATOR" && -x "$BINDING_GENERATOR" ]] || { echo "Missing game module build tools under Tools/." >&2; exit 1; }
+PYTHON_RUNTIME_MANIFEST="${ROOT}/Tools/python_runtime.json"
+[[ -f "$PYTHON_RUNTIME_MANIFEST" ]] || { echo "Missing pinned Python runtime manifest: $PYTHON_RUNTIME_MANIFEST" >&2; exit 1; }
 CLEAN_SIGNING_METADATA="${ROOT}/Tools/clean_signing_metadata.py"
 [[ -f "$CLEAN_SIGNING_METADATA" ]] || { echo "Missing signing metadata cleanup tool under Tools/." >&2; exit 1; }
 
@@ -29,6 +29,66 @@ fi
 
 GENERATED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/mgt-build.XXXXXX")"
 trap 'rm -rf "$GENERATED_DIR"' EXIT
+
+python_runtime_field() {
+    plutil -extract "$1" raw -o - "$PYTHON_RUNTIME_MANIFEST"
+}
+
+prepare_python_runtime() {
+    local arch="$1"
+    local destination="$GENERATED_DIR/python-runtime/$arch"
+    local runtime="$destination/python"
+    if [[ -x "$runtime/bin/python3" ]]; then
+        printf '%s\n' "$runtime"
+        return
+    fi
+
+    local version release url sha cache_root archive temporary actual
+    version="$(python_runtime_field version)"
+    release="$(python_runtime_field release)"
+    url="$(python_runtime_field "distributions.$arch.url")"
+    sha="$(python_runtime_field "distributions.$arch.sha256")"
+    [[ -n "$version" && -n "$release" && -n "$url" && "$sha" =~ ^[0-9a-f]{64}$ ]] || {
+        echo "Invalid Python runtime declaration for $arch." >&2
+        exit 1
+    }
+
+    cache_root="${MGT_PYTHON_RUNTIME_CACHE_DIR:-${HOME:-${TMPDIR:-/tmp}}/Library/Caches/MacGamingTrainer/python-runtime}"
+    mkdir -p "$cache_root"
+    archive="$cache_root/cpython-${version}+${release}-${arch}-apple-darwin-install_only.tar.gz"
+    if [[ -f "$archive" ]] && ! printf '%s  %s\n' "$sha" "$archive" | shasum -a 256 -c - >/dev/null 2>&1; then
+        rm -f "$archive"
+    fi
+    if [[ ! -f "$archive" ]]; then
+        temporary="$archive.tmp.$"
+        rm -f "$temporary"
+        curl -fL --retry 3 --retry-delay 1 -o "$temporary" "$url"
+        printf '%s  %s\n' "$sha" "$temporary" | shasum -a 256 -c - >/dev/null
+        mv "$temporary" "$archive"
+    fi
+
+    mkdir -p "$destination"
+    tar -xzf "$archive" -C "$destination"
+    [[ -x "$runtime/bin/python3" ]] || {
+        echo "Pinned Python runtime is missing bin/python3 for $arch." >&2
+        exit 1
+    }
+    actual="$("$runtime/bin/python3" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+    [[ "$actual" == "$version" ]] || {
+        echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
+        exit 1
+    }
+    printf '%s\n' "$runtime"
+}
+
+HOST_ARCH="$(uname -m)"
+case "$HOST_ARCH" in
+    arm64|x86_64) ;;
+    *) echo "Unsupported build-host architecture for bundled Python: $HOST_ARCH" >&2; exit 1 ;;
+esac
+HOST_PYTHON_ROOT="$(prepare_python_runtime "$HOST_ARCH")"
+PYTHON="$HOST_PYTHON_ROOT/bin/python3"
+
 NORMALIZED_MANIFEST="$GENERATED_DIR/module.normalized.json"
 "$PYTHON" "$MODULE_VALIDATOR" "$ACTIVE_GAME_ID" --json > "$NORMALIZED_MANIFEST"
 
@@ -76,6 +136,7 @@ for arch in "${ARCHITECTURES[@]}"; do
         arm64|x86_64) ;;
         *) echo "Unsupported frontend architecture: $arch" >&2; exit 1 ;;
     esac
+    prepare_python_runtime "$arch" >/dev/null
 done
 
 DIST="${GENERATED_DIR}/dist"
