@@ -260,8 +260,10 @@ AssignRoomToExitDoor(nativeDoor, nativeRoom)
 assert(nativeDoor.CanBeRerolled, 'native DoorReroll capability baseline is broken')
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
-assert(nativeDoor.CanBeRerolled and HasHeroTraitValue('AllowDoorReroll') == nativeDoorTrait,
-  'disable did not restore the real native door-reroll capability')
+assert(nativeDoor.CanBeRerolled,
+  'disable suppressed a reward door that remains natively rerollable')
+assert(HasHeroTraitValue('AllowDoorReroll') == nativeDoorTrait,
+  'disable did not release the synthetic AllowDoorReroll capability hook')
 '''
 
 HARNESS = BASE_HARNESS.replace(
