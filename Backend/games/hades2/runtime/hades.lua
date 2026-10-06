@@ -5873,6 +5873,8 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function release()
+      local hadDoorRuntime = nativeDoorCapability ~= nil
+        or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       for source, saved in pairs(forcedSources) do
         source.BlockReroll = saved.hadValue and saved.value or nil
         forcedSources[source] = nil
@@ -5884,7 +5886,7 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("HeroHasTrait")
       releaseHook("AssignRoomToExitDoor")
       releaseHook("HasHeroTraitValue")
-      restoreCurrentDoorOwners()
+      if hadDoorRuntime then restoreCurrentDoorOwners() end
       nativeDoorCapability = nil
       if _G[callbackName] == callback then _G[callbackName] = nil end
       if _G[seleneCallbackName] == seleneCallback then _G[seleneCallbackName] = nil end
