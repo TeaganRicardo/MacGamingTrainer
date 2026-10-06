@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 86 then
+if previousModule and previousModule.revision ~= 87 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 86 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 86, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 87, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4664,7 +4664,10 @@ if __MacGamingTrainerV1 == nil then
 
   forceRerolls = (function()
     local callbackName = "MacGamingTrainerForceRerollChoice"
+    local seleneCallbackName = "MacGamingTrainerForceRerollSelene"
     local callback
+    local seleneCallback
+    local screenPatches = {}
     local forcedSources = setmetatable({}, { __mode = "k" })
     local syntheticSpent = setmetatable({}, { __mode = "k" })
     local npcOwners = {}
@@ -4713,6 +4716,86 @@ if __MacGamingTrainerV1 == nil then
         return nil
       end
       return screen
+    end
+
+    local function currentNamedScreen(name)
+      local screen = type(ActiveScreens) == "table" and ActiveScreens[name] or nil
+      if type(screen) ~= "table" or screen.Name ~= name
+          or screen.Closing or screen.KeepOpen == false then
+        return nil
+      end
+      return screen
+    end
+
+    local function seleneSupported()
+      local upgrade = type(ScreenData) == "table" and ScreenData.UpgradeChoice or nil
+      local spell = type(ScreenData) == "table" and ScreenData.SpellScreen or nil
+      local talent = type(ScreenData) == "table" and ScreenData.TalentScreen or nil
+      return type(DeepCopyTable) == "function"
+        and type(CreateSpellButtons) == "function"
+        and type(CreateTalentTree) == "function"
+        and type(CreateTalentTreeIcons) == "function"
+        and type(UpdateTalentButtons) == "function"
+        and type(Destroy) == "function"
+        and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
+        and type(spell) == "table" and type(spell.ComponentData) == "table"
+        and type(talent) == "table" and type(talent.ComponentData) == "table"
+    end
+
+    local function patchSeleneScreenData(name)
+      if screenPatches[name] ~= nil then return end
+      local screenData = ScreenData[name]
+      local root = type(screenData) == "table" and screenData.ComponentData or nil
+      local actionBar = type(root) == "table" and root.ActionBar or nil
+      local children = type(actionBar) == "table" and actionBar.Children or nil
+      local template = ScreenData.UpgradeChoice.ComponentData
+      local templateChildren = type(template.ActionBar) == "table"
+        and template.ActionBar.Children or nil
+      if type(root) ~= "table" or type(actionBar) ~= "table" or type(children) ~= "table"
+          or type(template.RerollIcon) ~= "table"
+          or type(templateChildren) ~= "table"
+          or type(templateChildren.RerollButton) ~= "table" then
+        return
+      end
+
+      local injectedIcon = DeepCopyTable(template.RerollIcon)
+      local injectedButton = DeepCopyTable(templateChildren.RerollButton)
+      local injectedOrder = DeepCopyTable(actionBar.ChildrenOrder or {})
+      local hasReroll = false
+      for _, key in ipairs(injectedOrder) do
+        if key == "RerollButton" then hasReroll = true break end
+      end
+      if not hasReroll then injectedOrder[#injectedOrder + 1] = "RerollButton" end
+
+      screenPatches[name] = {
+        root = root,
+        children = children,
+        originalIcon = root.RerollIcon,
+        originalButton = children.RerollButton,
+        originalOrder = actionBar.ChildrenOrder,
+        injectedIcon = injectedIcon,
+        injectedButton = injectedButton,
+        injectedOrder = injectedOrder,
+      }
+      root.RerollIcon = injectedIcon
+      children.RerollButton = injectedButton
+      actionBar.ChildrenOrder = injectedOrder
+    end
+
+    local function restoreSeleneScreenData()
+      for name, patch in pairs(screenPatches) do
+        local actionBar = type(patch.root) == "table" and patch.root.ActionBar or nil
+        if patch.root.RerollIcon == patch.injectedIcon then
+          patch.root.RerollIcon = patch.originalIcon
+        end
+        if patch.children.RerollButton == patch.injectedButton then
+          patch.children.RerollButton = patch.originalButton
+        end
+        if type(actionBar) == "table" and actionBar.ChildrenOrder == patch.injectedOrder then
+          actionBar.ChildrenOrder = patch.originalOrder
+        end
+        screenPatches[name] = nil
+      end
     end
 
     local function nativeSource(source, definition)
@@ -4926,6 +5009,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function forcedCost(screen, source)
+      source = type(source) == "table" and source or {}
       if type(RerollCosts) ~= "table" or not finite(RerollCosts.Boon)
           or RerollCosts.Boon < 1 or RerollCosts.Boon % 1 ~= 0
           or not finite(RerollCosts.ReuseIncrement) or RerollCosts.ReuseIncrement < 0 then
@@ -4938,6 +5022,261 @@ if __MacGamingTrainerV1 == nil then
       local cost = RerollCosts.Boon + count * RerollCosts.ReuseIncrement
       if cost < 1 or cost > 999999 or cost % 1 ~= 0 then return nil end
       return cost, key
+    end
+
+    local function visibleSpellNames(screen)
+      local result = {}
+      local components = type(screen) == "table" and screen.Components or {}
+      for index = 1, 3 do
+        local button = components["PurchaseButton" .. index]
+        if type(button) == "table" and type(button.SpellName) == "string" then
+          result[#result + 1] = button.SpellName
+        end
+      end
+      return result
+    end
+
+    local function eligibleSpellNames(screen)
+      local result = {}
+      if type(SpellData) ~= "table" or type(IsGameStateEligible) ~= "function" then return result end
+      for spellName, spellData in pairs(SpellData) do
+        if type(spellName) == "string" and type(spellData) == "table"
+            and (screen.StripRequirements or spellData.GameStateRequirements == nil
+              or IsGameStateEligible(spellData, spellData.GameStateRequirements)) then
+          result[#result + 1] = spellName
+        end
+      end
+      table.sort(result)
+      return result
+    end
+
+    local function spellHasAlternative(screen)
+      local current = visibleSpellNames(screen)
+      if #current == 0 then return false end
+      local currentSet = {}
+      for _, name in ipairs(current) do currentSet[name] = true end
+      local eligible = eligibleSpellNames(screen)
+      if #eligible < #current then return false end
+      for _, name in ipairs(eligible) do
+        if not currentSet[name] then return true end
+      end
+      return false
+    end
+
+    local function spellPlan(screen)
+      local current = visibleSpellNames(screen)
+      if #current == 0 then return nil end
+      local currentSet = {}
+      for _, name in ipairs(current) do currentSet[name] = true end
+      local eligible = eligibleSpellNames(screen)
+      if #eligible < #current then return nil end
+
+      local alternatives = {}
+      for _, name in ipairs(eligible) do
+        if not currentSet[name] then alternatives[#alternatives + 1] = name end
+      end
+      if #alternatives == 0 then return nil end
+
+      requireFunctions("Selene Hex force reroll", { "RemoveRandomValue" })
+      local first = RemoveRandomValue(alternatives)
+      if first == nil then return nil end
+      local result = { first }
+      local used = { [first] = true }
+      local remaining = {}
+      for _, name in ipairs(eligible) do
+        if not used[name] then remaining[#remaining + 1] = name end
+      end
+      while #result < #current and #remaining > 0 do
+        local name = RemoveRandomValue(remaining)
+        result[#result + 1] = name
+        used[name] = true
+      end
+      if #result ~= #current then return nil end
+      return result
+    end
+
+    local function destroySpellButtons(screen)
+      requireFunctions("Selene Hex force reroll", { "Destroy" })
+      local components = screen.Components or {}
+      local ids = {}
+      for index = 1, 3 do
+        for _, key in ipairs({
+          "PurchaseButton" .. index,
+          "PurchaseButtonTitle" .. index,
+          "PurchaseButton" .. index .. "Highlight",
+          "Icon" .. index,
+          "PurchaseButton" .. index .. "QuestIcon",
+          "PurchaseButton" .. index .. "Frame",
+          "DuoOverlay" .. index,
+          "PurchaseButton" .. index .. "MoonIcon",
+          "PurchaseButton" .. index .. "OlympianDuo",
+        }) do
+          local component = components[key]
+          if type(component) == "table" and finite(component.Id) then ids[#ids + 1] = component.Id end
+          components[key] = nil
+        end
+      end
+      if #ids > 0 then Destroy({ Ids = ids }) end
+    end
+
+    local function updateSpellDuoEligibility(screen, names)
+      if type(SessionMapState) ~= "table" or type(SpellTalentData) ~= "table"
+          or type(TraitData) ~= "table" or type(IsGameStateEligible) ~= "function" then
+        return
+      end
+      SessionMapState.DuoTalentEligibleSpell = SessionMapState.DuoTalentEligibleSpell or {}
+      local any = false
+      for _, spellName in ipairs(names) do
+        local eligible = false
+        local spellData = type(SpellData) == "table" and SpellData[spellName] or nil
+        local legendary = type(spellData) == "table" and type(spellData.Talents) == "table"
+          and spellData.Talents.Legendary or {}
+        for _, traitName in pairs(legendary or {}) do
+          local traitData = TraitData[traitName]
+          if type(traitData) == "table" and traitData.IsDuoBoon
+              and (traitData.GameStateRequirements == nil
+                or IsGameStateEligible(screen.Source or {}, traitData.GameStateRequirements))
+              and (SpellTalentData.ServeDuoGameRequirements == nil
+                or IsGameStateEligible(screen.Source or {}, SpellTalentData.ServeDuoGameRequirements)) then
+            eligible = true
+            any = true
+            break
+          end
+        end
+        SessionMapState.DuoTalentEligibleSpell[spellName] = eligible or nil
+      end
+      if any then SessionMapState.DuoTalentEligible = true end
+    end
+
+    local function rerollSpellScreen(screen)
+      local plan = spellPlan(screen)
+      if plan == nil then error("Force reroll pool has no changed eligible candidates") end
+      destroySpellButtons(screen)
+      SessionMapState.SelectedSpells = ShallowCopyTable(plan)
+      updateSpellDuoEligibility(screen, plan)
+      CreateSpellButtons(screen)
+    end
+
+    local function treeShapeKey(tree)
+      if type(tree) ~= "table" then return "" end
+      local parts = {}
+      for depth, column in ipairs(tree) do
+        local slots = {}
+        for slot in pairs(type(column) == "table" and column or {}) do slots[#slots + 1] = slot end
+        table.sort(slots, function(a, b) return tostring(a) < tostring(b) end)
+        for _, slot in ipairs(slots) do
+          local node = column[slot]
+          local links = {}
+          for _, target in pairs(type(node) == "table" and node.LinkTo or {}) do
+            links[#links + 1] = tostring(target)
+          end
+          table.sort(links)
+          parts[#parts + 1] = table.concat({
+            tostring(depth), tostring(slot), table.concat(links, ","),
+          }, ":")
+        end
+      end
+      return table.concat(parts, "|")
+    end
+
+    local function talentHasMutableNode(screen)
+      if type(screen) ~= "table" or screen.ReadOnly then return false end
+      local slotted = seleneModel.currentSpell()
+      if type(slotted) ~= "table" or type(slotted.Talents) ~= "table" then return false end
+      for _, column in ipairs(slotted.Talents) do
+        for _, node in pairs(type(column) == "table" and column or {}) do
+          if type(node) == "table" and not node.Invested and not node.QueuedInvested then
+            return true
+          end
+        end
+      end
+      return false
+    end
+
+    local function talentPlan(screen)
+      if not talentHasMutableNode(screen) then return nil end
+      local slotted = seleneModel.currentSpell()
+      local spellData = type(SpellData) == "table" and SpellData[slotted.Name] or nil
+      if type(spellData) ~= "table" then return nil end
+      local currentShape = treeShapeKey(slotted.Talents)
+      local protectedNames = {}
+      for _, column in ipairs(slotted.Talents) do
+        for _, node in pairs(type(column) == "table" and column or {}) do
+          if type(node) == "table" and (node.Invested or node.QueuedInvested)
+              and type(node.Name) == "string" then
+            protectedNames[node.Name] = true
+          end
+        end
+      end
+
+      for _ = 1, 32 do
+        local candidate = CreateTalentTree(spellData)
+        if type(candidate) == "table" and treeShapeKey(candidate) == currentShape then
+          local changed, conflict = false, false
+          for depth, column in ipairs(slotted.Talents) do
+            for slot, node in pairs(type(column) == "table" and column or {}) do
+              if type(node) == "table" and not node.Invested and not node.QueuedInvested then
+                local fresh = type(candidate[depth]) == "table" and candidate[depth][slot] or nil
+                if type(fresh) ~= "table" or protectedNames[fresh.Name] then
+                  conflict = true
+                  break
+                end
+                if fresh.Name ~= node.Name or fresh.Rarity ~= node.Rarity then changed = true end
+              end
+            end
+            if conflict then break end
+          end
+          if changed and not conflict then return candidate end
+        end
+      end
+      return nil
+    end
+
+    local function rebuildTalentScreen(screen)
+      requireFunctions("Selene Path of Stars force reroll", {
+        "Destroy", "CreateTalentTreeIcons", "UpdateTalentButtons",
+      })
+      local components = screen.Components or {}
+      local ids = {}
+      for _, listName in ipairs({ "TalentIds", "TalentFrameIds", "LinkObjects" }) do
+        for _, id in ipairs(type(components[listName]) == "table" and components[listName] or {}) do
+          if finite(id) then ids[#ids + 1] = id end
+        end
+      end
+      local removeKeys = {}
+      for key, component in pairs(components) do
+        if type(key) == "string" and string.find(key, "TalentObject", 1, true) == 1
+            and type(component) == "table" then
+          if finite(component.BadgeId) then ids[#ids + 1] = component.BadgeId end
+          removeKeys[#removeKeys + 1] = key
+        end
+      end
+      for _, key in ipairs(removeKeys) do components[key] = nil end
+      if #ids > 0 then Destroy({ Ids = ids }) end
+      CreateTalentTreeIcons(screen, {
+        ObstacleName = "ButtonTalent",
+        OnPressedFunctionName = "OnTalentPressed",
+      })
+      UpdateTalentButtons(screen)
+      if type(UpdateAdditionalTalentPointButton) == "function" then
+        UpdateAdditionalTalentPointButton(screen)
+      end
+    end
+
+    local function rerollTalentScreen(screen)
+      local candidate = talentPlan(screen)
+      if candidate == nil then error("Force reroll pool has no changed eligible candidates") end
+      local slotted = seleneModel.currentSpell()
+      for depth, column in ipairs(slotted.Talents) do
+        for slot, node in pairs(type(column) == "table" and column or {}) do
+          if type(node) == "table" and not node.Invested and not node.QueuedInvested then
+            local fresh = candidate[depth][slot]
+            node.Name = fresh.Name
+            node.Rarity = fresh.Rarity
+          end
+        end
+      end
+      rebuildTalentScreen(screen)
     end
 
     local function needsAdapter(source, kind, definition)
@@ -5013,6 +5352,53 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
+    local function configureSelene(screen)
+      if not M.desiredFeatures.forceEnableRerolls or type(screen) ~= "table"
+          or type(screen.Components) ~= "table" then
+        return false
+      end
+      local isSpell = screen.Name == "SpellScreen"
+      local isTalent = screen.Name == "TalentScreen"
+      if not isSpell and not isTalent then return false end
+
+      local button = screen.Components.RerollButton
+      local icon = screen.Components.RerollIcon
+      if type(button) ~= "table" or not finite(button.Id)
+          or type(icon) ~= "table" or not finite(icon.Id)
+          or type(AttemptPanelReroll) ~= "function" then
+        return false
+      end
+
+      local available = isSpell and spellHasAlternative(screen)
+        or (isTalent and talentHasMutableNode(screen))
+      if not available then
+        button.OnPressedFunctionName = nil
+        button.RerollFunctionName = nil
+        button.Cost = -1
+        setButtonVisible(button, false)
+        return false
+      end
+
+      local source = type(screen.Source) == "table" and screen.Source or {}
+      local cost, key = forcedCost(screen, source)
+      if cost == nil then return false end
+      moveRerollUI(screen)
+      button.Cost = cost
+      button.RerollColor = source.LootColor
+      button.RerollId = key
+      button.LootData = source
+      button.OnPressedFunctionName = "AttemptPanelReroll"
+      button.RerollFunctionName = seleneCallbackName
+      if type(ModifyTextBox) == "function" then
+        ModifyTextBox({
+          Id = button.Id, Text = "Boon_Reroll",
+          LuaKey = "TempTextData", LuaValue = { Amount = cost },
+        })
+      end
+      setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= cost)
+      return true
+    end
+
     local function restoreRerollPresentation(screen, hideIcon)
       if screen.MovedRerollUIGroup then
         screen.MovedRerollUIGroup = nil
@@ -5026,6 +5412,22 @@ if __MacGamingTrainerV1 == nil then
         local icon = screen.Components.RerollIcon
         if type(icon) == "table" and finite(icon.Id) and type(SetAlpha) == "function" then
           SetAlpha({ Id = icon.Id, Fraction = 0.0, Duration = 0.2 })
+        end
+      end
+    end
+
+    local function restoreCurrentSelene()
+      for _, name in ipairs({ "SpellScreen", "TalentScreen" }) do
+        local screen = currentNamedScreen(name)
+        if screen ~= nil and type(screen.Components) == "table" then
+          local button = screen.Components.RerollButton
+          if type(button) == "table" then
+            button.OnPressedFunctionName = nil
+            button.RerollFunctionName = nil
+            button.Cost = -1
+            setButtonVisible(button, false)
+          end
+          restoreRerollPresentation(screen, true)
         end
       end
     end
@@ -5128,6 +5530,31 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    seleneCallback = function(screen, button)
+      local ok, message = pcall(function()
+        if type(screen) ~= "table" or type(button) ~= "table"
+            or button.RerollFunctionName ~= seleneCallbackName then
+          error("Force reroll source changed")
+        end
+        local live = currentNamedScreen(screen.Name)
+        if live ~= screen then error("Force reroll source changed") end
+        local source = type(screen.Source) == "table" and screen.Source or {}
+        if source.ObjectId == nil or source.ObjectId == -1 then
+          syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
+        end
+        if screen.Name == "SpellScreen" then
+          rerollSpellScreen(screen)
+        elseif screen.Name == "TalentScreen" then
+          rerollTalentScreen(screen)
+        else
+          error("Force reroll source changed")
+        end
+      end)
+      if not ok and type(DebugPrint) == "function" then
+        DebugPrint({ Text = "MacGamingTrainer Selene force reroll failed after native spend: " .. tostring(message) })
+      end
+    end
+
     local function install()
       requireFunctions("Force Enable Rerolls", {
         "HeroHasTrait", "OpenUpgradeChoiceMenu", "CreateBoonLootButtons",
@@ -5136,7 +5563,15 @@ if __MacGamingTrainerV1 == nil then
       if _G[callbackName] ~= nil and _G[callbackName] ~= callback then
         error("Force Enable Rerolls callback name is already owned")
       end
+      if _G[seleneCallbackName] ~= nil and _G[seleneCallbackName] ~= seleneCallback then
+        error("Force Enable Rerolls Selene callback name is already owned")
+      end
       _G[callbackName] = callback
+      if seleneSupported() then
+        _G[seleneCallbackName] = seleneCallback
+        patchSeleneScreenData("SpellScreen")
+        patchSeleneScreenData("TalentScreen")
+      end
 
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
@@ -5169,8 +5604,25 @@ if __MacGamingTrainerV1 == nil then
         return result
       end)
 
+      if seleneSupported() then
+        installHook("CreateSpellButtons", function(original, screen, ...)
+          local result = original(screen, ...)
+          if M.desiredFeatures.forceEnableRerolls then configureSelene(screen) end
+          return result
+        end)
+        installHook("UpdateTalentButtons", function(original, screen, ...)
+          local result = original(screen, ...)
+          if M.desiredFeatures.forceEnableRerolls then configureSelene(screen) end
+          return result
+        end)
+      end
+
       local screen = currentScreen()
       if screen ~= nil then configure(screen, screen.Source) end
+      local spellScreen = currentNamedScreen("SpellScreen")
+      if spellScreen ~= nil then configureSelene(spellScreen) end
+      local talentScreen = currentNamedScreen("TalentScreen")
+      if talentScreen ~= nil then configureSelene(talentScreen) end
     end
 
     local function release()
@@ -5178,10 +5630,15 @@ if __MacGamingTrainerV1 == nil then
         source.BlockReroll = saved.hadValue and saved.value or nil
         forcedSources[source] = nil
       end
+      releaseHook("UpdateTalentButtons")
+      releaseHook("CreateSpellButtons")
       releaseHook("CreateBoonLootButtons")
       releaseHook("OpenUpgradeChoiceMenu")
       releaseHook("HeroHasTrait")
       if _G[callbackName] == callback then _G[callbackName] = nil end
+      if _G[seleneCallbackName] == seleneCallback then _G[seleneCallbackName] = nil end
+      restoreCurrentSelene()
+      restoreSeleneScreenData()
       restoreCurrentNative()
     end
 
@@ -5195,9 +5652,15 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function active()
+      local seleneActive = true
+      if seleneSupported() then
+        seleneActive = owns("CreateSpellButtons") and owns("UpdateTalentButtons")
+          and _G[seleneCallbackName] == seleneCallback
+      end
       return M.desiredFeatures.forceEnableRerolls
         and owns("HeroHasTrait") and owns("OpenUpgradeChoiceMenu")
         and owns("CreateBoonLootButtons") and _G[callbackName] == callback
+        and seleneActive
     end
 
     return {
