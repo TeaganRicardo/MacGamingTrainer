@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = {
     "Backend/games/hades2/command_contract.py": {"run": ["/usr/bin/open", "/usr/bin/open"]},
     "Backend/games/hades2/transport.py": {"check_output": ["/usr/bin/xcrun"]},
-    "Backend/core/process_time_warp.py": {"check_output": ["/usr/bin/xcrun"]},
+    "Backend/games/hades2/lldb_time_warp.py": {"check_output": ["/usr/bin/xcrun"]},
 }
 
 for relative, expected_by_method in EXPECTED.items():
@@ -37,5 +37,10 @@ for relative, expected_by_method in EXPECTED.items():
         calls[method].append(executable)
 
     assert calls == expected_by_method, f"{relative}: unexpected subprocess tool paths: {calls!r}"
+
+core_time_warp = (ROOT / "Backend/core/process_time_warp.py").read_text()
+assert "/usr/bin/xcrun" not in core_time_warp, (
+    "Core Process Time Warp must remain debugger-agnostic; concrete tool discovery belongs to the game/runtime driver"
+)
 
 print("native_tool_path_contract_ok")
