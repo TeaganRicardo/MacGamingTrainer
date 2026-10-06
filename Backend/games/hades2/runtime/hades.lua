@@ -5809,7 +5809,11 @@ if __MacGamingTrainerV1 == nil then
         installHook("AssignRoomToExitDoor", function(original, door, room, ...)
           local result = original(door, room, ...)
           if M.desiredFeatures.forceEnableRerolls then
-            configureDoorOwner(door, nativeDoorEligible(door))
+            local nativeBaseline = nativeDoorEligible(door)
+            if not configureDoorOwner(door, nativeBaseline) then
+              door.CanBeRerolled = nativeBaseline
+              refreshDoorOwner(door)
+            end
           end
           return result
         end)
