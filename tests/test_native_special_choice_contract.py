@@ -165,12 +165,17 @@ assert 'M.specialChoiceOpens = {}' in block
 assert 'M.specialChoiceOpens[params.source] = (M.specialChoiceOpens[params.source] or 0) + 1' in block
 assert 'RandomSynchronize(8 + M.specialChoiceOpens[params.source])' in block
 assert 'RandomSynchronize(9)' not in block
-fixed = lua[lua.index('local function fixedOptions'):lua.index('local function previousRarity')]
-assert 'option.Type ~= "Trait"' in fixed
-assert 'type(TraitData[option.ItemName]) == "table"' in fixed
-assert 'HeroHasTrait(option.ItemName)' in fixed
-assert '(target.run.PickedTraits or {})[option.ItemName]' in fixed
-assert 'IsTraitEligible' not in fixed, "fixed NPC choices must preserve their native eligibility rules"
+fixed_eligibility = lua[
+    lua.index('local function fixedCandidateEligible'):
+    lua.index('local function fixedOptions')
+]
+assert 'option.Type == "Trait"' in fixed_eligibility
+assert 'type(TraitData[name]) == "table"' in fixed_eligibility
+assert 'HeroHasTrait(name)' in fixed_eligibility
+assert '(target.run.PickedTraits or {})[name]' in fixed_eligibility
+assert 'IsTraitEligible' not in fixed_eligibility, (
+    "fixed NPC choices must preserve their native eligibility rules"
+)
 assert 'AddTraitToHero' not in block
 assert 'hadLootChoiceHistory' in block
 assert 'CurrentRun.LootChoiceHistory = nil' in block
