@@ -100,8 +100,9 @@ BASE_HARNESS = BASE_HARNESS.replace(
 )
 
 DOOR_CASES = r'''
--- Start from ordinary native rules with no DoorRerollMetaUpgrade, matching a
--- packaged trial that globally removes reroll Arcana.
+-- Start from ordinary native 1.143476 / Steam 25481925 rules with no
+-- DoorRerollMetaUpgrade, matching a packaged trial that globally removes the
+-- AllowDoorReroll capability while leaving the concrete reward owner intact.
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 nativeDoorReroll = false
 CurrentRun.NumRerolls = 6
