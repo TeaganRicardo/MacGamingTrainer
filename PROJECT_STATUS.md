@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 13.
 - Hades II desired-state schema: 8.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 90.
+- Hades II resident runtime revision: 91.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
