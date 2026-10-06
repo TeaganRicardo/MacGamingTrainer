@@ -14,8 +14,6 @@ from pathlib import Path
 from core.adapter import AdapterError
 from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpController
 
-from .transport import Hades2LuaTransport
-
 
 WORKER_PROTOCOL_VERSION = 1
 
@@ -39,10 +37,22 @@ def _error_payload(error):
 
 
 class Hades2LLDBWorker:
-    def __init__(self, transport=None):
-        self.transport = transport or Hades2LuaTransport()
+    def __init__(self, transport=None, time_warp_factory=None):
+        if transport is None:
+            from .transport import Hades2LuaTransport
+            transport = Hades2LuaTransport()
+        self.transport = transport
         self.time_warp = None
         self._time_warp_config = None
+        self._time_warp_factory = time_warp_factory or self._default_time_warp_factory
+
+    @staticmethod
+    def _default_time_warp_factory(transport, helper_path, image_names):
+        return ProcessTimeWarpController(
+            LLDBProcessTimeWarpDriver(transport),
+            Path(helper_path),
+            list(image_names),
+        )
 
     def state(self):
         return {
@@ -77,10 +87,10 @@ class Hades2LLDBWorker:
             raise ValueError("time_warp imageNames must be non-empty strings")
         config = (helper_path, tuple(image_names))
         if config != self._time_warp_config:
-            self.time_warp = ProcessTimeWarpController(
-                LLDBProcessTimeWarpDriver(self.transport),
-                Path(helper_path),
-                list(image_names),
+            self.time_warp = self._time_warp_factory(
+                self.transport,
+                helper_path,
+                image_names,
             )
             self._time_warp_config = config
         return True
