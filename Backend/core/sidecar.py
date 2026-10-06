@@ -10,7 +10,6 @@ from pathlib import Path
 
 
 DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024
-DEFAULT_REPLY_TIMEOUT_SECONDS = 10.0
 
 
 class SidecarTerminalError(RuntimeError):
@@ -38,9 +37,9 @@ class JsonLineSidecarClient:
         self,
         command,
         *,
+        reply_timeout_seconds,
         cwd=None,
         env=None,
-        reply_timeout_seconds=DEFAULT_REPLY_TIMEOUT_SECONDS,
         max_line_bytes=DEFAULT_MAX_LINE_BYTES,
         process_factory=subprocess.Popen,
     ):
@@ -88,10 +87,10 @@ class JsonLineSidecarClient:
                 bufsize=0,
             )
         except OSError as error:
-            terminal = SidecarStartError(str(error), outcome_unknown=False)
-            self._terminal_error = terminal
+            # No request crossed the seam, so there is no outcome to distrust.
+            # Let the game/runtime decide whether a later explicit action retries.
             self._terminate_process()
-            raise terminal from error
+            raise SidecarStartError(str(error), outcome_unknown=False) from error
 
     def _terminate_process(self):
         process, self._process = self._process, None
@@ -266,12 +265,17 @@ def _line_ended(raw):
     return raw.endswith("\n") if isinstance(raw, str) else raw.endswith(b"\n")
 
 
-def _write_json_line(output_stream, payload):
-    text = json.dumps(payload, ensure_ascii=False, allow_nan=False) + "\n"
+def _write_json_line(output_stream, payload, max_line_bytes):
+    encoded = (
+        json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        + b"\n"
+    )
+    if len(encoded) > max_line_bytes:
+        raise ValueError("sidecar reply exceeded the configured line limit")
     try:
-        output_stream.write(text)
+        output_stream.write(encoded)
     except TypeError:
-        output_stream.write(text.encode("utf-8"))
+        output_stream.write(encoded.decode("utf-8"))
     output_stream.flush()
 
 
@@ -328,4 +332,7 @@ def serve_jsonl_requests(
                 "error": error_payload(error),
                 "state": state(),
             }
-        _write_json_line(output_stream, response)
+        # A post-dispatch serialization/size failure must terminate the worker
+        # rather than invent an ordinary error reply: the caller alone knows
+        # whether a lost mutation acknowledgement means outcome_unknown.
+        _write_json_line(output_stream, response, max_line_bytes)

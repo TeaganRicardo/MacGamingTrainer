@@ -143,9 +143,11 @@ class FakeSidecar:
             raise AssertionError(f"unexpected sidecar request: {method}")
         response = self.responses.pop(0)
         if isinstance(response, BaseException):
-            self.terminal = True
             self.started = False
+            if not isinstance(response, SidecarStartError):
+                self.terminal = True
             raise response
+        self.started = True
         return response
 
     def invalidate(self, detail, *, outcome_unknown=False):
@@ -247,6 +249,8 @@ assert reported_unknown_client.terminal
 
 unavailable_sidecar = FakeSidecar([
     SidecarStartError("xcrun python3 unavailable", outcome_unknown=False),
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": None}},
 ])
 unavailable_client = _LLDBWorkerClient(sidecar=unavailable_sidecar)
 try:
@@ -256,5 +260,24 @@ except AdapterError as error:
     assert error.presentation == "hades2.error.debuggerUnavailable"
 else:
     raise AssertionError("sidecar start failure lost Hades debugger presentation")
+assert not unavailable_client.terminal
+assert not unavailable_client.started
+assert unavailable_client.call("transport.alive")[0] is True
+
+protocol_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 999}},
+    {"id": "2", "result": {"protocolVersion": 1}},
+    {"id": "3", "result": True, "state": {"pid": None}},
+])
+protocol_client = _LLDBWorkerClient(sidecar=protocol_sidecar)
+try:
+    protocol_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "debugger_protocol", error.code
+else:
+    raise AssertionError("worker protocol mismatch was accepted")
+assert not protocol_client.terminal
+assert not protocol_client.started
+assert protocol_client.call("transport.alive")[0] is True
 
 print("hades2_lldb_worker_protocol_ok")

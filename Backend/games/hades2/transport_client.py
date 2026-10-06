@@ -75,12 +75,13 @@ class _LLDBWorkerClient:
         if self._terminal_error is not None:
             raise self._terminal_error
         if isinstance(error, SidecarStartError):
-            raised = AdapterError(
+            self._hello_complete = False
+            raise AdapterError(
                 "debugger_unavailable",
                 "hades2.error.debuggerUnavailable",
                 diagnostic=error.detail,
-            )
-        elif error.outcome_unknown:
+            ) from error
+        if error.outcome_unknown:
             raised = AdapterError(
                 "outcome_unknown",
                 "hades2.error.outcomeUnknownGeneric",
@@ -121,13 +122,12 @@ class _LLDBWorkerClient:
             or result.get("protocolVersion") != _WORKER_PROTOCOL_VERSION
         ):
             self._sidecar.close()
-            raised = AdapterError(
+            self._hello_complete = False
+            raise AdapterError(
                 "debugger_protocol",
                 "hades2.error.debuggerProtocol",
                 diagnostic=f"worker hello={result!r}",
             )
-            self._terminal_error = raised
-            raise raised
         self._hello_complete = True
 
     def _protocol_failure(self, method, detail):

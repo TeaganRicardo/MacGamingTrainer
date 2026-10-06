@@ -42,7 +42,7 @@ def factory_for(process):
 
 
 process = FakeProcess(b'{"id":"1","result":{"ok":true}}\n')
-client = JsonLineSidecarClient(["fake"], process_factory=factory_for(process))
+client = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=factory_for(process))
 reply = client.request("ping", {"value": 7})
 assert reply["result"] == {"ok": True}
 request = json.loads(process.stdin.getvalue())
@@ -61,14 +61,14 @@ def restart_factory(*args, **kwargs):
     return restart_processes.pop(0)
 
 
-restartable = JsonLineSidecarClient(["fake"], process_factory=restart_factory)
+restartable = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=restart_factory)
 assert restartable.request("observe")["result"] == "first"
 restart_first.terminated = True
 assert restartable.request("observe")["result"] == "second"
 assert not restart_processes
 
 mismatch_process = FakeProcess(b'{"id":"wrong","result":true}\n')
-mismatch = JsonLineSidecarClient(["fake"], process_factory=factory_for(mismatch_process))
+mismatch = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=factory_for(mismatch_process))
 try:
     mismatch.request("ping")
 except SidecarTerminalError as error:
@@ -80,7 +80,7 @@ assert mismatch.terminal
 assert mismatch_process.terminated or mismatch_process.killed
 
 lost_process = FakeProcess(b"")
-lost = JsonLineSidecarClient(["fake"], process_factory=factory_for(lost_process))
+lost = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=factory_for(lost_process))
 try:
     lost.request("mutate", outcome_unknown_on_loss=True)
 except SidecarTerminalError as error:
@@ -97,6 +97,7 @@ else:
 oversized_process = FakeProcess(b"x" * 65 + b"\n")
 oversized = JsonLineSidecarClient(
     ["fake"],
+    reply_timeout_seconds=1.0,
     process_factory=factory_for(oversized_process),
     max_line_bytes=64,
 )
@@ -115,7 +116,7 @@ class InterruptingOutput:
 
 interrupted_process = FakeProcess()
 interrupted_process.stdout = InterruptingOutput()
-interrupted = JsonLineSidecarClient(["fake"], process_factory=factory_for(interrupted_process))
+interrupted = JsonLineSidecarClient(["fake"], reply_timeout_seconds=1.0, process_factory=factory_for(interrupted_process))
 try:
     interrupted.request("observe")
 except KeyboardInterrupt:
@@ -181,7 +182,23 @@ def unavailable_factory(*args, **kwargs):
     raise OSError("runtime missing")
 
 
-unavailable = JsonLineSidecarClient(["missing"], process_factory=unavailable_factory)
+recovered_start = FakeProcess(b'{"id":"1","result":"ok"}\n')
+start_attempts = 0
+
+
+def unavailable_then_ready(*args, **kwargs):
+    global start_attempts
+    start_attempts += 1
+    if start_attempts == 1:
+        raise OSError("runtime missing")
+    return recovered_start
+
+
+unavailable = JsonLineSidecarClient(
+    ["missing"],
+    reply_timeout_seconds=1.0,
+    process_factory=unavailable_then_ready,
+)
 try:
     unavailable.request("hello")
 except SidecarStartError as error:
@@ -189,6 +206,9 @@ except SidecarStartError as error:
     assert "runtime missing" in str(error)
 else:
     raise AssertionError("sidecar start failure lost its identity")
+assert not unavailable.terminal, "pre-request start failure incorrectly terminated trust"
+assert unavailable.request("hello")["result"] == "ok"
+assert start_attempts == 2
 
 seen = []
 
@@ -204,7 +224,7 @@ def error_payload(error):
 
 input_stream = io.StringIO(
     json.dumps({"id": "a", "method": "ping", "params": {"n": 1}}) + "\n"
-    + ("x" * 80) + "\n"
+    + ("x" * 300) + "\n"
 )
 output_stream = io.StringIO()
 serve_jsonl_requests(
@@ -213,7 +233,7 @@ serve_jsonl_requests(
     dispatch,
     error_payload=error_payload,
     state=lambda: {"ready": True},
-    max_line_bytes=64,
+    max_line_bytes=256,
 )
 server_replies = [json.loads(line) for line in output_stream.getvalue().splitlines()]
 assert server_replies[0] == {
@@ -224,5 +244,20 @@ assert server_replies[0] == {
 assert server_replies[1]["id"] is None
 assert server_replies[1]["error"]["code"] == "invalid"
 assert seen == [("ping", {"n": 1})]
+
+oversized_output = io.StringIO()
+try:
+    serve_jsonl_requests(
+        io.StringIO(json.dumps({"id": "big", "method": "ping"}) + "\n"),
+        oversized_output,
+        lambda method, params: {"payload": "x" * 512},
+        error_payload=error_payload,
+        max_line_bytes=256,
+    )
+except ValueError as error:
+    assert "reply exceeded" in str(error)
+else:
+    raise AssertionError("oversized sidecar reply was emitted")
+assert oversized_output.getvalue() == ""
 
 print("sidecar_protocol_ok")
