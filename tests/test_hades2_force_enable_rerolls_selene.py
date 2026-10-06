@@ -113,6 +113,11 @@ end
 
 local function mountInjectedRerollComponents(screen, screenName)
   local data = ScreenData[screenName].ComponentData
+  screen.Components.ActionBar = {
+    Id = component().Id,
+    AutoAlignContextualButtons = true,
+    AutoAlignJustification = 'Right',
+  }
   if data.RerollIcon then screen.Components.RerollIcon = component() end
   if data.ActionBar and data.ActionBar.Children and data.ActionBar.Children.RerollButton then
     screen.Components.RerollButton = component()
