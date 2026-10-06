@@ -12,7 +12,6 @@ import subprocess
 from pathlib import Path
 
 from core.adapter import AdapterError
-from core.process_time_warp import ProcessTimeWarpError
 
 
 _WORKER_PROTOCOL_VERSION = 1
