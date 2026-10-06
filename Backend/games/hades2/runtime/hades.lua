@@ -5439,44 +5439,6 @@ if __MacGamingTrainerV1 == nil then
       }
     end
 
-    local function configureNemesisTrade(screen)
-      if not M.desiredFeatures.forceEnableRerolls
-          or type(screen) ~= "table" or screen.Name ~= "TradeScreen"
-          or type(screen.Source) ~= "table"
-          or screen.Source.Name ~= "NPC_Nemesis_01"
-          or not ensureInjectedRerollComponents(screen) then
-        return false
-      end
-      local owner = nemesisTradeArgs[screen.Args]
-      if type(owner) ~= "table" or owner.source ~= screen.Source
-          or owner.run ~= CurrentRun then
-        return false
-      end
-      nemesisTradeScreens[screen] = owner
-      if changedNemesisTradePlan(owner, screen.ChosenGiveOption, screen.ChosenGetOption) == nil then
-        clearRerollControl(screen, true)
-        return false
-      end
-      local cost, key = forcedCost(screen, screen.Source)
-      if cost == nil then
-        clearRerollControl(screen, true)
-        return false
-      end
-      return configureRerollControl(screen, {
-        cost = cost,
-        rerollId = key,
-        callback = nemesisTradeCallbackName,
-        showIcon = true,
-      })
-    end
-
-    local function restoreCurrentNemesisTrade()
-      local screen = currentNamedScreen("TradeScreen")
-      if screen ~= nil and type(screen.Components) == "table" then
-        clearRerollControl(screen, true)
-      end
-    end
-
     local function visibleSpellNames(screen)
       local result = {}
       local components = type(screen) == "table" and screen.Components or {}
@@ -5815,6 +5777,44 @@ if __MacGamingTrainerV1 == nil then
       end
       setButtonVisible(button, number(CurrentRun and CurrentRun.NumRerolls) >= args.cost)
       return true
+    end
+
+    local function configureNemesisTrade(screen)
+      if not M.desiredFeatures.forceEnableRerolls
+          or type(screen) ~= "table" or screen.Name ~= "TradeScreen"
+          or type(screen.Source) ~= "table"
+          or screen.Source.Name ~= "NPC_Nemesis_01"
+          or not ensureInjectedRerollComponents(screen) then
+        return false
+      end
+      local owner = nemesisTradeArgs[screen.Args]
+      if type(owner) ~= "table" or owner.source ~= screen.Source
+          or owner.run ~= CurrentRun then
+        return false
+      end
+      nemesisTradeScreens[screen] = owner
+      if changedNemesisTradePlan(owner, screen.ChosenGiveOption, screen.ChosenGetOption) == nil then
+        clearRerollControl(screen, true)
+        return false
+      end
+      local cost, key = forcedCost(screen, screen.Source)
+      if cost == nil then
+        clearRerollControl(screen, true)
+        return false
+      end
+      return configureRerollControl(screen, {
+        cost = cost,
+        rerollId = key,
+        callback = nemesisTradeCallbackName,
+        showIcon = true,
+      })
+    end
+
+    local function restoreCurrentNemesisTrade()
+      local screen = currentNamedScreen("TradeScreen")
+      if screen ~= nil and type(screen.Components) == "table" then
+        clearRerollControl(screen, true)
+      end
     end
 
     local function configure(screen, source)
