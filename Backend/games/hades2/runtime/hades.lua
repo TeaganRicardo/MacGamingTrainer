@@ -5107,6 +5107,27 @@ if __MacGamingTrainerV1 == nil then
       return nil
     end
 
+    local function fixedCandidateEligible(target, option, excluded)
+      if type(target) ~= "table" or type(option) ~= "table" or option.ItemName == excluded then
+        return false
+      end
+      if option.Type == "Trait" then
+        local name = option.ItemName
+        if type(name) ~= "string" or type(TraitData) ~= "table"
+            or type(TraitData[name]) ~= "table" or HeroHasTrait(name)
+            or (type(target.run) == "table" and (target.run.PickedTraits or {})[name]) then
+          return false
+        end
+      end
+      if option.GameStateRequirements ~= nil then
+        if type(IsGameStateEligible) ~= "function"
+            or not IsGameStateEligible(target.eligibilitySource, option.GameStateRequirements) then
+          return false
+        end
+      end
+      return true
+    end
+
     local function fixedOptions(target, excluded)
       local definition = target.definition
       local data = type(PresetEventArgs) == "table" and PresetEventArgs[definition.choices]
@@ -5116,19 +5137,14 @@ if __MacGamingTrainerV1 == nil then
       requireFunctions("fixed choice force reroll", {
         "IsGameStateEligible", "RemoveRandomValue", "PassRarityCheck", "ShallowCopyTable", "HeroHasTrait",
       })
+      target.eligibilitySource = target.eligibilitySource or nativeSource(target.source, definition)
       local priority, eligible, result = {}, {}, {}
-      local eligibilitySource = nativeSource(target.source, definition)
       for _, option in pairs(data.UpgradeOptions) do
-        if type(option) == "table" and option.ItemName ~= excluded
-            and (option.Type ~= "Trait" or (type(option.ItemName) == "string"
-              and type(TraitData) == "table" and type(TraitData[option.ItemName]) == "table"
-              and not HeroHasTrait(option.ItemName) and not (target.run.PickedTraits or {})[option.ItemName]))
-            and (option.GameStateRequirements == nil
-              or IsGameStateEligible(eligibilitySource, option.GameStateRequirements)) then
+        if fixedCandidateEligible(target, option, excluded) then
           local candidate = ShallowCopyTable(option)
           if definition.rarity then candidate.Rarity = definition.rarity end
           local pool = candidate.PriorityRequirements ~= nil
-              and IsGameStateEligible(eligibilitySource, candidate.PriorityRequirements)
+              and IsGameStateEligible(target.eligibilitySource, candidate.PriorityRequirements)
               and priority or eligible
           pool[#pool + 1] = candidate
         end
@@ -5271,16 +5287,14 @@ if __MacGamingTrainerV1 == nil then
       if kind == "fixed" then
         local data = type(PresetEventArgs) == "table" and PresetEventArgs[definition.choices]
         if type(data) ~= "table" or type(data.UpgradeOptions) ~= "table" then return false end
-        local eligibilitySource = nativeSource(source, definition)
+        local target = {
+          source = source,
+          definition = definition,
+          run = CurrentRun,
+          eligibilitySource = nativeSource(source, definition),
+        }
         for _, option in pairs(data.UpgradeOptions) do
-          if type(option) == "table" and option.ItemName ~= excluded
-              and (option.Type ~= "Trait" or (type(option.ItemName) == "string"
-                and type(TraitData) == "table" and type(TraitData[option.ItemName]) == "table"
-                and not HeroHasTrait(option.ItemName)
-                and not (CurrentRun.PickedTraits or {})[option.ItemName]))
-              and (option.GameStateRequirements == nil
-                or (type(IsGameStateEligible) == "function"
-                  and IsGameStateEligible(eligibilitySource, option.GameStateRequirements))) then
+          if fixedCandidateEligible(target, option, excluded) then
             count = count + 1
             if not current[option.ItemName] then changed = true end
           end
@@ -5301,10 +5315,20 @@ if __MacGamingTrainerV1 == nil then
       return count >= wanted and changed
     end
 
+    local function panelRerollCost(base, count, step)
+      if not finite(base) or base < 1 or base % 1 ~= 0
+          or not finite(count) or count < 0
+          or not finite(step) or step < 0 then
+        return nil
+      end
+      local cost = base + count * step
+      if cost < 1 or cost > 999999 or cost % 1 ~= 0 then return nil end
+      return cost
+    end
+
     local function forcedCost(screen, source)
       source = type(source) == "table" and source or {}
-      if type(RerollCosts) ~= "table" or not finite(RerollCosts.Boon)
-          or RerollCosts.Boon < 1 or RerollCosts.Boon % 1 ~= 0
+      if type(RerollCosts) ~= "table"
           or not finite(RerollCosts.ReuseIncrement) or RerollCosts.ReuseIncrement < 0 then
         return nil
       end
@@ -5312,9 +5336,7 @@ if __MacGamingTrainerV1 == nil then
         and CurrentRun.CurrentRoom.SpentRerolls or {}
       local key = source.ObjectId ~= nil and source.ObjectId ~= -1 and source.ObjectId or nil
       local count = key ~= nil and number(spent and spent[key]) or number(syntheticSpent[screen])
-      local cost = RerollCosts.Boon + count * RerollCosts.ReuseIncrement
-      if cost < 1 or cost > 999999 or cost % 1 ~= 0 then return nil end
-      return cost, key
+      return panelRerollCost(RerollCosts.Boon, count, RerollCosts.ReuseIncrement), key
     end
 
     local function visibleSpellNames(screen)
@@ -5853,17 +5875,14 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function surfaceShopCost(screen)
-      if type(RerollCosts) ~= "table" or not finite(RerollCosts.Shop)
-          or RerollCosts.Shop < 1 or RerollCosts.Shop % 1 ~= 0
+      if type(RerollCosts) ~= "table"
           or not finite(RerollCosts.ReuseIncrement) or RerollCosts.ReuseIncrement < 0 then
         return nil
       end
       local spent = type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table"
         and CurrentRun.CurrentRoom.SpentRerolls or nil
       local increment = type(spent) == "table" and number(spent[screen.Name]) or 0
-      local cost = RerollCosts.Shop + increment
-      if cost < 1 or cost > 999999 or cost % 1 ~= 0 then return nil end
-      return cost
+      return panelRerollCost(RerollCosts.Shop, increment, 1)
     end
 
     local function configureSurfaceShop(screen)
