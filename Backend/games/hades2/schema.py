@@ -3,7 +3,7 @@ import math
 TOGGLES = (
     'invincibility','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown',
     'hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled',
-    'moneyMultiplierEnabled','resourceMultiplierEnabled',
+    'forceEnableRerolls','moneyMultiplierEnabled','resourceMultiplierEnabled',
 )
 
 MULTIPLIER_RULES = {

@@ -18,7 +18,6 @@ enum Hades2Command: String {
     case lockResource = "lock_resource"
     case setRerolls = "set_rerolls"
     case lockRerolls = "lock_rerolls"
-    case rerollChoice = "reroll_choice"
     case setGatheringDesired = "set_gathering_desired"
     case setChaosGateDesired = "set_chaos_gate_desired"
     case generateGathering = "generate_gathering"

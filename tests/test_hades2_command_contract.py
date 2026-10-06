@@ -117,7 +117,7 @@ assert names == [
     "disable_all", "runtime_reset", "reset_desired", "set_desired",
     "set_vital", "set_counter", "lock_vital",
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
-    "reroll_choice", "set_gathering_desired", "set_chaos_gate_desired",
+    "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "set_stat", "set_element", "lock_element",
     "set_boon_rarity_desired", "set_next_room_reward_desired",
     "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
@@ -220,25 +220,6 @@ _, params = dispatch_runtime("set_rerolls", {"amount": 7}, "rerolls-id")
 assert params == {"amount": 7, "requestId": "rerolls-id"}
 _, params = dispatch_runtime("lock_rerolls", {"locked": True}, "lock-rerolls-id")
 assert params == {"locked": True, "requestId": "lock-rerolls-id"}
-
-_, params = dispatch_runtime(
-    "reroll_choice",
-    {"menuToken": "observed-menu", "expectedCost": 2},
-    "reroll-id",
-)
-assert params == {
-    "menuToken": "observed-menu",
-    "expectedCost": 2,
-    "requestId": "reroll-id",
-}
-for invalid in (
-    {},
-    {"menuToken": "", "expectedCost": 1},
-    {"menuToken": "x", "expectedCost": -1},
-    {"menuToken": "x", "expectedCost": True},
-    {"menuToken": "x", "expectedCost": 1.5},
-):
-    expect_error("reroll_choice", invalid, "请刷新后重新随机当前选项。")
 
 _, params = dispatch_runtime(
     "spawn_reward", {"reward": "EmptyMaxHealthDrop"}, "spawn-id"

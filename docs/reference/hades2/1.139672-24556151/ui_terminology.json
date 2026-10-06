@@ -394,11 +394,11 @@
       "status": "trainer_product_label",
       "reason": "Invincibility is a Trainer-owned custom damage-blocking feature distinct from Hades II native God Mode, so it has no official localization. The Trainer owns this bilingual pair."
     },
-    "rerollCurrentChoices": {
-      "value": "重新随机当前选项",
-      "englishValue": "Reroll current choices",
+    "forceEnableRerolls": {
+      "value": "强制启用重骰",
+      "englishValue": "Force Enable Rerolls",
       "status": "trainer_product_label",
-      "reason": "Trainer-owned action for the currently observed native UpgradeChoice candidates, including forced special-choice rerolls; not a native game menu title."
+      "reason": "Trainer-owned durable control that exposes applicable native in-game reroll controls without granting reroll currency or changing permanent MetaUpgrade progression."
     },
     "gatheringPanel": {
       "value": "采集点",

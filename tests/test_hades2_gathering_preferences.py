@@ -17,7 +17,7 @@ from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
-assert DESIRED_STATE_SCHEMA_VERSION == 7
+assert DESIRED_STATE_SCHEMA_VERSION == 8
 assert PROFILE_SCHEMA_VERSION == 6
 assert Hades2PreferenceStore.defaults()['gatheringProbabilities'] == {}
 valid = dict(zip(FAMILIES, (0, 100, 32.5, 1, 99)))
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         result = adapter.dispatch('set_gathering_desired', {'family': family, 'probability': percentage}, 'desired-'+family)
         assert result['gatheringProbabilities'][family] == percentage
     persisted = json.loads((base/'desired-state.json').read_text())
-    assert persisted['schemaVersion'] == 7 and persisted['gatheringProbabilities'] == valid
+    assert persisted['schemaVersion'] == 8 and persisted['gatheringProbabilities'] == valid
     assert not {'gatheringTargets', 'scopeToken', 'generate_gathering'} & set(persisted)
     restarted = Hades2Adapter(transport=Transport())
     assert restarted.preferences['gatheringProbabilities'] == valid and restarted.preference_dirty
@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     adapter.state['gatheringTargets'] = {'mining': {'available': True, 'scopeToken': 'ephemeral'}}
     adapter.save_profile('Gathering')
     envelope = json.loads(adapter.profile_service.path('Gathering').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 7
+    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 8
     assert envelope['desired']['gatheringProbabilities'] == wanted
     assert 'gatheringTargets' not in envelope['desired'] and 'scopeToken' not in envelope['desired']
     adapter.reset_desired()
@@ -174,7 +174,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     )
     assert saved_pending['desired']['gatheringProbabilities'] == valid | {'flora': 100}
 
-    future = dict(persisted, schemaVersion=8)
+    future = dict(persisted, schemaVersion=9)
     future_path = base/'future-desired.json'
     future_path.write_text(json.dumps(future))
     before_bytes = future_path.read_bytes()
@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     service = Hades2ProfileService(base/'future-profiles')
     service.save('Future', {'gatheringProbabilities': valid})
     path = service.path('Future')
-    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 8
+    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 9
     path.write_text(json.dumps(document)); before_bytes = path.read_bytes()
     for action in (lambda: service.load('Future'), lambda: service.save('Future', {})):
         try: action()

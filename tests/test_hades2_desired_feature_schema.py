@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2.preferences import Hades2PreferenceStore
+from games.hades2.preferences import Hades2PreferenceStore, normalize_persisted_desired
 from games.hades2.schema import (
     MULTIPLIERS,
     TOGGLES,
@@ -25,6 +25,7 @@ EXPECTED_DEFAULTS = {
     "autoMiniGames": False,
     "gardenQoL": False,
     "boonRarityEnabled": False,
+    "forceEnableRerolls": False,
     "moneyMultiplierEnabled": False,
     "resourceMultiplierEnabled": False,
     "damageMultiplier": 2.0,
@@ -97,6 +98,11 @@ for feature, value, message in cases:
 # maintaining a parallel set of feature defaults.
 stored_defaults = Hades2PreferenceStore.defaults()
 assert {key: stored_defaults[key] for key in EXPECTED_DEFAULTS} == EXPECTED_DEFAULTS
+
+# Force Enable Rerolls did not exist before desired schema 8. Older documents
+# must not reinterpret unrelated historical bytes as opt-in intent.
+assert normalize_persisted_desired({"forceEnableRerolls": True}, 7)["forceEnableRerolls"] is False
+assert normalize_persisted_desired({"forceEnableRerolls": True}, 8)["forceEnableRerolls"] is True
 
 normalized = Hades2PreferenceStore.normalize({
     "invincibility": True,

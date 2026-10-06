@@ -26,7 +26,7 @@ for raw in sys.stdin:
     req = json.loads(raw)
     payload = {'connected': True, 'status': 'ready', 'scene': 'run'}
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
-             'moduleProtocolVersion': 12, 'gameID': args.game, 'ok': True}
+             'moduleProtocolVersion': 13, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
         outcomes = ['accepted', 'opened', 'completed', 'completed', 'failed', 'outcome_unknown']
         outcome = outcomes[count]

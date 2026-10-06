@@ -43,13 +43,13 @@ struct BoonOption: Identifiable {
 enum Hades2FeatureKey: String, CaseIterable, Hashable {
     case invincibility, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
     case hexAlwaysReady, infiniteAmmo, autoMiniGames, gardenQoL, boonRarityEnabled
-    case moneyMultiplierEnabled, resourceMultiplierEnabled
+    case forceEnableRerolls, moneyMultiplierEnabled, resourceMultiplierEnabled
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
     case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
-    case boonRarityEnabled, forceLegendary, forceDuo
+    case boonRarityEnabled, forceEnableRerolls, forceLegendary, forceDuo
     case moneyMultiplierEnabled, resourceMultiplierEnabled
     case applyNextRoomReward, spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
@@ -60,7 +60,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     static let uiOrder: [ShortcutAction] = [
         .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
         .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL,
-        .boonRarityEnabled, .forceLegendary, .forceDuo,
+        .boonRarityEnabled, .forceEnableRerolls, .forceLegendary, .forceDuo,
         .moneyMultiplierEnabled, .resourceMultiplierEnabled,
         .spawnOlympian, .spawnPickup, .spawnSpecial, .applyNextRoomReward,
         .disableAll,
@@ -86,6 +86,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .autoMiniGames: return "hades2.feature.autoMiniGames"
         case .gardenQoL: return "hades2.feature.gardenQoL"
         case .boonRarityEnabled: return "hades2.feature.boonRarity"
+        case .forceEnableRerolls: return "hades2.feature.forceEnableRerolls"
         case .forceLegendary: return "hades2.feature.forceLegendary"
         case .forceDuo: return "hades2.feature.forceDuo"
         case .moneyMultiplierEnabled: return "hades2.feature.moneyMultiplier"

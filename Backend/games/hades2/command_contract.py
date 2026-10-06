@@ -227,20 +227,6 @@ def _special_choice(raw):
     return params
 
 
-def _reroll_choice(raw):
-    params = _params(raw)
-    token = params.get("menuToken")
-    cost = params.get("expectedCost")
-    if (
-        not isinstance(token, str)
-        or not 1 <= len(token) <= 128
-        or type(cost) is not int
-        or not 1 <= cost <= MAX_AMOUNT
-    ):
-        raise ValueError("请刷新后重新随机当前选项。")
-    return params
-
-
 def _trait_mutation(command):
     def validate(raw):
         params = _params(raw)
@@ -454,7 +440,6 @@ _COMMAND_SPECS = (
     _spec("lock_resource", request_id=True, validate=_lock_resource),
     _spec("set_rerolls", request_id=True, validate=_set_rerolls),
     _spec("lock_rerolls", request_id=True, validate=_lock_rerolls),
-    _spec("reroll_choice", request_id=True, validate=_reroll_choice),
     _spec(
         "set_gathering_desired",
         validate=_set_gathering_desired,
