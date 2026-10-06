@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
 from core.sidecar import SidecarStartError, SidecarTerminalError
+from games.hades2.config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import _LLDBWorkerClient
 
@@ -162,8 +163,12 @@ class FakeSidecar:
         self.started = False
 
 
-# Hades owns the worker handshake, method risk classification and presentation
-# mapping while Core owns the underlying request/reply transport mechanics.
+# Hades owns the worker handshake, method risk classification, timeout budget
+# and presentation mapping while Core owns the underlying request/reply mechanics.
+configured_sidecar = _LLDBWorkerClient._make_sidecar()
+assert configured_sidecar.reply_timeout_seconds == LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
+configured_sidecar.close()
+
 healthy_sidecar = FakeSidecar([
     {"id": "1", "result": {"protocolVersion": 1}},
     {"id": "2", "result": True, "state": {"pid": 4242}},
