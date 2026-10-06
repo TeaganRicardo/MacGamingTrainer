@@ -4,6 +4,8 @@ The caller supplies canonical durable desired state and a real pre-projection
 runtime observation. This module owns the resident-backed diff policy, one-batch
 execution and post-batch confirmation. It never mutates or persists desired state.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 import copy
 import logging
