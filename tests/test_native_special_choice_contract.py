@@ -170,7 +170,7 @@ fixed_eligibility = lua[
     lua.index('local function fixedOptions')
 ]
 assert 'option.Type == "Trait"' in fixed_eligibility
-assert 'type(TraitData[name]) == "table"' in fixed_eligibility
+assert 'type(TraitData[name]) ~= "table"' in fixed_eligibility
 assert 'HeroHasTrait(name)' in fixed_eligibility
 assert '(target.run.PickedTraits or {})[name]' in fixed_eligibility
 assert 'IsTraitEligible' not in fixed_eligibility, (
