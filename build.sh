@@ -73,7 +73,7 @@ prepare_python_runtime() {
         echo "Pinned Python runtime is missing bin/python3 for $arch." >&2
         exit 1
     }
-    actual="$("$runtime/bin/python3" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+    actual="$("$runtime/bin/python3" -c 'import platform; print(platform.python_version())')"
     [[ "$actual" == "$version" ]] || {
         echo "Pinned Python runtime version mismatch for $arch: expected $version, got $actual." >&2
         exit 1
