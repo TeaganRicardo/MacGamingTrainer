@@ -30,11 +30,14 @@ def install_runtime_fixture(resources, architectures=('arm64',)):
     python_line = '.'.join(PYTHON_RUNTIME_SOURCE['version'].split('.')[:2])
     for arch in architectures:
         bin_dir = runtime / arch / 'bin'
-        bin_dir.mkdir(parents=True)
+        bin_dir.mkdir(parents=True, exist_ok=True)
         versioned = bin_dir / f'python{python_line}'
         versioned.write_text('#!/bin/sh\nexit 0\n')
         versioned.chmod(0o755)
-        (bin_dir / 'python3').symlink_to(versioned.name)
+        unversioned = bin_dir / 'python3'
+        if unversioned.exists() or unversioned.is_symlink():
+            unversioned.unlink()
+        unversioned.symlink_to(versioned.name)
 
 
 # A stale app alphabetically before the selected target must not win discovery.
