@@ -45,7 +45,7 @@ Core/Host does not own Hades command names, Hades desired/active/dormant semanti
 - save codec/schema/edit semantics and game-specific save provider behavior;
 - game-specific UI composition.
 
-`reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs.
+`reference_fixture` is the permanent proof that a second module does not require Hades-shaped Core APIs, LLDB, Lua, or an optional sidecar.
 
 ## 2. State sources of truth
 
