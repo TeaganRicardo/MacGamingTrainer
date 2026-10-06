@@ -124,7 +124,7 @@
 "host.timeWarp.error.verifyFailed" = "Time Warp 设置校验失败（目标 {0}，实际 {1}）。";
 "host.timeWarp.error.abiMismatch" = "Time Warp helper ABI 不兼容。";
 "host.timeWarp.error.restartRequired" = "调试连接状态不明；请先重启后端或重新连接游戏。";
-"host.timeWarp.error.symbolUnavailable" = "Time Warp 导出符号 {0} {1}。";
+"host.timeWarp.error.symbolUnavailable" = "Time Warp 导出符号 {0} 不可用。";
 "host.timeWarp.error.helperMissing" = "Time Warp helper 不存在：{0}";
 "host.timeWarp.error.loadFailed" = "Time Warp helper 加载失败：{0}";
 "host.timeWarp.error.loadedSymbolsMissing" = "Time Warp helper 已加载但导出符号不可见。";

@@ -4,7 +4,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.process_time_warp import LLDBProcessTimeWarpDriver, ProcessTimeWarpError
+from core.process_time_warp import ProcessTimeWarpError
+from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 
 class FakeError:
@@ -185,4 +186,19 @@ expect_error(lambda: install_driver.install(b"Hades II", 2.0), "outcome_unknown"
 assert install_transport.tainted is True
 assert install_transport.process.deallocated == [0x1000]
 
+# LLDB-specific driver lifecycle stays Hades-owned: missing targets read as
+# absent helpers, while tainted transports fail before touching the debugger.
+class TargetlessTransport:
+    pid = 201
+    target = None
+
+    def alive(self):
+        return True
+
+
+targetless_driver = LLDBProcessTimeWarpDriver(
+    TargetlessTransport(),
+    lldb_module=object(),
+)
+assert targetless_driver.helper_present() is False
 print("process_time_warp_mutation_taint_ok")

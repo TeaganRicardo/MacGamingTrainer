@@ -2,16 +2,18 @@
 
 The application backend runs on bundled CPython. Only the game-owned debugger
 sidecar runs under Xcode's Python so the LLDB extension ABI cannot constrain the
-rest of the backend runtime.
+rest of the backend runtime. Core owns generic child-process/JSONL mechanics;
+all LLDB methods, failure meaning and runtime state remain Hades-owned here.
 """
 from __future__ import annotations
 
-import json
 import os
-import subprocess
 from pathlib import Path
 
 from core.adapter import AdapterError
+from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
+
+from .config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
 
 
 _WORKER_PROTOCOL_VERSION = 1
@@ -23,29 +25,18 @@ _RISKY_METHODS = frozenset({
 
 
 class _LLDBWorkerClient:
-    def __init__(self):
-        self._process = None
-        self._next_id = 1
+    def __init__(self, sidecar=None):
+        self._sidecar = sidecar or self._make_sidecar()
+        self._hello_complete = False
         self._terminal_error = None
 
-    @property
-    def started(self):
-        return self._process is not None
-
-    @property
-    def terminal(self):
-        return self._terminal_error is not None
-
-    def _backend_root(self):
+    @staticmethod
+    def _backend_root():
         return Path(__file__).resolve().parents[2]
 
-    def _start(self):
-        if self._terminal_error is not None:
-            raise self._terminal_error
-        if self._process is not None and self._process.poll() is None:
-            return
-
-        backend_root = self._backend_root()
+    @classmethod
+    def _make_sidecar(cls):
+        backend_root = cls._backend_root()
         environment = dict(os.environ)
         existing_path = environment.get("PYTHONPATH", "")
         environment["PYTHONPATH"] = (
@@ -55,119 +46,109 @@ class _LLDBWorkerClient:
         )
         environment["PYTHONUNBUFFERED"] = "1"
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        try:
-            self._process = subprocess.Popen(
-                [
-                    "/usr/bin/xcrun",
-                    "python3",
-                    "-u",
-                    "-m",
-                    "games.hades2.lldb_worker",
-                ],
-                cwd=str(backend_root),
-                env=environment,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=None,
-                text=True,
-                encoding="utf-8",
-                bufsize=1,
-            )
-            response = self._exchange("hello", {}, allow_start=False)
-        except (OSError, AdapterError) as error:
-            self._terminate()
-            if isinstance(error, AdapterError):
-                raise
+        return JsonLineSidecarClient(
+            [
+                "/usr/bin/xcrun",
+                "python3",
+                "-u",
+                "-m",
+                "games.hades2.lldb_worker",
+            ],
+            cwd=backend_root,
+            env=environment,
+            reply_timeout_seconds=LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS,
+        )
+
+    @property
+    def started(self):
+        # Preserve the Hades transport's established-session meaning: once the
+        # worker handshake succeeded, a child that exits between requests may
+        # be recreated safely by the next call. Terminal in-flight failures are
+        # tracked separately and remain non-recoverable.
+        return self._hello_complete
+
+    @property
+    def terminal(self):
+        return self._terminal_error is not None or self._sidecar.terminal
+
+    def _raise_sidecar_failure(self, error):
+        if self._terminal_error is not None:
+            raise self._terminal_error
+        if isinstance(error, SidecarStartError):
+            self._hello_complete = False
             raise AdapterError(
                 "debugger_unavailable",
                 "hades2.error.debuggerUnavailable",
-                diagnostic=str(error),
+                diagnostic=error.detail,
             ) from error
+        if error.outcome_unknown:
+            raised = AdapterError(
+                "outcome_unknown",
+                "hades2.error.outcomeUnknownGeneric",
+                diagnostic=error.detail,
+            )
+        else:
+            raised = AdapterError(
+                "restart_required",
+                "hades2.error.debuggerExited",
+                diagnostic=error.detail,
+            )
+        self._terminal_error = raised
+        raise raised from error
+
+    def _request(self, method, params=None):
+        try:
+            return self._sidecar.request(
+                method,
+                params or {},
+                outcome_unknown_on_loss=method in _RISKY_METHODS,
+                allow_start=False,
+            )
+        except (SidecarStartError, SidecarTerminalError) as error:
+            self._raise_sidecar_failure(error)
+
+    def _start(self):
+        if self._terminal_error is not None:
+            raise self._terminal_error
+        if self._hello_complete and self._sidecar.started:
+            return
+        try:
+            response = self._sidecar.request("hello", {})
+        except (SidecarStartError, SidecarTerminalError) as error:
+            self._raise_sidecar_failure(error)
 
         result = response.get("result")
         if (
             not isinstance(result, dict)
             or result.get("protocolVersion") != _WORKER_PROTOCOL_VERSION
         ):
-            self._terminate()
+            self._sidecar.close()
+            self._hello_complete = False
             raise AdapterError(
                 "debugger_protocol",
                 "hades2.error.debuggerProtocol",
                 diagnostic=f"worker hello={result!r}",
             )
+        self._hello_complete = True
 
-    def _communication_failure(self, method, detail):
-        self._terminate()
-        if method in _RISKY_METHODS:
-            error = AdapterError(
-                "outcome_unknown",
-                "hades2.error.outcomeUnknownGeneric",
-                diagnostic=detail,
-            )
-        else:
-            error = AdapterError(
-                "restart_required",
-                "hades2.error.debuggerExited",
-                diagnostic=detail,
-            )
-        self._terminal_error = error
-        raise error
-
-    def _exchange(self, method, params, *, allow_start=True):
-        if allow_start:
-            self._start()
-        process = self._process
-        if process is None or process.poll() is not None:
-            return self._communication_failure(method, "LLDB sidecar is not running.")
-        if process.stdin is None or process.stdout is None:
-            return self._communication_failure(method, "LLDB sidecar stdio is unavailable.")
-
-        request_id = str(self._next_id)
-        self._next_id += 1
-        request = {
-            "id": request_id,
-            "method": method,
-            "params": dict(params or {}),
-        }
+    def _protocol_failure(self, method, detail):
         try:
-            process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
-            process.stdin.flush()
-            raw = process.stdout.readline()
-        except (KeyboardInterrupt, SystemExit):
-            # Backend shutdown must not leave the Xcode-Python debugger child
-            # attached after the bundled worker exits. Preserve the terminating
-            # exception after releasing sidecar ownership.
-            self._terminate()
-            raise
-        except (BrokenPipeError, OSError) as error:
-            return self._communication_failure(method, str(error))
-        if not raw:
-            return self._communication_failure(
-                method,
-                f"LLDB sidecar exited with status {process.poll()!r}.",
+            self._sidecar.invalidate(
+                detail,
+                outcome_unknown=method in _RISKY_METHODS,
             )
-        try:
-            response = json.loads(raw)
-        except json.JSONDecodeError as error:
-            return self._communication_failure(
-                method,
-                f"LLDB sidecar returned invalid JSON: {error}",
-            )
-        if not isinstance(response, dict) or response.get("id") != request_id:
-            return self._communication_failure(
-                method,
-                f"LLDB sidecar reply identity mismatch: {response!r}",
-            )
-        return response
+        except SidecarTerminalError as error:
+            self._raise_sidecar_failure(error)
 
     def call(self, method, params=None):
         if self._terminal_error is not None:
             raise self._terminal_error
-        response = self._exchange(method, params or {})
+        self._start()
+        response = self._request(method, params)
         error = response.get("error")
         if error is not None:
             if not isinstance(error, dict):
-                self._communication_failure(method, f"Malformed worker error: {error!r}")
+                self._protocol_failure(method, f"Malformed worker error: {error!r}")
             raised = AdapterError(
                 str(error.get("code") or "debugger_error"),
                 str(error.get("presentation") or "hades2.error.debuggerCallFailed"),
@@ -183,14 +164,15 @@ class _LLDBWorkerClient:
                 ),
             )
             if raised.code == "outcome_unknown":
+                # The worker method's semantic uncertainty is Hades-owned.
+                # Stop this wrapper from issuing further calls; the generic
+                # sidecar only terminalizes itself for IPC trust failures.
                 self._terminal_error = raised
             raise raised
         return response.get("result"), response.get("state")
 
     def mark_tainted(self, value):
-        if self._terminal_error is not None:
-            return
-        if not self.started:
+        if self._terminal_error is not None or not self.started:
             return
         try:
             self.call("transport.set_tainted", {"value": bool(value)})
@@ -199,34 +181,15 @@ class _LLDBWorkerClient:
             # mask that primary failure with a secondary sidecar notification.
             pass
 
-    def _terminate(self):
-        process, self._process = self._process, None
-        if process is None:
-            return
-        try:
-            if process.stdin is not None:
-                process.stdin.close()
-        except OSError:
-            pass
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=1.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                try:
-                    process.wait(timeout=1.0)
-                except subprocess.TimeoutExpired:
-                    pass
-
     def close(self):
-        process = self._process
-        if process is not None and process.poll() is None:
+        # Do not respawn a child merely to close an already-dead sidecar.
+        if self._sidecar.started and not self.terminal:
             try:
                 self.call("transport.close")
             except AdapterError:
                 pass
-        self._terminate()
+        self._sidecar.close()
+        self._hello_complete = False
 
 
 class Hades2LuaTransport:

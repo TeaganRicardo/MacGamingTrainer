@@ -124,7 +124,7 @@
 "host.timeWarp.error.verifyFailed" = "Time Warp verification failed (target {0}, actual {1}).";
 "host.timeWarp.error.abiMismatch" = "The Time Warp helper ABI is incompatible.";
 "host.timeWarp.error.restartRequired" = "The debugger connection state is unknown. Restart the backend or reconnect to the game.";
-"host.timeWarp.error.symbolUnavailable" = "Time Warp export {0} is unavailable ({1}).";
+"host.timeWarp.error.symbolUnavailable" = "Time Warp export {0} is unavailable.";
 "host.timeWarp.error.helperMissing" = "The Time Warp helper is missing: {0}";
 "host.timeWarp.error.loadFailed" = "Loading the Time Warp helper failed: {0}";
 "host.timeWarp.error.loadedSymbolsMissing" = "The Time Warp helper loaded but its exported symbols are unavailable.";

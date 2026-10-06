@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
+from core.sidecar import SidecarStartError, SidecarTerminalError
+from games.hades2.config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
 from games.hades2.transport_client import _LLDBWorkerClient
 
@@ -126,61 +128,173 @@ assert replies[6]["error"] == {
 assert replies[6]["state"]["tainted"] is True
 
 
-class _InterruptingInput:
-    def write(self, value):
-        return len(value)
+class FakeSidecar:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+        self.started = True
+        self.terminal = False
+        self.closed = False
 
-    def flush(self):
-        pass
+    def request(
+        self,
+        method,
+        params=None,
+        *,
+        outcome_unknown_on_loss=False,
+        allow_start=True,
+    ):
+        self.calls.append(
+            (method, dict(params or {}), outcome_unknown_on_loss, allow_start)
+        )
+        if not self.responses:
+            raise AssertionError(f"unexpected sidecar request: {method}")
+        response = self.responses.pop(0)
+        if isinstance(response, BaseException):
+            self.started = False
+            if not isinstance(response, SidecarStartError):
+                self.terminal = True
+            raise response
+        self.started = True
+        return response
+
+    def invalidate(self, detail, *, outcome_unknown=False):
+        self.terminal = True
+        self.started = False
+        raise SidecarTerminalError(detail, outcome_unknown=outcome_unknown)
 
     def close(self):
-        pass
+        self.closed = True
+        self.started = False
 
 
-class _InterruptingOutput:
-    def readline(self):
-        raise KeyboardInterrupt()
+# Hades owns the worker handshake, method risk classification, timeout budget
+# and presentation mapping while Core owns the underlying request/reply mechanics.
+configured_sidecar = _LLDBWorkerClient._make_sidecar()
+assert configured_sidecar.reply_timeout_seconds == LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
+configured_sidecar.close()
 
+healthy_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": 4242}},
+])
+healthy_client = _LLDBWorkerClient(sidecar=healthy_sidecar)
+assert healthy_client.call("transport.alive") == (True, {"pid": 4242})
+assert healthy_sidecar.calls == [
+    ("hello", {}, False, True),
+    ("transport.alive", {}, False, False),
+]
 
-class _InterruptedSidecar:
-    def __init__(self):
-        self.stdin = _InterruptingInput()
-        self.stdout = _InterruptingOutput()
-        self.terminated = False
-        self.killed = False
+recoverable_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": 4242}},
+    {"id": "3", "result": {"protocolVersion": 1}},
+    {"id": "4", "result": True, "state": {"pid": None}},
+])
+recoverable_client = _LLDBWorkerClient(sidecar=recoverable_sidecar)
+assert recoverable_client.call("transport.alive")[0] is True
+recoverable_sidecar.started = False
+assert recoverable_client.started, (
+    "an established Hades worker must remain restartable after a between-request child exit"
+)
+assert recoverable_client.call("transport.alive")[0] is True
+assert [method for method, _, _, _ in recoverable_sidecar.calls] == [
+    "hello",
+    "transport.alive",
+    "hello",
+    "transport.alive",
+]
+assert [allow_start for _, _, _, allow_start in recoverable_sidecar.calls] == [
+    True,
+    False,
+    True,
+    False,
+]
+recoverable_sidecar.started = False
+calls_before_close = list(recoverable_sidecar.calls)
+recoverable_client.close()
+assert recoverable_sidecar.calls == calls_before_close, (
+    "closing an exited sidecar unexpectedly respawned the worker"
+)
 
-    def poll(self):
-        return -15 if self.terminated or self.killed else None
-
-    def terminate(self):
-        self.terminated = True
-
-    def kill(self):
-        self.killed = True
-
-    def wait(self, timeout=None):
-        return self.poll()
-
-
-# BackendProcess sends SIGTERM on a Host timeout. core.server converts that
-# signal to KeyboardInterrupt so its adapter can clean up. If that interrupt
-# lands while the bundled backend is blocked waiting for the LLDB sidecar,
-# the sidecar must be terminated before the interrupt escapes; otherwise the
-# Host can restart a new backend while an orphan debugger still owns the game.
-interrupted_process = _InterruptedSidecar()
-interrupted_client = _LLDBWorkerClient()
-interrupted_client._process = interrupted_process
+lost_mutation_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    SidecarTerminalError("lost LLDB acknowledgement", outcome_unknown=True),
+])
+lost_mutation_client = _LLDBWorkerClient(sidecar=lost_mutation_sidecar)
 try:
-    interrupted_client.call("transport.alive")
-except KeyboardInterrupt:
-    pass
+    lost_mutation_client.call("transport.execute", {"source": "return true"})
+except AdapterError as error:
+    assert error.code == "outcome_unknown", error.code
+    assert error.presentation == "hades2.error.outcomeUnknownGeneric"
 else:
-    raise AssertionError("simulated backend termination did not interrupt sidecar exchange")
-assert interrupted_process.terminated or interrupted_process.killed, (
-    "interrupted sidecar exchange left the debugger child running"
+    raise AssertionError("lost mutating LLDB reply was not outcome-unknown")
+assert lost_mutation_sidecar.calls[-1][2] is True
+assert lost_mutation_sidecar.calls[-1][3] is False
+try:
+    lost_mutation_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "outcome_unknown", "terminal trust failure was not sticky"
+else:
+    raise AssertionError("terminal LLDB sidecar was reused")
+
+reported_unknown_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {
+        "id": "2",
+        "error": {
+            "code": "outcome_unknown",
+            "presentation": "hades2.error.outcomeUnknownGeneric",
+            "diagnostic": "worker lost mutation acknowledgement",
+            "arguments": [],
+        },
+        "state": {"tainted": True},
+    },
+])
+reported_unknown_client = _LLDBWorkerClient(sidecar=reported_unknown_sidecar)
+try:
+    reported_unknown_client.call("transport.execute", {"source": "return true"})
+except AdapterError as error:
+    assert error.code == "outcome_unknown"
+else:
+    raise AssertionError("worker outcome_unknown was accepted")
+assert reported_unknown_client.terminal
+assert reported_unknown_sidecar.started, (
+    "worker-reported semantic uncertainty should not be reclassified as a Core IPC failure"
 )
-assert not interrupted_client.started, (
-    "interrupted sidecar exchange remained owned after backend termination"
-)
+assert not reported_unknown_sidecar.terminal
+
+unavailable_sidecar = FakeSidecar([
+    SidecarStartError("xcrun python3 unavailable"),
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": True, "state": {"pid": None}},
+])
+unavailable_client = _LLDBWorkerClient(sidecar=unavailable_sidecar)
+try:
+    unavailable_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "debugger_unavailable", error.code
+    assert error.presentation == "hades2.error.debuggerUnavailable"
+else:
+    raise AssertionError("sidecar start failure lost Hades debugger presentation")
+assert not unavailable_client.terminal
+assert not unavailable_client.started
+assert unavailable_client.call("transport.alive")[0] is True
+
+protocol_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 999}},
+    {"id": "2", "result": {"protocolVersion": 1}},
+    {"id": "3", "result": True, "state": {"pid": None}},
+])
+protocol_client = _LLDBWorkerClient(sidecar=protocol_sidecar)
+try:
+    protocol_client.call("transport.alive")
+except AdapterError as error:
+    assert error.code == "debugger_protocol", error.code
+else:
+    raise AssertionError("worker protocol mismatch was accepted")
+assert not protocol_client.terminal
+assert not protocol_client.started
+assert protocol_client.call("transport.alive")[0] is True
 
 print("hades2_lldb_worker_protocol_ok")

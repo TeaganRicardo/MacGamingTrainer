@@ -51,7 +51,7 @@ The proof requires:
 - both Hades II and the fixture consume the shared Host/UI seam;
 - macOS semantic typecheck/build/codesign succeeds for both modules.
 
-The fixture is architecture evidence, not a semantic template. A real game still owns its commands, transport, persistence rules, and game-specific UI.
+The fixture is architecture evidence, not a semantic template. It intentionally uses no LLDB, Lua, or sidecar. A real game still owns its commands, transport, persistence rules, optional runtime adapter, and game-specific UI.
 
 ## Ownership rules
 
@@ -60,6 +60,8 @@ The fixture is architecture evidence, not a semantic template. A real game still
 The App/Host supplies the common shell, sidebar, header, connection status, backend session, and theme. Game modules compose those shared interfaces instead of recreating Host behavior locally.
 
 - Runtime manifest fields consumed by Backend Core are limited to module identity/protocol/adapter and target-process identity. Frontend source selection, app metadata, architecture/minimum-macOS/debugger requirements, and declared app bundle resources belong to the build tooling. Presentation labels/icons/header text remain in Swift.
+- An optional runtime sidecar is a game-owned adapter over Core's generic child-process/JSONL lifecycle seam. Core may own process lifetime, bounded framing, request/reply identity, reply timeout/interruption cleanup, crash handling and terminal outcome-unknown trust semantics; the game owns whether a sidecar exists, its launch command, handshake and method vocabulary, risk classification, error presentation, debugger/engine bridge and runtime semantics. A game that needs no sidecar adds none.
+- `ProcessTimeWarpController` is Core-owned because its helper ABI/install/set/verify behavior is debugger-agnostic. A concrete debugger driver remains game-owned until a second real implementation proves a smaller shared driver seam; LLDB is not a Core requirement.
 
 ## Architecture evolution
 
