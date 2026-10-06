@@ -29,6 +29,21 @@ CreateScreenComponent = function(args)
   value.Group = args.Group
   return value
 end
+CreateComponentFromData = function(screenData, data)
+  local value = CreateScreenComponent(data)
+  value.Data = data
+  value.Screen = nil
+  return value
+end
+Attach = function() end
+GetDisplayName = function(args) return args.Text or '' end
+ApproximateStringWidth = function(text) return #tostring(text or '') end
+UIData = {
+  ContextualButtonSpacing = 100,
+  AutoAlignContextualButtonGlyphWidth = 0,
+  AutoAlignContextualButtonMinWidth = 40,
+  AutoAlignContextualButtonSpacing = 10,
+}
 CreateTextBox = function() end
 Destroy = function() end
 SetAnimation = function() end
@@ -289,6 +304,38 @@ ActiveScreens.TalentScreen = talentScreen
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 assert(not spellScreen.Components.RerollButton.Visible and not talentScreen.Components.RerollButton.Visible,
   'disabling Force Enable Rerolls left active Selene reroll actions visible')
+
+-- Enabling while a Selene owner is already open must synthesize the same
+-- native contextual reroll controls immediately; waiting for the next pickup
+-- would make durable feature state depend on screen timing.
+SessionMapState.SelectedSpells = { 'SpellA', 'SpellB', 'SpellC' }
+local openBeforeEnable = OpenSpellScreen({ Name = 'SpellDrop', ObjectId = 701 })
+assert(openBeforeEnable.Components.RerollButton == nil and openBeforeEnable.Components.RerollIcon == nil,
+  'disabled feature unexpectedly injected Selene reroll controls')
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
+assert(type(openBeforeEnable.Components.RerollButton) == 'table'
+  and type(openBeforeEnable.Components.RerollIcon) == 'table'
+  and openBeforeEnable.Components.RerollButton.Visible
+  and openBeforeEnable.Components.RerollButton.OnPressedFunctionName == 'AttemptPanelReroll',
+  'enabling Force Enable Rerolls did not activate an already-open SpellScreen')
+
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
+CurrentRun.Hero.SlottedSpell = {
+  Name = 'SpellA', TraitName = 'SpellATrait',
+  Talents = {
+    { [1] = { Name = 'TalentFixed', Rarity = 'Rare', Invested = true, LinkTo = { 1 } } },
+    { [1] = { Name = 'TalentOld', Rarity = 'Common', LinkFrom = { 1 } } },
+  },
+}
+local talentBeforeEnable = OpenTalentScreen({ Name = 'TalentDrop', ObjectId = 702 }, false)
+assert(talentBeforeEnable.Components.RerollButton == nil and talentBeforeEnable.Components.RerollIcon == nil,
+  'disabled feature unexpectedly injected TalentScreen reroll controls')
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
+assert(type(talentBeforeEnable.Components.RerollButton) == 'table'
+  and type(talentBeforeEnable.Components.RerollIcon) == 'table'
+  and talentBeforeEnable.Components.RerollButton.Visible,
+  'enabling Force Enable Rerolls did not activate an already-open writable TalentScreen')
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 '''
 
 HARNESS = BASE_HARNESS.replace(
