@@ -178,10 +178,6 @@ else:
     raise AssertionError("partial sidecar reply escaped the total frame timeout")
 
 
-def unavailable_factory(*args, **kwargs):
-    raise OSError("runtime missing")
-
-
 recovered_start = FakeProcess(b'{"id":"1","result":"ok"}\n')
 start_attempts = 0
 
@@ -202,7 +198,6 @@ unavailable = JsonLineSidecarClient(
 try:
     unavailable.request("hello")
 except SidecarStartError as error:
-    assert error.outcome_unknown is False
     assert "runtime missing" in str(error)
 else:
     raise AssertionError("sidecar start failure lost its identity")

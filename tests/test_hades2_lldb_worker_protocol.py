@@ -248,7 +248,7 @@ assert reported_unknown_sidecar.marked_unknown == [
 assert reported_unknown_client.terminal
 
 unavailable_sidecar = FakeSidecar([
-    SidecarStartError("xcrun python3 unavailable", outcome_unknown=False),
+    SidecarStartError("xcrun python3 unavailable"),
     {"id": "1", "result": {"protocolVersion": 1}},
     {"id": "2", "result": True, "state": {"pid": None}},
 ])

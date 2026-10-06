@@ -103,7 +103,7 @@ class _LLDBWorkerClient:
                 params or {},
                 outcome_unknown_on_loss=method in _RISKY_METHODS,
             )
-        except SidecarTerminalError as error:
+        except (SidecarStartError, SidecarTerminalError) as error:
             self._raise_sidecar_failure(error)
 
     def _start(self):
@@ -113,7 +113,7 @@ class _LLDBWorkerClient:
             return
         try:
             response = self._sidecar.request("hello", {})
-        except SidecarTerminalError as error:
+        except (SidecarStartError, SidecarTerminalError) as error:
             self._raise_sidecar_failure(error)
 
         result = response.get("result")

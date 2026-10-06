@@ -12,17 +12,24 @@ from pathlib import Path
 DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024
 
 
-class SidecarTerminalError(RuntimeError):
+class SidecarError(RuntimeError):
+    """Base failure for the generic optional-sidecar seam."""
+
+    def __init__(self, detail):
+        super().__init__(str(detail))
+        self.detail = str(detail)
+
+
+class SidecarStartError(SidecarError):
+    """The sidecar process could not be created before a request was sent."""
+
+
+class SidecarTerminalError(SidecarError):
     """Terminal loss of a sidecar request/reply trust boundary."""
 
     def __init__(self, detail, *, outcome_unknown=False):
-        super().__init__(str(detail))
-        self.detail = str(detail)
+        super().__init__(detail)
         self.outcome_unknown = bool(outcome_unknown)
-
-
-class SidecarStartError(SidecarTerminalError):
-    """The sidecar process could not be created."""
 
 
 class JsonLineSidecarClient:
@@ -90,7 +97,7 @@ class JsonLineSidecarClient:
             # No request crossed the seam, so there is no outcome to distrust.
             # Let the game/runtime decide whether a later explicit action retries.
             self._terminate_process()
-            raise SidecarStartError(str(error), outcome_unknown=False) from error
+            raise SidecarStartError(str(error)) from error
 
     def _terminate_process(self):
         process, self._process = self._process, None
