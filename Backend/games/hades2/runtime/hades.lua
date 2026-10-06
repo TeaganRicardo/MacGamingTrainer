@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 87 then
+if previousModule and previousModule.revision ~= 88 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 87 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 87, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 88, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4737,6 +4737,10 @@ if __MacGamingTrainerV1 == nil then
         and type(CreateTalentTreeIcons) == "function"
         and type(UpdateTalentButtons) == "function"
         and type(Destroy) == "function"
+        and type(CreateComponentFromData) == "function"
+        and type(Attach) == "function"
+        and type(GetDisplayName) == "function"
+        and type(ApproximateStringWidth) == "function"
         and type(upgrade) == "table" and type(upgrade.ComponentData) == "table"
         and type(spell) == "table" and type(spell.ComponentData) == "table"
         and type(talent) == "table" and type(talent.ComponentData) == "table"
@@ -4796,6 +4800,89 @@ if __MacGamingTrainerV1 == nil then
         end
         screenPatches[name] = nil
       end
+    end
+
+    local function contextualSpacing(screen, data)
+      if type(data) ~= "table" or type(data.TextArgs) ~= "table"
+          or type(UIData) ~= "table" then
+        return nil
+      end
+      if data.Requirements ~= nil and type(IsGameStateEligible) == "function"
+          and not IsGameStateEligible(screen, data.Requirements) then
+        return 0
+      end
+      local dataWidth = data.TextArgs.Width or UIData.ContextualButtonSpacing
+      local fontSize = data.TextArgs.FontSize or 20
+      local label = GetDisplayName({ Text = data.Text }) or ""
+      local labelAlt = GetDisplayName({ Text = data.AltText }) or ""
+      local len = math.max(ApproximateStringWidth(label), ApproximateStringWidth(labelAlt))
+      for _, text in ipairs(data.AltTexts or {}) do
+        len = math.max(len, ApproximateStringWidth(GetDisplayName({ Text = text }) or ""))
+      end
+      local glyphWidth = number(UIData.AutoAlignContextualButtonGlyphWidth)
+      local minimum = number(UIData.AutoAlignContextualButtonMinWidth)
+      local gap = number(UIData.AutoAlignContextualButtonSpacing)
+      local approx = math.max(fontSize * len - glyphWidth, minimum)
+      return math.min(dataWidth, approx) + gap
+    end
+
+    local function contextualOffset(screen, actionBar, targetName)
+      local offset = 0
+      for _, name in ipairs(actionBar.ChildrenOrder or {}) do
+        if name == targetName then return offset end
+        local data = type(actionBar.Children) == "table" and actionBar.Children[name] or nil
+        if type(data) == "table" then
+          local spacing = contextualSpacing(screen, data)
+          if spacing ~= nil then
+            if actionBar.AutoAlignJustification == "Left" then
+              offset = offset + spacing
+            elseif actionBar.AutoAlignJustification == "Right" then
+              offset = offset - spacing
+            end
+          end
+        end
+      end
+      return nil
+    end
+
+    local function ensureSeleneComponents(screen)
+      if type(screen) ~= "table" or type(screen.Components) ~= "table"
+          or (screen.Name ~= "SpellScreen" and screen.Name ~= "TalentScreen") then
+        return false
+      end
+      if type(screen.Components.RerollIcon) == "table"
+          and type(screen.Components.RerollButton) == "table" then
+        return true
+      end
+
+      local screenData = type(ScreenData) == "table" and ScreenData[screen.Name] or nil
+      local root = type(screenData) == "table" and screenData.ComponentData or nil
+      local actionBar = type(root) == "table" and root.ActionBar or nil
+      local children = type(actionBar) == "table" and actionBar.Children or nil
+      local parent = screen.Components.ActionBar
+      local iconData = type(root) == "table" and root.RerollIcon or nil
+      local buttonData = type(children) == "table" and children.RerollButton or nil
+      local offset = contextualOffset(screen, actionBar or {}, "RerollButton")
+      if type(parent) ~= "table" or not finite(parent.Id)
+          or type(iconData) ~= "table" or type(buttonData) ~= "table"
+          or offset == nil then
+        return false
+      end
+
+      if type(screen.Components.RerollIcon) ~= "table" then
+        local icon = CreateComponentFromData(root, DeepCopyTable(iconData))
+        if type(icon) ~= "table" or not finite(icon.Id) then return false end
+        icon.Screen = screen
+        screen.Components.RerollIcon = icon
+      end
+      if type(screen.Components.RerollButton) ~= "table" then
+        local button = CreateComponentFromData(root, DeepCopyTable(buttonData))
+        if type(button) ~= "table" or not finite(button.Id) then return false end
+        button.Screen = screen
+        screen.Components.RerollButton = button
+        Attach({ Id = button.Id, DestinationId = parent.Id, OffsetX = offset })
+      end
+      return true
     end
 
     local function nativeSource(source, definition)
@@ -5361,6 +5448,7 @@ if __MacGamingTrainerV1 == nil then
       local isTalent = screen.Name == "TalentScreen"
       if not isSpell and not isTalent then return false end
 
+      if not ensureSeleneComponents(screen) then return false end
       local button = screen.Components.RerollButton
       local icon = screen.Components.RerollIcon
       if type(button) ~= "table" or not finite(button.Id)
