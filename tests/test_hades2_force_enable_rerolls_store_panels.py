@@ -315,22 +315,32 @@ CurrentRun.CurrentRoom.Store.StoreOptions = { { Name = 'StoreA' } }
 CurrentRun.CurrentRoom.SellOptions = { { Name = 'ChoiceA', Value = 100, Rarity = 'Common' } }
 UpdateStoreReroll(well)
 UpdateStoreReroll(sell, CurrentRun.CurrentRoom.SellOptions, 'SellTraitScreenReroll')
-assert(well.Components.RerollButton.Visible and sell.Components.RerollButton.Visible)
+CreateSurfaceShopButtons(surface)
+assert(well.Components.RerollButton.Visible and sell.Components.RerollButton.Visible
+  and surface.Components.RerollButton.Visible,
+  'enabled store owners did not reconcile before disable')
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 assert(not well.Components.RerollButton.Visible and not sell.Components.RerollButton.Visible,
   'disabling Force Enable Rerolls left trial-disabled store panels active')
+assert(not surface.Components.RerollButton.Visible,
+  'disabling Force Enable Rerolls left the injected Shrine of Hermes reroll active')
 
--- A real native PanelRerollMetaUpgrade must be restored, not suppressed.
+-- A real native PanelRerollMetaUpgrade must be restored for native Well/Sell,
+-- but SurfaceShop has no native reroll baseline to restore.
 nativeTraits.PanelRerollMetaUpgrade = true
 UpdateStoreReroll(well)
 UpdateStoreReroll(sell, CurrentRun.CurrentRoom.SellOptions, 'SellTraitScreenReroll')
 assert(well.Components.RerollButton.Visible and sell.Components.RerollButton.Visible,
   'native panel-reroll baseline was not available')
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
+assert(surface.Components.RerollButton.Visible,
+  'Shrine of Hermes did not re-enable with a genuinely owned Panel Reroll Arcana')
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 assert(well.Components.RerollButton.Visible and sell.Components.RerollButton.Visible
   and HeroHasTrait('PanelRerollMetaUpgrade'),
   'disable did not restore the actual native store-panel capability')
+assert(not surface.Components.RerollButton.Visible,
+  'disable fabricated a native Shrine of Hermes reroll baseline')
 '''
 
 HARNESS = BASE_HARNESS.replace(
