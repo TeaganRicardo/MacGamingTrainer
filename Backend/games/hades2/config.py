@@ -30,6 +30,11 @@ MODULE_MANIFEST = GameModuleManifest.load(MODULE_DIR / 'module.json')
 LUA_TRANSPORT_SOURCE_LIMIT_BYTES = 1_048_576
 LUA_TRANSPORT_RESULT_LIMIT_BYTES = 262_144
 
+# Game-owned safety budget for one LLDB sidecar request/reply. Host command
+# deadlines are separate and may be shorter or longer; Core owns only the
+# generic timeout mechanism, not this debugger/runtime policy.
+LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS = 30.0
+
 HOME = Path.home()
 STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
 _RAW_MODULE = json.loads((MODULE_DIR / 'module.json').read_text(encoding='utf-8'))
