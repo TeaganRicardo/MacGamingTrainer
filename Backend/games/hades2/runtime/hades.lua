@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 88 then
+if previousModule and previousModule.revision ~= 89 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 88 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 88, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 89, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1255,6 +1255,7 @@ if __MacGamingTrainerV1 == nil then
       or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
       or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("HeroHasTrait") or owns("OpenUpgradeChoiceMenu") or owns("CreateBoonLootButtons")
+      or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
@@ -4669,6 +4670,12 @@ if __MacGamingTrainerV1 == nil then
     local seleneCallback
     local screenPatches = {}
     local forcedSources = setmetatable({}, { __mode = "k" })
+    local forcedDoorBaselines = setmetatable({}, { __mode = "k" })
+    local nativeDoorCapability
+    local forcedDoorCapability = {
+      Name = "MacGamingTrainerForceDoorRerollCapability",
+      AllowDoorReroll = true,
+    }
     local syntheticSpent = setmetatable({}, { __mode = "k" })
     local npcOwners = {}
     for id, definition in pairs(nativeSpecialChoiceDefinitions) do
@@ -4725,6 +4732,134 @@ if __MacGamingTrainerV1 == nil then
         return nil
       end
       return screen
+    end
+
+
+    local function doorSupported()
+      return type(HasHeroTraitValue) == "function"
+        and type(AssignRoomToExitDoor) == "function"
+        and type(CheckSpecialDoorRequirement) == "function"
+        and type(RefreshUseButton) == "function"
+    end
+
+    local function doorOwnerKind(target)
+      if type(target) ~= "table" then return nil end
+      if target.RerollFunctionName == "AttemptRerollShipWheel" then return "shipWheel" end
+      if target.RerollFunctionName == "AttemptRerollDoor"
+          or target.RerollFunctionName == "AttemptRerollFieldsDoor" then
+        return "exitDoor"
+      end
+      return nil
+    end
+
+    local function doorRequirementClear(target)
+      if type(CheckSpecialDoorRequirement) ~= "function" then return false end
+      local ok, requirement = pcall(CheckSpecialDoorRequirement, target)
+      return ok and requirement == nil
+    end
+
+    local function forceDoorEligible(target)
+      local kind = doorOwnerKind(target)
+      if kind == nil then return false end
+      if kind == "shipWheel" then
+        return target.ReadyToUse ~= false
+          and target.ChosenRewardType ~= nil
+          and target.ChosenRewardType ~= "Shop"
+      end
+
+      local room = target.Room
+      return type(room) == "table"
+        and not room.NoReroll
+        and not room.NoReward
+        and room.ChosenRewardType ~= nil
+        and room.ChosenRewardType ~= "Shop"
+        and target.EncounterCost == nil
+        and doorRequirementClear(target)
+    end
+
+    local function nativeDoorCapabilityEnabled()
+      local query = nativeDoorCapability
+      if type(query) ~= "function" then return false end
+      local ok, value = pcall(query, "AllowDoorReroll")
+      return ok and value ~= nil and value ~= false
+    end
+
+    local function nativeDoorEligible(target)
+      local kind = doorOwnerKind(target)
+      if kind == nil or not nativeDoorCapabilityEnabled() then return false end
+      if kind == "shipWheel" then
+        return target.ReadyToUse ~= false
+          and target.ChosenRewardType ~= nil
+          and target.ChosenRewardType ~= "Shop"
+      end
+
+      local room = target.Room
+      return type(room) == "table"
+        and target.AllowReroll
+        and not room.NoReroll
+        and not room.NoReward
+        and room.ChosenRewardType ~= nil
+        and room.ChosenRewardType ~= "Shop"
+        and target.EncounterCost == nil
+        and doorRequirementClear(target)
+    end
+
+    local function refreshDoorOwner(target)
+      if type(RefreshUseButton) == "function" and finite(target and target.ObjectId) then
+        pcall(RefreshUseButton, target.ObjectId, target)
+      end
+    end
+
+    local function configureDoorOwner(target, nativeBaseline)
+      if not M.desiredFeatures.forceEnableRerolls or not forceDoorEligible(target) then
+        return false
+      end
+      if forcedDoorBaselines[target] == nil then
+        if nativeBaseline == nil then nativeBaseline = not not target.CanBeRerolled end
+        forcedDoorBaselines[target] = { canBeRerolled = not not nativeBaseline }
+      end
+      target.CanBeRerolled = true
+      refreshDoorOwner(target)
+      return true
+    end
+
+    local function currentDoorOwners()
+      local result, seen = {}, {}
+      local function add(values)
+        for _, target in pairs(type(values) == "table" and values or {}) do
+          if type(target) == "table" and not seen[target] and doorOwnerKind(target) ~= nil then
+            seen[target] = true
+            result[#result + 1] = target
+          end
+        end
+      end
+      add(type(MapState) == "table" and MapState.OfferedExitDoors or nil)
+      add(type(MapState) == "table" and MapState.ShipWheels or nil)
+      return result
+    end
+
+    local function configureCurrentDoorOwners()
+      for _, target in ipairs(currentDoorOwners()) do
+        configureDoorOwner(target, target.CanBeRerolled)
+      end
+    end
+
+    local function restoreCurrentDoorOwners()
+      for _, target in ipairs(currentDoorOwners()) do
+        local baseline = forcedDoorBaselines[target]
+        if not forceDoorEligible(target) then
+          target.CanBeRerolled = false
+        elseif baseline ~= nil then
+          target.CanBeRerolled = baseline.canBeRerolled
+        else
+          target.CanBeRerolled = nativeDoorEligible(target)
+        end
+        refreshDoorOwner(target)
+        forcedDoorBaselines[target] = nil
+      end
+      for target in pairs(forcedDoorBaselines) do
+        forcedDoorBaselines[target] = nil
+      end
     end
 
     local function seleneSupported()
@@ -5661,6 +5796,29 @@ if __MacGamingTrainerV1 == nil then
         patchSeleneScreenData("TalentScreen")
       end
 
+      if doorSupported() then
+        nativeDoorCapability = HasHeroTraitValue
+        installHook("HasHeroTraitValue", function(original, propertyName, ...)
+          if propertyName == "AllowDoorReroll"
+              and M.desiredFeatures.forceEnableRerolls then
+            return forcedDoorCapability
+          end
+          return original(propertyName, ...)
+        end)
+
+        installHook("AssignRoomToExitDoor", function(original, door, room, ...)
+          local result = original(door, room, ...)
+          if M.desiredFeatures.forceEnableRerolls then
+            local nativeBaseline = nativeDoorEligible(door)
+            if not configureDoorOwner(door, nativeBaseline) then
+              door.CanBeRerolled = nativeBaseline
+              refreshDoorOwner(door)
+            end
+          end
+          return result
+        end)
+      end
+
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
           local screen = currentScreen()
@@ -5711,9 +5869,12 @@ if __MacGamingTrainerV1 == nil then
       if spellScreen ~= nil then configureSelene(spellScreen) end
       local talentScreen = currentNamedScreen("TalentScreen")
       if talentScreen ~= nil then configureSelene(talentScreen) end
+      if doorSupported() then configureCurrentDoorOwners() end
     end
 
     local function release()
+      local hadDoorRuntime = nativeDoorCapability ~= nil
+        or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       for source, saved in pairs(forcedSources) do
         source.BlockReroll = saved.hadValue and saved.value or nil
         forcedSources[source] = nil
@@ -5723,6 +5884,10 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("CreateBoonLootButtons")
       releaseHook("OpenUpgradeChoiceMenu")
       releaseHook("HeroHasTrait")
+      releaseHook("AssignRoomToExitDoor")
+      releaseHook("HasHeroTraitValue")
+      if hadDoorRuntime then restoreCurrentDoorOwners() end
+      nativeDoorCapability = nil
       if _G[callbackName] == callback then _G[callbackName] = nil end
       if _G[seleneCallbackName] == seleneCallback then _G[seleneCallbackName] = nil end
       restoreCurrentSelene()
@@ -5745,10 +5910,14 @@ if __MacGamingTrainerV1 == nil then
         seleneActive = owns("CreateSpellButtons") and owns("UpdateTalentButtons")
           and _G[seleneCallbackName] == seleneCallback
       end
+      local doorActive = true
+      if doorSupported() then
+        doorActive = owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor")
+      end
       return M.desiredFeatures.forceEnableRerolls
         and owns("HeroHasTrait") and owns("OpenUpgradeChoiceMenu")
         and owns("CreateBoonLootButtons") and _G[callbackName] == callback
-        and seleneActive
+        and seleneActive and doorActive
     end
 
     return {
