@@ -28,7 +28,7 @@ def _error_payload(error):
         }
     return {
         "code": "debugger_worker_internal",
-        "presentation": "LLDB 调试后端发生内部错误。",
+        "presentation": "hades2.error.debuggerInternal",
         "diagnostic": "".join(
             traceback.format_exception(type(error), error, error.__traceback__)
         ),
