@@ -13,6 +13,8 @@ from pathlib import Path
 from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
 
+from .config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
+
 
 _WORKER_PROTOCOL_VERSION = 1
 _RISKY_METHODS = frozenset({
@@ -54,6 +56,7 @@ class _LLDBWorkerClient:
             ],
             cwd=backend_root,
             env=environment,
+            reply_timeout_seconds=LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS,
         )
 
     @property
