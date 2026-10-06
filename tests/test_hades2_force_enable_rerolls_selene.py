@@ -281,9 +281,14 @@ local readOnly = OpenTalentScreen({ Name = 'TalentDrop', ObjectId = 602 }, true)
 assert(not readOnly.Components.RerollButton.Visible,
   'read-only TalentScreen exposed a spendable reroll action')
 
+-- Disable cleanup is defined for currently active native owners. The real game
+-- cannot keep these two modal screens open simultaneously; mark both active
+-- here only to exercise both cleanup paths in one harness.
+ActiveScreens.SpellScreen = spellScreen
+ActiveScreens.TalentScreen = talentScreen
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 assert(not spellScreen.Components.RerollButton.Visible and not talentScreen.Components.RerollButton.Visible,
-  'disabling Force Enable Rerolls left Selene reroll actions visible')
+  'disabling Force Enable Rerolls left active Selene reroll actions visible')
 '''
 
 HARNESS = BASE_HARNESS.replace(
