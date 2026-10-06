@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import selectors
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -135,18 +137,33 @@ class JsonLineSidecarClient:
         try:
             fileno = stream.fileno()
         except (AttributeError, OSError, ValueError):
-            fileno = None
-        if fileno is not None:
-            selector = selectors.DefaultSelector()
-            try:
-                selector.register(stream, selectors.EVENT_READ)
-                if not selector.select(self.reply_timeout_seconds):
+            return stream.readline(self.max_line_bytes + 1)
+
+        deadline = time.monotonic() + self.reply_timeout_seconds
+        chunks = []
+        total = 0
+        selector = selectors.DefaultSelector()
+        try:
+            selector.register(stream, selectors.EVENT_READ)
+            while total <= self.max_line_bytes:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0 or not selector.select(remaining):
                     raise TimeoutError(
                         f"sidecar reply timed out after {self.reply_timeout_seconds:g}s"
                     )
-            finally:
-                selector.close()
-        return stream.readline(self.max_line_bytes + 1)
+                chunk = os.read(
+                    fileno,
+                    min(65536, self.max_line_bytes + 1 - total),
+                )
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if b"\n" in chunk:
+                    break
+        finally:
+            selector.close()
+        return b"".join(chunks)
 
     def request(self, method, params=None, *, outcome_unknown_on_loss=False):
         if self._terminal_error is not None:
