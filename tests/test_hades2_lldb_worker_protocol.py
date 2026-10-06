@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
+from games.hades2.transport_client import _LLDBWorkerClient
 
 
 class FakeTransport:
@@ -123,5 +124,63 @@ assert replies[6]["error"] == {
     "arguments": ["fake"],
 }
 assert replies[6]["state"]["tainted"] is True
+
+
+class _InterruptingInput:
+    def write(self, value):
+        return len(value)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class _InterruptingOutput:
+    def readline(self):
+        raise KeyboardInterrupt()
+
+
+class _InterruptedSidecar:
+    def __init__(self):
+        self.stdin = _InterruptingInput()
+        self.stdout = _InterruptingOutput()
+        self.terminated = False
+        self.killed = False
+
+    def poll(self):
+        return -15 if self.terminated or self.killed else None
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+    def wait(self, timeout=None):
+        return self.poll()
+
+
+# BackendProcess sends SIGTERM on a Host timeout. core.server converts that
+# signal to KeyboardInterrupt so its adapter can clean up. If that interrupt
+# lands while the bundled backend is blocked waiting for the LLDB sidecar,
+# the sidecar must be terminated before the interrupt escapes; otherwise the
+# Host can restart a new backend while an orphan debugger still owns the game.
+interrupted_process = _InterruptedSidecar()
+interrupted_client = _LLDBWorkerClient()
+interrupted_client._process = interrupted_process
+try:
+    interrupted_client.call("transport.alive")
+except KeyboardInterrupt:
+    pass
+else:
+    raise AssertionError("simulated backend termination did not interrupt sidecar exchange")
+assert interrupted_process.terminated or interrupted_process.killed, (
+    "interrupted sidecar exchange left the debugger child running"
+)
+assert not interrupted_client.started, (
+    "interrupted sidecar exchange remained owned after backend termination"
+)
 
 print("hades2_lldb_worker_protocol_ok")
