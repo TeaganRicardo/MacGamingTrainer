@@ -14,12 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
     path = str(Path(__file__).resolve())
     embedded = (
-        "script import os,runpy; "
+        "script import os; "
         "os.environ['MGT_LLDB_EMBEDDED_TEST']='1'; "
-        # Keep LLDB's own __main__ module intact: its command interpreter owns
-        # helpers such as run_one_line there, and replacing that namespace while
-        # this regression drives SB APIs can make LLDB's callbacks fail.
-        f"runpy.run_path({path!r}, run_name='mgt_lldb_embedded_test')"
+        # Execute in LLDB's existing interpreter namespace without replacing
+        # its __main__ module. runpy either replaced __main__ (breaking LLDB's
+        # run_one_line helper) or isolated the test in a second namespace that
+        # could deadlock SB callbacks on the macOS runner.
+        f"exec(compile(open({path!r}, 'rb').read(), {path!r}, 'exec'), globals(), globals())"
     )
     try:
         completed = subprocess.run(
