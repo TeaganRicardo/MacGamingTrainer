@@ -54,7 +54,7 @@ class GameAdapter(ABC):
 
     The host owns framing, idempotency and lifecycle. A game adapter owns its
     commands/state and may use any implementation strategy (files, native
-    helper, memory access, LLDB, Lua, etc.).
+    helpers, memory access, optional runtime adapters, etc.).
     """
 
     def __init__(self, context: GameAdapterContext):

@@ -133,11 +133,6 @@ class JsonLineSidecarClient:
     def invalidate(self, detail, *, outcome_unknown=False):
         self._fail_terminal(detail, outcome_unknown=outcome_unknown)
 
-    def mark_outcome_unknown(self, detail):
-        if self._terminal_error is None:
-            self._terminal_error = SidecarTerminalError(detail, outcome_unknown=True)
-        self._terminate_process()
-
     def _readline(self, stream):
         try:
             fileno = stream.fileno()

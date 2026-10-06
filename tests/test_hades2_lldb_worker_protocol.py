@@ -132,7 +132,6 @@ class FakeSidecar:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
-        self.marked_unknown = []
         self.started = True
         self.terminal = False
         self.closed = False
@@ -154,11 +153,6 @@ class FakeSidecar:
         self.terminal = True
         self.started = False
         raise SidecarTerminalError(detail, outcome_unknown=outcome_unknown)
-
-    def mark_outcome_unknown(self, detail):
-        self.marked_unknown.append(detail)
-        self.terminal = True
-        self.started = False
 
     def close(self):
         self.closed = True
@@ -201,6 +195,12 @@ assert [method for method, _, _ in recoverable_sidecar.calls] == [
     "hello",
     "transport.alive",
 ]
+recoverable_sidecar.started = False
+calls_before_close = list(recoverable_sidecar.calls)
+recoverable_client.close()
+assert recoverable_sidecar.calls == calls_before_close, (
+    "closing an exited sidecar unexpectedly respawned the worker"
+)
 
 lost_mutation_sidecar = FakeSidecar([
     {"id": "1", "result": {"protocolVersion": 1}},
@@ -242,10 +242,11 @@ except AdapterError as error:
     assert error.code == "outcome_unknown"
 else:
     raise AssertionError("worker outcome_unknown was accepted")
-assert reported_unknown_sidecar.marked_unknown == [
-    "worker lost mutation acknowledgement"
-]
 assert reported_unknown_client.terminal
+assert reported_unknown_sidecar.started, (
+    "worker-reported semantic uncertainty should not be reclassified as a Core IPC failure"
+)
+assert not reported_unknown_sidecar.terminal
 
 unavailable_sidecar = FakeSidecar([
     SidecarStartError("xcrun python3 unavailable"),

@@ -163,10 +163,10 @@ class _LLDBWorkerClient:
                 ),
             )
             if raised.code == "outcome_unknown":
+                # The worker method's semantic uncertainty is Hades-owned.
+                # Stop this wrapper from issuing further calls; the generic
+                # sidecar only terminalizes itself for IPC trust failures.
                 self._terminal_error = raised
-                self._sidecar.mark_outcome_unknown(
-                    raised.diagnostic or "LLDB worker reported outcome_unknown."
-                )
             raise raised
         return response.get("result"), response.get("state")
 
@@ -181,7 +181,8 @@ class _LLDBWorkerClient:
             pass
 
     def close(self):
-        if self.started and not self.terminal:
+        # Do not respawn a child merely to close an already-dead sidecar.
+        if self._sidecar.started and not self.terminal:
             try:
                 self.call("transport.close")
             except AdapterError:
