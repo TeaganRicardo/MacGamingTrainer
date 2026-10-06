@@ -27,11 +27,14 @@ def install_runtime_fixture(resources, architectures=('arm64',)):
         },
     }
     (runtime / 'runtime.json').write_text(json.dumps(metadata))
+    python_line = '.'.join(PYTHON_RUNTIME_SOURCE['version'].split('.')[:2])
     for arch in architectures:
-        executable = runtime / arch / 'bin/python3'
-        executable.parent.mkdir(parents=True)
-        executable.write_text('#!/bin/sh\nexit 0\n')
-        executable.chmod(0o755)
+        bin_dir = runtime / arch / 'bin'
+        bin_dir.mkdir(parents=True)
+        versioned = bin_dir / f'python{python_line}'
+        versioned.write_text('#!/bin/sh\nexit 0\n')
+        versioned.chmod(0o755)
+        (bin_dir / 'python3').symlink_to(versioned.name)
 
 
 # A stale app alphabetically before the selected target must not win discovery.
@@ -81,6 +84,26 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     command = [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist), '--print-app']
     selected = subprocess.check_output(command, text=True).strip()
     assert selected == str(app.resolve()), selected
+
+    # python-build-standalone exposes python3 as an in-tree symlink to the
+    # versioned interpreter. That is safe only while the resolved target stays
+    # inside the packaged runtime.
+    runtime_python = resources / 'Python/arm64/bin/python3'
+    versioned_python = runtime_python.resolve()
+    outside_python = Path(temporary) / 'outside-python'
+    outside_python.write_text('#!/bin/sh\nexit 0\n')
+    outside_python.chmod(0o755)
+    runtime_python.unlink()
+    runtime_python.symlink_to(outside_python)
+    escaped_runtime = subprocess.run(
+        [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist)],
+        text=True,
+        capture_output=True,
+    )
+    assert escaped_runtime.returncode != 0
+    assert 'escapes package' in escaped_runtime.stderr
+    runtime_python.unlink()
+    runtime_python.symlink_to(versioned_python.name)
 
     # A stale app alone is not an acceptable fallback when the target is absent.
     with tempfile.TemporaryDirectory(prefix='mgt-stale-only-') as stale_only:
