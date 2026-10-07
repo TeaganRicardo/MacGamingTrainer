@@ -122,6 +122,15 @@ assert game_state["MetaPoints"] == 123.0
 assert game_state["UnknownFutureField"]["KeepMe"] == "yes"
 assert list(game_state["OrderedFlags"].keys()) == ["First", "Second"]
 
+# LuaTable mutations preserve the physical array/hash allocation partition.
+mixed_table = LuaTable(2, 1, [(1.0, "a"), (2.0, "b"), ("named", "c")])
+del mixed_table[1.0]
+assert mixed_table.array_size == 1
+assert mixed_table.hash_size == 1
+del mixed_table["named"]
+assert mixed_table.array_size == 1
+assert mixed_table.hash_size == 0
+
 # The primary #398 invariant: untouched saves round-trip byte-for-byte.
 assert doc.to_bytes() == fixture
 

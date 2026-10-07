@@ -102,13 +102,12 @@ class LuaTable(MutableMapping):
     def __delitem__(self, key):
         for index, (entry_key, _value) in enumerate(self._entries):
             if _same_lua_key(entry_key, key):
+                was_array_entry = index < self.array_size
                 del self._entries[index]
-                # The counts are allocation hints. Prefer shrinking the hash
-                # hint for editor-added/deleted fields; fall back to array.
-                if self.hash_size:
-                    self.hash_size -= 1
-                elif self.array_size:
+                if was_array_entry:
                     self.array_size -= 1
+                else:
+                    self.hash_size -= 1
                 return
         raise KeyError(key)
 
