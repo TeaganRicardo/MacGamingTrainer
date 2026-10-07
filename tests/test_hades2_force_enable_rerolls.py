@@ -55,7 +55,28 @@ PostRerollPanelPresentation = function() end
 CannotRerollPanelPresentation = function() error('unaffordable native attempt') end
 CallFunctionName = function(name, ...) return assert(_G[name], 'missing reroll callback')(... ) end
 thread = function(fn, ...) return fn(...) end
-wait = function() end
+
+-- Hades' real panel reroll owner yields through wait(). Track protected-call
+-- depth so this fixture fails if the Trainer ever wraps that game coroutine
+-- in pcall/nativeOperations again.
+local rawPcall = pcall
+local protectedCallDepth = 0
+local enforceNativePanelYieldBoundary = false
+local function pack(...)
+  return { n = select('#', ...), ... }
+end
+pcall = function(fn, ...)
+  protectedCallDepth = protectedCallDepth + 1
+  local result = pack(rawPcall(fn, ...))
+  protectedCallDepth = protectedCallDepth - 1
+  return unpack(result, 1, result.n)
+end
+wait = function()
+  if enforceNativePanelYieldBoundary then
+    assert(protectedCallDepth == 0,
+      'game-owned AttemptPanelReroll wait crossed a Trainer protected-call boundary')
+  end
+end
 
 -- Simulate a Chaos Trial / packaged bounty that has stripped the reroll Arcana.
 local nativeTraits = {}
@@ -137,7 +158,18 @@ AttemptPanelReroll = function(screen, button)
   CurrentRun.CurrentRoom.SpentRerolls = CurrentRun.CurrentRoom.SpentRerolls or {}
   if button.RerollId then IncrementTableValue(CurrentRun.CurrentRoom.SpentRerolls, button.RerollId, 1) end
   UpdateRerollUI(CurrentRun.NumRerolls)
+
+  -- Match the 1.143476 owner shape: both presentation phases and the outer
+  -- AttemptPanelReroll lifecycle yield around the callback.
+  ScreenState.InTransition = true
+  PreRerollPanelPresentation(screen, button)
+  wait(0.51)
   CallFunctionName(button.RerollFunctionName, screen, button)
+  PostRerollPanelPresentation(screen, button)
+  wait(0.40)
+  wait(0.10)
+  wait(0.95)
+  ScreenState.InTransition = false
 end
 
 HandleUpgradeChoiceSelection = function() end
@@ -208,7 +240,7 @@ assert(CurrentRun.NumRerolls == 10, 'enabling force rerolls minted reroll curren
 assert(not HeroHasTrait('PanelRerollMetaUpgrade'), 'feature mutated native trait/progression ownership')
 
 local ordinary = {
-  Name = 'ZeusUpgrade', ObjectId = 42,
+  Name = 'HeraUpgrade', ObjectId = 42,
   Traits = { 'ChoiceA', 'ChoiceB', 'ChoiceC', 'ChoiceD', 'ChoiceE' },
   UpgradeOptions = {
     { ItemName = 'ChoiceA', Type = 'Trait', Rarity = 'Common' },
@@ -216,6 +248,7 @@ local ordinary = {
     { ItemName = 'ChoiceC', Type = 'Trait', Rarity = 'Common' },
   },
 }
+LootData.HeraUpgrade = { GodLoot = true }
 LootData.ZeusUpgrade = { GodLoot = true }
 local ordinaryScreen = OpenUpgradeChoiceMenu(ordinary)
 assert(ordinaryScreen.MovedRerollUIGroup, 'trial-disabled panel reroll capability was not force-enabled')
@@ -224,12 +257,18 @@ assert(ordinaryScreen.Components.RerollButton.Visible
   'game-owned reroll control was not exposed')
 assert(ordinaryScreen.Components.RerollButton.RerollFunctionName == 'RerollBoonLoot',
   'ordinary native generator was replaced unnecessarily')
+enforceNativePanelYieldBoundary = true
 CallFunctionName(ordinaryScreen.Components.RerollButton.OnPressedFunctionName,
   ordinaryScreen, ordinaryScreen.Components.RerollButton)
+enforceNativePanelYieldBoundary = false
 assert(CurrentRun.NumRerolls == 9 and nativeRerolls == 1,
   'native AttemptPanelReroll did not own one spend and native regeneration')
 assert(ordinaryScreen.Components.RerollButton.Cost == 2,
   'native room/source cost history did not escalate through the game-owned button')
+local ordinaryStatus = M.dispatch('status', { includeCatalogs = false })
+assert(not ordinaryStatus.runtimeOutcomeUnknown
+  and ordinaryStatus.activeFeatures.forceEnableRerolls,
+  'ordinary Hera reroll poisoned resident trust')
 
 -- Every native UpgradeChoice loot owner keeps the native reroll generator.
 for index, name in ipairs({ 'HermesUpgrade', 'StackUpgrade', 'TrialUpgrade' }) do

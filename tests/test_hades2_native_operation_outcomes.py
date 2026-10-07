@@ -54,18 +54,9 @@ AttemptPanelReroll(screen, screen.Components.RerollButton)
 assert(originalRun.NumRerolls == 9, 'native spend did not reach original owner')
 assert(replacementRun.NumRerolls == 77, 'rollback refunded a replacement run')
 ''' + ASSERT_UNKNOWN
-cases['native_unwind'] = BASE + r'''
-local originalAttempt = AttemptPanelReroll
-AttemptPanelReroll = function(...)
-  originalAttempt(...)
-  error('native presentation unwind failed')
-end
-M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true })
-local source = { Name = 'MacGamingTrainerSpecial_Arachne', ObjectId = -1,
-  UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) } }
-local screen = OpenUpgradeChoiceMenu(source)
-AttemptPanelReroll(screen, screen.Components.RerollButton)
-''' + ASSERT_UNKNOWN
+# AttemptPanelReroll itself is a game-owned yielding coroutine in 1.143476.
+# Protect only the Trainer callback entered after native spend; the focused
+# callback-stage cases below still require terminal unknown on unproven faults.
 for stage, fault in {
     "candidates": "RemoveRandomValue = function() error('candidate generation fault') end",
     "clear": "local original = DestroyBoonLootButtons; DestroyBoonLootButtons = function(...) original(...); error('clear fault') end",

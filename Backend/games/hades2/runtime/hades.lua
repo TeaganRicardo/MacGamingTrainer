@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 94 then
+if previousModule and previousModule.revision ~= 95 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 94 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 94, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 95, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1281,9 +1281,9 @@ if __MacGamingTrainerV1 == nil then
       M.terminalActionUnknown = true
       return "MGT_OUTCOME_UNKNOWN: " .. tostring(message) .. "; do not retry"
     end
-    local function run(record, completedOutcome, work, frame)
+    local function run(record, completedOutcome, work, frame, crossedAtEntry)
       frame = frame or (record and record.nativeOwner) or owner()
-      local crossed = false
+      local crossed = not not crossedAtEntry
       local operation = {
         owner = frame,
         enter = function()
@@ -6264,12 +6264,16 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     local function runReroll(screen, work)
+      local frame = pendingRerollOwners[screen]
+      pendingRerollOwners[screen] = nil
       local ok, message = nativeOperations.run(nil, "completed", function(operation)
-        -- Native spend/presentation is not atomic. A callback is entered after
-        -- spend; the enclosing AttemptPanelReroll can also fail on unwind.
+        -- Hades invokes this callback only after reroll currency/history have
+        -- been mutated. A captured pre-spend frame therefore enters here with
+        -- the native boundary already crossed, even if its owner went stale
+        -- before callback dispatch.
         operation.enter()
         return work(operation)
-      end, pendingRerollOwners[screen])
+      end, frame, frame ~= nil)
       if not ok then reportRerollFailure(screen, message) end
       if ok then return message end
     end
@@ -6480,14 +6484,22 @@ if __MacGamingTrainerV1 == nil then
             return
           end
         end
-        local args = { ... }
-        return runReroll(screen, function(operation)
-          pendingRerollOwners[screen] = operation.owner
-          local ok, result = pcall(original, screen, button, unpack(args))
-          pendingRerollOwners[screen] = nil
-          if not ok then error(result) end
-          return result
-        end)
+
+        local rerollFunctionName = type(button) == "table" and button.RerollFunctionName or nil
+        local trainerOwnedCallback = rerollFunctionName == callbackName
+          or rerollFunctionName == seleneCallbackName
+          or rerollFunctionName == surfaceShopCallbackName
+          or rerollFunctionName == nemesisTradeCallbackName
+        if trainerOwnedCallback then
+          pendingRerollOwners[screen] = nativeOperations.owner()
+        end
+
+        -- Hades II 1.143476 AttemptPanelReroll and both presentation owners
+        -- yield through wait(). Keep that game coroutine outside protected
+        -- Trainer calls; classify only our callback after the native spend.
+        local result = original(screen, button, ...)
+        if trainerOwnedCallback then pendingRerollOwners[screen] = nil end
+        return result
       end, "session")
 
       installHook("HeroHasTrait", function(original, name, ...)
