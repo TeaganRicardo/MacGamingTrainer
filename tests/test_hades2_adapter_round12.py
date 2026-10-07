@@ -92,6 +92,7 @@ class ResetSession(FakeResidentSession):
         self.god_mode = False
 
     def status(self, params=None):
+        self.process_time_warp_allowed = True
         self.calls.append({
             'kind': 'status',
             'command': 'status',

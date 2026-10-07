@@ -406,6 +406,9 @@ def exercise_adapter_routes(root, toggles, multipliers):
         def __init__(self):
             self.calls = []
 
+        def current_speed(self):
+            return 1.0
+
         def set_speed(self, speed):
             self.calls.append(("set_speed", speed))
             return speed

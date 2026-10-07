@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 92 then
+if previousModule and previousModule.revision ~= 94 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 92 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 92, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 94, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1265,6 +1265,53 @@ if __MacGamingTrainerV1 == nil then
   end
   local reconcileDesired
   local forceCastAvailable, refillHex, currentSpellRuntime, actionLedger, integer
+  -- Native calls can yield, commit, then fail during presentation/cleanup.
+  -- Own that distinction once for callbacks and asynchronous modal receipts.
+  local nativeOperations = (function()
+    local function owner()
+      return { session = SessionState, run = CurrentRun,
+        hero = CurrentRun and CurrentRun.Hero, room = CurrentRun and CurrentRun.CurrentRoom }
+    end
+    local function sameOwner(frame)
+      return frame.session == SessionState and frame.run == CurrentRun
+        and frame.hero == (CurrentRun and CurrentRun.Hero)
+        and frame.room == (CurrentRun and CurrentRun.CurrentRoom)
+    end
+    local function taint(message)
+      M.terminalActionUnknown = true
+      return "MGT_OUTCOME_UNKNOWN: " .. tostring(message) .. "; do not retry"
+    end
+    local function run(record, completedOutcome, work, frame)
+      frame = frame or (record and record.nativeOwner) or owner()
+      local crossed = false
+      local operation = {
+        owner = frame,
+        enter = function()
+          if M.terminalActionUnknown then error("Native operation trust closed before commit; do not retry") end
+          if not sameOwner(frame) then error("Native operation owner changed before commit") end
+          crossed = true
+        end,
+        rollback = function(work)
+          if not sameOwner(frame) then error("Native operation owner changed; rollback unavailable") end
+          if work() ~= true or not sameOwner(frame) then error("Native operation rollback unavailable") end
+          crossed = false
+        end,
+      }
+      local ok, message = pcall(work, operation)
+      if ok and crossed and not sameOwner(frame) then
+        ok, message = false, "Native operation owner changed after commit"
+      end
+      local outcome = ok and completedOutcome or (crossed and "outcome_unknown" or "failed")
+      if outcome == "outcome_unknown" then message = taint(message) end
+      if record ~= nil then
+        record.status = outcome
+        record.error = not ok and tostring(message) or nil
+        actionLedger.publish(record)
+      end
+      return ok, message
+    end
+    return { run = run, taint = taint, owner = owner }
+  end)()
   local function synchronize()
     -- Keep already owned hooks on their captured owner. An uncertain native
     -- coroutine must never adopt a new owner or reinstall a replaced hook.
@@ -1334,7 +1381,10 @@ if __MacGamingTrainerV1 == nil then
     local hero = CurrentRun.Hero
     if vital == "health" then
       if finite(lock.max) and hero.MaxHealth ~= lock.max then hero.MaxHealth = lock.max end
-      if finite(lock.current) and hero.Health ~= lock.current then hero.Health = math.min(lock.current, number(hero.MaxHealth)) end
+      if finite(lock.current) then
+        local current = math.min(lock.current, number(hero.MaxHealth))
+        if hero.Health ~= current then hero.Health = current end
+      end
       refreshHealth()
     elseif vital == "mana" then
       if finite(lock.max) and hero.MaxMana ~= lock.max then hero.MaxMana = lock.max end
@@ -1343,7 +1393,10 @@ if __MacGamingTrainerV1 == nil then
         local ok, value = pcall(GetHeroMaxAvailableMana)
         if ok and finite(value) then available = value end
       end
-      if finite(lock.current) and hero.Mana ~= lock.current then hero.Mana = math.min(lock.current, math.max(0, available)) end
+      if finite(lock.current) then
+        local current = math.min(lock.current, math.max(0, available))
+        if hero.Mana ~= current then hero.Mana = current end
+      end
       refreshMana()
     elseif vital == "armor" then
       if finite(lock.current) then
@@ -6195,15 +6248,34 @@ if __MacGamingTrainerV1 == nil then
       return true
     end
 
-    local function failNoPlanAfterSpend(screen, button)
-      if not rollbackPanelSpend(screen, button) then
-        error("Force reroll pool changed after native spend; rollback unavailable")
-      end
+    local function failNoPlanAfterSpend(screen, button, operation)
+      operation.rollback(function() return rollbackPanelSpend(screen, button) end)
       error("Force reroll pool has no changed eligible candidates")
     end
 
+    local pendingRerollOwners = setmetatable({}, { __mode = "k" })
+    local function reportRerollFailure(screen, message)
+      if M.terminalActionUnknown then
+        M.featureErrors.forceEnableRerolls = "hades2.error.outcomeUnknownRuntime"
+        pcall(clearRerollControl, screen, true)
+      end
+      if type(DebugPrint) == "function" then
+        DebugPrint({ Text = "MacGamingTrainer native reroll: " .. tostring(message) })
+      end
+    end
+    local function runReroll(screen, work)
+      local ok, message = nativeOperations.run(nil, "completed", function(operation)
+        -- Native spend/presentation is not atomic. A callback is entered after
+        -- spend; the enclosing AttemptPanelReroll can also fail on unwind.
+        operation.enter()
+        return work(operation)
+      end, pendingRerollOwners[screen])
+      if not ok then reportRerollFailure(screen, message) end
+      if ok then return message end
+    end
+
     callback = function(screen, button)
-      local ok, message = pcall(function()
+      runReroll(screen, function(operation)
         local source = type(button) == "table" and button.LootData
           or type(screen) == "table" and screen.Source
         local kind, definition = owner(source)
@@ -6233,7 +6305,7 @@ if __MacGamingTrainerV1 == nil then
           })
           if type(planned.UpgradeOptions) ~= "table" or #planned.UpgradeOptions == 0
               or candidatesKey(planned.UpgradeOptions) == candidatesKey(source.UpgradeOptions) then
-            failNoPlanAfterSpend(screen, button)
+            failNoPlanAfterSpend(screen, button, operation)
           end
           if synthetic then
             syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
@@ -6250,7 +6322,7 @@ if __MacGamingTrainerV1 == nil then
         end
 
         local plan = changedPlan(source, kind, definition)
-        if plan == nil then failNoPlanAfterSpend(screen, button) end
+        if plan == nil then failNoPlanAfterSpend(screen, button, operation) end
         if synthetic then
           syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
         end
@@ -6270,13 +6342,10 @@ if __MacGamingTrainerV1 == nil then
         end
         CreateBoonLootButtons(screen, source, true)
       end)
-      if not ok and type(DebugPrint) == "function" then
-        DebugPrint({ Text = "MacGamingTrainer force reroll failed after native spend: " .. tostring(message) })
-      end
     end
 
     seleneCallback = function(screen, button)
-      local ok, message = pcall(function()
+      runReroll(screen, function(operation)
         if type(screen) ~= "table" or type(button) ~= "table"
             or button.RerollFunctionName ~= seleneCallbackName then
           error("Force reroll source changed")
@@ -6292,45 +6361,28 @@ if __MacGamingTrainerV1 == nil then
         else
           error("Force reroll source changed")
         end
-        if not applied then failNoPlanAfterSpend(screen, button) end
+        if not applied then failNoPlanAfterSpend(screen, button, operation) end
         if source.ObjectId == nil or source.ObjectId == -1 then
           syntheticSpent[screen] = number(syntheticSpent[screen]) + RerollCosts.ReuseIncrement
         end
       end)
-      if not ok and type(DebugPrint) == "function" then
-        DebugPrint({ Text = "MacGamingTrainer Selene force reroll failed after native spend: " .. tostring(message) })
-      end
     end
 
     surfaceShopCallback = function(screen, button)
-      local ok, message = pcall(function()
+      runReroll(screen, function(operation)
         if type(screen) ~= "table" or screen.Name ~= "SurfaceShop"
             or type(button) ~= "table"
             or button.RerollFunctionName ~= surfaceShopCallbackName
             or currentNamedScreen("SurfaceShop") ~= screen then
           error("Force reroll source changed")
         end
-        if not rerollSurfaceShop(screen) then failNoPlanAfterSpend(screen, button) end
+        if not rerollSurfaceShop(screen) then failNoPlanAfterSpend(screen, button, operation) end
       end)
-      if not ok and type(DebugPrint) == "function" then
-        DebugPrint({ Text = "MacGamingTrainer SurfaceShop force reroll failed after native spend: " .. tostring(message) })
-      end
-    end
-
-    local function taintNemesisTrade(message)
-      local detail = tostring(message or "Nemesis trade reroll outcome is unknown")
-      M.terminalActionUnknown = true
-      -- featureErrors is presentation-facing. Keep the concrete diagnostic in
-      -- the transport/debug log, but expose an existing bilingual Hades token
-      -- rather than embedding English copy into runtime state.
-      M.featureErrors.forceEnableRerolls = "hades2.error.outcomeUnknownRuntime"
-      return "MGT_OUTCOME_UNKNOWN: " .. detail .. "; do not retry"
     end
 
     nemesisTradeCallback = function(screen, button)
-      local safeRollback = false
       local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
-      local ok, message = pcall(function()
+      runReroll(screen, function(operation)
         if type(screen) ~= "table" or screen.Name ~= "TradeScreen"
             or type(button) ~= "table"
             or button.RerollFunctionName ~= nemesisTradeCallbackName
@@ -6338,39 +6390,20 @@ if __MacGamingTrainerV1 == nil then
             or owner.source ~= screen.Source
             or owner.args ~= screen.Args
             or owner.run ~= CurrentRun then
-          error(taintNemesisTrade(
-            "Nemesis trade reroll owner changed after native spend; outcome unknown"
-          ))
+          error("Nemesis trade reroll owner changed after native spend")
         end
 
-        owner.hadReroll = true
         local plan = changedNemesisTradePlan(
           owner, screen.ChosenGiveOption, screen.ChosenGetOption
         )
         if plan == nil then
-          if not rollbackPanelSpend(screen, button) then
-            error(taintNemesisTrade(
-              "Nemesis trade reroll candidate generation failed after native spend; rollback unavailable"
-            ))
-          end
-          owner.hadReroll = false
-          safeRollback = true
+          operation.rollback(function() return rollbackPanelSpend(screen, button) end)
           error("Force reroll pool has no changed eligible candidates")
         end
+        owner.operation.enter()
         CloseTradeScreen(screen, button)
         owner.nextPlan = plan
       end)
-      if not ok and not safeRollback and not M.terminalActionUnknown then
-        message = taintNemesisTrade(
-          "Nemesis trade reroll failed after native spend: " .. tostring(message)
-        )
-      end
-      if not ok and M.terminalActionUnknown then
-        clearRerollControl(screen, true)
-      end
-      if not ok and type(DebugPrint) == "function" then
-        DebugPrint({ Text = "MacGamingTrainer Nemesis trade force reroll failed after native spend: " .. tostring(message) })
-      end
     end
 
     local function install()
@@ -6430,24 +6463,32 @@ if __MacGamingTrainerV1 == nil then
         end)
       end
 
-      if nemesisTradeSupported() then
-        installHook("AttemptPanelReroll", function(original, screen, button, ...)
-          if type(button) == "table"
-              and button.RerollFunctionName == nemesisTradeCallbackName then
-            local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
-            if M.terminalActionUnknown
-                or type(owner) ~= "table"
-                or owner.source ~= screen.Source
-                or owner.args ~= screen.Args
-                or owner.run ~= CurrentRun
-                or currentNamedScreen("TradeScreen") ~= screen then
-              clearRerollControl(screen, true)
-              return
-            end
+      installHook("AttemptPanelReroll", function(original, screen, button, ...)
+        if M.terminalActionUnknown then
+          pcall(clearRerollControl, screen, true)
+          return
+        end
+        if type(button) == "table"
+            and button.RerollFunctionName == nemesisTradeCallbackName then
+          local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
+          if type(owner) ~= "table"
+              or owner.source ~= screen.Source
+              or owner.args ~= screen.Args
+              or owner.run ~= CurrentRun
+              or currentNamedScreen("TradeScreen") ~= screen then
+            clearRerollControl(screen, true)
+            return
           end
-          return original(screen, button, ...)
-        end, "session")
-      end
+        end
+        local args = { ... }
+        return runReroll(screen, function(operation)
+          pendingRerollOwners[screen] = operation.owner
+          local ok, result = pcall(original, screen, button, unpack(args))
+          pendingRerollOwners[screen] = nil
+          if not ok then error(result) end
+          return result
+        end)
+      end, "session")
 
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
@@ -6500,19 +6541,22 @@ if __MacGamingTrainerV1 == nil then
             run = CurrentRun,
           }
           nemesisTradeArgs[copiedArgs] = owner
-          local ok, result = pcall(original, source, copiedArgs, screen, ...)
-          if ok and source.Accepted and owner.finalPlan ~= nil then
-            copiedArgs.ChosenGiveOption = owner.finalPlan.give
-            copiedArgs.ChosenGetOption = owner.finalPlan.get
-          end
-          nemesisTradeArgs[copiedArgs] = nil
-          if not ok then
-            if owner.hadReroll and not M.terminalActionUnknown then
-              result = taintNemesisTrade(
-                "Nemesis trade reroll failed while replacing the native transaction owner: "
-                  .. tostring(result)
-              )
+          local args = { ... }
+          local ok, result = nativeOperations.run(nil, "completed", function(operation)
+            owner.operation = operation
+            local nativeOk, result = pcall(original, source, copiedArgs, screen, unpack(args))
+            if nativeOk and source.Accepted and owner.finalPlan ~= nil then
+              copiedArgs.ChosenGiveOption = owner.finalPlan.give
+              copiedArgs.ChosenGetOption = owner.finalPlan.get
             end
+            nemesisTradeArgs[copiedArgs] = nil
+            if not nativeOk then error(result) end
+            return result
+          end)
+          if not ok then
+            local tradeScreen = currentNamedScreen("TradeScreen")
+            if nemesisTradeScreens[tradeScreen] ~= owner then tradeScreen = nil end
+            reportRerollFailure(tradeScreen, result)
             error(result)
           end
           return result
@@ -6660,7 +6704,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function active()
-      if not supported() then return false end
+      if M.terminalActionUnknown or not supported() then return false end
       local seleneActive = not selenePresent()
         or (owns("CreateSpellButtons") and owns("UpdateTalentButtons")
           and _G[seleneCallbackName] == seleneCallback)
@@ -6771,8 +6815,8 @@ if __MacGamingTrainerV1 == nil then
       currentRunTraits = traitList,
       currentRunTraitIdentityScope = "currentRunInstance",
       currentRunTraitIdentityPersistent = false,
-      currentRunTraitsReason = traitListReason,
-      nextRoomReward = M.nextRoomReward,
+      currentRunTraitsReason = traitListReason == nil and jsonNull or traitListReason,
+      nextRoomReward = M.nextRoomReward == nil and jsonNull or M.nextRoomReward,
       damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
       resourceMultiplier = M.resourceMultiplier, resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
@@ -6780,7 +6824,7 @@ if __MacGamingTrainerV1 == nil then
       mana = number(hero.Mana), maxMana = number(hero.MaxMana), manaLocked = M.vitalLocks.mana ~= nil,
       availableMana = availableMana, totalMaxMana = number(hero.MaxMana),
       armor = number(hero.HealthBuffer), armorLocked = M.vitalLocks.armor ~= nil,
-      spellCharge = number(CurrentRun and CurrentRun.SpellCharge), spellChargeCost = spellChargeCost,
+      spellCharge = number(CurrentRun and CurrentRun.SpellCharge), spellChargeCost = spellChargeCost == nil and jsonNull or spellChargeCost,
       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
       gatheringProbabilities = roomGeneration.snapshot(),
@@ -6789,20 +6833,21 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
-      lastAction = actionLedger.latestReceipt(),
+      lastAction = actionLedger.latestReceipt() or jsonNull,
+      runtimeOutcomeUnknown = not not M.terminalActionUnknown,
       featureErrors = M.featureErrors,
       runtimeDiagnostics = {
-        revision = M.revision, heroObjectId = hero.ObjectId, runCount = runCount,
+        revision = M.revision, heroObjectId = hero.ObjectId or jsonNull, runCount = runCount,
         guardInstalled = not not (M.guardWrapper and UpdateTimers == M.guardWrapper),
         castHook = owns("SetEffectProperty") and owns("SetWeaponProperty"), castRuntime = castDiagnostics(),
-        hexRuntime = M.hexRuntime,
+        hexRuntime = M.hexRuntime or jsonNull,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
         boonRarityHooks = { chances = owns("GetRarityChances"), options = owns("SetTraitsOnLoot") },
         gardenHooks = { plant = owns("GardenPlantSeed"), harvest = owns("UseGardenPlot") },
         nextRoomRewardHook = owns("ChooseRoomReward") and owns("StartRoom"),
-        nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors,
-        nextRoomRewardToken = M.nextRoomRewardToken,
-        lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken,
+        nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors or jsonNull,
+        nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
+        lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken or jsonNull,
       },
     }
   end
@@ -7744,7 +7789,7 @@ if __MacGamingTrainerV1 == nil then
       }
     end
     local function publishActionReceipt(record)
-      if record.command == "generate_gathering" and record.status == "outcome_unknown" then M.terminalActionUnknown = true end
+      if record.status == "outcome_unknown" then nativeOperations.taint(record.error) end
       M.lastActionReceipt = actionReceipt(record, record.requestId, false)
     end
     local function action(command, params, work, preflight)
@@ -7774,7 +7819,8 @@ if __MacGamingTrainerV1 == nil then
       -- duplicate successful mutation must return its prior receipt even though
       -- the live target has since changed or disappeared.
       if preflight ~= nil then preflight() end
-      local record = { requestId = requestId, command = command, fingerprint = fingerprint, status = "outcome_unknown" }
+      local record = { requestId = requestId, command = command, fingerprint = fingerprint,
+        status = "outcome_unknown", nativeOwner = nativeOperations.owner() }
       M.requests[requestId] = record
       M.requestOrder[#M.requestOrder + 1] = requestId
       if #M.requestOrder > 128 then M.requests[table.remove(M.requestOrder, 1)] = nil end
@@ -8405,7 +8451,9 @@ if __MacGamingTrainerV1 == nil then
         if value < 1 then error("Current health must be at least 1") end
         hero.Health = math.min(value, number(hero.MaxHealth))
       end
-      if type(M.vitalLocks.health) == "table" then M.vitalLocks.health[field] = field == "current" and hero.Health or hero.MaxHealth end
+      if type(M.vitalLocks.health) == "table" then
+        M.vitalLocks.health = { current = number(hero.Health), max = number(hero.MaxHealth) }
+      end
       refreshHealth()
       return
     end
@@ -8427,7 +8475,9 @@ if __MacGamingTrainerV1 == nil then
         end
         hero.Mana = math.min(value, math.max(0, available))
       end
-      if type(M.vitalLocks.mana) == "table" then M.vitalLocks.mana[field] = field == "current" and hero.Mana or hero.MaxMana end
+      if type(M.vitalLocks.mana) == "table" then
+        M.vitalLocks.mana = { current = number(hero.Mana), max = number(hero.MaxMana) }
+      end
       refreshMana()
       return
     end
@@ -8506,6 +8556,7 @@ if __MacGamingTrainerV1 == nil then
         if params.vital == "health" then M.vitalLocks.health = { current = number(hero.Health), max = number(hero.MaxHealth) }
         elseif params.vital == "mana" then M.vitalLocks.mana = { current = number(hero.Mana), max = number(hero.MaxMana) }
         else M.vitalLocks.armor = { current = number(hero.HealthBuffer) } end
+        enforceVital(params.vital)
         installGuard()
       else M.vitalLocks[params.vital] = nil end
       if not anyDesired() and not anyRuntimeActive() then releaseGuard() end
@@ -8689,34 +8740,27 @@ if __MacGamingTrainerV1 == nil then
       if AreScreensActive() then error("Cannot open boon sell screen while another screen is active") end
       return actionLedger.run(command, params, function(record)
         local function runSell()
-          local originalScreen = ScreenData.SellTraits
-          local trainerScreen = nil
-          local ok, message = pcall(function()
-            trainerScreen = DeepCopyTable(ScreenData.SellTraits)
-            local closeButton = trainerScreen.ComponentData
-              and trainerScreen.ComponentData.ActionBar
-              and trainerScreen.ComponentData.ActionBar.Children
-              and trainerScreen.ComponentData.ActionBar.Children.CloseButton
-            if type(closeButton) ~= "table" or type(closeButton.Data) ~= "table" then
-              error("Native boon sell screen missing close button data")
-            end
-            closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
-            ScreenData.SellTraits = trainerScreen
-            local menuArgs = {}
-            OpenSellTraitMenu(menuArgs)
+          nativeOperations.run(record, "opened", function(operation)
+            local originalScreen = ScreenData.SellTraits
+            local trainerScreen = nil
+            local ok, message = pcall(function()
+              trainerScreen = DeepCopyTable(ScreenData.SellTraits)
+              local closeButton = trainerScreen.ComponentData
+                and trainerScreen.ComponentData.ActionBar
+                and trainerScreen.ComponentData.ActionBar.Children
+                and trainerScreen.ComponentData.ActionBar.Children.CloseButton
+              if type(closeButton) ~= "table" or type(closeButton.Data) ~= "table" then
+                error("Native boon sell screen missing close button data")
+              end
+              closeButton.Data.OnPressedFunctionName = "MacGamingTrainerCloseSellTraitScreen"
+              ScreenData.SellTraits = trainerScreen
+              local menuArgs = {}
+              operation.enter()
+              OpenSellTraitMenu(menuArgs)
+            end)
+            if trainerScreen ~= nil and ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
+            if not ok then error(message) end
           end)
-          if trainerScreen ~= nil and ScreenData.SellTraits == trainerScreen then ScreenData.SellTraits = originalScreen end
-          if ok then
-            record.status = "opened"
-            record.error = nil
-          else
-            record.status = "failed"
-            record.error = tostring(message)
-            if type(DebugPrint) == "function" then
-              DebugPrint({ Text = "MacGamingTrainer native sell screen failed: " .. record.error })
-            end
-          end
-          actionLedger.publish(record)
         end
         thread(runSell)
         return nil, "accepted"
@@ -8806,34 +8850,27 @@ if __MacGamingTrainerV1 == nil then
         local ownerRun = CurrentRun
 
         local function runChoice()
-          local previousLastReward = ownerRun.LastReward
-          local injectedLastReward = definition.echoLastReward and previousLastReward == nil
-          if injectedLastReward then
-            ownerRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
-          end
-          local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
-          if ok and definition.post == "costume" then pcall(SetupCostume) end
-          local cleanupOk, cleanupMessage = pcall(function()
-            if injectedLastReward then ownerRun.LastReward = previousLastReward end
-            lootPickups[source.Name] = previousPickup
-            if hadLootChoiceHistory then
-              while #history > historyCount do table.remove(history) end
-            elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
-              CurrentRun.LootChoiceHistory = nil
+          nativeOperations.run(record, "opened", function(operation)
+            operation.enter()
+            local previousLastReward = ownerRun.LastReward
+            local injectedLastReward = definition.echoLastReward and previousLastReward == nil
+            if injectedLastReward then
+              ownerRun.LastReward = { Type = "Consumable", Name = "MaxHealthDrop", DisplayName = "MaxHealthDrop" }
             end
+            local ok, message = pcall(OpenUpgradeChoiceMenu, source, args)
+            if ok and definition.post == "costume" then ok, message = pcall(SetupCostume) end
+            local cleanupOk, cleanupMessage = pcall(function()
+              if injectedLastReward then ownerRun.LastReward = previousLastReward end
+              lootPickups[source.Name] = previousPickup
+              if hadLootChoiceHistory then
+                while #history > historyCount do table.remove(history) end
+              elseif ownerRun == CurrentRun and type(CurrentRun.LootChoiceHistory) == "table" then
+                CurrentRun.LootChoiceHistory = nil
+              end
+            end)
+            if not cleanupOk then ok, message = false, cleanupMessage end
+            if not ok then error(message) end
           end)
-          if not cleanupOk then ok, message = false, cleanupMessage end
-          if ok then
-            record.status = "opened"
-            record.error = nil
-          else
-            record.status = "failed"
-            record.error = tostring(message)
-            if type(DebugPrint) == "function" then
-              DebugPrint({ Text = "MacGamingTrainer native special choice failed: " .. record.error })
-            end
-          end
-          actionLedger.publish(record)
         end
         thread(runChoice)
         return nil, "accepted"

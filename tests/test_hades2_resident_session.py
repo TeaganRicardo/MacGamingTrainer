@@ -151,6 +151,16 @@ try:
         raise AssertionError("malformed resident payload did not become outcome_unknown")
     assert decode_transport.tainted is True
 
+    null_transport = FakeTransport(["null"])
+    null_session = Hades2ResidentSession(null_transport, bootstrap="")
+    try:
+        null_session.mutate("lock_vital", {"vital": "health", "locked": True})
+    except AdapterError as error:
+        assert error.code == "outcome_unknown"
+    else:
+        raise AssertionError("a missing resident observation was accepted as success")
+    assert null_transport.tainted is True
+
     # A valid resident reply can itself report an asynchronous unknown outcome.
     # Session taints trust before returning the evidence to Adapter.
     async_transport = FakeTransport([
@@ -170,6 +180,13 @@ try:
         assert error.code == "restart_required"
     else:
         raise AssertionError("tainted session admitted another resident boundary")
+
+    # In-game native rerolls have no Trainer request receipt. Their resident
+    # trust observation must independently close the same session boundary.
+    native_transport = FakeTransport([payload(runtimeOutcomeUnknown=True)])
+    native_session = Hades2ResidentSession(native_transport, bootstrap="")
+    assert native_session.status().outcome_unknown is True
+    assert native_transport.tainted is True
 
     # Known resident failures remain known and do not poison session trust.
     known_transport = FakeTransport([

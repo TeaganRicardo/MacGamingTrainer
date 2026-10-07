@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import math
+from .vital_state import normalize_vital_locks
 
 from .persistence import (
     PersistenceError,
@@ -17,7 +18,6 @@ from .schema import (
     NEXT_ROOM_REWARD_MAX_LENGTH,
     STAT_RULES,
     TOGGLES,
-    VITALS,
     default_boon_rarity,
     desired_feature_defaults,
     is_valid_next_room_reward,
@@ -63,22 +63,6 @@ def _normalize_stat_locks(raw):
             if type(value) is float and value.is_integer():value=int(value)
             elif type(value) is not int:continue
         if rule['min']<=value<=rule['max']:result[stat]=value
-    return result
-
-
-def _normalize_vital_locks(raw):
-    if not isinstance(raw,dict):return {}
-    result={}
-    for vital,row in raw.items():
-        if vital not in VITALS or not isinstance(row,dict):continue
-        current=row.get('current')
-        if not _finite_number(current) or not 0<=current<=MAX_AMOUNT or (vital=='health' and current<1):continue
-        normalized={'current':current}
-        if vital!='armor':
-            maximum=row.get('max')
-            if not _finite_number(maximum) or not 0<=maximum<=MAX_AMOUNT or (vital=='health' and maximum<1):continue
-            normalized['max']=maximum
-        result[vital]=normalized
     return result
 
 
@@ -225,7 +209,7 @@ class Hades2PreferenceStore:
             if type(rarity.get('forceLegendary')) is bool:result['boonRarity']['forceLegendary']=rarity['forceLegendary']
             if type(rarity.get('forceDuo')) is bool:result['boonRarity']['forceDuo']=rarity['forceDuo']
         result['statLocks']=_normalize_stat_locks(raw.get('statLocks'))
-        result['vitalLocks']=_normalize_vital_locks(raw.get('vitalLocks'))
+        result['vitalLocks']=normalize_vital_locks(raw.get('vitalLocks'))
         result['resourceLocks']=_normalize_resource_locks(raw.get('resourceLocks'))
         result['elementLocks']=_normalize_element_locks(raw.get('elementLocks'))
         result['gatheringProbabilities']=normalize_gathering_probabilities(raw.get('gatheringProbabilities'))

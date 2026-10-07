@@ -3,7 +3,7 @@ import subprocess
 import tempfile
 import textwrap
 
-from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52
+from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52, terminal_case_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
@@ -402,11 +402,11 @@ eq(calls.add, beforeReplay, "outcome-unknown costume request replayed")
 
 -- Explicit removal restores the default appearance and tears down the selected
 -- costume's armor source through the owner lifecycle.
-row = assert(findRow("AgilityCostume"), "replacement costume row missing")
+row = assert(findRow("ManaCostume"), "replacement costume row missing")
 local beforeSetup = calls.setupCostume
 M.dispatch("remove_trait", paramsFrom(row, "arachne-costume-remove"))
-check(not HeroHasTrait("AgilityCostume"), "costume trait survived removal")
-check(MapState.HealthBufferSources.AgilityCostume == nil, "costume armor source survived removal")
+check(not HeroHasTrait("ManaCostume"), "costume trait survived removal")
+check(MapState.HealthBufferSources.ManaCostume == nil, "costume armor source survived removal")
 eq(CurrentRun.Hero.HealthBuffer, 0, "costume armor survived removal")
 eq(CurrentRun.Hero.ActiveCostume, "", "costume appearance did not return to default owner")
 eq(calls.setupCostume, beforeSetup + 1, "costume removal did not refresh native appearance owner")
@@ -414,20 +414,25 @@ eq(calls.setupCostume, beforeSetup + 1, "costume removal did not refresh native 
 print("hades2_arachne_costume_runtime_ok")
 '''
 
+TERMINAL_CASES = [
+    ('-- If native presentation/setup mutates and then fails acknowledgement', '-- Explicit removal restores the default appearance'),
+]
+
 with tempfile.TemporaryDirectory(prefix="mgt-arachne-costume-") as td:
     td = Path(td)
-    harness = td / "arachne_costume_runtime.lua"
-    harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
-    proc = subprocess.run(
-        [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        print(proc.stdout)
-        print(proc.stderr)
-        raise SystemExit(proc.returncode)
-    assert "hades2_arachne_costume_runtime_ok" in proc.stdout, proc.stdout
-    print(proc.stdout.strip())
+    for source in terminal_case_sources(HARNESS, TERMINAL_CASES, 'hades2_arachne_costume_runtime_ok'):
+        harness = td / "arachne_costume_runtime.lua"
+        harness.write_text(textwrap.dedent(source), encoding="utf-8")
+        proc = subprocess.run(
+            [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        if proc.returncode != 0:
+            print(proc.stdout)
+            print(proc.stderr)
+            raise SystemExit(proc.returncode)
+        assert "hades2_arachne_costume_runtime_ok" in proc.stdout, proc.stdout
+        print(proc.stdout.strip())

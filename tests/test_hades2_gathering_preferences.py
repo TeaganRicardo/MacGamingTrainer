@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter, TransportError, clear_active, mark_disconnected
@@ -15,6 +16,7 @@ from games.hades2.desired_reconciliation import DesiredReconciliationOutcome
 from games.hades2.persistence import PersistenceError, UnsupportedSchemaVersionError
 from games.hades2.preferences import Hades2PreferenceStore, DESIRED_STATE_SCHEMA_VERSION, normalize_persisted_desired
 from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VERSION
+from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
 assert DESIRED_STATE_SCHEMA_VERSION == 8
@@ -33,17 +35,16 @@ for version in range(6):
 assert normalize_persisted_desired({'gatheringProbabilities': valid}, 6)['gatheringProbabilities'] == valid
 
 
-class Transport:
-    pid = 123
+class OfflineSession(FakeResidentSession):
     def __init__(self):
+        super().__init__(pid=123)
         self.live = False
-    def alive(self): return self.live
 
 with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as temporary:
     base = Path(temporary)
     preparation.DATA = base
-    transport = Transport()
-    adapter = Hades2Adapter(transport=transport)
+    transport = OfflineSession()
+    adapter = Hades2Adapter(resident_session=transport, time_warp_controller=FakeTimeWarpController())
     # Host request validation is owned by the command-contract dispatch seam.
     for command, params in (
         ('set_gathering_desired', {'family': 'other', 'probability': 10}),
@@ -70,7 +71,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     persisted = json.loads((base/'desired-state.json').read_text())
     assert persisted['schemaVersion'] == 8 and persisted['gatheringProbabilities'] == valid
     assert not {'gatheringTargets', 'scopeToken', 'generate_gathering'} & set(persisted)
-    restarted = Hades2Adapter(transport=Transport())
+    restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['gatheringProbabilities'] == valid and restarted.preference_dirty
     adapter.dispatch('set_gathering_desired', {'family': 'flora', 'probability': None}, 'native')
     wanted = dict(valid); wanted.pop('flora')

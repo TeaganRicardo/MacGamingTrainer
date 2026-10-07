@@ -21,18 +21,18 @@ def build_diagnostics(adapter):
     state={}
     last_known_state=adapter.state if isinstance(getattr(adapter,'state',None),dict) else {}
     runtime_observation_available=False
-    if adapter.transport.alive():
-        try:
+    try:
+        if adapter.runtime.alive():
             refreshed=adapter.observe_runtime()
             if not isinstance(refreshed,dict):
                 raise RuntimeError('status refresh returned no runtime state')
             state=refreshed
             runtime_observation_available=True
             add('运行时状态刷新',True,'已获取实时 runtime status')
-        except Exception as error:
-            add('运行时状态刷新',False,str(error))
-    else:
-        add('运行时状态刷新',False,'transport disconnected; runtime status unknown')
+        else:
+            add('运行时状态刷新',False,'resident disconnected; runtime status unknown')
+    except Exception as error:
+        add('运行时状态刷新',False,str(error))
     add('协议版本',True,f'host {HOST_PROTOCOL_VERSION} · module {adapter.module_protocol_version} · backend {APP_BACKEND_VERSION}')
     add('后端进程',True,sys.executable)
     add('Python',True,sys.version.split()[0]+' · '+platform.platform())

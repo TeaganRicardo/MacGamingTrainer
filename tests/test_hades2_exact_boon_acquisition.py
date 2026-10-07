@@ -3,7 +3,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52
+from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52, terminal_case_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
@@ -418,21 +418,26 @@ end
 print("hades2_exact_boon_acquisition_runtime_ok")
 '''
 
+TERMINAL_CASES = [
+    ('-- If the mutation applies and the acknowledgement path faults', '-- Slot replacement follows the native replacement descriptor'),
+]
+
 with tempfile.TemporaryDirectory(prefix="mgt-exact-boon-runtime-") as td:
     td = Path(td)
-    harness = td / "exact_boon_runtime.lua"
-    harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
+    for source in terminal_case_sources(HARNESS, TERMINAL_CASES, 'hades2_exact_boon_acquisition_runtime_ok'):
+        harness = td / "exact_boon_runtime.lua"
+        harness.write_text(textwrap.dedent(source), encoding="utf-8")
 
-    proc = subprocess.run(
-        [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        print(proc.stdout)
-        print(proc.stderr)
-        raise SystemExit(proc.returncode)
-    assert "hades2_exact_boon_acquisition_runtime_ok" in proc.stdout, proc.stdout
-    print(proc.stdout.strip())
+        proc = subprocess.run(
+            [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        if proc.returncode != 0:
+            print(proc.stdout)
+            print(proc.stderr)
+            raise SystemExit(proc.returncode)
+        assert "hades2_exact_boon_acquisition_runtime_ok" in proc.stdout, proc.stdout
+        print(proc.stdout.strip())

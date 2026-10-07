@@ -69,6 +69,9 @@ class FakeTimeWarp:
     def __init__(self):
         self.speed = 1.0
 
+    def current_speed(self):
+        return self.speed
+
     def set_speed(self, speed):
         self.speed = float(speed)
         return self.speed
@@ -88,11 +91,11 @@ adapter.state.update(connected=True, status="waiting", scene="loading", capabili
 # A status-only runtime observation must retain the Core-owned Time Warp
 # capability/active projection even though it deliberately skips durable
 # Hades desired-state projection.
-adapter._time_warp_speed = 2.0
+adapter.time_warp.speed = 2.0
 observed = adapter.observe_runtime()
 assert observed["featureSupport"]["gameSpeed"] is True
 assert observed["activeFeatures"]["gameSpeed"] is True
-adapter._time_warp_speed = 1.0
+adapter._apply_game_speed(1.0)
 transport.sources.clear()
 
 state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze")
@@ -154,6 +157,9 @@ assert state["activeFeatures"]["gameSpeed"] is False
 
 
 class FailingTimeWarp:
+    def current_speed(self):
+        return 1.0
+
     def set_speed(self, speed):
         raise ProcessTimeWarpError(
             "time_warp_set_failed",

@@ -3,7 +3,7 @@ import tempfile
 import textwrap
 from pathlib import Path
 
-from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52
+from lua_runtime_support import RESIDENT_DISPATCH_CONTRACT, require_lua52, terminal_case_sources
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
@@ -658,20 +658,26 @@ end
 print("hades2_hammer_runtime_ok")
 '''
 
+TERMINAL_CASES = [
+    ('-- A game-owned Hammer teardown that silently leaves the selected instance', '-- Pre-equipped helper weapons are released only after'),
+    ('-- Post-mutation acknowledgement failure is outcome-unknown', 'print("hades2_hammer_runtime_ok")'),
+]
+
 with tempfile.TemporaryDirectory(prefix="mgt-hammer-runtime-") as td:
     td = Path(td)
-    harness = td / "hammer_runtime.lua"
-    harness.write_text(textwrap.dedent(HARNESS), encoding="utf-8")
-    proc = subprocess.run(
-        [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        timeout=30,
-    )
-    if proc.returncode != 0:
-        print(proc.stdout)
-        print(proc.stderr)
-        raise SystemExit(proc.returncode)
-    assert "hades2_hammer_runtime_ok" in proc.stdout, proc.stdout
-    print(proc.stdout.strip())
+    for source in terminal_case_sources(HARNESS, TERMINAL_CASES, 'hades2_hammer_runtime_ok'):
+        harness = td / "hammer_runtime.lua"
+        harness.write_text(textwrap.dedent(source), encoding="utf-8")
+        proc = subprocess.run(
+            [LUA, str(harness), str(RUNTIME), str(RESIDENT_DISPATCH_CONTRACT)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            timeout=30,
+        )
+        if proc.returncode != 0:
+            print(proc.stdout)
+            print(proc.stderr)
+            raise SystemExit(proc.returncode)
+        assert "hades2_hammer_runtime_ok" in proc.stdout, proc.stdout
+        print(proc.stdout.strip())
