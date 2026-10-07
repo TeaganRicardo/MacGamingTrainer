@@ -44,7 +44,7 @@ Accepted resident source SHA256:
 
 `4fad5a44efbb4608267ffef9440f63100eed8f50b0199aa79bd9237f24117c8c`
 
-This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier comprehensive baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 96. Notable intervening resident changes include:
+This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier accepted baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 96. Notable intervening resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;

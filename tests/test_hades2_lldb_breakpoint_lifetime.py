@@ -55,13 +55,14 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from hades2_lldb_fixture import (
     HELPER_SOURCE, TransportError, attach_helper, cleanup, lldb,
 )
+from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temporary:
     temporary = Path(temporary)
     source = temporary / "helper.c"
     executable = temporary / "helper"
-    source.write_text(HELPER_SOURCE, encoding="utf-8")
+    source.write_text(HELPER_SOURCE + "\nunsigned int MGTTimeWarpABI(void) { return 1; }\n", encoding="utf-8")
     subprocess.run(
         ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
         check=True,
@@ -90,6 +91,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
             entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
             assert error.Success() and entered == index + 1, (str(error), entered)
             transport.resume(time.monotonic() + 2)
+        # Time Warp calls expressions at the signal stop itself, without Lua's
+        # subsequent World::Update breakpoint. Exercise that direct consumer.
+        driver = LLDBProcessTimeWarpDriver(transport, lldb_module=lldb)
+        with driver.session():
+            assert driver.abi() == 1
+        assert transport.process.GetState() == lldb.eStateRunning
+        transport.stop(time.monotonic() + 2)
+        with driver.session():
+            assert driver.abi() == 1
+        assert transport.process.GetState() == lldb.eStateStopped
+        transport.resume(time.monotonic() + 2)
         process = transport.process
         transport.detach()
         assert process.GetState() == lldb.eStateDetached

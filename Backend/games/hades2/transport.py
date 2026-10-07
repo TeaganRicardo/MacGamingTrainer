@@ -172,7 +172,7 @@ class Hades2LuaTransport:
         except ProcessLookupError as exc:
             raise TransportError('disconnected','游戏进程已结束。') from exc
         except OSError as exc:
-            raise TransportError('stop_failed','无法暂停游戏：'+str(exc)) from exc
+            raise TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=str(exc)) from exc
         return self.wait_state((lldb.eStateStopped,),deadline)
 
     def resume(self, deadline, breakpoint_expected=False):
