@@ -119,6 +119,10 @@ def profile_transport(samples, tick_interval_us):
                     addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error,
                 )
                 assert error.Success() and focus == b"\x01", (str(error), focus)
+                entries = transport.process.ReadUnsignedFromMemory(
+                    addresses["fixture_pcall_entries"], 4, error,
+                )
+                assert error.Success() and entries == iterations, (str(error), entries, iterations)
                 transport.resume(time.monotonic() + 3)
             finally:
                 cleanup(child, debugger, transport)

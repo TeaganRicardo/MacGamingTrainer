@@ -81,9 +81,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
 
     # Before the transport fix, this production execute() path failed with
     # "breakpoint N which has been deleted": boundary() deleted the stop reason
-    # before EvaluateExpression. A slow fake pcall remains a genuine unknown
-    # outcome, but its breakpoint identity must survive LLDB unwind.
-    child, debugger, transport, _ = attach_helper(executable, 500)
+    # before EvaluateExpression. Hold pcall until LLDB unwinds it: a finite slow
+    # call can finish before an overloaded debugger delivers its halt, which is
+    # a valid known completion rather than an unknown outcome. The native entry
+    # marker proves this case actually crossed into pcall before interruption.
+    child, debugger, transport, addresses = attach_helper(executable, -1)
     try:
         try:
             transport.execute("return true", expression_timeout_seconds=0.1)
@@ -92,9 +94,24 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
             message = str(error).lower()
             assert "deleted" not in message, message
         else:
-            raise AssertionError("slow expression unexpectedly completed inside its timeout budget")
+            raise AssertionError("blocked expression unexpectedly completed")
         assert transport.tainted is True
         assert transport.target.GetNumBreakpoints() == 0, "timeout path leaked a breakpoint"
+        transport.stop(time.monotonic() + 2)
+        error = lldb.SBError()
+        entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
+        assert error.Success() and entered == 1, (str(error), entered)
+        focus = transport.process.ReadMemory(
+            addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
+        )
+        assert error.Success() and focus == b"\x01", (str(error), focus)
+        transport.resume(time.monotonic() + 2)
+        try:
+            transport.execute("return true")
+        except TransportError as error:
+            assert error.code == "restart_required", error.code
+        else:
+            raise AssertionError("tainted transport allowed a second native call")
     finally:
         cleanup(child, debugger, transport)
 

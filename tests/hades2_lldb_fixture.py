@@ -22,6 +22,7 @@ volatile unsigned char require_focus = 1;
 void *lua_interface = (void *)0x1234;
 volatile int delay_ms = 0;
 volatile int tick_interval_us = 0;
+volatile unsigned int pcall_entries = 0;
 static const char result_text[] = "{}";
 
 __attribute__((noinline)) int tick(int value) {
@@ -72,6 +73,10 @@ int fake_lua_pcallk(
   (void)error_function;
   (void)context;
   (void)continuation;
+  ++pcall_entries;
+  /* A negative delay holds the native call until LLDB interrupts/unwinds it.
+     A finite delay can finish while a slow debugger is delivering its halt. */
+  while (delay_ms < 0) {}
   spin_ms(delay_ms);
   return 0;
 }
@@ -110,6 +115,7 @@ SYMBOLS = {
     "lua_pcallk": "fake_lua_pcallk",
     "lua_tolstring": "fake_lua_tolstring",
     "lua_settop": "fake_lua_settop",
+    "fixture_pcall_entries": "pcall_entries",
 }
 
 
