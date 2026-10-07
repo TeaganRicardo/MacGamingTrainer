@@ -1281,9 +1281,9 @@ if __MacGamingTrainerV1 == nil then
       M.terminalActionUnknown = true
       return "MGT_OUTCOME_UNKNOWN: " .. tostring(message) .. "; do not retry"
     end
-    local function run(record, completedOutcome, work, frame)
+    local function run(record, completedOutcome, work, frame, crossedAtEntry)
       frame = frame or (record and record.nativeOwner) or owner()
-      local crossed = false
+      local crossed = not not crossedAtEntry
       local operation = {
         owner = frame,
         enter = function()
@@ -6267,11 +6267,13 @@ if __MacGamingTrainerV1 == nil then
       local frame = pendingRerollOwners[screen]
       pendingRerollOwners[screen] = nil
       local ok, message = nativeOperations.run(nil, "completed", function(operation)
-        -- Hades spends before invoking the reroll callback. Classify only the
-        -- Trainer-owned callback seam here; the enclosing game owner yields.
+        -- Hades invokes this callback only after reroll currency/history have
+        -- been mutated. A captured pre-spend frame therefore enters here with
+        -- the native boundary already crossed, even if its owner went stale
+        -- before callback dispatch.
         operation.enter()
         return work(operation)
-      end, frame)
+      end, frame, frame ~= nil)
       if not ok then reportRerollFailure(screen, message) end
       if ok then return message end
     end
