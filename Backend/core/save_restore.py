@@ -60,10 +60,14 @@ class SaveRestoreTransaction:
         if not target_running and self.target_running_probe is not None and self.target_running_probe():
             raise SaveBusyError('Game started while preparing restore.')
 
-    def _capture_rollback(self, target_running):
+    def _capture_rollback(self, target_running, require_idle=False):
         self._ensure_cold_target_still_stopped(target_running)
         current = list(self.resolver())
-        if target_running and self.busy_probe is not None and self.busy_probe(tuple(current)):
+        if (
+            self.busy_probe is not None
+            and (target_running or require_idle)
+            and self.busy_probe(tuple(current))
+        ):
             raise SaveBusyError('Save files are currently busy.')
 
         rollback = Path(tempfile.mkdtemp(prefix='.rollback-', dir=str(self._transaction_parent())))
@@ -183,6 +187,7 @@ class SaveRestoreTransaction:
         success,
         operation_name,
         post_install_verify=None,
+        require_idle=False,
     ):
         previous_snapshot_id = None
         mutation_started = False
@@ -200,6 +205,13 @@ class SaveRestoreTransaction:
             if not self._verify_state(baseline_hashes):
                 self._raise_race(target_running, 'Save changed before mutation could begin.')
             self._ensure_cold_target_still_stopped(target_running)
+            if require_idle and self.busy_probe is not None:
+                current = list(self.resolver())
+                if self.busy_probe(tuple(current)):
+                    raise SaveBusyError('Save files are currently busy.')
+                if not self._verify_state(baseline_hashes):
+                    self._raise_race(False, 'Save changed before mutation could begin.')
+                self._ensure_cold_target_still_stopped(target_running)
 
             mutation_started = True
             self._install_entries(target_entries)
@@ -209,6 +221,12 @@ class SaveRestoreTransaction:
                 raise SaveRestoreError('{} save set failed verification.'.format(operation_name))
             if post_install_verify is not None:
                 post_install_verify()
+                if not self._verify_state(target_hashes):
+                    raise SaveRestoreError(
+                        '{} save set changed during post-install validation.'.format(
+                            operation_name
+                        )
+                    )
             if target_running:
                 time.sleep(0.05)
                 if not self._verify_state(target_hashes):
@@ -282,7 +300,10 @@ class SaveRestoreTransaction:
         if not isinstance(expected_hashes, dict) or set(expected_hashes) != replacement_keys:
             raise ValueError('Expected save hashes must cover every replacement target exactly.')
 
-        rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(False)
+        rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
+            False,
+            require_idle=True,
+        )
         try:
             for key in replacement_keys:
                 if key not in baseline_hashes:
@@ -307,6 +328,7 @@ class SaveRestoreTransaction:
             success={'replaced': True},
             operation_name='Save replacement',
             post_install_verify=post_install_verify,
+            require_idle=True,
         )
 
     def restore(self, snapshot_id, preserve_current=False, target_running=False):
