@@ -40,9 +40,10 @@ checks its result, terminal trust, breakpoint cleanup and focus-recovery state.
 After each attachment, the tool verifies the target's actual focus flag and
 native call count before killing and reaping the temporary helper.
 
-The launcher owns a separate temporary process group, so a worker timeout or
-interruption also terminates its helper. A portable lifecycle regression covers
-this failure path; it does not assert a latency threshold.
+The tool and breakpoint regression launchers share one parent-owned temporary
+process group interface. A worker timeout or interruption also terminates its
+helper, even when the worker cannot run its own cleanup. A portable lifecycle
+regression covers this failure path; it does not assert a latency threshold.
 
 The shared breakpoint-lifetime regression holds its fake native call until LLDB
 interrupts it and verifies an entry marker, restored focus and terminal trust.

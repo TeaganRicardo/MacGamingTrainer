@@ -7,6 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+from hades2_lldb_worker_support import run_lldb_worker
+
 # GitHub's runner Python is not ABI-matched to Xcode's private _lldb
 # extension. Run the regression under the same Xcode Python + LLDB module path
 # used by the production Hades sidecar. Do not nest a second SBDebugger inside
@@ -26,22 +28,24 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
         else lldb_python_path + os.pathsep + existing_pythonpath
     )
     try:
-        completed = subprocess.run(
+        stdout = run_lldb_worker(
             ["/usr/bin/xcrun", "python3", path],
-            env=environment,
-            text=True,
-            capture_output=True,
+            environment,
             timeout=30,
         )
     except subprocess.TimeoutExpired as error:
         raise AssertionError(
             "Xcode-Python LLDB breakpoint-lifetime regression exceeded 30 seconds"
         ) from error
-    if completed.returncode != 0 or "hades2_lldb_breakpoint_lifetime_ok" not in completed.stdout:
+    except subprocess.CalledProcessError as error:
         raise AssertionError(
             "Xcode-Python LLDB regression failed:\n"
-            + completed.stdout
-            + completed.stderr
+            + (error.stdout or "") + (error.stderr or "")
+        ) from error
+    if "hades2_lldb_breakpoint_lifetime_ok" not in stdout:
+        raise AssertionError(
+            "Xcode-Python LLDB regression failed:\n"
+            + stdout
         )
     print("hades2_lldb_breakpoint_lifetime_ok")
     raise SystemExit(0)

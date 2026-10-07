@@ -1,4 +1,4 @@
-"""A profiler timeout must terminate the worker's temporary native target too."""
+"""An LLDB fixture worker timeout must terminate its temporary native target too."""
 import os
 import signal
 import subprocess
@@ -7,9 +7,7 @@ import tempfile
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "Tools"))
-from profile_hades2_operations import run_transport_worker
+from hades2_lldb_worker_support import run_lldb_worker
 
 WORKER = r'''
 import subprocess, sys, time
@@ -36,30 +34,30 @@ with tempfile.TemporaryDirectory(prefix='mgt-profile-lifetime-') as temporary:
     child_pid = None
     try:
         try:
-            run_transport_worker([sys.executable, str(worker)], dict(os.environ), timeout=1)
+            run_lldb_worker([sys.executable, str(worker)], dict(os.environ), timeout=1)
         except subprocess.TimeoutExpired as error:
             output = error.stdout
             if isinstance(output, bytes):
                 output = output.decode()
             child_pid = int(output.strip())
         else:
-            raise AssertionError('profiling worker unexpectedly returned before timeout')
+            raise AssertionError('LLDB fixture worker unexpectedly returned before timeout')
         deadline = time.monotonic() + 2
         while running(child_pid) and time.monotonic() < deadline:
             time.sleep(.01)
-        assert not running(child_pid), 'timed-out profiling worker left its target running'
+        assert not running(child_pid), 'timed-out LLDB fixture worker left its target running'
     finally:
         if child_pid is not None and running(child_pid):
             os.kill(child_pid, signal.SIGKILL)
 
-assert run_transport_worker([sys.executable, '-c', 'print("profile-result")'],
+assert run_lldb_worker([sys.executable, '-c', 'print("profile-result")'],
                             dict(os.environ), timeout=2).strip() == 'profile-result'
 try:
-    run_transport_worker([sys.executable, '-c', 'import sys; sys.exit(7)'],
+    run_lldb_worker([sys.executable, '-c', 'import sys; sys.exit(7)'],
                          dict(os.environ), timeout=2)
 except subprocess.CalledProcessError as error:
     assert error.returncode == 7
 else:
-    raise AssertionError('profiling worker failure was swallowed')
+    raise AssertionError('LLDB fixture worker failure was swallowed')
 
-print('hades2_profiling_worker_lifecycle_ok')
+print('hades2_lldb_worker_lifecycle_ok')
