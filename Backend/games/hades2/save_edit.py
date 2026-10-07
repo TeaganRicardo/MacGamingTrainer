@@ -68,6 +68,8 @@ class Hades2SaveEditSession:
         )
 
     def apply(self):
+        if not isinstance(self.document, Hades2SaveDocument):
+            raise TypeError("Save Editor applies only structured Hades save documents.")
         encoded = self.document.to_bytes()
         # Validate the complete candidate before crossing the destructive Core
         # transaction seam. This is intentionally a structured Hades document,
