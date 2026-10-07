@@ -90,8 +90,8 @@ class LuaTable(MutableMapping):
         raise KeyError(key)
 
     def __setitem__(self, key, value):
-        if key is None:
-            raise TypeError("Lua table keys cannot be nil")
+        if key is None or (isinstance(key, float) and key != key):
+            raise TypeError("Lua table keys cannot be nil or NaN")
         for index, (entry_key, _old_value) in enumerate(self._entries):
             if _same_lua_key(entry_key, key):
                 self._entries[index] = (entry_key, value)
@@ -356,7 +356,11 @@ def _decode_luabins(data):
             for _index in range(total):
                 key_type = reader.u8("luabins key type")
                 key = read_value(key_type, depth + 1)
-                if key is None or isinstance(key, LuaTable):
+                if (
+                    key is None
+                    or isinstance(key, LuaTable)
+                    or (isinstance(key, float) and key != key)
+                ):
                     raise HadesSaveFormatError("unsupported luabins table key")
                 value_type = reader.u8("luabins value type")
                 value = read_value(value_type, depth + 1)
@@ -415,7 +419,11 @@ def _encode_luabins(values):
             writer.i32(value.array_size)
             writer.i32(value.hash_size)
             for key, item in entries:
-                if key is None or isinstance(key, LuaTable):
+                if (
+                    key is None
+                    or isinstance(key, LuaTable)
+                    or (isinstance(key, float) and key != key)
+                ):
                     raise HadesSaveFormatError("unsupported luabins table key")
                 write_value(key, depth + 1)
                 write_value(item, depth + 1)
