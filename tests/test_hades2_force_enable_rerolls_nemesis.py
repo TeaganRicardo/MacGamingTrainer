@@ -68,9 +68,13 @@ UIData = {
 }
 Destroy = function() end
 local panelSpendMutations = 0
+local rerollUiHook = nil
 IncrementTableValue = function(values, key, amount)
   panelSpendMutations = panelSpendMutations + 1
   values[key] = (values[key] or 0) + amount
+end
+UpdateRerollUI = function(value)
+  if rerollUiHook ~= nil then rerollUiHook(value) end
 end
 
 local function mountTradeScreenComponents(screen)
@@ -132,6 +136,42 @@ end
 
 HandleScreenInput = function(screen)
   assert(screen.Name == 'TradeScreen')
+  if tradeMode == 'postSpendStale' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible,
+      'post-spend stale setup did not expose the Nemesis reroll control')
+    local ownerRun = CurrentRun
+    local replacementRun = {
+      Hero = ownerRun.Hero,
+      CurrentRoom = {},
+      NumRerolls = 11,
+      PickedTraits = {},
+      BannedTraits = {},
+    }
+    rerollUiHook = function()
+      rerollUiHook = nil
+      CurrentRun = replacementRun
+    end
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(panelSpendMutations == 1 and ownerRun.NumRerolls == 4
+      and ownerRun.CurrentRoom.SpentRerolls[screen.Source.ObjectId] == 1,
+      'post-spend stale Nemesis reroll did not preserve the already-completed native spend')
+    assert(replacementRun.NumRerolls == 11
+      and replacementRun.CurrentRoom.SpentRerolls == nil,
+      'post-spend stale Nemesis reroll mutated the replacement run')
+    local mutationOk, mutationError = pcall(M.dispatch, 'set_rerolls', {
+      value = 3, includeCatalogs = false,
+    })
+    assert(not mutationOk
+      and string.find(tostring(mutationError), 'MGT_OUTCOME_UNKNOWN', 1, true) ~= nil,
+      'post-spend stale Nemesis reroll did not close the resident mutation boundary')
+    assert(screen.KeepOpen,
+      'post-spend stale Nemesis reroll replayed or closed the uncertain transaction automatically')
+    M.dispatch('disable_all', { includeCatalogs = false })
+    CurrentRun = ownerRun
+    CloseTradeScreen(screen)
+    return
+  end
   if tradeMode == 'staleRun' then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible,
@@ -289,7 +329,22 @@ NemesisTradeChoice(staleSource, PresetEventArgs.NemesisBuyItemChoices, {})
 assert(CurrentRun.NumRerolls == 5,
   'stale Nemesis TradeScreen changed the owning run while refusing')
 
-M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
+-- If the run changes only after native AttemptPanelReroll has spent, the
+-- transaction outcome is no longer safe to rewrite or refund. Preserve the
+-- completed spend, leave the replacement run untouched, and close the
+-- resident mutation boundary instead of replaying automatically.
+tradeMode = 'postSpendStale'
+tradeOpenCount = 0
+randomChoiceCalls = 0
+panelSpendMutations = 0
+CurrentRun.NumRerolls = 5
+CurrentRun.CurrentRoom.SpentRerolls = {}
+local postSpendSource = { Name = 'NPC_Nemesis_01', ObjectId = 803, Accepted = false }
+NemesisTradeChoice(postSpendSource, PresetEventArgs.NemesisBuyItemChoices, {})
+
+-- disable_all above clears the terminal state only through the supported
+-- teardown path; no further feature mutation is performed in this harness.
+
 '''
 
 HARNESS = BASE_HARNESS.replace(
