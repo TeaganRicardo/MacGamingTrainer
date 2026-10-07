@@ -6341,7 +6341,10 @@ if __MacGamingTrainerV1 == nil then
             or owner.source ~= screen.Source
             or owner.args ~= screen.Args
             or owner.run ~= CurrentRun then
-          failNoPlanAfterSpend(screen, button)
+          M.terminalActionUnknown = true
+          M.featureErrors.forceEnableRerolls =
+            "Nemesis trade reroll owner changed after native spend; outcome unknown"
+          error("MGT_OUTCOME_UNKNOWN: Nemesis trade reroll owner changed after native spend; do not retry")
         end
         local plan = changedNemesisTradePlan(
           owner, screen.ChosenGiveOption, screen.ChosenGetOption
