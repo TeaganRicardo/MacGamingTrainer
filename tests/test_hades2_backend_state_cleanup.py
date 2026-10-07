@@ -54,6 +54,16 @@ struct Main {
         model.apply(["warnings": ["array wins"], "warning": "legacy value"])
         check(model.warning == "array wins", "warnings array did not take precedence")
 
+        // Resident full snapshots explicitly clear nullable run observations;
+        // sparse Profile/Save patches still preserve them and the catalogs.
+        model.apply(["spellChargeCost": 20.0, "nextRoomReward": "RoomMoneyDrop"])
+        model.apply(["profiles": []])
+        check(model.spellChargeCost == 20 && model.nextRoomReward == "RoomMoneyDrop",
+              "sparse Profile payload erased run observations")
+        model.apply(["spellChargeCost": NSNull(), "nextRoomReward": NSNull()])
+        check(model.spellChargeCost == nil && model.nextRoomReward == nil,
+              "full resident null did not clear absent Hex/reward state")
+
         // A Core-owned feature failure keeps its Host presentation identity and
         // arguments across the untyped backend payload. Legacy runtime-owned
         // featureErrors remain usable beside it rather than forcing either

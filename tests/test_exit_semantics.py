@@ -1,5 +1,6 @@
 import sys
 import tempfile
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,17 +14,76 @@ from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpContr
 
 model = (ROOT/'Sources/Hades2/Hades2Model.swift').read_text()
 
-termination = model[model.index('    private var runtimeCleanupRequired'):model.index('    private func finishExit')]
-assert 'failExit' not in termination
-assert 'let cleanupRequired = runtimeCleanupRequired' in termination
-assert 'dormantFeatures.values.contains(true)' in termination
-assert 'Hades2FeatureKey.allCases.contains(where: desiredFeatureEnabled)' in termination
-assert 'desiredFeatureKeys' not in termination
-assert 'sendBarrier(.resetDesired' in termination
-assert 'guard self.connected, cleanupRequired else' in termination
-assert 'sendBarrier(.disableAll' in termination
-assert 'announceSuccess: false' in termination
-assert 'self.finishExit(completion: completion)' in termination
+start = model.index('    private func detachForTermination')
+termination = model[start:model.index('\n}\n\nprivate extension Hades2FeatureKey', start)]
+swift = r'''
+import Foundation
+final class Session {
+    var isRunning = true
+    var stopped = false
+    func stop(suppressTerminationError: Bool) { stopped = true }
+}
+final class ExitHarness {
+    var connected = true, exiting = false, shuttingDown = false
+    var backendSession = Session()
+    var commands: [Hades2Command] = []
+    var activeFeatures: [String: Bool] = [:], dormantFeatures: [String: Bool] = [:]
+    var gatheringProbabilities: [String: Double] = [:]
+    var chaosGateProbability: Double?
+    var gameSpeed = 1.0
+    var nextRoomReward: String?
+    var healthLocked = false, manaLocked = false, armorLocked = false
+    var failReset = false, failCleanup = false
+    func invalidatePendingMutations() {}
+    func sendBarrier(_ command: Hades2Command, title: String, announceSuccess: Bool,
+                     completion: @escaping (Bool) -> Void) {
+        commands.append(command)
+        completion(command == .resetDesired ? !failReset : !failCleanup)
+    }
+''' + termination + r'''
+}
+@main struct Main {
+    static func main() {
+        for family in ["gathering", "chaos", "nextRoom", "speed", "lock", "default"] {
+            for failure in ["none", "reset", "cleanup"] {
+                let model = ExitHarness()
+                switch family {
+                case "gathering": model.gatheringProbabilities = ["fishing": 100]
+                case "chaos": model.chaosGateProbability = 100
+                case "nextRoom": model.nextRoomReward = "Money"
+                case "speed": model.gameSpeed = 2
+                case "lock": model.healthLocked = true
+                default: break
+                }
+                model.failReset = failure == "reset"
+                model.failCleanup = failure == "cleanup"
+                var finished = false
+                model.prepareForTermination { finished = $0 }
+                precondition(model.commands == [.resetDesired, .disableAll, .disconnect],
+                    "\(family)/\(failure): verified connection skipped resident teardown: \(model.commands)")
+                precondition(finished && model.backendSession.stopped)
+            }
+        }
+        let disconnected = ExitHarness()
+        disconnected.connected = false
+        disconnected.prepareForTermination { _ in }
+        precondition(disconnected.commands == [.resetDesired])
+        let stopped = ExitHarness()
+        stopped.backendSession.isRunning = false
+        stopped.prepareForTermination { _ in }
+        precondition(stopped.commands.isEmpty && stopped.backendSession.stopped)
+    }
+}
+'''
+with tempfile.TemporaryDirectory(prefix='mgt-exit-swift-') as temporary:
+    source = Path(temporary) / 'Exit.swift'
+    executable = Path(temporary) / 'exit'
+    source.write_text(swift)
+    subprocess.run(['swiftc', str(ROOT/'Sources/Hades2/Hades2Types.swift'),
+                    str(ROOT/'Sources/Hades2/Generated/Hades2Command.generated.swift'),
+                    str(source), '-o', str(executable)], check=True)
+    result = subprocess.run([str(executable)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 # reset_desired command identity/routing is covered at the Hades Host
 # command-contract seam. This test owns only exit/reset behavior.

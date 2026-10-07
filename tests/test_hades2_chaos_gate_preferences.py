@@ -29,16 +29,16 @@ for version in range(7):
     assert migrated['gatheringProbabilities'] == ({'flora': 25} if version >= 6 else {})
 assert normalize_persisted_desired({'chaosGateProbability': 0}, 7)['chaosGateProbability'] == 0
 
-class Transport:
-    pid = 123
-    live = False
-    def alive(self): return self.live
+class OfflineSession(FakeResidentSession):
+    def __init__(self):
+        super().__init__(pid=123)
+        self.live = False
 
 with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as temporary:
     base = Path(temporary)
     preparation.DATA = base
-    transport = Transport()
-    adapter = Hades2Adapter(transport=transport)
+    transport = OfflineSession()
+    adapter = Hades2Adapter(resident_session=transport, time_warp_controller=FakeTimeWarpController())
     # Host input validation is observed only through the public command seam.
     for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
         try:
@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert persisted['schemaVersion'] == 8 and persisted['chaosGateProbability'] == 80
     assert persisted['gatheringProbabilities'] == {'flora': 25}
     assert not {'ForceSecretDoor', 'ForceNextRoom', 'door', 'scopeToken'} & set(persisted)
-    restarted = Hades2Adapter(transport=Transport())
+    restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['chaosGateProbability'] == 80 and restarted.preference_dirty
     adapter.save_profile('Chaos Gate')
     envelope = json.loads(adapter.profile_service.path('Chaos Gate').read_text())

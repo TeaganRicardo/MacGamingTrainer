@@ -279,11 +279,10 @@ class RemoteProcessTimeWarpController:
         self._worker = transport._worker
         self._helper_path = str(Path(helper_path))
         self._image_names = list(image_names)
-        self._configured = False
 
     def _configure(self):
-        if self._configured:
-            return
+        # Configuration belongs to a worker process. Reassert it through the
+        # worker's idempotent owner so an idle child restart cannot lose it.
         _, state = self._worker.call(
             "time_warp.configure",
             {
@@ -292,7 +291,6 @@ class RemoteProcessTimeWarpController:
             },
         )
         self._transport._adopt_state(state)
-        self._configured = True
 
     def _call(self, method, params=None):
         self._configure()

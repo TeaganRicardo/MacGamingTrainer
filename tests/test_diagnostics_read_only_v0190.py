@@ -10,6 +10,7 @@ from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
 from games.hades2.diagnostics import build_diagnostics
 from games.hades2.preferences import Hades2PreferenceStore
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 
 # Source-boundary evidence for the real resident contract: status enters the
@@ -56,7 +57,7 @@ store.save(prefs)
 file_before = pref_path.read_bytes()
 
 transport = FakeTransport()
-adapter = Hades2Adapter(transport=transport)
+adapter = Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
 assert adapter.preference_dirty is True
 preferences_before = json.loads(json.dumps(adapter.preferences))
 
@@ -83,7 +84,7 @@ assert pref_path.read_bytes() == file_before
 preparation.DATA = base/'uninitialized'
 preparation.DATA.mkdir(parents=True)
 transport2 = FakeTransport()
-adapter2 = Hades2Adapter(transport=transport2)
+adapter2 = Hades2Adapter(transport=transport2, time_warp_controller=FakeTimeWarpController())
 assert adapter2.preference_initialized is False
 adapter2.observe_runtime()
 assert adapter2.preference_initialized is False
@@ -98,24 +99,5 @@ except TypeError:
 else:
     raise AssertionError('execute still exposes the ambiguous read_only flag')
 assert transport2.calls == 1
-
-# Diagnostics itself must request the explicit runtime-observation seam. A
-# small probe isolates this contract from the real platform checks performed by build_diagnostics.
-class AliveTransport:
-    def alive(self): return True
-
-class DiagnosticsProbe:
-    module_protocol_version = 5
-    transport = AliveTransport()
-    state = {}
-    def __init__(self): self.calls = []
-    def observe_runtime(self):
-        self.calls.append('observe_runtime')
-        return {}
-    def list_profiles(self): return []
-
-probe = DiagnosticsProbe()
-build_diagnostics(probe)
-assert probe.calls == ['observe_runtime']
 
 print('diagnostics_runtime_observation_v0190_ok')

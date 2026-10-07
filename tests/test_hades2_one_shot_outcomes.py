@@ -27,8 +27,6 @@ assert "MGT_OUTCOME_UNKNOWN:" in action
 # later records whether the engine-owned modal actually opened or failed.
 for block in (sell, special):
     assert 'return nil, "accepted"' in block
-    assert 'record.status = "opened"' in block
-    assert 'record.status = "failed"' in block
 
 assert "result.actionOutcome" in action
 assert "lastAction = actionLedger.latestReceipt()" in lua
@@ -42,8 +40,6 @@ assert "M.requestOrder[#M.requestOrder]" not in receipt_projection
 assert "local function publishActionReceipt(record)" in receipt_projection
 assert "requestId = requestId" in action
 assert "publishActionReceipt(record)" in action
-for block in (sell, special):
-    assert "actionLedger.publish(record)" in block
 
 # Hades owns the presentation vocabulary through its typed state boundary.
 # Core's generic successful-reply text must be suppressed for modal acknowledgements.

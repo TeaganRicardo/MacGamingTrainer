@@ -94,6 +94,11 @@ class FakeTimeWarpController:
         self.calls = []
         self.error = None
 
+    def current_speed(self):
+        if self.error is not None:
+            raise self.error
+        return self.speed
+
     def set_speed(self, value):
         self.calls.append(("set", float(value)))
         if self.error is not None:

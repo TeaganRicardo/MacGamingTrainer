@@ -288,8 +288,9 @@ class Hades2ResidentSession:
 
         last_action = reply.payload.get("lastAction") if isinstance(reply.payload, dict) else None
         outcome_unknown = (
-            isinstance(last_action, dict)
-            and last_action.get("outcome") == "outcome_unknown"
+            reply.payload.get("runtimeOutcomeUnknown") is True
+            or (isinstance(last_action, dict)
+                and last_action.get("outcome") == "outcome_unknown")
         )
         if outcome_unknown:
             self._transport.tainted = True
@@ -351,7 +352,7 @@ class Hades2ResidentSession:
             'return {["'
             + _TRAIT_TRAY_HANDOFF_KEY
             + '"]="closing"} end;'
-            + dispatch[len("return __MacGamingTrainerV1.json("):-1]
+            + 'return ' + dispatch[len("return __MacGamingTrainerV1.json("):-1]
             + " end)())"
         )
 
@@ -375,6 +376,8 @@ class Hades2ResidentSession:
 
             phase = time.monotonic()
             payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                raise TypeError("resident observation must be a JSON object")
             json_duration = time.monotonic() - phase
             phase = time.monotonic()
             payload = localize_catalog(payload)

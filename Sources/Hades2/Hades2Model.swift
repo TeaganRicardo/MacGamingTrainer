@@ -1308,17 +1308,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         logSink.append(line)
     }
 
-    private var runtimeCleanupRequired: Bool {
-        if activeFeatures.values.contains(true) || dormantFeatures.values.contains(true) { return true }
-        if Hades2FeatureKey.allCases.contains(where: desiredFeatureEnabled) { return true }
-        if abs(gameSpeed - 1.0) > 0.0001 || nextRoomReward != nil { return true }
-        if healthLocked || manaLocked || armorLocked || moneyLocked || rerollsLocked { return true }
-        if resources.contains(where: \.locked) || elements.contains(where: \.locked) { return true }
-        return graspLocked || dodgeLocked || critLocked || chargeSpeedLocked
-            || moveSpeedLocked || sprintSpeedLocked || dashSpeedLocked
-            || attackSpeedLocked || manaRegenLocked || enemyDamageLocked || enemyHealthLocked
-    }
-
     private func detachForTermination(completion: @escaping (Bool) -> Void) {
         guard connected else {
             finishExit(completion: completion)
@@ -1339,13 +1328,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return
         }
 
-        // Capture verified runtime state before reset_desired updates the UI
-        // projection. Durable intent and resident teardown have separate owners:
-        // reset_desired never crosses Lua; runtime cleanup is best-effort only.
-        let cleanupRequired = runtimeCleanupRequired
+        // Every verified connection receives best-effort resident teardown.
+        // The resident owns its hooks; a Host feature mirror cannot determine
+        // whether cleanup is needed. Durable reset remains persistence-only.
         sendBarrier(.resetDesired, title: "hades2.op.exitReset", announceSuccess: false) { [weak self] _ in
             guard let self else { completion(true); return }
-            guard self.connected, cleanupRequired else {
+            guard self.connected else {
                 self.detachForTermination(completion: completion)
                 return
             }
