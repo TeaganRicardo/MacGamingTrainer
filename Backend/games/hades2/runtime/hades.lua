@@ -6368,8 +6368,8 @@ if __MacGamingTrainerV1 == nil then
           safeRollback = true
           error("Force reroll pool has no changed eligible candidates")
         end
-        owner.nextPlan = plan
         CloseTradeScreen(screen, button)
+        owner.nextPlan = plan
       end)
       if not ok and not safeRollback and not M.terminalActionUnknown then
         message = taintNemesisTrade(
