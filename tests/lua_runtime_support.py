@@ -67,3 +67,23 @@ def require_lua52(subject: str) -> str:
             "or set MGT_LUA52 to the interpreter path"
         )
     return resolved
+
+
+def terminal_case_sources(source, ranges, success_marker):
+    """Run each terminal fault in a fresh Lua process with its normal preconditions.
+
+    A fault permanently closes resident trust. Keep the successful scenarios
+    together, then run each fault after its preceding successful scenarios;
+    never reset production trust flags to continue a fixture.
+    """
+    spans = [(source.index(start), source.index(end)) for start, end in ranges]
+    spans.sort()
+    pieces, previous = [], 0
+    cases = []
+    for start, end in spans:
+        assert previous <= start < end
+        pieces.append(source[previous:start])
+        cases.append(''.join(pieces) + source[start:end] + '\nprint(' + repr(success_marker) + ')\n')
+        previous = end
+    pieces.append(source[previous:])
+    return [''.join(pieces), *cases]

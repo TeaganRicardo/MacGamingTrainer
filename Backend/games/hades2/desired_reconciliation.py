@@ -13,6 +13,7 @@ import uuid
 
 from .resident_session import ResidentReply
 from .schema import MULTIPLIERS, TOGGLES, VITALS
+from .vital_state import confirmed_replay_vital_lock
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class DesiredReconciliationOutcome:
     reply: ResidentReply | None
     confirmed: bool
     mismatches: tuple[str, ...]
+    normalized_vital_locks: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -91,12 +93,20 @@ class Hades2DesiredStateReconciler:
             reply = self._resident_session.reconcile(calls)
             after = reply.payload if isinstance(reply.payload, dict) else {}
 
+        normalized_vital_locks = {}
+        if reply is not None:
+            for vital, wanted in _mapping(desired_snapshot.get('vitalLocks')).items():
+                actual = confirmed_replay_vital_lock(vital, wanted, after)
+                if actual is not None and actual != wanted:
+                    normalized_vital_locks[vital] = actual
+            desired_snapshot.setdefault('vitalLocks', {}).update(normalized_vital_locks)
         remaining = self._diff(desired_snapshot, after, force_full=False)
         mismatches = tuple(dict.fromkeys(action.mismatch for action in remaining))
         return DesiredReconciliationOutcome(
             reply=reply,
             confirmed=not mismatches,
             mismatches=mismatches,
+            normalized_vital_locks=normalized_vital_locks,
         )
 
     def _materialize(self, actions):

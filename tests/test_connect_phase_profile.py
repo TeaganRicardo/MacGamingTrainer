@@ -7,9 +7,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from games.hades2 import adapter as adapter_module
 from games.hades2 import preparation
+from games.hades2.schema import TOGGLES
+from hades2_resident_session_fakes import FakeTimeWarpController
 
 base = Path(tempfile.mkdtemp(prefix='mgt-connect-profile-'))
 preparation.DATA = base
@@ -36,17 +39,19 @@ class FakeTransport:
         self.pid = pid
         self.live = True
 
-    def execute(self, source):
+    def execute(self, source, **kwargs):
         return json.dumps({
             'status': 'ready',
             'scene': 'run',
             'capabilities': {},
-            'desiredFeatures': {},
+            'desiredFeatures': {key: False for key in TOGGLES},
             'activeFeatures': {},
             'resources': [],
             'rewards': [],
             'stats': {},
             'elements': [],
+            **{key: adapter_module.Hades2Adapter._default_preferences()[key]
+               for key in ('damageMultiplier', 'moneyMultiplier', 'resourceMultiplier', 'boonRarity')},
         })
 
     def detach(self):
@@ -58,7 +63,7 @@ class FakeTransport:
 
 
 transport = FakeTransport()
-adapter = adapter_module.Hades2Adapter(transport=transport)
+adapter = adapter_module.Hades2Adapter(transport=transport, time_warp_controller=FakeTimeWarpController())
 adapter.preference_initialized = True
 adapter.preference_dirty = False
 

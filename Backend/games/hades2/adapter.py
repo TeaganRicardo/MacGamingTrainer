@@ -7,11 +7,12 @@ import time
 from pathlib import Path
 
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
-from core.process_time_warp import ProcessTimeWarpController
+from core.process_time_warp import ProcessTimeWarpController, ProcessTimeWarpError
 
 from . import preparation
 from .command_contract import Hades2CommandContract
 from .desired_reconciliation import Hades2DesiredStateReconciler
+from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
@@ -125,7 +126,7 @@ class Hades2Adapter(GameAdapter):
                 )
         self.time_warp=time_warp_controller
         self.desired_reconciler=Hades2DesiredStateReconciler(self.runtime)
-        self._time_warp_speed=1.0;self._time_warp_error=None
+        self._time_warp_speed=None;self._time_warp_pid=None;self._time_warp_error=None
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
@@ -233,10 +234,6 @@ class Hades2Adapter(GameAdapter):
         vital=self.preferences.get('vitalLocks',{}) if isinstance(self.preferences.get('vitalLocks'),dict) else {}
         for key in ('health','mana','armor'):
             self.state[key+'Locked']=key in vital
-            row=vital.get(key)
-            if isinstance(row,dict):
-                if type(row.get('current')) in (int,float):self.state[key]=row['current']
-                if key!='armor' and type(row.get('max')) in (int,float):self.state['max'+key.capitalize()]=row['max']
         resources=self.preferences.get('resourceLocks',{}) if isinstance(self.preferences.get('resourceLocks'),dict) else {}
         self.state['moneyLocked']='Money' in resources
         if 'Money' in resources:self.state['money']=resources['Money']
@@ -257,7 +254,7 @@ class Hades2Adapter(GameAdapter):
     def _project_time_warp(self):
         active=self.state.get('activeFeatures')
         active=dict(active) if isinstance(active,dict) else {}
-        active['gameSpeed']=abs(self._time_warp_speed-1.0)>1e-6
+        active['gameSpeed']=self._time_warp_speed is not None and abs(self._time_warp_speed-1.0)>1e-6
         self.state['activeFeatures']=active
         support=self.state.get('featureSupport')
         support=dict(support) if isinstance(support,dict) else {}
@@ -292,8 +289,36 @@ class Hades2Adapter(GameAdapter):
                 'arguments':list(getattr(error,'arguments',()) or ()),
             }
             self._project_time_warp();raise
-        self._time_warp_speed=float(actual);self._time_warp_error=None;self._project_time_warp()
+        self._time_warp_speed=float(actual);self._time_warp_pid=self.runtime.pid
+        self._time_warp_error=None;self._project_time_warp()
         return self._time_warp_speed
+
+    def _invalidate_game_speed_observation(self):
+        self._time_warp_speed=None;self._time_warp_pid=None;self._time_warp_error=None
+        self.preference_dirty=True
+        self._project_time_warp()
+
+    def _observe_game_speed(self):
+        if not self.runtime.allows_process_time_warp():return
+        pid=self.runtime.pid
+        if self._time_warp_pid==pid and self._time_warp_speed is not None:return
+        try:
+            actual=self.time_warp.current_speed()
+            if pid is None or self.runtime.pid!=pid:
+                raise ProcessTimeWarpError('disconnected','host.timeWarp.error.disconnected',
+                                           diagnostic='Time Warp observation lost its verified target PID.')
+        except AdapterError as error:
+            self.preference_dirty=True
+            self._time_warp_error={
+                'presentation':error.presentation,
+                'arguments':list(getattr(error,'arguments',()) or ()),
+            }
+            self._project_time_warp();raise
+        self._time_warp_speed=float(actual);self._time_warp_pid=pid
+        self._time_warp_error=None
+        target=float(self.preferences.get('gameSpeed',1.0))
+        if abs(self._time_warp_speed-target)>1e-6:self.preference_dirty=True
+        self._project_time_warp()
 
     def _reset_preferences(self):
         preferences=self._default_preferences()
@@ -337,10 +362,8 @@ class Hades2Adapter(GameAdapter):
         self.preferences['statLocks']=locks
         vital={}
         for key in ('health','mana','armor'):
-            if decoded.get(key+'Locked'):
-                row={'current':decoded.get(key)}
-                if key in ('health','mana'):row['max']=decoded.get('max'+key.capitalize())
-                vital[key]=row
+            row=observed_vital_lock(key,decoded)
+            if row is not None:vital[key]=row
         self.preferences['vitalLocks']=vital
         self.preferences['resourceLocks']={str(item['id']):item.get('count',0) for item in decoded.get('resources',[]) if isinstance(item,dict) and item.get('locked') and isinstance(item.get('id'),str)}
         if decoded.get('moneyLocked'):self.preferences['resourceLocks']['Money']=decoded.get('money',0)
@@ -377,30 +400,26 @@ class Hades2Adapter(GameAdapter):
             self.preferences['statLocks']=locks
             return True
 
-        if command=='set_vital':
-            vital=params.get('vital');field=params.get('field');value=params.get('value')
+        if command in ('set_vital','lock_vital'):
+            vital=params.get('vital')
+            if vital not in ('health','mana','armor'):return False
             locks=dict(self.preferences.get('vitalLocks',{}))
-            row=locks.get(vital)
-            if not isinstance(row,dict) or field not in ('current','max'):return False
-            if type(value) not in (int,float) or isinstance(value,bool):return False
-            row=dict(row);row[field]=value;locks[vital]=row
-            self.preferences['vitalLocks']=locks
-            return True
-
-        if command=='lock_vital':
-            vital=params.get('vital');locked=params.get('locked')
-            if vital not in ('health','mana','armor') or type(locked) is not bool:return False
-            locks=dict(self.preferences.get('vitalLocks',{}))
-            if not locked:
+            if command=='set_vital' and vital not in locks:return False
+            if command=='lock_vital' and type(params.get('locked')) is not bool:return False
+            if command=='lock_vital' and not params['locked']:
                 locks.pop(vital,None)
             else:
-                current=decoded.get(vital)
-                maximum=decoded.get('max'+vital.capitalize())
-                if type(current) not in (int,float) or isinstance(current,bool):return False
-                row={'current':current}
-                if vital!='armor':
-                    if type(maximum) not in (int,float) or isinstance(maximum,bool):return False
-                    row['max']=maximum
+                row=observed_vital_lock(vital,decoded)
+                if row is None and command=='set_vital' and decoded.get(vital+'Locked') is False:
+                    # A pending lock still owns durable intent. Only the edited
+                    # value is acknowledged while its native lock is inactive;
+                    # unrelated pending targets must not be replaced by defaults.
+                    actual=observed_vital_values(vital,decoded)
+                    field=params.get('field')
+                    if actual is not None and field in actual:
+                        pending=dict(locks[vital]);pending[field]=actual[field]
+                        row=normalize_vital_locks({vital:pending}).get(vital)
+                if row is None:return False
                 locks[vital]=row
             self.preferences['vitalLocks']=locks
             return True
@@ -571,7 +590,8 @@ class Hades2Adapter(GameAdapter):
             self._save_preferences()
 
         speed_target=float(self.preferences.get('gameSpeed',desired_feature_defaults()['gameSpeed']))
-        speed_confirmed=abs(self._time_warp_speed-speed_target)<=1e-6
+        self._observe_game_speed()
+        speed_confirmed=self._time_warp_speed is not None and abs(self._time_warp_speed-speed_target)<=1e-6
         if self.runtime.allows_process_time_warp():
             if force_full or not speed_confirmed:
                 self._apply_game_speed(speed_target)
@@ -604,6 +624,11 @@ class Hades2Adapter(GameAdapter):
             raise
 
         mismatches=list(outcome.mismatches)
+        if outcome.normalized_vital_locks:
+            locks=dict(self.preferences.get('vitalLocks',{}))
+            locks.update(outcome.normalized_vital_locks)
+            self.preferences=dict(self.preferences,vitalLocks=locks)
+            self._save_preferences()
         if not speed_confirmed:mismatches.append('feature:gameSpeed')
         if not mismatches:
             self.preference_dirty=False
@@ -647,7 +672,7 @@ class Hades2Adapter(GameAdapter):
         self.state['pid']=pid
         if pid!=previous_pid:
             self.runtime.invalidate_generation()
-            self._time_warp_speed=1.0;self._time_warp_error=None;self._project_time_warp()
+            self._invalidate_game_speed_observation()
         if not pid:self.state['status']='not_running'
         elif not self.state['connected']:self.state['status']='disconnected'
         if not self.state['connected']:
@@ -667,6 +692,7 @@ class Hades2Adapter(GameAdapter):
                 profile['attachTotal']=time.monotonic()-phase
                 attach_profile=self.runtime.last_attach_profile
             # Resident-session attach owns generation/bootstrap invalidation.
+            self._invalidate_game_speed_observation()
             self.state['connected']=True
             if not probe_runtime:
                 outcome='deferred'
@@ -710,6 +736,7 @@ class Hades2Adapter(GameAdapter):
             )
 
     def _mark_runtime_generation_invalidated(self):
+        self._invalidate_game_speed_observation()
         self.preference_dirty=True
         clear_active(self.state,preserve_desired=True)
         self.state.update(connected=True,pid=self.runtime.pid,status='waiting',scene='loading')
@@ -743,6 +770,9 @@ class Hades2Adapter(GameAdapter):
         )
 
     def _merge_resident_reply(self,reply):
+        # Resident replies are full observations with explicit nulls for absent
+        # runtime values. Only expensive catalogs may be omitted. Profile/Save
+        # command patches bypass this seam and retain Swift's absence semantics.
         decoded=dict(reply.payload) if isinstance(reply.payload,dict) else {}
         prior_warnings=self.state.get('warnings') if isinstance(self.state.get('warnings'),list) else []
         catalog_warnings=decoded.get('warnings') if isinstance(decoded.get('warnings'),list) else []
@@ -840,10 +870,11 @@ class Hades2Adapter(GameAdapter):
             # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
+            self._observe_game_speed()
             if not host_observation_only and command=='status' and self.preference_dirty:
                 return self._replay_preferences(copy.deepcopy(self.state))
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,self.state):
+                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
                     self._save_preferences()
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
@@ -866,6 +897,7 @@ class Hades2Adapter(GameAdapter):
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
         if self.runtime.alive():self.runtime.detach()
+        self._invalidate_game_speed_observation()
         self.state.update(connected=False,status='disconnected')
         mark_disconnected(self.state)
         self._overlay_preferences()
