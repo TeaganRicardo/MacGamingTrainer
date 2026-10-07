@@ -1,8 +1,11 @@
 -- Offline profile of the shipped resident with explicit, inexpensive native
 -- stubs. No game/save data is loaded. Native presentations, engine callbacks,
--- mounted-trait inventories and optional reroll families are not represented.
+-- optional reroll families are not represented. Trait rows/catalogs are
+-- synthetic ordinary God boons; counts select an explicit inventory scale.
 local runtimePath = assert(arg[1])
 local samples = assert(tonumber(arg[2]))
+local traitCount = assert(tonumber(arg[3] or "0"))
+local catalogTraitCount = assert(tonumber(arg[4] or "0"))
 assert(_VERSION == "Lua 5.2", "profiling requires the supported Lua 5.2 ABI")
 
 SessionState = {}; SessionMapState = {}
@@ -40,6 +43,40 @@ HeroHasTrait = function() return false end
 OpenUpgradeChoiceMenu = noop; CreateBoonLootButtons = noop
 AttemptPanelReroll = noop; RerollBoonLoot = noop; DestroyBoonLootButtons = noop
 
+local upgradeQueries = 0
+if traitCount > 0 or catalogTraitCount > 0 then
+  local pool = {}
+  LootData.ZeusUpgrade = { GodLoot = true, Traits = pool }
+  for index = 1, math.max(traitCount, catalogTraitCount) do
+    local name = string.format("ProfileBoon%04d", index)
+    TraitData[name] = { RarityLevels = { Common = 1, Rare = 1.5, Epic = 2, Heroic = 2.5 } }
+    if index <= catalogTraitCount then pool[index] = name end
+    if index <= traitCount then
+      local trait = { Name = name, Id = index, StackNum = 2, Rarity = "Common", SourceId = "ZeusUpgrade" }
+      CurrentRun.Hero.Traits[index] = trait
+      CurrentRun.Hero.TraitDictionary[name] = { trait }
+    end
+  end
+  IsGodTrait = function(name) return TraitData[name] ~= nil end
+  GetAllUpgradeableGodTraits = function()
+    upgradeQueries = upgradeQueries + 1
+    local eligible = {}
+    for _, trait in ipairs(CurrentRun.Hero.Traits) do eligible[trait.Name] = true end
+    return eligible
+  end
+  IncreaseTraitLevel = noop; AddRarityToTraits = noop
+  GetTraitTooltipTitle = function(trait) return trait.Name end
+end
+
+local function verifyInventory(state)
+  assert(#state.currentRunTraits == traitCount, "mounted inventory count did not match the workload")
+  for index, row in ipairs(state.currentRunTraits) do
+    assert(row.instanceId == tostring(index) and row.sameNameCount == 1
+      and row.family == "olympianHermes" and row.levelCapability == "increaseOne",
+      "mounted inventory identity/eligibility was not observed")
+  end
+end
+
 local function emit(name, duration)
   print(name .. "\t" .. string.format("%.9f", duration))
 end
@@ -61,12 +98,22 @@ local first = M.dispatch("status", { includeCatalogs = true })
 assert(first.boons and first.rewards, "cold status omitted catalogs")
 M.json(first)
 emit("cold_catalog_status_json", os.clock() - started)
+verifyInventory(first)
+local exactCount = 0
+for _, row in ipairs(first.rewards) do
+  if row.acquisitionMode == "ordinaryNative" then exactCount = exactCount + 1 end
+end
+assert(exactCount == catalogTraitCount, "exact catalog count did not match the workload")
+measure("warm_catalog_status_json", function()
+  M.json(M.dispatch("status", { includeCatalogs = true }))
+end)
 
 local observation
 measure("status_dispatch", function()
   observation = M.dispatch("status", { includeCatalogs = false })
   assert(observation.boons == nil and observation.rewards == nil)
 end)
+verifyInventory(observation)
 measure("status_json", function() M.json(observation) end)
 measure("status_dispatch_json", function()
   M.json(M.dispatch("status", { includeCatalogs = false }))
@@ -87,6 +134,7 @@ for _, feature in ipairs(enabled) do
   calls[#calls + 1] = { command = "set_feature", params = { feature = feature, value = true } }
 end
 local function verify(state)
+  verifyInventory(state)
   assert(state.healthLocked and state.rerollsLocked, "requested locks did not mount")
   assert(next(state.featureErrors) == nil, "fixture feature installation failed")
   for _, feature in ipairs(enabled) do
@@ -136,3 +184,9 @@ for index = 1, samples do
     and result.lastAction.outcome == "completed" and not result.lastAction.duplicate,
     "resource edit lost its one-shot receipt")
 end
+
+local beforeQueries = upgradeQueries
+local final = M.dispatch("status", { includeCatalogs = false })
+verifyInventory(final)
+print("fixture\t" .. M.json({ mounted_traits = traitCount, catalog_traits = catalogTraitCount,
+  native_upgrade_queries_per_status = upgradeQueries - beforeQueries }))
