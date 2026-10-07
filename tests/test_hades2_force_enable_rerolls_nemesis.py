@@ -94,6 +94,9 @@ local function mountTradeScreenComponents(screen)
 end
 
 RandomInt = function(minimum) return minimum end
+IsGameStateEligible = function(_, _, requirements)
+  return not (type(requirements) == 'table' and requirements.Blocked)
+end
 local randomChoiceCalls = 0
 GetRandomValue = function(values)
   randomChoiceCalls = randomChoiceCalls + 1
@@ -110,6 +113,12 @@ end
 ConsumableData.TradeRewardA = { Name = 'TradeRewardA' }
 ConsumableData.TradeRewardB = { Name = 'TradeRewardB' }
 ConsumableData.TradeRewardC = { Name = 'TradeRewardC' }
+ConsumableData.DamageRewardA = { Name = 'DamageRewardA' }
+ConsumableData.DamageRewardB = { Name = 'DamageRewardB' }
+ConsumableData.DamageRewardBlocked = { Name = 'DamageRewardBlocked' }
+ConsumableData.TraitRewardA = { Name = 'TraitRewardA' }
+ConsumableData.TraitRewardB = { Name = 'TraitRewardB' }
+ConsumableData.TraitRewardBlocked = { Name = 'TraitRewardBlocked' }
 
 PresetEventArgs.NemesisBuyItemChoices = {
   GiveOptions = {
@@ -121,13 +130,78 @@ PresetEventArgs.NemesisBuyItemChoices = {
     { Name = 'TradeRewardC', CostResourceName = 'Money', CostResourceMin = 23, CostResourceMax = 23 },
   },
 }
+PresetEventArgs.NemesisTakeDamageForItemChoices = {
+  GiveOptions = {
+    { UseGetDamage = true },
+  },
+  GetOptions = {
+    { Name = 'DamageRewardA', DamageAmountMin = 7, DamageAmountMax = 7 },
+    { Name = 'DamageRewardB', DamageAmountMin = 13, DamageAmountMax = 13 },
+    { Name = 'DamageRewardBlocked', DamageAmountMin = 99, DamageAmountMax = 99,
+      GameStateRequirements = { Blocked = true } },
+  },
+}
+PresetEventArgs.NemesisGiveTraitForItemChoices = {
+  GiveOptions = {
+    { SellTrait = true },
+  },
+  GetOptions = {
+    { Name = 'TraitRewardA' },
+    { Name = 'TraitRewardB' },
+    { Name = 'TraitRewardBlocked', GameStateRequirements = { Blocked = true } },
+  },
+}
 
 local tradeOpenCount = 0
 local tradeMode = 'money'
 local displayedReward
 local displayedCost
+local displayedDamage
+local displayedSale
 local settledReward
 local settledCost
+local settledDamage
+local settledSale
+local removedTrait
+local sellGenerationCount = 0
+local sellSequence = { 'SellBoonA', 'SellBoonB', 'SellBoonC' }
+local observedCosts = {}
+
+GenerateSellTraitShop = function()
+  sellGenerationCount = sellGenerationCount + 1
+  local name = sellSequence[math.min(sellGenerationCount, #sellSequence)]
+  CurrentRun.CurrentRoom.SellOptions = { { Name = name } }
+end
+RemoveWeaponTrait = function(name)
+  removedTrait = name
+end
+Damage = function(hero, args)
+  hero.Health = hero.Health - args.DamageAmount
+  settledDamage = args.DamageAmount
+end
+
+local function resetTrade(mode, rerolls)
+  tradeMode = mode
+  tradeOpenCount = 0
+  randomChoiceCalls = 0
+  panelSpendMutations = 0
+  rerollUiHook = nil
+  displayedReward = nil
+  displayedCost = nil
+  displayedDamage = nil
+  displayedSale = nil
+  settledReward = nil
+  settledCost = nil
+  settledDamage = nil
+  settledSale = nil
+  removedTrait = nil
+  sellGenerationCount = 0
+  observedCosts = {}
+  CurrentRun.NumRerolls = rerolls or 5
+  CurrentRun.CurrentRoom.SpentRerolls = {}
+  CurrentRun.CurrentRoom.SellOptions = nil
+  CurrentRun.Hero.Health = 100
+end
 
 CloseTradeScreen = function(screen)
   screen.KeepOpen = false
@@ -196,26 +270,46 @@ HandleScreenInput = function(screen)
     CloseTradeScreen(screen)
     return
   end
-  if tradeOpenCount == 1 then
+  if tradeMode == 'exhausted' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and not button.Visible,
+      'exhausted Nemesis trade exposed a spendable reroll')
+    CloseTradeScreen(screen)
+    return
+  end
+
+  local rerollsWanted = tradeMode == 'twoRerolls' and 2 or 1
+  if tradeOpenCount <= rerollsWanted then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible
       and button.OnPressedFunctionName == 'AttemptPanelReroll',
       'Nemesis TradeScreen did not expose the native-style forced reroll action')
-    assert(randomChoiceCalls == 2,
+    local expectedBefore = tradeOpenCount * 2
+    assert(randomChoiceCalls == expectedBefore,
       'opening a Nemesis trade consumed RNG beyond native give/get selection')
+    observedCosts[#observedCosts + 1] = button.Cost
     local before = screen.ChosenGetOption.Name
     CallFunctionName(button.OnPressedFunctionName, screen, button)
-    assert(randomChoiceCalls == 4,
+    assert(randomChoiceCalls == expectedBefore + 2,
       'Nemesis trade reroll did not regenerate through native-shaped give/get draws')
     assert(not screen.KeepOpen, 'Nemesis trade reroll did not close the old native screen before redraw')
     assert(screen.ChosenGetOption.Name == before,
       'Nemesis trade reroll mutated the already-presented transaction plan in place')
-  else
-    displayedReward = screen.ChosenGetOption.Name
-    displayedCost = screen.ChosenGiveOption.Cost
-    screen.Source.Accepted = true
-    CloseTradeScreen(screen)
+    return
   end
+
+  displayedReward = screen.ChosenGetOption.Name
+  displayedCost = screen.ChosenGiveOption.Cost
+  displayedDamage = screen.ChosenGiveOption.DamageAmount
+  displayedSale = type(CurrentRun.CurrentRoom.SellOptions) == 'table'
+    and CurrentRun.CurrentRoom.SellOptions[1]
+    and CurrentRun.CurrentRoom.SellOptions[1].Name or nil
+  if tradeMode == 'decline' then
+    CloseTradeScreen(screen)
+    return
+  end
+  screen.Source.Accepted = true
+  CloseTradeScreen(screen)
 end
 
 OpenTradeScreen = function(source, args, chosenGiveOption, chosenGetOption)
@@ -232,10 +326,17 @@ OpenTradeScreen = function(source, args, chosenGiveOption, chosenGetOption)
   ActiveScreens.TradeScreen = screen
   mountTradeScreenComponents(screen)
 
-  if chosenGiveOption.UseGetCost then
+  if chosenGiveOption.SellTrait then
+    GenerateSellTraitShop(CurrentRun, CurrentRun.CurrentRoom, { SellOptionCount = 1 })
+  elseif chosenGiveOption.UseGetCost then
     chosenGiveOption.Cost = RandomInt(
       chosenGetOption.CostResourceMin,
       chosenGetOption.CostResourceMax
+    )
+  elseif chosenGiveOption.UseGetDamage then
+    chosenGiveOption.DamageAmount = RandomInt(
+      chosenGetOption.DamageAmountMin,
+      chosenGetOption.DamageAmountMax
     )
   end
 
@@ -272,16 +373,26 @@ end
 TradeDoExchange = function(screen, args)
   local giveOption = args.ChosenGiveOption
   local getOption = args.ChosenGetOption
+  if giveOption.SellTrait then
+    for _, sellData in pairs(CurrentRun.CurrentRoom.SellOptions or {}) do
+      RemoveWeaponTrait(sellData.Name)
+    end
+    CurrentRun.CurrentRoom.SellOptions = {}
+    settledSale = removedTrait
+  end
   if giveOption.UseGetCost then
     SpendResource(getOption.CostResourceName, giveOption.Cost)
   end
+  if giveOption.DamageAmount then
+    Damage(CurrentRun.Hero, { DamageAmount = giveOption.DamageAmount, PureDamage = true })
+  end
   settledReward = getOption.Name
   settledCost = giveOption.Cost
+  settledDamage = giveOption.DamageAmount or settledDamage
 end
 
 GameState.Resources.Money = 100
-CurrentRun.NumRerolls = 5
-CurrentRun.CurrentRoom.SpentRerolls = {}
+resetTrade('money', 5)
 local source = { Name = 'NPC_Nemesis_01', ObjectId = 801, Accepted = false }
 local dialogue = {}
 
@@ -315,15 +426,83 @@ assert(preset.GiveOptions[1].Cost == nil
   and preset.GetOptions[2].SpawnPoint == nil,
   'Nemesis force reroll mutated shared PresetEventArgs transaction pools')
 
+-- Damage-for-item keeps the prepared damage amount on the same copied plan
+-- that is displayed and later settled. Ineligible rewards never enter reroll.
+resetTrade('damage', 5)
+local damageSource = { Name = 'NPC_Nemesis_01', ObjectId = 804, Accepted = false }
+local damageDialogue = {}
+NemesisTradeChoice(damageSource, PresetEventArgs.NemesisTakeDamageForItemChoices, damageDialogue)
+assert(displayedReward == 'DamageRewardB' and displayedDamage == 13,
+  'Nemesis damage reroll did not present the changed eligible native offer')
+TradeDoExchange(damageDialogue, damageDialogue.OnCloseFinishedFunctionArgs)
+assert(settledReward == displayedReward and settledDamage == displayedDamage
+  and CurrentRun.Hero.Health == 100 - displayedDamage,
+  'Nemesis damage trade settled different damage/reward than displayed')
+assert(PresetEventArgs.NemesisTakeDamageForItemChoices.GiveOptions[1].DamageAmount == nil,
+  'Nemesis damage reroll mutated the shared preset give option')
+
+-- Trait-sale trades may regenerate both the reward and the native one-trait
+-- SellOptions owner. The final displayed sale is the one native exchange removes.
+resetTrade('traitSale', 5)
+local traitSource = { Name = 'NPC_Nemesis_01', ObjectId = 805, Accepted = false }
+local traitDialogue = {}
+NemesisTradeChoice(traitSource, PresetEventArgs.NemesisGiveTraitForItemChoices, traitDialogue)
+assert(displayedReward == 'TraitRewardB' and displayedSale == 'SellBoonB',
+  'Nemesis trait-sale reroll did not present the changed native reward/sale')
+TradeDoExchange(traitDialogue, traitDialogue.OnCloseFinishedFunctionArgs)
+assert(settledReward == displayedReward and settledSale == displayedSale
+  and removedTrait == displayedSale,
+  'Nemesis trait-sale exchange removed a trait different from the displayed sale')
+
+-- Declining after a deliberate reroll spends only that reroll; it never schedules
+-- or performs the trade exchange.
+resetTrade('decline', 5)
+GameState.Resources.Money = 100
+local declineSource = { Name = 'NPC_Nemesis_01', ObjectId = 806, Accepted = false }
+local declineDialogue = {}
+NemesisTradeChoice(declineSource, PresetEventArgs.NemesisBuyItemChoices, declineDialogue)
+assert(declineDialogue.OnCloseFinishedFunctionName == nil
+  and GameState.Resources.Money == 100
+  and CurrentRun.NumRerolls == 4
+  and settledReward == nil,
+  'declined Nemesis reroll performed or scheduled an exchange')
+
+-- A structurally exhausted pool keeps the injected Hades control unavailable and
+-- spends nothing.
+local fullMoneyPool = PresetEventArgs.NemesisBuyItemChoices.GetOptions
+PresetEventArgs.NemesisBuyItemChoices.GetOptions = { fullMoneyPool[1] }
+resetTrade('exhausted', 5)
+local exhaustedSource = { Name = 'NPC_Nemesis_01', ObjectId = 807, Accepted = false }
+NemesisTradeChoice(exhaustedSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5 and panelSpendMutations == 0,
+  'exhausted Nemesis trade spent a reroll')
+PresetEventArgs.NemesisBuyItemChoices.GetOptions = fullMoneyPool
+
+-- Repeated native clicks use the same Boon panel base/escalation policy.
+resetTrade('twoRerolls', 5)
+local repeatedSource = { Name = 'NPC_Nemesis_01', ObjectId = 808, Accepted = false }
+local repeatedDialogue = {}
+NemesisTradeChoice(repeatedSource, PresetEventArgs.NemesisBuyItemChoices, repeatedDialogue)
+assert(observedCosts[1] == 1 and observedCosts[2] == 2
+  and CurrentRun.NumRerolls == 2
+  and CurrentRun.CurrentRoom.SpentRerolls[808] == 2,
+  'Nemesis repeated rerolls did not preserve native escalating panel cost')
+
+-- Existing reroll-count lock remains independent: native spend/history occurs,
+-- then UpdateRerollUI reconciles the count to the locked value.
+resetTrade('money', 5)
+M.dispatch('lock_rerolls', { requestId = 'nemesis-lock', locked = true, includeCatalogs = false })
+local lockedSource = { Name = 'NPC_Nemesis_01', ObjectId = 809, Accepted = false }
+NemesisTradeChoice(lockedSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5
+  and CurrentRun.CurrentRoom.SpentRerolls[809] == 1,
+  'Nemesis reroll broke independent reroll-count lock semantics')
+M.dispatch('lock_rerolls', { requestId = 'nemesis-unlock', locked = false, includeCatalogs = false })
+
 -- A modal from a no-longer-current run is a known refusal. The adapter must
 -- reject it before native AttemptPanelReroll mutates the replacement run;
 -- spend-then-refund is not an acceptable substitute for preflight.
-tradeMode = 'staleRun'
-tradeOpenCount = 0
-randomChoiceCalls = 0
-panelSpendMutations = 0
-CurrentRun.NumRerolls = 5
-CurrentRun.CurrentRoom.SpentRerolls = {}
+resetTrade('staleRun', 5)
 local staleSource = { Name = 'NPC_Nemesis_01', ObjectId = 802, Accepted = false }
 NemesisTradeChoice(staleSource, PresetEventArgs.NemesisBuyItemChoices, {})
 assert(CurrentRun.NumRerolls == 5,
@@ -333,17 +512,12 @@ assert(CurrentRun.NumRerolls == 5,
 -- transaction outcome is no longer safe to rewrite or refund. Preserve the
 -- completed spend, leave the replacement run untouched, and close the
 -- resident mutation boundary instead of replaying automatically.
-tradeMode = 'postSpendStale'
-tradeOpenCount = 0
-randomChoiceCalls = 0
-panelSpendMutations = 0
-CurrentRun.NumRerolls = 5
-CurrentRun.CurrentRoom.SpentRerolls = {}
+resetTrade('postSpendStale', 5)
 local postSpendSource = { Name = 'NPC_Nemesis_01', ObjectId = 803, Accepted = false }
 NemesisTradeChoice(postSpendSource, PresetEventArgs.NemesisBuyItemChoices, {})
 
--- disable_all above clears the terminal state only through the supported
--- teardown path; no further feature mutation is performed in this harness.
+-- disable_all above is the only supported teardown while terminal outcome is
+-- unknown; no further feature mutation is performed in this harness.
 
 '''
 
