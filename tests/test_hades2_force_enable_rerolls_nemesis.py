@@ -242,6 +242,8 @@ HandleScreenInput = function(screen)
       'post-spend TradeScreen failure did not close the resident mutation boundary')
     assert(not button.Visible,
       'outcome-unknown TradeScreen left a second Nemesis reroll spend available')
+    assert(M.featureErrors.forceEnableRerolls == 'hades2.error.outcomeUnknownRuntime',
+      'terminal Nemesis feature error bypassed bilingual presentation')
     M.dispatch('disable_all', { includeCatalogs = false })
     return
   end
@@ -276,6 +278,8 @@ HandleScreenInput = function(screen)
       'post-spend stale Nemesis reroll did not close the resident mutation boundary')
     assert(not button.Visible,
       'post-spend stale outcome left a second Nemesis reroll spend available')
+    assert(M.featureErrors.forceEnableRerolls == 'hades2.error.outcomeUnknownRuntime',
+      'post-spend stale feature error bypassed bilingual presentation')
     assert(screen.KeepOpen,
       'post-spend stale Nemesis reroll replayed or closed the uncertain transaction automatically')
     M.dispatch('disable_all', { includeCatalogs = false })
