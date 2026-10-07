@@ -216,7 +216,18 @@ HandleScreenInput = function(screen)
   if tradeMode == 'closeFailure' then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible,
-      'close-failure setup did not expose the Nemesis reroll control')
+      'close-failure setup did not expose the Nemesis reroll control'
+        .. ' button=' .. tostring(button)
+        .. ' visible=' .. tostring(type(button) == 'table' and button.Visible)
+        .. ' cost=' .. tostring(type(button) == 'table' and button.Cost)
+        .. ' onPressed=' .. tostring(type(button) == 'table' and button.OnPressedFunctionName)
+        .. ' rerollFn=' .. tostring(type(button) == 'table' and button.RerollFunctionName)
+        .. ' rerolls=' .. tostring(CurrentRun and CurrentRun.NumRerolls)
+        .. ' spent=' .. tostring(CurrentRun and CurrentRun.CurrentRoom
+          and CurrentRun.CurrentRoom.SpentRerolls
+          and CurrentRun.CurrentRoom.SpentRerolls[screen.Source.ObjectId])
+        .. ' desired=' .. tostring(M.desiredFeatures.forceEnableRerolls)
+        .. ' terminal=' .. tostring(M.terminalActionUnknown))
     CallFunctionName(button.OnPressedFunctionName, screen, button)
     assert(panelSpendMutations == 1 and CurrentRun.NumRerolls == 4
       and CurrentRun.CurrentRoom.SpentRerolls[screen.Source.ObjectId] == 1,
