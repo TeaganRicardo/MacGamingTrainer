@@ -137,31 +137,35 @@ def profile_transport(samples, tick_interval_us):
     }
 
 
-def profile_resident(samples):
+def profile_resident(samples, trait_count=0, catalog_trait_count=0):
     from lua_runtime_support import require_lua52
 
     lua = require_lua52("offline Hades operation profiling")
     fixture = ROOT / "Tools/fixtures/hades2_operation_profile.lua"
     runtime = ROOT / "Backend/games/hades2/runtime/hades.lua"
     completed = subprocess.run(
-        [lua, str(fixture), str(runtime), str(samples)],
+        [lua, str(fixture), str(runtime), str(samples), str(trait_count), str(catalog_trait_count)],
         check=True, capture_output=True, text=True, timeout=60,
     )
     timings = collections.defaultdict(list)
     features = None
+    fixture_info = None
     for line in completed.stdout.splitlines():
         name, value = line.split("\t", 1)
         if name == "features":
             features = json.loads(value)
+        elif name == "fixture":
+            fixture_info = json.loads(value)
         else:
             timings[name].append(float(value))
-    if features is None:
-        raise RuntimeError("resident fixture did not report its verified active features")
+    if features is None or fixture_info is None:
+        raise RuntimeError("resident fixture did not report its verified features and inventory")
     return {
-        "workload": "production Lua 5.2 with explicit native stubs; empty trait inventory; no game engine",
+        "workload": "production Lua 5.2 with explicit native stubs and synthetic ordinary God traits; no game engine",
         "clock": "os.clock CPU time; frame samples average 100 UpdateTimers calls",
         "lua": subprocess.check_output([lua, "-v"], stderr=subprocess.STDOUT, text=True).strip(),
         "active_features": features,
+        "fixture": fixture_info,
         "metrics": {name: summarize(values) for name, values in timings.items()},
     }
 
@@ -173,10 +177,21 @@ def positive_integer(value):
     return result
 
 
+def non_negative_integer(value):
+    result = int(value)
+    if result < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("all", "transport", "resident"), default="all")
     parser.add_argument("--samples", type=positive_integer, default=30)
+    parser.add_argument("--resident-traits", type=non_negative_integer, default=0,
+                        help="synthetic mounted ordinary God traits; resident mode only")
+    parser.add_argument("--resident-catalog-traits", type=non_negative_integer, default=0,
+                        help="synthetic exact-acquisition catalog entries; resident mode only")
     parser.add_argument("--tick-microseconds", type=int, default=16667,
                         help="temporary helper update cadence; not a game frame rate measurement")
     parser.add_argument("--output", type=Path, help="write full JSON evidence; otherwise print it")
@@ -193,7 +208,8 @@ def main():
         "platform": platform.platform(),
         "source_sha256": {
             name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-            for name in ("Backend/games/hades2/transport.py", "Backend/games/hades2/runtime/hades.lua")
+            for name in ("Backend/games/hades2/transport.py", "Backend/games/hades2/runtime/hades.lua",
+                         "Tools/profile_hades2_operations.py", "Tools/fixtures/hades2_operation_profile.lua")
         },
     }
     if args.mode in ("all", "transport"):
@@ -213,7 +229,7 @@ def main():
         )
         report["transport"] = json.loads(raw)
     if args.mode in ("all", "resident"):
-        report["resident"] = profile_resident(args.samples)
+        report["resident"] = profile_resident(args.samples, args.resident_traits, args.resident_catalog_traits)
     encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(encoded, encoding="utf-8")

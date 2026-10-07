@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 96 then
+if previousModule and previousModule.revision ~= 97 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 96 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 96, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 97, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -3794,13 +3794,18 @@ if __MacGamingTrainerV1 == nil then
       return result
     end
 
-    local function nativeLevelEligible(trait)
+    local function nativeLevelEligible(trait, observation)
       if type(trait) ~= "table" or type(GetAllUpgradeableGodTraits) ~= "function" then return false end
-      local ok, eligible = pcall(GetAllUpgradeableGodTraits, 1)
-      return ok and type(eligible) == "table" and eligible[trait.Name] == true
+      local eligible = observation and observation.levelEligibility
+      if eligible == nil then
+        local ok, result = pcall(GetAllUpgradeableGodTraits, 1)
+        eligible = ok and type(result) == "table" and result or false
+        if observation then observation.levelEligibility = eligible end
+      end
+      return type(eligible) == "table" and eligible[trait.Name] == true
     end
 
-    local function operationCapabilities(trait, family, sellEligible, sameCount)
+    local function operationCapabilities(trait, family, sellEligible, sameCount, observation)
       local levelCapability, levelReason = "none", "ownerSpecificLifecycle"
       local rarityCapability, rarityReason = "none", "ownerSpecificLifecycle"
       local removalCapability, removalReason = "none", "ownerSpecificLifecycle"
@@ -3838,7 +3843,7 @@ if __MacGamingTrainerV1 == nil then
           levelCapability, levelReason = "increaseOne", ""
         elseif family == "directSpecial" then
           levelReason = "notMeaningful"
-        elseif family == "olympianHermes" and nativeLevelEligible(trait) then
+        elseif family == "olympianHermes" and nativeLevelEligible(trait, observation) then
           levelCapability, levelReason = "increaseOne", ""
         else
           levelReason = family == "olympianHermes" and "notMeaningful" or "ownerSpecificLifecycle"
@@ -3936,11 +3941,19 @@ if __MacGamingTrainerV1 == nil then
         return result, "noActiveRun"
       end
       local runId = tostring(CurrentRun)
+      -- These whole-inventory reads belong to this synchronous observation.
+      -- No result survives into another dispatch or mutation revalidation.
+      local observation = { nameCounts = {} }
+      for _, trait in ipairs(CurrentRun.Hero.Traits) do
+        if type(trait) == "table" and type(trait.Name) == "string" then
+          observation.nameCounts[trait.Name] = (observation.nameCounts[trait.Name] or 0) + 1
+        end
+      end
       for index, trait in ipairs(CurrentRun.Hero.Traits) do
         if type(trait) == "table" and type(trait.Name) == "string" and trait.Name ~= "" then
           local sellEligible, sellReason = sellScreenEligible(trait)
           local family = traitFamily(trait, sellEligible)
-          local count = sameNameCount(trait.Name)
+          local count = observation.nameCounts[trait.Name]
           local displayId = trait.Name
           if type(GetTraitTooltipTitle) == "function" then
             local titleOk, title = pcall(GetTraitTooltipTitle, trait)
@@ -3949,7 +3962,7 @@ if __MacGamingTrainerV1 == nil then
             displayId = trait.CustomTitle
           end
           local levelCapability, levelReason, rarityCapability, rarityReason,
-            removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count)
+            removalCapability, removalReason = operationCapabilities(trait, family, sellEligible, count, observation)
           if removalCapability == "none" and removalReason == "ownerSpecificLifecycle"
               and sellReason ~= "" and family == "olympianHermes" then
             removalReason = sellReason

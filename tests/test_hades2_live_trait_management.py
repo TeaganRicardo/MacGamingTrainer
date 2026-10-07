@@ -39,9 +39,7 @@ def test_owner_family_controls_default_native_paths():
 
     assert 'string.find(source, "NPC_", 1, true) == 1' in family_block
     assert 'return "directSpecial"' in family_block
-    assert 'family == "olympianHermes" and nativeLevelEligible(trait)' in capability_block
     assert 'family == "olympianHermes" and sellEligible' in capability_block
-    assert 'GetAllUpgradeableGodTraits, 1' in LUA
 
     # Direct special-NPC management is source- and behavior-derived; no
     # per-trait strategy/allowlist may bypass the native owner model.
@@ -576,6 +574,57 @@ local function paramsFrom(row, requestId, targetLevel)
   }
   if targetLevel ~= nil then params.targetLevel = targetLevel end
   return params
+end
+
+-- One inventory observation uses one native eligibility response. The next
+-- observation and every mutation must still consult current game-owned state.
+do
+  local original = GetAllUpgradeableGodTraits
+  local queries = 0
+  GetAllUpgradeableGodTraits = function(...)
+    queries = queries + 1
+    return original(...)
+  end
+  local first = newTrait("OrdinaryLevel", 91, 1, "Rare")
+  local second = newTrait("OrdinaryRarity", 92, 1, "Rare")
+  setTraits(first, second)
+  local observed = status().currentRunTraits
+  eq(queries, 1, "inventory repeated native eligibility query")
+  for _, row in ipairs(observed) do
+    eq(row.levelCapability, "increaseOne", "eligible inventory row lost level capability")
+    eq(row.sameNameCount, 1, "distinct inventory row count")
+  end
+
+  first.BlockStacking = true
+  table.insert(CurrentRun.Hero.Traits, newTrait("OrdinaryRarity", 93, 1, "Rare"))
+  observed = status().currentRunTraits
+  eq(queries, 2, "next observation reused prior native eligibility")
+  eq(observed[1].levelCapability, "none", "observation retained stale eligibility")
+  for index = 2, 3 do
+    eq(observed[index].sameNameCount, 2, "observation retained stale membership")
+    eq(observed[index].levelCapability, "none", "duplicate row gained level capability")
+  end
+
+  GetAllUpgradeableGodTraits = function()
+    queries = queries + 1
+    error("synthetic native eligibility failure")
+  end
+  setTraits(first, second)
+  observed = status().currentRunTraits
+  eq(queries, 3, "failed eligibility query repeated within observation")
+  for _, row in ipairs(observed) do
+    eq(row.levelCapability, "none", "failed native query granted level capability")
+  end
+
+  GetAllUpgradeableGodTraits = original
+  first.BlockStacking = nil
+  local row = findRow(first.Name, first.Id)
+  first.BlockStacking = true
+  local beforeLevel = calls.level
+  expectError("Trait level editing is unavailable", function()
+    M.dispatch("set_trait_level", paramsFrom(row, "eligibility-changed", 2))
+  end)
+  eq(calls.level, beforeLevel, "mutation reused observed eligibility")
 end
 
 -- Native Pom-eligible level change: execute the resident command and verify
