@@ -1,15 +1,16 @@
 # Hades save-format attribution
 
-The SGB1/LZ4/luabins format implementation in `save_document.py` was developed from format information published by **Hades-SavesExtractor** by Uladzislau Nikalayevich (TheNormalnij).
+The SGB1/LZ4/luabins format implementation in `save_document.py` was developed from format information and implementation evidence published by **Hades-SavesExtractor** by Uladzislau Nikalayevich (TheNormalnij).
 
 Source: `https://github.com/TheNormalnij/Hades-SavesExtractor`
 
-The upstream repository declares the following MIT License text:
+Upstream source files carry this notice:
 
-> MIT License
->
-> Copyright (c) [year] [fullname]
->
+> Copyright (c) Uladzislau Nikalayevich <thenormalnij@gmail.com>. All rights reserved.
+> Licensed under the MIT license. See LICENSE file in the project root for details.
+
+The upstream repository declares the MIT License. Its permission and warranty text is retained below:
+
 > Permission is hereby granted, free of charge, to any person obtaining a copy
 > of this software and associated documentation files (the "Software"), to deal
 > in the Software without restriction, including without limitation the rights
