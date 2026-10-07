@@ -85,6 +85,12 @@ local function mountTradeScreenComponents(screen)
 end
 
 RandomInt = function(minimum) return minimum end
+local randomChoiceCalls = 0
+GetRandomValue = function(values)
+  randomChoiceCalls = randomChoiceCalls + 1
+  if randomChoiceCalls == 4 and #values > 1 then return values[2] end
+  return values[1]
+end
 HasResource = function(name, amount)
   return (GameState.Resources[name] or 0) >= amount
 end
@@ -125,8 +131,12 @@ HandleScreenInput = function(screen)
     assert(type(button) == 'table' and button.Visible
       and button.OnPressedFunctionName == 'AttemptPanelReroll',
       'Nemesis TradeScreen did not expose the native-style forced reroll action')
+    assert(randomChoiceCalls == 2,
+      'opening a Nemesis trade consumed RNG beyond native give/get selection')
     local before = screen.ChosenGetOption.Name
     CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(randomChoiceCalls == 4,
+      'Nemesis trade reroll did not regenerate through native-shaped give/get draws')
     assert(not screen.KeepOpen, 'Nemesis trade reroll did not close the old native screen before redraw')
     assert(screen.ChosenGetOption.Name == before,
       'Nemesis trade reroll mutated the already-presented transaction plan in place')
