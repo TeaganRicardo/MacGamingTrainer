@@ -5420,10 +5420,12 @@ if __MacGamingTrainerV1 == nil then
       local currentKey = nemesisTradePlanKey(giveOption, getOption)
       local giveOptions = eligibleNemesisTradeOptions(owner.args.GiveOptions)
       local getOptions = eligibleNemesisTradeOptions(owner.args.GetOptions)
-      for _, give in ipairs(giveOptions) do
-        for _, get in ipairs(getOptions) do
-          if nemesisTradePlanKey(give, get) ~= currentKey then return true end
-        end
+      -- All three verified 1.143476 Nemesis families have exactly one give
+      -- owner. Fail closed if a future target changes that shape instead of
+      -- inventing a multi-give RNG policy that the supported build never had.
+      if #giveOptions ~= 1 or #getOptions == 0 then return false end
+      for _, get in ipairs(getOptions) do
+        if nemesisTradePlanKey(giveOptions[1], get) ~= currentKey then return true end
       end
       return false
     end
@@ -5433,8 +5435,11 @@ if __MacGamingTrainerV1 == nil then
       local currentKey = nemesisTradePlanKey(giveOption, getOption)
       local giveOptions = eligibleNemesisTradeOptions(owner.args.GiveOptions)
       local getOptions = eligibleNemesisTradeOptions(owner.args.GetOptions)
-      if #giveOptions == 0 or #getOptions == 0 then return nil end
+      if #giveOptions ~= 1 or #getOptions == 0 then return nil end
 
+      -- Match native NemesisTradeChoice RNG shape: one give draw, then one get
+      -- draw. The verified give pool contains one owner, while the get draw is
+      -- restricted to a genuinely changed eligible offer.
       local selectedGive = GetRandomValue(giveOptions)
       if type(selectedGive) ~= "table" then return nil end
       local eligibleGets = {}
@@ -5443,26 +5448,7 @@ if __MacGamingTrainerV1 == nil then
           eligibleGets[#eligibleGets + 1] = get
         end
       end
-
-      if #eligibleGets == 0 then
-        local alternativeGives = {}
-        for _, give in ipairs(giveOptions) do
-          for _, get in ipairs(getOptions) do
-            if nemesisTradePlanKey(give, get) ~= currentKey then
-              alternativeGives[#alternativeGives + 1] = give
-              break
-            end
-          end
-        end
-        if #alternativeGives == 0 then return nil end
-        selectedGive = GetRandomValue(alternativeGives)
-        if type(selectedGive) ~= "table" then return nil end
-        for _, get in ipairs(getOptions) do
-          if nemesisTradePlanKey(selectedGive, get) ~= currentKey then
-            eligibleGets[#eligibleGets + 1] = get
-          end
-        end
-      end
+      if #eligibleGets == 0 then return nil end
 
       local selectedGet = GetRandomValue(eligibleGets)
       if type(selectedGet) ~= "table" then return nil end
@@ -6511,7 +6497,6 @@ if __MacGamingTrainerV1 == nil then
           local owner = {
             source = source,
             args = copiedArgs,
-            family = family,
             run = CurrentRun,
           }
           nemesisTradeArgs[copiedArgs] = owner
