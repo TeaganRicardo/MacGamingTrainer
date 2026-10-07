@@ -6412,6 +6412,24 @@ if __MacGamingTrainerV1 == nil then
         end)
       end
 
+      if nemesisTradeSupported() then
+        installHook("AttemptPanelReroll", function(original, screen, button, ...)
+          if type(button) == "table"
+              and button.RerollFunctionName == nemesisTradeCallbackName then
+            local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
+            if type(owner) ~= "table"
+                or owner.source ~= screen.Source
+                or owner.args ~= screen.Args
+                or owner.run ~= CurrentRun
+                or currentNamedScreen("TradeScreen") ~= screen then
+              clearRerollControl(screen, true)
+              return
+            end
+          end
+          return original(screen, button, ...)
+        end)
+      end
+
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
           if storePanelDepth > 0 then return true end
@@ -6570,6 +6588,7 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("HandleScreenInput")
       releaseHook("OpenTradeScreen")
       releaseHook("NemesisTradeChoice")
+      releaseHook("AttemptPanelReroll")
       releaseHook("UpdateTalentButtons")
       releaseHook("CreateSpellButtons")
       releaseHook("CreateBoonLootButtons")
@@ -6625,7 +6644,7 @@ if __MacGamingTrainerV1 == nil then
           and _G[surfaceShopCallbackName] == surfaceShopCallback)
       local nemesisTradeActive = not nemesisTradePresent()
         or (owns("NemesisTradeChoice") and owns("OpenTradeScreen")
-          and owns("HandleScreenInput")
+          and owns("HandleScreenInput") and owns("AttemptPanelReroll")
           and _G[nemesisTradeCallbackName] == nemesisTradeCallback)
       local doorActive = not doorPresent()
         or (owns("HasHeroTraitValue") and owns("AssignRoomToExitDoor"))
