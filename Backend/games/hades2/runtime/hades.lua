@@ -6427,7 +6427,7 @@ if __MacGamingTrainerV1 == nil then
             end
           end
           return original(screen, button, ...)
-        end)
+        end, "session")
       end
 
       installHook("HeroHasTrait", function(original, name, ...)
