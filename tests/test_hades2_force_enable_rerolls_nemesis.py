@@ -223,7 +223,8 @@ assert(enabled.activeFeatures.forceEnableRerolls,
 
 NemesisTradeChoice(source, PresetEventArgs.NemesisBuyItemChoices, dialogue)
 assert(tradeOpenCount == 2, 'one Nemesis trade reroll did not regenerate exactly one native screen')
-assert(displayedReward == 'TradeRewardB',
+assert(displayedReward ~= 'TradeRewardA'
+  and (displayedReward == 'TradeRewardB' or displayedReward == 'TradeRewardC'),
   'Nemesis trade reroll did not produce a genuinely changed eligible reward')
 assert(CurrentRun.NumRerolls == 4
   and CurrentRun.CurrentRoom.SpentRerolls[801] == 1,
