@@ -26,7 +26,7 @@ SUPPORTED_HADES2_SAVE_VERSIONS = frozenset({
 _MAX_FILE_BYTES = 64 * 1024 * 1024
 _MAX_HEADER_STRING_BYTES = 1024 * 1024
 _MAX_NOTABLE_LUA_ITEMS = 1_000_000
-_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024
+_MAX_DECOMPRESSED_BYTES = 3129344 * 2
 _MAX_LUABINS_DEPTH = 128
 _MAX_LUABINS_TABLE_ENTRIES = 10_000_000
 
@@ -295,29 +295,87 @@ def _decompress_lz4_block(data):
     return bytes(output)
 
 
-def _literal_lz4_block(payload):
-    """Encode a valid raw LZ4 block as one final literal-only sequence.
+def _compress_lz4_block(payload):
+    """Encode one standards-compatible raw LZ4 block without a runtime dependency.
 
-    Untouched documents reuse the game's original compressed bytes exactly.
-    This dependency-free encoder is therefore only used after a structured
-    mutation. It favors deterministic correctness over compression ratio; a
-    later optimization may replace it without changing the document interface.
+    A fixed-size hash table provides ordinary LZ4 greedy matching while keeping
+    memory bounded for the supported Hades save buffer. The encoder deliberately
+    preserves the block-format end constraints (last five bytes literals; final
+    match begins at least twelve bytes before the end) used by reference LZ4
+    decoders.
     """
 
     if len(payload) > _MAX_DECOMPRESSED_BYTES:
         raise HadesSaveFormatError("luabins payload exceeds size limit")
+
     output = bytearray()
-    length = len(payload)
-    if length < 15:
-        output.append(length << 4)
-    else:
-        output.append(0xF0)
-        remaining = length - 15
-        while remaining >= 255:
+    size = len(payload)
+
+    def write_extension(length):
+        while length >= 255:
             output.append(255)
-            remaining -= 255
-        output.append(remaining)
-    output += payload
+            length -= 255
+        output.append(length)
+
+    def emit(anchor, match_start, match_length=0, offset=0):
+        literal_length = match_start - anchor
+        match_code = match_length - 4 if match_length else 0
+        token = (min(literal_length, 15) << 4) | min(match_code, 15)
+        output.append(token)
+        if literal_length >= 15:
+            write_extension(literal_length - 15)
+        output.extend(payload[anchor:match_start])
+        if not match_length:
+            return
+        output.extend(struct.pack("<H", offset))
+        if match_code >= 15:
+            write_extension(match_code - 15)
+
+    if size < 13:
+        emit(0, size)
+        return bytes(output)
+
+    last = [-1] * 65536
+
+    def hash_at(position):
+        value = int.from_bytes(payload[position:position + 4], "little")
+        return ((value * 2654435761) & 0xFFFFFFFF) >> 16
+
+    anchor = 0
+    pos = 0
+    match_limit = size - 5
+    search_limit = size - 12
+
+    while pos <= search_limit:
+        slot = hash_at(pos)
+        candidate = last[slot]
+        last[slot] = pos
+        if (
+            candidate < 0
+            or pos - candidate > 0xFFFF
+            or payload[candidate:candidate + 4] != payload[pos:pos + 4]
+        ):
+            pos += 1
+            continue
+
+        match_length = 4
+        max_match = match_limit - pos
+        while (
+            match_length < max_match
+            and payload[candidate + match_length] == payload[pos + match_length]
+        ):
+            match_length += 1
+
+        emit(anchor, pos, match_length, pos - candidate)
+        end = pos + match_length
+        update = pos + 1
+        while update + 4 <= end:
+            last[hash_at(update)] = update
+            update += 1
+        pos = end
+        anchor = end
+
+    emit(anchor, size)
     return bytes(output)
 
 
@@ -620,7 +678,7 @@ class Hades2SaveDocument:
         if self._original_luabins is not None and luabins == self._original_luabins:
             compressed = self._original_compressed
         else:
-            compressed = _literal_lz4_block(luabins)
+            compressed = _compress_lz4_block(luabins)
         encoded = _encode_container(self.header, compressed)
         if self._original_bytes is not None and encoded == self._original_bytes:
             return self._original_bytes

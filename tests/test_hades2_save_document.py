@@ -144,6 +144,15 @@ assert reopened.lua_state["GameState"]["MetaPoints"] == 999.0
 assert reopened.lua_state["GameState"]["UnknownFutureField"]["KeepMe"] == "yes"
 assert list(reopened.lua_state["GameState"]["OrderedFlags"].keys()) == ["First", "Second"]
 
+# Structured writes retain normal LZ4 compression instead of expanding the
+# entire Lua payload as a literal-only block.
+large_fixture = build_save(lua_state={"Blob": "ABCD" * 20000, "Keep": 7.0})
+large_doc = Hades2SaveDocument.from_bytes(large_fixture)
+large_doc.lua_state["Keep"] = 8.0
+large_encoded = large_doc.to_bytes()
+assert len(large_encoded) < 10_000, len(large_encoded)
+assert Hades2SaveDocument.from_bytes(large_encoded).lua_state["Blob"] == "ABCD" * 20000
+
 # File interface uses a caller-selected temporary path; it never resolves the real save tree.
 with tempfile.TemporaryDirectory(prefix="mgt-hades-save-doc-") as td:
     path = Path(td) / "Profile1.sav"
