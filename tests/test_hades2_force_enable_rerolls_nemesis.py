@@ -204,12 +204,34 @@ local function resetTrade(mode, rerolls)
 end
 
 CloseTradeScreen = function(screen)
+  if tradeMode == 'closeFailure' and tradeOpenCount == 1 then
+    error('simulated TradeScreen close failure after native spend')
+  end
   screen.KeepOpen = false
   if ActiveScreens.TradeScreen == screen then ActiveScreens.TradeScreen = nil end
 end
 
 HandleScreenInput = function(screen)
   assert(screen.Name == 'TradeScreen')
+  if tradeMode == 'closeFailure' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible,
+      'close-failure setup did not expose the Nemesis reroll control')
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(panelSpendMutations == 1 and CurrentRun.NumRerolls == 4
+      and CurrentRun.CurrentRoom.SpentRerolls[screen.Source.ObjectId] == 1,
+      'close-failure Nemesis reroll did not preserve the completed native spend')
+    assert(screen.KeepOpen,
+      'failed close unexpectedly consumed the native TradeScreen')
+    local mutationOk, mutationError = pcall(M.dispatch, 'set_rerolls', {
+      value = 3, includeCatalogs = false,
+    })
+    assert(not mutationOk
+      and string.find(tostring(mutationError), 'MGT_OUTCOME_UNKNOWN', 1, true) ~= nil,
+      'post-spend TradeScreen failure did not close the resident mutation boundary')
+    M.dispatch('disable_all', { includeCatalogs = false })
+    return
+  end
   if tradeMode == 'postSpendStale' then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible,
@@ -541,36 +563,52 @@ NemesisTradeChoice(staleSource, PresetEventArgs.NemesisBuyItemChoices, {})
 assert(CurrentRun.NumRerolls == 5,
   'stale Nemesis TradeScreen changed the owning run while refusing')
 
--- If the run changes only after native AttemptPanelReroll has spent, the
--- transaction outcome is no longer safe to rewrite or refund. Preserve the
--- completed spend, leave the replacement run untouched, and close the
--- resident mutation boundary instead of replaying automatically.
-resetTrade('postSpendStale', 5)
-local postSpendSource = { Name = 'NPC_Nemesis_01', ObjectId = 803, Accepted = false }
-NemesisTradeChoice(postSpendSource, PresetEventArgs.NemesisBuyItemChoices, {})
+if MGT_NEMESIS_TERMINAL_SCENARIO == 'postSpendStale' then
+  -- If the run changes only after native AttemptPanelReroll has spent, the
+  -- transaction outcome is no longer safe to rewrite or refund. Preserve the
+  -- completed spend, leave the replacement run untouched, and close the
+  -- resident mutation boundary instead of replaying automatically.
+  resetTrade('postSpendStale', 5)
+  local postSpendSource = { Name = 'NPC_Nemesis_01', ObjectId = 803, Accepted = false }
+  NemesisTradeChoice(postSpendSource, PresetEventArgs.NemesisBuyItemChoices, {})
+elseif MGT_NEMESIS_TERMINAL_SCENARIO == 'closeFailure' then
+  -- Once native spend has happened, an unexpected failure while replacing the
+  -- modal is also outcome-unknown. Never refund/replay through an uncertain
+  -- partial transaction.
+  resetTrade('closeFailure', 5)
+  local closeFailureSource = { Name = 'NPC_Nemesis_01', ObjectId = 812, Accepted = false }
+  NemesisTradeChoice(closeFailureSource, PresetEventArgs.NemesisBuyItemChoices, {})
+else
+  error('unknown Nemesis terminal scenario')
+end
 
 -- disable_all above is the only supported teardown while terminal outcome is
 -- unknown; no further feature mutation is performed in this harness.
 
 '''
 
-HARNESS = BASE_HARNESS.replace(
-    "print('hades2_force_enable_rerolls_ok')",
-    NEMESIS_CASES + "\nprint('hades2_force_enable_rerolls_ok')",
-)
-
-with tempfile.TemporaryDirectory(prefix="mgt-force-enable-rerolls-nemesis-") as temporary:
-    harness = Path(temporary) / "force-enable-rerolls-nemesis.lua"
-    harness.write_text(HARNESS)
-    result = subprocess.run(
-        [LUA, str(harness), str(ROOT / "Backend/games/hades2/runtime/hades.lua"),
-         str(RESIDENT_DISPATCH_CONTRACT)],
-        cwd=ROOT, text=True, capture_output=True, timeout=30,
+for terminal_scenario in ("postSpendStale", "closeFailure"):
+    scenario_cases = (
+        f"MGT_NEMESIS_TERMINAL_SCENARIO = '{terminal_scenario}'\n" + NEMESIS_CASES
     )
-    if result.returncode:
-        print(result.stdout)
-        print(result.stderr)
-        raise SystemExit(result.returncode)
-    assert "hades2_force_enable_rerolls_ok" in result.stdout
+    harness_text = BASE_HARNESS.replace(
+        "print('hades2_force_enable_rerolls_ok')",
+        scenario_cases + "\nprint('hades2_force_enable_rerolls_ok')",
+    )
+    with tempfile.TemporaryDirectory(
+        prefix=f"mgt-force-enable-rerolls-nemesis-{terminal_scenario}-"
+    ) as temporary:
+        harness = Path(temporary) / "force-enable-rerolls-nemesis.lua"
+        harness.write_text(harness_text)
+        result = subprocess.run(
+            [LUA, str(harness), str(ROOT / "Backend/games/hades2/runtime/hades.lua"),
+             str(RESIDENT_DISPATCH_CONTRACT)],
+            cwd=ROOT, text=True, capture_output=True, timeout=30,
+        )
+        if result.returncode:
+            print(result.stdout)
+            print(result.stderr)
+            raise SystemExit(result.returncode)
+        assert "hades2_force_enable_rerolls_ok" in result.stdout
 
 print("hades2_force_enable_rerolls_nemesis_runtime_ok")
