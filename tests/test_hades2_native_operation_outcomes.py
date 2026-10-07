@@ -167,6 +167,38 @@ assert(not observed.runtimeOutcomeUnknown)
 M.dispatch('set_rerolls', { amount = 77, requestId = 'safe' })
 '''
 
+for first_command, first_params in (
+    ("open_sell_traits", "{}"),
+    ("open_special_choice", "{ source = 'Arachne' }"),
+):
+    for second_command, second_params in (
+        ("open_sell_traits", "{}"),
+        ("open_special_choice", "{ source = 'Arachne' }"),
+    ):
+        cases[first_command + '_then_' + second_command] = BASE + ASYNC + f'''
+local queued = {{}}
+thread = function(fn) queued[#queued + 1] = fn end
+local nativeCalls = 0
+local function nativeMenu()
+  nativeCalls = nativeCalls + 1
+  if nativeCalls == 1 then error('native close fault after commit') end
+end
+OpenSellTraitMenu = nativeMenu
+OpenUpgradeChoiceMenu = nativeMenu
+local first = {first_params}; first.requestId = 'first-modal'
+local second = {second_params}; second.requestId = 'second-modal'
+assert(M.dispatch('{first_command}', first).actionOutcome == 'accepted')
+assert(M.dispatch('{second_command}', second).actionOutcome == 'accepted')
+assert(#queued == 2)
+queued[1]()
+assert(M.dispatch('status', {{ includeCatalogs = false }}).runtimeOutcomeUnknown)
+queued[2]()
+local observed = M.dispatch('status', {{ includeCatalogs = false }})
+assert(nativeCalls == 1, 'queued action entered native after terminal outcome unknown')
+assert(observed.lastAction.requestId == 'second-modal' and observed.lastAction.outcome == 'failed',
+  'queued action that never entered native was not a known refusal')
+''' + ASSERT_UNKNOWN
+
 with tempfile.TemporaryDirectory(prefix="mgt-native-outcomes-") as temporary:
     for name, source in cases.items():
         harness = Path(temporary) / (name + ".lua")

@@ -375,6 +375,12 @@ end
 
 OpenTradeScreen = function(source, args, chosenGiveOption, chosenGetOption)
   tradeOpenCount = tradeOpenCount + 1
+  if tradeMode == 'initialFailure' then
+    error('simulated initial TradeScreen failure before a reroll')
+  end
+  if tradeMode == 'redrawFailure' and tradeOpenCount == 2 then
+    error('simulated replacement TradeScreen failure after completed reroll')
+  end
   local screen = {
     Name = 'TradeScreen',
     Source = source,
@@ -597,6 +603,36 @@ elseif MGT_NEMESIS_TERMINAL_SCENARIO == 'closeFailure' then
   resetTrade('closeFailure', 5)
   local closeFailureSource = { Name = 'NPC_Nemesis_01', ObjectId = 812, Accepted = false }
   NemesisTradeChoice(closeFailureSource, PresetEventArgs.NemesisBuyItemChoices, {})
+elseif MGT_NEMESIS_TERMINAL_SCENARIO == 'initialFailure' then
+  resetTrade('initialFailure', 5)
+  local initialSource = { Name = 'NPC_Nemesis_01', ObjectId = 814, Accepted = false }
+  local ok, message = pcall(NemesisTradeChoice, initialSource,
+    PresetEventArgs.NemesisBuyItemChoices, {})
+  assert(not ok and not tostring(message):find('MGT_OUTCOME_UNKNOWN', 1, true))
+  local observed = M.dispatch('status', { includeCatalogs = false })
+  assert(not observed.runtimeOutcomeUnknown and CurrentRun.NumRerolls == 5
+    and panelSpendMutations == 0, 'pre-reroll failure falsely closed native trust')
+  ShowRerollUI = function() end
+  M.dispatch('set_rerolls', { amount = 77, requestId = 'initial-followup', includeCatalogs = false })
+elseif MGT_NEMESIS_TERMINAL_SCENARIO == 'redrawFailure' then
+  resetTrade('redrawFailure', 5)
+  local redrawSource = { Name = 'NPC_Nemesis_01', ObjectId = 813, Accepted = false }
+  local ok, message = pcall(NemesisTradeChoice, redrawSource,
+    PresetEventArgs.NemesisBuyItemChoices, {})
+  assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN', 1, true),
+    'replacement TradeScreen failure lost the completed reroll outcome')
+  assert(CurrentRun.NumRerolls == 4 and panelSpendMutations == 1,
+    'replacement TradeScreen failure guessed a refund')
+  local observed = M.dispatch('status', { includeCatalogs = false })
+  assert(observed.runtimeOutcomeUnknown and not observed.activeFeatures.forceEnableRerolls)
+  assert(observed.featureErrors.forceEnableRerolls == 'hades2.error.outcomeUnknownRuntime',
+    'replacement TradeScreen failure lost bilingual feature error')
+  ShowRerollUI = function() end
+  local mutateOk, mutateError = pcall(M.dispatch, 'set_rerolls', {
+    amount = 77, requestId = 'redraw-followup', includeCatalogs = false,
+  })
+  assert(not mutateOk and tostring(mutateError):find('MGT_OUTCOME_UNKNOWN', 1, true),
+    'replacement TradeScreen failure admitted another mutation')
 else
   error('unknown Nemesis terminal scenario')
 end
@@ -606,7 +642,7 @@ end
 
 '''
 
-for terminal_scenario in ("postSpendStale", "closeFailure"):
+for terminal_scenario in ("postSpendStale", "closeFailure", "initialFailure", "redrawFailure"):
     scenario_cases = (
         f"MGT_NEMESIS_TERMINAL_SCENARIO = '{terminal_scenario}'\n" + NEMESIS_CASES
     )

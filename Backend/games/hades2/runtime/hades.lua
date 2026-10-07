@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 93 then
+if previousModule and previousModule.revision ~= 94 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 93 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 93, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 94, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1287,6 +1287,7 @@ if __MacGamingTrainerV1 == nil then
       local operation = {
         owner = frame,
         enter = function()
+          if M.terminalActionUnknown then error("Native operation trust closed before commit; do not retry") end
           if not sameOwner(frame) then error("Native operation owner changed before commit") end
           crossed = true
         end,
@@ -6253,6 +6254,15 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local pendingRerollOwners = setmetatable({}, { __mode = "k" })
+    local function reportRerollFailure(screen, message)
+      if M.terminalActionUnknown then
+        M.featureErrors.forceEnableRerolls = "hades2.error.outcomeUnknownRuntime"
+        pcall(clearRerollControl, screen, true)
+      end
+      if type(DebugPrint) == "function" then
+        DebugPrint({ Text = "MacGamingTrainer native reroll: " .. tostring(message) })
+      end
+    end
     local function runReroll(screen, work)
       local ok, message = nativeOperations.run(nil, "completed", function(operation)
         -- Native spend/presentation is not atomic. A callback is entered after
@@ -6260,13 +6270,7 @@ if __MacGamingTrainerV1 == nil then
         operation.enter()
         return work(operation)
       end, pendingRerollOwners[screen])
-      if not ok and M.terminalActionUnknown then
-        M.featureErrors.forceEnableRerolls = "hades2.error.outcomeUnknownRuntime"
-        pcall(clearRerollControl, screen, true)
-      end
-      if not ok and type(DebugPrint) == "function" then
-        DebugPrint({ Text = "MacGamingTrainer native reroll: " .. tostring(message) })
-      end
+      if not ok then reportRerollFailure(screen, message) end
       if ok then return message end
     end
 
@@ -6389,15 +6393,14 @@ if __MacGamingTrainerV1 == nil then
           error("Nemesis trade reroll owner changed after native spend")
         end
 
-        owner.hadReroll = true
         local plan = changedNemesisTradePlan(
           owner, screen.ChosenGiveOption, screen.ChosenGetOption
         )
         if plan == nil then
           operation.rollback(function() return rollbackPanelSpend(screen, button) end)
-          owner.hadReroll = false
           error("Force reroll pool has no changed eligible candidates")
         end
+        owner.operation.enter()
         CloseTradeScreen(screen, button)
         owner.nextPlan = plan
       end)
@@ -6538,19 +6541,22 @@ if __MacGamingTrainerV1 == nil then
             run = CurrentRun,
           }
           nemesisTradeArgs[copiedArgs] = owner
-          local ok, result = pcall(original, source, copiedArgs, screen, ...)
-          if ok and source.Accepted and owner.finalPlan ~= nil then
-            copiedArgs.ChosenGiveOption = owner.finalPlan.give
-            copiedArgs.ChosenGetOption = owner.finalPlan.get
-          end
-          nemesisTradeArgs[copiedArgs] = nil
-          if not ok then
-            if owner.hadReroll and not M.terminalActionUnknown then
-              result = taintNemesisTrade(
-                "Nemesis trade reroll failed while replacing the native transaction owner: "
-                  .. tostring(result)
-              )
+          local args = { ... }
+          local ok, result = nativeOperations.run(nil, "completed", function(operation)
+            owner.operation = operation
+            local nativeOk, result = pcall(original, source, copiedArgs, screen, unpack(args))
+            if nativeOk and source.Accepted and owner.finalPlan ~= nil then
+              copiedArgs.ChosenGiveOption = owner.finalPlan.give
+              copiedArgs.ChosenGetOption = owner.finalPlan.get
             end
+            nemesisTradeArgs[copiedArgs] = nil
+            if not nativeOk then error(result) end
+            return result
+          end)
+          if not ok then
+            local tradeScreen = currentNamedScreen("TradeScreen")
+            if nemesisTradeScreens[tradeScreen] ~= owner then tradeScreen = nil end
+            reportRerollFailure(tradeScreen, result)
             error(result)
           end
           return result

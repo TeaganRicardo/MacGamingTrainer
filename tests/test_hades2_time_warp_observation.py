@@ -1,7 +1,10 @@
+import copy
 import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -129,5 +132,51 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
     else:
         raise AssertionError('lost PID default was adopted as actual speed')
     assert lost._time_warp_speed is None and lost.preference_dirty
+
+    # Every connection-loss route invalidates the last observed helper value,
+    # including read-only observations and preflight failures before dispatch.
+    for loss in ('observe', 'status', 'preflight', 'scan'):
+        disconnected_driver = ResidentHelperDriver()
+        disconnected_controller = ProcessTimeWarpController(
+            disconnected_driver, Path(temporary) / 'helper', ['Hades II'])
+        disconnected_session = FakeResidentSession(session.payload)
+        disconnected_session.payload['runtimeDiagnostics'] = {}
+        disconnected = Hades2Adapter(resident_session=disconnected_session,
+                                     time_warp_controller=disconnected_controller)
+        disconnected.state.update(connected=True, pid=4242)
+        assert disconnected.observe_runtime()['activeFeatures']['gameSpeed']
+        desired = copy.deepcopy(disconnected.preferences)
+
+        def lose_connection(resident, record):
+            resident.live = False
+            resident.pid = None
+            return AdapterError('disconnected', 'test connection loss')
+
+        if loss == 'scan':
+            disconnected_session.live = False
+            with patch.object(preparation, 'compatibility', return_value={
+                    'version': '1.143476', 'warnings': [], 'steam_build': '25481925'}), \
+                    patch('games.hades2.adapter.subprocess.run', return_value=SimpleNamespace(
+                        returncode=0, stdout='4242\n', stderr='')):
+                disconnected.scan()
+        else:
+            if loss == 'preflight':
+                disconnected_session.live = False
+            else:
+                disconnected_session.handler = lose_connection
+            try:
+                if loss == 'observe':
+                    disconnected.observe_runtime()
+                else:
+                    disconnected.dispatch('status', {}, 'lost-' + loss)
+            except AdapterError as error:
+                assert error.code == 'disconnected'
+            else:
+                raise AssertionError('lost connection did not fail: ' + loss)
+        assert not disconnected.state['connected'], loss
+        assert not disconnected.state['activeFeatures']['gameSpeed'], loss
+        assert disconnected.state['runtimeDiagnostics']['gameSpeedAppliedValue'] is None, loss
+        assert disconnected.preferences == desired, loss
+        assert disconnected_driver.speed == 2.0 and disconnected_driver.writes == [], loss
 
 print("hades2_time_warp_observation_ok")

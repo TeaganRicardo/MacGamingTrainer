@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 13.
 - Hades II desired-state schema: 8.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 93.
+- Hades II resident runtime revision: 94.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -44,7 +44,7 @@ Accepted resident source SHA256:
 
 `de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
 
-Current source contains resident revision 93. Revisions 52–93 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+Current source contains resident revision 94. Revisions 52–94 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -84,6 +84,7 @@ Current source contains resident revision 93. Revisions 52–93 remain pending t
 - revision 91: the Force Enable Rerolls owner is deepened after full-family convergence. Aggregate support/active state now fails closed when an applicable Selene, store-panel, SurfaceShop, or reward-door native seam is incomplete instead of silently reporting the whole feature active. UpgradeChoice, Selene and SurfaceShop share one private reroll-control configuration/teardown path while retaining distinct Hades-owned candidate generators. Adapter candidate exhaustion discovered only after native `AttemptPanelReroll` spend now rolls back that exact reroll charge/history before reporting the miss, preventing a paid no-op without changing permanent Arcana/MetaUpgrade ownership. Consolidated real-game acceptance remains pending.
 - revision 92: **强制启用重骰 / Force Enable Rerolls** extends to Nemesis' three native transaction families: Gold payment, damage-for-item, and sell-one-trait trades. The resident copies the event transaction inputs, preserves Hades' eligibility checks and separate give/get RNG draws, redraws through the native `TradeScreen`, and rebinds the accepted deferred `TradeDoExchange` to the exact final displayed plan; native cost/damage preparation, sell-option generation, payment/damage/trait removal, reward spawning, and accept/decline lifecycle remain game-owned. Shared `PresetEventArgs` pools are never mutated. The injected contextual control spends through native `AttemptPanelReroll` with normal panel escalation and reroll-lock compatibility. Closed/replaced/stale owners refuse before spend; an owner change after native spend is terminal outcome-unknown and blocks replay or further unsafe mutation instead of refunding into a new run. No Trainer-issued reroll transaction or Host request identity is reintroduced. Consolidated real-game acceptance remains pending.
 - revision 93: native rerolls and asynchronous reward/sell menus share execution-boundary outcome classification. Unproven post-native failures close resident/session trust; pre-native refusals and confirmed candidate-miss refunds remain known failures. Vital lock edits capture the complete normalized current/max result, and native mana reservation clamps are confirmed and persisted after replay. Full resident observations explicitly clear absent nullable values while allowing catalog omission. Exit tears down every verified resident connection; Time Warp observes the actual helper on verified attachment before reconciliation and reasserts idempotent configuration after sidecar replacement. Diagnostics use the resident observation interface, and mutation handoff returns the actual resident JSON object. Consolidated real-game acceptance remains pending.
+- revision 94: queued reward/sell actions recheck terminal trust before entering native execution. Nemesis replacement-screen and transaction-unwind failures after a reroll are classified by the same native-operation owner; failures before any reroll remain known, and no guessed refund or replay is introduced. Time Warp observation is invalidated on all verified connection-loss routes, including status/observation errors and same-PID debugger loss. Consolidated real-game acceptance remains pending.
 
 Automated verification does not replace this manual acceptance.
 

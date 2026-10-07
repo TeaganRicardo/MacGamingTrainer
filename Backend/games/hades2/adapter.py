@@ -298,6 +298,10 @@ class Hades2Adapter(GameAdapter):
         self.preference_dirty=True
         self._project_time_warp()
 
+    def _mark_disconnected(self):
+        self._invalidate_game_speed_observation()
+        mark_disconnected(self.state)
+
     def _observe_game_speed(self):
         if not self.runtime.allows_process_time_warp():return
         pid=self.runtime.pid
@@ -337,7 +341,7 @@ class Hades2Adapter(GameAdapter):
         # behind the host's back, report the connection loss rather than trying
         # to reattach during application termination.
         if self.state.get('connected') and not self.runtime.alive():
-            mark_disconnected(self.state)
+            self._mark_disconnected()
         self._overlay_preferences()
         return dict(self.state)
 
@@ -662,7 +666,7 @@ class Hades2Adapter(GameAdapter):
             attached_pid=self.runtime.pid
             same_process=pid is not None and pid==attached_pid
             self.runtime.detach()
-            if same_process:mark_disconnected(self.state)
+            if same_process:self._mark_disconnected()
             else:
                 clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
         elif self.state.get('pid') is not None and pid!=self.state.get('pid'):
@@ -685,14 +689,15 @@ class Hades2Adapter(GameAdapter):
         try:
             phase=time.monotonic();self.scan();profile['scan']=time.monotonic()-phase
             if not self.state['pid']:raise TransportError('not_running',f'请先启动 {GAME_SPEC.display_name} 并进入存档。')
+            # A reconnect invalidates the prior native helper observation.
+            # Resident-session attach separately owns Lua generation/bootstrap.
+            self._invalidate_game_speed_observation()
             phase=time.monotonic()
             try:
                 self.runtime.attach(self.state['pid'])
             finally:
                 profile['attachTotal']=time.monotonic()-phase
                 attach_profile=self.runtime.last_attach_profile
-            # Resident-session attach owns generation/bootstrap invalidation.
-            self._invalidate_game_speed_observation()
             self.state['connected']=True
             if not probe_runtime:
                 outcome='deferred'
@@ -717,7 +722,7 @@ class Hades2Adapter(GameAdapter):
                     result=dict(self.state)
                 else:
                     outcome=e.code
-                    self.runtime.detach();mark_disconnected(self.state);raise
+                    self.runtime.detach();self._mark_disconnected();raise
             profile['firstStatusTotal']=time.monotonic()-phase
             return result
         except Exception as exc:
@@ -792,7 +797,7 @@ class Hades2Adapter(GameAdapter):
     def _project_runtime_error(self,error,project_desired):
         if error.code=='waiting':self.state['status']='waiting'
         elif error.code=='disconnected':
-            self.state.update(status='disconnected');mark_disconnected(self.state)
+            self.state.update(status='disconnected');self._mark_disconnected()
         elif error.code in ('restart_required','outcome_unknown','restore_failed'):
             self.state['status']='restart_required'
         if project_desired:self._overlay_preferences()
@@ -822,7 +827,10 @@ class Hades2Adapter(GameAdapter):
                 if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
             self.runtime.attach(self.state['pid']);self.state['connected']=True
-        if not self.runtime.alive():raise TransportError('disconnected','请先连接游戏。')
+        if not self.runtime.alive():
+            error=TransportError('disconnected','请先连接游戏。')
+            self._project_runtime_error(error,project_desired)
+            raise error
         teardown_speed_error=None
         if teardown:
             try:self._apply_game_speed(1.0)
@@ -897,9 +905,8 @@ class Hades2Adapter(GameAdapter):
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
         if self.runtime.alive():self.runtime.detach()
-        self._invalidate_game_speed_observation()
         self.state.update(connected=False,status='disconnected')
-        mark_disconnected(self.state)
+        self._mark_disconnected()
         self._overlay_preferences()
         return dict(self.state)
 
