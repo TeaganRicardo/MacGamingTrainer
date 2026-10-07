@@ -1,47 +1,8 @@
 import struct
-from dataclasses import dataclass
 from pathlib import Path
 
 from .localization import official_display_names
-
-
-@dataclass(frozen=True)
-class _SaveHeader:
-    timestamp: int
-    location: str
-    runs: int
-    fear: int
-    grasp: int
-    current_map: str
-
-
-class _Reader:
-    def __init__(self, data):
-        self.data = memoryview(data)
-        self.pos = 0
-
-    def take(self, size):
-        end = self.pos + size
-        if size < 0 or end > len(self.data):
-            raise ValueError('truncated SGB1 header')
-        value = self.data[self.pos:end]
-        self.pos = end
-        return value
-
-    def u16(self):
-        return struct.unpack('<H', self.take(2))[0]
-
-    def u32(self):
-        return struct.unpack('<I', self.take(4))[0]
-
-    def u64(self):
-        return struct.unpack('<Q', self.take(8))[0]
-
-    def string(self):
-        size = self.u32()
-        if size > 4096:
-            raise ValueError('SGB1 header string is too large')
-        return bytes(self.take(size)).decode('utf-8', errors='strict')
+from .save_document import HadesSaveError, read_hades2_save_header
 
 
 def _active_profile(path):
@@ -58,32 +19,6 @@ def _active_profile(path):
     if not value.startswith('Profile') or not value[7:].isdigit():
         return None
     return value
-
-
-def _save_header(path):
-    try:
-        reader = _Reader(path.read_bytes())
-        if bytes(reader.take(4)) != b'SGB1':
-            return None
-        reader.take(4)  # checksum
-        version = reader.u16()
-        reader.take(2)  # save flags
-        timestamp = reader.u64()
-        location = reader.string()
-        runs = reader.u32()
-        reader.u32()  # accumulated meta points
-        fear = reader.u32()
-        grasp = reader.u32() if version >= 17 else 0
-        if version >= 18:
-            reader.u32()  # cosmetics points
-        reader.take(2)  # easy / hard mode
-        for _ in range(reader.u32()):
-            reader.string()
-        current_map = reader.string()
-        reader.string()  # next map
-        return _SaveHeader(timestamp, location, runs, fear, grasp, current_map)
-    except (OSError, UnicodeDecodeError, ValueError, struct.error):
-        return None
 
 
 class Hades2SaveProvider:
@@ -106,9 +41,11 @@ class Hades2SaveProvider:
             path = by_path.get(relative)
             if path is None:
                 continue
-            header = _save_header(path)
-            if header is not None:
-                headers.append(header)
+            try:
+                header = read_hades2_save_header(path)
+            except (OSError, HadesSaveError):
+                continue
+            headers.append(header)
         if not headers:
             return {'defaultName': None, 'nameDetails': []}
 
@@ -121,13 +58,23 @@ class Hades2SaveProvider:
                 language,
                 game_path=self.game_path,
             )
-            location = names.get(header.location) or header.current_map or header.location
+            location = names.get(header.location) or header.map_name or header.location
             if language == 'en':
-                night = f'Night {header.runs}'
-                details = [night, location, f'Grasp {header.grasp}', f'Fear {header.fear}']
+                night = f'Night {header.completed_runs}'
+                details = [
+                    night,
+                    location,
+                    f'Grasp {header.meta_upgrade_level}',
+                    f'Fear {header.active_shrine_points}',
+                ]
             else:
-                night = f'第{header.runs}夜'
-                details = [night, location, f'悟性 {header.grasp}', f'恐惧 {header.fear}']
+                night = f'第{header.completed_runs}夜'
+                details = [
+                    night,
+                    location,
+                    f'悟性 {header.meta_upgrade_level}',
+                    f'恐惧 {header.active_shrine_points}',
+                ]
             return {
                 'name': f'{time_label} · {night} · {location}',
                 'details': details,

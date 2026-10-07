@@ -1,6 +1,7 @@
 import struct
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,7 @@ def write_save(
     raw += struct.pack("<I", 0)       # notable lua data count
     raw += struct.pack("<I", len(current_b)) + current_b
     raw += struct.pack("<I", len(next_b)) + next_b
+    struct.pack_into("<I", raw, 4, zlib.adler32(raw[8:]) & 0xFFFFFFFF)
     path.write_bytes(raw)
 
 
