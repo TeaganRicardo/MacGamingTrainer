@@ -302,6 +302,29 @@ class Hades2Adapter(GameAdapter):
         self._invalidate_game_speed_observation()
         mark_disconnected(self.state)
 
+    def _project_detached_runtime(self):
+        self.state.update(connected=False,status='disconnected')
+        self._mark_disconnected()
+        self._overlay_preferences()
+
+    def _attach_runtime(self,pid):
+        try:
+            self.runtime.attach(pid)
+        except Exception:
+            if self.runtime.pid is None:self._project_detached_runtime()
+            raise
+
+    def _detach_runtime(self):
+        detached=False
+        try:
+            self.runtime.detach()
+            detached=True
+        finally:
+            # Release can complete before OS resume reports a failure. All
+            # attachment cleanup callers share this authoritative projection;
+            # failures before release retain the attachment for recovery.
+            if detached or self.runtime.pid is None:self._project_detached_runtime()
+
     def _observe_game_speed(self):
         if not self.runtime.allows_process_time_warp():return
         pid=self.runtime.pid
@@ -665,10 +688,8 @@ class Hades2Adapter(GameAdapter):
         if self.runtime.pid and (pid!=self.runtime.pid or not self.runtime.alive()):
             attached_pid=self.runtime.pid
             same_process=pid is not None and pid==attached_pid
-            self.runtime.detach()
-            if same_process:self._mark_disconnected()
-            else:
-                clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
+            if not same_process:clear_active(self.state,preserve_desired=True)
+            self._detach_runtime()
         elif self.state.get('pid') is not None and pid!=self.state.get('pid'):
             # A different game process cannot contain the prior session-local Lua module.
             clear_active(self.state,preserve_desired=True);self.preference_dirty=True;self._overlay_preferences();self.state.update(connected=False)
@@ -694,7 +715,7 @@ class Hades2Adapter(GameAdapter):
             self._invalidate_game_speed_observation()
             phase=time.monotonic()
             try:
-                self.runtime.attach(self.state['pid'])
+                self._attach_runtime(self.state['pid'])
             finally:
                 profile['attachTotal']=time.monotonic()-phase
                 attach_profile=self.runtime.last_attach_profile
@@ -722,7 +743,7 @@ class Hades2Adapter(GameAdapter):
                     result=dict(self.state)
                 else:
                     outcome=e.code
-                    self.runtime.detach();self._mark_disconnected();raise
+                    self._detach_runtime();raise
             profile['firstStatusTotal']=time.monotonic()-phase
             return result
         except Exception as exc:
@@ -826,7 +847,7 @@ class Hades2Adapter(GameAdapter):
                 clear_active(self.state);self.state.update(connected=False,status='not_running')
                 if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
-            self.runtime.attach(self.state['pid']);self.state['connected']=True
+            self._attach_runtime(self.state['pid']);self.state['connected']=True
         if not self.runtime.alive():
             error=TransportError('disconnected','请先连接游戏。')
             self._project_runtime_error(error,project_desired)
@@ -904,10 +925,8 @@ class Hades2Adapter(GameAdapter):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
-        if self.runtime.alive():self.runtime.detach()
-        self.state.update(connected=False,status='disconnected')
-        self._mark_disconnected()
-        self._overlay_preferences()
+        if self.runtime.alive():self._detach_runtime()
+        else:self._project_detached_runtime()
         return dict(self.state)
 
     def metadata(self):

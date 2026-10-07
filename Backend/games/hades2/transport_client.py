@@ -25,8 +25,9 @@ _RISKY_METHODS = frozenset({
 
 
 class _LLDBWorkerClient:
-    def __init__(self, sidecar=None):
+    def __init__(self, sidecar=None, on_state=None):
         self._sidecar = sidecar or self._make_sidecar()
+        self._on_state = on_state
         self._hello_complete = False
         self._terminal_error = None
 
@@ -146,9 +147,13 @@ class _LLDBWorkerClient:
         self._start()
         response = self._request(method, params)
         error = response.get("error")
+        if error is not None and not isinstance(error, dict):
+            self._protocol_failure(method, f"Malformed worker error: {error!r}")
+        # A method can fail after changing the attachment. Adopt the worker's
+        # authoritative observation before propagating either result or error.
+        if self._on_state is not None:
+            self._on_state(response.get("state"))
         if error is not None:
-            if not isinstance(error, dict):
-                self._protocol_failure(method, f"Malformed worker error: {error!r}")
             raised = AdapterError(
                 str(error.get("code") or "debugger_error"),
                 str(error.get("presentation") or "hades2.error.debuggerCallFailed"),
@@ -196,12 +201,12 @@ class Hades2LuaTransport:
     """Resident-session transport facade backed by one LLDB sidecar process."""
 
     def __init__(self):
-        self._worker = _LLDBWorkerClient()
         self.pid = None
         self.last_duration = 0.0
         self.last_expression_duration = 0.0
         self.last_attach_profile = {}
         self._tainted = False
+        self._worker = _LLDBWorkerClient(on_state=self._adopt_state)
 
     def _adopt_state(self, state):
         if not isinstance(state, dict):
@@ -219,8 +224,7 @@ class Hades2LuaTransport:
         self.last_attach_profile = dict(profile) if isinstance(profile, dict) else {}
 
     def _call(self, method, params=None):
-        result, state = self._worker.call(method, params)
-        self._adopt_state(state)
+        result, _ = self._worker.call(method, params)
         return result
 
     @property
@@ -276,27 +280,23 @@ class RemoteProcessTimeWarpController:
 
     def __init__(self, transport, *, helper_path, image_names):
         self._transport = transport
-        self._worker = transport._worker
         self._helper_path = str(Path(helper_path))
         self._image_names = list(image_names)
 
     def _configure(self):
         # Configuration belongs to a worker process. Reassert it through the
         # worker's idempotent owner so an idle child restart cannot lose it.
-        _, state = self._worker.call(
+        self._transport._call(
             "time_warp.configure",
             {
                 "helperPath": self._helper_path,
                 "imageNames": self._image_names,
             },
         )
-        self._transport._adopt_state(state)
 
     def _call(self, method, params=None):
         self._configure()
-        result, state = self._worker.call(method, params or {})
-        self._transport._adopt_state(state)
-        return result
+        return self._transport._call(method, params or {})
 
     def set_speed(self, value):
         return self._call("time_warp.set_speed", {"value": value})
