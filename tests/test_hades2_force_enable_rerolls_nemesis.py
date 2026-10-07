@@ -67,6 +67,11 @@ UIData = {
   AutoAlignContextualButtonSpacing = 10,
 }
 Destroy = function() end
+local panelSpendMutations = 0
+IncrementTableValue = function(values, key, amount)
+  panelSpendMutations = panelSpendMutations + 1
+  values[key] = (values[key] or 0) + amount
+end
 
 local function mountTradeScreenComponents(screen)
   local root = ScreenData.TradeScreen.ComponentData
@@ -114,6 +119,7 @@ PresetEventArgs.NemesisBuyItemChoices = {
 }
 
 local tradeOpenCount = 0
+local tradeMode = 'money'
 local displayedReward
 local displayedCost
 local settledReward
@@ -126,6 +132,30 @@ end
 
 HandleScreenInput = function(screen)
   assert(screen.Name == 'TradeScreen')
+  if tradeMode == 'staleRun' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible,
+      'stale-run setup did not expose the Nemesis reroll control')
+    local ownerRun = CurrentRun
+    local replacementRun = {
+      Hero = ownerRun.Hero,
+      CurrentRoom = {},
+      NumRerolls = 7,
+      PickedTraits = {},
+      BannedTraits = {},
+    }
+    CurrentRun = replacementRun
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(panelSpendMutations == 0,
+      'stale Nemesis TradeScreen entered native reroll spend before refusing')
+    assert(replacementRun.NumRerolls == 7
+      and (replacementRun.CurrentRoom.SpentRerolls == nil
+        or replacementRun.CurrentRoom.SpentRerolls[screen.Source.ObjectId] == nil),
+      'stale Nemesis TradeScreen mutated the replacement run')
+    CurrentRun = ownerRun
+    CloseTradeScreen(screen)
+    return
+  end
   if tradeOpenCount == 1 then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible
@@ -244,6 +274,20 @@ assert(preset.GiveOptions[1].Cost == nil
   and preset.GetOptions[1].SpawnPoint == nil
   and preset.GetOptions[2].SpawnPoint == nil,
   'Nemesis force reroll mutated shared PresetEventArgs transaction pools')
+
+-- A modal from a no-longer-current run is a known refusal. The adapter must
+-- reject it before native AttemptPanelReroll mutates the replacement run;
+-- spend-then-refund is not an acceptable substitute for preflight.
+tradeMode = 'staleRun'
+tradeOpenCount = 0
+randomChoiceCalls = 0
+panelSpendMutations = 0
+CurrentRun.NumRerolls = 5
+CurrentRun.CurrentRoom.SpentRerolls = {}
+local staleSource = { Name = 'NPC_Nemesis_01', ObjectId = 802, Accepted = false }
+NemesisTradeChoice(staleSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5,
+  'stale Nemesis TradeScreen changed the owning run while refusing')
 
 M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
 '''
