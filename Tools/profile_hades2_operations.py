@@ -15,6 +15,7 @@ import json
 import math
 import os
 import platform
+import signal
 import statistics
 import subprocess
 import sys
@@ -167,6 +168,25 @@ def positive_integer(value):
     return result
 
 
+def run_transport_worker(command, environment, timeout):
+    # The worker creates a native target. If the worker times out or is
+    # interrupted, its Python finally cannot own that target's cleanup. Keep
+    # the whole temporary process group inside this launcher's lifetime.
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, env=environment, start_new_session=True) as worker:
+        try:
+            stdout, stderr = worker.communicate(timeout=timeout)
+            if worker.returncode:
+                raise subprocess.CalledProcessError(worker.returncode, command, stdout, stderr)
+            return stdout
+        finally:
+            try:
+                os.killpg(worker.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            worker.wait()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("all", "transport", "resident"), default="all")
@@ -199,14 +219,13 @@ def main():
             print(json.dumps(profile_transport(args.samples, args.tick_microseconds)))
             return
         environment = dict(os.environ, MGT_PROFILE_LLDB_EMBEDDED="1")
-        completed = subprocess.run(
+        raw = run_transport_worker(
             ["/usr/bin/xcrun", "python3", str(Path(__file__).resolve()),
              "--mode", "transport", "--samples", str(args.samples),
              "--tick-microseconds", str(args.tick_microseconds)],
-            check=True, capture_output=True, text=True, env=environment,
-            timeout=30 + (args.samples + 6) * 4,
+            environment, 30 + (args.samples + 6) * 4,
         )
-        report["transport"] = json.loads(completed.stdout)
+        report["transport"] = json.loads(raw)
     if args.mode in ("all", "resident"):
         report["resident"] = profile_resident(args.samples)
     encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"

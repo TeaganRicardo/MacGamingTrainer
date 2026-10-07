@@ -40,6 +40,10 @@ checks its result, terminal trust, breakpoint cleanup and focus-recovery state.
 After each attachment, the tool verifies the target's actual focus flag before
 killing and reaping the temporary helper.
 
+The launcher owns a separate temporary process group, so a worker timeout or
+interruption also terminates its helper. A portable lifecycle regression covers
+this failure path; it does not assert a latency threshold.
+
 ## Resident measurements
 
 `--mode resident --samples 30` runs the shipped Lua source with explicit native
