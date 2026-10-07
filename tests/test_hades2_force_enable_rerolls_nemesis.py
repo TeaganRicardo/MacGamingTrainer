@@ -246,6 +246,26 @@ HandleScreenInput = function(screen)
     CloseTradeScreen(screen)
     return
   end
+  if tradeMode == 'staleMenu' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible,
+      'stale-menu setup did not expose the Nemesis reroll control')
+    screen.KeepOpen = false
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(panelSpendMutations == 0 and CurrentRun.NumRerolls == 5,
+      'closed Nemesis TradeScreen entered native reroll spend')
+    return
+  end
+  if tradeMode == 'staleSource' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible,
+      'stale-source setup did not expose the Nemesis reroll control')
+    screen.Source = { Name = 'NPC_Nemesis_01', ObjectId = 9999, Accepted = false }
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(panelSpendMutations == 0 and CurrentRun.NumRerolls == 5,
+      'changed Nemesis TradeScreen source entered native reroll spend')
+    return
+  end
   if tradeMode == 'staleRun' then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible,
@@ -498,6 +518,19 @@ assert(CurrentRun.NumRerolls == 5
   and CurrentRun.CurrentRoom.SpentRerolls[809] == 1,
   'Nemesis reroll broke independent reroll-count lock semantics')
 M.dispatch('lock_rerolls', { requestId = 'nemesis-unlock', locked = false, includeCatalogs = false })
+
+-- Closed/replaced native owners are deterministic pre-spend refusals.
+resetTrade('staleMenu', 5)
+local staleMenuSource = { Name = 'NPC_Nemesis_01', ObjectId = 810, Accepted = false }
+NemesisTradeChoice(staleMenuSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5 and panelSpendMutations == 0,
+  'closed Nemesis trade changed reroll state')
+
+resetTrade('staleSource', 5)
+local staleOwnerSource = { Name = 'NPC_Nemesis_01', ObjectId = 811, Accepted = false }
+NemesisTradeChoice(staleOwnerSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5 and panelSpendMutations == 0,
+  'replaced Nemesis trade source changed reroll state')
 
 -- A modal from a no-longer-current run is a known refusal. The adapter must
 -- reject it before native AttemptPanelReroll mutates the replacement run;
