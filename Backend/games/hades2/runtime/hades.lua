@@ -6376,6 +6376,9 @@ if __MacGamingTrainerV1 == nil then
           "Nemesis trade reroll failed after native spend: " .. tostring(message)
         )
       end
+      if not ok and M.terminalActionUnknown then
+        clearRerollControl(screen, true)
+      end
       if not ok and type(DebugPrint) == "function" then
         DebugPrint({ Text = "MacGamingTrainer Nemesis trade force reroll failed after native spend: " .. tostring(message) })
       end
@@ -6443,7 +6446,8 @@ if __MacGamingTrainerV1 == nil then
           if type(button) == "table"
               and button.RerollFunctionName == nemesisTradeCallbackName then
             local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
-            if type(owner) ~= "table"
+            if M.terminalActionUnknown
+                or type(owner) ~= "table"
                 or owner.source ~= screen.Source
                 or owner.args ~= screen.Args
                 or owner.run ~= CurrentRun
