@@ -97,6 +97,20 @@ class CoreSaveService:
             target_running_probe=self._running,
         )
 
+    def resolved_files(self):
+        self._require_supported()
+        return tuple(self._resolve())
+
+    def replace_files(self, replacements, expected_hashes, post_install_verify=None):
+        self._require_supported()
+        if self._running():
+            raise SaveBusyError('Game must be stopped before applying a save edit.')
+        return self._transaction().replace_files(
+            replacements,
+            expected_hashes,
+            post_install_verify=post_install_verify,
+        )
+
     def _staged_path(self):
         return self.store.ensure_storage_root() / 'staged-restore.json'
 
