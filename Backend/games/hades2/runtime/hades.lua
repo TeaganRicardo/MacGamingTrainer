@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 95 then
+if previousModule and previousModule.revision ~= 96 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 95 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 95, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 96, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4838,6 +4838,7 @@ if __MacGamingTrainerV1 == nil then
         and type(AssignRoomToExitDoor) == "function"
         and type(CheckSpecialDoorRequirement) == "function"
         and type(RefreshUseButton) == "function"
+        and type(thread) == "function"
     end
 
     local function doorOwnerKind(target)
@@ -4904,8 +4905,17 @@ if __MacGamingTrainerV1 == nil then
 
     local function refreshDoorOwner(target)
       if type(RefreshUseButton) == "function" and finite(target and target.ObjectId) then
-        pcall(RefreshUseButton, target.ObjectId, target)
+        -- Native RefreshUseButton hides/fades, waits even for duration zero,
+        -- destroys the old anchor and then recreates the prompt. Reconciliation
+        -- runs synchronously from dispatch/UpdateTimers and cannot yield.
+        thread(RefreshUseButton, target.ObjectId, target)
       end
+    end
+
+    local function setDoorRerollCapability(target, enabled)
+      if target.CanBeRerolled == enabled then return end
+      target.CanBeRerolled = enabled
+      refreshDoorOwner(target)
     end
 
     local function configureDoorOwner(target, nativeBaseline)
@@ -4916,8 +4926,7 @@ if __MacGamingTrainerV1 == nil then
         if nativeBaseline == nil then nativeBaseline = not not target.CanBeRerolled end
         forcedDoorBaselines[target] = { canBeRerolled = not not nativeBaseline }
       end
-      target.CanBeRerolled = true
-      refreshDoorOwner(target)
+      setDoorRerollCapability(target, true)
       return true
     end
 
@@ -4945,14 +4954,15 @@ if __MacGamingTrainerV1 == nil then
     local function restoreCurrentDoorOwners()
       for _, target in ipairs(currentDoorOwners()) do
         local baseline = forcedDoorBaselines[target]
+        local enabled
         if not forceDoorEligible(target) then
-          target.CanBeRerolled = false
+          enabled = false
         elseif baseline ~= nil then
-          target.CanBeRerolled = baseline.canBeRerolled
+          enabled = baseline.canBeRerolled
         else
-          target.CanBeRerolled = nativeDoorEligible(target)
+          enabled = nativeDoorEligible(target)
         end
-        refreshDoorOwner(target)
+        setDoorRerollCapability(target, enabled)
         forcedDoorBaselines[target] = nil
       end
       for target in pairs(forcedDoorBaselines) do
@@ -6459,8 +6469,7 @@ if __MacGamingTrainerV1 == nil then
           if M.desiredFeatures.forceEnableRerolls then
             local nativeBaseline = nativeDoorEligible(door)
             if not configureDoorOwner(door, nativeBaseline) then
-              door.CanBeRerolled = nativeBaseline
-              refreshDoorOwner(door)
+              setDoorRerollCapability(door, nativeBaseline)
             end
           end
           return result
@@ -6626,8 +6635,14 @@ if __MacGamingTrainerV1 == nil then
         return result
       end)
 
-      installHook("CreateBoonLootButtons", function(original, screen, source, ...)
-        local result = original(screen, source, ...)
+      installHook("CreateBoonLootButtons", function(original, screen, source, reroll, args, ...)
+        -- OpenUpgradeChoiceMenu stores its native presentation group on the
+        -- screen. NPC reroll callbacks lack the original opening args; retain
+        -- that owner context when rebuilding choices above narrative artwork.
+        if args == nil and type(screen) == "table" and screen.ButtonGroupName ~= nil then
+          args = { ButtonGroupName = screen.ButtonGroupName }
+        end
+        local result = original(screen, source, reroll, args, ...)
         if M.desiredFeatures.forceEnableRerolls then configure(screen, source) end
         return result
       end)
