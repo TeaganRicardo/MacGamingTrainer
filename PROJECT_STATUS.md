@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-07
+Updated: 2026-10-08
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -38,13 +38,13 @@ The 2026-10-05 architecture correction adopts root-cause-first scope discipline.
 
 ## Real-game acceptance baseline
 
-The latest Hades resident source accepted in the real game is **revision 51**, accepted on 2026-09-28 from commit `a6cf37b41639229bd64938d9587a9735fb16dd91`.
+On 2026-10-08 the user confirmed real-game acceptance of the latest patch, **revision 96 / #392 / PR #393**, and authorized continued performance development. The delivered QA candidate was `24e06cbab2e7049aef923d674a71ddf77d958fac`; its resident source is identical to current `main@46c99d8479a2c650961a1d51c0791b46b1fa7831`.
 
 Accepted resident source SHA256:
 
-`de4d0485e16d3dec3c9fda96e7d9d1aee321c9dab7fcdb428bf065d8f6347e37`
+`4fad5a44efbb4608267ffef9440f63100eed8f50b0199aa79bd9237f24117c8c`
 
-Current source contains resident revision 96. Revisions 52–96 remain pending the user's consolidated final real-game acceptance. Notable later resident changes include:
+This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier comprehensive baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 96. Notable intervening resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -86,7 +86,7 @@ Current source contains resident revision 96. Revisions 52–96 remain pending t
 - revision 93: native rerolls and asynchronous reward/sell menus share execution-boundary outcome classification. Unproven post-native failures close resident/session trust; pre-native refusals and confirmed candidate-miss refunds remain known failures. Vital lock edits capture the complete normalized current/max result, and native mana reservation clamps are confirmed and persisted after replay. Full resident observations explicitly clear absent nullable values while allowing catalog omission. Exit tears down every verified resident connection; Time Warp observes the actual helper on verified attachment before reconciliation and reasserts idempotent configuration after sidecar replacement. Diagnostics use the resident observation interface, and mutation handoff returns the actual resident JSON object. Consolidated real-game acceptance remains pending.
 - revision 94: queued reward/sell actions recheck terminal trust before entering native execution. Nemesis replacement-screen and transaction-unwind failures after a reroll are classified by the same native-operation owner; failures before any reroll remain known, and no guessed refund or replay is introduced. Time Warp observation is invalidated on all verified connection-loss routes, including status/observation errors and same-PID debugger loss. Consolidated real-game acceptance remains pending.
 - revision 95: fixes the Force Enable Rerolls regression exposed by a normal Hera `UpgradeChoice`. Hades II 1.143476 `AttemptPanelReroll`, `PreRerollPanelPresentation`, and `PostRerollPanelPresentation` are yielding game-owned coroutine paths, so the resident no longer wraps the enclosing native panel action in `pcall` / native-operation classification. Ordinary GodLoot, Hammer, Hermes/Stack/Trial and native special-loot rerolls retain the game's `AttemptPanelReroll` → native callback lifecycle. Trainer-owned adapters still capture the pre-spend run/room owner and classify unproven callback failures after native spend as terminal outcome-unknown; confirmed candidate-miss rollback remains known. Consolidated real-game acceptance remains pending.
-- revision 96: fixes Force Enable Rerolls presentation ownership exposed by user testing of revision 95. Door capability changes schedule the native yielding prompt refresh in a game coroutine; unchanged reconciliation retains the existing prompt instead of rebuilding it per frame. UpgradeChoice redraw retains the opening screen's native button group, including Arachne's narrative overlay, so regenerated choices stay above its decoration and dim layer. Native spend, candidate generation and unknown-outcome classification retain their owners. Automated fixtures cover prompt text/backing lifetime and narrative choice draw order; real rendered visual confirmation remains pending.
+- revision 96: fixes Force Enable Rerolls presentation ownership exposed by user testing of revision 95. Door capability changes schedule the native yielding prompt refresh in a game coroutine; unchanged reconciliation retains the existing prompt instead of rebuilding it per frame. UpgradeChoice redraw retains the opening screen's native button group, including Arachne's narrative overlay, so regenerated choices stay above its decoration and dim layer. Native spend, candidate generation and unknown-outcome classification retain their owners. Automated fixtures cover prompt text/backing lifetime and narrative choice draw order; the user accepted the latest patch on 2026-10-08 as recorded above.
 
 Automated verification does not replace this manual acceptance.
 
@@ -123,6 +123,8 @@ Mutation testing audits selected test sensitivity. It is not an ordinary feature
 ## Current development gate
 
 Planning issue #124 is the sequencing authority.
+
+- #392's latest patch is user-accepted. #376 is the active performance frontier: measure the production transport against temporary native targets, remove demonstrated ordinary-operation pause overhead at the Hades transport seam, and retain actual game/UI latency and populated resident-maintenance confirmation separately. No new resident semantics are implied by transport-only work.
 
 - #214 exact-head governance convergence is complete.
 - #262 / PR #271 identity migration is complete.

@@ -1,6 +1,8 @@
 """Supergiant/Hades II LLDB+Lua transport. This is a game-specific transport, not framework core."""
 import json
 import logging
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -155,15 +157,23 @@ class Hades2LuaTransport:
         raise TransportError('process_timeout','游戏进程状态切换超时。')
 
     def stop(self, deadline):
-        while time.monotonic()<deadline:
-            self.drain()
-            if self.process.GetState()==lldb.eStateStopped:return
-            error=self.process.Stop()
-            self.drain()
-            if self.process.GetState()==lldb.eStateStopped:return
-            if error.Success():return self.wait_state((lldb.eStateStopped,),deadline)
-            time.sleep(.01) # LLDB may still be completing an asynchronous resume.
-        raise TransportError('stop_failed','无法在时限内暂停游戏。')
+        self.drain()
+        state=self.process.GetState()
+        if state==lldb.eStateStopped:return
+        if state in (lldb.eStateInvalid,lldb.eStateExited,lldb.eStateDetached):
+            raise TransportError('disconnected','游戏进程已结束。')
+        if time.monotonic()>=deadline:
+            raise TransportError('stop_failed','无法在时限内暂停游戏。')
+        # Request the target stop without LLDB's synchronous debugserver halt
+        # round trip. Signal delivery is not completion: LLDB must observe the
+        # stop before callers proceed, and retains resume/breakpoint ownership.
+        try:
+            os.kill(self.pid,signal.SIGSTOP)
+        except ProcessLookupError as exc:
+            raise TransportError('disconnected','游戏进程已结束。') from exc
+        except OSError as exc:
+            raise TransportError('stop_failed','无法暂停游戏：'+str(exc)) from exc
+        return self.wait_state((lldb.eStateStopped,),deadline)
 
     def resume(self, deadline, breakpoint_expected=False):
         self.drain()

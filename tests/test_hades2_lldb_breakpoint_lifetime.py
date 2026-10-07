@@ -71,15 +71,30 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
 
     child, debugger, transport, addresses = attach_helper(executable, 0)
     try:
-        assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
-        assert transport.target.GetNumBreakpoints() == 0, "successful expression leaked a breakpoint"
-        transport.stop(time.monotonic() + 2)
-        error = lldb.SBError()
-        focus = transport.process.ReadMemory(
-            addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
-        )
-        assert error.Success() and focus == b"\x01", (str(error), focus)
-        transport.resume(time.monotonic() + 2)
+        # Repeated operations must leave no pending stop signal, breakpoint or
+        # focus change. Verify native entry counts rather than a timing bound or
+        # the debugger primitive used to pause the target.
+        for index in range(8):
+            assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
+            assert transport.process.GetState() == lldb.eStateRunning
+            assert transport.target.GetNumBreakpoints() == 0, "successful expression leaked a breakpoint"
+            transport.stop(time.monotonic() + 2)
+            stop_id = transport.process.GetStopID()
+            transport.stop(time.monotonic() + 2)
+            assert transport.process.GetStopID() == stop_id, "already stopped target stopped again"
+            error = lldb.SBError()
+            focus = transport.process.ReadMemory(
+                addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
+            )
+            assert error.Success() and focus == b"\x01", (str(error), focus)
+            entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
+            assert error.Success() and entered == index + 1, (str(error), entered)
+            transport.resume(time.monotonic() + 2)
+        process = transport.process
+        transport.detach()
+        assert process.GetState() == lldb.eStateDetached
+        assert child.poll() is None, "detach terminated the target"
+        assert transport.process is None and transport.pid is None
     finally:
         cleanup(child, debugger, transport)
 
