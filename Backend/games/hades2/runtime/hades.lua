@@ -6334,7 +6334,10 @@ if __MacGamingTrainerV1 == nil then
     local function taintNemesisTrade(message)
       local detail = tostring(message or "Nemesis trade reroll outcome is unknown")
       M.terminalActionUnknown = true
-      M.featureErrors.forceEnableRerolls = detail
+      -- featureErrors is presentation-facing. Keep the concrete diagnostic in
+      -- the transport/debug log, but expose an existing bilingual Hades token
+      -- rather than embedding English copy into runtime state.
+      M.featureErrors.forceEnableRerolls = "hades2.error.outcomeUnknownRuntime"
       return "MGT_OUTCOME_UNKNOWN: " .. detail .. "; do not retry"
     end
 
