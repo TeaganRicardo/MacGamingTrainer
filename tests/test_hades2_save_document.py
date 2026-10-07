@@ -224,6 +224,16 @@ except HadesSaveFormatError:
 else:
     raise AssertionError("invalid LZ4 back-reference must fail closed")
 
+# Luabins itself rejects NaN table keys; malformed saves must fail closed rather
+# than entering a structured state Python cannot address reliably.
+nan_key = build_save(lua_state={float("nan"): True})
+try:
+    Hades2SaveDocument.from_bytes(nan_key)
+except HadesSaveFormatError:
+    pass
+else:
+    raise AssertionError("NaN luabins table key must fail closed")
+
 # Older Hades II v0x11 remains readable while the current v0x12-only field is absent.
 v11 = Hades2SaveDocument.from_bytes(build_save(version=0x11))
 assert v11.header.cosmetics_points is None
