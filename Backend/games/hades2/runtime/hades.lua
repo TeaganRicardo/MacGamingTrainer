@@ -6331,9 +6331,17 @@ if __MacGamingTrainerV1 == nil then
       end
     end
 
+    local function taintNemesisTrade(message)
+      local detail = tostring(message or "Nemesis trade reroll outcome is unknown")
+      M.terminalActionUnknown = true
+      M.featureErrors.forceEnableRerolls = detail
+      return "MGT_OUTCOME_UNKNOWN: " .. detail .. "; do not retry"
+    end
+
     nemesisTradeCallback = function(screen, button)
+      local safeRollback = false
+      local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
       local ok, message = pcall(function()
-        local owner = nemesisTradeScreens[screen]
         if type(screen) ~= "table" or screen.Name ~= "TradeScreen"
             or type(button) ~= "table"
             or button.RerollFunctionName ~= nemesisTradeCallbackName
@@ -6341,18 +6349,33 @@ if __MacGamingTrainerV1 == nil then
             or owner.source ~= screen.Source
             or owner.args ~= screen.Args
             or owner.run ~= CurrentRun then
-          M.terminalActionUnknown = true
-          M.featureErrors.forceEnableRerolls =
+          error(taintNemesisTrade(
             "Nemesis trade reroll owner changed after native spend; outcome unknown"
-          error("MGT_OUTCOME_UNKNOWN: Nemesis trade reroll owner changed after native spend; do not retry")
+          ))
         end
+
+        owner.hadReroll = true
         local plan = changedNemesisTradePlan(
           owner, screen.ChosenGiveOption, screen.ChosenGetOption
         )
-        if plan == nil then failNoPlanAfterSpend(screen, button) end
+        if plan == nil then
+          if not rollbackPanelSpend(screen, button) then
+            error(taintNemesisTrade(
+              "Nemesis trade reroll candidate generation failed after native spend; rollback unavailable"
+            ))
+          end
+          owner.hadReroll = false
+          safeRollback = true
+          error("Force reroll pool has no changed eligible candidates")
+        end
         owner.nextPlan = plan
         CloseTradeScreen(screen, button)
       end)
+      if not ok and not safeRollback and not M.terminalActionUnknown then
+        message = taintNemesisTrade(
+          "Nemesis trade reroll failed after native spend: " .. tostring(message)
+        )
+      end
       if not ok and type(DebugPrint) == "function" then
         DebugPrint({ Text = "MacGamingTrainer Nemesis trade force reroll failed after native spend: " .. tostring(message) })
       end
@@ -6491,7 +6514,15 @@ if __MacGamingTrainerV1 == nil then
             copiedArgs.ChosenGetOption = owner.finalPlan.get
           end
           nemesisTradeArgs[copiedArgs] = nil
-          if not ok then error(result) end
+          if not ok then
+            if owner.hadReroll and not M.terminalActionUnknown then
+              result = taintNemesisTrade(
+                "Nemesis trade reroll failed while replacing the native transaction owner: "
+                  .. tostring(result)
+              )
+            end
+            error(result)
+          end
           return result
         end)
 
