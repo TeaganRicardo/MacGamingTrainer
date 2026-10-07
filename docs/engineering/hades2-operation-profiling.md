@@ -13,7 +13,7 @@ starts or attaches to Hades II and never loads user/game saves. Transport mode
 needs macOS, Xcode Python and LLDB; resident mode needs Lua 5.2 (`MGT_LUA52` may
 name its executable). On Linux, run `--mode resident`.
 
-The JSON records Git HEAD, working-tree changes, production source hashes,
+The JSON records Git HEAD, working-tree changes, production and profiling source hashes,
 runtime/toolchain versions, sample counts, raw durations, median and nearest-rank
 p95. Use a clean committed checkout when attributing evidence to an exact SHA.
 Run identical arguments and toolchains for comparisons; a dirty report is a
@@ -58,16 +58,35 @@ outcome.
 `--mode resident --samples 30` runs the shipped Lua source with explicit native
 stubs. It measures initial load/catalog status, warm dispatch, JSON encoding,
 resource edits with unique request identities, durable replay after cleanup, and
-`UpdateTimers` with/without desired features. Frame samples average 100 calls;
+`UpdateTimers` with/without desired features, and warm catalog status. Frame samples average 100 calls;
 their p95 describes these batch averages, not individual frame spikes.
 
 The active set is infinite health, infinite mana, damage multiplier, money and
 resource multipliers, and base UpgradeChoice Force Enable Rerolls, plus health,
 resource and reroll locks. The fixture verifies activation, returned resource
-counts and completed one-shot receipts. Native stubs are inexpensive, the trait
-inventory is empty, and the optional Selene/door/store/Nemesis reroll families are
-absent. This is a resident CPU baseline, not a measurement of game engine cost,
-full mounted-trait inventories, presentations or gameplay frame time.
+counts and completed one-shot receipts. Native stubs are inexpensive and the
+optional Selene/door/store/Nemesis reroll families are absent. The default trait
+inventory is empty. Select explicit mounted and exact-acquisition catalog sizes:
+
+```sh
+python3 Tools/profile_hades2_operations.py --mode resident --samples 100 \
+  --resident-traits 64 --resident-catalog-traits 512 --output /tmp/hades2-populated.json
+```
+
+These are synthetic ordinary God boons, not captured target-build data or a
+mixed-family gameplay inventory. The native eligibility stub scans the live
+inventory on each call; it does not model the engine's eligibility cost. The
+fixture checks every mounted identity/capability, the exact catalog count and
+the number of native eligibility queries in one unmeasured final observation.
+Cold/warm catalog metrics include their JSON output; ordinary observation,
+resource edits and replay omit the acquisition catalogs but retain mounted rows.
+This is a resident CPU baseline, not a measurement of game engine cost,
+presentations or gameplay frame time.
+
+Compare clean commits using identical fixture/tool hashes. A profiling-only
+commit can establish the populated baseline while retaining the unoptimized
+production source. Run baseline, candidate, then baseline again to detect drift;
+retain each JSON report with its source SHA and raw samples.
 
 ## Interpretation and remaining work
 
@@ -87,9 +106,18 @@ do not justify weakening ownership checks, changing frame cadence, caching live
 state or altering native/replay semantics. Performance assertions are deliberately
 not an always-on CI gate; the existing behavior gates continue to own correctness.
 
+Populated observation exposed a separate repeated-work cause: every ordinary
+God-boon row requested a complete native upgrade-eligibility map and rescanned
+the live inventory for same-name counts. Revision 97 shares those reads within
+one synchronous observation. The native map is obtained lazily, failure keeps
+capabilities unavailable, and nothing is retained across observations. Mutation
+preflight and commit-time target/eligibility checks remain independent. This
+removes redundant observation work without changing maintenance cadence or
+caching runtime truth between requests.
+
 These offline baselines complete only one slice of #376. Remaining measurements
 include a user-run exact-build trace of representative operations, Host scheduling,
 sidecar/RPC overhead, real resident dispatch/synchronization/materialization, UI
-projection, actual reconnect/replay, populated trait catalogs and gameplay frame
+projection, actual reconnect/replay, mixed-family populated inventories and gameplay frame
 cost. Keep #376 open until that evidence and any demonstrated owning-seam fixes
 are complete. Consolidated game/visual acceptance remains deferred.

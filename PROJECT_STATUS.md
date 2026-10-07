@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 13.
 - Hades II desired-state schema: 8.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 96.
+- Hades II resident runtime revision: 97.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen census/research snapshot, not current planning authority. Its packaged `ui_terminology.json` remains an intentional executable-governance resource.
@@ -44,7 +44,7 @@ Accepted resident source SHA256:
 
 `4fad5a44efbb4608267ffef9440f63100eed8f50b0199aa79bd9237f24117c8c`
 
-This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier accepted baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 96. Notable intervening resident changes include:
+This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier accepted baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 97. Notable intervening resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
@@ -87,6 +87,7 @@ This acceptance records the latest patch's native prompt/backing and narrative-c
 - revision 94: queued reward/sell actions recheck terminal trust before entering native execution. Nemesis replacement-screen and transaction-unwind failures after a reroll are classified by the same native-operation owner; failures before any reroll remain known, and no guessed refund or replay is introduced. Time Warp observation is invalidated on all verified connection-loss routes, including status/observation errors and same-PID debugger loss. Consolidated real-game acceptance remains pending.
 - revision 95: fixes the Force Enable Rerolls regression exposed by a normal Hera `UpgradeChoice`. Hades II 1.143476 `AttemptPanelReroll`, `PreRerollPanelPresentation`, and `PostRerollPanelPresentation` are yielding game-owned coroutine paths, so the resident no longer wraps the enclosing native panel action in `pcall` / native-operation classification. Ordinary GodLoot, Hammer, Hermes/Stack/Trial and native special-loot rerolls retain the game's `AttemptPanelReroll` → native callback lifecycle. Trainer-owned adapters still capture the pre-spend run/room owner and classify unproven callback failures after native spend as terminal outcome-unknown; confirmed candidate-miss rollback remains known. Consolidated real-game acceptance remains pending.
 - revision 96: fixes Force Enable Rerolls presentation ownership exposed by user testing of revision 95. Door capability changes schedule the native yielding prompt refresh in a game coroutine; unchanged reconciliation retains the existing prompt instead of rebuilding it per frame. UpgradeChoice redraw retains the opening screen's native button group, including Arachne's narrative overlay, so regenerated choices stay above its decoration and dim layer. Native spend, candidate generation and unknown-outcome classification retain their owners. Automated fixtures cover prompt text/backing lifetime and narrative choice draw order; the user accepted the latest patch on 2026-10-08 as recorded above.
+- revision 97: populated resident profiling exposed repeated whole-inventory work during current-run trait observation. One synchronous observation counts live names once and shares one lazily obtained native Pom-eligibility response across its rows. Every later observation and mutation revalidation still reads current game-owned state; failed eligibility stays unavailable. Frame cadence, desired-state convergence, native mutation lifecycles and request identity are unchanged. Real-game performance and consolidated feature acceptance remain pending.
 
 Automated verification does not replace this manual acceptance.
 
@@ -124,7 +125,7 @@ Mutation testing audits selected test sensitivity. It is not an ordinary feature
 
 Planning issue #124 is the sequencing authority.
 
-- #392's latest patch is user-accepted. #376 is the active performance frontier: ordinary-operation pause overhead is addressed at the Hades transport seam, with LLDB-observed stops and OS-running handoff after successful detach. Error replies retain authoritative attachment observations, including release followed by a resume error. Actual game/UI latency and populated resident-maintenance confirmation remain separate. Resident source and revision are unchanged by this transport work.
+- #392's latest patch is user-accepted. #376 is the active performance frontier: ordinary-operation pause overhead is addressed at the Hades transport seam, with LLDB-observed stops and OS-running handoff after successful detach. Error replies retain authoritative attachment observations, including release followed by a resume error. Populated offline resident profiling additionally removes repeated whole-inventory observation scans at revision 97. Actual Host/sidecar/UI latency and real-game resident-maintenance confirmation remain separate; the new resident source is pending user acceptance.
 
 - #214 exact-head governance convergence is complete.
 - #262 / PR #271 identity migration is complete.
