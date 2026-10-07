@@ -313,14 +313,27 @@ class Hades2LuaTransport:
             self.last_duration=time.monotonic()-started
 
     def detach(self):
+        detached_pid=None
         if self.process and self.alive():
             self.stop(time.monotonic()+3)
             self.restore_focus()
             self.target.DeleteAllBreakpoints()
             error=self.process.Detach()
             if error.Fail():raise TransportError('detach_failed',str(error))
+            detached_pid=self.pid
             self.drain()
         self.process=None;self.pid=None;self.addresses={};self.tainted=False
+        if detached_pid is not None:
+            # LLDB has released the target, but macOS may retain its BSD stop
+            # signal. Complete the process handoff after debugger ownership ends.
+            # The released attachment stays cleared even if OS resume fails.
+            try:
+                os.kill(detached_pid,signal.SIGCONT)
+            except ProcessLookupError:
+                pass # The target exited after release; no attachment remains.
+            except OSError as exc:
+                raise TransportError('resume_failed','hades2.error.resumeFailed',
+                                     diagnostic=str(exc),arguments=[str(exc)]) from exc
     def close(self):
         self.detach()
         if self.debugger:lldb.SBDebugger.Destroy(self.debugger);self.debugger=None

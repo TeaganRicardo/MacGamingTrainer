@@ -124,7 +124,7 @@ Mutation testing audits selected test sensitivity. It is not an ordinary feature
 
 Planning issue #124 is the sequencing authority.
 
-- #392's latest patch is user-accepted. #376 is the active performance frontier: measure the production transport against temporary native targets, remove demonstrated ordinary-operation pause overhead at the Hades transport seam, and retain actual game/UI latency and populated resident-maintenance confirmation separately. No new resident semantics are implied by transport-only work.
+- #392's latest patch is user-accepted. #376 is the active performance frontier: ordinary-operation pause overhead is addressed at the Hades transport seam, with LLDB-observed stops and OS-running handoff after successful detach. Error replies retain authoritative attachment observations, including release followed by a resume error. Actual game/UI latency and populated resident-maintenance confirmation remain separate. Resident source and revision are unchanged by this transport work.
 
 - #214 exact-head governance convergence is complete.
 - #262 / PR #271 identity migration is complete.

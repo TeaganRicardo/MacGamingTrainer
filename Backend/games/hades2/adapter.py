@@ -904,10 +904,17 @@ class Hades2Adapter(GameAdapter):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks
         # continue running and can be inspected again after reconnect.
-        if self.runtime.alive():self.runtime.detach()
-        self.state.update(connected=False,status='disconnected')
-        self._mark_disconnected()
-        self._overlay_preferences()
+        detached=False
+        try:
+            if self.runtime.alive():self.runtime.detach()
+            detached=True
+        finally:
+            # Release can complete before OS resume reports a failure. Preserve
+            # recovery ownership only while the worker still has an attachment.
+            if detached or self.runtime.pid is None:
+                self.state.update(connected=False,status='disconnected')
+                self._mark_disconnected()
+                self._overlay_preferences()
         return dict(self.state)
 
     def metadata(self):
