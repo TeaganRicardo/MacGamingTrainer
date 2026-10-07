@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-sidecar-") as temporary:
         sidecar = JsonLineSidecarClient([sys.executable, "-u", str(child)],
                                       reply_timeout_seconds=5, env=environment)
         transport = Hades2LuaTransport()
-        transport._worker = _LLDBWorkerClient(sidecar=sidecar)
+        transport._worker = _LLDBWorkerClient(sidecar=sidecar, on_state=transport._adopt_state)
         facade = transport.create_time_warp_controller(Path(temporary) / "helper", ["Hades II"])
         try:
             transport.attach(4242)

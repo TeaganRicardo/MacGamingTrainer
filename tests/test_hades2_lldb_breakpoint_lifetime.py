@@ -1,4 +1,5 @@
 import os
+import mmap
 import subprocess
 import sys
 import tempfile
@@ -55,13 +56,51 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from hades2_lldb_fixture import (
     HELPER_SOURCE, TransportError, attach_helper, cleanup, lldb,
 )
+from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
+
+PROGRESS_SOURCE = r"""
+#include <fcntl.h>
+#include <sys/mman.h>
+
+static void *record_progress(void *value) {
+  volatile uint64_t *counter = value;
+  for (;;) { ++*counter; usleep(1000); }
+  return 0;
+}
+
+__attribute__((constructor)) static void start_progress(void) {
+  const char *path = getenv("MGT_LLDB_FIXTURE_PROGRESS");
+  if (!path) return;
+  int fd = open(path, O_RDWR);
+  if (fd < 0) abort();
+  void *counter = mmap(0, sizeof(uint64_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  close(fd);
+  if (counter == MAP_FAILED) abort();
+  pthread_t worker;
+  if (pthread_create(&worker, 0, record_progress, counter)) abort();
+}
+
+unsigned int MGTTimeWarpABI(void) { return 1; }
+"""
+
+
+def assert_progress(counter):
+    # Read independently of LLDB: an alive child and eStateDetached do not prove
+    # the target runs. Observe the full window to catch a delayed stop signal.
+    previous = int.from_bytes(counter[:], sys.byteorder)
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        time.sleep(.2)
+        current = int.from_bytes(counter[:], sys.byteorder)
+        assert current > previous, "detached target stopped making native progress"
+        previous = current
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temporary:
     temporary = Path(temporary)
     source = temporary / "helper.c"
     executable = temporary / "helper"
-    source.write_text(HELPER_SOURCE, encoding="utf-8")
+    source.write_text(HELPER_SOURCE + PROGRESS_SOURCE, encoding="utf-8")
     subprocess.run(
         ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
         check=True,
@@ -69,19 +108,67 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
         text=True,
     )
 
+    progress_path = temporary / "progress"
+    progress_path.write_bytes(bytes(8))
+    os.environ["MGT_LLDB_FIXTURE_PROGRESS"] = str(progress_path)
+    progress_file = progress_path.open("r+b")
+    progress = mmap.mmap(progress_file.fileno(), 8)
     child, debugger, transport, addresses = attach_helper(executable, 0)
     try:
-        assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
-        assert transport.target.GetNumBreakpoints() == 0, "successful expression leaked a breakpoint"
+        # Repeated operations must leave no pending stop signal, breakpoint or
+        # focus change. Verify native entry counts rather than a timing bound or
+        # the debugger primitive used to pause the target.
+        for index in range(8):
+            assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
+            assert transport.process.GetState() == lldb.eStateRunning
+            assert transport.target.GetNumBreakpoints() == 0, "successful expression leaked a breakpoint"
+            transport.stop(time.monotonic() + 2)
+            stop_id = transport.process.GetStopID()
+            transport.stop(time.monotonic() + 2)
+            assert transport.process.GetStopID() == stop_id, "already stopped target stopped again"
+            error = lldb.SBError()
+            focus = transport.process.ReadMemory(
+                addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
+            )
+            assert error.Success() and focus == b"\x01", (str(error), focus)
+            entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
+            assert error.Success() and entered == index + 1, (str(error), entered)
+            transport.resume(time.monotonic() + 2)
+        # Time Warp calls expressions at the signal stop itself, without Lua's
+        # subsequent World::Update breakpoint. Exercise that direct consumer.
+        driver = LLDBProcessTimeWarpDriver(transport, lldb_module=lldb)
+        with driver.session():
+            assert driver.abi() == 1
+        assert transport.process.GetState() == lldb.eStateRunning
         transport.stop(time.monotonic() + 2)
-        error = lldb.SBError()
-        focus = transport.process.ReadMemory(
-            addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
-        )
-        assert error.Success() and focus == b"\x01", (str(error), focus)
+        with driver.session():
+            assert driver.abi() == 1
+        assert transport.process.GetState() == lldb.eStateStopped
         transport.resume(time.monotonic() + 2)
+        process = transport.process
+        transport.detach()
+        assert process.GetState() == lldb.eStateDetached
+        assert child.poll() is None, "detach terminated the target"
+        assert transport.process is None and transport.pid is None
+        assert_progress(progress)
     finally:
         cleanup(child, debugger, transport)
+
+    # Repeated fresh targets cover detach from both running and already stopped
+    # sessions without using reattach itself as the liveness observer.
+    for index in range(8):
+        child, debugger, transport, addresses = attach_helper(executable, 0)
+        try:
+            transport.resume(time.monotonic() + 2)
+            if index % 2 == 0:transport.stop(time.monotonic() + 2)
+            transport.detach()
+            assert_progress(progress)
+        finally:
+            cleanup(child, debugger, transport)
+
+    progress.close()
+    progress_file.close()
+    del os.environ["MGT_LLDB_FIXTURE_PROGRESS"]
 
     # Before the transport fix, this production execute() path failed with
     # "breakpoint N which has been deleted": boundary() deleted the stop reason
