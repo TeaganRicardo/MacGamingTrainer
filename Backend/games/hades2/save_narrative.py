@@ -124,7 +124,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
             en = english.get(name) or ("Quest · " + name)
             editable = (status != "CashedOut" and name in QUEST_IDS
                         and isinstance(completed, LuaTable)
-                        and completed.get(name) in (None, True, False))
+                        and (completed.get(name) is None
+                             or type(completed.get(name)) is bool))
             result.append(_row(
                 entry_id="quest:" + name, domain="progression", key=name,
                 path=["GameState", "QuestStatus", name],
