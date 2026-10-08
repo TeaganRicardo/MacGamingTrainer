@@ -216,6 +216,11 @@ struct Hades2SaveEditorView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.displayName)
                         .font(.subheadline.weight(.semibold))
+                    if let group = entry.group {
+                        Text(group)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if entry.englishName != entry.displayName && localization.language != .en {
                         Text(entry.englishName)
                             .font(.caption)
@@ -226,15 +231,32 @@ struct Hades2SaveEditorView: View {
 
                 Spacer()
 
-                if entry.editable, entry.mutationKinds.contains("set") {
-                    TextField(
-                        text("hades2.saveEditor.value"),
-                        text: draftBinding(for: entry)
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 130)
-                    .onSubmit { stageDraft(for: entry) }
+                if entry.editable, !entry.mutationKinds.isEmpty {
+                    if entry.valueType == "boolean" {
+                        Picker(text("hades2.saveEditor.value"), selection: draftBinding(for: entry)) {
+                            Text(text("hades2.saveEditor.false")).tag("false")
+                            Text(text("hades2.saveEditor.true")).tag("true")
+                        }
+                        .labelsHidden()
+                        .frame(width: 130)
+                    } else if entry.valueType == "enum", !entry.choices.isEmpty {
+                        Picker(text("hades2.saveEditor.value"), selection: draftBinding(for: entry)) {
+                            ForEach(entry.choices, id: \.self) { choice in
+                                Text(entry.choiceNames[choice] ?? enumTitle(choice)).tag(choice)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                    } else {
+                        TextField(
+                            text("hades2.saveEditor.value"),
+                            text: draftBinding(for: entry)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 130)
+                        .onSubmit { stageDraft(for: entry) }
+                    }
 
                     Button(text("hades2.saveEditor.stage")) {
                         stageDraft(for: entry)
@@ -317,23 +339,28 @@ struct Hades2SaveEditorView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(text("hades2.saveEditor.review"))
                     .font(.headline)
-                ForEach(model.pendingChanges) { change in
-                    HStack(spacing: 8) {
-                        Text(model.displayName(for: change))
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                            .help(change.rawID)
-                        Spacer()
-                        Text(valueText(change.before))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "arrow.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(valueText(change.after))
-                            .font(.caption.monospaced())
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(model.pendingChanges) { change in
+                            HStack(spacing: 8) {
+                                Text(model.displayName(for: change))
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                    .help(change.rawID)
+                                Spacer()
+                                Text(valueText(change.before))
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "arrow.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(valueText(change.after))
+                                    .font(.caption.monospaced())
+                            }
+                        }
                     }
                 }
+                .frame(maxHeight: 220)
             }
             .trainerPanel(padding: 12, cornerRadius: theme.controlCornerRadius)
         }
@@ -346,14 +373,27 @@ struct Hades2SaveEditorView: View {
         )
     }
 
+    private func enumTitle(_ value: String) -> String {
+        switch value {
+        case "Unlocked": return text("hades2.saveEditor.quest.unlocked")
+        case "Complete": return text("hades2.saveEditor.quest.complete")
+        case "CashedOut": return text("hades2.saveEditor.quest.cashedOut")
+        default: return value
+        }
+    }
+
     private func stageDraft(for entry: Hades2SaveEditorEntry) {
         guard let value = parsedDraft(for: entry) else { return }
-        model.stage(entryID: entry.id, operation: "set", value: value)
+        let operation = entry.mutationKinds.contains("setEnum") ? "setEnum" : "set"
+        model.stage(entryID: entry.id, operation: operation, value: value)
     }
 
     private func parsedDraft(for entry: Hades2SaveEditorEntry) -> Any? {
         let raw = drafts[entry.id] ?? valueText(entry.value)
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if entry.valueType == "enum" {
+            return entry.choices.contains(trimmed) ? trimmed : nil
+        }
         guard !trimmed.isEmpty else { return nil }
 
         if entry.constraints?.integer == true || entry.valueType == "integer" {

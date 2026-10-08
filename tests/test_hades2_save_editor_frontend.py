@@ -39,7 +39,26 @@ for raw in sys.stdin:
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
-        if domain == 'playerStats':
+        if domain == 'weapons':
+            items = [{
+                'id': 'aspectSelection:WeaponDagger',
+                'domain': 'weapons',
+                'rawId': 'WeaponDagger',
+                'path': ['GameState', 'LastWeaponUpgradeName', 'WeaponDagger'],
+                'name': 'Sister Blades · Selected aspect',
+                'englishName': 'Sister Blades · Selected aspect',
+                'value': '',
+                'valueType': 'enum',
+                'editable': True,
+                'mutationKinds': ['setEnum'],
+                'group': 'Weapon aspects',
+                'choices': ['', 'DaggerBlockAspect'],
+                'choiceNames': {
+                    '': 'Default aspect',
+                    'DaggerBlockAspect': 'Aspect of Artemis',
+                },
+            }]
+        elif domain == 'playerStats':
             items = [{
                 'id': 'playerStat:GameplayTime',
                 'domain': 'playerStats',
@@ -346,6 +365,19 @@ struct Main {
             || model.items.first?.constraints?.minimum != 0
             || model.items.first?.constraints?.integer != false {
             fail("playerStats descriptor row was not decoded")
+        }
+
+        model.selectDomain(.weapons)
+        pump(0.20)
+        guard let selector = model.items.first else { fail("equipment selector is missing") }
+        if selector.id != "aspectSelection:WeaponDagger"
+            || selector.valueType != "enum"
+            || selector.value != AnyHashable("")
+            || selector.choices != ["", "DaggerBlockAspect"]
+            || selector.choiceNames[""] != "Default aspect"
+            || selector.choiceNames["DaggerBlockAspect"] != "Aspect of Artemis"
+            || selector.group != "Weapon aspects" {
+            fail("localized equipment selection contract was not decoded")
         }
 
         model.selectDomain(.advanced)

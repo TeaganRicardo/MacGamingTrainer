@@ -1,3 +1,4 @@
+import os
 import struct
 import sys
 import tempfile
@@ -104,11 +105,20 @@ rows = [
     ResolvedSaveFile("main", "Profile1.sav", saves / "Profile1.sav"),
     ResolvedSaveFile("main", "Profile1_Temp.sav", saves / "Profile1_Temp.sav"),
 ]
+no_marker = provider.describe_snapshot(tuple(rows), "2026-09-20T14:37:51")
+assert no_marker["defaultName"] == "2026-09-20 14:37 · 第10夜 · 三岔路口"
+marker = saves / "Profile1.v.sav"
+marker.write_bytes(b"validation-marker")
+stamp = 1_700_000_000_000_000_000
+os.utime(saves / "Profile1.sav", ns=(stamp, stamp))
+os.utime(marker, ns=(stamp + 2_000_000_000, stamp + 2_000_000_000))
+rows.append(ResolvedSaveFile("main", "Profile1.v.sav", marker))
 resolved = provider.resolve({"main": saves}, tuple(rows))
 assert resolved == [
     ("main", "activeProfile"),
     ("main", "Profile1.sav"),
     ("main", "Profile1_Temp.sav"),
+    ("main", "Profile1.v.sav"),
 ]
 
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T14:37:51")
@@ -138,6 +148,7 @@ write_save(
     fear=7,
     current_map="Hub_Main",
 )
+os.utime(saves / "Profile1.sav", ns=(stamp + 3_000_000_000, stamp + 3_000_000_000))
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T15:02:09")
 assert description == {
     "defaultName": "2026-09-20 15:02 · 第11夜 · 三岔路口",
@@ -165,6 +176,7 @@ write_save(
     fear=7,
     current_map="F_Combat99",
 )
+os.utime(marker, ns=(stamp + 5_000_000_000, stamp + 5_000_000_000))
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T15:15:00")
 assert description["defaultName"] == "2026-09-20 15:15 · 第12夜 · F_Combat99"
 assert description["nameDetails"][:2] == ["第12夜", "F_Combat99"]
