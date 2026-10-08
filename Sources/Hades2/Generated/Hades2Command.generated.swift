@@ -36,6 +36,12 @@ enum Hades2Command: String {
     case removeTrait = "remove_trait"
     case advanceTraitLifecycle = "advance_trait_lifecycle"
     case openSpecialChoice = "open_special_choice"
+    case saveEditorOpen = "save_editor_open"
+    case saveEditorQuery = "save_editor_query"
+    case saveEditorStage = "save_editor_stage"
+    case saveEditorReview = "save_editor_review"
+    case saveEditorCancel = "save_editor_cancel"
+    case saveEditorApply = "save_editor_apply"
     case listProfiles = "list_profiles"
     case saveProfile = "save_profile"
     case loadProfile = "load_profile"
@@ -53,6 +59,7 @@ enum Hades2Command: String {
         case .disconnect: return 12.0
         case .launch: return 10.0
         case .diagnostics: return 70.0
+        case .saveEditorApply: return 30.0
         case .exportDiagnostics: return 85.0
         case .prepare: return 560.0
         case .restore: return 240.0
