@@ -323,6 +323,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
+    func makeSaveEditorModel() -> Hades2SaveEditorModel {
+        Hades2SaveEditorModel(session: backendSession)
+    }
+
     func toggleConnectionFromHost() { toggleConnection(probeRuntime: true) }
 
     func connectAutomaticallyFromHost(targetJustLaunched: Bool) {

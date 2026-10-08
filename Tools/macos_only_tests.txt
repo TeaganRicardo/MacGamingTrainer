@@ -11,6 +11,7 @@ test_viewport_feedback.py
 test_hades2_force_enable_rerolls_frontend.py
 test_hades2_gathering_frontend.py
 test_hades2_chaos_gate_frontend.py
+test_hades2_save_editor_frontend.py
 test_hades2_backend_state_cleanup.py
 test_hades2_lldb_breakpoint_lifetime.py
 test_build_signing_metadata_macos.py

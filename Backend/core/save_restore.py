@@ -292,12 +292,15 @@ class SaveRestoreTransaction:
             entries.append((key, source, _sha256(source)))
         return entries
 
-    def replace_files(self, replacements, expected_hashes, post_install_verify=None):
+    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None):
         if post_install_verify is not None and not callable(post_install_verify):
             raise ValueError('Save replacement verifier must be callable.')
         entries = self._replacement_entries(replacements)
         replacement_keys = {key for key, _source, _digest in entries}
-        if not isinstance(expected_hashes, dict) or set(expected_hashes) != replacement_keys:
+        if expected_hashes is not None and (
+            not isinstance(expected_hashes, dict)
+            or set(expected_hashes) != replacement_keys
+        ):
             raise ValueError('Expected save hashes must cover every replacement target exactly.')
 
         rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
@@ -308,7 +311,10 @@ class SaveRestoreTransaction:
             for key in replacement_keys:
                 if key not in baseline_hashes:
                     raise SaveRestoreError('Save replacement target is not part of the current save set.')
-                if expected_hashes[key] != baseline_hashes[key]:
+                if (
+                    expected_hashes is not None
+                    and expected_hashes[key] != baseline_hashes[key]
+                ):
                     raise SaveRestoreError('Save changed since the edit was prepared.')
             target_hashes = dict(baseline_hashes)
             for key, _source, digest in entries:

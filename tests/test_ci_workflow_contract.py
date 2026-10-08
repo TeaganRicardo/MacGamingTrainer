@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -7,9 +8,27 @@ WORKFLOWS = [
     ROOT / '.github/workflows/build2-macos.yml',
     ROOT / '.github/workflows/module-build-matrix.yml',
 ]
+RUNTIME_VERSION = json.loads((ROOT / 'Tools/python_runtime.json').read_text())["version"]
+match = re.fullmatch(r"(\d+\.\d+\.\d+)(a|b|rc)(\d+)", RUNTIME_VERSION)
+assert match, f"unsupported pinned Python version format: {RUNTIME_VERSION}"
+CI_PYTHON_VERSION = f"{match.group(1)}-{match.group(2)}.{match.group(3)}"
+
 for workflow in WORKFLOWS:
     assert workflow.is_file(), workflow
     text = workflow.read_text()
+
+    first_setup = text.index('actions/setup-python@v5')
+    first_python = min(
+        index for token in ('python3 ', 'python -')
+        if (index := text.find(token)) >= 0
+    )
+    assert first_setup < first_python, (
+        f'{workflow.name}: project Python runs before the pinned setup-python step'
+    )
+    setup_window = text[first_setup:first_setup + 300]
+    assert f"python-version: '{CI_PYTHON_VERSION}'" in setup_window, (
+        f'{workflow.name}: first setup-python must match Tools/python_runtime.json'
+    )
 
     # Every lane resolves the change scope exactly once, at workflow level.
     # Both consumers must read the same BASE_SHA/HEAD_SHA pair, so a PR that is

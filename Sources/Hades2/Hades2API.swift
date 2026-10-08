@@ -32,6 +32,10 @@ enum Hades2Request {
     case removeTrait(CurrentRunTrait)
     case advanceTraitLifecycle(CurrentRunTrait)
     case openSpecialChoice(source: String)
+    case saveEditorOpen
+    case saveEditorQuery(domain: String, search: String, offset: Int, limit: Int, path: [Any], language: String)
+    case saveEditorStage(entryID: String, operation: String, value: Any?)
+    case saveEditorReview, saveEditorCancel, saveEditorApply
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
@@ -75,6 +79,12 @@ enum Hades2Request {
         case .removeTrait: return .removeTrait
         case .advanceTraitLifecycle: return .advanceTraitLifecycle
         case .openSpecialChoice: return .openSpecialChoice
+        case .saveEditorOpen: return .saveEditorOpen
+        case .saveEditorQuery: return .saveEditorQuery
+        case .saveEditorStage: return .saveEditorStage
+        case .saveEditorReview: return .saveEditorReview
+        case .saveEditorCancel: return .saveEditorCancel
+        case .saveEditorApply: return .saveEditorApply
         case .listProfiles: return .listProfiles
         case .saveProfile: return .saveProfile
         case .loadProfile: return .loadProfile
@@ -168,6 +178,19 @@ enum Hades2Request {
             return Self.traitTargetParams(trait)
         case .openSpecialChoice(let source):
             return ["source": source]
+        case .saveEditorQuery(let domain, let search, let offset, let limit, let path, let language):
+            return [
+                "domain": domain,
+                "search": search,
+                "offset": offset,
+                "limit": limit,
+                "path": path,
+                "language": language,
+            ]
+        case .saveEditorStage(let entryID, let operation, let value):
+            var result: [String: Any] = ["entryId": entryID, "operation": operation]
+            if let value { result["value"] = value }
+            return result
         case .saveProfile(let name, let shortcuts):
             return ["name": name, "shortcuts": shortcuts]
         case .loadProfile(let name), .deleteProfile(let name):

@@ -59,6 +59,11 @@ class GameAdapter(ABC):
 
     def __init__(self, context: GameAdapterContext):
         self.context = context
+        self.save_service = None
+
+    def bind_save_service(self, save_service):
+        """Bind the Host-owned generic Save service for optional game semantics."""
+        self.save_service = save_service
 
     @property
     def game_id(self):

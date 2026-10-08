@@ -23,12 +23,27 @@ _PROFILE_SAVE_RE = re.compile(r"^Profile[0-9]+(?:_Temp)?[.]sav$")
 class Hades2SaveEditSession:
     """One structured edit session bound to an observed Hades profile save."""
 
-    __slots__ = ("_save_service", "_target", "_original_sha256", "document")
+    __slots__ = (
+        "_save_service",
+        "_target",
+        "_original_sha256",
+        "_version_pinned",
+        "document",
+    )
 
-    def __init__(self, save_service, target, original_sha256, document):
+    def __init__(
+        self,
+        save_service,
+        target,
+        original_sha256,
+        document,
+        *,
+        version_pinned=False,
+    ):
         self._save_service = save_service
         self._target = target
         self._original_sha256 = original_sha256
+        self._version_pinned = bool(version_pinned)
         self.document = document
 
     @property
@@ -40,7 +55,7 @@ class Hades2SaveEditSession:
         return self._original_sha256
 
     @classmethod
-    def open(cls, save_service, relative_path):
+    def open(cls, save_service, relative_path, *, version_pinned=False):
         if (
             not isinstance(relative_path, str)
             or _PROFILE_SAVE_RE.fullmatch(relative_path) is None
@@ -65,6 +80,7 @@ class Hades2SaveEditSession:
             target,
             hashlib.sha256(raw).hexdigest(),
             document,
+            version_pinned=version_pinned,
         )
 
     def apply(self):
@@ -102,9 +118,13 @@ class Hades2SaveEditSession:
                         "installed Hades save did not round-trip to the edited document"
                     )
 
+            expected_hashes = (
+                None if self._version_pinned
+                else {key: self._original_sha256}
+            )
             result = self._save_service.replace_files(
                 (replacement,),
-                {key: self._original_sha256},
+                expected_hashes,
                 post_install_verify=verify_installed,
             )
 
