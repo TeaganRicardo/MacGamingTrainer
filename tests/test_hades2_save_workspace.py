@@ -92,7 +92,20 @@ assert hub.relative_path == "Profile1.sav"
 _base, _saves, service = _environment("run", include_temp=True)
 run = Hades2SaveWorkspace.open(service)
 assert run.profile == "Profile1"
+# A leftover crash-recovery Temp is not automatically the next loaded save.
+assert run.relative_path == "Profile1.sav"
+
+# The native .v.sav validation marker selects an eligible, newer Temp.
+import os
+validator = _saves / "Profile1.v.sav"
+validator.write_bytes(b"marker")
+os.utime(_saves / "Profile1.sav", ns=(1_000_000_000, 1_000_000_000))
+os.utime(validator, ns=(2_000_000_000, 2_000_000_000))
+run = Hades2SaveWorkspace.open(service)
 assert run.relative_path == "Profile1_Temp.sav"
+os.utime(validator, ns=(500_000_000, 500_000_000))
+run = Hades2SaveWorkspace.open(service)
+assert run.relative_path == "Profile1.sav"
 
 # Resource queries are backend-filtered/paged and expose only descriptor-owned
 # editability. The frontend never needs the whole save tree to search this domain.
