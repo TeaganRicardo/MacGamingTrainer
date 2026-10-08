@@ -557,4 +557,25 @@ else:
     raise AssertionError("contradictory weapon/aspect batch was accepted")
 assert (equipment_saves / "Profile1.sav").read_bytes() == previous_save
 
+# Gift sequence items without their matching resource count are not safe to
+# rewrite. Numeric zero/one must not be accepted as Arcana boolean ownership.
+malformed_gifts = LuaTable(2, 1, [
+    (1.0, "GiftPoints"), (2.0, "MedeaPoints"), ("GiftPoints", 1.0),
+])
+malformed_state = {
+    **long_term_state,
+    "GiftRecord": _table({"Hecate": malformed_gifts}),
+    "MetaUpgradeState": _table({
+        "ChanneledCast": _table({"Unlocked": 1.0, "Level": 2.0}),
+    }),
+}
+_base, _malformed_saves, malformed_service = _environment(
+    "malformed_long_term", state=malformed_state
+)
+malformed = Hades2SaveWorkspace.open(malformed_service)
+gift_rows = malformed.query(domain="relationships", language="en")["items"]
+assert next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")["editable"] is False
+card_rows = malformed.query(domain="progression", language="en")["items"]
+assert all(row["id"] != "card:ChanneledCast:Level" for row in card_rows)
+
 print("hades2_save_workspace_ok")
