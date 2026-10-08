@@ -167,7 +167,6 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 ))
 
         objectives = state.get("ObjectivesCompleted")
-        completed_sets = state.get("CompletedObjectiveSets")
         if isinstance(objectives, LuaTable):
             names = [name for name, _ in objectives.entries() if isinstance(name, str)]
             native, en = _display(names, language, game_path)
@@ -175,7 +174,6 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 amount = objectives[name]
                 if not _integer(amount):
                     continue
-                done = isinstance(completed_sets, LuaTable) and completed_sets.get(name) is True
                 result.append(_row(
                     "objective:" + name, domain, name,
                     ["GameState", "ObjectivesCompleted", name],
@@ -183,7 +181,6 @@ def rows(root, domain, language="zh-CN", game_path=None):
                     "Objective completions · " + (en.get(name) or name),
                     int(amount), "integer",
                     group="目标统计" if zh else "Objective counters",
-                    editable=not done,
                 ))
     return result
 
