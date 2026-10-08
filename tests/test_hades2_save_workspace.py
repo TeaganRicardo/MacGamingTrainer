@@ -332,6 +332,10 @@ gift_npc = LuaTable(3, 2, [
     ("GiftPoints", 2.0), ("MedeaPoints", 1.0),
 ])
 long_term_state = {
+    "Flags": _table({}),
+    "TextLinesRecord": _table({}),
+    "QuestStatus": _table({}),
+    "QuestsCompleted": _table({}),
     "NPCInteractions": _table({"Hecate": 2.0}),
     "GiftRecord": _table({"Hecate": gift_npc}),
     "GiftResourceRecord": _table({"GiftPoints": 5.0, "MedeaPoints": 1.0}),
