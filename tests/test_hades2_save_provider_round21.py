@@ -1,3 +1,4 @@
+import os
 import struct
 import sys
 import tempfile
@@ -111,6 +112,14 @@ assert resolved == [
     ("main", "Profile1_Temp.sav"),
 ]
 
+# Temp is crash-recovery material until the game validation marker is newer.
+without_marker = provider.describe_snapshot(tuple(rows), "2026-09-20T14:30:00")
+assert without_marker["nameDetails"][:2] == ["第10夜", "三岔路口"]
+marker = saves / "Profile1.v.sav"
+marker.write_bytes(b"native-v")
+rows.append(ResolvedSaveFile("main", "Profile1.v.sav", marker))
+os.utime(saves / "Profile1.sav", ns=(1_000_000_000, 1_000_000_000))
+os.utime(marker, ns=(2_000_000_000, 2_000_000_000))
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T14:37:51")
 assert description == {
     "defaultName": "2026-09-20 14:37 · 第11夜 · 厄瑞玻斯",
@@ -165,6 +174,7 @@ write_save(
     fear=7,
     current_map="F_Combat99",
 )
+os.utime(marker, ns=(2_000_000_000_000_000_000, 2_000_000_000_000_000_000))
 description = provider.describe_snapshot(tuple(rows), "2026-09-20T15:15:00")
 assert description["defaultName"] == "2026-09-20 15:15 · 第12夜 · F_Combat99"
 assert description["nameDetails"][:2] == ["第12夜", "F_Combat99"]
