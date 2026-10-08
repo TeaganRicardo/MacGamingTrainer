@@ -397,16 +397,27 @@ def linked_changes(root, intents):
 
 def validate_batch(root, intents):
     """Reject contradictory staged intents and impossible final ownership."""
-    if not any(intent["domain"] == "weapons" for intent in intents):
+    own = [intent for intent in intents if intent["domain"] == "weapons"]
+    if not own:
         return
-    state = _state(root)
     current = _semantic_values(root)
-    for intent in intents:
-        if intent["domain"] == "weapons":
-            if current.get(intent["id"]) != intent["after"]:
-                raise ValueError("Save Editor equipment changes conflict.")
+    affected_weapons = set()
+    familiars_changed = False
+    for intent in own:
+        entry = intent["id"]
+        if current.get(entry) != intent["after"]:
+            raise ValueError("Save Editor equipment changes conflict.")
+        if entry.startswith("weapon:"):
+            affected_weapons.add(entry[len("weapon:"):])
+        elif entry.startswith("aspect:"):
+            affected_weapons.add(_ASPECT_PARENT[entry[len("aspect:"):]])
+        elif entry.startswith("aspectSelection:"):
+            affected_weapons.add(entry[len("aspectSelection:"):])
+        elif entry.startswith("familiar:") or entry == "familiarSelection":
+            familiars_changed = True
 
-    for weapon, aspects in _WEAPONS.items():
+    for weapon in affected_weapons:
+        aspects = _WEAPONS[weapon]
         if "weapon:" + weapon not in current:
             continue
         owned = current["weapon:" + weapon]
@@ -421,6 +432,7 @@ def validate_batch(root, intents):
         if selected and (not owned or current.get("aspect:" + selected, 0) == 0):
             raise ValueError("Save Editor selected aspect is not purchased.")
 
-    familiar = current.get("familiarSelection")
-    if familiar and current.get("familiar:" + familiar) is not True:
-        raise ValueError("Save Editor equipped familiar must be unlocked.")
+    if familiars_changed:
+        familiar = current.get("familiarSelection")
+        if familiar and current.get("familiar:" + familiar) is not True:
+            raise ValueError("Save Editor equipped familiar must be unlocked.")
