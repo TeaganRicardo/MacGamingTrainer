@@ -18,7 +18,7 @@ def _table(values):
     return LuaTable(0, len(values), list(values.items()))
 
 
-def _save_bytes(timestamp, resources=None, stats=None, extra=None):
+def _save_bytes(timestamp, resources=None, stats=None, extra=None, state=None):
     game_state = {
         "Resources": _table(resources or {"MetaCurrency": 123.0}),
         "GameplayTime": 123.5,
@@ -28,6 +28,8 @@ def _save_bytes(timestamp, resources=None, stats=None, extra=None):
     }
     if stats is not None:
         game_state.update(stats)
+    if state is not None:
+        game_state.update(state)
     root = _table({"GameState": _table(game_state), "CurrentRun": _table({})})
     header = Hades2SaveHeader(
         game_version=0x12,
@@ -53,17 +55,17 @@ def _active_profile(name="Profile1"):
     return b"SGB1" + struct.pack("<I", len(raw)) + raw
 
 
-def _environment(name, *, include_temp=False, running=False, resources=None, stats=None, extra=None):
+def _environment(name, *, include_temp=False, running=False, resources=None, stats=None, extra=None, state=None):
     base = Path(tempfile.mkdtemp(prefix="mgt-save-workspace-")) / name
     saves = base / "saves"
     saves.mkdir(parents=True)
     (saves / "activeProfile").write_bytes(_active_profile())
     (saves / "Profile1.sav").write_bytes(
-        _save_bytes(100, resources=resources, stats=stats, extra=extra)
+        _save_bytes(100, resources=resources, stats=stats, extra=extra, state=state)
     )
     if include_temp:
         (saves / "Profile1_Temp.sav").write_bytes(
-            _save_bytes(200, resources=resources, stats=stats, extra=extra)
+            _save_bytes(200, resources=resources, stats=stats, extra=extra, state=state)
         )
     spec = SaveManagementSpec(
         roots=(SaveRootSpec("main", str(saves), ("Profile*.sav", "activeProfile", "saveinfo")),),
@@ -254,5 +256,73 @@ assert installed.lua_state["GameState"]["GameplayTime"] == 900.5
 assert installed.lua_state["GameState"]["UnknownFutureField"]["KeepMe"] == "A"
 previous = pinned_service.store.load_verified_snapshot(applied["previousSnapshotId"])
 assert (previous["root"] / "files/main/Profile1.sav").read_bytes() == newer
+
+# Explicitly verified narrative records are editable; arbitrary GameState flags
+# are not promoted to write access, and gift-tied lines remain immutable.
+narrative_state = {
+    "Flags": _table({
+        "HasShuffledMusicPlayer": True,
+        "UnsupportedHiddenFlag": True,
+    }),
+    "TextLinesRecord": _table({"NormalScene": True, "GiftLine": True}),
+    "TextLinesChoiceRecord": _table({"NormalScene": "ChoiceA"}),
+    "GiftTextLinesOrderRecord": _table({
+        "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
+    }),
+    "QuestStatus": _table({"QuestA": "Unlocked", "QuestB": "CashedOut"}),
+    "QuestsCompleted": _table({"QuestB": True}),
+}
+_base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
+narrative = Hades2SaveWorkspace.open(narrative_service)
+flags = narrative.query(domain="flags", search="HasPinnedAnyBoon", language="en")
+assert flags["total"] == 1
+assert flags["items"][0]["value"] is False
+assert flags["items"][0]["group"] == "Tutorial and presentation records"
+dialogue = narrative.query(domain="dialogue", limit=10, language="zh-CN")
+assert {row["rawId"] for row in dialogue["items"]} == {"NormalScene", "GiftLine"}
+assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
+quests = narrative.query(domain="progression", limit=10, language="en")
+assert quests["total"] == 2
+assert next(row for row in quests["items"] if row["rawId"] == "QuestA")["choices"] == [
+    "Unlocked", "Complete"
+]
+assert next(row for row in quests["items"] if row["rawId"] == "QuestB")["editable"] is False
+for identity, action, value in (
+    ("flag:UnsupportedHiddenFlag", "set", False),
+    ("dialogue:GiftLine", "set", False),
+    ("quest:QuestB", "setEnum", "Unlocked"),
+    ("quest:QuestA", "setEnum", "CashedOut"),
+    ("quest:QuestA", "set", "Complete"),
+    ("flag:HasPinnedAnyBoon", "set", 1),
+):
+    try:
+        narrative.stage(identity, action, value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid narrative mutation accepted: " + identity)
+
+narrative.stage("flag:HasPinnedAnyBoon", "set", True)
+narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
+narrative.stage("dialogue:NormalScene", "set", False)
+narrative.stage("quest:QuestA", "setEnum", "Complete")
+changes = narrative.review()["changes"]
+assert len(changes) == 6, changes  # four intents and two necessary linked effects
+assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
+    "linked:quest:QuestA", "linked:dialogue:NormalScene"
+}
+narrative.apply()
+installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
+game = installed_narrative.lua_state["GameState"]
+assert game["Flags"]["HasPinnedAnyBoon"] is True
+assert game["Flags"].get("HasShuffledMusicPlayer") is None
+assert game["Flags"]["UnsupportedHiddenFlag"] is True
+assert game["TextLinesRecord"].get("NormalScene") is None
+assert game["TextLinesRecord"]["GiftLine"] is True
+assert game["TextLinesChoiceRecord"].get("NormalScene") is None
+assert game["QuestStatus"]["QuestA"] == "Complete"
+assert game["QuestsCompleted"]["QuestA"] is True
+assert game["QuestStatus"]["QuestB"] == "CashedOut"
+assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
 print("hades2_save_workspace_ok")
