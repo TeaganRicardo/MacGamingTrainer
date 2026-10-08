@@ -357,8 +357,8 @@ long_term_state = {
     "Flags": _table({}),
     "TextLinesRecord": _table({}),
     "QuestStatus": _table({}),
-    "NPCInteractions": _table({"Hecate": 2.0}),
-    "SpecialInteractRecord": _table({"Hecate": 1.0}),
+    "NPCInteractions": _table({"NPC_Hecate_01": 2.0}),
+    "SpecialInteractRecord": _table({"NPC_Hecate_01": 1.0}),
     "GiftRecord": _table({"Hecate": gift_npc}),
     "GiftResourceRecord": _table({"GiftPoints": 5.0, "MedeaPoints": 1.0}),
     "MetaUpgradeState": _table({
@@ -372,26 +372,26 @@ long_term_state = {
 _base, long_term_saves, long_term_service = _environment("long_term", state=long_term_state)
 long_term = Hades2SaveWorkspace.open(long_term_service)
 rels = long_term.query(domain="relationships", language="en")
-assert {entry["id"] for entry in rels["items"]} == {
-    "interaction:Hecate", "specialInteraction:Hecate",
+assert {
+    "interaction:NPC_Hecate_01", "specialInteraction:NPC_Hecate_01",
     "gift:Hecate:GiftPoints", "gift:Hecate:MedeaPoints"
-}
-assert {row["id"] for row in rels["items"] if row["editable"]} == {
-    "interaction:Hecate", "specialInteraction:Hecate"
-}
+}.issubset({entry["id"] for entry in rels["items"]})
+assert {"interaction:NPC_Hecate_01", "specialInteraction:NPC_Hecate_01"}.issubset({
+    row["id"] for row in rels["items"] if row["editable"]
+})
 assert all(not row["editable"] for row in rels["items"] if row["id"].startswith("gift:"))
 progress = long_term.query(domain="progression", language="en")
-assert {row["id"] for row in progress["items"]} == {
+assert {
     "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level",
     "card:BonusHealth:Unlocked", "card:BonusHealth:Level",
     "objective:GiftPrompt",
-}
+}.issubset({row["id"] for row in progress["items"]})
 assert all(row["id"] != "card:UnknownHiddenCard:Level" for row in progress["items"])
 for identity, value in (
     ("gift:Hecate:GiftPoints", 3),
     ("card:ChanneledCast:Level", 4),
     ("card:BonusHealth:Unlocked", 1),
-    ("interaction:Hecate", True),
+    ("interaction:NPC_Hecate_01", True),
     ("objective:Unknown", 4),
 ):
     try:
@@ -401,8 +401,8 @@ for identity, value in (
     else:
         raise AssertionError("invalid long-term edit accepted: " + identity)
 
-long_term.stage("interaction:Hecate", "set", 5)
-long_term.stage("specialInteraction:Hecate", "set", 4)
+long_term.stage("interaction:NPC_Hecate_01", "set", 5)
+long_term.stage("specialInteraction:NPC_Hecate_01", "set", 4)
 long_term.stage("card:ChanneledCast:Unlocked", "set", False)
 long_term.stage("objective:GiftPrompt", "set", 3)
 review = long_term.review()
@@ -412,8 +412,8 @@ assert {item["id"] for item in review["changes"] if item["id"].startswith("linke
 }
 long_term.apply()
 edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
-assert edited["NPCInteractions"]["Hecate"] == 5
-assert edited["SpecialInteractRecord"]["Hecate"] == 4
+assert edited["NPCInteractions"]["NPC_Hecate_01"] == 5
+assert edited["SpecialInteractRecord"]["NPC_Hecate_01"] == 4
 record = edited["GiftRecord"]["Hecate"]
 assert record["GiftPoints"] == 2
 assert [value for key, value in record.entries() if type(key) is float] == [

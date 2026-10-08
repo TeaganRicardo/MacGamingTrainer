@@ -7,6 +7,7 @@ Arcana changes preserve unlocked/equipped/level invariants.
 
 from .localization import official_display_names
 from .save_document import LuaTable
+from .save_native_ids import NPC_INTERACTION_IDS, OBJECTIVE_IDS
 
 _MAX = 9_007_199_254_740_991
 _ARCANA_CARDS = frozenset((
@@ -72,10 +73,10 @@ def rows(root, domain, language="zh-CN", game_path=None):
     if domain == "relationships":
         interaction = state.get("NPCInteractions")
         if isinstance(interaction, LuaTable):
-            names = [key for key, _ in interaction.entries() if isinstance(key, str)]
+            names = sorted(NPC_INTERACTION_IDS)
             native, en = _display(names, language, game_path)
             for name in names:
-                value = interaction[name]
+                value = interaction.get(name, 0)
                 if not _integer(value):
                     continue
                 title = native.get(name) or name
@@ -90,7 +91,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
 
         special = state.get("SpecialInteractRecord")
         if isinstance(special, LuaTable):
-            names = [name for name, _ in special.entries() if isinstance(name, str)]
+            names = [name for name, _ in special.entries()
+                     if isinstance(name, str) and name in NPC_INTERACTION_IDS]
             native, en = _display(names, language, game_path)
             for name in names:
                 value = special[name]
@@ -168,10 +170,10 @@ def rows(root, domain, language="zh-CN", game_path=None):
 
         objectives = state.get("ObjectivesCompleted")
         if isinstance(objectives, LuaTable):
-            names = [name for name, _ in objectives.entries() if isinstance(name, str)]
+            names = sorted(OBJECTIVE_IDS)
             native, en = _display(names, language, game_path)
             for name in names:
-                amount = objectives[name]
+                amount = objectives.get(name, 0)
                 if not _integer(amount):
                     continue
                 result.append(_row(
@@ -225,6 +227,8 @@ def apply_intent(root, intent):
     if entry_id.startswith(("interaction:", "specialInteraction:")):
         special = entry_id.startswith("specialInteraction:")
         name = entry_id[len("specialInteraction:"):] if special else entry_id[len("interaction:"):]
+        if name not in NPC_INTERACTION_IDS:
+            raise ValueError("Save Editor NPC identity is not supported.")
         owner = _table(state, "SpecialInteractRecord" if special else "NPCInteractions")
         if after == 0:
             owner.pop(name, None)
@@ -251,6 +255,8 @@ def apply_intent(root, intent):
         return
     if entry_id.startswith("objective:"):
         name = entry_id[len("objective:"):]
+        if name not in OBJECTIVE_IDS:
+            raise ValueError("Save Editor objective identity is not supported.")
         owner = _table(state, "ObjectivesCompleted")
         if after:
             owner[name] = after
