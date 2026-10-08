@@ -19,9 +19,9 @@ root = table([
     ("GameState", table([
         ("MixedKeys", table([
             (1.0, "numeric"),
-            ("1", "text"),
+            ("1.0", "text"),
             (True, "boolean"),
-            ("true", "textual boolean"),
+            ("True", "textual boolean"),
         ])),
         ("a/b", table([("c", "first")])),
         ("a", table([("b/c", "second")])),
