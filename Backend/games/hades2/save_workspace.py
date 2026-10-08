@@ -7,6 +7,7 @@ to receive the complete Lua tree just to browse or search it.
 
 import math
 
+from . import save_narrative
 from .localization import official_display_names
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
@@ -353,6 +354,10 @@ class Hades2SaveWorkspace:
             rows = self._resource_rows(language)
         elif domain == "playerStats":
             rows = self._player_stat_rows(language)
+        elif domain in ("flags", "dialogue", "progression"):
+            rows = save_narrative.rows(
+                self.document.lua_state, domain, language, game_path=self._game_path
+            )
         elif domain == "advanced":
             if path is None:
                 path = []
@@ -397,12 +402,19 @@ class Hades2SaveWorkspace:
             return self._resource_descriptor(identifier)
         if separator and prefix == "playerStat":
             return self._player_stat_descriptor(identifier)
+        semantic = save_narrative.descriptor(
+            self.document.lua_state, entry_id, game_path=self._game_path
+        )
+        if semantic is not None:
+            return semantic
         raise ValueError("Save Editor entry is not writable.")
 
     def stage(self, entry_id, operation, value=None):
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
+        if descriptor["domain"] in ("flags", "dialogue", "progression"):
+            save_narrative.validate(descriptor, operation, value)
         if operation == "set":
             if descriptor["domain"] == "resources":
                 if (
@@ -459,6 +471,9 @@ class Hades2SaveWorkspace:
                 key: intent[key]
                 for key in ("id", "domain", "rawId", "operation", "before", "after")
             })
+        changes.extend(
+            save_narrative.linked_changes(self.document.lua_state, self._pending.values())
+        )
         return {"count": len(changes), "changes": changes}
 
     def cancel(self):
@@ -467,6 +482,9 @@ class Hades2SaveWorkspace:
 
     @staticmethod
     def _apply_intent(document, intent):
+        if intent["domain"] in ("flags", "dialogue", "progression"):
+            save_narrative.apply_intent(document.lua_state, intent)
+            return
         path = intent["path"]
         owner = _lua_path(document.lua_state, path[:-1])
         if not isinstance(owner, LuaTable):
