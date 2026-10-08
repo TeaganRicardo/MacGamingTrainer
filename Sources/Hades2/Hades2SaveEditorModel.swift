@@ -65,6 +65,7 @@ struct Hades2SaveEditorChange: Identifiable, Equatable {
     let domain: String
     let rawID: String
     let operation: String
+    let name: String?
     let before: AnyHashable?
     let after: AnyHashable?
 
@@ -82,6 +83,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let valueType: String
     let editable: Bool
     let mutationKinds: [String]
+    let group: String?
+    let choices: [String]
     let constraints: Hades2SaveEditorConstraints?
     let childCount: Int?
 
@@ -96,6 +99,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.valueType == rhs.valueType
             && lhs.editable == rhs.editable
             && lhs.mutationKinds == rhs.mutationKinds
+            && lhs.group == rhs.group
+            && lhs.choices == rhs.choices
             && lhs.constraints == rhs.constraints
             && lhs.childCount == rhs.childCount
     }
@@ -197,7 +202,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func displayName(for change: Hades2SaveEditorChange) -> String {
-        knownDisplayNames[change.entryID] ?? change.rawID
+        change.name ?? knownDisplayNames[change.entryID] ?? change.rawID
     }
 
     func submitSearch() {
@@ -334,6 +339,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                     domain: domain,
                     rawID: rawID,
                     operation: operation,
+                    name: row["name"] as? String,
                     before: Self.hashableScalar(row["before"]),
                     after: Self.hashableScalar(row["after"])
                 )
@@ -409,6 +415,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             valueType: valueType,
             editable: editable,
             mutationKinds: mutationKinds,
+            group: row["group"] as? String,
+            choices: row["choices"] as? [String] ?? [],
             constraints: constraints,
             childCount: intValue(row["childCount"])
         )
