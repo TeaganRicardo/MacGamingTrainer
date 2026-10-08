@@ -18,6 +18,7 @@ from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
 from .runtime_error_presentation import present_runtime_error
+from .save_workspace import SAVE_EDITOR_DOMAINS, SAVE_EDITOR_MUTATION_KINDS
 from .schema import (
     BOON_RARITY_TARGETS,
     MAX_AMOUNT,
@@ -308,6 +309,59 @@ def _next_room_reward(raw):
     return {"reward": reward}
 
 
+def _save_editor_query(raw):
+    params = _params(raw)
+    domain = params.get("domain")
+    search = params.get("search", "")
+    offset = params.get("offset", 0)
+    limit = params.get("limit", 100)
+    path = params.get("path", [])
+    language = params.get("language", "zh-CN")
+    if domain not in SAVE_EDITOR_DOMAINS:
+        raise ValueError("未知存档编辑器分类。")
+    if not isinstance(search, str) or len(search) > 256:
+        raise ValueError("存档搜索内容过长。")
+    if type(offset) is not int or offset < 0:
+        raise ValueError("存档查询位置无效。")
+    if type(limit) is not int or not 1 <= limit <= 200:
+        raise ValueError("存档查询数量必须为 1–200。")
+    if (
+        not isinstance(path, list)
+        or len(path) > 64
+        or any(
+            part is None
+            or isinstance(part, (list, dict))
+            or type(part) not in (str, int, float, bool)
+            for part in path
+        )
+    ):
+        raise ValueError("存档浏览路径无效。")
+    if language not in ("zh-CN", "en"):
+        raise ValueError("存档编辑器语言无效。")
+    return {
+        "domain": domain,
+        "search": search,
+        "offset": offset,
+        "limit": limit,
+        "path": path,
+        "language": language,
+    }
+
+
+def _save_editor_stage(raw):
+    params = _params(raw)
+    entry_id = params.get("entryId")
+    operation = params.get("operation")
+    if not isinstance(entry_id, str) or not 1 <= len(entry_id) <= 512:
+        raise ValueError("存档项目无效。")
+    if operation not in SAVE_EDITOR_MUTATION_KINDS:
+        raise ValueError("存档修改操作无效。")
+    result = {"entryId": entry_id, "operation": operation}
+    if "value" in params:
+        result["value"] = params["value"]
+    return result
+
+
 def _direct(method):
     def invoke(adapter, params):
         return getattr(adapter, method)()
@@ -360,6 +414,14 @@ def _load_profile(adapter, params):
 
 def _delete_profile(adapter, params):
     return adapter.delete_profile(params.get("name"))
+
+
+def _save_editor_query_invoke(adapter, params):
+    return adapter.query_save_editor(params)
+
+
+def _save_editor_stage_invoke(adapter, params):
+    return adapter.stage_save_editor(params)
 
 
 def _diagnostics(adapter, params):
@@ -490,6 +552,20 @@ _COMMAND_SPECS = (
         validate=_trait_mutation("advance_trait_lifecycle"),
     ),
     _spec("open_special_choice", request_id=True, validate=_special_choice),
+    _spec("save_editor_open", invoke=_direct("open_save_editor")),
+    _spec(
+        "save_editor_query",
+        validate=_save_editor_query,
+        invoke=_save_editor_query_invoke,
+    ),
+    _spec(
+        "save_editor_stage",
+        validate=_save_editor_stage,
+        invoke=_save_editor_stage_invoke,
+    ),
+    _spec("save_editor_review", invoke=_direct("review_save_editor")),
+    _spec("save_editor_cancel", invoke=_direct("cancel_save_editor")),
+    _spec("save_editor_apply", timeout=30.0, invoke=_direct("apply_save_editor")),
     _spec("list_profiles", invoke=_list_profiles),
     _spec("save_profile", invoke=_save_profile),
     _spec("load_profile", invoke=_load_profile),
