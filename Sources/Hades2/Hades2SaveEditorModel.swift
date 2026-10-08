@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import Combine
 
 enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
@@ -22,20 +23,24 @@ enum Hades2SaveEditorPathComponent: Hashable {
     case boolean(Bool)
 
     init?(_ value: Any) {
-        if let value = value as? String {
-            self = .string(value)
-        } else if let value = value as? Bool {
-            self = .boolean(value)
-        } else if let value = value as? Int {
-            self = .integer(value)
-        } else if let value = value as? Double {
-            if value.rounded() == value, value >= Double(Int.min), value <= Double(Int.max) {
-                self = .integer(Int(value))
-            } else {
-                self = .number(value)
-            }
+        if let text = value as? String {
+            self = .string(text)
+            return
+        }
+        guard let number = value as? NSNumber else { return nil }
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            self = .boolean(number.boolValue)
+        } else if let integer = value as? Int {
+            self = .integer(integer)
         } else {
-            return nil
+            let scalar = number.doubleValue
+            guard scalar.isFinite else { return nil }
+            if scalar.rounded() == scalar, scalar >= Double(Int.min),
+               scalar < Double(Int.max) {
+                self = .integer(Int(scalar))
+            } else {
+                self = .number(scalar)
+            }
         }
     }
 
@@ -411,11 +416,14 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     private static func hashableScalar(_ value: Any?) -> AnyHashable? {
         guard let value, !(value is NSNull) else { return nil }
-        if let value = value as? Bool { return AnyHashable(value) }
-        if let value = value as? Int { return AnyHashable(value) }
-        if let value = value as? Double { return AnyHashable(value) }
-        if let value = value as? String { return AnyHashable(value) }
-        return nil
+        if let text = value as? String { return AnyHashable(text) }
+        guard let number = value as? NSNumber else { return nil }
+        if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            return AnyHashable(number.boolValue)
+        }
+        if let integer = value as? Int { return AnyHashable(integer) }
+        let scalar = number.doubleValue
+        return scalar.isFinite ? AnyHashable(scalar) : nil
     }
 
     private static func intValue(_ value: Any?) -> Int? {
