@@ -122,4 +122,47 @@ assert advanced["items"][0]["rawId"] == "Item0100"
 assert all(row["editable"] is False for row in advanced["items"])
 assert all(row["path"][:2] == ["GameState", "UnknownFutureField"] for row in advanced["items"])
 
+# Staging stores typed mutation intent only. The source document stays pinned
+# and untouched until one explicit batch Apply crosses the recoverable seam.
+original_meta = workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"]
+workspace.stage("resource:MetaCurrency", "set", 500)
+workspace.stage("resource:GiftPoints", "set", 20)
+assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] == original_meta
+review = workspace.review()
+assert review["count"] == 2
+assert review["changes"] == [
+    {
+        "id": "resource:MetaCurrency",
+        "domain": "resources",
+        "rawId": "MetaCurrency",
+        "operation": "set",
+        "before": 123,
+        "after": 500,
+    },
+    {
+        "id": "resource:GiftPoints",
+        "domain": "resources",
+        "rawId": "GiftPoints",
+        "operation": "set",
+        "before": 9,
+        "after": 20,
+    },
+]
+workspace.cancel()
+assert workspace.review() == {"count": 0, "changes": []}
+
+for entry_id, operation, value in (
+    ("resource:MetaCurrency", "set", -1),
+    ("resource:MetaCurrency", "set", 1_000_000),
+    ("resource:MetaCurrency", "set", 1.5),
+    ("resource:MetaCurrency", "unset", None),
+    ("advanced:GameState/UnknownFutureField/Item0000", "set", 9),
+):
+    try:
+        workspace.stage(entry_id, operation, value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unsupported Save Editor mutation was accepted")
+
 print("hades2_save_workspace_ok")
