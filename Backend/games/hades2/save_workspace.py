@@ -72,11 +72,12 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One editor workspace pinned to the active Hades profile save."""
 
-    __slots__ = ("_session", "_game_path", "profile")
+    __slots__ = ("_session", "_game_path", "_pending", "profile")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
         self._game_path = game_path
+        self._pending = {}
         self.profile = profile
 
     @property
@@ -110,7 +111,7 @@ class Hades2SaveWorkspace:
             game_path=game_path,
         )
 
-    def _resource_rows(self, language):
+    def _resources(self):
         try:
             game_state = self.document.lua_state["GameState"]
             resources = game_state["Resources"]
@@ -118,7 +119,33 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor resource inventory is unavailable.") from error
         if not isinstance(resources, LuaTable):
             raise ValueError("Save Editor resource inventory is malformed.")
+        return resources
 
+    def _resource_descriptor(self, identifier):
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError("Save Editor resource identity is invalid.")
+        resources = self._resources()
+        try:
+            value = resources[identifier]
+        except KeyError as error:
+            raise ValueError("Save Editor resource is unavailable.") from error
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not float(value).is_integer()
+        ):
+            raise ValueError("Save Editor resource is not an editable integer.")
+        return {
+            "id": "resource:{}".format(identifier),
+            "domain": "resources",
+            "rawId": identifier,
+            "path": ["GameState", "Resources", identifier],
+            "before": int(value),
+            "mutationKinds": ("set",),
+        }
+
+    def _resource_rows(self, language):
+        resources = self._resources()
         identifiers = {
             key for key, _value in resources.entries()
             if isinstance(key, str)
@@ -134,29 +161,24 @@ class Hades2SaveWorkspace:
         )
 
         rows = []
-        for key, value in resources.entries():
+        for key, _value in resources.entries():
             if not isinstance(key, str):
                 continue
-            if (
-                not isinstance(value, (int, float))
-                or isinstance(value, bool)
-                or not float(value).is_integer()
-            ):
-                # A primitive-looking value is not silently writable unless the
-                # resource descriptor can prove the supported integer contract.
+            try:
+                descriptor = self._resource_descriptor(key)
+            except ValueError:
                 continue
-            amount = int(value)
             rows.append({
-                "id": "resource:{}".format(key),
-                "domain": "resources",
+                "id": descriptor["id"],
+                "domain": descriptor["domain"],
                 "rawId": key,
-                "path": ["GameState", "Resources", key],
+                "path": descriptor["path"],
                 "name": names.get(key) or key,
                 "englishName": english.get(key) or key,
-                "value": amount,
+                "value": descriptor["before"],
                 "valueType": "integer",
                 "editable": True,
-                "mutationKinds": ["set"],
+                "mutationKinds": list(descriptor["mutationKinds"]),
                 "constraints": {
                     "min": 0,
                     "max": MAX_AMOUNT,
@@ -237,3 +259,51 @@ class Hades2SaveWorkspace:
             "total": total,
             "items": rows[offset:offset + limit],
         }
+
+    def _descriptor(self, entry_id):
+        if not isinstance(entry_id, str) or not entry_id:
+            raise ValueError("Save Editor entry identity is invalid.")
+        prefix, separator, identifier = entry_id.partition(":")
+        if separator and prefix == "resource":
+            return self._resource_descriptor(identifier)
+        raise ValueError("Save Editor entry is not writable.")
+
+    def stage(self, entry_id, operation, value=None):
+        descriptor = self._descriptor(entry_id)
+        if operation not in descriptor["mutationKinds"]:
+            raise ValueError("Save Editor mutation is not allowed for this entry.")
+        if operation == "set":
+            if (
+                type(value) is not int
+                or isinstance(value, bool)
+                or not 0 <= value <= MAX_AMOUNT
+            ):
+                raise ValueError("Save Editor resource value must be an integer 0..999999.")
+        before = descriptor["before"]
+        if value == before:
+            self._pending.pop(entry_id, None)
+            return self.review()
+
+        self._pending[entry_id] = {
+            "id": descriptor["id"],
+            "domain": descriptor["domain"],
+            "rawId": descriptor["rawId"],
+            "path": descriptor["path"],
+            "operation": operation,
+            "before": before,
+            "after": value,
+        }
+        return self.review()
+
+    def review(self):
+        changes = []
+        for intent in self._pending.values():
+            changes.append({
+                key: intent[key]
+                for key in ("id", "domain", "rawId", "operation", "before", "after")
+            })
+        return {"count": len(changes), "changes": changes}
+
+    def cancel(self):
+        self._pending.clear()
+        return self.review()
