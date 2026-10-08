@@ -339,23 +339,28 @@ struct Hades2SaveEditorView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(text("hades2.saveEditor.review"))
                     .font(.headline)
-                ForEach(model.pendingChanges) { change in
-                    HStack(spacing: 8) {
-                        Text(model.displayName(for: change))
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
-                            .help(change.rawID)
-                        Spacer()
-                        Text(valueText(change.before))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Image(systemName: "arrow.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(valueText(change.after))
-                            .font(.caption.monospaced())
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(model.pendingChanges) { change in
+                            HStack(spacing: 8) {
+                                Text(model.displayName(for: change))
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                                    .help(change.rawID)
+                                Spacer()
+                                Text(valueText(change.before))
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "arrow.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(valueText(change.after))
+                                    .font(.caption.monospaced())
+                            }
+                        }
                     }
                 }
+                .frame(maxHeight: 220)
             }
             .trainerPanel(padding: 12, cornerRadius: theme.controlCornerRadius)
         }
