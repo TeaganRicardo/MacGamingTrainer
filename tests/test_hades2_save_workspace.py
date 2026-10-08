@@ -269,7 +269,8 @@ narrative_state = {
     "GiftTextLinesOrderRecord": _table({
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
-    "QuestStatus": _table({"QuestA": "Unlocked", "QuestB": "CashedOut"}),
+    "QuestStatus": _table({"QuestHelpOdysseus": "Unlocked", "QuestHelpDora": "CashedOut", "QuestA": "Unlocked"}),
+    "QuestsCompleted": _table({"QuestHelpDora": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
 narrative = Hades2SaveWorkspace.open(narrative_service)
@@ -281,17 +282,17 @@ dialogue = narrative.query(domain="dialogue", limit=10, language="zh-CN")
 assert {row["rawId"] for row in dialogue["items"]} == {"NormalScene", "GiftLine"}
 assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
 quests = narrative.query(domain="progression", limit=10, language="en")
-assert quests["total"] == 2
-assert next(row for row in quests["items"] if row["rawId"] == "QuestA")["choices"] == [
+assert quests["total"] == 2  # unrecognized QuestA is not an editable game quest
+assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpOdysseus")["choices"] == [
     "Unlocked", "Complete"
 ]
-assert next(row for row in quests["items"] if row["rawId"] == "QuestB")["editable"] is False
+assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpDora")["editable"] is False
 for identity, action, value in (
     ("flag:UnsupportedHiddenFlag", "set", False),
     ("dialogue:GiftLine", "set", False),
-    ("quest:QuestB", "setEnum", "Unlocked"),
-    ("quest:QuestA", "setEnum", "CashedOut"),
-    ("quest:QuestA", "set", "Complete"),
+    ("quest:QuestHelpDora", "setEnum", "Unlocked"),
+    ("quest:QuestHelpOdysseus", "setEnum", "CashedOut"),
+    ("quest:QuestHelpOdysseus", "set", "Complete"),
     ("flag:HasPinnedAnyBoon", "set", 1),
 ):
     try:
@@ -304,11 +305,11 @@ for identity, action, value in (
 narrative.stage("flag:HasPinnedAnyBoon", "set", True)
 narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
 narrative.stage("dialogue:NormalScene", "set", False)
-narrative.stage("quest:QuestA", "setEnum", "Complete")
+narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 5, changes  # four intents and one linked choice reset
+assert len(changes) == 6, changes  # four intents plus choice reset and quest completion
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:dialogue:NormalScene"
+    "linked:dialogue:NormalScene", "linked:quest:QuestHelpOdysseus"
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -319,9 +320,11 @@ assert game["Flags"]["UnsupportedHiddenFlag"] is True
 assert game["TextLinesRecord"].get("NormalScene") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
 assert game["TextLinesChoiceRecord"].get("NormalScene") is None
-assert game["QuestStatus"]["QuestA"] == "Complete"
-assert "QuestsCompleted" not in game
-assert game["QuestStatus"]["QuestB"] == "CashedOut"
+assert game["QuestStatus"]["QuestHelpOdysseus"] == "Complete"
+assert game["QuestsCompleted"]["QuestHelpOdysseus"] is True
+assert game["QuestsCompleted"]["QuestHelpDora"] is True
+assert game["QuestStatus"]["QuestHelpDora"] == "CashedOut"
+assert game["QuestStatus"]["QuestA"] == "Unlocked"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
 # Relationship history has a native chronological array and a global
@@ -628,5 +631,62 @@ assert starter_written["WeaponsUnlocked"]["StaffClearCastAspect2"] is True
 assert starter_written["WorldUpgrades"]["StaffClearCastAspect2"] is True
 assert starter_written["WorldUpgrades"].get("WeaponStaffSwing") is None
 
+
+# Native quest lifecycle synchronizes completion history. Reversing an
+# unclaimed quest also clears its completed-history gate without changing other
+# quests or the original game's unrelated save state.
+undo_quest = Hades2SaveWorkspace.open(narrative_service)
+undo_quest.stage("quest:QuestHelpOdysseus", "setEnum", "Unlocked")
+assert any(c["id"] == "linked:quest:QuestHelpOdysseus"
+           for c in undo_quest.review()["changes"])
+undo_quest.apply()
+restored = Hades2SaveDocument.load(narrative_saves / "Profile1.sav").lua_state["GameState"]
+assert restored["QuestStatus"]["QuestHelpOdysseus"] == "Unlocked"
+assert restored["QuestsCompleted"].get("QuestHelpOdysseus") is None
+assert restored["QuestsCompleted"]["QuestHelpDora"] is True
+try:
+    undo_quest.stage("quest:QuestA", "setEnum", "Complete")
+except ValueError:
+    pass
+else:
+    raise AssertionError("arbitrary stored QuestStatus key became writable")
+
+# The real game writes free/default aspect unlock bits on visiting the Aspect
+# shop. Revoking the parent weapon must remove the *recorded* free aspect too.
+free_aspect_state = {
+    "WeaponsUnlocked": _table({"WeaponDagger": True, "DaggerBackstabAspect": True}),
+    "WorldUpgrades": _table({"WeaponDagger": True}),
+    "WorldUpgradesAdded": _table({"WeaponDagger": True}),
+    "LastWeaponUpgradeName": _table({}),
+}
+_base, free_saves, free_service = _environment("native-free-aspect", state=free_aspect_state)
+free_editor = Hades2SaveWorkspace.open(free_service)
+free_rows = {r["id"]: r for r in free_editor.query(domain="weapons")["items"]}
+assert free_rows["aspect:DaggerBackstabAspect"]["value"] == 1
+# The UI identity must distinguish the six forms sharing the same native title.
+assert "WeaponDagger" in free_rows["aspect:DaggerBackstabAspect"]["name"]
+free_editor.stage("weapon:WeaponDagger", "set", False)
+free_editor.apply()
+free_result = Hades2SaveDocument.load(free_saves / "Profile1.sav").lua_state["GameState"]
+assert free_result["WeaponsUnlocked"].get("WeaponDagger") is None
+assert free_result["WeaponsUnlocked"].get("DaggerBackstabAspect") is None
+assert free_result["WorldUpgrades"].get("WeaponDagger") is None
+assert free_result["UnknownFutureField"]["KeepMe"] == "yes"
+
+# CompletedObjectiveSets uses set names; ObjectivesCompleted uses objective
+# names. A coincidental identical key must not imply a linked historical state.
+objective_state = {
+    "ObjectivesCompleted": _table({"WeaponCast": 2.0}),
+    "CompletedObjectiveSets": _table({"FCastTutorial": True, "WeaponCast": True}),
+}
+_base, obj_saves, obj_service = _environment("native-objective-namespaces", state=objective_state)
+obj_editor = Hades2SaveWorkspace.open(obj_service)
+objective = next(x for x in obj_editor.query(domain="progression")["items"]
+                 if x["id"] == "objective:WeaponCast")
+assert objective["editable"] is True
+
+# Overview is an advertised top-level domain, so it must be navigable and
+# provide an actual structured summary rather than a permanent empty list.
+assert Hades2SaveWorkspace.open(obj_service).query(domain="overview")["total"] >= 1
 
 print("hades2_save_workspace_ok")
