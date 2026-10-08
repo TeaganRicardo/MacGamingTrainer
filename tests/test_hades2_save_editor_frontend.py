@@ -138,7 +138,7 @@ for raw in sys.stdin:
             'profile': 'Profile1',
             'relativePath': 'Profile1.sav',
             'domain': domain,
-            'offset': req['params']['offset'],
+            'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
             'total': len(items),
             'items': items,
@@ -377,6 +377,13 @@ struct Main {
         let rawCommands = try String(contentsOf: commandLog, encoding: .utf8)
         if !rawCommands.contains(#""path": ["GameState", "Resources", 1]"#) {
             fail("Advanced numeric key 1 was sent to the backend as a boolean")
+        }
+
+        model.search = "invalid-offset"
+        model.submitSearch()
+        pump(0.20)
+        if model.failure == nil {
+            fail("A boolean query offset was accepted as a numeric offset")
         }
 
         session.stop()
