@@ -54,7 +54,21 @@ for raw in sys.stdin:
                 'constraints': {'min': 0, 'integer': False},
             }]
         elif domain == 'advanced':
-            if path == []:
+            if path == ['GameState', 'Resources']:
+                items = [{
+                    'id': 'advanced:GameState/Resources/1',
+                    'domain': 'advanced',
+                    'rawId': '1',
+                    'path': ['GameState', 'Resources', 1],
+                    'name': '1',
+                    'englishName': '1',
+                    'value': None,
+                    'valueType': 'table',
+                    'editable': False,
+                    'mutationKinds': [],
+                    'childCount': 1,
+                }]
+            elif path == []:
                 items = [{
                     'id': 'advanced:GameState',
                     'domain': 'advanced',
@@ -91,6 +105,30 @@ for raw in sys.stdin:
                 'name': 'Ashes',
                 'englishName': 'Ashes',
                 'value': resource_value,
+                'valueType': 'integer',
+                'editable': True,
+                'mutationKinds': ['set'],
+                'constraints': {'min': 0, 'max': 999999, 'integer': True},
+            }, {
+                'id': 'resource:GiftPoints',
+                'domain': 'resources',
+                'rawId': 'GiftPoints',
+                'path': ['GameState', 'Resources', 'GiftPoints'],
+                'name': 'Zero resource',
+                'englishName': 'Zero resource',
+                'value': 0,
+                'valueType': 'integer',
+                'editable': True,
+                'mutationKinds': ['set'],
+                'constraints': {'min': 0, 'max': 999999, 'integer': True},
+            }, {
+                'id': 'resource:CardUpgradePoints',
+                'domain': 'resources',
+                'rawId': 'CardUpgradePoints',
+                'path': ['GameState', 'Resources', 'CardUpgradePoints'],
+                'name': 'One resource',
+                'englishName': 'One resource',
+                'value': 1,
                 'valueType': 'integer',
                 'editable': True,
                 'mutationKinds': ['set'],
@@ -199,9 +237,15 @@ struct Main {
         if model.availableDomains != Hades2SaveEditorDomain.allCases {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
         }
-        if model.total != 1 || model.items.count != 1 { fail("initial resources page was not loaded") }
+        if model.total != 3 || model.items.count != 3 { fail("initial resources page was not loaded") }
         if model.items[0].rawID != "MetaCurrency" || model.items[0].displayName != "Ashes" {
             fail("resource row was not decoded")
+        }
+        for (index, expected) in [(1, 0), (2, 1)] {
+            guard let value = model.items[index].value else { fail("missing numeric resource") }
+            if !(value.base is Int) || value.base is Bool || value != AnyHashable(expected) {
+                fail("JSON integer \(expected) was decoded as a boolean")
+            }
         }
 
         let sent = commands(at: commandLog)
@@ -320,6 +364,19 @@ struct Main {
               let advancedPath = advancedParams["path"] as? [String],
               advancedPath == ["GameState"] else {
             fail("Advanced query did not carry the lazy path")
+        }
+        guard let resourcesNode = model.items.first else { fail("Advanced resource table missing") }
+        model.enterAdvanced(resourcesNode)
+        pump(0.20)
+        guard let numericNode = model.items.first else { fail("Advanced numeric key missing") }
+        if numericNode.path.last != .integer(1) {
+            fail("Advanced numeric key 1 was decoded as a boolean")
+        }
+        model.enterAdvanced(numericNode)
+        pump(0.20)
+        let rawCommands = try String(contentsOf: commandLog, encoding: .utf8)
+        if !rawCommands.contains(#""path": ["GameState", "Resources", 1]"#) {
+            fail("Advanced numeric key 1 was sent to the backend as a boolean")
         }
 
         session.stop()
