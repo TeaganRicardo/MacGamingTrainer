@@ -9,6 +9,7 @@ import math
 
 from . import save_equipment, save_long_term, save_narrative
 from .localization import official_display_names
+from .save_native_identities import RESOURCE_IDS
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import _active_profile
@@ -182,8 +183,8 @@ class Hades2SaveWorkspace:
         return resources
 
     def _resource_descriptor(self, identifier):
-        if not isinstance(identifier, str) or not identifier:
-            raise ValueError("Save Editor resource identity is invalid.")
+        if not isinstance(identifier, str) or identifier not in RESOURCE_IDS:
+            raise ValueError("Save Editor resource identity is not verified.")
         resources = self._resources()
         try:
             value = resources[identifier]
