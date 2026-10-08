@@ -4,7 +4,6 @@ Gift history is represented as a count AND a chronological Lua array. Both
 it and the global gift-resource count must be updated as one mutation. Arcana
 cards follow MetaUpgradeLogic's locked/equipped/level ownership constraints.
 """
-from collections import Counter
 
 from .localization import official_display_names
 from .save_document import LuaTable
@@ -120,6 +119,24 @@ def rows(root, domain, language="zh-CN", game_path=None):
                     group="角色互动" if zh else "Character interactions",
                 ))
 
+        special = state.get("SpecialInteractRecord")
+        if isinstance(special, LuaTable):
+            names = [name for name, _ in special.entries() if isinstance(name, str)]
+            native, en = _display(names, language, game_path)
+            for name in names:
+                value = special[name]
+                if not _integer(value):
+                    continue
+                result.append(_row(
+                    "specialInteraction:" + name, domain, name,
+                    ["GameState", "SpecialInteractRecord", name],
+                    ("特殊互动次数 · " if zh else "Special interactions · ") +
+                        (native.get(name) or name),
+                    "Special interactions · " + (en.get(name) or name),
+                    int(value), "integer",
+                    group="角色互动" if zh else "Character interactions",
+                ))
+
         gift_record = state.get("GiftRecord")
         gift_totals = state.get("GiftResourceRecord")
         if isinstance(gift_record, LuaTable) and isinstance(gift_totals, LuaTable):
@@ -131,7 +148,10 @@ def rows(root, domain, language="zh-CN", game_path=None):
             native, en = _display(set(names) | resources, language, game_path)
             for person in names:
                 record = gift_record[person]
-                writable = _gift_consistent(record, gift_totals)
+                # Gift counts include quantities, while array entries record
+                # gift events. Changing either without the actual conversation
+                # and gift outcome would fabricate relationship history.
+                writable = False
                 for resource, value in record.entries():
                     if not isinstance(resource, str) or not _integer(value):
                         continue
@@ -202,7 +222,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
 def descriptor(root, entry_id, game_path=None):
     if not isinstance(entry_id, str):
         return None
-    domain = ("relationships" if entry_id.startswith(("gift:", "interaction:"))
+    domain = ("relationships" if entry_id.startswith(("interaction:", "specialInteraction:"))
               else "progression" if entry_id.startswith(("card:", "objective:")) else None)
     if domain is None:
         return None
@@ -232,60 +252,18 @@ def validate(descriptor_value, operation, value):
         raise ValueError("Save Editor long-term mutation type is unsupported.")
 
 
-def _replace_gift(record, resource, new_value):
-    sequence = _gift_sequence(record)
-    if sequence is None:
-        raise ValueError("Save Editor gift history has invalid order.")
-    previous = int(record.get(resource, 0))
-    difference = new_value - previous
-    if difference > 0:
-        sequence.extend([resource] * difference)
-    elif difference < 0:
-        for _ in range(-difference):
-            reverse = len(sequence) - 1 - sequence[::-1].index(resource)
-            sequence.pop(reverse)
-    named = [(key, value) for key, value in record.entries() if isinstance(key, str) and key != resource]
-    if new_value > 0:
-        named.append((resource, new_value))
-    return LuaTable(
-        len(sequence), len(named),
-        [(float(index), value) for index, value in enumerate(sequence, 1)] + named,
-    )
-
-
 def apply_intent(root, intent):
     state = _state(root)
     entry_id = intent["id"]
     after = intent["after"]
-    if entry_id.startswith("interaction:"):
-        name = entry_id[len("interaction:"):]
-        owner = _table(state, "NPCInteractions")
+    if entry_id.startswith(("interaction:", "specialInteraction:")):
+        special = entry_id.startswith("specialInteraction:")
+        name = entry_id[len("specialInteraction:"):] if special else entry_id[len("interaction:"):]
+        owner = _table(state, "SpecialInteractRecord" if special else "NPCInteractions")
         if after == 0:
             owner.pop(name, None)
         else:
             owner[name] = after
-        return
-    if entry_id.startswith("gift:"):
-        _, person, resource = entry_id.split(":", 2)
-        all_gifts = _table(state, "GiftRecord")
-        totals = _table(state, "GiftResourceRecord")
-        record = all_gifts.get(person)
-        if not isinstance(record, LuaTable) or not _gift_consistent(record, totals):
-            raise ValueError("Save Editor gift history is not internally consistent.")
-        old = int(record.get(resource, 0))
-        delta = after - old
-        global_total = int(totals.get(resource, 0))
-        if global_total + delta < 0 or global_total + delta > _MAX:
-            raise ValueError("Save Editor gift totals would be invalid.")
-        updated = _replace_gift(record, resource, after)
-        if len(updated):
-            all_gifts[person] = updated
-        else:
-            all_gifts.pop(person, None)
-        if global_total + delta:
-            totals[resource] = global_total + delta
-        else:
-            totals.pop(resource, None)
         return
     if entry_id.startswith("card:"):
         _, name, field = entry_id.split(":", 2)
@@ -319,16 +297,9 @@ def apply_intent(root, intent):
 def linked_changes(root, intents):
     state = _state(root)
     changes = []
-    gift_deltas = Counter()
-    order_deltas = Counter()
     cards = state.get("MetaUpgradeState")
     for intent in intents:
         entry = intent["id"]
-        if entry.startswith("gift:"):
-            _, person, resource = entry.split(":", 2)
-            delta = int(intent["after"]) - int(intent["before"])
-            gift_deltas[resource] += delta
-            order_deltas[person] += delta
         if entry.startswith("card:") and entry.endswith(":Unlocked") and intent["after"] is False:
             _, name, _ = entry.split(":", 2)
             card = cards.get(name) if isinstance(cards, LuaTable) else None
@@ -347,27 +318,6 @@ def linked_changes(root, intents):
                         "name": "Arcana level · " + name,
                         "operation": "set", "before": int(card.get("Level")), "after": 1,
                     })
-    totals = state.get("GiftResourceRecord")
-    for resource, delta in gift_deltas.items():
-        if delta and isinstance(totals, LuaTable):
-            before = int(totals.get(resource, 0))
-            changes.append({
-                "id": "linked:giftTotal:" + resource, "domain": "relationships",
-                "rawId": resource, "name": "GiftResourceRecord · " + resource,
-                "operation": "set", "before": before, "after": before + delta,
-            })
-    for person, delta in order_deltas.items():
-        if delta:
-            gifts = state.get("GiftRecord")
-            old = gifts.get(person) if isinstance(gifts, LuaTable) else None
-            sequence = _gift_sequence(old) if isinstance(old, LuaTable) else None
-            if sequence is not None:
-                changes.append({
-                    "id": "linked:giftOrder:" + person, "domain": "relationships",
-                    "rawId": person, "name": "Gift chronology length · " + person,
-                    "operation": "set", "before": len(sequence),
-                    "after": len(sequence) + delta,
-                })
     return changes
 
 
