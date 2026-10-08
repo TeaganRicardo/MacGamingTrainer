@@ -101,7 +101,7 @@ class CoreSaveService:
         self._require_supported()
         return tuple(self._resolve())
 
-    def replace_files(self, replacements, expected_hashes, post_install_verify=None):
+    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None):
         self._require_supported()
         if self._running():
             raise SaveBusyError('Game must be stopped before applying a save edit.')
