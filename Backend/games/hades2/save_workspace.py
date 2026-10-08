@@ -7,7 +7,7 @@ to receive the complete Lua tree just to browse or search it.
 
 import math
 
-from . import save_narrative
+from . import save_long_term, save_narrative
 from .localization import official_display_names
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
@@ -358,6 +358,14 @@ class Hades2SaveWorkspace:
             rows = save_narrative.rows(
                 self.document.lua_state, domain, language, game_path=self._game_path
             )
+            if domain == "progression":
+                rows.extend(save_long_term.rows(
+                    self.document.lua_state, domain, language, game_path=self._game_path
+                ))
+        elif domain == "relationships":
+            rows = save_long_term.rows(
+                self.document.lua_state, domain, language, game_path=self._game_path
+            )
         elif domain == "advanced":
             if path is None:
                 path = []
@@ -407,13 +415,20 @@ class Hades2SaveWorkspace:
         )
         if semantic is not None:
             return semantic
+        semantic = save_long_term.descriptor(
+            self.document.lua_state, entry_id, game_path=self._game_path
+        )
+        if semantic is not None:
+            return semantic
         raise ValueError("Save Editor entry is not writable.")
 
     def stage(self, entry_id, operation, value=None):
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
-        if descriptor["domain"] in ("flags", "dialogue", "progression"):
+        if entry_id.startswith(("gift:", "interaction:", "card:", "objective:")):
+            save_long_term.validate(descriptor, operation, value)
+        elif descriptor["domain"] in ("flags", "dialogue", "progression"):
             save_narrative.validate(descriptor, operation, value)
         if operation == "set":
             if descriptor["domain"] == "resources":
@@ -474,6 +489,9 @@ class Hades2SaveWorkspace:
         changes.extend(
             save_narrative.linked_changes(self.document.lua_state, self._pending.values())
         )
+        changes.extend(
+            save_long_term.linked_changes(self.document.lua_state, self._pending.values())
+        )
         return {"count": len(changes), "changes": changes}
 
     def cancel(self):
@@ -482,6 +500,9 @@ class Hades2SaveWorkspace:
 
     @staticmethod
     def _apply_intent(document, intent):
+        if intent["id"].startswith(("gift:", "interaction:", "card:", "objective:")):
+            save_long_term.apply_intent(document.lua_state, intent)
+            return
         if intent["domain"] in ("flags", "dialogue", "progression"):
             save_narrative.apply_intent(document.lua_state, intent)
             return
@@ -530,6 +551,7 @@ class Hades2SaveWorkspace:
                 raise ValueError("Save Editor mutation is no longer allowed.")
             self._apply_intent(candidate, intent)
 
+        save_long_term.validate_batch(candidate.lua_state, self._pending.values())
         self._session.document = candidate
         try:
             result = self._session.apply()
