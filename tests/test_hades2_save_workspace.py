@@ -629,4 +629,34 @@ assert starter_written["WorldUpgrades"]["StaffClearCastAspect2"] is True
 assert starter_written["WorldUpgrades"].get("WeaponStaffSwing") is None
 
 
+
+# Native QuestLogLogic.lua writes QuestStatus and QuestsCompleted together.
+# A pinned Save Editor edit must preserve that canonical relationship.
+native_quests = {
+    "QuestStatus": _table({"QuestHelpOdysseus": "Unlocked"}),
+    "QuestsCompleted": _table({}),
+}
+_base, quest_saves, quest_service = _environment(
+    "native-quest-companion", state=native_quests,
+)
+quest_editor = Hades2SaveWorkspace.open(quest_service)
+quest_editor.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
+quest_review = quest_editor.review()["changes"]
+assert any(
+    c["rawId"] == "QuestsCompleted/QuestHelpOdysseus" and c["after"] is True
+    for c in quest_review
+), "Quest completion companion field was omitted from batch review"
+quest_editor.apply()
+quest_written = Hades2SaveDocument.load(quest_saves / "Profile1.sav").lua_state["GameState"]
+assert quest_written["QuestsCompleted"]["QuestHelpOdysseus"] is True, (
+    "QuestStatus Complete must also mark QuestsCompleted"
+)
+quest_editor = Hades2SaveWorkspace.open(quest_service)
+quest_editor.stage("quest:QuestHelpOdysseus", "setEnum", "Unlocked")
+quest_editor.apply()
+quest_written = Hades2SaveDocument.load(quest_saves / "Profile1.sav").lua_state["GameState"]
+assert quest_written["QuestsCompleted"].get("QuestHelpOdysseus") is None, (
+    "QuestStatus rollback must clear the completion companion"
+)
+
 print("hades2_save_workspace_ok")
