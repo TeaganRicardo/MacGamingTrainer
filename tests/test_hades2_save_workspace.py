@@ -132,6 +132,15 @@ by_resource = {row["rawId"]: row for row in workspace.query(
 )["items"]}
 assert by_resource["GiftPoints"]["value"] == 9
 assert by_resource["CardUpgradePoints"]["value"] == 7
+# ResourceData.Money is marked RunResource; it is cleared at death and must
+# never be represented as persistent inventory in the Save Editor.
+assert "Money" not in by_resource
+try:
+    workspace.stage("resource:Money", "set", 123)
+except ValueError:
+    pass
+else:
+    raise AssertionError("run-only money became editable persistent inventory")
 for row in page["items"]:
     assert row["editable"] is True
     assert row["mutationKinds"] == ["set"]

@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
     )
     (scripts / "ResourceData.lua").write_text(
         'ResourceData =\n{\n\tBaseResource =\n\t{\n\t},\n'
-        '\tDreamPoints =\n\t{\n\t},\n}\nResourceDisplayOrderData =\n{\n}\n',
+        '\tDreamPoints =\n\t{\n\t},\n\tMoney =\n\t{\n\t\tRunResource = true,\n\t},\n}\nResourceDisplayOrderData =\n{\n}\n',
         encoding="utf-8",
     )
     (scripts / "ObjectiveData.lua").write_text(
