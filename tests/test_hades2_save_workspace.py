@@ -325,4 +325,108 @@ assert game["QuestsCompleted"]["QuestA"] is True
 assert game["QuestStatus"]["QuestB"] == "CashedOut"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
+# Relationship history has a native chronological array and a global
+# gift-resource aggregate. A count edit must keep all three states coherent.
+gift_npc = LuaTable(3, 2, [
+    (1.0, "GiftPoints"), (2.0, "MedeaPoints"), (3.0, "GiftPoints"),
+    ("GiftPoints", 2.0), ("MedeaPoints", 1.0),
+])
+long_term_state = {
+    "NPCInteractions": _table({"Hecate": 2.0}),
+    "GiftRecord": _table({"Hecate": gift_npc}),
+    "GiftResourceRecord": _table({"GiftPoints": 5.0, "MedeaPoints": 1.0}),
+    "MetaUpgradeState": _table({
+        "ChanneledCast": _table({"Unlocked": True, "Equipped": True, "Level": 2.0}),
+        "BonusHealth": _table({"Level": 1.0}),
+        "UnknownHiddenCard": _table({"Unlocked": True, "Level": 17.0}),
+    }),
+    "ObjectivesCompleted": _table({"GiftPrompt": 2.0}),
+    "CompletedObjectiveSets": _table({}),
+}
+_base, long_term_saves, long_term_service = _environment("long_term", state=long_term_state)
+long_term = Hades2SaveWorkspace.open(long_term_service)
+rels = long_term.query(domain="relationships", language="en")
+assert {entry["id"] for entry in rels["items"]} == {
+    "interaction:Hecate", "gift:Hecate:GiftPoints", "gift:Hecate:MedeaPoints"
+}
+assert all(row["editable"] for row in rels["items"])
+progress = long_term.query(domain="progression", language="en")
+assert {row["id"] for row in progress["items"]} == {
+    "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level",
+    "card:BonusHealth:Unlocked", "card:BonusHealth:Level",
+    "objective:GiftPrompt",
+}
+assert all(row["id"] != "card:UnknownHiddenCard:Level" for row in progress["items"])
+for identity, value in (
+    ("gift:Hecate:GiftPoints", -1),
+    ("card:ChanneledCast:Level", 4),
+    ("card:BonusHealth:Unlocked", 1),
+    ("interaction:Hecate", True),
+    ("objective:Unknown", 4),
+):
+    try:
+        long_term.stage(identity, "set", value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid long-term edit accepted: " + identity)
+
+long_term.stage("interaction:Hecate", "set", 5)
+long_term.stage("gift:Hecate:GiftPoints", "set", 3)
+long_term.stage("card:ChanneledCast:Unlocked", "set", False)
+long_term.stage("objective:GiftPrompt", "set", 3)
+review = long_term.review()
+assert review["count"] == 8, review
+assert {item["id"] for item in review["changes"] if item["id"].startswith("linked:")} == {
+    "linked:giftTotal:GiftPoints", "linked:giftOrder:Hecate",
+    "linked:card:ChanneledCast:Equipped", "linked:card:ChanneledCast:Level"
+}
+long_term.apply()
+edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
+assert edited["NPCInteractions"]["Hecate"] == 5
+record = edited["GiftRecord"]["Hecate"]
+assert record["GiftPoints"] == 3
+assert [value for key, value in record.entries() if type(key) is float] == [
+    "GiftPoints", "MedeaPoints", "GiftPoints", "GiftPoints"
+]
+assert edited["GiftResourceRecord"]["GiftPoints"] == 6
+arcana = edited["MetaUpgradeState"]["ChanneledCast"]
+assert arcana.get("Unlocked") is None
+assert arcana.get("Equipped") is None
+assert arcana["Level"] == 1
+assert edited["ObjectivesCompleted"]["GiftPrompt"] == 3
+assert edited["MetaUpgradeState"]["UnknownHiddenCard"]["Level"] == 17
+assert edited["UnknownFutureField"]["KeepMe"] == "yes"
+
+# A later decrease retains the order of unrelated gift resources and removes
+# only the newest matching entries; the global gift aggregate decreases too.
+again = Hades2SaveWorkspace.open(long_term_service)
+again.stage("gift:Hecate:GiftPoints", "set", 1)
+again.apply()
+edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
+assert edited["GiftRecord"]["Hecate"]["GiftPoints"] == 1
+assert [value for key, value in edited["GiftRecord"]["Hecate"].entries()
+        if type(key) is float] == ["GiftPoints", "MedeaPoints"]
+assert edited["GiftResourceRecord"]["GiftPoints"] == 4
+
+# A card cannot be upgraded while locked, even when a batch also edits its
+# unlocked state. Reject the whole candidate before crossing Core Save.
+bad = Hades2SaveWorkspace.open(long_term_service)
+bad.stage("card:BonusHealth:Level", "set", 2)
+before_bad = (long_term_saves / "Profile1.sav").read_bytes()
+try:
+    bad.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("upgrading locked Arcana was accepted")
+assert (long_term_saves / "Profile1.sav").read_bytes() == before_bad
+bad.cancel()
+bad.stage("card:BonusHealth:Unlocked", "set", True)
+bad.stage("card:BonusHealth:Level", "set", 2)
+bad.apply()
+edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
+assert edited["MetaUpgradeState"]["BonusHealth"]["Unlocked"] is True
+assert edited["MetaUpgradeState"]["BonusHealth"]["Level"] == 2
+
 print("hades2_save_workspace_ok")
