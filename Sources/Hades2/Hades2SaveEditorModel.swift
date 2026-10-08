@@ -1,0 +1,434 @@
+import Foundation
+import Combine
+
+enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
+    case overview
+    case resources
+    case playerStats
+    case progression
+    case dialogue
+    case flags
+    case relationships
+    case weapons
+    case advanced
+
+    var id: String { rawValue }
+}
+
+enum Hades2SaveEditorPathComponent: Hashable {
+    case string(String)
+    case integer(Int)
+    case number(Double)
+    case boolean(Bool)
+
+    init?(_ value: Any) {
+        if let value = value as? String {
+            self = .string(value)
+        } else if let value = value as? Bool {
+            self = .boolean(value)
+        } else if let value = value as? Int {
+            self = .integer(value)
+        } else if let value = value as? Double {
+            if value.rounded() == value, value >= Double(Int.min), value <= Double(Int.max) {
+                self = .integer(Int(value))
+            } else {
+                self = .number(value)
+            }
+        } else {
+            return nil
+        }
+    }
+
+    var jsonValue: Any {
+        switch self {
+        case .string(let value): return value
+        case .integer(let value): return value
+        case .number(let value): return value
+        case .boolean(let value): return value
+        }
+    }
+}
+
+struct Hades2SaveEditorConstraints: Equatable {
+    let minimum: Double?
+    let maximum: Double?
+    let integer: Bool
+}
+
+struct Hades2SaveEditorChange: Identifiable, Equatable {
+    let entryID: String
+    let domain: String
+    let rawID: String
+    let operation: String
+    let before: AnyHashable?
+    let after: AnyHashable?
+
+    var id: String { entryID }
+}
+
+struct Hades2SaveEditorEntry: Identifiable, Equatable {
+    let id: String
+    let domain: String
+    let rawID: String
+    let path: [Hades2SaveEditorPathComponent]
+    let displayName: String
+    let englishName: String
+    let value: AnyHashable?
+    let valueType: String
+    let editable: Bool
+    let mutationKinds: [String]
+    let constraints: Hades2SaveEditorConstraints?
+    let childCount: Int?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+            && lhs.domain == rhs.domain
+            && lhs.rawID == rhs.rawID
+            && lhs.path == rhs.path
+            && lhs.displayName == rhs.displayName
+            && lhs.englishName == rhs.englishName
+            && lhs.value == rhs.value
+            && lhs.valueType == rhs.valueType
+            && lhs.editable == rhs.editable
+            && lhs.mutationKinds == rhs.mutationKinds
+            && lhs.constraints == rhs.constraints
+            && lhs.childCount == rhs.childCount
+    }
+}
+
+final class Hades2SaveEditorModel: ObservableObject {
+    static let pageSize = 100
+
+    @Published private(set) var profile = ""
+    @Published private(set) var relativePath = ""
+    @Published private(set) var availableDomains: [Hades2SaveEditorDomain] = []
+    @Published var selectedDomain: Hades2SaveEditorDomain = .resources
+    @Published var search = ""
+    @Published private(set) var offset = 0
+    @Published private(set) var total = 0
+    @Published private(set) var items: [Hades2SaveEditorEntry] = []
+    @Published private(set) var advancedPath: [Hades2SaveEditorPathComponent] = []
+    @Published private(set) var pendingChanges: [Hades2SaveEditorChange] = []
+    @Published private(set) var busy = false
+    @Published private(set) var failure: TrainerTextToken?
+
+    var pendingCount: Int { pendingChanges.count }
+
+    private let api: Hades2API
+    private var language: TrainerPresentationLanguage = .zhCN
+    private var pendingRequests = 0
+    private var knownDisplayNames: [String: String] = [:]
+
+    init(session: TrainerBackendSession) {
+        api = Hades2API(session: session)
+    }
+
+    func open(language: TrainerPresentationLanguage) {
+        self.language = language
+        failure = nil
+        perform(.saveEditorOpen, operation: "hades2.saveEditor.operation.open") { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard self.applySummary(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.selectedDomain = .resources
+            self.query(offset: 0)
+        }
+    }
+
+    func setLanguage(_ language: TrainerPresentationLanguage) {
+        guard self.language != language else { return }
+        self.language = language
+        guard !profile.isEmpty else { return }
+        query(offset: offset)
+    }
+
+    func query(offset requestedOffset: Int = 0) {
+        guard !profile.isEmpty else { return }
+        let boundedOffset = max(0, requestedOffset)
+        let path = selectedDomain == .advanced
+            ? advancedPath.map(\.jsonValue)
+            : []
+        perform(
+            .saveEditorQuery(
+                domain: selectedDomain.rawValue,
+                search: search,
+                offset: boundedOffset,
+                limit: Self.pageSize,
+                path: path,
+                language: language.rawValue
+            ),
+            operation: "hades2.saveEditor.operation.query",
+            announceSuccess: false
+        ) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard let domain = result["domain"] as? String,
+                  domain == self.selectedDomain.rawValue,
+                  let total = Self.intValue(result["total"]),
+                  let offset = Self.intValue(result["offset"]),
+                  let rows = result["items"] as? [[String: Any]]
+            else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            var decoded: [Hades2SaveEditorEntry] = []
+            decoded.reserveCapacity(rows.count)
+            for row in rows {
+                guard let entry = Self.decodeEntry(row) else {
+                    self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                    return
+                }
+                decoded.append(entry)
+            }
+            self.total = total
+            self.offset = offset
+            self.items = decoded
+            for entry in decoded {
+                self.knownDisplayNames[entry.id] = entry.displayName
+            }
+            self.failure = nil
+        }
+    }
+
+    func displayName(for change: Hades2SaveEditorChange) -> String {
+        knownDisplayNames[change.entryID] ?? change.rawID
+    }
+
+    func submitSearch() {
+        query(offset: 0)
+    }
+
+    func selectDomain(_ domain: Hades2SaveEditorDomain) {
+        guard availableDomains.contains(domain) else { return }
+        selectedDomain = domain
+        search = ""
+        advancedPath = []
+        query(offset: 0)
+    }
+
+    func enterAdvanced(_ entry: Hades2SaveEditorEntry) {
+        guard selectedDomain == .advanced,
+              entry.domain == Hades2SaveEditorDomain.advanced.rawValue,
+              entry.childCount != nil
+        else { return }
+        advancedPath = entry.path
+        search = ""
+        query(offset: 0)
+    }
+
+    func leaveAdvanced() {
+        guard selectedDomain == .advanced, !advancedPath.isEmpty else { return }
+        advancedPath.removeLast()
+        search = ""
+        query(offset: 0)
+    }
+
+    func nextPage() {
+        let next = offset + Self.pageSize
+        guard next < total else { return }
+        query(offset: next)
+    }
+
+    func previousPage() {
+        guard offset > 0 else { return }
+        query(offset: max(0, offset - Self.pageSize))
+    }
+
+    func stage(entryID: String, operation: String, value: Any?) {
+        perform(
+            .saveEditorStage(entryID: entryID, operation: operation, value: value),
+            operation: "hades2.saveEditor.operation.stage",
+            announceSuccess: false
+        ) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard self.applyReview(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.failure = nil
+        }
+    }
+
+    func review() {
+        perform(
+            .saveEditorReview,
+            operation: "hades2.saveEditor.operation.review",
+            announceSuccess: false
+        ) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard self.applyReview(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.failure = nil
+        }
+    }
+
+    func cancel() {
+        perform(
+            .saveEditorCancel,
+            operation: "hades2.saveEditor.operation.cancel",
+            announceSuccess: false
+        ) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard self.applyReview(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.failure = nil
+        }
+    }
+
+    func apply() {
+        guard !pendingChanges.isEmpty else { return }
+        let appliedOffset = offset
+        perform(
+            .saveEditorApply,
+            operation: "hades2.saveEditor.operation.apply"
+        ) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard result["applied"] as? Bool == true else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.pendingChanges = []
+            self.failure = nil
+            self.query(offset: appliedOffset)
+        }
+    }
+
+    private func applySummary(_ result: [String: Any]) -> Bool {
+        guard let profile = result["profile"] as? String,
+              let relativePath = result["relativePath"] as? String,
+              let rawDomains = result["domains"] as? [String]
+        else { return false }
+        self.profile = profile
+        self.relativePath = relativePath
+        availableDomains = rawDomains.compactMap(Hades2SaveEditorDomain.init(rawValue:))
+        return true
+    }
+
+    private func applyReview(_ result: [String: Any]) -> Bool {
+        guard let count = Self.intValue(result["count"]),
+              let rows = result["changes"] as? [[String: Any]],
+              count == rows.count
+        else { return false }
+
+        var changes: [Hades2SaveEditorChange] = []
+        changes.reserveCapacity(rows.count)
+        for row in rows {
+            guard let entryID = row["id"] as? String,
+                  let domain = row["domain"] as? String,
+                  let rawID = row["rawId"] as? String,
+                  let operation = row["operation"] as? String
+            else { return false }
+            changes.append(
+                Hades2SaveEditorChange(
+                    entryID: entryID,
+                    domain: domain,
+                    rawID: rawID,
+                    operation: operation,
+                    before: Self.hashableScalar(row["before"]),
+                    after: Self.hashableScalar(row["after"])
+                )
+            )
+        }
+        pendingChanges = changes
+        return true
+    }
+
+    private func perform(
+        _ request: Hades2Request,
+        operation: String,
+        announceSuccess: Bool = true,
+        reply: @escaping (BackendReply) -> Void
+    ) {
+        pendingRequests += 1
+        busy = true
+        api.request(
+            request,
+            operation: operation,
+            announceSuccess: announceSuccess,
+            reply: { [weak self] backendReply in
+                if !backendReply.success, let backendFailure = backendReply.failure {
+                    self?.failure = TrainerTextToken(
+                        key: backendFailure.presentation,
+                        arguments: backendFailure.presentationArguments
+                    )
+                }
+                reply(backendReply)
+            },
+            completion: { [weak self] _ in
+                guard let self else { return }
+                self.pendingRequests = max(0, self.pendingRequests - 1)
+                self.busy = self.pendingRequests > 0
+            }
+        )
+    }
+
+    private static func decodeEntry(_ row: [String: Any]) -> Hades2SaveEditorEntry? {
+        guard let id = row["id"] as? String,
+              let domain = row["domain"] as? String,
+              let rawID = row["rawId"] as? String,
+              let displayName = row["name"] as? String,
+              let englishName = row["englishName"] as? String,
+              let valueType = row["valueType"] as? String,
+              let editable = row["editable"] as? Bool,
+              let mutationKinds = row["mutationKinds"] as? [String],
+              let rawPath = row["path"] as? [Any]
+        else { return nil }
+
+        let path = rawPath.compactMap(Hades2SaveEditorPathComponent.init(_:))
+        guard path.count == rawPath.count else { return nil }
+
+        let constraints: Hades2SaveEditorConstraints?
+        if let raw = row["constraints"] as? [String: Any] {
+            constraints = Hades2SaveEditorConstraints(
+                minimum: doubleValue(raw["min"]),
+                maximum: doubleValue(raw["max"]),
+                integer: raw["integer"] as? Bool ?? false
+            )
+        } else {
+            constraints = nil
+        }
+
+        return Hades2SaveEditorEntry(
+            id: id,
+            domain: domain,
+            rawID: rawID,
+            path: path,
+            displayName: displayName,
+            englishName: englishName,
+            value: hashableScalar(row["value"]),
+            valueType: valueType,
+            editable: editable,
+            mutationKinds: mutationKinds,
+            constraints: constraints,
+            childCount: intValue(row["childCount"])
+        )
+    }
+
+    private static func hashableScalar(_ value: Any?) -> AnyHashable? {
+        guard let value, !(value is NSNull) else { return nil }
+        if let value = value as? Bool { return AnyHashable(value) }
+        if let value = value as? Int { return AnyHashable(value) }
+        if let value = value as? Double { return AnyHashable(value) }
+        if let value = value as? String { return AnyHashable(value) }
+        return nil
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let value = value as? Int { return value }
+        if let value = value as? Double, value.rounded() == value { return Int(value) }
+        if let value = value as? NSNumber { return value.intValue }
+        return nil
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let value = value as? Double { return value }
+        if let value = value as? Int { return Double(value) }
+        if let value = value as? NSNumber { return value.doubleValue }
+        return nil
+    }
+}

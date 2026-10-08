@@ -5,11 +5,49 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
+import math
+
 from .localization import official_display_names
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import _active_profile
 from .schema import MAX_AMOUNT
+
+
+_MAX_EXACT_LUA_INTEGER = 9_007_199_254_740_991
+_PLAYER_STAT_FIELDS = (
+    {
+        "id": "GameplayTime",
+        "names": {
+            "en": "Gameplay Time (seconds)",
+            "zh-CN": "有效游戏时间（秒）",
+        },
+        "valueType": "number",
+        "constraints": {"min": 0, "integer": False},
+    },
+    {
+        "id": "TotalTime",
+        "names": {
+            "en": "Total Run Time (seconds)",
+            "zh-CN": "累计运行时间（秒）",
+        },
+        "valueType": "number",
+        "constraints": {"min": 0, "integer": False},
+    },
+    {
+        "id": "TotalRequiredEnemyKills",
+        "names": {
+            "en": "Required Enemy Kills",
+            "zh-CN": "关卡必要敌人击杀数",
+        },
+        "valueType": "integer",
+        "constraints": {
+            "min": 0,
+            "max": _MAX_EXACT_LUA_INTEGER,
+            "integer": True,
+        },
+    },
+)
 
 
 SAVE_EDITOR_DOMAINS = (
@@ -123,9 +161,18 @@ class Hades2SaveWorkspace:
             game_path=game_path,
         )
 
-    def _resources(self):
+    def _game_state(self):
         try:
             game_state = self.document.lua_state["GameState"]
+        except KeyError as error:
+            raise ValueError("Save Editor GameState is unavailable.") from error
+        if not isinstance(game_state, LuaTable):
+            raise ValueError("Save Editor GameState is malformed.")
+        return game_state
+
+    def _resources(self):
+        try:
+            game_state = self._game_state()
             resources = game_state["Resources"]
         except KeyError as error:
             raise ValueError("Save Editor resource inventory is unavailable.") from error
@@ -199,6 +246,66 @@ class Hades2SaveWorkspace:
             })
         return rows
 
+    def _player_stat_descriptor(self, identifier):
+        field = next(
+            (field for field in _PLAYER_STAT_FIELDS if field["id"] == identifier),
+            None,
+        )
+        if field is None:
+            raise ValueError("Save Editor player statistic is not writable.")
+
+        game_state = self._game_state()
+        try:
+            value = game_state[identifier]
+        except KeyError:
+            value = 0
+
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(float(value))
+            or float(value) < 0
+        ):
+            raise ValueError("Save Editor player statistic is malformed.")
+
+        if field["valueType"] == "integer":
+            if not float(value).is_integer():
+                raise ValueError("Save Editor player statistic must be integral.")
+            value = int(value)
+        else:
+            value = float(value)
+
+        return {
+            "id": "playerStat:{}".format(identifier),
+            "domain": "playerStats",
+            "rawId": identifier,
+            "path": ["GameState", identifier],
+            "before": value,
+            "mutationKinds": ("set",),
+            "valueType": field["valueType"],
+            "constraints": dict(field["constraints"]),
+            "names": field["names"],
+        }
+
+    def _player_stat_rows(self, language):
+        rows = []
+        for field in _PLAYER_STAT_FIELDS:
+            descriptor = self._player_stat_descriptor(field["id"])
+            rows.append({
+                "id": descriptor["id"],
+                "domain": descriptor["domain"],
+                "rawId": descriptor["rawId"],
+                "path": descriptor["path"],
+                "name": descriptor["names"][language],
+                "englishName": descriptor["names"]["en"],
+                "value": descriptor["before"],
+                "valueType": descriptor["valueType"],
+                "editable": True,
+                "mutationKinds": list(descriptor["mutationKinds"]),
+                "constraints": descriptor["constraints"],
+            })
+        return rows
+
     def _advanced_rows(self, path):
         target = _lua_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
@@ -235,7 +342,7 @@ class Hades2SaveWorkspace:
         language="zh-CN",
     ):
         if domain not in SAVE_EDITOR_DOMAINS:
-            raise ValueError("Unknown Save Editor domain.")
+            raise ValueError("Save Editor domain is unknown.")
         if not isinstance(search, str) or len(search) > 256:
             raise ValueError("Save Editor search must be at most 256 characters.")
         if language not in ("zh-CN", "en"):
@@ -244,6 +351,8 @@ class Hades2SaveWorkspace:
 
         if domain == "resources":
             rows = self._resource_rows(language)
+        elif domain == "playerStats":
+            rows = self._player_stat_rows(language)
         elif domain == "advanced":
             if path is None:
                 path = []
@@ -286,6 +395,8 @@ class Hades2SaveWorkspace:
         prefix, separator, identifier = entry_id.partition(":")
         if separator and prefix == "resource":
             return self._resource_descriptor(identifier)
+        if separator and prefix == "playerStat":
+            return self._player_stat_descriptor(identifier)
         raise ValueError("Save Editor entry is not writable.")
 
     def stage(self, entry_id, operation, value=None):
@@ -293,12 +404,38 @@ class Hades2SaveWorkspace:
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
         if operation == "set":
-            if (
-                type(value) is not int
-                or isinstance(value, bool)
-                or not 0 <= value <= MAX_AMOUNT
-            ):
-                raise ValueError("Save Editor resource value must be an integer 0..999999.")
+            if descriptor["domain"] == "resources":
+                if (
+                    type(value) is not int
+                    or isinstance(value, bool)
+                    or not 0 <= value <= MAX_AMOUNT
+                ):
+                    raise ValueError(
+                        "Save Editor resource value must be an integer 0..999999."
+                    )
+            elif descriptor["domain"] == "playerStats":
+                constraints = descriptor["constraints"]
+                if descriptor["valueType"] == "integer":
+                    maximum = constraints.get("max", _MAX_EXACT_LUA_INTEGER)
+                    if (
+                        type(value) is not int
+                        or isinstance(value, bool)
+                        or not constraints["min"] <= value <= maximum
+                    ):
+                        raise ValueError(
+                            "Save Editor player statistic must be an in-range integer."
+                        )
+                else:
+                    if (
+                        not isinstance(value, (int, float))
+                        or isinstance(value, bool)
+                        or not math.isfinite(float(value))
+                        or float(value) < constraints["min"]
+                    ):
+                        raise ValueError(
+                            "Save Editor player statistic must be a finite non-negative number."
+                        )
+                    value = float(value)
         before = descriptor["before"]
         if value == before:
             self._pending.pop(entry_id, None)
@@ -358,7 +495,7 @@ class Hades2SaveWorkspace:
                 except KeyError:
                     pass
             return
-        raise ValueError("Unsupported Save Editor mutation operation.")
+        raise ValueError("Save Editor mutation operation is unsupported.")
 
     def apply(self):
         if not self._pending:

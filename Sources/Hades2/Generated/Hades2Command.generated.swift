@@ -58,8 +58,8 @@ enum Hades2Command: String {
         case .connect: return 90.0
         case .disconnect: return 12.0
         case .launch: return 10.0
-        case .diagnostics: return 70.0
         case .saveEditorApply: return 30.0
+        case .diagnostics: return 70.0
         case .exportDiagnostics: return 85.0
         case .prepare: return 560.0
         case .restore: return 240.0

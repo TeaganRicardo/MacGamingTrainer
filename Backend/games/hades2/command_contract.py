@@ -318,13 +318,13 @@ def _save_editor_query(raw):
     path = params.get("path", [])
     language = params.get("language", "zh-CN")
     if domain not in SAVE_EDITOR_DOMAINS:
-        raise ValueError("未知存档编辑器分类。")
+        raise ValueError("Save Editor query domain is invalid.")
     if not isinstance(search, str) or len(search) > 256:
-        raise ValueError("存档搜索内容过长。")
+        raise ValueError("Save Editor query search is too long.")
     if type(offset) is not int or offset < 0:
-        raise ValueError("存档查询位置无效。")
+        raise ValueError("Save Editor query offset is invalid.")
     if type(limit) is not int or not 1 <= limit <= 200:
-        raise ValueError("存档查询数量必须为 1–200。")
+        raise ValueError("Save Editor query limit must be 1..200.")
     if (
         not isinstance(path, list)
         or len(path) > 64
@@ -335,9 +335,9 @@ def _save_editor_query(raw):
             for part in path
         )
     ):
-        raise ValueError("存档浏览路径无效。")
+        raise ValueError("Save Editor query path is invalid.")
     if language not in ("zh-CN", "en"):
-        raise ValueError("存档编辑器语言无效。")
+        raise ValueError("Save Editor query language is invalid.")
     return {
         "domain": domain,
         "search": search,
@@ -353,9 +353,9 @@ def _save_editor_stage(raw):
     entry_id = params.get("entryId")
     operation = params.get("operation")
     if not isinstance(entry_id, str) or not 1 <= len(entry_id) <= 512:
-        raise ValueError("存档项目无效。")
+        raise ValueError("Save Editor mutation entry is invalid.")
     if operation not in SAVE_EDITOR_MUTATION_KINDS:
-        raise ValueError("存档修改操作无效。")
+        raise ValueError("Save Editor mutation operation is invalid.")
     result = {"entryId": entry_id, "operation": operation}
     if "value" in params:
         result["value"] = params["value"]

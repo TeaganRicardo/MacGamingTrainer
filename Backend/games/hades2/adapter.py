@@ -937,12 +937,12 @@ class Hades2Adapter(GameAdapter):
 
     def _require_save_workspace(self):
         if self.save_workspace is None:
-            raise ValueError("请先打开存档编辑器。")
+            raise ValueError("Save Editor workspace is not open.")
         return self.save_workspace
 
     def open_save_editor(self):
         if self.save_service is None:
-            raise ValueError("存档管理不可用。")
+            raise ValueError("Save Editor save management is unavailable.")
         self.save_workspace = Hades2SaveWorkspace.open(self.save_service)
         return self.save_workspace.summary()
 

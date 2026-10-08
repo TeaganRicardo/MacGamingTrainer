@@ -98,18 +98,18 @@ for name in (
     assert name in metadata
 assert metadata["save_editor_apply"] == 30.0
 
-for command, params in (
-    ("save_editor_query", {"domain": "resources", "limit": 0}),
-    ("save_editor_query", {"domain": "resources", "limit": 201}),
-    ("save_editor_query", {"domain": "resources", "search": "x" * 257}),
-    ("save_editor_query", {"domain": "resources", "language": "fr"}),
-    ("save_editor_stage", {"entryId": "", "operation": "set", "value": 1}),
-    ("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "raw", "value": 1}),
+for command, params, presentation in (
+    ("save_editor_query", {"domain": "resources", "limit": 0}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_query", {"domain": "resources", "limit": 201}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_query", {"domain": "resources", "search": "x" * 257}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_query", {"domain": "resources", "language": "fr"}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_stage", {"entryId": "", "operation": "set", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
+    ("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "raw", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
 ):
     try:
         contract.dispatch(command, params, "invalid")
-    except Exception:
-        pass
+    except Exception as error:
+        assert getattr(error, "presentation", None) == presentation, (command, error)
     else:
         raise AssertionError("invalid Save Editor command was accepted: {}".format(command))
 
