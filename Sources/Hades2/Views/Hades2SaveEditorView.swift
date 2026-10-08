@@ -386,6 +386,9 @@ struct Hades2SaveEditorView: View {
     private func parsedDraft(for entry: Hades2SaveEditorEntry) -> Any? {
         let raw = drafts[entry.id] ?? valueText(entry.value)
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if entry.valueType == "enum" {
+            return entry.choices.contains(trimmed) ? trimmed : nil
+        }
         guard !trimmed.isEmpty else { return nil }
 
         if entry.constraints?.integer == true || entry.valueType == "integer" {
@@ -404,9 +407,6 @@ struct Hades2SaveEditorView: View {
             if trimmed == "true" { return true }
             if trimmed == "false" { return false }
             return nil
-        }
-        if entry.valueType == "enum" {
-            return entry.choices.contains(trimmed) ? trimmed : nil
         }
         if entry.valueType == "string" {
             return trimmed
