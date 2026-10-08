@@ -6,7 +6,7 @@ to receive the complete Lua tree just to browse or search it.
 """
 
 from .localization import official_display_names
-from .save_document import LuaTable
+from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import _active_profile
 from .schema import MAX_AMOUNT
@@ -106,7 +106,11 @@ class Hades2SaveWorkspace:
         provider = getattr(save_service, "provider", None)
         game_path = getattr(provider, "game_path", None)
         return cls(
-            Hades2SaveEditSession.open(save_service, relative_path),
+            Hades2SaveEditSession.open(
+                save_service,
+                relative_path,
+                version_pinned=True,
+            ),
             profile,
             game_path=game_path,
         )
@@ -307,3 +311,64 @@ class Hades2SaveWorkspace:
     def cancel(self):
         self._pending.clear()
         return self.review()
+
+    @staticmethod
+    def _apply_intent(document, intent):
+        path = intent["path"]
+        owner = _lua_path(document.lua_state, path[:-1])
+        if not isinstance(owner, LuaTable):
+            raise ValueError("Save Editor mutation owner is not a table.")
+        key = path[-1]
+        operation = intent["operation"]
+        if operation == "set":
+            owner[key] = intent["after"]
+            return
+        if operation == "unset":
+            del owner[key]
+            return
+        if operation in ("addMembership", "removeMembership"):
+            try:
+                collection = owner[key]
+            except KeyError as error:
+                raise ValueError("Save Editor membership target is missing.") from error
+            if not isinstance(collection, LuaTable):
+                raise ValueError("Save Editor membership target is not a table.")
+            member = intent["after"]
+            if operation == "addMembership":
+                collection[member] = True
+            else:
+                try:
+                    del collection[member]
+                except KeyError:
+                    pass
+            return
+        raise ValueError("Unsupported Save Editor mutation operation.")
+
+    def apply(self):
+        if not self._pending:
+            raise ValueError("Save Editor has no changes to apply.")
+
+        source_document = self._session.document
+        candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
+        for intent in self._pending.values():
+            # Re-resolve the descriptor against the pinned source before
+            # applying its typed intent. This keeps mutation authority in the
+            # semantic workspace rather than in caller-supplied Lua paths.
+            descriptor = self._descriptor(intent["id"])
+            if intent["operation"] not in descriptor["mutationKinds"]:
+                raise ValueError("Save Editor mutation is no longer allowed.")
+            self._apply_intent(candidate, intent)
+
+        self._session.document = candidate
+        try:
+            result = self._session.apply()
+        except BaseException:
+            self._session.document = source_document
+            raise
+
+        change_count = len(self._pending)
+        self._pending.clear()
+        return {
+            **result,
+            "changeCount": change_count,
+        }
