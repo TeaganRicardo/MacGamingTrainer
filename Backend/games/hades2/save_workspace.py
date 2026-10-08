@@ -7,10 +7,12 @@ to receive the complete Lua tree just to browse or search it.
 
 import math
 
+from . import save_equipment, save_long_term, save_narrative
 from .localization import official_display_names
+from .save_native_ids import RESOURCE_IDS
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
-from .save_provider import _active_profile
+from .save_provider import resolve_active_profile_save
 from .schema import MAX_AMOUNT
 
 
@@ -137,17 +139,7 @@ class Hades2SaveWorkspace:
     @classmethod
     def open(cls, save_service):
         files = tuple(save_service.resolved_files())
-        by_path = {row.relative_path: row for row in files}
-        active = by_path.get("activeProfile")
-        profile = _active_profile(active.source_path) if active is not None else None
-        if profile is None:
-            raise ValueError("Save Editor could not resolve the active Hades profile.")
-
-        temporary = "{}_Temp.sav".format(profile)
-        persistent = "{}.sav".format(profile)
-        relative_path = temporary if temporary in by_path else persistent
-        if relative_path not in by_path:
-            raise ValueError("Save Editor active profile save is missing.")
+        profile, relative_path = resolve_active_profile_save(files)
 
         provider = getattr(save_service, "provider", None)
         game_path = getattr(provider, "game_path", None)
@@ -181,13 +173,12 @@ class Hades2SaveWorkspace:
         return resources
 
     def _resource_descriptor(self, identifier):
-        if not isinstance(identifier, str) or not identifier:
-            raise ValueError("Save Editor resource identity is invalid.")
+        if not isinstance(identifier, str) or identifier not in RESOURCE_IDS:
+            raise ValueError("Save Editor resource identity is not supported by the native catalog.")
         resources = self._resources()
-        try:
-            value = resources[identifier]
-        except KeyError as error:
-            raise ValueError("Save Editor resource is unavailable.") from error
+        # Native ResourceData declares the identity; absence from the save
+        # represents a zero balance, not an unknown resource.
+        value = resources.get(identifier, 0)
         if (
             not isinstance(value, (int, float))
             or isinstance(value, bool)
@@ -205,10 +196,7 @@ class Hades2SaveWorkspace:
 
     def _resource_rows(self, language):
         resources = self._resources()
-        identifiers = {
-            key for key, _value in resources.entries()
-            if isinstance(key, str)
-        }
+        identifiers = RESOURCE_IDS
         names = official_display_names(
             identifiers,
             language,
@@ -220,9 +208,7 @@ class Hades2SaveWorkspace:
         )
 
         rows = []
-        for key, _value in resources.entries():
-            if not isinstance(key, str):
-                continue
+        for key in sorted(RESOURCE_IDS):
             try:
                 descriptor = self._resource_descriptor(key)
             except ValueError:
@@ -306,6 +292,44 @@ class Hades2SaveWorkspace:
             })
         return rows
 
+    def _overview_rows(self, language):
+        state = self._game_state()
+        resources = state.get("Resources")
+        resource_count = 0
+        if isinstance(resources, LuaTable):
+            resource_count = sum(
+                1 for key, value in resources.entries()
+                if isinstance(key, str) and key in RESOURCE_IDS
+                and type(value) in (float, int) and math.isfinite(float(value))
+                and float(value).is_integer()
+            )
+        line_history = state.get("TextLinesRecord")
+        flags = state.get("Flags")
+        measurements = (
+            ("resources", "已记录资源种类", "Recorded resource types", resource_count, ["GameState", "Resources"]),
+            ("dialogue", "已记录对话", "Recorded dialogue entries",
+             sum(1 for _, value in line_history.entries() if value is True)
+             if isinstance(line_history, LuaTable) else 0, ["GameState", "TextLinesRecord"]),
+            ("flags", "已存储标志", "Stored flags",
+             len(flags) if isinstance(flags, LuaTable) else 0, ["GameState", "Flags"]),
+            ("pending", "待提交修改", "Staged changes", len(self._pending), []),
+        )
+        return [
+            {
+                "id": "overview:" + key,
+                "domain": "overview",
+                "rawId": key,
+                "path": path,
+                "name": zh if language == "zh-CN" else en,
+                "englishName": en,
+                "value": value,
+                "valueType": "integer",
+                "editable": False,
+                "mutationKinds": [],
+            }
+            for key, zh, en, value, path in measurements
+        ]
+
     def _advanced_rows(self, path):
         target = _lua_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
@@ -349,10 +373,28 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
 
-        if domain == "resources":
+        if domain == "overview":
+            rows = self._overview_rows(language)
+        elif domain == "resources":
             rows = self._resource_rows(language)
         elif domain == "playerStats":
             rows = self._player_stat_rows(language)
+        elif domain in ("flags", "dialogue", "progression"):
+            rows = save_narrative.rows(
+                self.document.lua_state, domain, language, game_path=self._game_path
+            )
+            if domain == "progression":
+                rows.extend(save_long_term.rows(
+                    self.document.lua_state, domain, language, game_path=self._game_path
+                ))
+        elif domain == "relationships":
+            rows = save_long_term.rows(
+                self.document.lua_state, domain, language, game_path=self._game_path
+            )
+        elif domain == "weapons":
+            rows = save_equipment.rows(
+                self.document.lua_state, language, game_path=self._game_path
+            )
         elif domain == "advanced":
             if path is None:
                 path = []
@@ -397,12 +439,33 @@ class Hades2SaveWorkspace:
             return self._resource_descriptor(identifier)
         if separator and prefix == "playerStat":
             return self._player_stat_descriptor(identifier)
+        semantic = save_narrative.descriptor(
+            self.document.lua_state, entry_id, game_path=self._game_path
+        )
+        if semantic is not None:
+            return semantic
+        semantic = save_long_term.descriptor(
+            self.document.lua_state, entry_id, game_path=self._game_path
+        )
+        if semantic is not None:
+            return semantic
+        semantic = save_equipment.descriptor(
+            self.document.lua_state, entry_id, game_path=self._game_path
+        )
+        if semantic is not None:
+            return semantic
         raise ValueError("Save Editor entry is not writable.")
 
     def stage(self, entry_id, operation, value=None):
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
+        if descriptor["domain"] == "weapons":
+            save_equipment.validate(descriptor, operation, value)
+        elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+            save_long_term.validate(descriptor, operation, value)
+        elif descriptor["domain"] in ("flags", "dialogue", "progression"):
+            save_narrative.validate(descriptor, operation, value)
         if operation == "set":
             if descriptor["domain"] == "resources":
                 if (
@@ -437,20 +500,28 @@ class Hades2SaveWorkspace:
                         )
                     value = float(value)
         before = descriptor["before"]
+        previous = self._pending.get(entry_id)
         if value == before:
             self._pending.pop(entry_id, None)
+        else:
+            self._pending[entry_id] = {
+                "id": descriptor["id"],
+                "domain": descriptor["domain"],
+                "rawId": descriptor["rawId"],
+                "path": descriptor["path"],
+                "operation": operation,
+                "before": before,
+                "after": value,
+            }
+        try:
             return self.review()
-
-        self._pending[entry_id] = {
-            "id": descriptor["id"],
-            "domain": descriptor["domain"],
-            "rawId": descriptor["rawId"],
-            "path": descriptor["path"],
-            "operation": operation,
-            "before": before,
-            "after": value,
-        }
-        return self.review()
+        except Exception:
+            # A rejected preview must not leave an invisible pending mutation.
+            if previous is None:
+                self._pending.pop(entry_id, None)
+            else:
+                self._pending[entry_id] = previous
+            raise
 
     def review(self):
         changes = []
@@ -459,6 +530,15 @@ class Hades2SaveWorkspace:
                 key: intent[key]
                 for key in ("id", "domain", "rawId", "operation", "before", "after")
             })
+        changes.extend(
+            save_narrative.linked_changes(self.document.lua_state, self._pending.values())
+        )
+        changes.extend(
+            save_long_term.linked_changes(self.document.lua_state, self._pending.values())
+        )
+        changes.extend(
+            save_equipment.linked_changes(self.document.lua_state, self._pending.values())
+        )
         return {"count": len(changes), "changes": changes}
 
     def cancel(self):
@@ -467,6 +547,15 @@ class Hades2SaveWorkspace:
 
     @staticmethod
     def _apply_intent(document, intent):
+        if intent["domain"] == "weapons":
+            save_equipment.apply_intent(document.lua_state, intent)
+            return
+        if intent["id"].startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
+            save_long_term.apply_intent(document.lua_state, intent)
+            return
+        if intent["domain"] in ("flags", "dialogue", "progression"):
+            save_narrative.apply_intent(document.lua_state, intent)
+            return
         path = intent["path"]
         owner = _lua_path(document.lua_state, path[:-1])
         if not isinstance(owner, LuaTable):
@@ -512,6 +601,8 @@ class Hades2SaveWorkspace:
                 raise ValueError("Save Editor mutation is no longer allowed.")
             self._apply_intent(candidate, intent)
 
+        save_long_term.validate_batch(candidate.lua_state, self._pending.values())
+        save_equipment.validate_batch(candidate.lua_state, self._pending.values())
         self._session.document = candidate
         try:
             result = self._session.apply()
