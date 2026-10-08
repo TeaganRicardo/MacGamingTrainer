@@ -12,7 +12,7 @@ from .localization import official_display_names
 from .save_native_ids import RESOURCE_IDS
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
-from .save_provider import _active_profile
+from .save_provider import resolve_active_profile_save
 from .schema import MAX_AMOUNT
 
 
@@ -139,17 +139,7 @@ class Hades2SaveWorkspace:
     @classmethod
     def open(cls, save_service):
         files = tuple(save_service.resolved_files())
-        by_path = {row.relative_path: row for row in files}
-        active = by_path.get("activeProfile")
-        profile = _active_profile(active.source_path) if active is not None else None
-        if profile is None:
-            raise ValueError("Save Editor could not resolve the active Hades profile.")
-
-        temporary = "{}_Temp.sav".format(profile)
-        persistent = "{}.sav".format(profile)
-        relative_path = temporary if temporary in by_path else persistent
-        if relative_path not in by_path:
-            raise ValueError("Save Editor active profile save is missing.")
+        profile, relative_path = resolve_active_profile_save(files)
 
         provider = getattr(save_service, "provider", None)
         game_path = getattr(provider, "game_path", None)

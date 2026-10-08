@@ -21,6 +21,32 @@ def _active_profile(path):
     return value
 
 
+def resolve_active_profile_save(files):
+    """Resolve the profile and source Hades is expected to load.
+
+    A stale _Temp.sav is a recovery copy, not the active save. The validation
+    marker must exist and be newer than the main save for Temp to win.
+    """
+    by_path = {row.relative_path: row.source_path for row in files}
+    active = by_path.get("activeProfile")
+    profile = _active_profile(active) if active is not None else None
+    if profile is None:
+        raise ValueError("Save Editor could not resolve the active Hades profile.")
+    persistent = "{}.sav".format(profile)
+    temporary = "{}_Temp.sav".format(profile)
+    validation = "{}.v.sav".format(profile)
+    if persistent not in by_path:
+        raise ValueError("Save Editor active profile save is missing.")
+    if temporary in by_path and validation in by_path:
+        try:
+            if (by_path[validation].stat().st_mtime_ns >
+                    by_path[persistent].stat().st_mtime_ns):
+                return profile, temporary
+        except OSError as error:
+            raise ValueError("Save Editor could not inspect the active-save marker.") from error
+    return profile, persistent
+
+
 class Hades2SaveProvider:
     def __init__(self, game_path=None):
         self.game_path = Path(game_path) if game_path is not None else None
@@ -31,25 +57,11 @@ class Hades2SaveProvider:
 
     def describe_snapshot(self, files, created_at):
         by_path = {row.relative_path: row.source_path for row in files}
-        active_path = by_path.get('activeProfile')
-        profile = _active_profile(active_path) if active_path is not None else None
-        if profile is None:
+        try:
+            _profile, relative = resolve_active_profile_save(files)
+            header = read_hades2_save_header(by_path[relative])
+        except (ValueError, OSError, HadesSaveError):
             return {'defaultName': None, 'nameDetails': []}
-
-        headers = []
-        for relative in (f'{profile}.sav', f'{profile}_Temp.sav'):
-            path = by_path.get(relative)
-            if path is None:
-                continue
-            try:
-                header = read_hades2_save_header(path)
-            except (OSError, HadesSaveError):
-                continue
-            headers.append(header)
-        if not headers:
-            return {'defaultName': None, 'nameDetails': []}
-
-        header = max(headers, key=lambda item: item.timestamp)
         time_label = created_at.replace('T', ' ')[:16]
 
         def presentation(language):

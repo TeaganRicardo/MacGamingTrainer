@@ -1,3 +1,4 @@
+import os
 import struct
 import sys
 import tempfile
@@ -55,7 +56,7 @@ def _active_profile(name="Profile1"):
     return b"SGB1" + struct.pack("<I", len(raw)) + raw
 
 
-def _environment(name, *, include_temp=False, running=False, resources=None, stats=None, extra=None, state=None):
+def _environment(name, *, include_temp=False, validation_age=None, running=False, resources=None, stats=None, extra=None, state=None):
     base = Path(tempfile.mkdtemp(prefix="mgt-save-workspace-")) / name
     saves = base / "saves"
     saves.mkdir(parents=True)
@@ -67,6 +68,14 @@ def _environment(name, *, include_temp=False, running=False, resources=None, sta
         (saves / "Profile1_Temp.sav").write_bytes(
             _save_bytes(200, resources=resources, stats=stats, extra=extra, state=state)
         )
+    if validation_age:
+        assert include_temp
+        marker = saves / "Profile1.v.sav"
+        marker.write_bytes(b"validation-marker")
+        fixed = 1_700_000_000_000_000_000
+        os.utime(saves / "Profile1.sav", ns=(fixed, fixed))
+        stamp = fixed + (2_000_000_000 if validation_age == "new" else -2_000_000_000)
+        os.utime(marker, ns=(stamp, stamp))
     spec = SaveManagementSpec(
         roots=(SaveRootSpec("main", str(saves), ("Profile*.sav", "activeProfile", "saveinfo")),),
         provider="games.hades2.save_provider:Hades2SaveProvider",
@@ -89,10 +98,14 @@ hub = Hades2SaveWorkspace.open(service)
 assert hub.profile == "Profile1"
 assert hub.relative_path == "Profile1.sav"
 
-_base, _saves, service = _environment("run", include_temp=True)
+_base, _saves, service = _environment("run", include_temp=True, validation_age="new")
 run = Hades2SaveWorkspace.open(service)
 assert run.profile == "Profile1"
 assert run.relative_path == "Profile1_Temp.sav"
+_base, _saves, service = _environment("stale-temp", include_temp=True)
+assert Hades2SaveWorkspace.open(service).relative_path == "Profile1.sav"
+_base, _saves, service = _environment("old-validation", include_temp=True, validation_age="old")
+assert Hades2SaveWorkspace.open(service).relative_path == "Profile1.sav"
 
 # Resource queries are backend-filtered/paged and expose only descriptor-owned
 # editability. The frontend never needs the whole save tree to search this domain.
@@ -679,6 +692,7 @@ assert free_result["UnknownFutureField"]["KeepMe"] == "yes"
 # CompletedObjectiveSets uses set names; ObjectivesCompleted uses objective
 # names. A coincidental identical key must not imply a linked historical state.
 objective_state = {
+    "QuestStatus": _table({}),
     "ObjectivesCompleted": _table({"WeaponCast": 2.0}),
     "CompletedObjectiveSets": _table({"FCastTutorial": True, "WeaponCast": True}),
 }
