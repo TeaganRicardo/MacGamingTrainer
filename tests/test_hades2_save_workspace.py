@@ -269,7 +269,8 @@ narrative_state = {
     "GiftTextLinesOrderRecord": _table({
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
-    "QuestStatus": _table({"QuestA": "Unlocked", "QuestB": "CashedOut"}),
+    "QuestStatus": _table({"QuestHelpOdysseus": "Unlocked", "QuestHelpDora": "CashedOut"}),
+    "QuestsCompleted": _table({"QuestHelpDora": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
 narrative = Hades2SaveWorkspace.open(narrative_service)
@@ -282,16 +283,16 @@ assert {row["rawId"] for row in dialogue["items"]} == {"NormalScene", "GiftLine"
 assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
 quests = narrative.query(domain="progression", limit=10, language="en")
 assert quests["total"] == 2
-assert next(row for row in quests["items"] if row["rawId"] == "QuestA")["choices"] == [
+assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpOdysseus")["choices"] == [
     "Unlocked", "Complete"
 ]
-assert next(row for row in quests["items"] if row["rawId"] == "QuestB")["editable"] is False
+assert next(row for row in quests["items"] if row["rawId"] == "QuestHelpDora")["editable"] is False
 for identity, action, value in (
     ("flag:UnsupportedHiddenFlag", "set", False),
     ("dialogue:GiftLine", "set", False),
-    ("quest:QuestB", "setEnum", "Unlocked"),
-    ("quest:QuestA", "setEnum", "CashedOut"),
-    ("quest:QuestA", "set", "Complete"),
+    ("quest:QuestHelpDora", "setEnum", "Unlocked"),
+    ("quest:QuestHelpOdysseus", "setEnum", "CashedOut"),
+    ("quest:QuestHelpOdysseus", "set", "Complete"),
     ("flag:HasPinnedAnyBoon", "set", 1),
 ):
     try:
@@ -304,11 +305,11 @@ for identity, action, value in (
 narrative.stage("flag:HasPinnedAnyBoon", "set", True)
 narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
 narrative.stage("dialogue:NormalScene", "set", False)
-narrative.stage("quest:QuestA", "setEnum", "Complete")
+narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 5, changes  # four intents and one linked choice reset
+assert len(changes) == 6, changes  # four intents and two linked native records
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:dialogue:NormalScene"
+    "linked:dialogue:NormalScene", "linked:quest:QuestHelpOdysseus:completed"
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -319,9 +320,10 @@ assert game["Flags"]["UnsupportedHiddenFlag"] is True
 assert game["TextLinesRecord"].get("NormalScene") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
 assert game["TextLinesChoiceRecord"].get("NormalScene") is None
-assert game["QuestStatus"]["QuestA"] == "Complete"
-assert "QuestsCompleted" not in game
-assert game["QuestStatus"]["QuestB"] == "CashedOut"
+assert game["QuestStatus"]["QuestHelpOdysseus"] == "Complete"
+assert game["QuestsCompleted"]["QuestHelpOdysseus"] is True
+assert game["QuestsCompleted"]["QuestHelpDora"] is True
+assert game["QuestStatus"]["QuestHelpDora"] == "CashedOut"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
 # Relationship history has a native chronological array and a global
@@ -463,7 +465,7 @@ else:
     raise AssertionError("synthetic gift history mutation accepted")
 
 # Dialogue choices may be nested tables; review must be serializable and
-# changing a quest must not require fictitious QuestsCompleted state.
+# unrelated quest state remains unchanged when a dialogue choice is cleared.
 import json
 nested_state = {
     "Flags": _table({}), "TextLinesRecord": _table({"ChoiceScene": True}),
@@ -658,5 +660,93 @@ quest_written = Hades2SaveDocument.load(quest_saves / "Profile1.sav").lua_state[
 assert quest_written["QuestsCompleted"].get("QuestHelpOdysseus") is None, (
     "QuestStatus rollback must clear the completion companion"
 )
+
+
+# An unknown integer or quest-like string cannot gain write authority solely
+# because it has the same primitive type as a supported native identity.
+_base, _, unknown_service = _environment(
+    "unmodeled-identities",
+    resources={"MetaCurrency": 3.0, "InventedResource": 9.0},
+    state={
+        "QuestStatus": _table({"QuestHelpOdysseus": "Unlocked",
+                               "QuestInventedEntry": "Unlocked"}),
+        "QuestsCompleted": _table({}),
+    },
+)
+unknown = Hades2SaveWorkspace.open(unknown_service)
+assert all(row["rawId"] != "InventedResource"
+           for row in unknown.query(domain="resources")["items"])
+assert next(row for row in unknown.query(domain="progression")["items"]
+            if row["rawId"] == "QuestInventedEntry")["editable"] is False
+for identity, op, value in (
+    ("resource:InventedResource", "set", 2),
+    ("quest:QuestInventedEntry", "setEnum", "Complete"),
+):
+    try:
+        unknown.stage(identity, op, value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unmodeled identity became writable: " + identity)
+
+# Objective names and objective-set names have independent native contracts.
+_base, objectives_saves, objectives_service = _environment(
+    "objective-namespaces", state={
+        "QuestStatus": _table({}),
+        "ObjectivesCompleted": _table({"GiftPrompt": 2.0, "WeaponCast": 3.0}),
+        "CompletedObjectiveSets": _table({"GiftPrompt": True, "FCastTutorial": True}),
+    },
+)
+objectives = Hades2SaveWorkspace.open(objectives_service)
+objective = next(r for r in objectives.query(domain="progression")["items"]
+                 if r["id"] == "objective:GiftPrompt")
+assert objective["editable"], "Objective count should not inherit a set lock"
+objectives.stage("objective:GiftPrompt", "set", 5)
+objectives.apply()
+written = Hades2SaveDocument.load(objectives_saves / "Profile1.sav").lua_state["GameState"]
+assert written["ObjectivesCompleted"]["GiftPrompt"] == 5
+assert written["CompletedObjectiveSets"]["GiftPrompt"] is True
+assert written["CompletedObjectiveSets"]["FCastTutorial"] is True
+
+# In the native aspect menu, the free default aspect acquires its own flag.
+_base, free_saves, free_service = _environment(
+    "free-aspect-revoke", state={
+        "WeaponsUnlocked": _table({"WeaponDagger": True, "DaggerBackstabAspect": True}),
+        "WorldUpgrades": _table({"WeaponDagger": True}),
+        "WorldUpgradesAdded": _table({"WeaponDagger": True}),
+        "LastWeaponUpgradeName": _table({}),
+    },
+)
+free = Hades2SaveWorkspace.open(free_service)
+free.stage("weapon:WeaponDagger", "set", False)
+free.apply()
+written = Hades2SaveDocument.load(free_saves / "Profile1.sav").lua_state["GameState"]
+assert written["WeaponsUnlocked"].get("DaggerBackstabAspect") is None
+assert written["WorldUpgrades"].get("WeaponDagger") is None
+
+# The same official base-aspect label belongs to six distinct parent weapons.
+from games.hades2 import save_equipment
+original_names = save_equipment.official_display_names
+def _test_equipment_names(ids, language, game_path=None):
+    weapon_labels = (
+        {"WeaponDagger": "Sister Blades", "WeaponStaffSwing": "Witch's Staff"}
+        if language == "en" else
+        {"WeaponDagger": "姊妹双刃", "WeaponStaffSwing": "女巫之杖"}
+    )
+    defaults = set(save_equipment._DEFAULT_ASPECTS)
+    return {name: weapon_labels.get(name, (
+        "Aspect of Melinoë" if language == "en" else "墨利诺厄形态"
+    ) if name in defaults else name) for name in ids}
+try:
+    save_equipment.official_display_names = _test_equipment_names
+    localized = save_equipment.rows(
+        Hades2SaveDocument.load(free_saves / "Profile1.sav").lua_state, "zh-CN"
+    )
+    by_id = {r["id"]: r for r in localized}
+    dagger = by_id["aspect:DaggerBackstabAspect"]["name"]
+    staff = by_id["aspect:BaseStaffAspect"]["name"]
+    assert "姊妹双刃" in dagger and "女巫之杖" in staff and dagger != staff
+finally:
+    save_equipment.official_display_names = original_names
 
 print("hades2_save_workspace_ok")
