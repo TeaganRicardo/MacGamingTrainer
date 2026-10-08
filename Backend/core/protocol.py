@@ -76,6 +76,8 @@ class JsonlRequestRouter:
             target_running_probe or (lambda: _target_process_running(getattr(context, 'process_name', ''))),
         )
 
+        adapter.bind_save_service(self.save_service)
+
     def _envelope(self, request_id, ok):
         return {
             'id': request_id,

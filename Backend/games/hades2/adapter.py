@@ -18,6 +18,7 @@ from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed
 from .profile_service import Hades2ProfileService
 from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
+from .save_workspace import Hades2SaveWorkspace
 from .schema import (
     MULTIPLIERS,
     STAT_RULES,
@@ -142,6 +143,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
         self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
         self.command_contract=Hades2CommandContract(self)
+        self.save_workspace=None
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
         # replay is a no-op; if Hades itself restarted, the same profile is
@@ -928,6 +930,40 @@ class Hades2Adapter(GameAdapter):
         if self.runtime.alive():self._detach_runtime()
         else:self._project_detached_runtime()
         return dict(self.state)
+
+    def bind_save_service(self, save_service):
+        super().bind_save_service(save_service)
+        self.save_workspace = None
+
+    def _require_save_workspace(self):
+        if self.save_workspace is None:
+            raise ValueError("Save Editor workspace is not open.")
+        return self.save_workspace
+
+    def open_save_editor(self):
+        if self.save_service is None:
+            raise ValueError("Save Editor save management is unavailable.")
+        self.save_workspace = Hades2SaveWorkspace.open(self.save_service)
+        return self.save_workspace.summary()
+
+    def query_save_editor(self, params):
+        return self._require_save_workspace().query(**params)
+
+    def stage_save_editor(self, params):
+        return self._require_save_workspace().stage(
+            params["entryId"],
+            params["operation"],
+            params.get("value"),
+        )
+
+    def review_save_editor(self):
+        return self._require_save_workspace().review()
+
+    def cancel_save_editor(self):
+        return self._require_save_workspace().cancel()
+
+    def apply_save_editor(self):
+        return self._require_save_workspace().apply()
 
     def metadata(self):
         metadata = super().metadata()

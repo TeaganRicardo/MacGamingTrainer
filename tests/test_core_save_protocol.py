@@ -43,6 +43,7 @@ context = GameAdapterContext(
 )
 adapter = FakeAdapter(context)
 router = JsonlRequestRouter(adapter, save_data_root=base/'data', target_running_probe=lambda: False)
+assert adapter.save_service is router.save_service
 
 backup = router.handle({'id':'b1','command':'core.save.backup','params':{'name':'First'}})
 assert backup['ok'] is True

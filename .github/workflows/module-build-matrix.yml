@@ -32,6 +32,10 @@ jobs:
       - name: Require intended scope checkout
         run: test "$(git rev-parse HEAD)" = "$HEAD_SHA"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.15.0-rc.3'
+
       - name: Classify change scope
         id: scope
         run: python3 Tools/ci_docs_only.py "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
