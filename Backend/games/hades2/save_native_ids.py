@@ -49,7 +49,7 @@ RESOURCE_IDS = frozenset((
     "FishQRare", "FishQLegendary", "FishChaosCommon", "FishChaosRare", "FishChaosLegendary",
     "WeaponPointsRare", "Mixer5Common", "Mixer6Common", "MixerShadow", "MixerMythic",
     "FamiliarPoints", "MysteryResource", "SuperGiftPoints", "CharonPoints", "GemPoints",
-    "DreamPoints", "TrashPoints", "Money",
+    "DreamPoints", "TrashPoints",
 ))
 
 NPC_INTERACTION_IDS = frozenset((

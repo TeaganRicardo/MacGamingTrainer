@@ -28,11 +28,24 @@ def resource_ids(source):
     marker = re.search(r"(?m)^ResourceDisplayOrderData\s*=", source)
     if marker is None:
         raise ValueError("ResourceData boundary not found")
-    keys = re.findall(
+    # Run-only resources (for example Money) are cleared at the native
+    # death/reset boundary and must not appear as persisted inventory.
+    scope = source[:marker.start()]
+    entries = list(re.finditer(
         r"(?m)^\t([A-Za-z][A-Za-z0-9_]*)\s*=\s*\n\s*\{",
-        source[:marker.start()],
-    )
-    return [key for key in keys if not key.startswith("Base")]
+        scope,
+    ))
+    persistent = []
+    for index, entry in enumerate(entries):
+        name = entry.group(1)
+        if name.startswith("Base"):
+            continue
+        end = entries[index + 1].start() if index + 1 < len(entries) else len(scope)
+        body = scope[entry.end():end]
+        if re.search(r"(?m)^\t\tRunResource\s*=\s*true\b", body):
+            continue
+        persistent.append(name)
+    return persistent
 
 
 def objective_ids(source):
