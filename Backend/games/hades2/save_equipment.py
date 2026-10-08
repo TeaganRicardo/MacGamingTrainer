@@ -97,7 +97,16 @@ def _tool_level(state, tool):
 def _set_rank(state, aspect, level):
     for tier in range(1, 6):
         if tier == 1 and aspect in _DEFAULT_ASPECTS:
-            continue  # Default aspect ownership is the base weapon itself.
+            # The free aspect has a separate native unlock bit after the shop
+            # is opened. Its absence is valid until then, but revocation cannot
+            # leave the bit behind.
+            if level == 0:
+                _set_owned(state, aspect, False)
+            elif level > 1:
+                owner = _table(state, "WeaponsUnlocked")
+                _flag(owner, aspect)
+                owner[aspect] = True
+            continue
         name = aspect if tier == 1 else "{}{}".format(aspect, tier)
         _set_owned(state, name, tier <= level)
 
@@ -172,8 +181,8 @@ def rows(root, language="zh-CN", game_path=None):
             english_name = en.get(aspect) or aspect
             result.append(_row(
                 "aspect:" + aspect, aspect, ["GameState", "WeaponsUnlocked", aspect],
-                name + (" · 等级" if zh else " · Rank"),
-                english_name + " · Rank", level, "integer", aspect_group,
+                title + " · " + name + (" · 等级" if zh else " · Rank"),
+                english + " · " + english_name + " · Rank", level, "integer", aspect_group,
                 editable=owned or aspect not in _DEFAULT_ASPECTS, maximum=5,
             ))
         if owned:
@@ -383,6 +392,7 @@ def linked_changes(root, intents):
     if not own:
         return []
     before = _semantic_values(root)
+    english_labels = {row["id"]: row["name"] for row in rows(root, "en")}
     candidate = copy.deepcopy(root)
     for intent in own:
         apply_intent(candidate, intent)
@@ -393,7 +403,7 @@ def linked_changes(root, intents):
         if key not in edited and before[key] != after[key]:
             changes.append({
                 "id": "linked:" + key, "domain": "weapons", "rawId": key,
-                "name": key, "operation": "set",
+                "name": english_labels.get(key, key), "operation": "set",
                 "before": before[key], "after": after[key],
             })
     return changes

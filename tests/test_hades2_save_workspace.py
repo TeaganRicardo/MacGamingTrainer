@@ -100,6 +100,7 @@ resources = {
     "MetaCurrency": 123.0,
     "GiftPoints": 9.0,
     "CardUpgradePoints": 7.0,
+    "UnmodeledCurrency": 6.0,
 }
 extra = {"Item{:04d}".format(index): float(index) for index in range(1500)}
 _base, _saves, service = _environment(
@@ -112,6 +113,7 @@ page = workspace.query(domain="resources", search="Points", offset=0, limit=2, l
 assert page["domain"] == "resources"
 assert page["total"] == 2
 assert len(page["items"]) == 2
+assert workspace.query(domain="resources", search="UnmodeledCurrency")["total"] == 0
 assert {row["rawId"] for row in page["items"]} == {"GiftPoints", "CardUpgradePoints"}
 for row in page["items"]:
     assert row["editable"] is True
@@ -196,6 +198,7 @@ workspace.cancel()
 assert workspace.review() == {"count": 0, "changes": []}
 
 for entry_id, operation, value in (
+    ("resource:UnmodeledCurrency", "set", 500),
     ("resource:MetaCurrency", "set", -1),
     ("resource:MetaCurrency", "set", 1_000_000),
     ("resource:MetaCurrency", "set", 1.5),

@@ -4,6 +4,7 @@ Only explicit, source-verified records receive write authority. The generic
 Advanced tree remains the read-only escape hatch for everything else.
 """
 from .localization import official_display_names
+from .save_native_ids import QUEST_IDS
 from .save_document import LuaTable
 
 
@@ -114,7 +115,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
         names = set(k for k, _ in statuses.entries() if isinstance(k, str))
         official = official_display_names(names, language, game_path=game_path)
         english = official if language == "en" else official_display_names(names, "en", game_path=game_path)
-        for name in sorted(names):
+        for name in sorted(names & QUEST_IDS):
             status = statuses.get(name)
             if status not in _QUEST_STATUSES:
                 continue
@@ -180,9 +181,25 @@ def apply_intent(root, intent):
                 if isinstance(choices, LuaTable):
                     choices.pop(name, None)
     elif prefix == "quest":
+        if name not in QUEST_IDS:
+            raise ValueError("Save Editor quest identity is unknown.")
         status = _table(state, "QuestStatus")
         if status.get(name) == "CashedOut":
             raise ValueError("Save Editor cannot rewrite a claimed quest reward.")
+        completed = state.get("QuestsCompleted")
+        if completed is not None and not isinstance(completed, LuaTable):
+            raise ValueError("Save Editor quest completion history is malformed.")
+        if completed is None and after == "Complete":
+            completed = LuaTable()
+            state["QuestsCompleted"] = completed
+        if completed is not None:
+            previous = completed.get(name)
+            if previous is not None and type(previous) is not bool:
+                raise ValueError("Save Editor quest completion record is malformed.")
+            if after == "Complete":
+                completed[name] = True
+            else:
+                completed.pop(name, None)
         status[name] = after
     else:
         raise ValueError("Save Editor narrative mutation is unknown.")
@@ -192,7 +209,27 @@ def linked_changes(root, intents):
     state = _game_state(root)
     changes = []
     choices = state.get("TextLinesChoiceRecord")
+    completed = state.get("QuestsCompleted")
+    if completed is not None and not isinstance(completed, LuaTable):
+        raise ValueError("Save Editor quest completion history is malformed.")
     for intent in intents:
+        if intent["id"].startswith("quest:"):
+            name = intent["rawId"]
+            record = completed.get(name) if completed is not None else None
+            if record is not None and type(record) is not bool:
+                raise ValueError("Save Editor quest completion record is malformed.")
+            before = record is True
+            after = intent["after"] == "Complete"
+            if before != after:
+                changes.append({
+                    "id": "linked:quest:" + name,
+                    "domain": "progression",
+                    "rawId": name,
+                    "name": "Quest completion history · " + name,
+                    "operation": "set",
+                    "before": before,
+                    "after": after,
+                })
         if (intent["id"].startswith("dialogue:") and intent["after"] is False
                 and isinstance(choices, LuaTable)):
             name = intent["rawId"]

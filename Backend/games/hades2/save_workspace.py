@@ -9,6 +9,7 @@ import math
 
 from . import save_equipment, save_long_term, save_narrative
 from .localization import official_display_names
+from .save_native_ids import RESOURCE_IDS
 from .save_document import Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import _active_profile
@@ -182,8 +183,8 @@ class Hades2SaveWorkspace:
         return resources
 
     def _resource_descriptor(self, identifier):
-        if not isinstance(identifier, str) or not identifier:
-            raise ValueError("Save Editor resource identity is invalid.")
+        if not isinstance(identifier, str) or identifier not in RESOURCE_IDS:
+            raise ValueError("Save Editor resource identity is not supported by the native catalog.")
         resources = self._resources()
         try:
             value = resources[identifier]
@@ -307,6 +308,44 @@ class Hades2SaveWorkspace:
             })
         return rows
 
+    def _overview_rows(self, language):
+        state = self._game_state()
+        resources = state.get("Resources")
+        resource_count = 0
+        if isinstance(resources, LuaTable):
+            resource_count = sum(
+                1 for key, value in resources.entries()
+                if isinstance(key, str) and key in RESOURCE_IDS
+                and type(value) in (float, int) and math.isfinite(float(value))
+                and float(value).is_integer()
+            )
+        line_history = state.get("TextLinesRecord")
+        flags = state.get("Flags")
+        measurements = (
+            ("resources", "已记录资源种类", "Recorded resource types", resource_count, ["GameState", "Resources"]),
+            ("dialogue", "已记录对话", "Recorded dialogue entries",
+             sum(1 for _, value in line_history.entries() if value is True)
+             if isinstance(line_history, LuaTable) else 0, ["GameState", "TextLinesRecord"]),
+            ("flags", "已存储标志", "Stored flags",
+             len(flags) if isinstance(flags, LuaTable) else 0, ["GameState", "Flags"]),
+            ("pending", "待提交修改", "Staged changes", len(self._pending), []),
+        )
+        return [
+            {
+                "id": "overview:" + key,
+                "domain": "overview",
+                "rawId": key,
+                "path": path,
+                "name": zh if language == "zh-CN" else en,
+                "englishName": en,
+                "value": value,
+                "valueType": "integer",
+                "editable": False,
+                "mutationKinds": [],
+            }
+            for key, zh, en, value, path in measurements
+        ]
+
     def _advanced_rows(self, path):
         target = _lua_path(self.document.lua_state, path)
         if not isinstance(target, LuaTable):
@@ -350,7 +389,9 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
 
-        if domain == "resources":
+        if domain == "overview":
+            rows = self._overview_rows(language)
+        elif domain == "resources":
             rows = self._resource_rows(language)
         elif domain == "playerStats":
             rows = self._player_stat_rows(language)
