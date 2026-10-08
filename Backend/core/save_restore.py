@@ -60,10 +60,14 @@ class SaveRestoreTransaction:
         if not target_running and self.target_running_probe is not None and self.target_running_probe():
             raise SaveBusyError('Game started while preparing restore.')
 
-    def _capture_rollback(self, target_running):
+    def _capture_rollback(self, target_running, require_idle=False):
         self._ensure_cold_target_still_stopped(target_running)
         current = list(self.resolver())
-        if target_running and self.busy_probe is not None and self.busy_probe(tuple(current)):
+        if (
+            self.busy_probe is not None
+            and (target_running or require_idle)
+            and self.busy_probe(tuple(current))
+        ):
             raise SaveBusyError('Save files are currently busy.')
 
         rollback = Path(tempfile.mkdtemp(prefix='.rollback-', dir=str(self._transaction_parent())))
@@ -170,12 +174,21 @@ class SaveRestoreTransaction:
             entries.append((key, row.source_path, hashes[key]))
         return entries
 
-    def restore(self, snapshot_id, preserve_current=False, target_running=False):
-        if type(preserve_current) is not bool or type(target_running) is not bool:
-            raise ValueError('Restore options must be boolean.')
-        verified = self.store.load_verified_snapshot(snapshot_id)
-        target_entries, target_hashes = self._target_entries(verified)
-        rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(target_running)
+    def _apply_captured(
+        self,
+        rollback_root,
+        rollback_rows,
+        baseline_hashes,
+        target_entries,
+        target_hashes,
+        *,
+        preserve_current,
+        target_running,
+        success,
+        operation_name,
+        post_install_verify=None,
+        require_idle=False,
+    ):
         previous_snapshot_id = None
         mutation_started = False
         cleanup_rollback = True
@@ -190,23 +203,37 @@ class SaveRestoreTransaction:
                 previous_snapshot_id = previous['id']
 
             if not self._verify_state(baseline_hashes):
-                self._raise_race(target_running, 'Save changed before restore could begin.')
+                self._raise_race(target_running, 'Save changed before mutation could begin.')
             self._ensure_cold_target_still_stopped(target_running)
+            if require_idle and self.busy_probe is not None:
+                current = list(self.resolver())
+                if self.busy_probe(tuple(current)):
+                    raise SaveBusyError('Save files are currently busy.')
+                if not self._verify_state(baseline_hashes):
+                    self._raise_race(False, 'Save changed before mutation could begin.')
+                self._ensure_cold_target_still_stopped(target_running)
 
             mutation_started = True
             self._install_entries(target_entries)
             self._delete_keys(set(baseline_hashes) - set(target_hashes))
 
             if not self._verify_state(target_hashes):
-                raise SaveRestoreError('Restored save set failed verification.')
+                raise SaveRestoreError('{} save set failed verification.'.format(operation_name))
+            if post_install_verify is not None:
+                post_install_verify()
+                if not self._verify_state(target_hashes):
+                    raise SaveRestoreError(
+                        '{} save set changed during post-install validation.'.format(
+                            operation_name
+                        )
+                    )
             if target_running:
                 time.sleep(0.05)
                 if not self._verify_state(target_hashes):
                     raise SaveRestoreError('Game rewrote save files immediately after hot restore.')
 
             return {
-                'restored': True,
-                'snapshotId': snapshot_id,
+                **success,
                 'previousSnapshotId': previous_snapshot_id,
                 'fileCount': len(target_entries),
                 'hot': target_running,
@@ -217,12 +244,11 @@ class SaveRestoreTransaction:
                     raise
                 if isinstance(error, (SaveBusyError, SaveSnapshotError, SaveRestoreError, ValueError)):
                     raise
-                raise SaveRestoreError('Restore failed before mutation.') from error
+                raise SaveRestoreError('{} failed before mutation.'.format(operation_name)) from error
 
-            # The backend translates SIGTERM into KeyboardInterrupt. Once real
-            # save mutation has started, every exit path must attempt rollback
-            # before the worker is allowed to terminate. Keep the recovery copy
-            # until rollback has both completed and verified.
+            # Once real save mutation starts, every exit path attempts rollback
+            # before returning or allowing process termination. Keep the
+            # recovery copy until rollback has completed and verified.
             cleanup_rollback = False
             try:
                 self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes))
@@ -233,13 +259,92 @@ class SaveRestoreTransaction:
                 if not isinstance(rollback_error, Exception):
                     raise
                 raise SaveRollbackError(
-                    'Restore failed and rollback could not be completed; recovery copy was preserved.',
+                    '{} failed and rollback could not be completed; recovery copy was preserved.'.format(
+                        operation_name
+                    ),
                     rollback_root,
                 ) from error
             cleanup_rollback = True
             if not isinstance(error, Exception):
                 raise
-            raise SaveRestoreError('Restore failed; previous saves were rolled back.') from error
+            raise SaveRestoreError(
+                '{} failed; previous saves were rolled back.'.format(operation_name)
+            ) from error
         finally:
             if cleanup_rollback:
                 shutil.rmtree(rollback_root, ignore_errors=True)
+
+    def _replacement_entries(self, replacements):
+        if not isinstance(replacements, (list, tuple)) or not replacements:
+            raise ValueError('Save replacement set must not be empty.')
+        entries = []
+        seen = set()
+        for row in replacements:
+            if not isinstance(row, ResolvedSaveFile):
+                raise ValueError('Save replacement rows must be resolved save files.')
+            key = self._key(row)
+            if key in seen:
+                raise ValueError('Save replacement set contains duplicate targets.')
+            seen.add(key)
+            source = Path(row.source_path)
+            if source.is_symlink() or not source.is_file():
+                raise SaveRestoreError('Save replacement source is missing or unsafe.')
+            entries.append((key, source, _sha256(source)))
+        return entries
+
+    def replace_files(self, replacements, expected_hashes, post_install_verify=None):
+        if post_install_verify is not None and not callable(post_install_verify):
+            raise ValueError('Save replacement verifier must be callable.')
+        entries = self._replacement_entries(replacements)
+        replacement_keys = {key for key, _source, _digest in entries}
+        if not isinstance(expected_hashes, dict) or set(expected_hashes) != replacement_keys:
+            raise ValueError('Expected save hashes must cover every replacement target exactly.')
+
+        rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
+            False,
+            require_idle=True,
+        )
+        try:
+            for key in replacement_keys:
+                if key not in baseline_hashes:
+                    raise SaveRestoreError('Save replacement target is not part of the current save set.')
+                if expected_hashes[key] != baseline_hashes[key]:
+                    raise SaveRestoreError('Save changed since the edit was prepared.')
+            target_hashes = dict(baseline_hashes)
+            for key, _source, digest in entries:
+                target_hashes[key] = digest
+        except BaseException:
+            shutil.rmtree(rollback_root, ignore_errors=True)
+            raise
+
+        return self._apply_captured(
+            rollback_root,
+            rollback_rows,
+            baseline_hashes,
+            entries,
+            target_hashes,
+            preserve_current=True,
+            target_running=False,
+            success={'replaced': True},
+            operation_name='Save replacement',
+            post_install_verify=post_install_verify,
+            require_idle=True,
+        )
+
+    def restore(self, snapshot_id, preserve_current=False, target_running=False):
+        if type(preserve_current) is not bool or type(target_running) is not bool:
+            raise ValueError('Restore options must be boolean.')
+        verified = self.store.load_verified_snapshot(snapshot_id)
+        target_entries, target_hashes = self._target_entries(verified)
+        rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(target_running)
+        return self._apply_captured(
+            rollback_root,
+            rollback_rows,
+            baseline_hashes,
+            target_entries,
+            target_hashes,
+            preserve_current=preserve_current,
+            target_running=target_running,
+            success={'restored': True, 'snapshotId': snapshot_id},
+            operation_name='Restore',
+        )
