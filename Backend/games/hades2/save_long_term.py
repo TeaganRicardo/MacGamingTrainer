@@ -64,13 +64,15 @@ def _gift_consistent(record, global_counts):
     if sequence is None:
         return False
     counts = Counter(sequence)
+    named = set()
     for key, value in record.entries():
         if isinstance(key, str):
+            named.add(key)
             if not _integer(value) or counts[key] != int(value):
                 return False
             if not _integer(global_counts.get(key, 0)) or int(global_counts.get(key, 0)) < int(value):
                 return False
-    return True
+    return named == set(counts)
 
 
 def _display(ids, language, game_path):
@@ -154,7 +156,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 unlocked = card.get("Unlocked")
                 level = card.get("Level", 1)
                 equipped = card.get("Equipped")
-                if unlocked not in (None, True, False) or not _integer(level) or equipped not in (None, True, False):
+                if (unlocked is not None and type(unlocked) is not bool) or not _integer(level) or (equipped is not None and type(equipped) is not bool):
                     continue
                 if int(level) < 1 or int(level) > _ARCANA_MAX_LEVEL:
                     continue
