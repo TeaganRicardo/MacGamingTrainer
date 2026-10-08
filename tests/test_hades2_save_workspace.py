@@ -750,4 +750,40 @@ assert invalid_editor.review()["count"] == 1
 invalid_editor.cancel()
 assert invalid_editor.review() == {"count": 0, "changes": []}
 
+
+# Native interaction keys are UnitSetData units, not localization/speaker
+# names. The editor must be able to initialize a known but never met NPC from
+# the native zero default without authorizing arbitrary future metadata keys.
+identity_state = {
+    "QuestStatus": _table({}),
+    "NPCInteractions": _table({"NPC_Hecate_01": 3.0, "FutureUnit": 5.0}),
+    "SpecialInteractRecord": _table({"NPC_Hecate_01": 1.0, "FutureUnit": 2.0}),
+    "ObjectivesCompleted": _table({"WeaponCast": 2.0, "UnknownObjective": 4.0}),
+}
+_base, identity_saves, identity_service = _environment(
+    "native-relationship-ids", state=identity_state
+)
+identity = Hades2SaveWorkspace.open(identity_service)
+relationship_rows = {r["id"]: r for r in identity.query(
+    domain="relationships", limit=200
+)["items"]}
+assert relationship_rows["interaction:NPC_Hecate_01"]["value"] == 3
+assert relationship_rows["interaction:NPC_Nemesis_01"]["value"] == 0
+assert relationship_rows["interaction:NPC_Nemesis_01"]["editable"] is True
+assert "interaction:FutureUnit" not in relationship_rows
+assert "specialInteraction:FutureUnit" not in relationship_rows
+objective_rows = {r["id"]: r for r in identity.query(
+    domain="progression", limit=200
+)["items"]}
+assert objective_rows["objective:WeaponCast"]["value"] == 2
+assert "objective:UnknownObjective" not in objective_rows
+identity.stage("interaction:NPC_Nemesis_01", "set", 1)
+identity.stage("objective:WeaponCast", "set", 3)
+identity.apply()
+persisted = Hades2SaveDocument.load(identity_saves / "Profile1.sav").lua_state["GameState"]
+assert persisted["NPCInteractions"]["NPC_Nemesis_01"] == 1
+assert persisted["NPCInteractions"]["FutureUnit"] == 5
+assert persisted["SpecialInteractRecord"]["FutureUnit"] == 2
+assert persisted["ObjectivesCompleted"]["UnknownObjective"] == 4
+
 print("hades2_save_workspace_ok")
