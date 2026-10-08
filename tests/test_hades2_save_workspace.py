@@ -433,4 +433,128 @@ edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["Ga
 assert edited["MetaUpgradeState"]["BonusHealth"]["Unlocked"] is True
 assert edited["MetaUpgradeState"]["BonusHealth"]["Level"] == 2
 
+# Weapon ownership uses three native purchase markers; progression edits must
+# maintain the contiguous aspect tiers, selected aspect, and tool ranks.
+equipment_owned = {
+    "WeaponDagger", "DaggerBlockAspect", "DaggerBlockAspect2", "ToolShovel"
+}
+equipment_state = {
+    "WeaponsUnlocked": _table({key: True for key in equipment_owned}),
+    "WorldUpgrades": _table({key: True for key in equipment_owned}),
+    "WorldUpgradesAdded": _table({key: True for key in equipment_owned}),
+    "LastWeaponUpgradeName": _table({"WeaponDagger": "DaggerBlockAspect"}),
+    "FamiliarsUnlocked": _table({"HoundFamiliar": True}),
+    "EquippedFamiliar": "HoundFamiliar",
+}
+_base, equipment_saves, equipment_service = _environment(
+    "equipment", state=equipment_state
+)
+equipment = Hades2SaveWorkspace.open(equipment_service)
+weapon_rows = equipment.query(domain="weapons", offset=0, limit=100, language="zh-CN")
+by_id = {row["id"]: row for row in weapon_rows["items"]}
+assert by_id["weapon:WeaponDagger"]["value"] is True
+assert by_id["aspect:DaggerBlockAspect"]["value"] == 2
+assert by_id["aspect:DaggerBackstabAspect"]["value"] == 1
+assert by_id["aspect:DaggerBackstabAspect"]["editable"]
+assert by_id["aspect:StaffClearCastAspect"]["value"] == 0
+assert by_id["aspect:BaseStaffAspect"]["editable"] is False
+assert by_id["aspectSelection:WeaponDagger"]["value"] == "DaggerBlockAspect"
+assert "DaggerBackstabAspect" in by_id["aspectSelection:WeaponDagger"]["choices"]
+assert by_id["aspectSelection:WeaponDagger"]["choiceNames"][""] == "默认形态"
+assert by_id["tool:ToolShovel"]["value"] == 1
+assert by_id["familiar:HoundFamiliar"]["value"] is True
+assert by_id["familiarSelection"]["value"] == "HoundFamiliar"
+assert "weapon:WeaponUnknown" not in by_id
+assert all(row["domain"] == "weapons" for row in weapon_rows["items"])
+for identity, operation, value in (
+    ("aspect:DaggerBlockAspect", "set", 6),
+    ("aspect:DaggerBlockAspect", "set", 2.5),
+    ("tool:ToolShovel", "set", 3),
+    ("familiar:HoundFamiliar", "set", 1),
+    ("familiarSelection", "setEnum", "UnknownFamiliar"),
+    ("aspectSelection:WeaponDagger", "setEnum", "WrongAspect"),
+    ("weapon:WeaponUnknown", "set", True),
+):
+    try:
+        equipment.stage(identity, operation, value)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid equipment edit accepted: " + identity)
+
+equipment.stage("aspect:DaggerBlockAspect", "set", 4)
+equipment.stage("tool:ToolShovel", "set", 2)
+equipment.stage("familiar:CatFamiliar", "set", True)
+equipment.stage("familiarSelection", "setEnum", "CatFamiliar")
+review = equipment.review()
+assert review["count"] == 4
+equipment.apply()
+installed_equipment = Hades2SaveDocument.load(equipment_saves / "Profile1.sav")
+state = installed_equipment.lua_state["GameState"]
+for table_name in ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded"):
+    for key in ("DaggerBlockAspect3", "DaggerBlockAspect4", "ToolShovel2"):
+        assert state[table_name][key] is True
+    assert state[table_name].get("DaggerBlockAspect5") is None
+assert state["LastWeaponUpgradeName"]["WeaponDagger"] == "DaggerBlockAspect"
+assert state["FamiliarsUnlocked"]["CatFamiliar"] is True
+assert state["EquippedFamiliar"] == "CatFamiliar"
+assert state["UnknownFutureField"]["KeepMe"] == "yes"
+
+# Turning off an owned aspect and familiar resets dependent selections; a
+# downgrade removes later shop tiers from all three purchase-marker tables.
+equipment_again = Hades2SaveWorkspace.open(equipment_service)
+equipment_again.stage("aspect:DaggerBlockAspect", "set", 0)
+equipment_again.stage("familiar:CatFamiliar", "set", False)
+linked_ids = {row["id"] for row in equipment_again.review()["changes"]
+              if row["id"].startswith("linked:")}
+assert "linked:aspectSelection:WeaponDagger" in linked_ids
+assert "linked:familiarSelection" in linked_ids
+equipment_again.apply()
+state = Hades2SaveDocument.load(equipment_saves / "Profile1.sav").lua_state["GameState"]
+assert state["LastWeaponUpgradeName"].get("WeaponDagger") is None
+assert state.get("EquippedFamiliar") is None
+assert state["FamiliarsUnlocked"].get("CatFamiliar") is None
+for table_name in ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded"):
+    for tier in ("DaggerBlockAspect", "DaggerBlockAspect2",
+                 "DaggerBlockAspect3", "DaggerBlockAspect4"):
+        assert state[table_name].get(tier) is None
+
+# A proposed selection of an unowned aspect is not silently installed. The
+# entire batch fails before mutating the on-disk save.
+bad_equipment = Hades2SaveWorkspace.open(equipment_service)
+bad_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
+before_bad_equipment = (equipment_saves / "Profile1.sav").read_bytes()
+try:
+    bad_equipment.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("unowned selected weapon aspect was accepted")
+assert (equipment_saves / "Profile1.sav").read_bytes() == before_bad_equipment
+bad_equipment.cancel()
+
+# Compatible staged unlock and selection are committed together, without
+# rewriting CurrentRun runtime mounted effects.
+good_equipment = Hades2SaveWorkspace.open(equipment_service)
+good_equipment.stage("aspect:DaggerBlockAspect", "set", 3)
+good_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
+good_equipment.apply()
+state = Hades2SaveDocument.load(equipment_saves / "Profile1.sav").lua_state["GameState"]
+assert state["WeaponsUnlocked"]["DaggerBlockAspect3"] is True
+assert state["LastWeaponUpgradeName"]["WeaponDagger"] == "DaggerBlockAspect"
+
+# The parent weapon unlock and its purchased aspect cannot end in mutually
+# contradictory states, regardless of staging order.
+conflict = Hades2SaveWorkspace.open(equipment_service)
+conflict.stage("weapon:WeaponDagger", "set", False)
+conflict.stage("aspect:DaggerBlockAspect", "set", 4)
+previous_save = (equipment_saves / "Profile1.sav").read_bytes()
+try:
+    conflict.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("contradictory weapon/aspect batch was accepted")
+assert (equipment_saves / "Profile1.sav").read_bytes() == previous_save
+
 print("hades2_save_workspace_ok")
