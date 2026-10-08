@@ -96,8 +96,8 @@ def _tool_level(state, tool):
 
 def _set_rank(state, aspect, level):
     for tier in range(1, 6):
-        if tier == 1 and aspect in _DEFAULT_ASPECTS:
-            continue  # Default aspect ownership is the base weapon itself.
+        if tier == 1 and aspect in _DEFAULT_ASPECTS and level > 0:
+            continue  # Preserve the native free unlock when the weapon remains owned.
         name = aspect if tier == 1 else "{}{}".format(aspect, tier)
         _set_owned(state, name, tier <= level)
 
@@ -168,8 +168,8 @@ def rows(root, language="zh-CN", game_path=None):
                 level = _rank(state, aspect)
             except ValueError:
                 continue
-            name = native.get(aspect) or aspect
-            english_name = en.get(aspect) or aspect
+            name = title + " · " + (native.get(aspect) or aspect)
+            english_name = english + " · " + (en.get(aspect) or aspect)
             result.append(_row(
                 "aspect:" + aspect, aspect, ["GameState", "WeaponsUnlocked", aspect],
                 name + (" · 等级" if zh else " · Rank"),
