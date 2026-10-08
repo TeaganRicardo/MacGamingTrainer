@@ -270,7 +270,6 @@ narrative_state = {
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
     "QuestStatus": _table({"QuestA": "Unlocked", "QuestB": "CashedOut"}),
-    "QuestsCompleted": _table({"QuestB": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
 narrative = Hades2SaveWorkspace.open(narrative_service)
@@ -307,9 +306,9 @@ narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
 narrative.stage("dialogue:NormalScene", "set", False)
 narrative.stage("quest:QuestA", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 6, changes  # four intents and two necessary linked effects
+assert len(changes) == 5, changes  # four intents and one choice-record reset
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:quest:QuestA", "linked:dialogue:NormalScene"
+    "linked:dialogue:NormalScene"
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -321,8 +320,28 @@ assert game["TextLinesRecord"].get("NormalScene") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
 assert game["TextLinesChoiceRecord"].get("NormalScene") is None
 assert game["QuestStatus"]["QuestA"] == "Complete"
-assert game["QuestsCompleted"]["QuestA"] is True
+assert "QuestsCompleted" not in game
 assert game["QuestStatus"]["QuestB"] == "CashedOut"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
+
+
+# Dialogue choices may be tables. The review payload must remain JSON-safe,
+# while Apply removes the linked choice data without rewriting other history.
+import json
+nested_state = {
+    "Flags": _table({}),
+    "TextLinesRecord": _table({"ChoiceScene": True}),
+    "TextLinesChoiceRecord": _table({"ChoiceScene": _table({"ChoiceIndex": 2.0})}),
+    "GiftTextLinesOrderRecord": _table({}),
+    "QuestStatus": _table({"QuestC": "Unlocked"}),
+}
+_base, nested_saves, nested_service = _environment("nested-dialogue", state=nested_state)
+nested_workspace = Hades2SaveWorkspace.open(nested_service)
+nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+json.dumps(nested_workspace.review())
+nested_workspace.apply()
+nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
+assert nested_game["TextLinesChoiceRecord"].get("ChoiceScene") is None
+assert nested_game["QuestStatus"]["QuestC"] == "Unlocked"
 
 print("hades2_save_workspace_ok")
