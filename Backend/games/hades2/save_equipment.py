@@ -292,7 +292,9 @@ def apply_intent(root, intent):
         aspect = entry_id[len("aspect:"):]
         if aspect not in _ASPECT_PARENT:
             raise ValueError("Save Editor aspect is unknown.")
-        if after:
+        # A starter weapon may already be owned without purchase markers.
+        # Only create linked parent purchase records if ownership changes.
+        if after and not _owned(state, _ASPECT_PARENT[aspect]):
             _set_owned(state, _ASPECT_PARENT[aspect], True)
         _set_rank(state, aspect, after)
         if not after:
