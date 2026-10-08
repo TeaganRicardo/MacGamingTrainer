@@ -209,7 +209,10 @@ def linked_changes(root, intents):
     state = _game_state(root)
     changes = []
     choices = state.get("TextLinesChoiceRecord")
-    completed = state.get("QuestsCompleted")
+    intents = tuple(intents)
+    completed = state.get("QuestsCompleted") if any(
+        intent["id"].startswith("quest:") for intent in intents
+    ) else None
     if completed is not None and not isinstance(completed, LuaTable):
         raise ValueError("Save Editor quest completion history is malformed.")
     for intent in intents:

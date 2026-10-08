@@ -176,10 +176,9 @@ class Hades2SaveWorkspace:
         if not isinstance(identifier, str) or identifier not in RESOURCE_IDS:
             raise ValueError("Save Editor resource identity is not supported by the native catalog.")
         resources = self._resources()
-        try:
-            value = resources[identifier]
-        except KeyError as error:
-            raise ValueError("Save Editor resource is unavailable.") from error
+        # Native ResourceData declares the identity; absence from the save
+        # represents a zero balance, not an unknown resource.
+        value = resources.get(identifier, 0)
         if (
             not isinstance(value, (int, float))
             or isinstance(value, bool)
@@ -197,10 +196,7 @@ class Hades2SaveWorkspace:
 
     def _resource_rows(self, language):
         resources = self._resources()
-        identifiers = {
-            key for key, _value in resources.entries()
-            if isinstance(key, str)
-        }
+        identifiers = RESOURCE_IDS
         names = official_display_names(
             identifiers,
             language,
@@ -212,9 +208,7 @@ class Hades2SaveWorkspace:
         )
 
         rows = []
-        for key, _value in resources.entries():
-            if not isinstance(key, str):
-                continue
+        for key in sorted(RESOURCE_IDS):
             try:
                 descriptor = self._resource_descriptor(key)
             except ValueError:
@@ -506,20 +500,28 @@ class Hades2SaveWorkspace:
                         )
                     value = float(value)
         before = descriptor["before"]
+        previous = self._pending.get(entry_id)
         if value == before:
             self._pending.pop(entry_id, None)
+        else:
+            self._pending[entry_id] = {
+                "id": descriptor["id"],
+                "domain": descriptor["domain"],
+                "rawId": descriptor["rawId"],
+                "path": descriptor["path"],
+                "operation": operation,
+                "before": before,
+                "after": value,
+            }
+        try:
             return self.review()
-
-        self._pending[entry_id] = {
-            "id": descriptor["id"],
-            "domain": descriptor["domain"],
-            "rawId": descriptor["rawId"],
-            "path": descriptor["path"],
-            "operation": operation,
-            "before": before,
-            "after": value,
-        }
-        return self.review()
+        except Exception:
+            # A rejected preview must not leave an invisible pending mutation.
+            if previous is None:
+                self._pending.pop(entry_id, None)
+            else:
+                self._pending[entry_id] = previous
+            raise
 
     def review(self):
         changes = []

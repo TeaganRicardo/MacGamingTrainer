@@ -124,10 +124,14 @@ _base, _saves, service = _environment(
 workspace = Hades2SaveWorkspace.open(service)
 page = workspace.query(domain="resources", search="Points", offset=0, limit=2, language="en")
 assert page["domain"] == "resources"
-assert page["total"] == 2
+assert page["total"] >= 2
 assert len(page["items"]) == 2
 assert workspace.query(domain="resources", search="UnmodeledCurrency")["total"] == 0
-assert {row["rawId"] for row in page["items"]} == {"GiftPoints", "CardUpgradePoints"}
+by_resource = {row["rawId"]: row for row in workspace.query(
+    domain="resources", limit=200, language="en"
+)["items"]}
+assert by_resource["GiftPoints"]["value"] == 9
+assert by_resource["CardUpgradePoints"]["value"] == 7
 for row in page["items"]:
     assert row["editable"] is True
     assert row["mutationKinds"] == ["set"]
