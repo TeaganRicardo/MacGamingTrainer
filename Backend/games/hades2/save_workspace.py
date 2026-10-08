@@ -12,7 +12,7 @@ from .save_provider import _active_profile
 from .schema import MAX_AMOUNT
 
 
-_DOMAINS = (
+SAVE_EDITOR_DOMAINS = (
     "overview",
     "resources",
     "playerStats",
@@ -22,6 +22,14 @@ _DOMAINS = (
     "relationships",
     "weapons",
     "advanced",
+)
+SAVE_EDITOR_MUTATION_KINDS = (
+    "set",
+    "unset",
+    "addMembership",
+    "removeMembership",
+    "setEnum",
+    "setCounter",
 )
 
 
@@ -226,7 +234,7 @@ class Hades2SaveWorkspace:
         path=None,
         language="zh-CN",
     ):
-        if domain not in _DOMAINS:
+        if domain not in SAVE_EDITOR_DOMAINS:
             raise ValueError("Unknown Save Editor domain.")
         if not isinstance(search, str) or len(search) > 256:
             raise ValueError("Save Editor search must be at most 256 characters.")
@@ -262,6 +270,14 @@ class Hades2SaveWorkspace:
             "limit": limit,
             "total": total,
             "items": rows[offset:offset + limit],
+        }
+
+    def summary(self):
+        return {
+            "profile": self.profile,
+            "relativePath": self.relative_path,
+            "domains": list(SAVE_EDITOR_DOMAINS),
+            "pendingCount": len(self._pending),
         }
 
     def _descriptor(self, entry_id):
@@ -320,7 +336,7 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor mutation owner is not a table.")
         key = path[-1]
         operation = intent["operation"]
-        if operation == "set":
+        if operation in ("set", "setEnum", "setCounter"):
             owner[key] = intent["after"]
             return
         if operation == "unset":
