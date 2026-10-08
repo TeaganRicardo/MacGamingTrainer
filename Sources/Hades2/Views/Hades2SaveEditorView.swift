@@ -242,7 +242,7 @@ struct Hades2SaveEditorView: View {
                     } else if entry.valueType == "enum", !entry.choices.isEmpty {
                         Picker(text("hades2.saveEditor.value"), selection: draftBinding(for: entry)) {
                             ForEach(entry.choices, id: \.self) { choice in
-                                Text(enumTitle(choice)).tag(choice)
+                                Text(entry.choiceNames[choice] ?? enumTitle(choice)).tag(choice)
                             }
                         }
                         .labelsHidden()
