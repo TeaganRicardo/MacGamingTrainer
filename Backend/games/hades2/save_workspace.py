@@ -437,7 +437,7 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
         if descriptor["domain"] == "weapons":
             save_equipment.validate(descriptor, operation, value)
-        elif entry_id.startswith(("gift:", "interaction:", "card:", "objective:")):
+        elif entry_id.startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
             save_long_term.validate(descriptor, operation, value)
         elif descriptor["domain"] in ("flags", "dialogue", "progression"):
             save_narrative.validate(descriptor, operation, value)
@@ -517,7 +517,7 @@ class Hades2SaveWorkspace:
         if intent["domain"] == "weapons":
             save_equipment.apply_intent(document.lua_state, intent)
             return
-        if intent["id"].startswith(("gift:", "interaction:", "card:", "objective:")):
+        if intent["id"].startswith(("interaction:", "specialInteraction:", "card:", "objective:")):
             save_long_term.apply_intent(document.lua_state, intent)
             return
         if intent["domain"] in ("flags", "dialogue", "progression"):

@@ -16,7 +16,7 @@ _WEAPONS = {
     "WeaponTorch": ("TorchSpecialDurationAspect", "TorchDetonateAspect", "TorchSprintRecallAspect", "TorchAutofireAspect"),
     "WeaponAxe": ("AxeRecoveryAspect", "AxeArmCastAspect", "AxePerfectCriticalAspect", "AxeRallyAspect"),
     "WeaponLob": ("LobAmmoBoostAspect", "LobCloseAttackAspect", "LobImpulseAspect", "LobGunAspect"),
-    "WeaponSuit": ("BaseSuitAspect", "SuitMarkCritAspect", "SuitHexAspect", "SuitComboAspect"),
+    "WeaponSuit": ("BaseSuitAspect", "SuitHexAspect", "SuitMarkCritAspect", "SuitComboAspect"),
 }
 _TOOLS = ("ToolExorcismBook", "ToolFishingRod", "ToolPickaxe", "ToolShovel")
 _FAMILIARS = ("CatFamiliar", "FrogFamiliar", "RavenFamiliar", "HoundFamiliar", "PolecatFamiliar")
@@ -51,14 +51,15 @@ def _markers(state):
 
 
 def _owned(state, key):
-    markers = tuple(_flag(table, key) for table in _markers(state))
-    if len(set(markers)) != 1:
-        raise ValueError("Save Editor durable purchase markers disagree.")
-    return markers[0]
+    # The actual game gives the starter weapon through WeaponsUnlocked
+    # without a corresponding WorldUpgrade purchase. Purchase mirrors are
+    # intentionally not equal to ownership for every key.
+    return _flag(_table(state, "WeaponsUnlocked"), key)
 
 
 def _set_owned(state, key, owned):
     for table in _markers(state):
+        _flag(table, key)  # Never overwrite unknown non-boolean data.
         if owned:
             table[key] = True
         else:
@@ -159,6 +160,7 @@ def rows(root, language="zh-CN", game_path=None):
         result.append(_row(
             "weapon:" + weapon, weapon, ["GameState", "WeaponsUnlocked", weapon],
             title, english, owned, "boolean", world_group,
+            editable=weapon != "WeaponStaffSwing",
             choices=(False, True),
         ))
         for aspect in aspects:

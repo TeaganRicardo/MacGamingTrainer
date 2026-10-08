@@ -98,7 +98,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 continue
             # A gift event also changes GiftRecord/order/choice history. It
             # cannot safely be reset by treating one text flag as independent.
-            writable = name not in gifted_ids
+            writable = value is True and name not in gifted_ids
             result.append(_row(
                 entry_id="dialogue:" + name, domain="dialogue", key=name,
                 path=["GameState", "TextLinesRecord", name],
@@ -111,17 +111,12 @@ def rows(root, domain, language="zh-CN", game_path=None):
             ))
     if domain == "progression":
         statuses = _table(state, "QuestStatus")
-        completed = _table(state, "QuestsCompleted")
         names = set(k for k, _ in statuses.entries() if isinstance(k, str))
-        names.update(k for k, _ in completed.entries() if isinstance(k, str))
         official = official_display_names(names, language, game_path=game_path)
         english = official if language == "en" else official_display_names(names, "en", game_path=game_path)
         for name in sorted(names):
             status = statuses.get(name)
             if status not in _QUEST_STATUSES:
-                continue
-            done = completed.get(name)
-            if done is not None and type(done) is not bool:
                 continue
             label = official.get(name) or (("任务 · " if language == "zh-CN" else "Quest · ") + name)
             en = english.get(name) or ("Quest · " + name)
@@ -186,14 +181,9 @@ def apply_intent(root, intent):
                     choices.pop(name, None)
     elif prefix == "quest":
         status = _table(state, "QuestStatus")
-        completed = _table(state, "QuestsCompleted")
         if status.get(name) == "CashedOut":
             raise ValueError("Save Editor cannot rewrite a claimed quest reward.")
         status[name] = after
-        if after == "Complete":
-            completed[name] = True
-        else:
-            completed.pop(name, None)
     else:
         raise ValueError("Save Editor narrative mutation is unknown.")
 
@@ -201,23 +191,14 @@ def apply_intent(root, intent):
 def linked_changes(root, intents):
     state = _game_state(root)
     changes = []
-    completed = state.get("QuestsCompleted")
     choices = state.get("TextLinesChoiceRecord")
     for intent in intents:
-        if intent["id"].startswith("quest:") and isinstance(completed, LuaTable):
-            name = intent["rawId"]
-            before = _read_bool(completed, name)
-            after = intent["after"] == "Complete"
-            if before != after:
-                changes.append({
-                    "id": "linked:quest:" + name, "domain": "progression", "rawId": name,
-                    "name": "QuestsCompleted · " + name,
-                    "operation": "set", "before": before, "after": after,
-                })
         if (intent["id"].startswith("dialogue:") and intent["after"] is False
                 and isinstance(choices, LuaTable)):
             name = intent["rawId"]
             before = choices.get(name)
+            if isinstance(before, LuaTable):
+                before = "Table ({} entries)".format(len(before))
             if before is not None:
                 changes.append({
                     "id": "linked:dialogue:" + name, "domain": "dialogue", "rawId": name,

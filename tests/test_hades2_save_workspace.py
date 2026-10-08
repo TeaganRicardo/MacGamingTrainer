@@ -270,7 +270,6 @@ narrative_state = {
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
     "QuestStatus": _table({"QuestA": "Unlocked", "QuestB": "CashedOut"}),
-    "QuestsCompleted": _table({"QuestB": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
 narrative = Hades2SaveWorkspace.open(narrative_service)
@@ -307,9 +306,9 @@ narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
 narrative.stage("dialogue:NormalScene", "set", False)
 narrative.stage("quest:QuestA", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 6, changes  # four intents and two necessary linked effects
+assert len(changes) == 5, changes  # four intents and one linked choice reset
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:quest:QuestA", "linked:dialogue:NormalScene"
+    "linked:dialogue:NormalScene"
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -321,7 +320,7 @@ assert game["TextLinesRecord"].get("NormalScene") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
 assert game["TextLinesChoiceRecord"].get("NormalScene") is None
 assert game["QuestStatus"]["QuestA"] == "Complete"
-assert game["QuestsCompleted"]["QuestA"] is True
+assert "QuestsCompleted" not in game
 assert game["QuestStatus"]["QuestB"] == "CashedOut"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
@@ -335,8 +334,8 @@ long_term_state = {
     "Flags": _table({}),
     "TextLinesRecord": _table({}),
     "QuestStatus": _table({}),
-    "QuestsCompleted": _table({}),
     "NPCInteractions": _table({"Hecate": 2.0}),
+    "SpecialInteractRecord": _table({"Hecate": 1.0}),
     "GiftRecord": _table({"Hecate": gift_npc}),
     "GiftResourceRecord": _table({"GiftPoints": 5.0, "MedeaPoints": 1.0}),
     "MetaUpgradeState": _table({
@@ -351,9 +350,13 @@ _base, long_term_saves, long_term_service = _environment("long_term", state=long
 long_term = Hades2SaveWorkspace.open(long_term_service)
 rels = long_term.query(domain="relationships", language="en")
 assert {entry["id"] for entry in rels["items"]} == {
-    "interaction:Hecate", "gift:Hecate:GiftPoints", "gift:Hecate:MedeaPoints"
+    "interaction:Hecate", "specialInteraction:Hecate",
+    "gift:Hecate:GiftPoints", "gift:Hecate:MedeaPoints"
 }
-assert all(row["editable"] for row in rels["items"])
+assert {row["id"] for row in rels["items"] if row["editable"]} == {
+    "interaction:Hecate", "specialInteraction:Hecate"
+}
+assert all(not row["editable"] for row in rels["items"] if row["id"].startswith("gift:"))
 progress = long_term.query(domain="progression", language="en")
 assert {row["id"] for row in progress["items"]} == {
     "card:ChanneledCast:Unlocked", "card:ChanneledCast:Level",
@@ -362,7 +365,7 @@ assert {row["id"] for row in progress["items"]} == {
 }
 assert all(row["id"] != "card:UnknownHiddenCard:Level" for row in progress["items"])
 for identity, value in (
-    ("gift:Hecate:GiftPoints", -1),
+    ("gift:Hecate:GiftPoints", 3),
     ("card:ChanneledCast:Level", 4),
     ("card:BonusHealth:Unlocked", 1),
     ("interaction:Hecate", True),
@@ -376,24 +379,24 @@ for identity, value in (
         raise AssertionError("invalid long-term edit accepted: " + identity)
 
 long_term.stage("interaction:Hecate", "set", 5)
-long_term.stage("gift:Hecate:GiftPoints", "set", 3)
+long_term.stage("specialInteraction:Hecate", "set", 4)
 long_term.stage("card:ChanneledCast:Unlocked", "set", False)
 long_term.stage("objective:GiftPrompt", "set", 3)
 review = long_term.review()
-assert review["count"] == 8, review
+assert review["count"] == 6, review
 assert {item["id"] for item in review["changes"] if item["id"].startswith("linked:")} == {
-    "linked:giftTotal:GiftPoints", "linked:giftOrder:Hecate",
     "linked:card:ChanneledCast:Equipped", "linked:card:ChanneledCast:Level"
 }
 long_term.apply()
 edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
 assert edited["NPCInteractions"]["Hecate"] == 5
+assert edited["SpecialInteractRecord"]["Hecate"] == 4
 record = edited["GiftRecord"]["Hecate"]
-assert record["GiftPoints"] == 3
+assert record["GiftPoints"] == 2
 assert [value for key, value in record.entries() if type(key) is float] == [
-    "GiftPoints", "MedeaPoints", "GiftPoints", "GiftPoints"
+    "GiftPoints", "MedeaPoints", "GiftPoints"
 ]
-assert edited["GiftResourceRecord"]["GiftPoints"] == 6
+assert edited["GiftResourceRecord"]["GiftPoints"] == 5
 arcana = edited["MetaUpgradeState"]["ChanneledCast"]
 assert arcana.get("Unlocked") is None
 assert arcana.get("Equipped") is None
@@ -401,17 +404,6 @@ assert arcana["Level"] == 1
 assert edited["ObjectivesCompleted"]["GiftPrompt"] == 3
 assert edited["MetaUpgradeState"]["UnknownHiddenCard"]["Level"] == 17
 assert edited["UnknownFutureField"]["KeepMe"] == "yes"
-
-# A later decrease retains the order of unrelated gift resources and removes
-# only the newest matching entries; the global gift aggregate decreases too.
-again = Hades2SaveWorkspace.open(long_term_service)
-again.stage("gift:Hecate:GiftPoints", "set", 1)
-again.apply()
-edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["GameState"]
-assert edited["GiftRecord"]["Hecate"]["GiftPoints"] == 1
-assert [value for key, value in edited["GiftRecord"]["Hecate"].entries()
-        if type(key) is float] == ["GiftPoints", "MedeaPoints"]
-assert edited["GiftResourceRecord"]["GiftPoints"] == 4
 
 # A card cannot be upgraded while locked, even when a batch also edits its
 # unlocked state. Reject the whole candidate before crossing Core Save.
@@ -433,8 +425,63 @@ edited = Hades2SaveDocument.load(long_term_saves / "Profile1.sav").lua_state["Ga
 assert edited["MetaUpgradeState"]["BonusHealth"]["Unlocked"] is True
 assert edited["MetaUpgradeState"]["BonusHealth"]["Level"] == 2
 
-# Weapon ownership uses three native purchase markers; progression edits must
-# maintain the contiguous aspect tiers, selected aspect, and tool ranks.
+# Gift chronology must remain read-only even when counts look consistent.
+# Numeric zero/one must not be accepted as Arcana boolean ownership.
+malformed_gifts = LuaTable(2, 1, [
+    (1.0, "GiftPoints"), (2.0, "MedeaPoints"), ("GiftPoints", 1.0),
+])
+malformed_state = {
+    **long_term_state,
+    "GiftRecord": _table({"Hecate": malformed_gifts}),
+    "MetaUpgradeState": _table({
+        "ChanneledCast": _table({"Unlocked": 1.0, "Level": 2.0}),
+    }),
+}
+_base, _malformed_saves, malformed_service = _environment(
+    "malformed_long_term", state=malformed_state
+)
+malformed = Hades2SaveWorkspace.open(malformed_service)
+gift_rows = malformed.query(domain="relationships", language="en")["items"]
+assert next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")["editable"] is False
+card_rows = malformed.query(domain="progression", language="en")["items"]
+assert all(row["id"] != "card:ChanneledCast:Level" for row in card_rows)
+
+# Gift quantities need not equal gift-event count. No synthetic gifts or
+# dialogue events may be manufactured when the two representations differ.
+quantity_record = LuaTable(1, 1, [(1.0, "SuperGiftPoints"), ("SuperGiftPoints", 2.0)])
+quantity_state = {**long_term_state, "GiftRecord": _table({"Hecate": quantity_record})}
+_base, _quantity_saves, quantity_service = _environment("gift_quantity", state=quantity_state)
+quantity_editor = Hades2SaveWorkspace.open(quantity_service)
+quantity_row = next(r for r in quantity_editor.query(domain="relationships")["items"]
+                    if r["id"] == "gift:Hecate:SuperGiftPoints")
+assert quantity_row["value"] == 2 and not quantity_row["editable"]
+try:
+    quantity_editor.stage("gift:Hecate:SuperGiftPoints", "set", 3)
+except ValueError:
+    pass
+else:
+    raise AssertionError("synthetic gift history mutation accepted")
+
+# Dialogue choices may be nested tables; review must be serializable and
+# changing a quest must not require fictitious QuestsCompleted state.
+import json
+nested_state = {
+    "Flags": _table({}), "TextLinesRecord": _table({"ChoiceScene": True}),
+    "TextLinesChoiceRecord": _table({"ChoiceScene": _table({"ChoiceIndex": 2.0})}),
+    "GiftTextLinesOrderRecord": _table({}),
+    "QuestStatus": _table({"QuestC": "Unlocked"}),
+}
+_base, nested_saves, nested_service = _environment("nested-dialogue", state=nested_state)
+nested_workspace = Hades2SaveWorkspace.open(nested_service)
+nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+json.dumps(nested_workspace.review())
+nested_workspace.apply()
+nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
+assert nested_game["TextLinesChoiceRecord"].get("ChoiceScene") is None
+assert nested_game["QuestStatus"]["QuestC"] == "Unlocked"
+
+# WeaponsUnlocked is authoritative for ownership. Shop purchases also
+# keep the two optional world-upgrade marker tables synchronized.
 equipment_owned = {
     "WeaponDagger", "DaggerBlockAspect", "DaggerBlockAspect2", "ToolShovel"
 }
@@ -557,25 +604,29 @@ else:
     raise AssertionError("contradictory weapon/aspect batch was accepted")
 assert (equipment_saves / "Profile1.sav").read_bytes() == previous_save
 
-# Gift sequence items without their matching resource count are not safe to
-# rewrite. Numeric zero/one must not be accepted as Arcana boolean ownership.
-malformed_gifts = LuaTable(2, 1, [
-    (1.0, "GiftPoints"), (2.0, "MedeaPoints"), ("GiftPoints", 1.0),
-])
-malformed_state = {
-    **long_term_state,
-    "GiftRecord": _table({"Hecate": malformed_gifts}),
-    "MetaUpgradeState": _table({
-        "ChanneledCast": _table({"Unlocked": 1.0, "Level": 2.0}),
-    }),
+
+# Initial starting weapon state in CreateNewHero writes only WeaponsUnlocked.
+# Missing world-upgrade mirrors must not hide or invalidate this weapon.
+starter_state = {
+    "WeaponsUnlocked": _table({"WeaponStaffSwing": True}),
+    "WorldUpgrades": _table({}),
+    "WorldUpgradesAdded": _table({}),
+    "LastWeaponUpgradeName": _table({}),
 }
-_base, _malformed_saves, malformed_service = _environment(
-    "malformed_long_term", state=malformed_state
-)
-malformed = Hades2SaveWorkspace.open(malformed_service)
-gift_rows = malformed.query(domain="relationships", language="en")["items"]
-assert next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")["editable"] is False
-card_rows = malformed.query(domain="progression", language="en")["items"]
-assert all(row["id"] != "card:ChanneledCast:Level" for row in card_rows)
+_base, starter_saves, starter_service = _environment("starter-weapon", state=starter_state)
+starter_editor = Hades2SaveWorkspace.open(starter_service)
+starter_rows = {r["id"]: r for r in starter_editor.query(domain="weapons")["items"]}
+assert starter_rows["weapon:WeaponStaffSwing"]["value"] is True
+assert starter_rows["aspect:BaseStaffAspect"]["value"] == 1
+assert starter_rows["weapon:WeaponStaffSwing"]["editable"] is False
+assert starter_rows["aspect:StaffClearCastAspect"]["value"] == 0
+starter_editor.stage("aspect:StaffClearCastAspect", "set", 2)
+starter_editor.apply()
+starter_written = Hades2SaveDocument.load(starter_saves / "Profile1.sav").lua_state["GameState"]
+assert starter_written["WeaponsUnlocked"]["WeaponStaffSwing"] is True
+assert starter_written["WeaponsUnlocked"]["StaffClearCastAspect2"] is True
+assert starter_written["WorldUpgrades"]["StaffClearCastAspect2"] is True
+assert starter_written["WorldUpgrades"].get("WeaponStaffSwing") is None
+
 
 print("hades2_save_workspace_ok")
