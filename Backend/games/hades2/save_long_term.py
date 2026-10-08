@@ -1,8 +1,8 @@
 """Source-verified relationship and long-term progression save descriptors.
 
-Gift history is represented as a count AND a chronological Lua array. Both
-it and the global gift-resource count must be updated as one mutation. Arcana
-cards follow MetaUpgradeLogic's locked/equipped/level ownership constraints.
+Gift history combines purchased quantities, ordered gifts, dialogue records,
+and game-triggered side effects; it is inspectable but not safely synthesizable.
+Arcana changes preserve unlocked/equipped/level invariants.
 """
 
 from .localization import official_display_names
@@ -41,37 +41,6 @@ def _integer(value):
     return (type(value) in (float, int) and
             0 <= value <= _MAX and
             float(value).is_integer())
-
-
-def _gift_sequence(record):
-    pairs = []
-    for key, value in record.entries():
-        if type(key) in (float, int) and float(key).is_integer() and key >= 1:
-            if not isinstance(value, str):
-                return None
-            pairs.append((int(key), value))
-        elif not isinstance(key, str):
-            return None
-    pairs.sort()
-    if [key for key, _ in pairs] != list(range(1, len(pairs) + 1)):
-        return None
-    return [value for _, value in pairs]
-
-
-def _gift_consistent(record, global_counts):
-    sequence = _gift_sequence(record)
-    if sequence is None:
-        return False
-    counts = Counter(sequence)
-    named = set()
-    for key, value in record.entries():
-        if isinstance(key, str):
-            named.add(key)
-            if not _integer(value) or counts[key] != int(value):
-                return False
-            if not _integer(global_counts.get(key, 0)) or int(global_counts.get(key, 0)) < int(value):
-                return False
-    return named == set(counts)
 
 
 def _display(ids, language, game_path):
@@ -340,15 +309,3 @@ def validate_batch(root, intents):
             actual = (bool(card.get(field)) if field == "Unlocked" else int(level))
             if actual != intent["after"]:
                 raise ValueError("Save Editor Arcana changes conflict.")
-        if entry_id.startswith("gift:"):
-            _, person, resource = entry_id.split(":", 2)
-            gifts = _table(state, "GiftRecord")
-            total = _table(state, "GiftResourceRecord")
-            record = gifts.get(person)
-            if record is not None and (
-                not isinstance(record, LuaTable) or not _gift_consistent(record, total)
-            ):
-                raise ValueError("Save Editor gift record was not updated coherently.")
-            actual = int(record.get(resource, 0)) if isinstance(record, LuaTable) else 0
-            if actual != intent["after"]:
-                raise ValueError("Save Editor gift changes conflict.")
