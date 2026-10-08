@@ -427,16 +427,19 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private static func intValue(_ value: Any?) -> Int? {
-        if let value = value as? Int { return value }
-        if let value = value as? Double, value.rounded() == value { return Int(value) }
-        if let value = value as? NSNumber { return value.intValue }
-        return nil
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        if let integer = value as? Int { return integer }
+        let scalar = number.doubleValue
+        guard scalar.isFinite, scalar.rounded() == scalar,
+              scalar >= Double(Int.min), scalar < Double(Int.max) else { return nil }
+        return Int(scalar)
     }
 
     private static func doubleValue(_ value: Any?) -> Double? {
-        if let value = value as? Double { return value }
-        if let value = value as? Int { return Double(value) }
-        if let value = value as? NSNumber { return value.doubleValue }
-        return nil
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let scalar = number.doubleValue
+        return scalar.isFinite ? scalar : nil
     }
 }
