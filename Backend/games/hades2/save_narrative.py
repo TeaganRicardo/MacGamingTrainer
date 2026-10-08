@@ -4,6 +4,7 @@ Only explicit, source-verified records receive write authority. The generic
 Advanced tree remains the read-only escape hatch for everything else.
 """
 from .localization import official_display_names
+from .save_native_identities import QUEST_IDS
 from .save_document import LuaTable
 
 
@@ -114,13 +115,16 @@ def rows(root, domain, language="zh-CN", game_path=None):
         names = set(k for k, _ in statuses.entries() if isinstance(k, str))
         official = official_display_names(names, language, game_path=game_path)
         english = official if language == "en" else official_display_names(names, "en", game_path=game_path)
+        completed = state.get("QuestsCompleted")
         for name in sorted(names):
             status = statuses.get(name)
             if status not in _QUEST_STATUSES:
                 continue
             label = official.get(name) or (("任务 · " if language == "zh-CN" else "Quest · ") + name)
             en = english.get(name) or ("Quest · " + name)
-            editable = status != "CashedOut"
+            editable = (status != "CashedOut" and name in QUEST_IDS
+                        and isinstance(completed, LuaTable)
+                        and completed.get(name) in (None, True, False))
             result.append(_row(
                 entry_id="quest:" + name, domain="progression", key=name,
                 path=["GameState", "QuestStatus", name],
@@ -183,7 +187,12 @@ def apply_intent(root, intent):
         status = _table(state, "QuestStatus")
         if status.get(name) == "CashedOut":
             raise ValueError("Save Editor cannot rewrite a claimed quest reward.")
+        completed = _table(state, "QuestsCompleted")
         status[name] = after
+        if after == "Complete":
+            completed[name] = True
+        else:
+            completed.pop(name, None)
     else:
         raise ValueError("Save Editor narrative mutation is unknown.")
 
@@ -204,5 +213,18 @@ def linked_changes(root, intents):
                     "id": "linked:dialogue:" + name, "domain": "dialogue", "rawId": name,
                     "name": "TextLinesChoiceRecord · " + name,
                     "operation": "unset", "before": before, "after": None,
+                })
+        if intent["id"].startswith("quest:"):
+            name = intent["rawId"]
+            completed = _table(state, "QuestsCompleted")
+            before = completed.get(name)
+            after = True if intent["after"] == "Complete" else None
+            if before != after:
+                changes.append({
+                    "id": "linked:quest:" + name + ":completed",
+                    "domain": "progression", "rawId": "QuestsCompleted/" + name,
+                    "name": "Quest completion record · " + name,
+                    "operation": "set" if after is True else "unset",
+                    "before": before, "after": after,
                 })
     return changes
