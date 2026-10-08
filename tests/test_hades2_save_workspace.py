@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.save_restore import SaveBusyError
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -164,5 +165,44 @@ for entry_id, operation, value in (
         pass
     else:
         raise AssertionError("unsupported Save Editor mutation was accepted")
+
+# Version-pinned sessions may be prepared while Hades is running, but Apply
+# is cold-only. A newer game-authored save is intentionally preserved as the
+# recovery snapshot, then replaced by the edited originally-read document.
+_base, pinned_saves, pinned_service = _environment(
+    "pinned",
+    running=True,
+    resources={"MetaCurrency": 123.0, "GiftPoints": 9.0},
+    extra={"KeepMe": "A"},
+)
+pinned = Hades2SaveWorkspace.open(pinned_service)
+pinned.stage("resource:MetaCurrency", "set", 500)
+try:
+    pinned.apply()
+except SaveBusyError:
+    pass
+else:
+    raise AssertionError("running Save Editor apply was not refused")
+assert pinned.review()["count"] == 1
+
+newer = _save_bytes(
+    300,
+    resources={"MetaCurrency": 777.0, "GiftPoints": 88.0},
+    extra={"KeepMe": "B"},
+)
+pinned_path = pinned_saves / "Profile1.sav"
+pinned_path.write_bytes(newer)
+pinned_service.target_running_probe = lambda: False
+applied = pinned.apply()
+assert applied["applied"] is True
+assert applied["previousSnapshotId"]
+assert pinned.review() == {"count": 0, "changes": []}
+
+installed = Hades2SaveDocument.load(pinned_path)
+assert installed.lua_state["GameState"]["Resources"]["MetaCurrency"] == 500.0
+assert installed.lua_state["GameState"]["Resources"]["GiftPoints"] == 9.0
+assert installed.lua_state["GameState"]["UnknownFutureField"]["KeepMe"] == "A"
+previous = pinned_service.store.load_verified_snapshot(applied["previousSnapshotId"])
+assert (previous["root"] / "files/main/Profile1.sav").read_bytes() == newer
 
 print("hades2_save_workspace_ok")
