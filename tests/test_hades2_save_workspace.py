@@ -706,4 +706,44 @@ assert objective["editable"] is True
 # provide an actual structured summary rather than a permanent empty list.
 assert Hades2SaveWorkspace.open(obj_service).query(domain="overview")["total"] >= 1
 
+
+# GameState.Resources may omit a zero-valued native resource. That resource
+# remains a valid writable identity even when not yet present in the save.
+_base, sparse_saves, sparse_service = _environment(
+    "sparse-resources", resources={"MetaCurrency": 1.0, "UnmodeledCurrency": 11.0}
+)
+sparse = Hades2SaveWorkspace.open(sparse_service)
+all_rows = sparse.query(domain="resources", limit=200)["items"]
+dream = next(row for row in all_rows if row["id"] == "resource:DreamPoints")
+assert dream["value"] == 0 and dream["editable"] is True
+assert not any(row["id"] == "resource:UnmodeledCurrency" for row in all_rows)
+sparse.stage("resource:DreamPoints", "set", 7)
+assert sparse.review()["changes"][0]["before"] == 0
+sparse.apply()
+sparse_state = Hades2SaveDocument.load(sparse_saves / "Profile1.sav").lua_state["GameState"]
+assert sparse_state["Resources"]["DreamPoints"] == 7
+assert sparse_state["Resources"]["UnmodeledCurrency"] == 11
+
+# A rejected stage must not poison the mutation queue. Native malformed
+# historical completion data must not be used for quest mutation.
+malformed_history = {
+    "QuestStatus": _table({"QuestHelpOdysseus": "Unlocked"}),
+    "QuestsCompleted": _table({"QuestHelpOdysseus": 3.0}),
+    "Flags": _table({}),
+    "TextLinesRecord": _table({}),
+}
+_base, invalid_saves, invalid_service = _environment("bad-quest-history", state=malformed_history)
+invalid_editor = Hades2SaveWorkspace.open(invalid_service)
+try:
+    invalid_editor.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
+except ValueError:
+    pass
+else:
+    raise AssertionError("malformed completed quest record became writable")
+assert invalid_editor.review() == {"count": 0, "changes": []}
+invalid_editor.stage("resource:MetaCurrency", "set", 17)
+assert invalid_editor.review()["count"] == 1
+invalid_editor.cancel()
+assert invalid_editor.review() == {"count": 0, "changes": []}
+
 print("hades2_save_workspace_ok")
