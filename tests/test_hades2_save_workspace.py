@@ -511,10 +511,10 @@ except ValueError:
     pass
 else:
     raise AssertionError("unverified dialogue reset accepted")
-json.dumps(nested_workspace.review())
-nested_workspace.apply()
+assert nested_workspace.review() == {"count": 0, "changes": []}
+json.dumps(nested_workspace.query(domain="dialogue")["items"])
 nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
-assert nested_game["TextLinesChoiceRecord"].get("ChoiceScene") is None
+assert nested_game["TextLinesChoiceRecord"]["ChoiceScene"]["ChoiceIndex"] == 2.0
 assert nested_game["QuestStatus"]["QuestC"] == "Unlocked"
 
 # WeaponsUnlocked is authoritative for ownership. Shop purchases also
