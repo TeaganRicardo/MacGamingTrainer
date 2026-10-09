@@ -505,7 +505,12 @@ nested_state = {
 }
 _base, nested_saves, nested_service = _environment("nested-dialogue", state=nested_state)
 nested_workspace = Hades2SaveWorkspace.open(nested_service)
-nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+try:
+    nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+except ValueError:
+    pass
+else:
+    raise AssertionError("unverified dialogue reset accepted")
 json.dumps(nested_workspace.review())
 nested_workspace.apply()
 nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
