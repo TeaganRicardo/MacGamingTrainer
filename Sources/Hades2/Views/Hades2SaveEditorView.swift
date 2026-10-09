@@ -40,7 +40,11 @@ struct Hades2SaveEditorView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                editorList
+                if model.selectedDomain == .investigate {
+                    investigationWorkbench
+                } else {
+                    editorList
+                }
                 pagingControls
                 reviewPanel
             }
@@ -125,6 +129,22 @@ struct Hades2SaveEditorView: View {
             .textFieldStyle(.roundedBorder)
             .onSubmit { model.submitSearch() }
 
+            if model.selectedDomain == .investigate {
+                Picker(
+                    text("hades2.saveEditor.investigate.all"),
+                    selection: Binding(
+                        get: { model.investigationFilter },
+                        set: { model.setInvestigationFilter($0) }
+                    )
+                ) {
+                    ForEach(["all", "recorded", "notRecorded", "ambiguous", "unknown"], id: \.self) { value in
+                        Text(text("hades2.saveEditor.investigate." + value)).tag(value)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 145)
+            }
+
             Button {
                 model.submitSearch()
             } label: {
@@ -144,6 +164,7 @@ struct Hades2SaveEditorView: View {
         case .resources: return text("hades2.saveEditor.domain.resources")
         case .playerStats: return text("hades2.saveEditor.domain.playerStats")
         case .progression: return text("hades2.saveEditor.domain.progression")
+        case .investigate: return text("hades2.saveEditor.domain.investigate")
         case .dialogue: return text("hades2.saveEditor.domain.dialogue")
         case .flags: return text("hades2.saveEditor.domain.flags")
         case .relationships: return text("hades2.saveEditor.domain.relationships")
@@ -184,6 +205,142 @@ struct Hades2SaveEditorView: View {
         case .number(let value): return String(value)
         case .boolean(let value): return value ? "true" : "false"
         }
+    }
+
+    @ViewBuilder
+    private var investigationWorkbench: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if model.investigationSourceStatus == "missing" || model.investigationSourceStatus == "mismatch" {
+                Text(text("hades2.saveEditor.investigate." + model.investigationSourceStatus))
+                    .font(.caption)
+                    .foregroundStyle(theme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(alignment: .top, spacing: 12) {
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach(model.items) { entry in
+                            Button {
+                                model.inspect(entry)
+                            } label: {
+                                TrainerListCard {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(entry.displayName)
+                                            .font(.subheadline.weight(.semibold))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        Text(text("hades2.saveEditor.investigate." + (entry.investigationStatus ?? "unknown")))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if let excerpt = entry.investigationSnippet, !excerpt.isEmpty {
+                                            Text(excerpt)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(2)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(entry.displayName)
+                            .accessibilityHint(text("hades2.saveEditor.investigate.details"))
+                        }
+                    }
+                }
+                .frame(minWidth: 290, maxWidth: 360, minHeight: 300, maxHeight: 460)
+
+                if let detail = model.investigationDetail {
+                    ScrollView {
+                        investigationDetailView(detail)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 300, maxHeight: 460)
+                } else {
+                    Text(text("hades2.saveEditor.investigate.select"))
+                        .foregroundStyle(.secondary)
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                }
+            }
+        }
+    }
+
+    private func investigationDetailView(_ detail: Hades2SaveInvestigationDetail) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(detail.scene)
+                .font(.headline)
+                .textSelection(.enabled)
+            Text(text("hades2.saveEditor.investigate." + detail.status))
+                .font(.subheadline)
+            Text(text("hades2.saveEditor.investigate.future"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if detail.canStage && !detail.stageID.isEmpty {
+                Button(text("hades2.saveEditor.investigate.clearRecord")) {
+                    model.stage(entryID: detail.stageID, operation: "set", value: false)
+                }
+                .disabled(model.busy)
+            } else {
+                Text(text("hades2.saveEditor.investigate.readOnly"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text(text("hades2.saveEditor.investigate." + (detail.sourceStatus == "available" ? detail.status + "Reason" : "sourceReason")))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if detail.sourceResolution == "unresolved" {
+                Text(text("hades2.saveEditor.investigate.sourceUnresolved"))
+                    .font(.caption)
+                    .foregroundStyle(theme.warning)
+            }
+            if !detail.definitions.isEmpty {
+                Text(text("hades2.saveEditor.investigate.authored"))
+                    .font(.subheadline.weight(.semibold))
+                ForEach(detail.definitions) { source in
+                    DisclosureGroup("\(source.file):\(source.line)") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if source.partner {
+                                Text("Partner / CopyDataFromPartner")
+                                    .font(.caption)
+                            }
+                            ForEach(source.requirements) { requirement in
+                                DisclosureGroup("\(text("hades2.saveEditor.investigate.conditions")) · \(requirement.line)") {
+                                    Hades2NarrativeConditionView(node: requirement.tree, label: self.text)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.caption)
+                }
+            }
+            Text(text("hades2.saveEditor.investigate.lines"))
+                .font(.subheadline.weight(.semibold))
+            ForEach(detail.lines) { line in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(line.speaker.isEmpty ? "Cue" : line.speaker) · \(line.cueID)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    let official = localization.language == .en ? line.english : line.chinese
+                    if official.isEmpty {
+                        Text(text("hades2.saveEditor.investigate.untranslated"))
+                            .font(.caption)
+                            .foregroundStyle(theme.warning)
+                    } else {
+                        ForEach(official, id: \.self) { lineText in
+                            Text(lineText)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
     }
 
     @ViewBuilder
@@ -429,5 +586,33 @@ struct Hades2SaveEditorView: View {
         guard let value else { return "—" }
         if let bool = value.base as? Bool { return bool ? "true" : "false" }
         return String(describing: value.base)
+    }
+}
+
+private struct Hades2NarrativeConditionView: View {
+    let node: Hades2NarrativeCondition
+    let label: (String, [String]) -> String
+
+    var body: some View {
+        if node.children.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(node.label)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                Text(label("hades2.saveEditor.investigate.path." + node.evidence, []))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            DisclosureGroup(node.label) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(node.children) { child in
+                        Hades2NarrativeConditionView(node: child, label: label)
+                    }
+                }
+            }
+            .font(.caption)
+        }
     }
 }
