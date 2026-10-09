@@ -65,6 +65,16 @@ def objective_ids(source):
     return sorted(set(direct) | set(referenced))
 
 
+def story_reset_text_ids(source):
+    section = re.search(r"(?ms)^\s*TextLines\s*=\s*\{(.*?)^\s*\},", source)
+    if section is None:
+        raise ValueError("StoryResetData.TextLines not found")
+    return sorted(set(re.findall(
+        r'(?m)^\s*"([A-Za-z0-9_]+)"\s*,?\s*$',
+        section.group(1),
+    )))
+
+
 def npc_ids(scripts):
     keys = set()
     source_hash = hashlib.sha256()
@@ -91,6 +101,10 @@ def render(items):
     return "\n".join(lines)
 
 
+def render_words(items):
+    return "\n".join(" ".join(items[start:start + 8]) for start in range(0, len(items), 8))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scripts", type=Path, help="Installed Content/Scripts directory")
@@ -101,14 +115,17 @@ def main():
     quests_source, quest_hash = read(args.scripts / "QuestData.lua")
     resources_source, resource_hash = read(args.scripts / "ResourceData.lua")
     objectives_source, objective_hash = read(args.scripts / "ObjectiveData.lua")
+    reset_source, reset_hash = read(args.scripts / "StoryResetData.lua")
     quests = quest_ids(quests_source)
     resources = resource_ids(resources_source)
     objectives = objective_ids(objectives_source)
+    reset_text = story_reset_text_ids(reset_source)
     npcs, npc_hash = npc_ids(args.scripts)
 
     for label, values in (
         ("quests", quests), ("resources", resources),
         ("objectives", objectives), ("NPCs", npcs),
+        ("story-reset dialogue", reset_text),
     ):
         if not values or len(values) != len(set(values)):
             raise ValueError("Missing or duplicated native " + label + " identity")
@@ -128,6 +145,15 @@ def main():
     print(
         f'\nNPC_INTERACTION_IDS = frozenset((\n{render(npcs)}\n))\n\n'
         f'OBJECTIVE_IDS = frozenset((\n{render(objectives)}\n))'
+    )
+
+    print(
+        "\n# Native StoryResetData.TextLines from target "
+        f"{args.version} / Steam {args.steam_build}.\n"
+        f"# StoryResetData.lua SHA-256 {reset_hash}\n"
+        "# A native-authored reset target is necessary, not sufficient, to authorize an\n"
+        "# individual edit: companion narrative/gift/run owners are validated separately.\n"
+        f'STORY_RESET_TEXT_IDS = frozenset("""\n{render_words(reset_text)}\n""".split())'
     )
 
 
