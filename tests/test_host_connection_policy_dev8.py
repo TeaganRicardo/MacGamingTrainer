@@ -43,6 +43,28 @@ if policy.consumeAutomaticConnectIfEligible(backendAvailable: true, busy: false,
     fail("launch connect was not one-shot")
 }
 
+// A launch notification publishes running and launchGeneration together.
+// Host may observe running first; a single generation-aware observation must
+// preserve the launch grant before it consumes the pending connect intent.
+var coalescedLaunch = TrainerConnectionPolicy()
+coalescedLaunch.observeTarget(running: true, launchGeneration: 0)
+if coalescedLaunch.backgroundConnectionAllowed {
+    fail("foreground discovery was misidentified as a true launch")
+}
+coalescedLaunch.observeTarget(running: true, launchGeneration: 1)
+if !coalescedLaunch.backgroundConnectionAllowed {
+    fail("launch generation was not staged before presence-based auto-connect")
+}
+if !coalescedLaunch.consumeAutomaticConnectIfEligible(
+    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
+) {
+    fail("staged launch did not preserve its single connect opportunity")
+}
+coalescedLaunch.observeTarget(running: true, launchGeneration: 1)
+if coalescedLaunch.backgroundConnectionAllowed || coalescedLaunch.connectRequested {
+    fail("duplicate launch observation granted another attach")
+}
+
 // Merely discovering an already-running target is not a true launch and must
 // never grant background debugger permission. Only the explicit launch event
 // may do so.
