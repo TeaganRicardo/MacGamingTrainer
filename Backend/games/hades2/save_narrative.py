@@ -4,7 +4,7 @@ Only explicit, source-verified records receive write authority. The generic
 Advanced tree remains the read-only escape hatch for everything else.
 """
 from .localization import official_display_names
-from .save_native_ids import QUEST_IDS
+from .save_native_ids import QUEST_IDS, STORY_RESET_TEXT_IDS
 from .save_document import LuaTable
 
 
@@ -55,6 +55,69 @@ def _read_bool(table, identifier):
     if value is not None and type(value) is not bool:
         raise ValueError("Save Editor narrative flag is not boolean.")
     return bool(value)
+
+
+def _dialogue_authority(root):
+    """Validate native dialogue companion owners before inferring absence."""
+    state = _game_state(root)
+    gift_history = state.get("GiftTextLinesOrderRecord")
+    choice_history = state.get("TextLinesChoiceRecord")
+    if not isinstance(gift_history, LuaTable) or not isinstance(choice_history, LuaTable):
+        raise ValueError("Save Editor dialogue companion history is unavailable.")
+    gifted_ids = set()
+    for person, history in gift_history.entries():
+        if type(person) is not str or not isinstance(history, LuaTable):
+            raise ValueError("Save Editor gift dialogue history is malformed.")
+        for index, line in history.entries():
+            if (type(index) not in (int, float) or index < 1 or
+                    not float(index).is_integer() or type(line) is not str):
+                raise ValueError("Save Editor gift dialogue history is malformed.")
+            gifted_ids.add(line)
+
+    # PlayTextLine and native narrative choice selection write both the
+    # persistent and the current-run owners. A reset must account for both.
+    owners = [("GameState.TextLinesChoiceRecord", choice_history, str)]
+    run = root.get("CurrentRun")
+    if run is not None:
+        if not isinstance(run, LuaTable):
+            raise ValueError("Save Editor current-run dialogue history is malformed.")
+        for field, expected_type in (
+            ("TextLinesRecord", bool),
+            ("HubTextLinesRecord", bool),
+            ("TextLinesChoiceRecord", str),
+        ):
+            value = run.get(field)
+            if value is not None:
+                if not isinstance(value, LuaTable):
+                    raise ValueError("Save Editor current-run dialogue history is malformed.")
+                owners.append(("CurrentRun." + field, value, expected_type))
+        room = run.get("CurrentRoom")
+        if room is not None:
+            if not isinstance(room, LuaTable):
+                raise ValueError("Save Editor current-room dialogue history is malformed.")
+            room_lines = room.get("TextLinesRecord")
+            if room_lines is not None:
+                if not isinstance(room_lines, LuaTable):
+                    raise ValueError("Save Editor current-room dialogue history is malformed.")
+                owners.append(("CurrentRun.CurrentRoom.TextLinesRecord", room_lines, bool))
+    return gifted_ids, owners
+
+
+def _validated_dialogue_owners(root, name, authority):
+    # StoryResetData.TextLines is a native-authored reset boundary. Neither a
+    # boolean observation nor missing gift evidence grants write authority.
+    if name not in STORY_RESET_TEXT_IDS:
+        raise ValueError("Save Editor dialogue identity is not a native reset target.")
+    if _table(_game_state(root), "TextLinesRecord").get(name) is not True:
+        raise ValueError("Save Editor dialogue must be a played record.")
+    gifted_ids, owners = authority
+    if name in gifted_ids:
+        raise ValueError("Save Editor gift-linked dialogue cannot be reset alone.")
+    for _owner_name, record, expected_type in owners:
+        before = record.get(name)
+        if before is not None and type(before) is not expected_type:
+            raise ValueError("Save Editor linked dialogue history is malformed.")
+    return owners
 
 
 def _row(*, entry_id, domain, key, path, label, english, value,
