@@ -342,6 +342,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             runLogWatcher.start()
             status = "waiting"
             scene = "loading"
+            // Backend recovery may have delayed this auto-connect until after
+            // the game's native ready event. Carry its observed signal forward
+            // rather than waiting for another reset that may never happen.
+            if pendingRunReadySignal {
+                launchAttachGate.observeRuntimeReady()
+            }
             consumeDeferredLaunchAttachIfPossible()
             return
         }
@@ -365,8 +371,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard !exiting else { return }
         switch event {
         case .mainMenu, .runtimeReset:
-            guard connected else { return }
+            // The native log watcher still owns generation evidence while
+            // detached, so stale readiness cannot leak into a newer launch.
             pendingRunReadySignal = false
+            guard connected else { return }
             invalidatePendingMutations()
             status = "waiting"
             scene = event == .mainMenu ? "main_menu" : "loading"
@@ -384,12 +392,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 send(.runtimeReset, title: "hades2.op.recordRuntimeReset", announceSuccess: false)
             }
         case .runtimeReady:
+            // Remember readiness even before Host/backend has delivered the
+            // deferred launch intent. This signal is reset by the next native
+            // main-menu/runtime-reset event or by a fresh manual connection.
+            pendingRunReadySignal = true
             launchAttachGate.observeRuntimeReady()
             if launchAttachGate.isPending {
                 consumeDeferredLaunchAttachIfPossible()
                 return
             }
-            pendingRunReadySignal = true
             guard connected else { return }
             consumeRunLogReadySignalIfPossible()
         }
