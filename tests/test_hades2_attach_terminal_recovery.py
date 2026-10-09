@@ -31,10 +31,16 @@ for line in sys.stdin:
     req = json.loads(line)
     method = req["method"]
     if method == "transport.attach":
+        pid = req["params"]["pid"]
         if mode == "blocked_initial_attach" and not marker.exists():
             marker.write_text("blocked", encoding="utf-8")
+            # Native attach has happened but its acknowledgment is lost.
             time.sleep(0.5)
-        pid = req["params"]["pid"]
+        elif mode == "blocked_reattach":
+            if marker.exists():
+                time.sleep(0.5)
+            else:
+                marker.write_text("first-attach-ok", encoding="utf-8")
         result = True
     elif method == "hello":
         result = {"protocolVersion": 1, "pythonVersion": "fixture"}
@@ -90,6 +96,17 @@ def run_case(root, mode):
                 transport.attach(4242)
                 assert len(launches) == 2, "new explicit attach reused a dead worker"
                 assert transport.pid == 4242 and transport.alive()
+            elif mode == "blocked_reattach":
+                transport.attach(4242)
+                assert transport.pid == 4242
+                for _ in range(2):
+                    try:
+                        transport.attach(4242)
+                    except AdapterError as error:
+                        assert error.code == "restart_required", error.code
+                    else:
+                        raise AssertionError("known attached PID escaped a lost second attach")
+                assert len(launches) == 1, "existing attachment was silently reset"
             else:
                 transport.attach(4242)
                 try:
@@ -113,6 +130,7 @@ def run_case(root, mode):
 with tempfile.TemporaryDirectory(prefix="mgt-attach-terminal-") as temporary:
     root = Path(temporary)
     run_case(root / "attach", "blocked_initial_attach")
+    run_case(root / "reattach", "blocked_reattach")
     run_case(root / "mutation", "blocked_mutation")
 
 print("hades2_attach_terminal_recovery_ok")
