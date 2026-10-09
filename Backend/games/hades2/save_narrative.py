@@ -57,27 +57,56 @@ def _read_bool(table, identifier):
     return bool(value)
 
 
+def _dialogue_unique_value(owner, name):
+    """Resolve exactly one string key before a first-match LuaTable mutation."""
+    found = False
+    value = None
+    for key, entry in owner.entries():
+        if type(key) is str and key == name:
+            if found:
+                raise ValueError("Save Editor dialogue owner has duplicate keys.")
+            found = True
+            value = entry
+    return value
+
+
 def _dialogue_authority(root):
     """Validate native dialogue companion owners before inferring absence."""
+    # The codec preserves duplicate entries for lossless reads. Every owner
+    # selector and target key must therefore be unique before any reset.
+    _dialogue_unique_value(root, "GameState")
+    _dialogue_unique_value(root, "CurrentRun")
     state = _game_state(root)
-    gift_history = state.get("GiftTextLinesOrderRecord")
-    choice_history = state.get("TextLinesChoiceRecord")
-    if not isinstance(gift_history, LuaTable) or not isinstance(choice_history, LuaTable):
+    lines = _dialogue_unique_value(state, "TextLinesRecord")
+    gift_history = _dialogue_unique_value(state, "GiftTextLinesOrderRecord")
+    choice_history = _dialogue_unique_value(state, "TextLinesChoiceRecord")
+    if not all(isinstance(owner, LuaTable)
+               for owner in (lines, gift_history, choice_history)):
         raise ValueError("Save Editor dialogue companion history is unavailable.")
     gifted_ids = set()
+    seen_people = set()
     for person, history in gift_history.entries():
         if type(person) is not str or not isinstance(history, LuaTable):
             raise ValueError("Save Editor gift dialogue history is malformed.")
+        if person in seen_people:
+            raise ValueError("Save Editor gift dialogue owner has duplicate keys.")
+        seen_people.add(person)
+        seen_indexes = set()
         for index, line in history.entries():
             if (type(index) not in (int, float) or index < 1 or
                     not float(index).is_integer() or type(line) is not str):
                 raise ValueError("Save Editor gift dialogue history is malformed.")
+            # Lua numeric keys share one identity for 1 and 1.0.
+            numeric_key = float(index)
+            if numeric_key in seen_indexes:
+                raise ValueError("Save Editor gift dialogue history has duplicate indexes.")
+            seen_indexes.add(numeric_key)
             gifted_ids.add(line)
 
     # PlayTextLine and native narrative choice selection write both the
     # persistent and the current-run owners. A reset must account for both.
     owners = [("GameState.TextLinesChoiceRecord", choice_history, str)]
-    run = root.get("CurrentRun")
+    run = _dialogue_unique_value(root, "CurrentRun")
     if run is not None:
         if not isinstance(run, LuaTable):
             raise ValueError("Save Editor current-run dialogue history is malformed.")
@@ -86,16 +115,16 @@ def _dialogue_authority(root):
             ("HubTextLinesRecord", bool),
             ("TextLinesChoiceRecord", str),
         ):
-            value = run.get(field)
+            value = _dialogue_unique_value(run, field)
             if value is not None:
                 if not isinstance(value, LuaTable):
                     raise ValueError("Save Editor current-run dialogue history is malformed.")
                 owners.append(("CurrentRun." + field, value, expected_type))
-        room = run.get("CurrentRoom")
+        room = _dialogue_unique_value(run, "CurrentRoom")
         if room is not None:
             if not isinstance(room, LuaTable):
                 raise ValueError("Save Editor current-room dialogue history is malformed.")
-            room_lines = room.get("TextLinesRecord")
+            room_lines = _dialogue_unique_value(room, "TextLinesRecord")
             if room_lines is not None:
                 if not isinstance(room_lines, LuaTable):
                     raise ValueError("Save Editor current-room dialogue history is malformed.")
@@ -108,13 +137,13 @@ def _validated_dialogue_owners(root, name, authority):
     # boolean observation nor missing gift evidence grants write authority.
     if name not in STORY_RESET_TEXT_IDS:
         raise ValueError("Save Editor dialogue identity is not a native reset target.")
-    if _table(_game_state(root), "TextLinesRecord").get(name) is not True:
+    if _dialogue_unique_value(_table(_game_state(root), "TextLinesRecord"), name) is not True:
         raise ValueError("Save Editor dialogue must be a played record.")
     gifted_ids, owners = authority
     if name in gifted_ids:
         raise ValueError("Save Editor gift-linked dialogue cannot be reset alone.")
     for _owner_name, record, expected_type in owners:
-        before = record.get(name)
+        before = _dialogue_unique_value(record, name)
         if before is not None and type(before) is not expected_type:
             raise ValueError("Save Editor linked dialogue history is malformed.")
     return owners
@@ -155,9 +184,15 @@ def rows(root, domain, language="zh-CN", game_path=None):
             authority = _dialogue_authority(root)
         except ValueError:
             authority = None  # Keep the recorded rows inspectable, but read-only.
+        seen_lines = set()
         for name, value in lines.entries():
             if not isinstance(name, str) or type(value) is not bool:
                 continue
+            # Duplicate physical keys retain one read-only semantic row; the
+            # full underlying entries remain inspectable in Advanced.
+            if name in seen_lines:
+                continue
+            seen_lines.add(name)
             # A gift event also changes GiftRecord/order/choice history. It
             # cannot safely be reset by treating one text flag as independent.
             writable = False
