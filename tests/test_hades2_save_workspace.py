@@ -832,5 +832,14 @@ _base, refusal_saves, refusal_service = _environment("dialogue-refusal", state=i
 refusal = Hades2SaveWorkspace.open(refusal_service)
 refusal.stage("resource:MetaCurrency", "set", 99)
 refusal.stage("dialogue:HecatePostTrueEnding01", "set", False)
+source_bytes = (refusal_saves / "Profile1.sav").read_bytes()
+refusal.document.lua_state["GameState"]["GiftTextLinesOrderRecord"] = "invalid"
+try:
+    refusal.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("invalid narrative batch wrote to Core Save")
+assert (refusal_saves / "Profile1.sav").read_bytes() == source_bytes
 
 print("hades2_save_workspace_ok")
