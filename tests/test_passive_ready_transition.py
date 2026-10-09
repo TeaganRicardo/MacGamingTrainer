@@ -33,8 +33,7 @@ launch_start = host.index('.onChange(of: targetMonitor.launchGeneration)')
 launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
 launch_block = host[launch_start:launch_end]
 for token in (
-    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
-    'connectionPolicy.targetLaunched()',
+    'connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)',
     'reconcileAutomaticConnection()',
 ):
     assert token in launch_block, token
@@ -67,13 +66,13 @@ foreground_end = host.index('\n    }\n\n    private func handlePrimaryConnection
 host_foreground = host[foreground_start:foreground_end]
 for token in (
     'targetMonitor.refresh()',
-    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
+    'connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)',
     'reconcileAutomaticConnection()',
     'model.hostDidBecomeActive()',
 ):
     assert token in host_foreground, token
-assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.targetStateChanged')
-assert host_foreground.index('connectionPolicy.targetStateChanged') < host_foreground.index('reconcileAutomaticConnection()')
+assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.observeTarget')
+assert host_foreground.index('connectionPolicy.observeTarget') < host_foreground.index('reconcileAutomaticConnection()')
 
 # App activation is a generic optional lifecycle hook. Hades uses it only for a
 # single foreground refresh when an existing connection is still waiting.
@@ -95,7 +94,7 @@ for token in (
 
 # Automatic connection carries the true-launch reason through the generic Host
 # contract. Game modules that do not care keep the default toggle behavior;
-# Hades uses the launch reason only to defer its first expensive runtime probe.
+# Hades defers the actual debugger attach until a native runtime-ready event.
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in contract
 assert 'connectAutomaticallyFromHost(targetJustLaunched:' in host
 automatic_start = host.index('    private func reconcileAutomaticConnection()')
@@ -105,8 +104,9 @@ assert automatic_block.index('let targetJustLaunched = connectionPolicy.backgrou
 assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)' in automatic_block
 
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
-assert 'let canDeferRuntimeProbe = targetJustLaunched && runLogWatcher.canObserveLifecycle' in model
-assert 'toggleConnection(probeRuntime: !canDeferRuntimeProbe)' in model
+assert 'launchAttachGate.deferUntilReady(' in model
+assert 'consumeDeferredLaunchAttachIfPossible()' in model
+assert 'toggleConnection(probeRuntime: true)' in model
 assert 'case connect(probeRuntime: Bool)' in api
 assert '["probeRuntime": probeRuntime]' in api
 
