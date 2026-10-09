@@ -220,6 +220,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self?.handleRunLogEvent(event)
     }
     private var pendingRunReadySignal = false
+    private var launchAttachGate = Hades2LaunchAttachGate()
     private var activationGraceWorkItems: [Hades2FeatureKey: DispatchWorkItem] = [:]
     @Published private var activationGraceFeatures: Set<Hades2FeatureKey> = []
     private var hotkeys: GlobalHotkeys?
@@ -327,11 +328,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         Hades2SaveEditorModel(session: backendSession)
     }
 
-    func toggleConnectionFromHost() { toggleConnection(probeRuntime: true) }
+    func toggleConnectionFromHost() {
+        // A deliberate click overrides an unconsumed launch-time auto-attach.
+        launchAttachGate.cancel()
+        toggleConnection(probeRuntime: true)
+    }
 
     func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
-        let canDeferRuntimeProbe = targetJustLaunched && runLogWatcher.canObserveLifecycle
-        toggleConnection(probeRuntime: !canDeferRuntimeProbe)
+        if launchAttachGate.deferUntilReady(
+            targetJustLaunched: targetJustLaunched,
+            canObserveLifecycle: runLogWatcher.canObserveLifecycle
+        ) {
+            runLogWatcher.start()
+            status = "waiting"
+            scene = "loading"
+            consumeDeferredLaunchAttachIfPossible()
+            return
+        }
+        toggleConnection(probeRuntime: true)
     }
 
     func refreshFromHost() {
@@ -370,10 +384,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 send(.runtimeReset, title: "hades2.op.recordRuntimeReset", announceSuccess: false)
             }
         case .runtimeReady:
+            launchAttachGate.observeRuntimeReady()
+            if launchAttachGate.isPending {
+                consumeDeferredLaunchAttachIfPossible()
+                return
+            }
             pendingRunReadySignal = true
             guard connected else { return }
             consumeRunLogReadySignalIfPossible()
         }
+    }
+
+    private func consumeDeferredLaunchAttachIfPossible() {
+        guard launchAttachGate.consumeIfEligible(
+            backendAvailable: backendAvailable,
+            busy: busy,
+            connected: connected,
+            exiting: exiting
+        ) else { return }
+        // The game has finished an observed boot/reset load cycle, so the
+        // initial debugger attach and first runtime probe can now run together.
+        toggleConnection(probeRuntime: true)
     }
 
     private func consumeRunLogReadySignalIfPossible() {
@@ -435,6 +466,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 onStatusChange: { [weak self] status in
                     self?.applyBackendStatus(status)
                     if !status.busy {
+                        self?.consumeDeferredLaunchAttachIfPossible()
                         self?.consumeRunLogReadySignalIfPossible()
                     }
                 }
