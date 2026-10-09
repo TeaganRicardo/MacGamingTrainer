@@ -54,13 +54,18 @@ class UnsupportedHadesSaveVersionError(HadesSaveFormatError):
     """The save is not a supported Hades II SGB1 schema version."""
 
 
+def _lua_key_identity(key):
+    # Physical duplicate identity follows Lua semantics: numeric 1 and 1.0
+    # alias, while true and numeric 1 do not.
+    if type(key) is bool:
+        return ("boolean", key)
+    if isinstance(key, (int, float)):
+        return ("number", float(key))
+    return (type(key), key)
+
+
 def _same_lua_key(left, right):
-    # Lua booleans and numbers are distinct keys, unlike Python's True == 1.
-    if isinstance(left, bool) or isinstance(right, bool):
-        return type(left) is type(right) and left == right
-    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
-        return float(left) == float(right)
-    return type(left) is type(right) and left == right
+    return _lua_key_identity(left) == _lua_key_identity(right)
 
 
 class LuaTable(MutableMapping):
@@ -83,33 +88,41 @@ class LuaTable(MutableMapping):
         if self.array_size + self.hash_size != len(self._entries):
             raise HadesSaveFormatError("luabins table size does not match entry count")
 
-    def __getitem__(self, key):
-        for entry_key, value in self._entries:
+    def _index_for_key(self, key):
+        found = None
+        for index, (entry_key, _value) in enumerate(self._entries):
             if _same_lua_key(entry_key, key):
-                return value
-        raise KeyError(key)
+                if found is not None:
+                    raise ValueError("Save Editor ambiguous Lua table key: {!r}".format(key))
+                found = index
+        return found
+
+    def __getitem__(self, key):
+        index = self._index_for_key(key)
+        if index is None:
+            raise KeyError(key)
+        return self._entries[index][1]
 
     def __setitem__(self, key, value):
         if key is None or (isinstance(key, float) and key != key):
             raise TypeError("Lua table keys cannot be nil or NaN")
-        for index, (entry_key, _old_value) in enumerate(self._entries):
-            if _same_lua_key(entry_key, key):
-                self._entries[index] = (entry_key, value)
-                return
+        index = self._index_for_key(key)
+        if index is not None:
+            self._entries[index] = (self._entries[index][0], value)
+            return
         self._entries.append((key, value))
         self.hash_size += 1
 
     def __delitem__(self, key):
-        for index, (entry_key, _value) in enumerate(self._entries):
-            if _same_lua_key(entry_key, key):
-                was_array_entry = index < self.array_size
-                del self._entries[index]
-                if was_array_entry:
-                    self.array_size -= 1
-                else:
-                    self.hash_size -= 1
-                return
-        raise KeyError(key)
+        index = self._index_for_key(key)
+        if index is None:
+            raise KeyError(key)
+        was_array_entry = index < self.array_size
+        del self._entries[index]
+        if was_array_entry:
+            self.array_size -= 1
+        else:
+            self.hash_size -= 1
 
     def __iter__(self) -> Iterator:
         return (key for key, _value in self._entries)
@@ -119,6 +132,17 @@ class LuaTable(MutableMapping):
 
     def entries(self):
         return tuple(self._entries)
+
+    def physical_entries(self):
+        """Read-only indexed occurrences, including duplicate physical keys."""
+        counts = {}
+        for key, _value in self._entries:
+            identity = _lua_key_identity(key)
+            counts[identity] = counts.get(identity, 0) + 1
+        return tuple(
+            (index, key, value, counts[_lua_key_identity(key)] > 1)
+            for index, (key, value) in enumerate(self._entries)
+        )
 
     def __repr__(self):
         return "LuaTable(array_size={!r}, hash_size={!r}, entries={!r})".format(
