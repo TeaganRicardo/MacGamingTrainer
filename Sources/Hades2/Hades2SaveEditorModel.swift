@@ -88,6 +88,7 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let choiceNames: [String: String]
     let constraints: Hades2SaveEditorConstraints?
     let childCount: Int?
+    let pathAmbiguous: Bool
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -105,6 +106,7 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.choiceNames == rhs.choiceNames
             && lhs.constraints == rhs.constraints
             && lhs.childCount == rhs.childCount
+            && lhs.pathAmbiguous == rhs.pathAmbiguous
     }
 }
 
@@ -222,7 +224,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     func enterAdvanced(_ entry: Hades2SaveEditorEntry) {
         guard selectedDomain == .advanced,
               entry.domain == Hades2SaveEditorDomain.advanced.rawValue,
-              entry.childCount != nil
+              entry.childCount != nil,
+              !entry.pathAmbiguous
         else { return }
         advancedPath = entry.path
         search = ""
@@ -421,7 +424,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             choices: row["choices"] as? [String] ?? [],
             choiceNames: row["choiceNames"] as? [String: String] ?? [:],
             constraints: constraints,
-            childCount: intValue(row["childCount"])
+            childCount: intValue(row["childCount"]),
+            pathAmbiguous: row["pathAmbiguous"] as? Bool ?? false
         )
     }
 

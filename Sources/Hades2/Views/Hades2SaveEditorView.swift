@@ -290,6 +290,12 @@ struct Hades2SaveEditorView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if entry.pathAmbiguous {
+                    Text(text("hades2.saveEditor.ambiguousPath"))
+                        .font(.caption)
+                        .foregroundStyle(theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer()
                 if entry.childCount != nil {
                     Button {
@@ -298,7 +304,7 @@ struct Hades2SaveEditorView: View {
                         Image(systemName: "chevron.right")
                     }
                     .buttonStyle(.borderless)
-                    .disabled(model.busy)
+                    .disabled(model.busy || entry.pathAmbiguous)
                 }
             }
         }

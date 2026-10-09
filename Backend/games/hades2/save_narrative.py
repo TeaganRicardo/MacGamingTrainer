@@ -5,7 +5,7 @@ Advanced tree remains the read-only escape hatch for everything else.
 """
 from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, STORY_RESET_TEXT_IDS
-from .save_document import LuaTable
+from .save_document import AmbiguousLuaKeyError, LuaTable
 
 
 # Boolean records written/read directly by current-build Scripts/*Logic.lua.
@@ -168,6 +168,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
         for name, (group, zh, en) in _FLAG_DESCRIPTORS.items():
             try:
                 value = _read_bool(flags, name)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue  # Malformed flags remain accessible in Advanced.
             result.append(_row(
