@@ -32,6 +32,7 @@ def source_tree(folder):
   NemesisPostTrueEnding01 = {
     GameStateRequirements = {{PathTrue = {"CurrentRun", "TextLinesRecord", "TrueEndingFinale01"}}},
     { Cue = "/VO/Nemesis_0407", Text = "English authored line" },
+    { Cue = "/VO/Nemesis_0408", Text = "Second authored line" },
   },
   NemesisAboutChronosBossFights01 = {
     GameStateRequirements = {
@@ -64,6 +65,13 @@ def source_tree(folder):
   },
 }
 ''', encoding='utf-8')
+    (scripts / 'NPCData_Hermes.lua').write_text('''UnitSetData = {
+  HermesFieldAboutTyphon03 = {
+    { Cue = "/VO/MelinoeField_4215", Text = "Only unlocalized script text" },
+    -- { Cue = "/VO/DisabledHermes_0001", Text = "Commented out" },
+  },
+}
+''', encoding='utf-8')
     (scripts / 'NPCData_Hades.lua').write_text('''FirstOwner = {
   HadesWithPersephone01 = {Partner = "Persephone", { Cue = "/VO/Hades_0001" }},
 }
@@ -73,6 +81,7 @@ SecondOwner = {
 ''', encoding='utf-8')
     (english / '_NPCData_Nemesis.en.sjson').write_text('''{
  Texts = [
+  { Id = "Nemesis_0408" DisplayName = "Second authored line" Speaker = "Nemesis" Event = "NemesisPostTrueEnding01" }
   { Id = "Nemesis_0407" DisplayName = "My father has returned" Speaker = "Nemesis" Event = "NemesisPostTrueEnding01" }
   { Id = "Nemesis_0252" DisplayName = "Fought Chronos repeatedly" Speaker = "Nemesis" Event = "NemesisAboutChronosBossFights01" }
   // { Id = "Commented_01" DisplayName = "Not live" Event = "NemesisPostTrueEnding01" }
@@ -127,6 +136,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert finding.query(search='Nemesis', offset=1, limit=1, language='en', writable=set())['total'] == found['total']
 
     nemesis = finding.detail('NemesisPostTrueEnding01', 'en', set())
+    assert [item['cueId'] for item in nemesis['lines'][:2]] == ['Nemesis_0407', 'Nemesis_0408']
     assert nemesis['status'] == 'recorded' and nemesis['futureEligibility'] == 'unknown'
     n = flatten(nemesis['definitions'][0]['requirements'][0]['tree'])
     assert any('CurrentRun.TextLinesRecord.TrueEndingFinale01' in entry['text'] and entry['evidence'] == 'unknown' for entry in n)
@@ -147,10 +157,20 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert len(finding.detail('HadesWithPersephone01', 'en', set())['definitions']) == 2
     no_translation = finding.detail('HecateAboutTyphonFight03', 'zh-CN', set())['lines']
     assert len(no_translation) == 2 and all(not v['en'] and not v['zhCN'] for v in no_translation)
+    hermes_missing = finding.detail('HermesFieldAboutTyphon03', 'zh-CN', set())['lines']
+    assert [line['cueId'] for line in hermes_missing] == ['MelinoeField_4215']
+    assert not hermes_missing[0]['zhCN'] and not hermes_missing[0]['en']
 
     allowed = finding.query(search='NemesisPostTrueEnding01', offset=0, limit=10,
                             language='en', writable={'NemesisPostTrueEnding01'})['items'][0]
     assert allowed['canStage'] and allowed['stageID'] == 'dialogue:NemesisPostTrueEnding01'
+    duplicated = LuaTable(0, 2, [('NemesisPostTrueEnding01', True), ('NemesisPostTrueEnding01', False)])
+    conflicting_root = lua(GameState=lua(TextLinesRecord=duplicated))
+    conflict = NativeDialogueInvestigation(conflicting_root, game, expected_hash=checksum)
+    conflicted = conflict.query(search='NemesisPostTrueEnding01', offset=0, limit=20,
+                                language='en', writable={'NemesisPostTrueEnding01'})['items'][0]
+    assert conflicted['status'] == 'ambiguous' and not conflicted['canStage']
+    assert conflict.detail('NemesisPostTrueEnding01', 'en', {'NemesisPostTrueEnding01'})['canStage'] is False
     missing = NativeDialogueInvestigation(root, game / 'missing', expected_hash=checksum)
     assert missing.query(search='', offset=0, limit=10, language='en', writable={'NemesisPostTrueEnding01'})['items'][0]['canStage'] is False
     assert missing.native['status'] == 'missing'
