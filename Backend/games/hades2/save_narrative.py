@@ -237,17 +237,20 @@ def apply_intent(root, intent):
     prefix = intent["id"].partition(":")[0]
     name = intent["rawId"]
     after = intent["after"]
-    if prefix in ("flag", "dialogue"):
-        owner = _table(state, "Flags" if prefix == "flag" else "TextLinesRecord")
+    if prefix == "flag":
+        owner = _table(state, "Flags")
         if after:
             owner[name] = True
         else:
             owner.pop(name, None)
-            if prefix == "dialogue":
-                # One-time dialogue choice state belongs to the played line.
-                choices = state.get("TextLinesChoiceRecord")
-                if isinstance(choices, LuaTable):
-                    choices.pop(name, None)
+    elif prefix == "dialogue":
+        if after is not False:
+            raise ValueError("Save Editor dialogue reset requires an explicit false value.")
+        # Validate every linked owner before modifying this candidate document.
+        owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
+        _table(state, "TextLinesRecord").pop(name, None)
+        for _owner_name, record, _type in owners:
+            record.pop(name, None)
     elif prefix == "quest":
         if name not in QUEST_IDS:
             raise ValueError("Save Editor quest identity is unknown.")
