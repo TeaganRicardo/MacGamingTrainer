@@ -68,11 +68,11 @@ def objective_ids(source):
 def story_reset_text_ids(source):
     # This set is a necessary native-authored reset boundary, not a blanket
     # permission to clear dialogue without checking its other owners.
-    section = re.search(r"(?ms)^\\s*TextLines\\s*=\\s*\\{(.*?)^\\s*\\},", source)
+    section = re.search(r"(?ms)^\s*TextLines\s*=\s*\{(.*?)^\s*\},", source)
     if section is None:
         raise ValueError("StoryResetData.TextLines not found")
     return sorted(set(re.findall(
-        r'(?m)^\\s*"([A-Za-z0-9_]+)"\\s*,?\\s*
+        r'(?m)^\s*"([A-Za-z0-9_]+)"\s*,?\s*
     keys = set()
     source_hash = hashlib.sha256()
     files = sorted(scripts.glob("NPCData*.lua"))
@@ -99,7 +99,7 @@ def render(items):
 
 
 def render_words(items):
-    return "\\n".join(" ".join(items[start:start + 8]) for start in range(0, len(items), 8))
+    return "\n".join(" ".join(items[start:start + 8]) for start in range(0, len(items), 8))
 
 
 def main():
@@ -140,16 +140,16 @@ def main():
         f'RESOURCE_IDS = frozenset((\n{render(resources)}\n))'
     )
     print(
-        f'\\nNPC_INTERACTION_IDS = frozenset((\\n{render(npcs)}\\n))\\n\\n'
-        f'OBJECTIVE_IDS = frozenset((\\n{render(objectives)}\\n))'
+        f'\nNPC_INTERACTION_IDS = frozenset((\n{render(npcs)}\n))\n\n'
+        f'OBJECTIVE_IDS = frozenset((\n{render(objectives)}\n))'
     )
     print(
-        '\\n# Native StoryResetData.TextLines from target '
-        f'{args.version} / Steam {args.steam_build}.\\n'
-        f'# StoryResetData.lua SHA-256 {reset_hash}\\n'
-        '# A native-authored reset target is necessary, not sufficient, to authorize an\\n'
-        '# individual edit: companion narrative/gift/run owners are validated separately.\\n'
-        f'STORY_RESET_TEXT_IDS = frozenset("""\\n{render_words(reset_text)}\\n""".split())'
+        '\n# Native StoryResetData.TextLines from target '
+        f'{args.version} / Steam {args.steam_build}.\n'
+        f'# StoryResetData.lua SHA-256 {reset_hash}\n'
+        '# A native-authored reset target is necessary, not sufficient, to authorize an\n'
+        '# individual edit: companion narrative/gift/run owners are validated separately.\n'
+        f'STORY_RESET_TEXT_IDS = frozenset("""\n{render_words(reset_text)}\n""".split())'
     )
 
 
