@@ -821,4 +821,16 @@ assert persisted["NPCInteractions"]["FutureUnit"] == 5
 assert persisted["SpecialInteractRecord"]["FutureUnit"] == 2
 assert persisted["ObjectivesCompleted"]["UnknownObjective"] == 4
 
+# A linked narrative provenance failure must refuse a cross-domain apply.
+invalid_owner_state = {
+    "Flags": _table({}),
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True}),
+    "TextLinesChoiceRecord": _table({}),
+    "GiftTextLinesOrderRecord": _table({}),
+}
+_base, refusal_saves, refusal_service = _environment("dialogue-refusal", state=invalid_owner_state)
+refusal = Hades2SaveWorkspace.open(refusal_service)
+refusal.stage("resource:MetaCurrency", "set", 99)
+refusal.stage("dialogue:HecatePostTrueEnding01", "set", False)
+
 print("hades2_save_workspace_ok")
