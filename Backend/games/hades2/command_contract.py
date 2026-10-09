@@ -45,7 +45,10 @@ def _connect(raw):
     probe_runtime = params.get("probeRuntime", True)
     if type(probe_runtime) is not bool:
         raise ValueError("probeRuntime 必须为布尔值。")
-    return {"probeRuntime": probe_runtime}
+    recover_lost_attach = params.get("recoverLostAttach", False)
+    if type(recover_lost_attach) is not bool:
+        raise ValueError("recoverLostAttach 必须为布尔值。")
+    return {"probeRuntime": probe_runtime, "recoverLostAttach": recover_lost_attach}
 
 
 def _set_desired(raw):
@@ -377,7 +380,10 @@ def _runtime(command):
 
 
 def _connect_invoke(adapter, params):
-    return adapter.connect(probe_runtime=params["probeRuntime"])
+    return adapter.connect(
+        probe_runtime=params["probeRuntime"],
+        recover_lost_attach=params["recoverLostAttach"],
+    )
 
 
 def _set_desired_invoke(adapter, params):

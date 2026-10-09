@@ -91,6 +91,7 @@
     "hades2.error.preferenceWriteBlocked": "The existing desired state could not be safely isolated, read, or is corrupt; overwriting the original file is blocked.",
     "hades2.error.prepareWhileRunning": "Quit {0} first; signatures and saves cannot be changed while it is running.",
     "hades2.error.probeRuntimeBoolean": "probeRuntime must be a boolean.",
+    "hades2.error.recoverLostAttachBoolean": "recoverLostAttach must be a boolean.",
     "hades2.error.processExited": "The game process has ended.",
     "hades2.error.processExitedSecond": "The game process has exited.",
     "hades2.error.processQueryFailed": "Could not query the {0} process ({1}): {2}",
