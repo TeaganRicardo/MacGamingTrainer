@@ -293,8 +293,8 @@ narrative_state = {
         "HasShuffledMusicPlayer": True,
         "UnsupportedHiddenFlag": True,
     }),
-    "TextLinesRecord": _table({"NormalScene": True, "GiftLine": True}),
-    "TextLinesChoiceRecord": _table({"NormalScene": "ChoiceA"}),
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True, "GiftLine": True}),
+    "TextLinesChoiceRecord": _table({"HecatePostTrueEnding01": "ChoiceA"}),
     "GiftTextLinesOrderRecord": _table({
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
@@ -302,13 +302,25 @@ narrative_state = {
     "QuestsCompleted": _table({"QuestHelpDora": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
+# This native line also has recorded current-run counterparts. A reset must
+# remove their observed choices/playback without altering RunHistory.
+narrative_file = narrative_saves / "Profile1.sav"
+narrative_document = Hades2SaveDocument.load(narrative_file)
+run_records = narrative_document.lua_state["CurrentRun"]
+run_records["TextLinesRecord"] = _table({"HecatePostTrueEnding01": True})
+run_records["HubTextLinesRecord"] = _table({"HecatePostTrueEnding01": True})
+run_records["TextLinesChoiceRecord"] = _table({"HecatePostTrueEnding01": "ChoiceA"})
+run_records["CurrentRoom"] = _table({
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True})
+})
+narrative_file.write_bytes(narrative_document.to_bytes())
 narrative = Hades2SaveWorkspace.open(narrative_service)
 flags = narrative.query(domain="flags", search="HasPinnedAnyBoon", language="en")
 assert flags["total"] == 1
 assert flags["items"][0]["value"] is False
 assert flags["items"][0]["group"] == "Tutorial and presentation records"
 dialogue = narrative.query(domain="dialogue", limit=10, language="zh-CN")
-assert {row["rawId"] for row in dialogue["items"]} == {"NormalScene", "GiftLine"}
+assert {row["rawId"] for row in dialogue["items"]} == {"HecatePostTrueEnding01", "GiftLine"}
 assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
 quests = narrative.query(domain="progression", limit=10, language="en")
 assert quests["total"] == 2  # unrecognized QuestA is not an editable game quest
@@ -333,12 +345,16 @@ for identity, action, value in (
 
 narrative.stage("flag:HasPinnedAnyBoon", "set", True)
 narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
-narrative.stage("dialogue:NormalScene", "set", False)
+narrative.stage("dialogue:HecatePostTrueEnding01", "set", False)
 narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 6, changes  # four intents plus choice reset and quest completion
+assert len(changes) == 10, changes  # four intents, five dialogue owner links, quest history
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:dialogue:NormalScene", "linked:quest:QuestHelpOdysseus"
+    "linked:dialogue:HecatePostTrueEnding01", "linked:quest:QuestHelpOdysseus",
+    "linked:dialogue:CurrentRun.TextLinesRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.HubTextLinesRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.TextLinesChoiceRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.CurrentRoom.TextLinesRecord:HecatePostTrueEnding01",
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -346,15 +362,85 @@ game = installed_narrative.lua_state["GameState"]
 assert game["Flags"]["HasPinnedAnyBoon"] is True
 assert game["Flags"].get("HasShuffledMusicPlayer") is None
 assert game["Flags"]["UnsupportedHiddenFlag"] is True
-assert game["TextLinesRecord"].get("NormalScene") is None
+assert game["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
-assert game["TextLinesChoiceRecord"].get("NormalScene") is None
+assert game["TextLinesChoiceRecord"].get("HecatePostTrueEnding01") is None
+run_after = installed_narrative.lua_state["CurrentRun"]
+assert run_after["TextLinesRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["HubTextLinesRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["TextLinesChoiceRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["CurrentRoom"]["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["QuestStatus"]["QuestHelpOdysseus"] == "Complete"
 assert game["QuestsCompleted"]["QuestHelpOdysseus"] is True
 assert game["QuestsCompleted"]["QuestHelpDora"] is True
 assert game["QuestStatus"]["QuestHelpDora"] == "CashedOut"
 assert game["QuestStatus"]["QuestA"] == "Unlocked"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
+
+# A valid cross-domain batch must be refused before touching disk if its
+# dialogue ownership becomes ambiguous between staging and cold Apply.
+duplicate_state = {
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True}),
+    "TextLinesChoiceRecord": _table({"HecatePostTrueEnding01": "ChoiceA"}),
+    "GiftTextLinesOrderRecord": _table({"Hecate": LuaTable(0, 0, [])}),
+}
+_base, duplicated_saves, duplicated_service = _environment(
+    "duplicate-dialogue-batch", state=duplicate_state
+)
+duplicated_path = duplicated_saves / "Profile1.sav"
+duplicated = Hades2SaveWorkspace.open(duplicated_service)
+duplicated.stage("resource:MetaCurrency", "set", 500)
+duplicated.stage("dialogue:HecatePostTrueEnding01", "set", False)
+before_ambiguous_apply = duplicated_path.read_bytes()
+# Only in-memory source state changes. The actual save file remains untouched.
+duplicated.document.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
+    0, 2, [
+        ("HecatePostTrueEnding01", "ChoiceA"),
+        ("HecatePostTrueEnding01", "ChoiceB"),
+    ]
+)
+assert next(
+    row for row in duplicated.query(domain="dialogue")["items"]
+    if row["rawId"] == "HecatePostTrueEnding01"
+)["editable"] is False
+try:
+    duplicated.review()
+except ValueError:
+    pass
+else:
+    raise AssertionError("ambiguous linked dialogue appeared in batch preview")
+try:
+    duplicated.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("ambiguous cross-domain Save Editor batch was applied")
+assert duplicated_path.read_bytes() == before_ambiguous_apply
+assert duplicated.summary()["pendingCount"] == 2
+
+# A physically parseable, duplicate-key save remains readable and byte-stable.
+# Opening and rejecting a dialogue mutation must not normalize either record.
+source_with_duplicates = Hades2SaveDocument.load(duplicated_path)
+source_with_duplicates.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
+    0, 2, [
+        ("HecatePostTrueEnding01", "ChoiceA"),
+        ("HecatePostTrueEnding01", "ChoiceB"),
+    ]
+)
+duplicated_path.write_bytes(source_with_duplicates.to_bytes())
+original_duplicate_bytes = duplicated_path.read_bytes()
+read_only_duplicate = Hades2SaveWorkspace.open(duplicated_service)
+assert next(
+    row for row in read_only_duplicate.query(domain="dialogue")["items"]
+    if row["rawId"] == "HecatePostTrueEnding01"
+)["editable"] is False
+try:
+    read_only_duplicate.stage("dialogue:HecatePostTrueEnding01", "set", False)
+except ValueError:
+    pass
+else:
+    raise AssertionError("physically duplicated dialogue was editable")
+assert duplicated_path.read_bytes() == original_duplicate_bytes
 
 # Relationship history has a native chronological array and a global
 # gift-resource aggregate. A count edit must keep all three states coherent.
@@ -505,11 +591,16 @@ nested_state = {
 }
 _base, nested_saves, nested_service = _environment("nested-dialogue", state=nested_state)
 nested_workspace = Hades2SaveWorkspace.open(nested_service)
-nested_workspace.stage("dialogue:ChoiceScene", "set", False)
-json.dumps(nested_workspace.review())
-nested_workspace.apply()
+try:
+    nested_workspace.stage("dialogue:ChoiceScene", "set", False)
+except ValueError:
+    pass
+else:
+    raise AssertionError("unverified dialogue reset accepted")
+assert nested_workspace.review() == {"count": 0, "changes": []}
+json.dumps(nested_workspace.query(domain="dialogue")["items"])
 nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
-assert nested_game["TextLinesChoiceRecord"].get("ChoiceScene") is None
+assert nested_game["TextLinesChoiceRecord"]["ChoiceScene"]["ChoiceIndex"] == 2.0
 assert nested_game["QuestStatus"]["QuestC"] == "Unlocked"
 
 # WeaponsUnlocked is authoritative for ownership. Shop purchases also
@@ -794,5 +885,26 @@ assert persisted["NPCInteractions"]["NPC_Nemesis_01"] == 1
 assert persisted["NPCInteractions"]["FutureUnit"] == 5
 assert persisted["SpecialInteractRecord"]["FutureUnit"] == 2
 assert persisted["ObjectivesCompleted"]["UnknownObjective"] == 4
+
+# A linked narrative provenance failure must refuse a cross-domain apply.
+invalid_owner_state = {
+    "Flags": _table({}),
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True}),
+    "TextLinesChoiceRecord": _table({}),
+    "GiftTextLinesOrderRecord": _table({}),
+}
+_base, refusal_saves, refusal_service = _environment("dialogue-refusal", state=invalid_owner_state)
+refusal = Hades2SaveWorkspace.open(refusal_service)
+refusal.stage("resource:MetaCurrency", "set", 99)
+refusal.stage("dialogue:HecatePostTrueEnding01", "set", False)
+source_bytes = (refusal_saves / "Profile1.sav").read_bytes()
+refusal.document.lua_state["GameState"]["GiftTextLinesOrderRecord"] = "invalid"
+try:
+    refusal.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("invalid narrative batch wrote to Core Save")
+assert (refusal_saves / "Profile1.sav").read_bytes() == source_bytes
 
 print("hades2_save_workspace_ok")

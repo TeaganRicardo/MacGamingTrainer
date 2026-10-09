@@ -4,7 +4,7 @@ Only explicit, source-verified records receive write authority. The generic
 Advanced tree remains the read-only escape hatch for everything else.
 """
 from .localization import official_display_names
-from .save_native_ids import QUEST_IDS
+from .save_native_ids import QUEST_IDS, STORY_RESET_TEXT_IDS
 from .save_document import LuaTable
 
 
@@ -57,6 +57,98 @@ def _read_bool(table, identifier):
     return bool(value)
 
 
+def _dialogue_unique_value(owner, name):
+    """Resolve exactly one string key before a first-match LuaTable mutation."""
+    found = False
+    value = None
+    for key, entry in owner.entries():
+        if type(key) is str and key == name:
+            if found:
+                raise ValueError("Save Editor dialogue owner has duplicate keys.")
+            found = True
+            value = entry
+    return value
+
+
+def _dialogue_authority(root):
+    """Validate native dialogue companion owners before inferring absence."""
+    # The codec preserves duplicate entries for lossless reads. Every owner
+    # selector and target key must therefore be unique before any reset.
+    _dialogue_unique_value(root, "GameState")
+    _dialogue_unique_value(root, "CurrentRun")
+    state = _game_state(root)
+    lines = _dialogue_unique_value(state, "TextLinesRecord")
+    gift_history = _dialogue_unique_value(state, "GiftTextLinesOrderRecord")
+    choice_history = _dialogue_unique_value(state, "TextLinesChoiceRecord")
+    if not all(isinstance(owner, LuaTable)
+               for owner in (lines, gift_history, choice_history)):
+        raise ValueError("Save Editor dialogue companion history is unavailable.")
+    gifted_ids = set()
+    seen_people = set()
+    for person, history in gift_history.entries():
+        if type(person) is not str or not isinstance(history, LuaTable):
+            raise ValueError("Save Editor gift dialogue history is malformed.")
+        if person in seen_people:
+            raise ValueError("Save Editor gift dialogue owner has duplicate keys.")
+        seen_people.add(person)
+        seen_indexes = set()
+        for index, line in history.entries():
+            if (type(index) not in (int, float) or index < 1 or
+                    not float(index).is_integer() or type(line) is not str):
+                raise ValueError("Save Editor gift dialogue history is malformed.")
+            # Lua numeric keys share one identity for 1 and 1.0.
+            numeric_key = float(index)
+            if numeric_key in seen_indexes:
+                raise ValueError("Save Editor gift dialogue history has duplicate indexes.")
+            seen_indexes.add(numeric_key)
+            gifted_ids.add(line)
+
+    # PlayTextLine and native narrative choice selection write both the
+    # persistent and the current-run owners. A reset must account for both.
+    owners = [("GameState.TextLinesChoiceRecord", choice_history, str)]
+    run = _dialogue_unique_value(root, "CurrentRun")
+    if run is not None:
+        if not isinstance(run, LuaTable):
+            raise ValueError("Save Editor current-run dialogue history is malformed.")
+        for field, expected_type in (
+            ("TextLinesRecord", bool),
+            ("HubTextLinesRecord", bool),
+            ("TextLinesChoiceRecord", str),
+        ):
+            value = _dialogue_unique_value(run, field)
+            if value is not None:
+                if not isinstance(value, LuaTable):
+                    raise ValueError("Save Editor current-run dialogue history is malformed.")
+                owners.append(("CurrentRun." + field, value, expected_type))
+        room = _dialogue_unique_value(run, "CurrentRoom")
+        if room is not None:
+            if not isinstance(room, LuaTable):
+                raise ValueError("Save Editor current-room dialogue history is malformed.")
+            room_lines = _dialogue_unique_value(room, "TextLinesRecord")
+            if room_lines is not None:
+                if not isinstance(room_lines, LuaTable):
+                    raise ValueError("Save Editor current-room dialogue history is malformed.")
+                owners.append(("CurrentRun.CurrentRoom.TextLinesRecord", room_lines, bool))
+    return gifted_ids, owners
+
+
+def _validated_dialogue_owners(root, name, authority):
+    # StoryResetData.TextLines is a native-authored reset boundary. Neither a
+    # boolean observation nor missing gift evidence grants write authority.
+    if name not in STORY_RESET_TEXT_IDS:
+        raise ValueError("Save Editor dialogue identity is not a native reset target.")
+    if _dialogue_unique_value(_table(_game_state(root), "TextLinesRecord"), name) is not True:
+        raise ValueError("Save Editor dialogue must be a played record.")
+    gifted_ids, owners = authority
+    if name in gifted_ids:
+        raise ValueError("Save Editor gift-linked dialogue cannot be reset alone.")
+    for _owner_name, record, expected_type in owners:
+        before = _dialogue_unique_value(record, name)
+        if before is not None and type(before) is not expected_type:
+            raise ValueError("Save Editor linked dialogue history is malformed.")
+    return owners
+
+
 def _row(*, entry_id, domain, key, path, label, english, value,
          value_type, editable, operations, group, choices=None):
     return {
@@ -88,18 +180,29 @@ def rows(root, domain, language="zh-CN", game_path=None):
             ))
     if domain == "dialogue":
         lines = _table(state, "TextLinesRecord")
-        gifted = state.get("GiftTextLinesOrderRecord")
-        gifted_ids = set()
-        if isinstance(gifted, LuaTable):
-            for _, record in gifted.entries():
-                if isinstance(record, LuaTable):
-                    gifted_ids.update(value for _, value in record.entries() if isinstance(value, str))
+        try:
+            authority = _dialogue_authority(root)
+        except ValueError:
+            authority = None  # Keep the recorded rows inspectable, but read-only.
+        seen_lines = set()
         for name, value in lines.entries():
             if not isinstance(name, str) or type(value) is not bool:
                 continue
+            # Duplicate physical keys retain one read-only semantic row; the
+            # full underlying entries remain inspectable in Advanced.
+            if name in seen_lines:
+                continue
+            seen_lines.add(name)
             # A gift event also changes GiftRecord/order/choice history. It
             # cannot safely be reset by treating one text flag as independent.
-            writable = value is True and name not in gifted_ids
+            writable = False
+            if authority is not None and value is True:
+                try:
+                    _validated_dialogue_owners(root, name, authority)
+                except ValueError:
+                    pass
+                else:
+                    writable = True
             result.append(_row(
                 entry_id="dialogue:" + name, domain="dialogue", key=name,
                 path=["GameState", "TextLinesRecord", name],
@@ -169,17 +272,20 @@ def apply_intent(root, intent):
     prefix = intent["id"].partition(":")[0]
     name = intent["rawId"]
     after = intent["after"]
-    if prefix in ("flag", "dialogue"):
-        owner = _table(state, "Flags" if prefix == "flag" else "TextLinesRecord")
+    if prefix == "flag":
+        owner = _table(state, "Flags")
         if after:
             owner[name] = True
         else:
             owner.pop(name, None)
-            if prefix == "dialogue":
-                # One-time dialogue choice state belongs to the played line.
-                choices = state.get("TextLinesChoiceRecord")
-                if isinstance(choices, LuaTable):
-                    choices.pop(name, None)
+    elif prefix == "dialogue":
+        if after is not False:
+            raise ValueError("Save Editor dialogue reset requires an explicit false value.")
+        # Validate every linked owner before modifying this candidate document.
+        owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
+        _table(state, "TextLinesRecord").pop(name, None)
+        for _owner_name, record, _type in owners:
+            record.pop(name, None)
     elif prefix == "quest":
         if name not in QUEST_IDS:
             raise ValueError("Save Editor quest identity is unknown.")
@@ -208,7 +314,6 @@ def apply_intent(root, intent):
 def linked_changes(root, intents):
     state = _game_state(root)
     changes = []
-    choices = state.get("TextLinesChoiceRecord")
     intents = tuple(intents)
     completed = state.get("QuestsCompleted") if any(
         intent["id"].startswith("quest:") for intent in intents
@@ -233,16 +338,19 @@ def linked_changes(root, intents):
                     "before": before,
                     "after": after,
                 })
-        if (intent["id"].startswith("dialogue:") and intent["after"] is False
-                and isinstance(choices, LuaTable)):
+        if intent["id"].startswith("dialogue:") and intent["after"] is False:
             name = intent["rawId"]
-            before = choices.get(name)
-            if isinstance(before, LuaTable):
-                before = "Table ({} entries)".format(len(before))
-            if before is not None:
+            owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
+            for owner_name, record, _expected_type in owners:
+                before = record.get(name)
+                if before is None:
+                    continue
+                identity = ("linked:dialogue:" + name
+                            if owner_name == "GameState.TextLinesChoiceRecord"
+                            else "linked:dialogue:" + owner_name + ":" + name)
                 changes.append({
-                    "id": "linked:dialogue:" + name, "domain": "dialogue", "rawId": name,
-                    "name": "TextLinesChoiceRecord · " + name,
+                    "id": identity, "domain": "dialogue", "rawId": name,
+                    "name": owner_name + " · " + name,
                     "operation": "unset", "before": before, "after": None,
                 })
     return changes
