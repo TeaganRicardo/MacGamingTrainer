@@ -33,6 +33,35 @@ if Hades2RunLogRefreshGate.shouldConsume(
     fatalError("busy trainer must defer the lifecycle refresh")
 }
 
+// Hades runtime-ready evidence belongs to the target lifetime, not to a
+// backend worker. Recovery may finish after the one native ready event.
+var readyBeforeBackend = Hades2LaunchAttachGate()
+readyBeforeBackend.observeRuntimeReady()
+if !readyBeforeBackend.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: true) {
+    fatalError("launch-time readiness gate was not armed")
+}
+if !readyBeforeBackend.consumeIfEligible(
+    backendAvailable: true, busy: false, connected: false, exiting: false
+) {
+    fatalError("ready event received before backend recovery was lost")
+}
+// A new target lifetime cannot consume a ready event from the old process.
+readyBeforeBackend.targetLifetimeChanged()
+if !readyBeforeBackend.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: true) {
+    fatalError("replacement target failed to arm launch gate")
+}
+if readyBeforeBackend.consumeIfEligible(
+    backendAvailable: true, busy: false, connected: false, exiting: false
+) {
+    fatalError("old process readiness escaped its target lifetime")
+}
+readyBeforeBackend.observeRuntimeReady()
+if !readyBeforeBackend.consumeIfEligible(
+    backendAvailable: true, busy: false, connected: false, exiting: false
+) {
+    fatalError("replacement target could not connect after its own ready event")
+}
+
 let fileManager = FileManager.default
 guard CommandLine.arguments.count == 2 else {
     fatalError("temporary Hades support directory argument required")

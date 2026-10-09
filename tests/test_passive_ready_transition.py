@@ -25,15 +25,22 @@ for retired in (
 # Initial process discovery and a real NSWorkspace launch are distinct events.
 # Only didLaunch may grant permission to attach while Trainer is backgrounded.
 monitor = (ROOT / 'Sources/Core/Runtime/TrainerTargetProcessMonitor.swift').read_text()
-assert '@Published private(set) var launchGeneration' in monitor
+# A single published observation prevents an isRunning callback consuming
+# launch intent before the corresponding NSWorkspace generation is published.
+assert '@Published private(set) var targetObservation' in monitor
+assert '@Published private(set) var isRunning' not in monitor
+assert '@Published private(set) var launchGeneration' not in monitor
 launch_note = monitor[monitor.index('NSWorkspace.didLaunchApplicationNotification'):monitor.index('NSWorkspace.didActivateApplicationNotification')]
-assert 'launchGeneration &+= 1' in launch_note
-
-launch_start = host.index('.onChange(of: targetMonitor.launchGeneration)')
+assert 'targetObservation = TrainerTargetObservation(' in launch_note
+assert '.onChange(of: targetMonitor.targetObservation)' in host
+assert '.onChange(of: targetMonitor.isRunning)' not in host
+assert '.onChange(of: targetMonitor.launchGeneration)' not in host
+launch_start = host.index('.onChange(of: targetMonitor.targetObservation)')
 launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
 launch_block = host[launch_start:launch_end]
 for token in (
-    'connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)',
+    'connectionPolicy.observeTarget(',
+    'model.hostTargetLifetimeChanged(',
     'reconcileAutomaticConnection()',
 ):
     assert token in launch_block, token

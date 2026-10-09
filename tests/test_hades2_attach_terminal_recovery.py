@@ -92,9 +92,18 @@ def run_case(root, mode):
                 assert marker.exists()
                 assert len(launches) == 1
                 assert transport.pid is None
-                # This is an explicit second attach, not an automatic retry.
-                transport.attach(4242)
-                assert len(launches) == 2, "new explicit attach reused a dead worker"
+                # A later Host automatic opportunity must not silently revive
+                # the terminal worker after an unacknowledged native attach.
+                try:
+                    transport.attach(4242, recover_lost_attach=False)
+                except AdapterError as error:
+                    assert error.code == "restart_required", error.code
+                else:
+                    raise AssertionError("automatic reattach escaped terminal safety")
+                assert len(launches) == 1, "automatic reattach spawned a new worker"
+                # A deliberate user Connect supplies fresh recovery authority.
+                transport.attach(4242, recover_lost_attach=True)
+                assert len(launches) == 2, "explicit reconnect reused a dead worker"
                 assert transport.pid == 4242 and transport.alive()
             elif mode == "blocked_reattach":
                 transport.attach(4242)
