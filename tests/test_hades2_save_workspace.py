@@ -907,7 +907,7 @@ else:
     raise AssertionError("invalid narrative batch wrote to Core Save")
 assert (refusal_saves / "Profile1.sav").read_bytes() == source_bytes
 
-print("hades2_save_workspace_ok")
+
 
 
 # Duplicate physical Lua keys remain inspectable and fail closed for the
@@ -950,3 +950,5 @@ state = installed.lua_state["GameState"]
 assert state["Resources"]["MetaCurrency"] == 321
 assert [item for key, item in state["UnknownFutureField"].entries()
         if key == "KeepMe"] == ["yes", "other physical record"]
+
+print("hades2_save_workspace_ok")
