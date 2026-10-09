@@ -13,6 +13,21 @@ struct TrainerConnectionPolicy {
     private(set) var automaticConnectionSuppressed = false
     private(set) var backgroundConnectionAllowed = false
     private(set) var targetExitRefreshRequested = false
+    private var observedLaunchGeneration: UInt = 0
+
+    /// Fold process presence and an NSWorkspace launch generation into one
+    /// observation. SwiftUI may deliver isRunning's onChange before the
+    /// launchGeneration onChange for the same notification; neither order
+    /// may consume the connection grant as an ordinary foreground discovery.
+    mutating func observeTarget(running: Bool, launchGeneration: UInt) {
+        targetStateChanged(running: running)
+        guard observedLaunchGeneration != launchGeneration else { return }
+        observedLaunchGeneration = launchGeneration
+        if running {
+            targetLaunched()
+        }
+    }
+
 
     mutating func targetStateChanged(running: Bool) {
         guard targetRunning != running else { return }
