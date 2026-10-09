@@ -5,6 +5,7 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
+import json
 import math
 
 from . import save_equipment, save_long_term, save_narrative
@@ -339,7 +340,11 @@ class Hades2SaveWorkspace:
             item_path = [*path, key]
             kind = _value_type(value)
             row = {
-                "id": "advanced:" + "/".join(str(part) for part in item_path),
+                # Preserve Lua key type and path boundaries in opaque Swift IDs.
+                # Numbers, booleans and strings can share the same printed key.
+                "id": "advanced:" + json.dumps(
+                    item_path, ensure_ascii=True, separators=(",", ":")
+                ),
                 "domain": "advanced",
                 "rawId": str(key),
                 "path": item_path,
