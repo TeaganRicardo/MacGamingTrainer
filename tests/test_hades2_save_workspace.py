@@ -908,3 +908,45 @@ else:
 assert (refusal_saves / "Profile1.sav").read_bytes() == source_bytes
 
 print("hades2_save_workspace_ok")
+
+
+# Duplicate physical Lua keys remain inspectable and fail closed for the
+# selected owned state, while a staged batch cannot write the original disk
+# target after one previously staged owner becomes ambiguous.
+_base, duplicate_saves, duplicate_service = _environment(
+    "duplicate_pending_owner",
+    resources={"MetaCurrency": 5.0, "GiftPoints": 7.0},
+)
+duplicate_editor = Hades2SaveWorkspace.open(duplicate_service)
+duplicate_editor.stage("resource:MetaCurrency", "set", 50)
+duplicate_editor.stage("playerStat:GameplayTime", "set", 300.0)
+original_target = (duplicate_saves / "Profile1.sav").read_bytes()
+game_state = duplicate_editor.document.lua_state["GameState"]
+game_state._entries.append(("GameplayTime", 999.0))
+game_state.hash_size += 1
+for operation in (duplicate_editor.review, duplicate_editor.apply):
+    try:
+        operation()
+    except ValueError as error:
+        assert "ambiguous" in str(error).lower(), error
+    else:
+        raise AssertionError("duplicate staged owner was accepted")
+assert (duplicate_saves / "Profile1.sav").read_bytes() == original_target
+assert {change["id"] for change in duplicate_editor._pending.values()} == {
+    "resource:MetaCurrency", "playerStat:GameplayTime",
+}
+
+# A duplicate physical key in unrelated future/unknown data is not grounds
+# to prohibit a supported resource edit or discard any raw entries.
+_base, preserved_saves, preserved_service = _environment("duplicate_unknown")
+preserved = Hades2SaveWorkspace.open(preserved_service)
+unknown = preserved.document.lua_state["GameState"]["UnknownFutureField"]
+unknown._entries.append(("KeepMe", "other physical record"))
+unknown.hash_size += 1
+preserved.stage("resource:MetaCurrency", "set", 321)
+preserved.apply()
+installed = Hades2SaveDocument.load(preserved_saves / "Profile1.sav")
+state = installed.lua_state["GameState"]
+assert state["Resources"]["MetaCurrency"] == 321
+assert [item for key, item in state["UnknownFutureField"].entries()
+        if key == "KeepMe"] == ["yes", "other physical record"]
