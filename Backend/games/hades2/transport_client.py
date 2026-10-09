@@ -13,10 +13,7 @@ from pathlib import Path
 from core.adapter import AdapterError
 from core.sidecar import JsonLineSidecarClient, SidecarStartError, SidecarTerminalError
 
-from .config import (
-    LLDB_SIDECAR_ATTACH_REPLY_TIMEOUT_SECONDS,
-    LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS,
-)
+from .config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
 
 
 _WORKER_PROTOCOL_VERSION = 1
@@ -101,20 +98,12 @@ class _LLDBWorkerClient:
         raise raised from error
 
     def _request(self, method, params=None):
-        # Game process attach may take significantly longer than a Lua/readout
-        # exchange. Apply its Hades-owned budget only to that method.
-        timeout_override = (
-            {"reply_timeout_seconds": LLDB_SIDECAR_ATTACH_REPLY_TIMEOUT_SECONDS}
-            if method == "transport.attach"
-            else {}
-        )
         try:
             return self._sidecar.request(
                 method,
                 params or {},
                 outcome_unknown_on_loss=method in _RISKY_METHODS,
                 allow_start=False,
-                **timeout_override,
             )
         except (SidecarStartError, SidecarTerminalError) as error:
             self._raise_sidecar_failure(error)
