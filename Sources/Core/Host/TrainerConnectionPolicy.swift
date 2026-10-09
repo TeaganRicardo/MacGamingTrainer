@@ -16,22 +16,17 @@ struct TrainerConnectionPolicy {
     private var observedLaunchGeneration: UInt = 0
     private var awaitingDefinitiveLaunch = false
 
-    /// Fold process presence and an NSWorkspace launch generation into one
-    /// observation. SwiftUI may deliver isRunning's onChange before the
-    /// launchGeneration onChange for the same notification; neither order
-    /// may consume the connection grant as an ordinary foreground discovery.
+    /// Consume an atomic process-presence/launch-generation observation.
+    /// Activation or refresh can establish presence for Save safety before
+    /// NSWorkspace reports a definitive launch; that interim snapshot must
+    /// never authorize automatic debugger work.
     mutating func observeTarget(
         running: Bool, launchGeneration: UInt, allowDiscoveryConnect: Bool = true
     ) {
         let wasRunning = targetRunning
-        targetStateChanged(running: running)
+        targetStateChanged(running: running, allowAutomaticConnect: allowDiscoveryConnect)
         if running && !wasRunning && !allowDiscoveryConnect {
-            // Activation/foreground refresh proves presence (including Save
-            // safety) without proving startup has finished. Await launch
-            // evidence before any automatic debugger operation.
             awaitingDefinitiveLaunch = true
-            connectRequested = false
-            backendRestartRequested = false
         }
         guard observedLaunchGeneration != launchGeneration else { return }
         observedLaunchGeneration = launchGeneration
@@ -41,7 +36,7 @@ struct TrainerConnectionPolicy {
     }
 
 
-    mutating func targetStateChanged(running: Bool) {
+    mutating func targetStateChanged(running: Bool, allowAutomaticConnect: Bool = true) {
         guard targetRunning != running else { return }
         targetRunning = running
         if running {
@@ -51,8 +46,10 @@ struct TrainerConnectionPolicy {
             // that stale observation is refreshed, even if a replacement target
             // has already launched.
             automaticConnectionSuppressed = false
-            backendRestartRequested = true
-            connectRequested = true
+            if allowAutomaticConnect {
+                backendRestartRequested = true
+                connectRequested = true
+            }
         } else {
             targetExitRefreshRequested = true
             backendRestartRequested = false
