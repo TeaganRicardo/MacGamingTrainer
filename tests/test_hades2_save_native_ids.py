@@ -1,5 +1,6 @@
 """The pinned native Save identity generator must remain executable/reproducible."""
 
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -41,7 +42,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         encoding="utf-8",
     )
     (scripts / "StoryResetData.lua").write_text(
-        'StoryResetData =\n{\n  TextLines =\n  {\n    "HecatePostTrueEnding01",\n    -- "CommentedOutLine",\n    --[=[\n    "BlockCommentedLine",\n    ]=]\n    "HecatePostEpilogue01", -- active native line\n    "HecatePostTrueEnding01",\n  },\n}\n',
+        'StoryResetData =\n{\n  TextLines =\n  {\n    "HecatePostTrueEnding01",\n    -- "CommentedOutLine",\n    --[=[\n    "BlockCommentedLine",\n    ]=]\n    "HecatePostEpilogue01", -- active native line\n    "HecatePostTrueEnding01",\n  },\n  Unrelated =\n  {\n    "NotAResetTarget",\n  },\n}\n',
         encoding="utf-8",
     )
     (scripts / "NPCData_Hecate.lua").write_text(
@@ -49,16 +50,29 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         '\tNPC_Giftable =\n\t{\n\t},\n}\n',
         encoding="utf-8",
     )
-    generated = subprocess.check_output(
-        [sys.executable, str(ROOT / "Tools/generate_hades_save_ids.py"),
-         str(scripts)], text=True,
-    )
-    namespace = {}
-    exec(compile(generated, "<native-save-identity-catalog>", "exec"), namespace)
-    assert namespace["QUEST_IDS"] == frozenset({"QuestExample"})
-    assert namespace["RESOURCE_IDS"] == frozenset({"DreamPoints"})
-    assert namespace["NPC_INTERACTION_IDS"] == frozenset({"NPC_Hecate_01"})
-    assert namespace["OBJECTIVE_IDS"] == frozenset({"GiftPrompt", "WeaponCast"})
-    assert namespace["STORY_RESET_TEXT_IDS"] == frozenset({"HecatePostTrueEnding01", "HecatePostEpilogue01"})
+    native_sources = {path: path.read_bytes() for path in scripts.glob("*.lua")}
+    expected = {
+        "QUEST_IDS": frozenset({"QuestExample"}),
+        "RESOURCE_IDS": frozenset({"DreamPoints"}),
+        "NPC_INTERACTION_IDS": frozenset({"NPC_Hecate_01"}),
+        "OBJECTIVE_IDS": frozenset({"GiftPrompt", "WeaponCast"}),
+        "STORY_RESET_TEXT_IDS": frozenset({"HecatePostTrueEnding01", "HecatePostEpilogue01"}),
+    }
+    # The shipped native scripts have CRLF line endings. Every family must
+    # regenerate identically from LF, CRLF and CR inputs, with raw-byte hashes.
+    for newline in (b"\n", b"\r\n", b"\r"):
+        for path, original in native_sources.items():
+            path.write_bytes(original.replace(b"\n", newline))
+        generated = subprocess.check_output(
+            [sys.executable, str(ROOT / "Tools/generate_hades_save_ids.py"),
+             str(scripts)], text=True,
+        )
+        namespace = {}
+        exec(compile(generated, "<native-save-identity-catalog>", "exec"), namespace)
+        for name, ids in expected.items():
+            assert namespace[name] == ids, (name, newline)
+        for name in ("QuestData.lua", "ResourceData.lua", "ObjectiveData.lua", "StoryResetData.lua"):
+            raw_sha = hashlib.sha256((scripts / name).read_bytes()).hexdigest()
+            assert f"{name} SHA-256 {raw_sha}" in generated, (name, newline)
 
 print("hades2_save_native_ids_ok")

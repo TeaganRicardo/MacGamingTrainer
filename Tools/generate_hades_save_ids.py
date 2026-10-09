@@ -14,7 +14,10 @@ from pathlib import Path
 
 def read(path):
     data = path.read_bytes()
-    return data.decode("utf-8-sig"), hashlib.sha256(data).hexdigest()
+    # Parse every native Lua file with the same line boundaries regardless of
+    # its on-disk newline convention. Provenance still hashes the original bytes.
+    source = data.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
+    return source, hashlib.sha256(data).hexdigest()
 
 
 def quest_ids(source):
