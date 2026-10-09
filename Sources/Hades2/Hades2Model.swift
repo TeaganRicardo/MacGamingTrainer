@@ -331,7 +331,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func toggleConnectionFromHost() {
         // A deliberate click overrides an unconsumed launch-time auto-attach.
         launchAttachGate.cancel()
-        toggleConnection(probeRuntime: true)
+        toggleConnection(probeRuntime: true, recoverLostAttach: true)
     }
 
     func connectAutomaticallyFromHost(targetJustLaunched: Bool) {
@@ -432,7 +432,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    private func toggleConnection(probeRuntime: Bool) {
+    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false) {
         if connected {
             sendBarrier(.disconnect, title: "host.disconnectGame")
         } else {
@@ -440,7 +440,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 pendingRunReadySignal = false
             }
             runLogWatcher.start()
-            send(.connect(probeRuntime: probeRuntime), title: "host.connectGame") { [weak self] _ in
+            send(.connect(probeRuntime: probeRuntime, recoverLostAttach: recoverLostAttach), title: "host.connectGame") { [weak self] _ in
                 guard let self else { return }
                 self.runLogWatcher.start()
                 self.consumeRunLogReadySignalIfPossible()

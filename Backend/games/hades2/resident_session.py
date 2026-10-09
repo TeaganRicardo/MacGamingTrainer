@@ -122,8 +122,11 @@ class Hades2ResidentSession:
         """
         return self._generation_ready
 
-    def attach(self, pid):
-        self._transport.attach(pid)
+    def attach(self, pid, *, recover_lost_attach=False):
+        if recover_lost_attach:
+            self._transport.attach(pid, recover_lost_attach=True)
+        else:
+            self._transport.attach(pid)
         # A debugger reconnect is the synchronization seam for resident source.
         # Re-bootstrap once even when the same game process survived a manual detach.
         self.invalidate_generation()

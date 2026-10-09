@@ -120,8 +120,8 @@ assert 'if pendingRunReadySignal {' in launch_connect
 assert 'launchAttachGate.observeRuntimeReady()' in launch_connect
 
 assert 'toggleConnection(probeRuntime: true)' in model
-assert 'case connect(probeRuntime: Bool)' in api
-assert '["probeRuntime": probeRuntime]' in api
+assert 'case connect(probeRuntime: Bool, recoverLostAttach: Bool)' in api
+assert '["probeRuntime": probeRuntime, "recoverLostAttach": recoverLostAttach]' in api
 
 # No generic process/Lua polling loop is introduced by the foreground design.
 assert 'Timer.' not in host and 'scheduledTimer' not in host
@@ -131,7 +131,7 @@ assert 'asyncAfter' not in foreground
 # the Trainer's launch notification. The pre-connect watcher start is therefore
 # paired with an idempotent post-connect start so the event-driven lifecycle
 # cannot be permanently missed without adding polling.
-toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool)')
+toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)')
 toggle_end = model.index('\n    func restartBackendFromHost()', toggle_start)
 toggle = model[toggle_start:toggle_end]
 assert toggle.count('runLogWatcher.start()') >= 2
@@ -171,7 +171,7 @@ for token in (
     assert token in model, token
 
 consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
-consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool)', consume_start)
+consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)', consume_start)
 run_log_refresh = model[consume_start:consume_end]
 assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
 assert 'status == "ready"' not in run_log_refresh

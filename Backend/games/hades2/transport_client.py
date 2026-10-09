@@ -275,8 +275,9 @@ class Hades2LuaTransport:
         except AdapterError:
             return False
 
-    def attach(self, pid):
-        if self.pid is None and not self._tainted:
+    def attach(self, pid, *, recover_lost_attach=False):
+        if recover_lost_attach and self.pid is None and not self._tainted:
+            # Only a deliberate user connection can replace the terminal worker.
             self._worker.reopen_after_initial_attach_loss()
         self._call("transport.attach", {"pid": pid})
 
