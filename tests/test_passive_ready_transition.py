@@ -73,7 +73,8 @@ foreground_end = host.index('\n    }\n\n    private func handlePrimaryConnection
 host_foreground = host[foreground_start:foreground_end]
 for token in (
     'targetMonitor.refresh()',
-    'connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)',
+    'connectionPolicy.observeTarget(',
+    'allowDiscoveryConnect: false',
     'reconcileAutomaticConnection()',
     'model.hostDidBecomeActive()',
 ):

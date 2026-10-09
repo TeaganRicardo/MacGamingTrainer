@@ -56,8 +56,9 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         ) { [weak self] note in
             guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
-            // Activation is not definitive launch evidence. Let the launch
-            // event or an explicit foreground refresh update process presence.
+            // Activation proves the game is running for Save safety, but it
+            // does not grant a launch-time automatic debugger attachment.
+            self.publishPresence(true)
             self.activationGeneration &+= 1
         })
         observers.append(center.addObserver(

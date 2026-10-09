@@ -65,6 +65,33 @@ if coalescedLaunch.backgroundConnectionAllowed || coalescedLaunch.connectRequest
     fail("duplicate launch observation granted another attach")
 }
 
+// Activation and foreground refresh prove game presence for Save safety
+// but cannot issue an automatic debugger attach before definitive launch.
+var earlyActivation = TrainerConnectionPolicy()
+earlyActivation.observeTarget(
+    running: true, launchGeneration: 0, allowDiscoveryConnect: false
+)
+earlyActivation.targetActivated()
+earlyActivation.backendBecameAvailable()
+if earlyActivation.consumeAutomaticConnectIfEligible(
+    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
+) {
+    fail("activation/discovery attached LLDB before definitive launch")
+}
+if earlyActivation.consumeAutomaticBackendRestartIfEligible(
+    backendAvailable: false, busy: false, actionsEnabled: true
+) {
+    fail("unconfirmed launch restarted backend before definitive launch")
+}
+earlyActivation.observeTarget(
+    running: true, launchGeneration: 1, allowDiscoveryConnect: false
+)
+if !earlyActivation.consumeAutomaticConnectIfEligible(
+    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
+) {
+    fail("definitive launch failed to release automatic connection")
+}
+
 // Merely discovering an already-running target is not a true launch and must
 // never grant background debugger permission. Only the explicit launch event
 // may do so.

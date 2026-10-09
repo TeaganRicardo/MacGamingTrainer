@@ -88,7 +88,8 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             }
             connectionPolicy.observeTarget(
                 running: observed.isRunning,
-                launchGeneration: observed.launchGeneration
+                launchGeneration: observed.launchGeneration,
+                allowDiscoveryConnect: false
             )
             if !observed.isRunning, Module.descriptor.supportsSaveManagement, model.backendAvailable {
                 saveManager.applyStagedIfPossible()
@@ -126,7 +127,11 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             // Repair policy state synchronously even when the published
             // isRunning value did not change and SwiftUI therefore emits no
             // onChange callback.
-            connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
+            connectionPolicy.observeTarget(
+                running: targetMonitor.isRunning,
+                launchGeneration: targetMonitor.launchGeneration,
+                allowDiscoveryConnect: false
+            )
             reconcileAutomaticConnection()
             model.hostDidBecomeActive()
         }

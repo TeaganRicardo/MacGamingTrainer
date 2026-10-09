@@ -14,13 +14,25 @@ struct TrainerConnectionPolicy {
     private(set) var backgroundConnectionAllowed = false
     private(set) var targetExitRefreshRequested = false
     private var observedLaunchGeneration: UInt = 0
+    private var awaitingDefinitiveLaunch = false
 
     /// Fold process presence and an NSWorkspace launch generation into one
     /// observation. SwiftUI may deliver isRunning's onChange before the
     /// launchGeneration onChange for the same notification; neither order
     /// may consume the connection grant as an ordinary foreground discovery.
-    mutating func observeTarget(running: Bool, launchGeneration: UInt) {
+    mutating func observeTarget(
+        running: Bool, launchGeneration: UInt, allowDiscoveryConnect: Bool = true
+    ) {
+        let wasRunning = targetRunning
         targetStateChanged(running: running)
+        if running && !wasRunning && !allowDiscoveryConnect {
+            // Activation/foreground refresh proves presence (including Save
+            // safety) without proving startup has finished. Await launch
+            // evidence before any automatic debugger operation.
+            awaitingDefinitiveLaunch = true
+            connectRequested = false
+            backendRestartRequested = false
+        }
         guard observedLaunchGeneration != launchGeneration else { return }
         observedLaunchGeneration = launchGeneration
         if running {
@@ -47,11 +59,13 @@ struct TrainerConnectionPolicy {
             connectRequested = false
             automaticConnectionSuppressed = false
             backgroundConnectionAllowed = false
+            awaitingDefinitiveLaunch = false
         }
     }
 
     mutating func targetLaunched() {
         targetRunning = true
+        awaitingDefinitiveLaunch = false
         // A launch is definitive target-lifetime evidence. It also covers the
         // rapid-replacement case where aggregate process presence never exposed
         // an intermediate running=false snapshot.
@@ -63,7 +77,7 @@ struct TrainerConnectionPolicy {
     }
 
     mutating func targetActivated() {
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // Activation is a bounded second opportunity when launch-time startup
         // or attach happened before the game had reached a usable state.
         backendRestartRequested = true
@@ -72,14 +86,14 @@ struct TrainerConnectionPolicy {
 
     mutating func backendBecameAvailable() {
         backendRestartRequested = false
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // A recovered/restarted backend gets one chance to restore the debugger
         // connection, unless the user explicitly detached this target lifetime.
         connectRequested = true
     }
 
     mutating func backendBecameUnavailable() {
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // TrainerBackendSession owns its own bounded immediate recovery. This
         // pending host request is preserved while it is busy and becomes one
         // final event-driven restart opportunity only if that recovery exhausts.
@@ -143,6 +157,7 @@ struct TrainerConnectionPolicy {
         }
         guard backendRestartRequested,
               targetRunning,
+              !awaitingDefinitiveLaunch,
               !busy,
               actionsEnabled else { return false }
         backendRestartRequested = false
@@ -159,6 +174,7 @@ struct TrainerConnectionPolicy {
         actionsEnabled: Bool
     ) -> Bool {
         guard connectRequested,
+              !awaitingDefinitiveLaunch,
               !automaticConnectionSuppressed,
               targetRunning,
               backendAvailable,
