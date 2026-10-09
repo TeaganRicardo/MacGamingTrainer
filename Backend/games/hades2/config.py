@@ -35,6 +35,12 @@ LUA_TRANSPORT_RESULT_LIMIT_BYTES = 262_144
 # generic timeout mechanism, not this debugger/runtime policy.
 LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS = 30.0
 
+# Initial LLDB attach can exceed the ordinary 30-second reply budget:
+# successful target-machine attachments have taken 29+ seconds. Limit only
+# transport.attach to 60 seconds, leaving the 90-second Host connect watchdog
+# time for a first status probe while preserving shorter mutation deadlines.
+LLDB_SIDECAR_ATTACH_REPLY_TIMEOUT_SECONDS = 60.0
+
 HOME = Path.home()
 STEAMAPPS = HOME / 'Library/Application Support/Steam/steamapps'
 _RAW_MODULE = json.loads((MODULE_DIR / 'module.json').read_text(encoding='utf-8'))
