@@ -82,6 +82,14 @@
 
 `QuestLogLogic.lua:607-632` 依据 Unlock/CompleteGameStateRequirements 从缺失 → Unlocked → Complete；`CashOutQuest` 还调用 `AddResource` 并标为 `CashedOut`。`QuestPresentation.lua:104-113,400-408` 维护 `QuestsViewed`、`QuestsUpdated`、`PlayedQuestInterstitials`。目前 `save_narrative.py` 对 QuestStatus 的编辑只联动 `QuestsCompleted`，并阻止改已领取的 CashedOut。这一限制不能视作用户产品已涵盖奖赏领取/剧情/任务显示的全部语义。命运清单至少应以实体展示实际原生解锁与完成条件、记录状态、奖励/领取状态、已查看/演出情况，再给出真实可支持的操作和无法编辑原因。
 
+### F10：失败、受击和小游戏纪录没有一个通用的「不完美」总开关
+
+源码逐项定位，避免把用户希望检查的失败/受伤记录一概转成某个零值：`HarvestLogic.lua:738-765` 将驱邪成功分为魔宠和手动，手动小游戏失败另增 `GameState.ExorcismFails` 与局内 `CurrentRun.ExorcismFails`；`HarvestPresentation.lua:949-965,1044-1045` 同样分别记录钓鱼成功、魔宠/手动成功、`FishCaught` 和钓鱼失败。这些是**实际持久化/局内增量**，但并不意味着只改一处历史计数就能撤销相关体验。
+
+`ObjectiveLogic.lua:303-309` 的 `GameState.LastObjectiveFailedRun[objectiveName]` 记录**最后失败的局数**，不是失败总次数。尤其 `NPCData_Nemesis.lua:~12000` 对 `NemesisBet` 的对话直接读取该值并与 `CompletedRunsCache` 比较；删除「失败记录」可能反而改变剧情可用性。`DeathLoopLogic.lua:65-115` 更新最近死因、连胜和死亡后的清算条件，`RunLogic.lua:1946` 从 `GetRunResult(CurrentRun)` 写局结果；它们与一条通用「死亡次数」不是等价语义。
+
+`CombatLogic.lua:1769-1830` 正伤害会修改 `CurrentRun.TotalDamageTaken`，有攻击者时也更新局内及长期 `DamageTakenFromRecord`；遭遇期间还会设置 `Encounter.PlayerTookDamage` 并失败 `PerfectClear` 目标。紧随其后的零伤害分支单独处理受击对话。脚本检索到的 `HeroHit` 相关项主要是震动/演出，不足以证明存在一个可写的通用 `GameState.HeroHit`「零受击」字段。因此**受到命中、受到实际伤害、完美挑战失败、历史局失败、小游戏失败**是不同事件；仅把伤害数值清零不能证明达成 0-hit 或抹去完整失败历史。修改许可必须针对原生 owner 和关联条件另行证实。
+
 ## 四、用户应看见的状态模型
 
 | UI 状态 | 证明依据 | 能宣称什么 |
