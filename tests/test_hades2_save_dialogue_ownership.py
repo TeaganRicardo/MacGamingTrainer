@@ -130,4 +130,81 @@ assert {row["id"] for row in legitimate.review()["changes"] if not row["id"].sta
 }
 assert root["GameState"]["Resources"]["MetaCurrency"] == 5.0
 
+# Parseable duplicate-linked-owner cases must stay inspectable yet read-only.
+# LuaTable deliberately preserves duplicate luabins entries, so first-key
+# lookup/removal is not sufficient evidence for a standalone dialogue reset.
+ambiguous_cases = (
+    ("primary", {"lines": [(SAFE, True), (SAFE, True), (UNKNOWN, True)]}),
+    ("choice", {"choice": table([(SAFE, "ChoiceA"), (SAFE, "ChoiceB")])}),
+    ("current-run play", {"run": table([
+        ("TextLinesRecord", table([(SAFE, True), (SAFE, False)])),
+    ])}),
+    ("current-run hub", {"run": table([
+        ("HubTextLinesRecord", table([(SAFE, True), (SAFE, True)])),
+    ])}),
+    ("current-run choice", {"run": table([
+        ("TextLinesChoiceRecord", table([(SAFE, "ChoiceA"), (SAFE, "ChoiceB")])),
+    ])}),
+    ("current-room play", {"run": table([
+        ("CurrentRoom", table([
+            ("TextLinesRecord", table([(SAFE, True), (SAFE, True)])),
+        ])),
+    ])}),
+    ("duplicate current-run owner field", {"run": table([
+        ("TextLinesRecord", table([(SAFE, True)])),
+        ("TextLinesRecord", table([(SAFE, False)])),
+    ])}),
+    ("duplicate current-room owner field", {"run": table([
+        ("CurrentRoom", table([
+            ("TextLinesRecord", table([(SAFE, True)])),
+            ("TextLinesRecord", table([(SAFE, False)])),
+        ])),
+    ])}),
+    ("gift numeric index", {"gift": table([
+        ("Hecate", table([(1.0, "AnotherLine"), (1, "SecondLine")])),
+    ])}),
+    ("gift character owner", {"gift": table([
+        ("Hecate", table([])), ("Hecate", table([])),
+    ])}),
+)
+for label, override in ambiguous_cases:
+    context = {"gift": empty_gifts, "choice": choice_record, **override}
+    unsafe, original_root = editor(**context)
+    displayed = [
+        row for row in unsafe.query(domain="dialogue", limit=100)["items"]
+        if row["rawId"] == SAFE
+    ]
+    assert len(displayed) == 1, (label, "duplicate semantic row IDs")
+    assert displayed[0]["editable"] is False, label
+    assert displayed[0]["mutationKinds"] == [], label
+    try:
+        unsafe.stage("dialogue:" + SAFE, "set", False)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("ambiguous dialogue reset was staged: " + label)
+    assert unsafe.review()["changes"] == [], label
+    assert original_root["GameState"]["TextLinesRecord"].get(SAFE) is True, label
+    # An unrelated valid intent cannot silently authorize the rejected dialogue.
+    unsafe.stage("resource:MetaCurrency", "set", 22)
+    assert [change["id"] for change in unsafe.review()["changes"]] == [
+        "resource:MetaCurrency"
+    ], label
+
+# An owner field name duplicated inside GameState also makes its first-match
+# choice record ambiguous, even when each nested table is individually valid.
+unsafe, original_root = editor(gift=empty_gifts, choice=choice_record)
+game = original_root["GameState"]
+original_root["GameState"] = table([
+    *game.entries(), ("TextLinesChoiceRecord", table([(SAFE, "ChoiceB")]))
+])
+row = records(unsafe)[SAFE]
+assert row["editable"] is False
+try:
+    unsafe.stage("dialogue:" + SAFE, "set", False)
+except ValueError:
+    pass
+else:
+    raise AssertionError("ambiguous GameState dialogue owner was staged")
+
 print("hades2_save_dialogue_ownership_ok")
