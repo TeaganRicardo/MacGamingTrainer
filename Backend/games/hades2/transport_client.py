@@ -30,6 +30,7 @@ class _LLDBWorkerClient:
         self._on_state = on_state
         self._hello_complete = False
         self._terminal_error = None
+        self._initial_attach_reply_lost = False
 
     @staticmethod
     def _backend_root():
@@ -106,6 +107,15 @@ class _LLDBWorkerClient:
                 allow_start=False,
             )
         except (SidecarStartError, SidecarTerminalError) as error:
+            if (
+                method == "transport.attach"
+                and isinstance(error, SidecarTerminalError)
+                and not error.outcome_unknown
+            ):
+                # The worker was terminated without acknowledging a pre-session
+                # attach. No Lua or Time Warp mutation crossed this IPC seam.
+                # Only a *later explicit attach* may create a fresh worker.
+                self._initial_attach_reply_lost = True
             self._raise_sidecar_failure(error)
 
     def _start(self):
@@ -174,7 +184,27 @@ class _LLDBWorkerClient:
                 # sidecar only terminalizes itself for IPC trust failures.
                 self._terminal_error = raised
             raise raised
+        if method == "transport.attach":
+            self._initial_attach_reply_lost = False
         return response.get("result"), response.get("state")
+
+    def reopen_after_initial_attach_loss(self):
+        """Discard a dead pre-session worker on the next explicit attach only."""
+        if (
+            not self._initial_attach_reply_lost
+            or self._terminal_error is None
+            or self._terminal_error.code != "restart_required"
+        ):
+            return False
+        # Generic sidecar loss has already killed the old process. Any stale
+        # debugger attachment is gone with that worker; a new attach still has
+        # to pass the native debugger's own ownership/permission checks.
+        self._sidecar.close()
+        self._sidecar = self._make_sidecar()
+        self._hello_complete = False
+        self._terminal_error = None
+        self._initial_attach_reply_lost = False
+        return True
 
     def mark_tainted(self, value):
         if self._terminal_error is not None or not self.started:
@@ -195,6 +225,7 @@ class _LLDBWorkerClient:
                 pass
         self._sidecar.close()
         self._hello_complete = False
+        self._initial_attach_reply_lost = False
 
 
 class Hades2LuaTransport:
@@ -245,6 +276,8 @@ class Hades2LuaTransport:
             return False
 
     def attach(self, pid):
+        if self.pid is None and not self._tainted:
+            self._worker.reopen_after_initial_attach_loss()
         self._call("transport.attach", {"pid": pid})
 
     def detach(self):
