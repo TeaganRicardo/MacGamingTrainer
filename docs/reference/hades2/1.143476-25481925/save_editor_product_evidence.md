@@ -4,11 +4,13 @@
 
 ## 一、证据来源与方法
 
-资料取自用户此前备份的 Google Drive / Hades2 / 1.143476-25481925 / `hades2-catalog-evidence-1.143476-steam-25481925.tar.gz`，2026-09-30 捕获，对应 Hades II 1.143476 / Steam 25481925。归档采用原始 `sources/Scripts`、`sources/Text/en` 和 `sources/Text/zh-CN` 路径。实际执行 `sha256sum -c manifest/FILES.sha256`，**1,164/1,164 通过**；有效源码有 **958 个 Lua 脚本、181 个英文 SJSON 和 181 个简体中文 SJSON**（排除 macOS AppleDouble 元数据文件）。
+资料取自用户此前备份的 Google Drive / Hades2 / 1.143476-25481925 / `hades2-catalog-evidence-1.143476-steam-25481925.tar.gz`，2026-09-30 捕获，对应 Hades II 1.143476 / Steam 25481925。归档采用原始 `sources/Scripts`、`sources/Text/en` 和 `sources/Text/zh-CN` 路径。实际执行 `sha256sum -c manifest/FILES.sha256`，**1,164/1,164 通过**；这是对清单中原始文件的校验，不是 tar 物理成员数量。归档的 `sources/Scripts` 有 **958 个 `.lua` 后缀成员**，其中 **479 个有效 Lua 脚本**，另 **479 个是 macOS AppleDouble `._*.lua` 元数据文件**，不得计入脚本扫描。实际调查语料为 **479 个 Lua 脚本、181 个英文 SJSON、181 个简体中文 SJSON**（均排除 AppleDouble），三类合计 841 个有效源文件。
 
 已与仓库 `Backend/games/hades2/save_native_ids.py` 中的生成来源 SHA 对照：`QuestData.lua = df9888d6586e0f8644e31db093bf35452bc3ac057d0f144be2f2f1e8d1e64336`；`ResourceData.lua = 94b2dc9edc22c34b213ab78dea42f2dc76c80cbcfde14104cbe772b254a29b03`；`ObjectiveData.lua = e635ef5c05ba8a22e4af4ed3d4290ec20d31c0bd95c1aff9e8b1ac828940c816`；`StoryResetData.lua = 58509042a27542f96d666071da2fa58ca3c3b227002e4ae628501b7d7738ef8e`，**全部吻合**。
 
-调查方法为冻结仓库生产文件/邻近测试阅读、原生 Lua 脚本词法扫描、针对部分 `name={...}` 场景的括号平衡提取、中英 SJSON `Id/Event` 交叉校验，以及人工检查反例。**静态次数只是候选覆盖，不等于 Lua 游戏语义、持久化字段或可写权限；没有执行真实 Lua 游戏循环、没有读取任何个人存档。**完整原生脚本、台词不进入公共仓库，仅保留最少标识及路径/哈希以供复核。
+调查方法为冻结仓库生产文件/邻近测试阅读、**仅遍历 479 个非 AppleDouble 的 Lua 脚本**进行词法扫描、针对部分 `name={...}` 场景的括号平衡提取、中英 SJSON `Id/Event` 交叉校验，以及人工检查反例。**静态次数只是候选覆盖，不等于 Lua 游戏语义、持久化字段或可写权限；没有执行真实 Lua 游戏循环、没有读取任何个人存档。**完整原生脚本、台词不进入公共仓库，仅保留最少标识及路径/哈希以供复核。
+
+**数量复核口径：** 在归档根目录执行 `find sources/Scripts -type f -name '*.lua' ! -name '._*' | wc -l` 得到 479；tar 中另有 479 个 `._*.lua` 分叉。`RunLogic.lua` 全文按 `\bGameState\.([A-Za-z_][A-Za-z_0-9]*)\s*=\s*GameState\.\1\s+or\b` 匹配初始化，得到 **146 次、145 个不同字段**；`EnemyEliteAttributeKills` 在第 162、238 行重复出现。SJSON 在保留引号字符串的前提下排除 `//` 与 `/* ... */` 注释，按行首 `Id = "..."` 的字面值提取并在每种语言内去重（不按 `Event` 或文件名筛选）：英文 **38,086**、中文 **37,300**、交集 **37,300**，英文独有 **786**、中文独有 **0**。这仅是 ID 字面值覆盖，不证明对应译文的质量、有效性或语义等价。
 
 ## 二、当前产品覆盖（源码事实）
 
@@ -45,7 +47,7 @@
 
 | 指标 | 结果 | 限定 |
 |---|---:|---|
-| 存在脚本内可检索 `ID = {...}` 定义 | **392** | `PreTrueEnding01` 未在 958 个 Lua 脚本发现该形态定义，**不能断言它在游戏中不存在** |
+| 存在脚本内可检索 `ID = {...}` 定义 | **392** | `PreTrueEnding01` 未在 479 个有效 Lua 脚本发现该形态定义，**不能断言它在游戏中不存在** |
 | 存在多处同名 Lua 定义 | **10** | 部分为双人/伙伴对话镜像和其他所有权 |
 | 对应定义块出现 `GameStateRequirements` | **374** | 只证明文本出现，不等于全部条件、可计算性或成立 |
 | 可直接由英文 SJSON `Event = "ID"` 联结 | **390** | `HecateAboutUltimateProgress03`、`HecateAboutUltimateProgress04`、`PreTrueEnding01` 没有这一直接映射 |
@@ -56,13 +58,13 @@
 
 **正例：** `NPCData_Nemesis.lua:4093+` 的 `NemesisPostTrueEnding01` 中有 `/VO/Nemesis_0407`，`Text/en/_NPCData_Nemesis.en.sjson:2935+` 记录 `Id=Nemesis_0407`、`Speaker=Nemesis`、`Event=NemesisPostTrueEnding01`；`Text/zh-CN/_NPCData_Nemesis.zh-CN.sjson:2099+` 可用同 Cue ID 联结官方中文。应按 **Event → 来源人物/场景/变体/伙伴 → 多个 Cue 及分支 → 中英译文 → 原生要求** 建立多对多来源索引。
 
-额外基线：全英文 SJSON 静态扫描约 **8,499 个 Event 值**、**30,339 次 Event–Id 关联**、**38,073 个不同 Id**；中文有 **37,300 个不同 Id**，其中 **37,286 个**与英文相同。这里 Id 包含大量非对话/表现文本，Event 关联亦不等于独立对话数。中文文件通常不重复 Event 元信息，而需要用 Id 联结。不得说「英文 8,499 段对话全部已翻译」。
+额外基线：全英文 SJSON 静态扫描约 **8,499 个 Event 值**、**30,339 次 Event–Id 关联**、**38,086 个不同 Id**；中文有 **37,300 个不同 Id**，**全部 37,300 个**与英文 Id 集合重合（英文独有 786 个）。这里 Id 包含大量非对话/表现文本，Event 关联亦不等于独立对话数；相同 Id 不表示文本内容、场景与有效翻译一一对应。中文文件通常不重复 Event 元信息，而需要用 Id 联结。不得说「英文 8,499 段对话全部已翻译」。
 
 ### F5：「数百个没有实现的 GameState.Flags」这一假设被推翻
 
-遍历所有 958 个脚本，找到直接 `GameState.Flags.<NAME>` 共 **14 个不同名称**，与 `save_narrative._FLAG_DESCRIPTORS` 的 14 项一致。发现的其他变量下标 `Flags[variable]` 属于 `MapState.Flags` 的地图级表，没有证据是未列出的动态 `GameState.Flags`。并不意味着玩家所有剧情状态只有 14 项；大量真正的条件位于 `TextLinesRecord`、`SpeechRecord`、`EnemyKills`、`RunHistory`、`WorldUpgrades`、`QuestStatus` 等表。
+遍历所有 479 个有效脚本，找到直接 `GameState.Flags.<NAME>` 共 **14 个不同名称**，与 `save_narrative._FLAG_DESCRIPTORS` 的 14 项一致。发现的其他变量下标 `Flags[variable]` 属于 `MapState.Flags` 的地图级表，没有证据是未列出的动态 `GameState.Flags`。并不意味着玩家所有剧情状态只有 14 项；大量真正的条件位于 `TextLinesRecord`、`SpeechRecord`、`EnemyKills`、`RunHistory`、`WorldUpgrades`、`QuestStatus` 等表。
 
-更广义的词法调查发现约 **251 个直接 `GameState.<FIELD>` 名称**；其中 `RunLogic.lua` 含 **142 个 `GameState.X = GameState.X or ...` 初始化**。这些数字不代表 251 个独立保存字段，更不代表可编辑数：其中有缓存、衍生或上下文状态；完整是否保存须依 `SaveLogic.lua` 的白名单/处理判断。
+更广义的词法调查发现约 **251 个直接 `GameState.<FIELD>` 名称**；其中 `RunLogic.lua` 按上述正则有 **146 次 `GameState.X = GameState.X or ...` 初始化匹配、涉及 145 个不同字段**（`EnemyEliteAttributeKills` 出现两次）。这些数字不代表 251 个独立保存字段，更不代表可编辑数：其中有缓存、衍生或上下文状态；完整是否保存须依 `SaveLogic.lua` 的白名单/处理判断。
 
 ### F6：不存在完整无限制的局历史（已证实）
 
