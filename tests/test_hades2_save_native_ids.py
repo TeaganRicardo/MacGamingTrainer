@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-native-save-ids-") as temp:
         encoding="utf-8",
     )
     (scripts / "StoryResetData.lua").write_text(
-        'StoryResetData =\n{\n  TextLines =\n  {\n    "HecatePostTrueEnding01",\n    -- "CommentedOutLine",\n    "HecatePostEpilogue01",\n    "HecatePostTrueEnding01",\n  },\n}\n',
+        'StoryResetData =\n{\n  TextLines =\n  {\n    "HecatePostTrueEnding01",\n    -- "CommentedOutLine",\n    --[=[\n    "BlockCommentedLine",\n    ]=]\n    "HecatePostEpilogue01", -- active native line\n    "HecatePostTrueEnding01",\n  },\n}\n',
         encoding="utf-8",
     )
     (scripts / "NPCData_Hecate.lua").write_text(

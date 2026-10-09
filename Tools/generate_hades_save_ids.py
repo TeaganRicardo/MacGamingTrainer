@@ -69,9 +69,12 @@ def story_reset_text_ids(source):
     section = re.search(r"(?ms)^\s*TextLines\s*=\s*\{(.*?)^\s*\},", source)
     if section is None:
         raise ValueError("StoryResetData.TextLines not found")
+    # Lua long comments can contain disabled entries; support --[[...]]
+    # and --[=[...]=] without treating their contents as active IDs.
+    active = re.sub(r"--\[(=*)\[[\s\S]*?\]\1\]", "", section.group(1))
     return sorted(set(re.findall(
-        r'(?m)^\s*"([A-Za-z0-9_]+)"\s*,?\s*$',
-        section.group(1),
+        r'(?m)^[ \t]*"([A-Za-z0-9_]+)"[ \t]*,?[ \t]*(?:--[^\r\n]*)?$',
+        active,
     )))
 
 
