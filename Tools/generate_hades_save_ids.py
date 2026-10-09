@@ -65,6 +65,16 @@ def objective_ids(source):
     return sorted(set(direct) | set(referenced))
 
 
+def story_reset_text_ids(source):
+    section = re.search(r"(?ms)^\s*TextLines\s*=\s*\{(.*?)^\s*\},", source)
+    if section is None:
+        raise ValueError("StoryResetData.TextLines not found")
+    return sorted(set(re.findall(
+        r'(?m)^\s*"([A-Za-z0-9_]+)"\s*,?\s*$',
+        section.group(1),
+    )))
+
+
 def npc_ids(scripts):
     keys = set()
     source_hash = hashlib.sha256()
