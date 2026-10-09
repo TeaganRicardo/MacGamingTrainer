@@ -133,13 +133,13 @@ class JsonLineSidecarClient:
     def invalidate(self, detail, *, outcome_unknown=False):
         self._fail_terminal(detail, outcome_unknown=outcome_unknown)
 
-    def _readline(self, stream, *, timeout_seconds):
+    def _readline(self, stream):
         try:
             fileno = stream.fileno()
         except (AttributeError, OSError, ValueError):
             return stream.readline(self.max_line_bytes + 1)
 
-        deadline = time.monotonic() + timeout_seconds
+        deadline = time.monotonic() + self.reply_timeout_seconds
         chunks = []
         total = 0
         selector = selectors.DefaultSelector()
@@ -149,7 +149,7 @@ class JsonLineSidecarClient:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not selector.select(remaining):
                     raise TimeoutError(
-                        f"sidecar reply timed out after {timeout_seconds:g}s"
+                        f"sidecar reply timed out after {self.reply_timeout_seconds:g}s"
                     )
                 chunk = os.read(
                     fileno,
@@ -172,7 +172,6 @@ class JsonLineSidecarClient:
         *,
         outcome_unknown_on_loss=False,
         allow_start=True,
-        reply_timeout_seconds=None,
     ):
         if self._terminal_error is not None:
             raise self._terminal_error
@@ -184,15 +183,6 @@ class JsonLineSidecarClient:
             raise ValueError("sidecar params must be an object")
         if type(allow_start) is not bool:
             raise ValueError("sidecar allow_start must be boolean")
-        if reply_timeout_seconds is None:
-            timeout_seconds = self.reply_timeout_seconds
-        elif (
-            type(reply_timeout_seconds) not in (int, float)
-            or not 0 < reply_timeout_seconds < float("inf")
-        ):
-            raise ValueError("sidecar reply timeout override must be finite and positive")
-        else:
-            timeout_seconds = float(reply_timeout_seconds)
         if allow_start:
             self.start()
         process = self._process
@@ -225,7 +215,7 @@ class JsonLineSidecarClient:
         try:
             process.stdin.write(encoded)
             process.stdin.flush()
-            raw = self._readline(process.stdout, timeout_seconds=timeout_seconds)
+            raw = self._readline(process.stdout)
         except (KeyboardInterrupt, SystemExit):
             self._terminate_process()
             raise
