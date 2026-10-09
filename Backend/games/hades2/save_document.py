@@ -54,6 +54,10 @@ class UnsupportedHadesSaveVersionError(HadesSaveFormatError):
     """The save is not a supported Hades II SGB1 schema version."""
 
 
+class AmbiguousLuaKeyError(ValueError):
+    """A semantic key resolves to multiple physical luabins entries."""
+
+
 def _lua_key_identity(key):
     # Physical duplicate identity follows Lua semantics: numeric 1 and 1.0
     # alias, while true and numeric 1 do not.
@@ -93,7 +97,7 @@ class LuaTable(MutableMapping):
         for index, (entry_key, _value) in enumerate(self._entries):
             if _same_lua_key(entry_key, key):
                 if found is not None:
-                    raise ValueError("Save Editor ambiguous Lua table key: {!r}".format(key))
+                    raise AmbiguousLuaKeyError("Save Editor ambiguous Lua table key: {!r}".format(key))
                 found = index
         return found
 
