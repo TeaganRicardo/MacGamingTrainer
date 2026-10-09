@@ -30,8 +30,8 @@ class ProbeAdapter:
     def scan(self):
         return self._record("scan")
 
-    def connect(self, probe_runtime=True):
-        return self._record("connect", probe_runtime)
+    def connect(self, probe_runtime=True, recover_lost_attach=False):
+        return self._record("connect", probe_runtime, recover_lost_attach)
 
     def disconnect(self):
         return self._record("disconnect")
@@ -149,10 +149,14 @@ assert contract.dispatch("scan", {}, "scan-request")["route"] == "scan"
 assert probe.calls == [("scan",)]
 probe.calls.clear()
 contract.dispatch("connect", {}, "connect-default")
-assert probe.calls == [("connect", True)]
+assert probe.calls == [("connect", True, False)]
 probe.calls.clear()
 contract.dispatch("connect", {"probeRuntime": False}, "connect-false")
-assert probe.calls == [("connect", False)]
+assert probe.calls == [("connect", False, False)]
+probe.calls.clear()
+contract.dispatch("connect", {"recoverLostAttach": True}, "connect-manual")
+assert probe.calls == [("connect", True, True)]
+expect_error("connect", {"recoverLostAttach": 1}, "recoverLostAttach 必须为布尔值。")
 probe.calls.clear()
 contract.dispatch("disconnect", {"ignored": "kept-compatible"}, "disconnect")
 assert probe.calls == [("disconnect",)]

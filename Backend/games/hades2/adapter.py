@@ -309,9 +309,14 @@ class Hades2Adapter(GameAdapter):
         self._mark_disconnected()
         self._overlay_preferences()
 
-    def _attach_runtime(self,pid):
+    def _attach_runtime(self,pid,recover_lost_attach=False):
         try:
-            self.runtime.attach(pid)
+            if recover_lost_attach:
+                # Only a deliberate Connect can discard an unacknowledged,
+                # mutation-free initial sidecar attach. Automatic retries never do.
+                self.runtime.attach(pid,recover_lost_attach=True)
+            else:
+                self.runtime.attach(pid)
         except Exception:
             if self.runtime.pid is None:self._project_detached_runtime()
             raise
@@ -706,7 +711,7 @@ class Hades2Adapter(GameAdapter):
             self.state['scene']='unknown'
             self.state['capabilities']=disconnected_capabilities()
         return dict(self.state)
-    def connect(self,probe_runtime=True):
+    def connect(self,probe_runtime=True,recover_lost_attach=False):
         self._last_status_boundary_duration=0.0;self._last_status_json_duration=0.0;self._last_status_localize_duration=0.0
         started=time.monotonic();profile={};attach_profile={};outcome='ok'
         try:
@@ -717,7 +722,7 @@ class Hades2Adapter(GameAdapter):
             self._invalidate_game_speed_observation()
             phase=time.monotonic()
             try:
-                self._attach_runtime(self.state['pid'])
+                self._attach_runtime(self.state['pid'],recover_lost_attach=recover_lost_attach)
             finally:
                 profile['attachTotal']=time.monotonic()-phase
                 attach_profile=self.runtime.last_attach_profile

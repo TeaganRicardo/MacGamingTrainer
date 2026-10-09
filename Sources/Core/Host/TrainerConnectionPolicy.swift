@@ -13,8 +13,30 @@ struct TrainerConnectionPolicy {
     private(set) var automaticConnectionSuppressed = false
     private(set) var backgroundConnectionAllowed = false
     private(set) var targetExitRefreshRequested = false
+    private var observedLaunchGeneration: UInt = 0
+    private var awaitingDefinitiveLaunch = false
 
-    mutating func targetStateChanged(running: Bool) {
+    /// Consume an atomic process-presence/launch-generation observation.
+    /// Activation or refresh can establish presence for Save safety before
+    /// NSWorkspace reports a definitive launch; that interim snapshot must
+    /// never authorize automatic debugger work.
+    mutating func observeTarget(
+        running: Bool, launchGeneration: UInt, allowDiscoveryConnect: Bool = true
+    ) {
+        let wasRunning = targetRunning
+        targetStateChanged(running: running, allowAutomaticConnect: allowDiscoveryConnect)
+        if running && !wasRunning && !allowDiscoveryConnect {
+            awaitingDefinitiveLaunch = true
+        }
+        guard observedLaunchGeneration != launchGeneration else { return }
+        observedLaunchGeneration = launchGeneration
+        if running {
+            targetLaunched()
+        }
+    }
+
+
+    mutating func targetStateChanged(running: Bool, allowAutomaticConnect: Bool = true) {
         guard targetRunning != running else { return }
         targetRunning = running
         if running {
@@ -24,19 +46,23 @@ struct TrainerConnectionPolicy {
             // that stale observation is refreshed, even if a replacement target
             // has already launched.
             automaticConnectionSuppressed = false
-            backendRestartRequested = true
-            connectRequested = true
+            if allowAutomaticConnect {
+                backendRestartRequested = true
+                connectRequested = true
+            }
         } else {
             targetExitRefreshRequested = true
             backendRestartRequested = false
             connectRequested = false
             automaticConnectionSuppressed = false
             backgroundConnectionAllowed = false
+            awaitingDefinitiveLaunch = false
         }
     }
 
     mutating func targetLaunched() {
         targetRunning = true
+        awaitingDefinitiveLaunch = false
         // A launch is definitive target-lifetime evidence. It also covers the
         // rapid-replacement case where aggregate process presence never exposed
         // an intermediate running=false snapshot.
@@ -48,7 +74,7 @@ struct TrainerConnectionPolicy {
     }
 
     mutating func targetActivated() {
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // Activation is a bounded second opportunity when launch-time startup
         // or attach happened before the game had reached a usable state.
         backendRestartRequested = true
@@ -57,14 +83,14 @@ struct TrainerConnectionPolicy {
 
     mutating func backendBecameAvailable() {
         backendRestartRequested = false
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // A recovered/restarted backend gets one chance to restore the debugger
         // connection, unless the user explicitly detached this target lifetime.
         connectRequested = true
     }
 
     mutating func backendBecameUnavailable() {
-        guard targetRunning else { return }
+        guard targetRunning, !awaitingDefinitiveLaunch else { return }
         // TrainerBackendSession owns its own bounded immediate recovery. This
         // pending host request is preserved while it is busy and becomes one
         // final event-driven restart opportunity only if that recovery exhausts.
@@ -128,6 +154,7 @@ struct TrainerConnectionPolicy {
         }
         guard backendRestartRequested,
               targetRunning,
+              !awaitingDefinitiveLaunch,
               !busy,
               actionsEnabled else { return false }
         backendRestartRequested = false
@@ -144,6 +171,7 @@ struct TrainerConnectionPolicy {
         actionsEnabled: Bool
     ) -> Bool {
         guard connectRequested,
+              !awaitingDefinitiveLaunch,
               !automaticConnectionSuppressed,
               targetRunning,
               backendAvailable,

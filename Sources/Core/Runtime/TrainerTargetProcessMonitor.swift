@@ -2,6 +2,14 @@ import AppKit
 import Combine
 import Foundation
 
+/// Atomically published process presence and definitive launch generation.
+/// Consumers must never see an intermediate running=true / old-generation
+/// snapshot from a single NSWorkspace didLaunch notification.
+struct TrainerTargetObservation: Equatable {
+    let isRunning: Bool
+    let launchGeneration: UInt
+}
+
 /// Event-driven target-app presence monitor shared by all game modules.
 ///
 /// It deliberately uses NSWorkspace launch/activation/termination notifications
@@ -11,9 +19,11 @@ import Foundation
 /// and cannot be paused merely to focus the trainer. The initial snapshot covers
 /// the case where the target game was already running before the trainer launched.
 final class TrainerTargetProcessMonitor: ObservableObject {
-    @Published private(set) var isRunning: Bool
-    @Published private(set) var launchGeneration: UInt = 0
+    @Published private(set) var targetObservation = TrainerTargetObservation(isRunning: false, launchGeneration: 0)
     @Published private(set) var activationGeneration: UInt = 0
+
+    var isRunning: Bool { targetObservation.isRunning }
+    var launchGeneration: UInt { targetObservation.launchGeneration }
 
     private let processName: String
     private let bundleIdentifier: String
@@ -24,8 +34,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         self.processName = processName
         self.bundleIdentifier = bundleIdentifier
         self.workspace = workspace
-        self.isRunning = false
-        self.isRunning = currentRunningState()
+        targetObservation = TrainerTargetObservation(isRunning: currentRunningState(), launchGeneration: 0)
 
         let center = workspace.notificationCenter
         observers.append(center.addObserver(
@@ -35,8 +44,10 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         ) { [weak self] note in
             guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
-            self.isRunning = true
-            self.launchGeneration &+= 1
+            self.targetObservation = TrainerTargetObservation(
+                isRunning: true,
+                launchGeneration: self.launchGeneration &+ 1
+            )
         })
         observers.append(center.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -45,7 +56,9 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         ) { [weak self] note in
             guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
-            self.isRunning = true
+            // Activation proves the game is running for Save safety, but it
+            // does not grant a launch-time automatic debugger attachment.
+            self.publishPresence(true)
             self.activationGeneration &+= 1
         })
         observers.append(center.addObserver(
@@ -55,7 +68,7 @@ final class TrainerTargetProcessMonitor: ObservableObject {
         ) { [weak self] note in
             guard let self, let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   self.matches(app) else { return }
-            self.isRunning = self.currentRunningState()
+            self.publishPresence(self.currentRunningState())
         })
     }
 
@@ -65,7 +78,15 @@ final class TrainerTargetProcessMonitor: ObservableObject {
     }
 
     func refresh() {
-        isRunning = currentRunningState()
+        publishPresence(currentRunningState())
+    }
+
+    private func publishPresence(_ running: Bool) {
+        guard running != isRunning else { return }
+        targetObservation = TrainerTargetObservation(
+            isRunning: running,
+            launchGeneration: launchGeneration
+        )
     }
 
     private func currentRunningState() -> Bool {

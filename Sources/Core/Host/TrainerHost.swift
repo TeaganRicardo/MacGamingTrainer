@@ -75,22 +75,25 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .onAppear {
             registerModulePresentation(localization)
             targetMonitor.refresh()
-            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
+            connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
             reconcileAutomaticConnection()
         }
-        .onChange(of: targetMonitor.isRunning) { _, running in
-            connectionPolicy.targetStateChanged(running: running)
-            if !running, Module.descriptor.supportsSaveManagement, model.backendAvailable {
+        .onChange(of: targetMonitor.targetObservation) { previous, observed in
+            // One published snapshot carries both presence and launch intent.
+            // Notify modules before consuming the Host's connection grant so
+            // game-owned readiness from an earlier process cannot be reused.
+            if observed.launchGeneration != previous.launchGeneration ||
+               (previous.isRunning && !observed.isRunning) {
+                model.hostTargetLifetimeChanged(running: observed.isRunning)
+            }
+            connectionPolicy.observeTarget(
+                running: observed.isRunning,
+                launchGeneration: observed.launchGeneration,
+                allowDiscoveryConnect: false
+            )
+            if !observed.isRunning, Module.descriptor.supportsSaveManagement, model.backendAvailable {
                 saveManager.applyStagedIfPossible()
             }
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: targetMonitor.launchGeneration) { _, _ in
-            // Only a real NSWorkspace launch may grant the one background
-            // debugger-attach opportunity. Initial process discovery remains
-            // foreground-only.
-            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
-            connectionPolicy.targetLaunched()
             reconcileAutomaticConnection()
         }
         .onChange(of: targetMonitor.activationGeneration) { _, _ in
@@ -124,7 +127,11 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             // Repair policy state synchronously even when the published
             // isRunning value did not change and SwiftUI therefore emits no
             // onChange callback.
-            connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)
+            connectionPolicy.observeTarget(
+                running: targetMonitor.isRunning,
+                launchGeneration: targetMonitor.launchGeneration,
+                allowDiscoveryConnect: false
+            )
             reconcileAutomaticConnection()
             model.hostDidBecomeActive()
         }

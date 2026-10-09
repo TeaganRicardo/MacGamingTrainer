@@ -25,16 +25,22 @@ for retired in (
 # Initial process discovery and a real NSWorkspace launch are distinct events.
 # Only didLaunch may grant permission to attach while Trainer is backgrounded.
 monitor = (ROOT / 'Sources/Core/Runtime/TrainerTargetProcessMonitor.swift').read_text()
-assert '@Published private(set) var launchGeneration' in monitor
+# A single published observation prevents an isRunning callback consuming
+# launch intent before the corresponding NSWorkspace generation is published.
+assert '@Published private(set) var targetObservation' in monitor
+assert '@Published private(set) var isRunning' not in monitor
+assert '@Published private(set) var launchGeneration' not in monitor
 launch_note = monitor[monitor.index('NSWorkspace.didLaunchApplicationNotification'):monitor.index('NSWorkspace.didActivateApplicationNotification')]
-assert 'launchGeneration &+= 1' in launch_note
-
-launch_start = host.index('.onChange(of: targetMonitor.launchGeneration)')
+assert 'targetObservation = TrainerTargetObservation(' in launch_note
+assert '.onChange(of: targetMonitor.targetObservation)' in host
+assert '.onChange(of: targetMonitor.isRunning)' not in host
+assert '.onChange(of: targetMonitor.launchGeneration)' not in host
+launch_start = host.index('.onChange(of: targetMonitor.targetObservation)')
 launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
 launch_block = host[launch_start:launch_end]
 for token in (
-    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
-    'connectionPolicy.targetLaunched()',
+    'connectionPolicy.observeTarget(',
+    'model.hostTargetLifetimeChanged(',
     'reconcileAutomaticConnection()',
 ):
     assert token in launch_block, token
@@ -67,13 +73,14 @@ foreground_end = host.index('\n    }\n\n    private func handlePrimaryConnection
 host_foreground = host[foreground_start:foreground_end]
 for token in (
     'targetMonitor.refresh()',
-    'connectionPolicy.targetStateChanged(running: targetMonitor.isRunning)',
+    'connectionPolicy.observeTarget(',
+    'allowDiscoveryConnect: false',
     'reconcileAutomaticConnection()',
     'model.hostDidBecomeActive()',
 ):
     assert token in host_foreground, token
-assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.targetStateChanged')
-assert host_foreground.index('connectionPolicy.targetStateChanged') < host_foreground.index('reconcileAutomaticConnection()')
+assert host_foreground.index('targetMonitor.refresh()') < host_foreground.index('connectionPolicy.observeTarget')
+assert host_foreground.index('connectionPolicy.observeTarget') < host_foreground.index('reconcileAutomaticConnection()')
 
 # App activation is a generic optional lifecycle hook. Hades uses it only for a
 # single foreground refresh when an existing connection is still waiting.
@@ -95,7 +102,7 @@ for token in (
 
 # Automatic connection carries the true-launch reason through the generic Host
 # contract. Game modules that do not care keep the default toggle behavior;
-# Hades uses the launch reason only to defer its first expensive runtime probe.
+# Hades defers the actual debugger attach until a native runtime-ready event.
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in contract
 assert 'connectAutomaticallyFromHost(targetJustLaunched:' in host
 automatic_start = host.index('    private func reconcileAutomaticConnection()')
@@ -105,10 +112,20 @@ assert automatic_block.index('let targetJustLaunched = connectionPolicy.backgrou
 assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunched)' in automatic_block
 
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
-assert 'let canDeferRuntimeProbe = targetJustLaunched && runLogWatcher.canObserveLifecycle' in model
-assert 'toggleConnection(probeRuntime: !canDeferRuntimeProbe)' in model
-assert 'case connect(probeRuntime: Bool)' in api
-assert '["probeRuntime": probeRuntime]' in api
+assert 'launchAttachGate.deferUntilReady(' in model
+assert 'consumeDeferredLaunchAttachIfPossible()' in model
+# Backend recovery can delay Host's grant until after native readiness.
+# The gate owns readiness across backend restarts and clears it only on a
+# native reset or definitive target OS-process lifetime change.
+launch_connect = model[model.index('    func connectAutomaticallyFromHost('):model.index('    func refreshFromHost()', model.index('    func connectAutomaticallyFromHost('))]
+assert 'launchAttachGate.deferUntilReady(' in launch_connect
+assert 'consumeDeferredLaunchAttachIfPossible()' in launch_connect
+assert 'hostTargetLifetimeChanged(running: Bool)' in model
+assert 'launchAttachGate.observeRuntimeReset()' in model
+
+assert 'toggleConnection(probeRuntime: true)' in model
+assert 'case connect(probeRuntime: Bool, recoverLostAttach: Bool)' in api
+assert '["probeRuntime": probeRuntime, "recoverLostAttach": recoverLostAttach]' in api
 
 # No generic process/Lua polling loop is introduced by the foreground design.
 assert 'Timer.' not in host and 'scheduledTimer' not in host
@@ -118,7 +135,7 @@ assert 'asyncAfter' not in foreground
 # the Trainer's launch notification. The pre-connect watcher start is therefore
 # paired with an idempotent post-connect start so the event-driven lifecycle
 # cannot be permanently missed without adding polling.
-toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool)')
+toggle_start = model.index('    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)')
 toggle_end = model.index('\n    func restartBackendFromHost()', toggle_start)
 toggle = model[toggle_start:toggle_end]
 assert toggle.count('runLogWatcher.start()') >= 2
@@ -158,7 +175,7 @@ for token in (
     assert token in model, token
 
 consume_start = model.index('    private func consumeRunLogReadySignalIfPossible()')
-consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool)', consume_start)
+consume_end = model.index('\n    private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false)', consume_start)
 run_log_refresh = model[consume_start:consume_end]
 assert 'Hades2RunLogRefreshGate.shouldConsume' in run_log_refresh
 assert 'status == "ready"' not in run_log_refresh

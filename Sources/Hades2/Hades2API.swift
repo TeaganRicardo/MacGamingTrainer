@@ -5,7 +5,7 @@ import Foundation
 /// domain request shapes and JSON parameter construction stay type-safe here.
 enum Hades2Request {
     case scan, status, disconnect, launch, disableAll, runtimeReset, resetDesired
-    case connect(probeRuntime: Bool)
+    case connect(probeRuntime: Bool, recoverLostAttach: Bool)
     case setDesired(feature: String, value: Any)
     case setVital(vital: String, field: String, value: Double)
     case setCounter(counter: String, value: Double)
@@ -47,7 +47,7 @@ enum Hades2Request {
         switch self {
         case .scan: return .scan
         case .status: return .status
-        case .connect(_): return .connect
+        case .connect(_, _): return .connect
         case .disconnect: return .disconnect
         case .launch: return .launch
         case .disableAll: return .disableAll
@@ -116,8 +116,8 @@ enum Hades2Request {
 
     var params: [String: Any] {
         switch self {
-        case .connect(let probeRuntime):
-            return ["probeRuntime": probeRuntime]
+        case .connect(let probeRuntime, let recoverLostAttach):
+            return ["probeRuntime": probeRuntime, "recoverLostAttach": recoverLostAttach]
         case .setDesired(let feature, let value):
             return ["feature": feature, "value": value]
         case .setVital(let vital, let field, let value):

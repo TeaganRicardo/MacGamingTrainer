@@ -275,6 +275,10 @@
       "arguments": [],
       "key": "hades2.error.probeRuntimeBoolean"
     },
+    "recoverLostAttach 必须为布尔值。": {
+      "arguments": [],
+      "key": "hades2.error.recoverLostAttachBoolean"
+    },
     "runtime observation 仅允许 status。": {
       "arguments": [],
       "key": "hades2.error.runtimeObservationOnly"
