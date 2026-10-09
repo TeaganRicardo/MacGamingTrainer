@@ -293,8 +293,8 @@ narrative_state = {
         "HasShuffledMusicPlayer": True,
         "UnsupportedHiddenFlag": True,
     }),
-    "TextLinesRecord": _table({"NormalScene": True, "GiftLine": True}),
-    "TextLinesChoiceRecord": _table({"NormalScene": "ChoiceA"}),
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True, "GiftLine": True}),
+    "TextLinesChoiceRecord": _table({"HecatePostTrueEnding01": "ChoiceA"}),
     "GiftTextLinesOrderRecord": _table({
         "Hecate": LuaTable(1, 0, [(1.0, "GiftLine")]),
     }),
@@ -308,7 +308,7 @@ assert flags["total"] == 1
 assert flags["items"][0]["value"] is False
 assert flags["items"][0]["group"] == "Tutorial and presentation records"
 dialogue = narrative.query(domain="dialogue", limit=10, language="zh-CN")
-assert {row["rawId"] for row in dialogue["items"]} == {"NormalScene", "GiftLine"}
+assert {row["rawId"] for row in dialogue["items"]} == {"HecatePostTrueEnding01", "GiftLine"}
 assert next(row for row in dialogue["items"] if row["rawId"] == "GiftLine")["editable"] is False
 quests = narrative.query(domain="progression", limit=10, language="en")
 assert quests["total"] == 2  # unrecognized QuestA is not an editable game quest
@@ -333,12 +333,12 @@ for identity, action, value in (
 
 narrative.stage("flag:HasPinnedAnyBoon", "set", True)
 narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
-narrative.stage("dialogue:NormalScene", "set", False)
+narrative.stage("dialogue:HecatePostTrueEnding01", "set", False)
 narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
 assert len(changes) == 6, changes  # four intents plus choice reset and quest completion
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:dialogue:NormalScene", "linked:quest:QuestHelpOdysseus"
+    "linked:dialogue:HecatePostTrueEnding01", "linked:quest:QuestHelpOdysseus"
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -346,9 +346,9 @@ game = installed_narrative.lua_state["GameState"]
 assert game["Flags"]["HasPinnedAnyBoon"] is True
 assert game["Flags"].get("HasShuffledMusicPlayer") is None
 assert game["Flags"]["UnsupportedHiddenFlag"] is True
-assert game["TextLinesRecord"].get("NormalScene") is None
+assert game["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
-assert game["TextLinesChoiceRecord"].get("NormalScene") is None
+assert game["TextLinesChoiceRecord"].get("HecatePostTrueEnding01") is None
 assert game["QuestStatus"]["QuestHelpOdysseus"] == "Complete"
 assert game["QuestsCompleted"]["QuestHelpOdysseus"] is True
 assert game["QuestsCompleted"]["QuestHelpDora"] is True
