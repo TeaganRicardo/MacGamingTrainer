@@ -302,6 +302,18 @@ narrative_state = {
     "QuestsCompleted": _table({"QuestHelpDora": True}),
 }
 _base, narrative_saves, narrative_service = _environment("narrative", state=narrative_state)
+# This native line also has recorded current-run counterparts. A reset must
+# remove their observed choices/playback without altering RunHistory.
+narrative_file = narrative_saves / "Profile1.sav"
+narrative_document = Hades2SaveDocument.load(narrative_file)
+run_records = narrative_document.lua_state["CurrentRun"]
+run_records["TextLinesRecord"] = _table({"HecatePostTrueEnding01": True})
+run_records["HubTextLinesRecord"] = _table({"HecatePostTrueEnding01": True})
+run_records["TextLinesChoiceRecord"] = _table({"HecatePostTrueEnding01": "ChoiceA"})
+run_records["CurrentRoom"] = _table({
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True})
+})
+narrative_file.write_bytes(narrative_document.to_bytes())
 narrative = Hades2SaveWorkspace.open(narrative_service)
 flags = narrative.query(domain="flags", search="HasPinnedAnyBoon", language="en")
 assert flags["total"] == 1
