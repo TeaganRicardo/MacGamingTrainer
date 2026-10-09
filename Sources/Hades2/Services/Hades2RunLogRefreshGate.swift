@@ -22,12 +22,21 @@ struct Hades2LaunchAttachGate {
         if isPending { return true }
         guard targetJustLaunched && canObserveLifecycle else { return false }
         isPending = true
-        runtimeReadyObserved = false
+        // Readiness may have arrived before backend recovery delivered the
+        // Host's one-shot connect intent. It belongs to the game lifetime.
         return true
     }
 
     mutating func observeRuntimeReady() {
-        if isPending { runtimeReadyObserved = true }
+        runtimeReadyObserved = true
+    }
+
+    mutating func observeRuntimeReset() {
+        runtimeReadyObserved = false
+    }
+
+    mutating func targetLifetimeChanged() {
+        cancel()
     }
 
     mutating func consumeIfEligible(

@@ -78,18 +78,21 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
             reconcileAutomaticConnection()
         }
-        .onChange(of: targetMonitor.isRunning) { _, running in
-            connectionPolicy.observeTarget(running: running, launchGeneration: targetMonitor.launchGeneration)
-            if !running, Module.descriptor.supportsSaveManagement, model.backendAvailable {
+        .onChange(of: targetMonitor.targetObservation) { previous, observed in
+            // One published snapshot carries both presence and launch intent.
+            // Notify modules before consuming the Host's connection grant so
+            // game-owned readiness from an earlier process cannot be reused.
+            if observed.launchGeneration != previous.launchGeneration ||
+               (previous.isRunning && !observed.isRunning) {
+                model.hostTargetLifetimeChanged(running: observed.isRunning)
+            }
+            connectionPolicy.observeTarget(
+                running: observed.isRunning,
+                launchGeneration: observed.launchGeneration
+            )
+            if !observed.isRunning, Module.descriptor.supportsSaveManagement, model.backendAvailable {
                 saveManager.applyStagedIfPossible()
             }
-            reconcileAutomaticConnection()
-        }
-        .onChange(of: targetMonitor.launchGeneration) { _, _ in
-            // The same generation-aware observation runs for presence and
-            // launch callbacks. Whichever SwiftUI delivers first owns the
-            // single launch grant; the later callback cannot duplicate it.
-            connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
             reconcileAutomaticConnection()
         }
         .onChange(of: targetMonitor.activationGeneration) { _, _ in

@@ -61,6 +61,7 @@ protocol TrainerHostModel: ObservableObject {
     func connectAutomaticallyFromHost(targetJustLaunched: Bool)
     func refreshFromHost()
     func hostDidBecomeActive()
+    func hostTargetLifetimeChanged(running: Bool)
     func restartBackendFromHost()
     func prepareForTermination(completion: @escaping (Bool) -> Void)
 }
@@ -76,6 +77,10 @@ extension TrainerHostModel {
     /// foreground-only refresh. The default is deliberately a no-op because
     /// not every integration needs or can afford a live target boundary.
     func hostDidBecomeActive() {}
+
+    /// Definitive target launch/exit invalidates game-owned observations from
+    /// the prior OS process lifetime. Modules without such state may ignore it.
+    func hostTargetLifetimeChanged(running: Bool) {}
 }
 
 /// Game modules supply business content and game-specific actions. The host

@@ -113,11 +113,14 @@ assert 'model.connectAutomaticallyFromHost(targetJustLaunched: targetJustLaunche
 assert 'func connectAutomaticallyFromHost(targetJustLaunched: Bool)' in model
 assert 'launchAttachGate.deferUntilReady(' in model
 assert 'consumeDeferredLaunchAttachIfPossible()' in model
-# Backend recovery can delay Host's automatic-connect delivery until after
-# Hades has already emitted runtimeReady. Preserve that event while detached.
+# Backend recovery can delay Host's grant until after native readiness.
+# The gate owns readiness across backend restarts and clears it only on a
+# native reset or definitive target OS-process lifetime change.
 launch_connect = model[model.index('    func connectAutomaticallyFromHost('):model.index('    func refreshFromHost()', model.index('    func connectAutomaticallyFromHost('))]
-assert 'if pendingRunReadySignal {' in launch_connect
-assert 'launchAttachGate.observeRuntimeReady()' in launch_connect
+assert 'launchAttachGate.deferUntilReady(' in launch_connect
+assert 'consumeDeferredLaunchAttachIfPossible()' in launch_connect
+assert 'hostTargetLifetimeChanged(running: Bool)' in model
+assert 'launchAttachGate.observeRuntimeReset()' in model
 
 assert 'toggleConnection(probeRuntime: true)' in model
 assert 'case connect(probeRuntime: Bool, recoverLostAttach: Bool)' in api

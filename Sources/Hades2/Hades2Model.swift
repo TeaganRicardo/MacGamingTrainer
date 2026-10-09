@@ -342,16 +342,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             runLogWatcher.start()
             status = "waiting"
             scene = "loading"
-            // Backend recovery may have delayed this auto-connect until after
-            // the game's native ready event. Carry its observed signal forward
-            // rather than waiting for another reset that may never happen.
-            if pendingRunReadySignal {
-                launchAttachGate.observeRuntimeReady()
-            }
+            // The gate retains native readiness independently of the Backend
+            // worker, including events observed before this Host request.
             consumeDeferredLaunchAttachIfPossible()
             return
         }
         toggleConnection(probeRuntime: true)
+    }
+
+    func hostTargetLifetimeChanged(running: Bool) {
+        // Backend restart is not a game restart; definitive OS launch/exit is.
+        // Never carry a prior process's native readiness into this lifetime.
+        launchAttachGate.targetLifetimeChanged()
+        pendingRunReadySignal = false
     }
 
     func refreshFromHost() {
@@ -374,6 +377,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             // The native log watcher still owns generation evidence while
             // detached, so stale readiness cannot leak into a newer launch.
             pendingRunReadySignal = false
+            launchAttachGate.observeRuntimeReset()
             guard connected else { return }
             invalidatePendingMutations()
             status = "waiting"
