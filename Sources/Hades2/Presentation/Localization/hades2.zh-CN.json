@@ -91,6 +91,7 @@
     "hades2.error.preferenceWriteBlocked": "现有 desired-state 无法安全隔离/读取/损坏，已禁止覆盖原文件。",
     "hades2.error.prepareWhileRunning": "请先退出 {0}；运行中不能修改签名或恢复存档。",
     "hades2.error.probeRuntimeBoolean": "probeRuntime 必须为布尔值。",
+    "hades2.error.recoverLostAttachBoolean": "recoverLostAttach 必须为布尔值。",
     "hades2.error.processExited": "游戏进程已结束。",
     "hades2.error.processExitedSecond": "游戏进程已退出。",
     "hades2.error.processQueryFailed": "查询 {0} 进程失败（{1}）：{2}",
