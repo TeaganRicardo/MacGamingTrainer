@@ -101,6 +101,10 @@ def render(items):
     return "\n".join(lines)
 
 
+def render_words(items):
+    return "\n".join(" ".join(items[start:start + 8]) for start in range(0, len(items), 8))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scripts", type=Path, help="Installed Content/Scripts directory")
@@ -111,14 +115,17 @@ def main():
     quests_source, quest_hash = read(args.scripts / "QuestData.lua")
     resources_source, resource_hash = read(args.scripts / "ResourceData.lua")
     objectives_source, objective_hash = read(args.scripts / "ObjectiveData.lua")
+    reset_source, reset_hash = read(args.scripts / "StoryResetData.lua")
     quests = quest_ids(quests_source)
     resources = resource_ids(resources_source)
     objectives = objective_ids(objectives_source)
+    reset_text = story_reset_text_ids(reset_source)
     npcs, npc_hash = npc_ids(args.scripts)
 
     for label, values in (
         ("quests", quests), ("resources", resources),
         ("objectives", objectives), ("NPCs", npcs),
+        ("story-reset dialogue", reset_text),
     ):
         if not values or len(values) != len(set(values)):
             raise ValueError("Missing or duplicated native " + label + " identity")
