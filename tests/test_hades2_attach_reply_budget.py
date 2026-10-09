@@ -3,7 +3,6 @@
 Exercises the real Core JSONL subprocess and Hades worker client with an
 isolated fake LLDB worker. No game process, save or debugger is involved.
 """
-import json
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +25,8 @@ for raw in sys.stdin:
         result = {"protocolVersion": 1}
     elif method in ("transport.attach", "transport.alive"):
         time.sleep(0.45)
+        result = True
+    elif method == "transport.close":
         result = True
     else:
         raise ValueError(method)
