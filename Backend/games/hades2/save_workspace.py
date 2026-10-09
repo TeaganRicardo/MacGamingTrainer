@@ -11,7 +11,7 @@ import math
 from . import save_equipment, save_long_term, save_narrative
 from .localization import official_display_names
 from .save_native_ids import RESOURCE_IDS
-from .save_document import Hades2SaveDocument, LuaTable
+from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import resolve_active_profile_save
 from .schema import MAX_AMOUNT
@@ -212,6 +212,8 @@ class Hades2SaveWorkspace:
         for key in sorted(RESOURCE_IDS):
             try:
                 descriptor = self._resource_descriptor(key)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue
             rows.append({
