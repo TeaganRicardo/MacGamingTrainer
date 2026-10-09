@@ -7,7 +7,7 @@ trait stack. Changing a durable selector never edits CurrentRun mounts.
 import copy
 
 from .localization import official_display_names
-from .save_document import LuaTable
+from .save_document import AmbiguousLuaKeyError, LuaTable
 
 
 _WEAPONS = {
@@ -164,6 +164,8 @@ def rows(root, language="zh-CN", game_path=None):
         english = en.get(weapon) or weapon
         try:
             owned = _owned(state, weapon)
+        except AmbiguousLuaKeyError:
+            raise
         except ValueError:
             continue
         result.append(_row(
@@ -175,6 +177,8 @@ def rows(root, language="zh-CN", game_path=None):
         for aspect in aspects:
             try:
                 level = _rank(state, aspect)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue
             name = native.get(aspect) or aspect
@@ -188,6 +192,8 @@ def rows(root, language="zh-CN", game_path=None):
         if owned:
             try:
                 chosen = _selection(state, weapon)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue
             choices = ("", *aspects)
@@ -207,6 +213,8 @@ def rows(root, language="zh-CN", game_path=None):
     for tool in _TOOLS:
         try:
             level = _tool_level(state, tool)
+        except AmbiguousLuaKeyError:
+            raise
         except ValueError:
             continue
         name = native.get(tool) or tool
@@ -222,6 +230,8 @@ def rows(root, language="zh-CN", game_path=None):
         for familiar in _FAMILIARS:
             try:
                 owned = _flag(familiar_unlocks, familiar)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue
             name = native.get(familiar) or familiar
@@ -358,20 +368,28 @@ def _semantic_values(root):
     for weapon, aspects in _WEAPONS.items():
         try:
             values["weapon:" + weapon] = _owned(state, weapon)
+        except AmbiguousLuaKeyError:
+            raise
         except ValueError:
             continue
         for aspect in aspects:
             try:
                 values["aspect:" + aspect] = _rank(state, aspect)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 pass
         try:
             values["aspectSelection:" + weapon] = _selection(state, weapon)
+        except AmbiguousLuaKeyError:
+            raise
         except ValueError:
             pass
     for tool in _TOOLS:
         try:
             values["tool:" + tool] = _tool_level(state, tool)
+        except AmbiguousLuaKeyError:
+            raise
         except ValueError:
             pass
     familiars = state.get("FamiliarsUnlocked")
@@ -379,6 +397,8 @@ def _semantic_values(root):
         for familiar in _FAMILIARS:
             try:
                 values["familiar:" + familiar] = _flag(familiars, familiar)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 pass
         value = state.get("EquippedFamiliar")
