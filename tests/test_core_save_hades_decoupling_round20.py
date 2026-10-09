@@ -53,7 +53,7 @@ assert "Hades2SaveManagerView" not in management
 assert 'Label("存档管理"' not in actions
 assert 'Label("存档管理"' not in main_view
 assert "saveManager.applyStagedIfPossible()" in host
-assert "if !running" in host
+assert "if !observed.isRunning, Module.descriptor.supportsSaveManagement" in host
 assert "Timer.scheduledTimer" not in host
 
 print("core_save_hades_decoupling_round20_ok")
