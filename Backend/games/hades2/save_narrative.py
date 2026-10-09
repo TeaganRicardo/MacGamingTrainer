@@ -279,7 +279,6 @@ def apply_intent(root, intent):
 def linked_changes(root, intents):
     state = _game_state(root)
     changes = []
-    choices = state.get("TextLinesChoiceRecord")
     intents = tuple(intents)
     completed = state.get("QuestsCompleted") if any(
         intent["id"].startswith("quest:") for intent in intents
@@ -304,16 +303,19 @@ def linked_changes(root, intents):
                     "before": before,
                     "after": after,
                 })
-        if (intent["id"].startswith("dialogue:") and intent["after"] is False
-                and isinstance(choices, LuaTable)):
+        if intent["id"].startswith("dialogue:") and intent["after"] is False:
             name = intent["rawId"]
-            before = choices.get(name)
-            if isinstance(before, LuaTable):
-                before = "Table ({} entries)".format(len(before))
-            if before is not None:
+            owners = _validated_dialogue_owners(root, name, _dialogue_authority(root))
+            for owner_name, record, _expected_type in owners:
+                before = record.get(name)
+                if before is None:
+                    continue
+                identity = ("linked:dialogue:" + name
+                            if owner_name == "GameState.TextLinesChoiceRecord"
+                            else "linked:dialogue:" + owner_name + ":" + name)
                 changes.append({
-                    "id": "linked:dialogue:" + name, "domain": "dialogue", "rawId": name,
-                    "name": "TextLinesChoiceRecord · " + name,
+                    "id": identity, "domain": "dialogue", "rawId": name,
+                    "name": owner_name + " · " + name,
                     "operation": "unset", "before": before, "after": None,
                 })
     return changes
