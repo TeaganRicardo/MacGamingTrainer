@@ -196,9 +196,9 @@ class _LLDBWorkerClient:
             or self._terminal_error.code != "restart_required"
         ):
             return False
-        # Generic sidecar loss has already killed the old process. Any stale
-        # debugger attachment is gone with that worker; a new attach still has
-        # to pass the native debugger's own ownership/permission checks.
+        # Generic sidecar loss already terminated the old worker. A fresh
+        # attach must independently pass the native debugger's ownership and
+        # permission checks; we do not assume that a prior attach completed.
         self._sidecar.close()
         self._sidecar = self._make_sidecar()
         self._hello_complete = False
