@@ -151,18 +151,23 @@ def rows(root, domain, language="zh-CN", game_path=None):
             ))
     if domain == "dialogue":
         lines = _table(state, "TextLinesRecord")
-        gifted = state.get("GiftTextLinesOrderRecord")
-        gifted_ids = set()
-        if isinstance(gifted, LuaTable):
-            for _, record in gifted.entries():
-                if isinstance(record, LuaTable):
-                    gifted_ids.update(value for _, value in record.entries() if isinstance(value, str))
+        try:
+            authority = _dialogue_authority(root)
+        except ValueError:
+            authority = None  # Keep the recorded rows inspectable, but read-only.
         for name, value in lines.entries():
             if not isinstance(name, str) or type(value) is not bool:
                 continue
             # A gift event also changes GiftRecord/order/choice history. It
             # cannot safely be reset by treating one text flag as independent.
-            writable = value is True and name not in gifted_ids
+            writable = False
+            if authority is not None and value is True:
+                try:
+                    _validated_dialogue_owners(root, name, authority)
+                except ValueError:
+                    pass
+                else:
+                    writable = True
             result.append(_row(
                 entry_id="dialogue:" + name, domain="dialogue", key=name,
                 path=["GameState", "TextLinesRecord", name],
