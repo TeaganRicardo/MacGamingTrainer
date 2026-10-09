@@ -91,6 +91,15 @@ for choices in (MISSING, "not a table", table([(SAFE, table([]))])):
     bad_choices, _ = editor(gift=empty_gifts, choice=choices)
     assert records(bad_choices)[SAFE]["editable"] is False
 
+# A malformed current-run owner must never be silently ignored.
+for bad_run in (
+    table([("TextLinesRecord", "invalid")]),
+    table([("TextLinesChoiceRecord", table([(SAFE, table([]))]))]),
+    table([("CurrentRoom", table([("TextLinesRecord", "invalid")]))]),
+):
+    denied, _ = editor(gift=empty_gifts, choice=choice_record, run=bad_run)
+    assert records(denied)[SAFE]["editable"] is False
+
 # CurrentRun records are also written by PlayTextLine and must be accounted
 # for in an authorized reset; no stale per-run replay gate can remain unseen.
 run = table([
