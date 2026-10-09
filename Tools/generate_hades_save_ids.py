@@ -147,6 +147,15 @@ def main():
         f'OBJECTIVE_IDS = frozenset((\n{render(objectives)}\n))'
     )
 
+    print(
+        "\n# Native StoryResetData.TextLines from target "
+        f"{args.version} / Steam {args.steam_build}.\n"
+        f"# StoryResetData.lua SHA-256 {reset_hash}\n"
+        "# A native-authored reset target is necessary, not sufficient, to authorize an\n"
+        "# individual edit: companion narrative/gift/run owners are validated separately.\n"
+        f'STORY_RESET_TEXT_IDS = frozenset("""\n{render_words(reset_text)}\n""".split())'
+    )
+
 
 if __name__ == "__main__":
     main()
