@@ -348,9 +348,13 @@ narrative.stage("flag:HasShuffledMusicPlayer", "set", False)
 narrative.stage("dialogue:HecatePostTrueEnding01", "set", False)
 narrative.stage("quest:QuestHelpOdysseus", "setEnum", "Complete")
 changes = narrative.review()["changes"]
-assert len(changes) == 6, changes  # four intents plus choice reset and quest completion
+assert len(changes) == 10, changes  # four intents, five dialogue owner links, quest history
 assert {row["id"] for row in changes if row["id"].startswith("linked:")} == {
-    "linked:dialogue:HecatePostTrueEnding01", "linked:quest:QuestHelpOdysseus"
+    "linked:dialogue:HecatePostTrueEnding01", "linked:quest:QuestHelpOdysseus",
+    "linked:dialogue:CurrentRun.TextLinesRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.HubTextLinesRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.TextLinesChoiceRecord:HecatePostTrueEnding01",
+    "linked:dialogue:CurrentRun.CurrentRoom.TextLinesRecord:HecatePostTrueEnding01",
 }
 narrative.apply()
 installed_narrative = Hades2SaveDocument.load(narrative_saves / "Profile1.sav")
@@ -361,6 +365,11 @@ assert game["Flags"]["UnsupportedHiddenFlag"] is True
 assert game["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["TextLinesRecord"]["GiftLine"] is True
 assert game["TextLinesChoiceRecord"].get("HecatePostTrueEnding01") is None
+run_after = installed_narrative.lua_state["CurrentRun"]
+assert run_after["TextLinesRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["HubTextLinesRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["TextLinesChoiceRecord"].get("HecatePostTrueEnding01") is None
+assert run_after["CurrentRoom"]["TextLinesRecord"].get("HecatePostTrueEnding01") is None
 assert game["QuestStatus"]["QuestHelpOdysseus"] == "Complete"
 assert game["QuestsCompleted"]["QuestHelpOdysseus"] is True
 assert game["QuestsCompleted"]["QuestHelpDora"] is True
