@@ -377,6 +377,71 @@ assert game["QuestStatus"]["QuestHelpDora"] == "CashedOut"
 assert game["QuestStatus"]["QuestA"] == "Unlocked"
 assert game["UnknownFutureField"]["KeepMe"] == "yes"
 
+# A valid cross-domain batch must be refused before touching disk if its
+# dialogue ownership becomes ambiguous between staging and cold Apply.
+duplicate_state = {
+    "TextLinesRecord": _table({"HecatePostTrueEnding01": True}),
+    "TextLinesChoiceRecord": _table({"HecatePostTrueEnding01": "ChoiceA"}),
+    "GiftTextLinesOrderRecord": _table({"Hecate": LuaTable(0, 0, [])}),
+}
+_base, duplicated_saves, duplicated_service = _environment(
+    "duplicate-dialogue-batch", state=duplicate_state
+)
+duplicated_path = duplicated_saves / "Profile1.sav"
+duplicated = Hades2SaveWorkspace.open(duplicated_service)
+duplicated.stage("resource:MetaCurrency", "set", 500)
+duplicated.stage("dialogue:HecatePostTrueEnding01", "set", False)
+before_ambiguous_apply = duplicated_path.read_bytes()
+# Only in-memory source state changes. The actual save file remains untouched.
+duplicated.document.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
+    0, 2, [
+        ("HecatePostTrueEnding01", "ChoiceA"),
+        ("HecatePostTrueEnding01", "ChoiceB"),
+    ]
+)
+assert next(
+    row for row in duplicated.query(domain="dialogue")["items"]
+    if row["rawId"] == "HecatePostTrueEnding01"
+)["editable"] is False
+try:
+    duplicated.review()
+except ValueError:
+    pass
+else:
+    raise AssertionError("ambiguous linked dialogue appeared in batch preview")
+try:
+    duplicated.apply()
+except ValueError:
+    pass
+else:
+    raise AssertionError("ambiguous cross-domain Save Editor batch was applied")
+assert duplicated_path.read_bytes() == before_ambiguous_apply
+assert duplicated.summary()["pendingCount"] == 2
+
+# A physically parseable, duplicate-key save remains readable and byte-stable.
+# Opening and rejecting a dialogue mutation must not normalize either record.
+source_with_duplicates = Hades2SaveDocument.load(duplicated_path)
+source_with_duplicates.lua_state["GameState"]["TextLinesChoiceRecord"] = LuaTable(
+    0, 2, [
+        ("HecatePostTrueEnding01", "ChoiceA"),
+        ("HecatePostTrueEnding01", "ChoiceB"),
+    ]
+)
+duplicated_path.write_bytes(source_with_duplicates.to_bytes())
+original_duplicate_bytes = duplicated_path.read_bytes()
+read_only_duplicate = Hades2SaveWorkspace.open(duplicated_service)
+assert next(
+    row for row in read_only_duplicate.query(domain="dialogue")["items"]
+    if row["rawId"] == "HecatePostTrueEnding01"
+)["editable"] is False
+try:
+    read_only_duplicate.stage("dialogue:HecatePostTrueEnding01", "set", False)
+except ValueError:
+    pass
+else:
+    raise AssertionError("physically duplicated dialogue was editable")
+assert duplicated_path.read_bytes() == original_duplicate_bytes
+
 # Relationship history has a native chronological array and a global
 # gift-resource aggregate. A count edit must keep all three states coherent.
 gift_npc = LuaTable(3, 2, [
