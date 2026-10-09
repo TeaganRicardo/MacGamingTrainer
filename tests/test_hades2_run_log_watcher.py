@@ -67,6 +67,84 @@ func append(_ text: String) throws {
 
 pump(0.35)
 
+// Reproduce launch-time auto-connect being consumed while Hades is still in
+// Steam/runtime startup. The LLDB attach must wait for observed game readiness
+// rather than crossing the debugger boundary at process discovery/launch.
+var hostPolicy = TrainerConnectionPolicy()
+hostPolicy.targetLaunched()
+if !hostPolicy.consumeAutomaticConnectIfEligible(
+    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
+) {
+    fatalError("fresh launch did not grant the one automatic connect intent")
+}
+var launchGate = Hades2LaunchAttachGate()
+if !launchGate.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: true) {
+    fatalError("fresh launch tried to attach before runtime readiness")
+}
+if !launchGate.deferUntilReady(targetJustLaunched: false, canObserveLifecycle: true) {
+    fatalError("second Host opportunity bypassed a pending startup gate")
+}
+if launchGate.consumeIfEligible(backendAvailable: true, busy: false, connected: false, exiting: false) {
+    fatalError("an early attach was allowed before runtime-ready evidence")
+}
+let bootDir = directory.appendingPathComponent("fresh-boot", isDirectory: true)
+try fileManager.createDirectory(at: bootDir, withIntermediateDirectories: true)
+let bootLog = bootDir.appendingPathComponent("Hades II.log")
+try Data("prior log\n".utf8).write(to: bootLog)
+var bootEvents: [Hades2RunLogEvent] = []
+let bootWatcher = Hades2RunLogWatcher(directoryURL: bootDir) { event in
+    bootEvents.append(event)
+    if event == .runtimeReady { launchGate.observeRuntimeReady() }
+}
+bootWatcher.start()
+pump(0.3)
+func bootAppend(_ text: String) throws {
+    let handle = try FileHandle(forWritingTo: bootLog)
+    try handle.seekToEnd()
+    try handle.write(contentsOf: Data(text.utf8))
+    try handle.synchronize()
+    try handle.close()
+}
+try bootAppend(
+    "2026-10-09 [MainThread] App.cpp INFO| App Initialize\n" +
+    "2026-10-09 [LoadTaskScheduler] LuaExt.cpp INFO| Lua interface destroyed\n" +
+    "2026-10-09 [MainThread] GameAssetManager.cpp INFO| Loading package: MainMenu.pkg\n" +
+    "2026-10-09 [MainThread] App.cpp INFO| App.Reset Start\n"
+)
+pump(0.3)
+if launchGate.consumeIfEligible(backendAvailable: true, busy: false, connected: false, exiting: false) {
+    fatalError("the debugger attached while Hades II was still initializing")
+}
+try bootAppend("2026-10-09 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.25 seconds)\n")
+let bootDeadline = Date().addingTimeInterval(2)
+while !bootEvents.contains(.runtimeReady) && Date() < bootDeadline { pump(0.01) }
+if !bootEvents.contains(.runtimeReady) {
+    fatalError("observed game startup did not produce runtime-ready evidence")
+}
+if launchGate.consumeIfEligible(backendAvailable: true, busy: true, connected: false, exiting: false) {
+    fatalError("startup readiness bypassed a busy backend")
+}
+if !launchGate.consumeIfEligible(backendAvailable: true, busy: false, connected: false, exiting: false) {
+    fatalError("startup readiness did not release exactly one deferred attach")
+}
+if launchGate.consumeIfEligible(backendAvailable: true, busy: false, connected: false, exiting: false) {
+    fatalError("the same startup readiness caused duplicate attachment")
+}
+var canceledGate = Hades2LaunchAttachGate()
+if !canceledGate.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: true) {
+    fatalError("cancel fixture did not arm a startup attach")
+}
+canceledGate.cancel()
+canceledGate.observeRuntimeReady()
+if canceledGate.consumeIfEligible(backendAvailable: true, busy: false, connected: false, exiting: false) {
+    fatalError("manual disconnect was overridden by a late startup event")
+}
+var noWatcherGate = Hades2LaunchAttachGate()
+if noWatcherGate.deferUntilReady(targetJustLaunched: true, canObserveLifecycle: false) {
+    fatalError("unobservable log incorrectly blocked the fallback connect path")
+}
+bootWatcher.stop()
+
 try append("2026-09-19 [MainThread] World.cpp INFO| World::Begin() G_Intro -> G_Combat04\n")
 try append("2026-09-19 [MainThread] World.cpp INFO| Finished loadScreen onExit (0.04 seconds)\n")
 try append("2026-09-19 [MainThread] World.cpp INFO| World::Stop()\n")
@@ -159,6 +237,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades2-log-watcher-") as td:
         SWIFTC,
         str(ROOT / "Sources/Hades2/Services/Hades2RunLogRefreshGate.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2RunLogWatcher.swift"),
+        str(ROOT / "Sources/Core/Host/TrainerConnectionPolicy.swift"),
         str(main),
         "-o", str(binary),
     ], check=True, cwd=ROOT)
