@@ -377,11 +377,16 @@ class NativeDialogueInvestigation:
 
     def _text_records(self, scene):
         native = self.native
-        ids = list(native['events'].get(scene, ()))
+        # Lua orders the actual spoken lines. SJSON Event tags may reference
+        # alternate or shared cues, but filename order is not dialogue order.
+        ids = []
         for definition in native['scenes'].get(scene, ()):
             for cue in definition['cues']:
                 if cue not in ids:
                     ids.append(cue)
+        for cue in native['events'].get(scene, ()):
+            if cue not in ids:
+                ids.append(cue)
         en = native['text']['en']
         zh = native['text']['zh-CN']
         return [{'cueId': cue, 'en': [x['text'] for x in en.get(cue, ())],
