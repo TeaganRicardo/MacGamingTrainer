@@ -71,17 +71,20 @@ var earlyActivation = TrainerConnectionPolicy()
 earlyActivation.observeTarget(
     running: true, launchGeneration: 0, allowDiscoveryConnect: false
 )
+if !earlyActivation.targetRunning {
+    fail("activation did not preserve running-state evidence for Save safety")
+}
+if earlyActivation.consumeAutomaticBackendRestartIfEligible(
+    backendAvailable: false, busy: false, actionsEnabled: true
+) {
+    fail("unconfirmed launch restarted backend before definitive launch")
+}
 earlyActivation.targetActivated()
 earlyActivation.backendBecameAvailable()
 if earlyActivation.consumeAutomaticConnectIfEligible(
     backendAvailable: true, busy: false, connected: false, actionsEnabled: true
 ) {
     fail("activation/discovery attached LLDB before definitive launch")
-}
-if earlyActivation.consumeAutomaticBackendRestartIfEligible(
-    backendAvailable: false, busy: false, actionsEnabled: true
-) {
-    fail("unconfirmed launch restarted backend before definitive launch")
 }
 earlyActivation.observeTarget(
     running: true, launchGeneration: 1, allowDiscoveryConnect: false
