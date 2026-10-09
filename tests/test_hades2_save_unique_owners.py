@@ -96,6 +96,41 @@ w, _ = editor(table([
 rejects(lambda: w.stage("interaction:NPC_Nemesis_01", "set", 4),
         "duplicate relationship counter")
 
+# Linked progression/equipment owners also require unique identities; an
+# invalid entry must not be hidden by a per-row malformed-data fallback.
+w, _ = editor(table([
+    ("QuestStatus", table([])),
+    ("MetaUpgradeState", table([
+        ("ChanneledCast", table([
+            ("Unlocked", True), ("Level", 2.0), ("Level", 3.0),
+        ])),
+    ])),
+]))
+rejects(lambda: w.stage("card:ChanneledCast:Level", "set", 3),
+        "duplicate Arcana level")
+
+w, _ = editor(table([
+    ("WeaponsUnlocked", table([
+        ("WeaponDagger", True), ("WeaponDagger", False),
+    ])),
+    ("WorldUpgrades", table([])),
+    ("WorldUpgradesAdded", table([])),
+]))
+rejects(lambda: w.stage("weapon:WeaponDagger", "set", False),
+        "duplicate weapon ownership")
+
+w, _ = editor(table([
+    ("WeaponsUnlocked", table([])),
+    ("WorldUpgrades", table([])),
+    ("WorldUpgradesAdded", table([])),
+    ("FamiliarsUnlocked", table([
+        ("CatFamiliar", True), ("CatFamiliar", False),
+    ])),
+]))
+rejects(lambda: w.stage("familiar:CatFamiliar", "set", False),
+        "duplicate Familiar ownership")
+
+
 # Advanced must preserve both physical rows with stable, distinct Swift IDs,
 # including the same-type duplicated container keys. The second physical
 # container must never silently navigate to the first one.
