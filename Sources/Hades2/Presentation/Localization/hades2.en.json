@@ -461,6 +461,7 @@
     "hades2.saveEditor.empty": "No matching entries.",
     "hades2.saveEditor.up": "Up",
     "hades2.saveEditor.childCount": "{0} children",
+    "hades2.saveEditor.ambiguousPath": "Duplicate physical key · cannot open",
     "hades2.saveEditor.previousPage": "Previous",
     "hades2.saveEditor.nextPage": "Next",
     "hades2.saveEditor.pageSummary": "{0}–{1} of {2}",

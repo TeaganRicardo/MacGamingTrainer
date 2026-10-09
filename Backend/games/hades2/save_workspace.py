@@ -11,7 +11,7 @@ import math
 from . import save_equipment, save_long_term, save_narrative
 from .localization import official_display_names
 from .save_native_ids import RESOURCE_IDS
-from .save_document import Hades2SaveDocument, LuaTable
+from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import resolve_active_profile_save
 from .schema import MAX_AMOUNT
@@ -212,6 +212,8 @@ class Hades2SaveWorkspace:
         for key in sorted(RESOURCE_IDS):
             try:
                 descriptor = self._resource_descriptor(key)
+            except AmbiguousLuaKeyError:
+                raise
             except ValueError:
                 continue
             rows.append({
@@ -336,7 +338,7 @@ class Hades2SaveWorkspace:
         if not isinstance(target, LuaTable):
             raise ValueError("Save Editor Advanced path must identify a table.")
         rows = []
-        for key, value in target.entries():
+        for physical_index, key, value, ambiguous in target.physical_entries():
             item_path = [*path, key]
             kind = _value_type(value)
             row = {
@@ -344,7 +346,8 @@ class Hades2SaveWorkspace:
                 # Numbers, booleans and strings can share the same printed key.
                 "id": "advanced:" + json.dumps(
                     item_path, ensure_ascii=True, separators=(",", ":")
-                ),
+                ) + ":" + str(physical_index),
+                "pathAmbiguous": ambiguous,
                 "domain": "advanced",
                 "rawId": str(key),
                 "path": item_path,
@@ -531,6 +534,12 @@ class Hades2SaveWorkspace:
     def review(self):
         changes = []
         for intent in self._pending.values():
+            # A staged identity must still resolve uniquely on the pinned source.
+            # Reject a stale or ambiguous preview before linked effects are shown.
+            descriptor = self._descriptor(intent["id"])
+            if (intent["operation"] not in descriptor["mutationKinds"]
+                    or intent["before"] != descriptor["before"]):
+                raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             changes.append({
                 key: intent[key]
                 for key in ("id", "domain", "rawId", "operation", "before", "after")

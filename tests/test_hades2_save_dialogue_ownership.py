@@ -170,6 +170,7 @@ ambiguous_cases = (
 for label, override in ambiguous_cases:
     context = {"gift": empty_gifts, "choice": choice_record, **override}
     unsafe, original_root = editor(**context)
+    original_lines = original_root["GameState"]["TextLinesRecord"].entries()
     displayed = [
         row for row in unsafe.query(domain="dialogue", limit=100)["items"]
         if row["rawId"] == SAFE
@@ -184,7 +185,7 @@ for label, override in ambiguous_cases:
     else:
         raise AssertionError("ambiguous dialogue reset was staged: " + label)
     assert unsafe.review()["changes"] == [], label
-    assert original_root["GameState"]["TextLinesRecord"].get(SAFE) is True, label
+    assert original_root["GameState"]["TextLinesRecord"].entries() == original_lines, label
     # An unrelated valid intent cannot silently authorize the rejected dialogue.
     unsafe.stage("resource:MetaCurrency", "set", 22)
     assert [change["id"] for change in unsafe.review()["changes"]] == [

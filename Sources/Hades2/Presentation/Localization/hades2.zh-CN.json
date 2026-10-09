@@ -461,6 +461,7 @@
     "hades2.saveEditor.empty": "没有匹配项目。",
     "hades2.saveEditor.up": "上一级",
     "hades2.saveEditor.childCount": "{0} 个子项",
+    "hades2.saveEditor.ambiguousPath": "重复的底层字段，无法安全进入",
     "hades2.saveEditor.previousPage": "上一页",
     "hades2.saveEditor.nextPage": "下一页",
     "hades2.saveEditor.pageSummary": "第 {0}–{1} 项，共 {2} 项",
