@@ -68,10 +68,12 @@ def _masked(text, *, lua):
     return ''.join(chars)
 
 
-def _braces(masked):
+def _braces(masked, parents=None):
     stack, pairs = [], {}
     for i, character in enumerate(masked):
         if character == '{':
+            if parents is not None:
+                parents[i] = stack[-1] if stack else None
             stack.append(i)
         elif character == '}' and stack:
             pairs[stack.pop()] = i
@@ -321,25 +323,44 @@ def _load_native(game_path, expected_hash):
         except (OSError, UnicodeError):
             continue
         masked = _masked(raw, lua=True)
-        pairs = _braces(masked)
-        for match in _ASSIGN.finditer(masked):
+        parents = {}
+        pairs = _braces(masked, parents)
+        assignments = list(_ASSIGN.finditer(masked))
+        # Authored scene identity belongs to an immediate TextLineSets entry.
+        # StoryReset and localized Event IDs are supplementary evidence, not
+        # admission gates: many real native scenes have neither association.
+        # The direct-parent test avoids classifying arbitrary voice-line lists
+        # or nested Cue tables as standalone scenes.
+        text_line_owners = {
+            assignment.start(2) for assignment in assignments
+            if assignment.group(1).endswith('TextLineSets')
+        }
+        for match in assignments:
             name = match.group(1)
-            if name not in candidates:
-                continue
             opening = match.start(2)
+            authored_scene = parents.get(opening) in text_line_owners
+            if not authored_scene and name not in candidates:
+                continue
+            if not authored_scene and name.endswith(('VoiceLines', 'TextLineSets')):
+                continue
             end = pairs.get(opening)
             if end is None:
                 continue
             body = raw[opening: end + 1]
-            # Guard against unrelated lookalike names (not all reset targets
-            # are guaranteed to exist in scripts; preserving unresolved is intentional).
             active_body = _lua_without_comments(body)
             cues = [c.group(1) for c in _CUE.finditer(active_body)]
-            if not cues and 'GameStateRequirements' not in body and name not in STORY_RESET_TEXT_IDS:
+            partner = bool(re.search(r'\b(?:Partner|CopyDataFromPartner)\b', active_body))
+            # A line set may forward its dialogue through a partner without a
+            # local Cue. Mere key/requirement resemblance outside these owners
+            # is insufficient to turn a generic speech table into a scene.
+            if not cues and not partner and (
+                'GameStateRequirements' not in active_body or
+                name not in candidates
+            ):
                 continue
             scenes[name].append({'file': path.name, 'line': raw.count('\n', 0, match.start()) + 1,
                                  'script': body, 'search': active_body, 'cues': cues,
-                                 'partner': bool(re.search(r'\b(?:Partner|CopyDataFromPartner)\b', body))})
+                                 'partner': partner})
     return {'status': 'available', 'scenes': dict(scenes), 'events': dict(events),
             'text': {lang: dict(index) for lang, index in by_language.items()}, 'errors': []}
 
@@ -352,8 +373,9 @@ def _cached(game_path, expected_hash, signature):
 class NativeDialogueInvestigation:
     """Search installed version-pinned native evidence with cold save state."""
 
-    def __init__(self, save_root, game_path=None, *, expected_hash=_SUPPORTED_STORY_SHA):
-        self.root = save_root
+    def __init__(self, game_path=None, *, expected_hash=_SUPPORTED_STORY_SHA):
+        # Cache only source evidence, never a LuaTable from a mutable Save
+        # document. Query/detail receive the workspace's current document.
         path = str(game_path) if game_path is not None else None
         scripts, _ = _original_roots(path)
         try:
@@ -363,9 +385,9 @@ class NativeDialogueInvestigation:
         self.native = _cached(path, expected_hash, signature)
         self.expected_hash = expected_hash
 
-    def _records(self):
+    def _records(self, save_root):
         try:
-            state = self.root['GameState']
+            state = save_root['GameState']
             lines = state['TextLinesRecord']
         except (KeyError, TypeError, AmbiguousLuaKeyError):
             return {}, {'__owner__'}
@@ -388,7 +410,11 @@ class NativeDialogueInvestigation:
         if not person:
             person = scene.split('About', 1)[0].split('Post', 1)[0].split('With', 1)[0]
         npc = 'NPC_' + person + '_01' if person else ''
-        return person, npc
+        localized = {}
+        for language in ('en', 'zh-CN'):
+            names = native['text'][language].get(npc, ())
+            localized[language] = next((item['text'] for item in names if item['text']), person)
+        return person, npc, localized
 
     def _data(self, scene, records, ambiguous):
         native = self.native
@@ -420,12 +446,8 @@ class NativeDialogueInvestigation:
                 for cue in ids]
 
     def _summary_row(self, scene, language, records, ambiguous, writable):
-        person, npc = self._names(scene)
-        name = scene
-        if person:
-            names = self.native['text'][language].get(npc, ())
-            native_name = next((entry['text'] for entry in names if entry['text']), person)
-            name = native_name + ' · ' + scene
+        person, npc, localized = self._names(scene)
+        name = (localized[language] + ' · ' + scene) if person else scene
         lines = self._text_records(scene)
         translated_key = 'zhCN' if language == 'zh-CN' else 'en'
         subtitle = next((phrase for row in lines for phrase in row[translated_key]), '')
@@ -445,7 +467,7 @@ class NativeDialogueInvestigation:
         return {
             'id': 'investigate:' + scene, 'domain': 'investigate', 'rawId': scene,
             'path': ['GameState', 'TextLinesRecord', scene],
-            'name': name, 'englishName': (person + ' · ' if person else '') + scene,
+            'name': name, 'englishName': (localized['en'] + ' · ' if person else '') + scene,
             'value': state == 'recorded', 'valueType': 'boolean',
             'editable': False, 'mutationKinds': [],
             'group': person or ('Other dialogue' if language == 'en' else '其他对话'),
@@ -453,8 +475,8 @@ class NativeDialogueInvestigation:
             'reason': reason, 'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
         }
 
-    def query(self, *, search, offset, limit, language, writable, state_filter="all"):
-        records, ambiguous = self._records()
+    def query(self, save_root, *, search, offset, limit, language, writable, state_filter="all"):
+        records, ambiguous = self._records(save_root)
         # An empty search never floods the user with thousands of unobserved
         # native scenes; deliberate queries expand the discoverable index.
         if search.strip():
@@ -465,8 +487,8 @@ class NativeDialogueInvestigation:
         rows = []
         for scene in candidates:
             if needle:
-                person, _ = self._names(scene)
-                corpus = (scene, person)
+                person, npc, localized = self._names(scene)
+                corpus = (scene, person, npc, *localized.values())
                 if not any(needle in token.casefold() for token in corpus):
                     definitions = self.native['scenes'].get(scene, ())
                     # Authored requirement paths, named predicates and scene
@@ -482,8 +504,8 @@ class NativeDialogueInvestigation:
         rows.sort(key=lambda row: (row['status'] != 'recorded', row['group'].casefold(), row['rawId']))
         return {'total': len(rows), 'items': rows[offset:offset + limit], 'sourceStatus': self.native['status']}
 
-    def detail(self, scene, language, writable):
-        records, ambiguous = self._records()
+    def detail(self, save_root, scene, language, writable):
+        records, ambiguous = self._records(save_root)
         if scene not in records and scene not in STORY_RESET_TEXT_IDS and scene not in self.native['scenes'] and scene not in self.native['events']:
             raise ValueError('Save Editor native scene identity is unknown.')
         overview = self._summary_row(scene, language, records, ambiguous, writable)
@@ -504,7 +526,7 @@ class NativeDialogueInvestigation:
                 scope = 'scene' if first_cue is None or hit.start() < first_cue.start() else 'line'
                 authored.append({'line': definition['line'] + body.count('\n', 0, hit.start()),
                                  'scope': scope,
-                                 'tree': _requirement_nodes(_parse_lua_table(snippet), self.root)})
+                                 'tree': _requirement_nodes(_parse_lua_table(snippet), save_root)})
             definitions.append({'file': definition['file'], 'line': definition['line'],
                                 'partner': definition['partner'], 'requirements': authored,
                                 'cueIDs': definition['cues']})
