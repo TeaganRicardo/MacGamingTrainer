@@ -388,7 +388,7 @@ struct Main {
         window.contentView = NSHostingView(rootView: root)
         window.orderFront(nil)
         pumpUntil {
-            commands(at: commandLog).count >= 2
+            model.profile == "Profile1" && model.items.count == 1
         }
 
         if model.profile != "Profile1" {
