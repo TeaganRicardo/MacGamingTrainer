@@ -532,11 +532,11 @@ class Hades2SaveWorkspace:
                 if state == "ambiguous":
                     row["editable"] = False
                     row["mutationKinds"] = []
-                    reason_code = row.get("blockReasonCode") or "ambiguousOwner"
+                    reason_code = "ambiguousOwner"
                 elif state == "unsupported":
                     row["editable"] = False
                     row["mutationKinds"] = []
-                    reason_code = row.get("blockReasonCode") or "unsupportedOwner"
+                    reason_code = "unsupportedOwner"
                 elif row.get("editable"):
                     reason_code = "editable" if state == "observed" else "editableAbsent"
                 else:

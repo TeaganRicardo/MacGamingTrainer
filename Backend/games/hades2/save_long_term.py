@@ -187,9 +187,19 @@ def rows(root, domain, language="zh-CN", game_path=None):
                     record = gift_record[person]
                 except AmbiguousLuaKeyError:
                     continue
-                for resource, value in record.entries():
-                    if not isinstance(resource, str) or not _integer(value):
+                seen_resources = set()
+                for _index, resource, value, ambiguous in record.physical_entries():
+                    if not isinstance(resource, str) or resource in seen_resources:
                         continue
+                    seen_resources.add(resource)
+                    owner_state = None
+                    presented_value = None
+                    if ambiguous:
+                        owner_state = "ambiguous"
+                    elif _integer(value):
+                        presented_value = int(value)
+                    else:
+                        owner_state = "unsupported"
                     title = (
                         (gift_native.get(person) or person) + " · " +
                         (gift_native.get(resource) or resource)
@@ -202,10 +212,15 @@ def rows(root, domain, language="zh-CN", game_path=None):
                         "gift:{}:{}".format(person, resource), domain,
                         "{} / {}".format(person, resource),
                         ["GameState", "GiftRecord", person, resource],
-                        title, english, int(value), "integer",
+                        title, english, presented_value, "integer",
                         group="赠礼记录" if zh else "Gift history",
                         editable=False, maximum=999999,
-                        block_reason_code="giftHistoryLinked",
+                        block_reason_code=(
+                            "ambiguousOwner" if owner_state == "ambiguous"
+                            else "unsupportedOwner" if owner_state == "unsupported"
+                            else "giftHistoryLinked"
+                        ),
+                        owner_state=owner_state,
                     ))
 
     if domain == "progression":

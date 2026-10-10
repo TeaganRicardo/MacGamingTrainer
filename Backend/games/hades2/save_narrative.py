@@ -277,6 +277,16 @@ def rows(root, domain, language="zh-CN", game_path=None):
             statuses = None
             statuses_owner_state = "unsupported"
             names = set(QUEST_IDS)
+        try:
+            completed = state.get("QuestsCompleted")
+        except AmbiguousLuaKeyError:
+            completed = None
+            completed_owner_state = "ambiguous"
+        else:
+            completed_owner_state = (
+                None if completed is None or isinstance(completed, LuaTable)
+                else "unsupported"
+            )
         official = official_display_names(names, language, game_path=game_path)
         english = (
             official if language == "en"
@@ -293,6 +303,17 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 else:
                     if status not in _QUEST_STATUSES:
                         owner_state = "unsupported"
+            if owner_state is None and status != "CashedOut":
+                linked_state = completed_owner_state
+                if linked_state is None and isinstance(completed, LuaTable):
+                    try:
+                        completion = completed.get(name)
+                    except AmbiguousLuaKeyError:
+                        linked_state = "ambiguous"
+                    else:
+                        if completion is not None and type(completion) is not bool:
+                            linked_state = "unsupported"
+                owner_state = linked_state
             label = official.get(name) or (("任务 · " if language == "zh-CN" else "Quest · ") + name)
             en = english.get(name) or ("Quest · " + name)
             editable = owner_state is None and status != "CashedOut"

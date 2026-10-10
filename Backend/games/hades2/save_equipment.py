@@ -50,6 +50,46 @@ def _markers(state):
     return tuple(_table(state, field) for field in _MARKER_FIELDS)
 
 
+def _merge_owner_state(*states):
+    if "ambiguous" in states:
+        return "ambiguous"
+    if "unsupported" in states:
+        return "unsupported"
+    return None
+
+
+def _marker_write_state(state, keys):
+    try:
+        markers = _markers(state)
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    except ValueError:
+        return "unsupported"
+    for table in markers:
+        for key in keys:
+            try:
+                _flag(table, key)
+            except AmbiguousLuaKeyError:
+                return "ambiguous"
+            except ValueError:
+                return "unsupported"
+    return None
+
+
+def _selection_write_state(state, weapon):
+    try:
+        _selection(state, weapon)
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    except ValueError:
+        return "unsupported"
+    return None
+
+
+def _aspect_tier_keys(aspect):
+    return (aspect, *("{}{}".format(aspect, tier) for tier in range(2, 6)))
+
+
 def _owned(state, key):
     # The actual game gives the starter weapon through WeaponsUnlocked
     # without a corresponding WorldUpgrade purchase. Purchase mirrors are
@@ -175,6 +215,17 @@ def rows(root, language="zh-CN", game_path=None):
             weapon_owner_state = "ambiguous"
         except ValueError:
             weapon_owner_state = "unsupported"
+        if weapon_owner_state is None and weapon != "WeaponStaffSwing":
+            marker_keys = [weapon]
+            selection_state = None
+            if owned is True:
+                for aspect in aspects:
+                    marker_keys.extend(_aspect_tier_keys(aspect))
+                selection_state = _selection_write_state(state, weapon)
+            weapon_owner_state = _merge_owner_state(
+                _marker_write_state(state, marker_keys),
+                selection_state,
+            )
         weapon_editable = (
             weapon_owner_state is None and weapon != "WeaponStaffSwing"
         )
@@ -203,6 +254,18 @@ def rows(root, language="zh-CN", game_path=None):
                 aspect_owner_state = "unsupported"
             name = native.get(aspect) or aspect
             english_name = en.get(aspect) or aspect
+            if aspect_owner_state is None:
+                marker_keys = list(_aspect_tier_keys(aspect))
+                if owned is False:
+                    marker_keys.append(weapon)
+                selection_state = (
+                    _selection_write_state(state, weapon)
+                    if aspect not in _DEFAULT_ASPECTS else None
+                )
+                aspect_owner_state = _merge_owner_state(
+                    _marker_write_state(state, marker_keys),
+                    selection_state,
+                )
             aspect_editable = (
                 aspect_owner_state is None
                 and (owned is True or aspect not in _DEFAULT_ASPECTS)
@@ -260,6 +323,10 @@ def rows(root, language="zh-CN", game_path=None):
             tool_owner_state = "ambiguous"
         except ValueError:
             tool_owner_state = "unsupported"
+        if tool_owner_state is None:
+            tool_owner_state = _marker_write_state(
+                state, (tool, tool + "2")
+            )
         name = native.get(tool) or tool
         english = en.get(tool) or tool
         result.append(_row(
@@ -463,40 +530,36 @@ def _semantic_values(root):
     for weapon, aspects in _WEAPONS.items():
         try:
             values["weapon:" + weapon] = _owned(state, weapon)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             continue
         for aspect in aspects:
             try:
                 values["aspect:" + aspect] = _rank(state, aspect)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
+            except (AmbiguousLuaKeyError, ValueError):
                 pass
         try:
             values["aspectSelection:" + weapon] = _selection(state, weapon)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             pass
     for tool in _TOOLS:
         try:
             values["tool:" + tool] = _tool_level(state, tool)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             pass
-    familiars = state.get("FamiliarsUnlocked")
+    try:
+        familiars = state.get("FamiliarsUnlocked")
+    except AmbiguousLuaKeyError:
+        familiars = None
     if isinstance(familiars, LuaTable):
         for familiar in _FAMILIARS:
             try:
                 values["familiar:" + familiar] = _flag(familiars, familiar)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
+            except (AmbiguousLuaKeyError, ValueError):
                 pass
-        value = state.get("EquippedFamiliar")
+        try:
+            value = state.get("EquippedFamiliar")
+        except AmbiguousLuaKeyError:
+            value = object()
         if value is None or (isinstance(value, str) and value in _FAMILIARS):
             values["familiarSelection"] = value or ""
     return values

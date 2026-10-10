@@ -224,6 +224,42 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert good_relationship["state"] == "observed"
     assert good_relationship["editable"] is True
 
+    gift_session = Session()
+    gift_state = gift_session.document.lua_state["GameState"]
+    gift_state["GiftRecord"] = table({
+        "Hecate": LuaTable(0, 3, [
+            ("GiftPoints", 1.0),
+            ("GiftPoints", 2.0),
+            ("MedeaPoints", 1.0),
+        ]),
+    })
+    gift_state["GiftResourceRecord"] = table({"GiftPoints": 2.0})
+    gift_workspace = Hades2SaveWorkspace(
+        gift_session, "Profile1", game_path=game
+    )
+    duplicate_gifts = [
+        item for item in gift_workspace.query(
+            domain="discover",
+            search="Hecate / GiftPoints",
+            language="en",
+        )["items"]
+        if item["id"] == "gift:Hecate:GiftPoints"
+    ]
+    assert len(duplicate_gifts) == 1
+    assert duplicate_gifts[0]["state"] == "ambiguous"
+    assert duplicate_gifts[0]["editable"] is False
+    assert duplicate_gifts[0]["reasonCode"] == "ambiguousOwner"
+    safe_gift = next(
+        item for item in gift_workspace.query(
+            domain="discover",
+            search="Hecate / MedeaPoints",
+            language="en",
+        )["items"]
+        if item["id"] == "gift:Hecate:MedeaPoints"
+    )
+    assert safe_gift["state"] == "observed"
+    assert safe_gift["reasonCode"] == "giftHistoryLinked"
+
     arcana_session = Session()
     arcana_state = arcana_session.document.lua_state["GameState"]
     arcana_state["MetaUpgradeState"] = LuaTable(0, 3, [
@@ -277,6 +313,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     assert good_weapon["state"] == "absent"
     assert good_weapon["editable"] is True
+    weapon_workspace.stage("weapon:WeaponTorch", "set", True)
+    assert any(
+        change["id"] == "weapon:WeaponTorch"
+        for change in weapon_workspace.review()["changes"]
+    )
+    weapon_workspace.cancel()
 
     # A source-owned identity can be discoverable even when no value is present.
     absent = workspace.query(
@@ -299,6 +341,30 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert claimed_quest["editable"] is False
     assert claimed_quest["reasonCode"] == "rewardClaimed"
 
+    linked_quest_session = Session()
+    linked_quest_state = linked_quest_session.document.lua_state["GameState"]
+    linked_quest_state["QuestStatus"] = table({
+        "QuestHelpOdysseus": "Unlocked",
+    })
+    linked_quest_state["QuestsCompleted"] = LuaTable(0, 2, [
+        ("QuestHelpOdysseus", True),
+        ("QuestHelpOdysseus", False),
+    ])
+    linked_quest_workspace = Hades2SaveWorkspace(
+        linked_quest_session, "Profile1", game_path=game
+    )
+    linked_quest = next(
+        item for item in linked_quest_workspace.query(
+            domain="discover",
+            search="QuestHelpOdysseus",
+            language="en",
+        )["items"]
+        if item["id"] == "quest:QuestHelpOdysseus"
+    )
+    assert linked_quest["state"] == "ambiguous"
+    assert linked_quest["editable"] is False
+    assert linked_quest["reasonCode"] == "ambiguousOwner"
+
     starter = workspace.query(
         domain="discover",
         search="WeaponStaffSwing",
@@ -307,6 +373,28 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     starter_weapon = next(item for item in starter["items"] if item["id"] == "weapon:WeaponStaffSwing")
     assert starter_weapon["editable"] is False
     assert starter_weapon["reasonCode"] == "starterWeapon"
+
+    linked_weapon_session = Session()
+    linked_weapon_state = linked_weapon_session.document.lua_state["GameState"]
+    linked_weapon_state["WeaponsUnlocked"] = table({"WeaponDagger": True})
+    linked_weapon_state["WorldUpgrades"] = LuaTable(0, 2, [
+        ("WeaponDagger", True),
+        ("WeaponDagger", False),
+    ])
+    linked_weapon_state["WorldUpgradesAdded"] = table({"WeaponDagger": True})
+    linked_weapon_state["LastWeaponUpgradeName"] = table({})
+    linked_weapon_workspace = Hades2SaveWorkspace(
+        linked_weapon_session, "Profile1", game_path=game
+    )
+    linked_weapon = next(
+        item for item in linked_weapon_workspace.query(
+            domain="discover", search="WeaponDagger", language="en"
+        )["items"]
+        if item["id"] == "weapon:WeaponDagger"
+    )
+    assert linked_weapon["state"] == "ambiguous"
+    assert linked_weapon["editable"] is False
+    assert linked_weapon["reasonCode"] == "ambiguousOwner"
 
     # Compound semantic owners must report the semantic state, not merely the
     # presence of the row's display path. The default Staff aspect is owned by
