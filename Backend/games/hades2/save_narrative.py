@@ -158,14 +158,20 @@ def _validated_dialogue_owners(root, name, authority):
 
 
 def _row(*, entry_id, domain, key, path, label, english, value,
-         value_type, editable, operations, group, choices=None):
-    return {
+         value_type, editable, operations, group, choices=None,
+         block_reason_code=None, block_reason_diagnostic=None):
+    row = {
         "id": entry_id, "domain": domain, "rawId": key, "path": path,
         "name": label, "englishName": english, "value": value,
         "valueType": value_type, "editable": editable,
         "mutationKinds": list(operations), "group": group,
         "choices": list(choices or ()),
     }
+    if block_reason_code:
+        row["blockReasonCode"] = block_reason_code
+    if block_reason_diagnostic:
+        row["blockReasonDiagnostic"] = block_reason_diagnostic
+    return row
 
 
 def rows(root, domain, language="zh-CN", game_path=None):
@@ -255,6 +261,12 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 editable=editable, operations=("setEnum",) if editable else (),
                 group=_GROUP_NAMES["quest"][0 if language == "zh-CN" else 1],
                 choices=("Unlocked", "Complete") if editable else (),
+                block_reason_code=None if editable else "rewardClaimed",
+                block_reason_diagnostic=None if editable else (
+                    "任务奖励已领取；无法在不撤销已发放奖励及关联记录的情况下安全回退。"
+                    if language == "zh-CN"
+                    else "Quest reward already claimed; the status cannot be safely rolled back without reversing granted rewards and linked records."
+                ),
             ))
     return result
 
