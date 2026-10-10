@@ -21,6 +21,10 @@ def document():
         "TextLinesChoiceRecord": table({}),
         "GiftTextLinesOrderRecord": table({}),
         "QuestStatus": table({}),
+        "WeaponsUnlocked": table({"WeaponStaffSwing": True}),
+        "WorldUpgrades": table({}),
+        "WorldUpgradesAdded": table({}),
+        "LastWeaponUpgradeName": table({}),
         "UnknownFutureField": table({
             "MysteryCounter": 7.0,
             "Nested": table({"OpaqueThing": "kept"}),
@@ -94,6 +98,33 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert flag["state"] == "absent"
     assert flag["editable"] is True
     assert flag["reasonCode"] == "editableAbsent"
+
+    # Compound semantic owners must report the semantic state, not merely the
+    # presence of the row's display path. The default Staff aspect is owned by
+    # its base weapon even when no separate BaseStaffAspect key exists.
+    compound = workspace.query(
+        domain="discover",
+        search="BaseStaffAspect",
+        language="en",
+    )
+    base_aspect = next(item for item in compound["items"] if item["id"] == "aspect:BaseStaffAspect")
+    assert base_aspect["value"] == 1
+    assert base_aspect["state"] == "observed"
+
+    absent_only = workspace.query(
+        domain="discover",
+        search="HasUsedWeaponShopNavigation",
+        language="en",
+        stateFilter="absent",
+    )
+    assert absent_only["items"]
+    assert all(item["state"] == "absent" for item in absent_only["items"])
+    assert workspace.query(
+        domain="discover",
+        search="HasUsedWeaponShopNavigation",
+        language="en",
+        stateFilter="observed",
+    )["total"] == 0
 
     # Unknown data is searchable without granting write authority and keeps the
     # exact Advanced path needed to inspect it.
