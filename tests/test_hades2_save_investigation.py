@@ -312,7 +312,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     header = Hades2SaveHeader(
         game_version=0x12, save_flags=3, timestamp=1,
         location='Crossroads', completed_runs=4, accumulated_meta_points=0,
-        active_shrine_points=0, meta_upgrade_level=0, cosmetics_points=None,
+        active_shrine_points=0, meta_upgrade_level=0, cosmetics_points=0,
         easy_mode=0, hard_mode=0, notable_lua_data=(),
         map_name='Hub_Main', next_map_name='F_Opening01',
     )
