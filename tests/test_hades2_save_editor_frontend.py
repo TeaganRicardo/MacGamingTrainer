@@ -31,15 +31,58 @@ for raw in sys.stdin:
             'profile': 'Profile1',
             'relativePath': 'Profile1.sav',
             'domains': [
-                'overview', 'resources', 'playerStats', 'progression', 'investigate', 'dialogue',
+                'overview', 'discover', 'resources', 'playerStats', 'progression', 'investigate', 'dialogue',
                 'flags', 'relationships', 'weapons', 'advanced',
             ],
             'pendingCount': 0,
+            'coverage': [
+                {'id': 'resources', 'discoverability': 'supported', 'understanding': 'supported', 'write': 'supported', 'reasonCode': 'verifiedDescriptors'},
+                {'id': 'playerHistory', 'discoverability': 'partial', 'understanding': 'partial', 'write': 'partial', 'reasonCode': 'playerHistoryPartial'},
+                {'id': 'narrative', 'discoverability': 'supported', 'understanding': 'partial', 'write': 'partial', 'reasonCode': 'narrativePartial'},
+                {'id': 'relationships', 'discoverability': 'supported', 'understanding': 'partial', 'write': 'partial', 'reasonCode': 'relationshipsPartial'},
+                {'id': 'progression', 'discoverability': 'supported', 'understanding': 'partial', 'write': 'partial', 'reasonCode': 'progressionPartial'},
+                {'id': 'equipment', 'discoverability': 'supported', 'understanding': 'partial', 'write': 'partial', 'reasonCode': 'equipmentPartial'},
+                {'id': 'unknown', 'discoverability': 'supported', 'understanding': 'readOnly', 'write': 'readOnly', 'reasonCode': 'unknownReadOnly'},
+            ],
         }
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
-        if domain == 'investigate':
+        if domain == 'discover':
+            if req['params']['search'] == 'MysteryCounter':
+                items = [{
+                    'id': 'advanced:["GameState","UnknownFutureField","MysteryCounter"]:0',
+                    'domain': 'advanced',
+                    'rawId': 'MysteryCounter',
+                    'path': ['GameState', 'UnknownFutureField', 'MysteryCounter'],
+                    'name': 'MysteryCounter',
+                    'englishName': 'MysteryCounter',
+                    'value': 7,
+                    'valueType': 'number',
+                    'editable': False,
+                    'mutationKinds': [],
+                    'state': 'unknown',
+                    'reasonCode': 'unknownRaw',
+                    'reason': 'Unknown save data is preserved and available read-only in Advanced.',
+                }]
+            else:
+                items = [{
+                    'id': 'resource:MetaCurrency',
+                    'domain': 'resources',
+                    'rawId': 'MetaCurrency',
+                    'path': ['GameState', 'Resources', 'MetaCurrency'],
+                    'name': 'Ashes',
+                    'englishName': 'Ashes',
+                    'value': resource_value,
+                    'valueType': 'integer',
+                    'editable': True,
+                    'mutationKinds': ['set'],
+                    'constraints': {'min': 0, 'max': 999999, 'integer': True},
+                    'state': 'observed',
+                    'reasonCode': 'editable',
+                    'reason': 'Observed with verified native ownership; supported for editing.',
+                }]
+        elif domain == 'investigate':
             lang = req['params']['language']
             items = [{
                 'id': 'investigate:NemesisPostTrueEnding01',
@@ -90,7 +133,20 @@ for raw in sys.stdin:
                 'constraints': {'min': 0, 'integer': False},
             }]
         elif domain == 'advanced':
-            if path == ['GameState', 'Resources']:
+            if path == ['GameState', 'UnknownFutureField']:
+                items = [{
+                    'id': 'advanced:unknown/MysteryCounter',
+                    'domain': 'advanced',
+                    'rawId': 'MysteryCounter',
+                    'path': ['GameState', 'UnknownFutureField', 'MysteryCounter'],
+                    'name': 'MysteryCounter',
+                    'englishName': 'MysteryCounter',
+                    'value': 7,
+                    'valueType': 'number',
+                    'editable': False,
+                    'mutationKinds': [],
+                }]
+            elif path == ['GameState', 'Resources']:
                 items = [{
                     'id': 'advanced:GameState/Resources/1',
                     'domain': 'advanced',
@@ -297,15 +353,18 @@ struct Main {
         if model.availableDomains != Hades2SaveEditorDomain.allCases {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
         }
-        if model.total != 3 || model.items.count != 3 { fail("initial resources page was not loaded") }
+        if model.selectedDomain != .discover { fail("Save Editor did not open on unified discovery") }
+        if model.total != 1 || model.items.count != 1 { fail("initial discovery page was not loaded") }
         if model.items[0].rawID != "MetaCurrency" || model.items[0].displayName != "Ashes" {
-            fail("resource row was not decoded")
+            fail("discovery resource row was not decoded")
         }
-        for (index, expected) in [(1, 0), (2, 1)] {
-            guard let value = model.items[index].value else { fail("missing numeric resource") }
-            if !(value.base is Int) || value.base is Bool || value != AnyHashable(expected) {
-                fail("JSON integer \(expected) was decoded as a boolean")
-            }
+        if model.items[0].discoveryState != "observed"
+            || model.items[0].discoveryReasonCode != "editable" {
+            fail("discovery state/reason was not decoded")
+        }
+        if model.coverage.count != 7
+            || model.coverage.first(where: { $0.id == "playerHistory" })?.write != "partial" {
+            fail("Save Editor coverage map was not decoded")
         }
 
         let sent = commands(at: commandLog)
@@ -313,8 +372,8 @@ struct Main {
             fail("unexpected command sequence: \(sent)")
         }
         guard let params = sent.last?["params"] as? [String: Any] else { fail("missing query params") }
-        if params["domain"] as? String != "resources" || params["language"] as? String != "en" {
-            fail("query did not use initial Resources domain / live language")
+        if params["domain"] as? String != "discover" || params["language"] as? String != "en" {
+            fail("query did not use initial unified discovery domain / live language")
         }
         if params["offset"] as? Int != 0 || params["limit"] as? Int != 100 {
             fail("query page contract drifted")
@@ -397,6 +456,23 @@ struct Main {
         guard let searchParams = commands(at: commandLog).last?["params"] as? [String: Any],
               searchParams["search"] as? String == "ash" else {
             fail("search was not delegated to the backend query")
+        }
+
+        model.search = "MysteryCounter"
+        model.submitSearch()
+        pump(0.20)
+        guard let unknown = model.items.first,
+              unknown.domain == "advanced",
+              unknown.discoveryState == "unknown",
+              unknown.discoveryReasonCode == "unknownRaw" else {
+            fail("unknown raw discovery row was not decoded")
+        }
+        model.openDiscoveryEntry(unknown)
+        pump(0.20)
+        if model.selectedDomain != .advanced
+            || model.advancedPath != [.string("GameState"), .string("UnknownFutureField")]
+            || model.search != "MysteryCounter" {
+            fail("discovery result did not navigate to its Advanced owner")
         }
 
         model.selectDomain(.investigate)
