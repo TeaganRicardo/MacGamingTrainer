@@ -164,6 +164,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     and_nodes = finding.detail('NemesisAboutChronosBossFights01', 'en', set())['definitions'][0]['requirements'][0]['tree']
     all_nodes = flatten(and_nodes)
     assert any('CurrentRun.RoomsEntered.I_Boss01' in entry['text'] for entry in all_nodes)
+    # The authored comparison is not an eligibility prediction; the actual
+    # cold-save scalar must nevertheless be inspectable alongside its threshold.
+    observed_chronos = next(entry for entry in all_nodes if 'GameState.EnemyKills.Chronos' in entry['text'])
+    assert observed_chronos['evidence'] == 'recorded'
+    assert observed_chronos['observation'] == '8'
+    assert observed_chronos['text'].endswith('Comparison: >=, Value: 3')
+    current_run = next(entry for entry in all_nodes if 'CurrentRun.Cleared' in entry['text'])
+    assert current_run['evidence'] == 'unknown' and current_run['observation'] is None
     assert any('CurrentRun.Cleared' in entry['text'] for entry in all_nodes)
     assert any('GameState.EnemyKills.Chronos' in entry['text'] and 'Comparison: >=' in entry['text'] for entry in all_nodes)
     assert any('GameState.TextLinesRecord.NemesisGift03' in entry['text'] for entry in all_nodes)
