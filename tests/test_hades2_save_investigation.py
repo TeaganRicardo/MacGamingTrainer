@@ -8,6 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
 
+from unittest.mock import patch
+
+from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
+from games.hades2.save_workspace import Hades2SaveWorkspace
 from games.hades2.save_document import LuaTable
 from games.hades2.save_investigation import NativeDialogueInvestigation
 
@@ -43,6 +47,17 @@ def source_tree(folder):
     },
     { Cue = "/VO/Nemesis_0252", Text = "Many prerequisites" },
   },
+  NPC_Nemesis_01 = {
+    InteractVoiceLines = {
+      { Cue = "/VO/Nemesis_Ambient9001", Text = "Ambient only" },
+    },
+    GiftTextLineSets = {
+      NemesisBathHouseRepeatable01 = {
+        GameStateRequirements = {{PathTrue = {"GameState", "WorldUpgradesAdded", "WorldUpgradeBathHouse"}}},
+        { Cue = "/VO/Nemesis_Bath9001", Text = "Repeatable bathhouse scene" },
+      },
+    },
+  },
 }
 ''', encoding='utf-8')
     (scripts / 'NPCData_Hecate.lua').write_text('''UnitSetData = {
@@ -62,6 +77,14 @@ def source_tree(folder):
   HecateAboutTyphonFight03 = {
     { Cue = "/VO/Melinoe_0585_A", Text = "Only source English" },
     { Cue = "/VO/Melinoe_0585_B", Text = "Only source English" },
+  },
+  NPC_Hecate_01 = {
+    InteractTextLineSets = {
+      HecateAboutTyphonFight02_B = {
+        PlayOnce = true,
+        { Cue = "/VO/Hecate_Typhon9001", Text = "Scene without a localization Event" },
+      },
+    },
   },
 }
 ''', encoding='utf-8')
@@ -89,12 +112,14 @@ SecondOwner = {
   { Id = "Nemesis_0252" DisplayName = "Fought Chronos repeatedly" Speaker = "Nemesis" Event = "NemesisAboutChronosBossFights01" }
   { Id = "Nemesis_GenericVoice01" DisplayName = "Unrelated ambient speech" Event = "NPC_Nemesis_01.InteractVoiceLines" }
   { Id = "Nemesis_EventOnly01" DisplayName = "Unresolved event wording" Event = "NemesisOnlyLocalizationEvent01" }
+  { Id = "Nemesis_Bath9001" DisplayName = "The springs again" }
   // { Id = "Commented_01" DisplayName = "Not live" Event = "NemesisPostTrueEnding01" }
  ]
 }
 ''', encoding='utf-8')
     (english / '_NPCData_Hecate.en.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0795" DisplayName = "Shared" Event = "HecateAboutUltimateProgress03_A" }
+ { Id = "Hecate_Typhon9001" DisplayName = "Typhon follow-up" }
 ] }''', encoding='utf-8')
     (english / '_EnemyData_Hecate.en.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0942" DisplayName = "From enemy text" Event = "HecateBossAboutEndingPath04" }
@@ -102,14 +127,22 @@ SecondOwner = {
     (chinese / '_NPCData_Nemesis.zh-CN.sjson').write_text('''{ Texts = [
  { Id = "Nemesis_0407" DisplayName = "我的父亲回来了" }
  { Id = "Nemesis_0252" DisplayName = "多次击败克洛诺斯" }
+ { Id = "Nemesis_Bath9001" DisplayName = "再次泡温泉" }
 ] }''', encoding='utf-8')
     (chinese / '_NPCData_Hecate.zh-CN.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0795" DisplayName = "同一台词" }
+ { Id = "Hecate_Typhon9001" DisplayName = "台风之后" }
  { Id = "Hecate_ZHOnly9001" DisplayName = "仅中文场景" Event = "HecateChineseEventOnly01" Speaker = "赫卡忒" }
 ] }''', encoding='utf-8')
     (chinese / '_EnemyData_Hecate.zh-CN.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0942" DisplayName = "跨文件翻译" }
 ] }''', encoding='utf-8')
+    (english / 'HelpText.en.sjson').write_text(
+        '{ Texts = [ { Id = "NPC_Nemesis_01" DisplayName = "Nemesis" } ] }',
+        encoding='utf-8')
+    (chinese / 'HelpText.zh-CN.sjson').write_text(
+        '{ Texts = [ { Id = "NPC_Nemesis_01" DisplayName = "涅墨西斯" } ] }',
+        encoding='utf-8')
     return hashlib.sha256(reset.read_bytes()).hexdigest()
 
 
@@ -133,7 +166,21 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert finding.query(search='', offset=0, limit=30, language='en', writable=set())['total'] == 2
     found = finding.query(search='Nemesis', offset=0, limit=100, language='zh-CN', writable=set())
     assert found['total'] >= 2
-    assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01'}
+    assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01', 'NemesisBathHouseRepeatable01'}
+    # Two real native scenes lack both StoryReset and a matching SJSON Event.
+    # Their immediate owners are authored TextLineSets, not voice-line lists.
+    bath = finding.query(search='NemesisBathHouseRepeatable01', offset=0, limit=10, language='zh-CN', writable=set())
+    typhon = finding.query(search='HecateAboutTyphonFight02_B', offset=0, limit=10, language='zh-CN', writable=set())
+    assert [row['rawId'] for row in bath['items']] == ['NemesisBathHouseRepeatable01']
+    assert [row['rawId'] for row in typhon['items']] == ['HecateAboutTyphonFight02_B']
+    assert all(row['status'] == 'notRecorded' and not row['canStage'] for row in bath['items'] + typhon['items'])
+    assert finding.detail('NemesisBathHouseRepeatable01', 'zh-CN', set())['lines'][0]['zhCN'] == ['再次泡温泉']
+    assert finding.detail('HecateAboutTyphonFight02_B', 'en', set())['lines'][0]['en'] == ['Typhon follow-up']
+    assert finding.query(search='InteractVoiceLines', offset=0, limit=10, language='en', writable=set())['total'] == 0
+    # Searching the same bilingual character label shown in result headings
+    # must find her scenes even when none of their dialogue contains that name.
+    localized = finding.query(search='涅墨西斯', offset=0, limit=100, language='zh-CN', writable=set())
+    assert {'NemesisPostTrueEnding01', 'NemesisBathHouseRepeatable01'} <= {row['rawId'] for row in localized['items']}
     assert finding.query(search='我的父亲', offset=0, limit=10, language='zh-CN', writable=set())['total'] == 1
     # A zh-CN-only Event/Id is still discoverable; its English counterpart
     # is explicitly missing, not silently copied or synthesized.
@@ -214,5 +261,61 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert missing.native['status'] == 'missing'
     wrong = NativeDialogueInvestigation(root, game, expected_hash='f' * 64)
     assert wrong.native['status'] == 'mismatch' and not wrong.detail('NemesisPostTrueEnding01', 'en', set())['definitions']
+
+
+    # The workspace must use the currently committed cold-save document, not
+    # a LuaTable retained when investigation was first opened. Use the real
+    # document serialization and workspace stage/review/apply path, but replace
+    # the physical save writer with a temporary-file transaction double.
+    save_root = lua(GameState=lua(
+        TextLinesRecord=lua(NemesisPostTrueEnding01=True),
+        GiftTextLinesOrderRecord=lua(),
+        TextLinesChoiceRecord=lua(),
+    ))
+    header = Hades2SaveHeader(
+        game_version=0x12, save_flags=3, timestamp=1,
+        location='Crossroads', completed_runs=4, accumulated_meta_points=0,
+        active_shrine_points=0, meta_upgrade_level=0, cosmetics_points=None,
+        easy_mode=0, hard_mode=0, notable_lua_data=(),
+        map_name='Hub_Main', next_map_name='F_Opening01',
+    )
+    initial_bytes = Hades2SaveDocument(header, [save_root]).to_bytes()
+    target = game / 'Profile1.sav'
+    target.write_bytes(initial_bytes)
+
+    class TestColdSession:
+        relative_path = 'Profile1.sav'
+
+        def __init__(self):
+            self.document = Hades2SaveDocument.from_bytes(target.read_bytes())
+
+        def apply(self):
+            encoded = self.document.to_bytes()
+            Hades2SaveDocument.from_bytes(encoded)
+            target.write_bytes(encoded)
+            self.document = Hades2SaveDocument.load(target)
+            return {'applied': True, 'replaced': True}
+
+    # Match the installed-source gate to this *temporary* native-like fixture;
+    # production keeps the fixed version hash and current Save policy.
+    with patch('games.hades2.save_investigation._cached', return_value=finding.native):
+        session = TestColdSession()
+        workspace = Hades2SaveWorkspace(session, 'Profile1', game_path=game)
+        first = workspace.query(domain='investigate', search='NemesisPostTrueEnding01', language='en')['items'][0]
+        assert first['status'] == 'recorded' and first['canStage']
+        before_detail = workspace.investigate(first['id'], 'en')
+        assert before_detail['status'] == 'recorded' and before_detail['canStage']
+        preview = workspace.stage('dialogue:NemesisPostTrueEnding01', 'set', False)
+        assert preview['count'] >= 1
+        assert target.read_bytes() == initial_bytes
+        applied = workspace.apply()
+        assert applied['applied']
+        assert 'NemesisPostTrueEnding01' not in Hades2SaveDocument.load(target).lua_state['GameState']['TextLinesRecord']
+        second = workspace.query(domain='investigate', search='NemesisPostTrueEnding01', language='en')['items'][0]
+        after_detail = workspace.investigate(first['id'], 'en')
+        assert second['status'] == 'notRecorded' and not second['canStage']
+        assert after_detail['status'] == 'notRecorded' and not after_detail['canStage']
+        assert after_detail['sourceStatus'] == 'available'
+        assert workspace.review()['count'] == 0
 
 print('hades2_save_investigation_ok')
