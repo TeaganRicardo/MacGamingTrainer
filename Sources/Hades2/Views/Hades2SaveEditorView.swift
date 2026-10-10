@@ -30,6 +30,9 @@ struct Hades2SaveEditorView: View {
             VStack(alignment: .leading, spacing: 12) {
                 workspaceHeader
                 domainToolbar
+                if model.selectedDomain == .discover {
+                    coveragePanel
+                }
                 if model.selectedDomain == .advanced {
                     advancedBreadcrumb
                 }
@@ -123,11 +126,29 @@ struct Hades2SaveEditorView: View {
             .frame(width: 180)
 
             TextField(
-                text("hades2.saveEditor.search"),
+                text(model.selectedDomain == .discover
+                     ? "hades2.saveEditor.searchAll"
+                     : "hades2.saveEditor.search"),
                 text: $model.search
             )
             .textFieldStyle(.roundedBorder)
             .onSubmit { model.submitSearch() }
+
+            if model.selectedDomain == .discover {
+                Picker(
+                    text("hades2.saveEditor.discovery.filter.all"),
+                    selection: Binding(
+                        get: { model.discoveryFilter },
+                        set: { model.setDiscoveryFilter($0) }
+                    )
+                ) {
+                    ForEach(["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unknown"], id: \.self) { value in
+                        Text(text("hades2.saveEditor.discovery.filter." + value)).tag(value)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 145)
+            }
 
             if model.selectedDomain == .investigate {
                 Picker(
@@ -161,6 +182,7 @@ struct Hades2SaveEditorView: View {
     private func domainTitle(_ domain: Hades2SaveEditorDomain) -> String {
         switch domain {
         case .overview: return text("hades2.saveEditor.domain.overview")
+        case .discover: return text("hades2.saveEditor.domain.discover")
         case .resources: return text("hades2.saveEditor.domain.resources")
         case .playerStats: return text("hades2.saveEditor.domain.playerStats")
         case .progression: return text("hades2.saveEditor.domain.progression")
@@ -171,6 +193,43 @@ struct Hades2SaveEditorView: View {
         case .weapons: return text("hades2.saveEditor.domain.weapons")
         case .advanced: return text("hades2.saveEditor.domain.advanced")
         }
+    }
+
+    private var coveragePanel: some View {
+        DisclosureGroup(text("hades2.saveEditor.coverage.title")) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(text("hades2.saveEditor.coverage.area"))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(text("hades2.saveEditor.coverage.discoverability"))
+                        .frame(width: 95, alignment: .leading)
+                    Text(text("hades2.saveEditor.coverage.understanding"))
+                        .frame(width: 95, alignment: .leading)
+                    Text(text("hades2.saveEditor.coverage.write"))
+                        .frame(width: 75, alignment: .leading)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+                ForEach(model.coverage) { item in
+                    HStack(spacing: 8) {
+                        Text(text("hades2.saveEditor.coverage.area." + item.id))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(text("hades2.saveEditor.coverage.level." + item.discoverability))
+                            .frame(width: 95, alignment: .leading)
+                        Text(text("hades2.saveEditor.coverage.level." + item.understanding))
+                            .frame(width: 95, alignment: .leading)
+                        Text(text("hades2.saveEditor.coverage.level." + item.write))
+                            .frame(width: 75, alignment: .leading)
+                    }
+                    .font(.caption)
+                    .help(text("hades2.saveEditor.coverage.reason." + item.reasonCode))
+                }
+            }
+            .padding(.top, 6)
+        }
+        .font(.caption)
+        .trainerPanel(padding: 10, cornerRadius: theme.controlCornerRadius)
     }
 
     @ViewBuilder
@@ -363,7 +422,9 @@ struct Hades2SaveEditorView: View {
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(model.items) { entry in
-                        if model.selectedDomain == .advanced {
+                        if model.selectedDomain == .discover {
+                            discoveryRow(entry)
+                        } else if model.selectedDomain == .advanced {
                             advancedRow(entry)
                         } else {
                             semanticRow(entry)
@@ -434,6 +495,86 @@ struct Hades2SaveEditorView: View {
                 }
             }
         }
+    }
+
+    private func discoveryRow(_ entry: Hades2SaveEditorEntry) -> some View {
+        TrainerListCard {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.displayName)
+                        .font(.subheadline.weight(.semibold))
+                    if entry.englishName != entry.displayName && localization.language != .en {
+                        Text(entry.englishName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 8) {
+                        if let group = entry.group {
+                            Text(group)
+                        }
+                        if let state = entry.discoveryState {
+                            Text(text("hades2.saveEditor.discovery.state." + state))
+                        }
+                        Text(text(entry.editable
+                                  ? "hades2.saveEditor.discovery.editable"
+                                  : "hades2.saveEditor.discovery.readOnly"))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    if let reason = entry.discoveryReason, !reason.isEmpty {
+                        Text(discoveryReason(entry, fallback: reason))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(entry.rawID)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .textSelection(.enabled)
+                }
+
+                Spacer()
+
+                if entry.valueType != "table" {
+                    Text(valueText(entry.value))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                if canOpenDiscoveryEntry(entry) {
+                    Button(text(entry.domain == "advanced"
+                                ? "hades2.saveEditor.discovery.openAdvanced"
+                                : "hades2.saveEditor.discovery.open")) {
+                        model.openDiscoveryEntry(entry)
+                    }
+                    .disabled(model.busy || entry.pathAmbiguous)
+                }
+            }
+        }
+    }
+
+    private func discoveryReason(_ entry: Hades2SaveEditorEntry, fallback: String) -> String {
+        guard let code = entry.discoveryReasonCode else { return fallback }
+        if entry.domain == "investigate" {
+            return text("hades2.saveEditor.investigate.block." + code)
+        }
+        let known = [
+            "editable", "editableAbsent", "readOnly", "unknownRaw",
+            "ambiguousOwner", "ambiguousRaw", "knownAbsent",
+        ]
+        return known.contains(code)
+            ? text("hades2.saveEditor.discovery.reason." + code)
+            : fallback
+    }
+
+    private func canOpenDiscoveryEntry(_ entry: Hades2SaveEditorEntry) -> Bool {
+        if entry.domain == "advanced" || entry.domain == "investigate" {
+            return true
+        }
+        if entry.id.hasPrefix("quest:"), entry.discoveryState == "absent" {
+            return false
+        }
+        return Hades2SaveEditorDomain(rawValue: entry.domain) != nil
     }
 
     private func advancedRow(_ entry: Hades2SaveEditorEntry) -> some View {
