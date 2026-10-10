@@ -368,6 +368,40 @@ struct Main {
         )
 
         let model = Hades2SaveEditorModel(session: session)
+
+        // The workbench groups known linked native owners without creating a
+        // parallel edit identity; each original descriptor remains selectable.
+        func sample(
+            _ id: String, _ domain: String, _ rawID: String, _ name: String,
+            group: String? = nil
+        ) -> Hades2SaveEditorEntry {
+            Hades2SaveEditorEntry(
+                id: id, domain: domain, rawID: rawID, path: [],
+                displayName: name, englishName: name, value: AnyHashable(1),
+                valueType: "integer", editable: true, mutationKinds: ["set"],
+                group: group, choices: [], choiceNames: [:], constraints: nil,
+                childCount: nil, pathAmbiguous: false, investigationStatus: nil,
+                investigationSnippet: nil, investigationSourceStatus: nil,
+                investigationReason: nil, discoveryState: nil,
+                discoveryReasonCode: nil, discoveryReason: nil
+            )
+        }
+        let grouped = Hades2SaveEditorEntityGrouping.entities(from: [
+            sample("interaction:Nemesis", "relationships", "Nemesis", "Interactions · Nemesis"),
+            sample("gift:Nemesis:Nectar", "relationships", "Nemesis / Nectar", "Nemesis · Nectar"),
+            sample("investigate:NemesisPostTrueEnding01", "investigate",
+                   "NemesisPostTrueEnding01", "Nemesis · NemesisPostTrueEnding01",
+                   group: "Nemesis"),
+            sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast", "Sorceress · Unlocked"),
+            sample("card:ChanneledCast:Level", "progression", "ChanneledCast", "Sorceress · Level"),
+            sample("resource:MetaCurrency", "resources", "MetaCurrency", "Ashes"),
+        ])
+        if grouped.count != 3
+            || grouped[0].title != "Nemesis" || grouped[0].entries.count != 3
+            || grouped[1].title != "Sorceress" || grouped[1].entries.count != 2
+            || grouped[2].title != "Ashes" || grouped[2].entries.count != 1 {
+            fail("Save Editor entity grouping lost physical edit descriptors")
+        }
         let defaults = InMemoryDefaults()
         defaults.set(
             TrainerPresentationLanguage.en.rawValue,
@@ -632,6 +666,20 @@ struct Main {
         pump(0.20)
         if model.failure == nil {
             fail("A boolean query offset was accepted as a numeric offset")
+        }
+
+        // A scene found by the all-content search must open authored details
+        // directly, without bouncing through a separate investigation mode.
+        model.selectDomain(.discover)
+        pump(0.20)
+        let discoveredScene = sample(
+            "investigate:NemesisPostTrueEnding01", "investigate",
+            "NemesisPostTrueEnding01", "Nemesis"
+        )
+        model.inspect(discoveredScene)
+        pump(0.30)
+        if model.investigationDetail?.scene != "NemesisPostTrueEnding01" {
+            fail("All-content discovery could not inspect narrative evidence")
         }
 
         session.stop()

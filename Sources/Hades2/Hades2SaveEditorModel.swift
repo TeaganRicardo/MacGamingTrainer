@@ -421,7 +421,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func inspect(_ entry: Hades2SaveEditorEntry) {
-        guard selectedDomain == .investigate, entry.domain == "investigate" else { return }
+        guard (selectedDomain == .investigate || selectedDomain == .discover),
+              entry.domain == "investigate" else { return }
         selectedInvestigationID = entry.rawID
         investigationDetail = nil
         perform(
@@ -709,7 +710,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             investigationSourceStatus: row["sourceStatus"] as? String,
             investigationReason: row["reason"] as? String,
             discoveryState: row["state"] as? String,
-            discoveryReasonCode: row["reasonCode"] as? String,
+            discoveryReasonCode: (row["reasonCode"] as? String) ?? (row["blockReasonCode"] as? String),
             discoveryReason: row["reason"] as? String
         )
     }
