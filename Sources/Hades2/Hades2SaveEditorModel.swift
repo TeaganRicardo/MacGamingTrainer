@@ -211,6 +211,7 @@ struct Hades2SaveInvestigationDetail {
     let status: String
     let sourceStatus: String
     let reason: String
+    let blockReasonCode: String?
     let canStage: Bool
     let stageID: String
     let definitions: [Hades2NarrativeSource]
@@ -249,6 +250,7 @@ struct Hades2SaveInvestigationDetail {
         self.status = status
         self.sourceStatus = sourceStatus
         self.reason = reason
+        blockReasonCode = raw["blockReasonCode"] as? String
         self.canStage = canStage
         self.stageID = stageID
         self.sourceResolution = sourceResolution
