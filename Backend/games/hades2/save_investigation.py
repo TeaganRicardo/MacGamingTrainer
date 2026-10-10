@@ -445,24 +445,33 @@ class NativeDialogueInvestigation:
                                       for x in lang.get(cue, ()) if x['event']))}
                 for cue in ids]
 
-    def _summary_row(self, scene, language, records, ambiguous, writable):
+    def _summary_row(self, scene, language, records, ambiguous, permissions):
         person, npc, localized = self._names(scene)
         name = (localized[language] + ' · ' + scene) if person else scene
         lines = self._text_records(scene)
         translated_key = 'zhCN' if language == 'zh-CN' else 'en'
         subtitle = next((phrase for row in lines for phrase in row[translated_key]), '')
         state = self._data(scene, records, ambiguous)
-        can_stage = bool(scene in writable and state == 'recorded')
-        if state == 'recorded':
-            reason = 'Recorded; clearing is authorized only when native companion owners validate.'
+        decision = permissions.get(scene, {})
+        can_stage = bool(decision.get('allowed') and state == 'recorded')
+        block_code = None
+        if state == 'recorded' and can_stage:
+            reason = 'Native dialogue reset and companion owners validated.'
+        elif state == 'recorded':
+            block_code = decision.get('code') or 'invalidOwner'
+            reason = decision.get('diagnostic') or 'The native dialogue owner was not validated for a standalone reset.'
         elif state == 'notRecorded':
+            block_code = 'notPlayed'
             reason = 'No cold-save record: absence is not proof an event never occurred.'
         elif state == 'ambiguous':
+            block_code = 'ambiguousOwner'
             reason = 'Duplicate or inaccessible native record owner; write blocked.'
         else:
+            block_code = 'unverified'
             reason = 'No verified script scene identity: localization Event tags alone can name voice-line entrypoints.'
         if self.native['status'] != 'available':
             can_stage = False
+            block_code = 'sourceUnavailable'
             reason = 'Supported game source missing or version mismatch; native context unavailable.'
         return {
             'id': 'investigate:' + scene, 'domain': 'investigate', 'rawId': scene,
@@ -472,10 +481,11 @@ class NativeDialogueInvestigation:
             'editable': False, 'mutationKinds': [],
             'group': person or ('Other dialogue' if language == 'en' else '其他对话'),
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
-            'reason': reason, 'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
+            'reason': reason, 'blockReasonCode': block_code,
+            'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
         }
 
-    def query(self, save_root, *, search, offset, limit, language, writable, state_filter="all"):
+    def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all"):
         records, ambiguous = self._records(save_root)
         # An empty search never floods the user with thousands of unobserved
         # native scenes; deliberate queries expand the discoverable index.
@@ -498,17 +508,17 @@ class NativeDialogueInvestigation:
                         if not any(needle in (line['cueId'] + ' ' + ' '.join(line['en']) + ' ' + ' '.join(line['zhCN'])
                                               + ' ' + ' '.join(line['events'])).casefold() for line in lines):
                             continue
-            row = self._summary_row(scene, language, records, ambiguous, writable)
+            row = self._summary_row(scene, language, records, ambiguous, permissions)
             if state_filter == "all" or row["status"] == state_filter:
                 rows.append(row)
         rows.sort(key=lambda row: (row['status'] != 'recorded', row['group'].casefold(), row['rawId']))
         return {'total': len(rows), 'items': rows[offset:offset + limit], 'sourceStatus': self.native['status']}
 
-    def detail(self, save_root, scene, language, writable):
+    def detail(self, save_root, scene, language, permissions):
         records, ambiguous = self._records(save_root)
         if scene not in records and scene not in STORY_RESET_TEXT_IDS and scene not in self.native['scenes'] and scene not in self.native['events']:
             raise ValueError('Save Editor native scene identity is unknown.')
-        overview = self._summary_row(scene, language, records, ambiguous, writable)
+        overview = self._summary_row(scene, language, records, ambiguous, permissions)
         definitions = []
         for definition in self.native['scenes'].get(scene, ()):
             body = definition['script']
@@ -531,7 +541,8 @@ class NativeDialogueInvestigation:
                                 'partner': definition['partner'], 'requirements': authored,
                                 'cueIDs': definition['cues']})
         return {'scene': scene, 'status': overview['status'], 'sourceStatus': self.native['status'],
-                'reason': overview['reason'], 'canStage': overview['canStage'],
+                'reason': overview['reason'], 'blockReasonCode': overview['blockReasonCode'],
+                'canStage': overview['canStage'],
                 'stageID': overview['stageID'], 'character': overview['group'],
                 'definitions': definitions, 'sourceResolution': 'resolved' if definitions else 'unresolved',
                 'lines': self._text_records(scene),
