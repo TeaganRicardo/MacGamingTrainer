@@ -77,12 +77,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     (text / "zh-CN").mkdir(parents=True)
     (text / "en" / "Resources.en.sjson").write_text(
         'Texts = { { Id = "MetaCurrency", DisplayName = "Ashes", }, '
-        '{ Id = "QuestHelpOdysseus", DisplayName = "The Wanderer\'s Task", }, }',
+        '{ Id = "QuestHelpOdysseus", DisplayName = "The Wanderer\'s Task", }, '
+        '{ Id = "WeaponDagger", DisplayName = "Sister Blades", }, }',
         encoding="utf-8",
     )
     (text / "zh-CN" / "Resources.zh-CN.sjson").write_text(
         'Texts = { { Id = "MetaCurrency", DisplayName = "灰烬", }, '
-        '{ Id = "QuestHelpOdysseus", DisplayName = "流浪者的使命", }, }',
+        '{ Id = "QuestHelpOdysseus", DisplayName = "流浪者的使命", }, '
+        '{ Id = "WeaponDagger", DisplayName = "姊妹双刃", }, }',
         encoding="utf-8",
     )
 
@@ -223,6 +225,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     assert good_relationship["state"] == "observed"
     assert good_relationship["editable"] is True
+    assert good_relationship["entityId"] == "person:Hecate"
+    assert bad_relationship["entityId"] == "person:Nemesis"
+    interaction_rows = {
+        row["id"]: row for row in relationship_workspace.query(
+            domain="relationships", language="en", limit=200,
+        )["items"]
+    }
+    assert interaction_rows["interaction:NPC_Hecate_Story_01"]["entityId"] == (
+        good_relationship["entityId"]
+    )
 
     gift_session = Session()
     gift_state = gift_session.document.lua_state["GameState"]
@@ -259,6 +271,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     assert safe_gift["state"] == "observed"
     assert safe_gift["reasonCode"] == "giftHistoryLinked"
+    assert safe_gift["entityId"] == good_relationship["entityId"]
 
     gift_person_session = Session()
     gift_person_state = gift_person_session.document.lua_state["GameState"]
@@ -308,6 +321,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert good_arcana["state"] == "observed"
     assert good_arcana["editable"] is True
 
+    arcana_scope = arcana_workspace.query(domain="arcana", search="", language="en")
+    assert arcana_scope["items"]
+    assert all(row["id"].startswith("card:") for row in arcana_scope["items"])
+    quest_scope = arcana_workspace.query(domain="quests", search="", language="en")
+    assert quest_scope["items"]
+    assert all(row["id"].startswith(("quest:", "objective:"))
+               for row in quest_scope["items"])
+    assert not {row["id"] for row in quest_scope["items"]} & {
+        row["id"] for row in arcana_scope["items"]
+    }
+
     weapon_session = Session()
     weapon_state = weapon_session.document.lua_state["GameState"]
     weapon_state["WeaponsUnlocked"] = LuaTable(0, 3, [
@@ -340,6 +364,31 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         for change in weapon_workspace.review()["changes"]
     )
     weapon_workspace.cancel()
+
+    # A single native weapon identity owns all aspects and the selection.
+    # Its key cannot change when the player changes the UI language.
+    owned_weapon_session = Session()
+    owned_weapon_session.document.lua_state["GameState"]["WeaponsUnlocked"] = table({
+        "WeaponStaffSwing": True, "WeaponDagger": True,
+    })
+    owned_workspace = Hades2SaveWorkspace(
+        owned_weapon_session, "Profile1", game_path=game
+    )
+    by_locale = {}
+    for locale in ("zh-CN", "en"):
+        by_locale[locale] = {
+            row["id"]: row
+            for row in owned_workspace.query(
+                domain="weapons", language=locale, limit=200,
+            )["items"]
+        }
+        for key in ("weapon:WeaponDagger", "aspect:DaggerBackstabAspect",
+                    "aspectSelection:WeaponDagger"):
+            assert by_locale[locale][key]["entityId"] == "weapon:WeaponDagger"
+    assert by_locale["zh-CN"]["weapon:WeaponDagger"]["entityName"] != (
+        by_locale["en"]["weapon:WeaponDagger"]["entityName"]
+    )
+    assert by_locale["en"]["weapon:WeaponDagger"]["entityName"] == "Sister Blades"
 
     # A source-owned identity can be discoverable even when no value is present.
     absent = workspace.query(

@@ -83,6 +83,47 @@ extension View {
     func trainerPanel(padding: CGFloat? = nil, cornerRadius: CGFloat? = nil) -> some View {
         modifier(TrainerPanelModifier(padding: padding, cornerRadius: cornerRadius))
     }
+
+    func trainerSurface(_ role: TrainerSurfaceRole, cornerRadius: CGFloat? = nil) -> some View {
+        modifier(TrainerSurfaceModifier(role: role, cornerRadius: cornerRadius))
+    }
+}
+
+enum TrainerSurfaceRole {
+    case canvas
+    case sidebar
+    case panel
+    case subtle
+    case selected
+    case clear
+}
+
+private struct TrainerSurfaceModifier: ViewModifier {
+    @Environment(\.trainerTheme) private var theme
+    let role: TrainerSurfaceRole
+    let cornerRadius: CGFloat?
+
+    private var fill: Color {
+        switch role {
+        case .canvas: return theme.background
+        case .sidebar: return theme.sidebarBackground
+        case .panel: return theme.panel
+        case .subtle: return theme.subtleFill
+        case .selected: return theme.mutedFill
+        case .clear: return .clear
+        }
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let cornerRadius {
+            content.background(fill, in: RoundedRectangle(cornerRadius: cornerRadius))
+        } else if case .canvas = role {
+            content.background(fill.ignoresSafeArea())
+        } else {
+            content.background(fill)
+        }
+    }
 }
 
 private struct TrainerPanelModifier: ViewModifier {

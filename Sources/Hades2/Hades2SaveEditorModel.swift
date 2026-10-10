@@ -8,6 +8,8 @@ enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
     case resources
     case playerStats
     case progression
+    case quests
+    case arcana
     case investigate
     case dialogue
     case flags
@@ -94,6 +96,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let editable: Bool
     let mutationKinds: [String]
     let group: String?
+    let entityID: String?
+    let entityName: String?
     let choices: [String]
     let choiceNames: [String: String]
     let constraints: Hades2SaveEditorConstraints?
@@ -119,6 +123,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.editable == rhs.editable
             && lhs.mutationKinds == rhs.mutationKinds
             && lhs.group == rhs.group
+            && lhs.entityID == rhs.entityID
+            && lhs.entityName == rhs.entityName
             && lhs.choices == rhs.choices
             && lhs.choiceNames == rhs.choiceNames
             && lhs.constraints == rhs.constraints
@@ -421,7 +427,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func inspect(_ entry: Hades2SaveEditorEntry) {
-        guard selectedDomain == .investigate, entry.domain == "investigate" else { return }
+        guard (selectedDomain == .investigate || selectedDomain == .discover),
+              entry.domain == "investigate" else { return }
         selectedInvestigationID = entry.rawID
         investigationDetail = nil
         perform(
@@ -699,6 +706,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             editable: editable,
             mutationKinds: mutationKinds,
             group: row["group"] as? String,
+            entityID: row["entityId"] as? String,
+            entityName: row["entityName"] as? String,
             choices: row["choices"] as? [String] ?? [],
             choiceNames: row["choiceNames"] as? [String: String] ?? [:],
             constraints: constraints,
@@ -709,7 +718,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             investigationSourceStatus: row["sourceStatus"] as? String,
             investigationReason: row["reason"] as? String,
             discoveryState: row["state"] as? String,
-            discoveryReasonCode: row["reasonCode"] as? String,
+            discoveryReasonCode: (row["reasonCode"] as? String) ?? (row["blockReasonCode"] as? String),
             discoveryReason: row["reason"] as? String
         )
     }
