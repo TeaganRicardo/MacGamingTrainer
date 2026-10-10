@@ -59,11 +59,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     (text / "en").mkdir(parents=True)
     (text / "zh-CN").mkdir(parents=True)
     (text / "en" / "Resources.en.sjson").write_text(
-        'Texts = { { Id = "MetaCurrency", DisplayName = "Ashes", }, }',
+        'Texts = { { Id = "MetaCurrency", DisplayName = "Ashes", }, '
+        '{ Id = "QuestHelpOdysseus", DisplayName = "The Wanderer\'s Task", }, }',
         encoding="utf-8",
     )
     (text / "zh-CN" / "Resources.zh-CN.sjson").write_text(
-        'Texts = { { Id = "MetaCurrency", DisplayName = "灰烬", }, }',
+        'Texts = { { Id = "MetaCurrency", DisplayName = "灰烬", }, '
+        '{ Id = "QuestHelpOdysseus", DisplayName = "流浪者的使命", }, }',
         encoding="utf-8",
     )
 
@@ -108,5 +110,35 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert all(item["state"] == "observed" for item in default["items"])
     assert not any(item["rawId"] == "HasUsedWeaponShopNavigation" for item in default["items"])
     assert not any(item["rawId"] == "MysteryCounter" for item in default["items"])
+
+    # Native catalogs can identify absent content without inventing write
+    # authority. The same entry remains searchable by either official language.
+    missing_quest = workspace.query(
+        domain="discover",
+        search="流浪者的使命",
+        language="en",
+    )
+    quest = next(item for item in missing_quest["items"] if item["id"] == "quest:QuestHelpOdysseus")
+    assert quest["state"] == "absent"
+    assert quest["editable"] is False
+    assert quest["reasonCode"] == "knownAbsent"
+
+    coverage = {item["id"]: item for item in workspace.summary()["coverage"]}
+    assert set(coverage) == {
+        "resources", "playerHistory", "narrative", "relationships",
+        "progression", "equipment", "unknown",
+    }
+    assert coverage["resources"] == {
+        "id": "resources",
+        "discoverability": "supported",
+        "understanding": "supported",
+        "write": "supported",
+        "reasonCode": "verifiedDescriptors",
+    }
+    assert coverage["playerHistory"]["discoverability"] == "partial"
+    assert coverage["playerHistory"]["write"] == "partial"
+    assert coverage["unknown"]["discoverability"] == "supported"
+    assert coverage["unknown"]["understanding"] == "readOnly"
+    assert coverage["unknown"]["write"] == "readOnly"
 
 print("hades2_save_discovery_ok")
