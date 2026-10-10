@@ -97,6 +97,183 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     chinese_alias = workspace.query(domain="discover", search="灰烬", language="en")
     assert any(item["id"] == "resource:MetaCurrency" for item in chinese_alias["items"])
 
+    # A known semantic identity stays recognizable when its physical owner is
+    # ambiguous or malformed. The failed identity becomes read-only without
+    # hiding unrelated valid entries from the same semantic domain.
+    ambiguous_session = Session()
+    ambiguous_state = ambiguous_session.document.lua_state["GameState"]
+    ambiguous_state["Resources"] = LuaTable(0, 3, [
+        ("MetaCurrency", 123.0),
+        ("MetaCurrency", 456.0),
+        ("GiftPoints", 2.0),
+    ])
+    ambiguous_workspace = Hades2SaveWorkspace(
+        ambiguous_session, "Profile1", game_path=game
+    )
+    ambiguous_known = ambiguous_workspace.query(
+        domain="discover", search="Ashes", language="en"
+    )
+    ambiguous_resource = next(
+        item for item in ambiguous_known["items"]
+        if item["id"] == "resource:MetaCurrency"
+    )
+    assert ambiguous_resource["state"] == "ambiguous"
+    assert ambiguous_resource["editable"] is False
+    assert ambiguous_resource["reasonCode"] == "ambiguousOwner"
+    assert any(
+        item["id"] == "resource:MetaCurrency"
+        for item in ambiguous_workspace.query(
+            domain="discover", search="灰烬", language="en"
+        )["items"]
+    )
+    safe_sibling = ambiguous_workspace.query(
+        domain="discover", search="GiftPoints", language="en"
+    )
+    sibling = next(
+        item for item in safe_sibling["items"]
+        if item["id"] == "resource:GiftPoints"
+    )
+    assert sibling["domain"] == "resources"
+    assert sibling["editable"] is True
+
+    malformed_session = Session()
+    malformed_state = malformed_session.document.lua_state["GameState"]
+    malformed_state["Resources"] = table({
+        "MetaCurrency": "corrupt",
+        "GiftPoints": 2.0,
+    })
+    malformed_workspace = Hades2SaveWorkspace(
+        malformed_session, "Profile1", game_path=game
+    )
+    malformed_known = malformed_workspace.query(
+        domain="discover", search="Ashes", language="en"
+    )
+    malformed_resource = next(
+        item for item in malformed_known["items"]
+        if item["id"] == "resource:MetaCurrency"
+    )
+    assert malformed_resource["state"] == "unsupported"
+    assert malformed_resource["editable"] is False
+    assert malformed_resource["reasonCode"] == "unsupportedOwner"
+    unsupported_only = malformed_workspace.query(
+        domain="discover",
+        search="Ashes",
+        language="en",
+        stateFilter="unsupported",
+    )
+    assert [item["id"] for item in unsupported_only["items"]] == [
+        "resource:MetaCurrency"
+    ]
+
+    flag_session = Session()
+    flag_state = flag_session.document.lua_state["GameState"]
+    flag_state["Flags"] = LuaTable(0, 3, [
+        ("HasPinnedAnyBoon", True),
+        ("HasPinnedAnyBoon", False),
+        ("HasShuffledMusicPlayer", True),
+    ])
+    flag_workspace = Hades2SaveWorkspace(
+        flag_session, "Profile1", game_path=game
+    )
+    bad_flag = next(
+        item for item in flag_workspace.query(
+            domain="discover", search="Has pinned a boon", language="en"
+        )["items"]
+        if item["id"] == "flag:HasPinnedAnyBoon"
+    )
+    assert bad_flag["state"] == "ambiguous"
+    assert bad_flag["editable"] is False
+    good_flag = next(
+        item for item in flag_workspace.query(
+            domain="discover",
+            search="Has shuffled the music player",
+            language="en",
+        )["items"]
+        if item["id"] == "flag:HasShuffledMusicPlayer"
+    )
+    assert good_flag["state"] == "observed"
+    assert good_flag["editable"] is True
+
+    relationship_session = Session()
+    relationship_state = relationship_session.document.lua_state["GameState"]
+    relationship_state["NPCInteractions"] = table({
+        "NPC_Nemesis_01": "bad",
+        "NPC_Hecate_01": 2.0,
+    })
+    relationship_workspace = Hades2SaveWorkspace(
+        relationship_session, "Profile1", game_path=game
+    )
+    bad_relationship = next(
+        item for item in relationship_workspace.query(
+            domain="discover", search="NPC_Nemesis_01", language="en"
+        )["items"]
+        if item["id"] == "interaction:NPC_Nemesis_01"
+    )
+    assert bad_relationship["state"] == "unsupported"
+    assert bad_relationship["editable"] is False
+    good_relationship = next(
+        item for item in relationship_workspace.query(
+            domain="discover", search="NPC_Hecate_01", language="en"
+        )["items"]
+        if item["id"] == "interaction:NPC_Hecate_01"
+    )
+    assert good_relationship["state"] == "observed"
+    assert good_relationship["editable"] is True
+
+    arcana_session = Session()
+    arcana_state = arcana_session.document.lua_state["GameState"]
+    arcana_state["MetaUpgradeState"] = LuaTable(0, 3, [
+        ("ChanneledCast", table({"Unlocked": True, "Level": 1.0})),
+        ("ChanneledCast", table({"Unlocked": False, "Level": 2.0})),
+        ("HealthRegen", table({"Unlocked": True, "Level": 1.0})),
+    ])
+    arcana_workspace = Hades2SaveWorkspace(
+        arcana_session, "Profile1", game_path=game
+    )
+    bad_arcana = next(
+        item for item in arcana_workspace.query(
+            domain="discover", search="ChanneledCast", language="en"
+        )["items"]
+        if item["id"] == "card:ChanneledCast:Level"
+    )
+    assert bad_arcana["state"] == "ambiguous"
+    assert bad_arcana["editable"] is False
+    good_arcana = next(
+        item for item in arcana_workspace.query(
+            domain="discover", search="HealthRegen", language="en"
+        )["items"]
+        if item["id"] == "card:HealthRegen:Level"
+    )
+    assert good_arcana["state"] == "observed"
+    assert good_arcana["editable"] is True
+
+    weapon_session = Session()
+    weapon_state = weapon_session.document.lua_state["GameState"]
+    weapon_state["WeaponsUnlocked"] = LuaTable(0, 3, [
+        ("WeaponStaffSwing", True),
+        ("WeaponDagger", True),
+        ("WeaponDagger", False),
+    ])
+    weapon_workspace = Hades2SaveWorkspace(
+        weapon_session, "Profile1", game_path=game
+    )
+    bad_weapon = next(
+        item for item in weapon_workspace.query(
+            domain="discover", search="WeaponDagger", language="en"
+        )["items"]
+        if item["id"] == "weapon:WeaponDagger"
+    )
+    assert bad_weapon["state"] == "ambiguous"
+    assert bad_weapon["editable"] is False
+    good_weapon = next(
+        item for item in weapon_workspace.query(
+            domain="discover", search="WeaponTorch", language="en"
+        )["items"]
+        if item["id"] == "weapon:WeaponTorch"
+    )
+    assert good_weapon["state"] == "absent"
+    assert good_weapon["editable"] is True
+
     # A source-owned identity can be discoverable even when no value is present.
     absent = workspace.query(
         domain="discover",

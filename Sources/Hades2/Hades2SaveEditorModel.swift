@@ -407,7 +407,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func setDiscoveryFilter(_ value: String) {
-        guard ["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unknown"].contains(value) else { return }
+        guard ["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unsupported", "unknown"].contains(value) else { return }
         discoveryFilter = value
         query(offset: 0)
     }

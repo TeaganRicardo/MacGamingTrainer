@@ -80,7 +80,8 @@ SAVE_EDITOR_INVESTIGATION_FILTERS = (
     "all", "recorded", "notRecorded", "ambiguous", "unknown",
 )
 SAVE_EDITOR_DISCOVERY_FILTERS = (
-    "all", "observed", "absent", "editable", "readOnly", "ambiguous", "unknown",
+    "all", "observed", "absent", "editable", "readOnly",
+    "ambiguous", "unsupported", "unknown",
 )
 SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
     (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
@@ -210,7 +211,6 @@ class Hades2SaveWorkspace:
         }
 
     def _resource_rows(self, language):
-        resources = self._resources()
         identifiers = RESOURCE_IDS
         names = official_display_names(
             identifiers,
@@ -224,29 +224,36 @@ class Hades2SaveWorkspace:
 
         rows = []
         for key in sorted(RESOURCE_IDS):
-            try:
-                descriptor = self._resource_descriptor(key)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
-                continue
-            rows.append({
-                "id": descriptor["id"],
-                "domain": descriptor["domain"],
+            row = {
+                "id": "resource:" + key,
+                "domain": "resources",
                 "rawId": key,
-                "path": descriptor["path"],
+                "path": ["GameState", "Resources", key],
                 "name": names.get(key) or key,
                 "englishName": english.get(key) or key,
-                "value": descriptor["before"],
+                "value": None,
                 "valueType": "integer",
-                "editable": True,
-                "mutationKinds": list(descriptor["mutationKinds"]),
+                "editable": False,
+                "mutationKinds": [],
                 "constraints": {
                     "min": 0,
                     "max": MAX_AMOUNT,
                     "integer": True,
                 },
-            })
+            }
+            try:
+                descriptor = self._resource_descriptor(key)
+            except AmbiguousLuaKeyError:
+                row["ownerState"] = "ambiguous"
+                row["blockReasonCode"] = "ambiguousOwner"
+            except ValueError:
+                row["ownerState"] = "unsupported"
+                row["blockReasonCode"] = "unsupportedOwner"
+            else:
+                row["value"] = descriptor["before"]
+                row["editable"] = True
+                row["mutationKinds"] = list(descriptor["mutationKinds"])
+            rows.append(row)
         return rows
 
     def _player_stat_descriptor(self, identifier):
@@ -293,20 +300,32 @@ class Hades2SaveWorkspace:
     def _player_stat_rows(self, language):
         rows = []
         for field in _PLAYER_STAT_FIELDS:
-            descriptor = self._player_stat_descriptor(field["id"])
-            rows.append({
-                "id": descriptor["id"],
-                "domain": descriptor["domain"],
-                "rawId": descriptor["rawId"],
-                "path": descriptor["path"],
-                "name": descriptor["names"][language],
-                "englishName": descriptor["names"]["en"],
-                "value": descriptor["before"],
-                "valueType": descriptor["valueType"],
-                "editable": True,
-                "mutationKinds": list(descriptor["mutationKinds"]),
-                "constraints": descriptor["constraints"],
-            })
+            row = {
+                "id": "playerStat:" + field["id"],
+                "domain": "playerStats",
+                "rawId": field["id"],
+                "path": ["GameState", field["id"]],
+                "name": field["names"][language],
+                "englishName": field["names"]["en"],
+                "value": None,
+                "valueType": field["valueType"],
+                "editable": False,
+                "mutationKinds": [],
+                "constraints": dict(field["constraints"]),
+            }
+            try:
+                descriptor = self._player_stat_descriptor(field["id"])
+            except AmbiguousLuaKeyError:
+                row["ownerState"] = "ambiguous"
+                row["blockReasonCode"] = "ambiguousOwner"
+            except ValueError:
+                row["ownerState"] = "unsupported"
+                row["blockReasonCode"] = "unsupportedOwner"
+            else:
+                row["value"] = descriptor["before"]
+                row["editable"] = True
+                row["mutationKinds"] = list(descriptor["mutationKinds"])
+            rows.append(row)
         return rows
 
     def _overview_rows(self, language):
@@ -405,6 +424,10 @@ class Hades2SaveWorkspace:
                 "存档中存在重复或歧义所有权；仅允许只读检查。",
                 "Duplicate or ambiguous save ownership is read-only.",
             ),
+            "unsupportedOwner": (
+                "原生身份已知，但当前存档中的所有者或值不符合受支持结构；仅允许只读检查。",
+                "The native identity is known, but its saved owner or value is outside the supported structure; it remains read-only.",
+            ),
             "ambiguousRaw": (
                 "此原始路径存在重复键或路径歧义；仅允许只读检查。",
                 "This raw path contains duplicate keys or ambiguous ownership and is read-only.",
@@ -427,6 +450,9 @@ class Hades2SaveWorkspace:
         return "observed"
 
     def _semantic_state(self, row):
+        owner_state = row.get("ownerState")
+        if owner_state in ("ambiguous", "unsupported"):
+            return owner_state
         state = self._path_state(row["path"])
         if state != "absent":
             return state
@@ -456,53 +482,48 @@ class Hades2SaveWorkspace:
         other_language = "en" if language == "zh-CN" else "zh-CN"
         result = []
         for domain in domains:
-            try:
-                if domain == "resources":
-                    rows = self._resource_rows(language)
-                    aliases = self._resource_rows(other_language)
-                elif domain == "playerStats":
-                    rows = self._player_stat_rows(language)
-                    aliases = self._player_stat_rows(other_language)
-                elif domain in ("flags", "progression"):
-                    rows = save_narrative.rows(
+            if domain == "resources":
+                rows = self._resource_rows(language)
+                aliases = self._resource_rows(other_language)
+            elif domain == "playerStats":
+                rows = self._player_stat_rows(language)
+                aliases = self._player_stat_rows(other_language)
+            elif domain in ("flags", "progression"):
+                rows = save_narrative.rows(
+                    self.document.lua_state, domain, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_narrative.rows(
+                    self.document.lua_state, domain, other_language,
+                    game_path=self._game_path,
+                )
+                if domain == "progression":
+                    rows.extend(save_long_term.rows(
                         self.document.lua_state, domain, language,
                         game_path=self._game_path,
-                    )
-                    aliases = save_narrative.rows(
+                    ))
+                    aliases.extend(save_long_term.rows(
                         self.document.lua_state, domain, other_language,
                         game_path=self._game_path,
-                    )
-                    if domain == "progression":
-                        rows.extend(save_long_term.rows(
-                            self.document.lua_state, domain, language,
-                            game_path=self._game_path,
-                        ))
-                        aliases.extend(save_long_term.rows(
-                            self.document.lua_state, domain, other_language,
-                            game_path=self._game_path,
-                        ))
-                elif domain == "relationships":
-                    rows = save_long_term.rows(
-                        self.document.lua_state, domain, language,
-                        game_path=self._game_path,
-                    )
-                    aliases = save_long_term.rows(
-                        self.document.lua_state, domain, other_language,
-                        game_path=self._game_path,
-                    )
-                else:
-                    rows = save_equipment.rows(
-                        self.document.lua_state, language,
-                        game_path=self._game_path,
-                    )
-                    aliases = save_equipment.rows(
-                        self.document.lua_state, other_language,
-                        game_path=self._game_path,
-                    )
-            except (ValueError, KeyError, AmbiguousLuaKeyError):
-                # A malformed semantic owner must not hide unrelated domains.
-                # Its physical data is still reachable through raw discovery.
-                continue
+                    ))
+            elif domain == "relationships":
+                rows = save_long_term.rows(
+                    self.document.lua_state, domain, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_long_term.rows(
+                    self.document.lua_state, domain, other_language,
+                    game_path=self._game_path,
+                )
+            else:
+                rows = save_equipment.rows(
+                    self.document.lua_state, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_equipment.rows(
+                    self.document.lua_state, other_language,
+                    game_path=self._game_path,
+                )
 
             alias_by_id = {row["id"]: row for row in aliases}
             for source in rows:
@@ -511,7 +532,11 @@ class Hades2SaveWorkspace:
                 if state == "ambiguous":
                     row["editable"] = False
                     row["mutationKinds"] = []
-                    reason_code = "ambiguousOwner"
+                    reason_code = row.get("blockReasonCode") or "ambiguousOwner"
+                elif state == "unsupported":
+                    row["editable"] = False
+                    row["mutationKinds"] = []
+                    reason_code = row.get("blockReasonCode") or "unsupportedOwner"
                 elif row.get("editable"):
                     reason_code = "editable" if state == "observed" else "editableAbsent"
                 else:
@@ -521,8 +546,10 @@ class Hades2SaveWorkspace:
                 row["reasonCode"] = reason_code
                 row["reason"] = (
                     row.get("blockReasonDiagnostic")
-                    if reason_code not in ("editable", "editableAbsent", "readOnly",
-                                           "ambiguousOwner")
+                    if reason_code not in (
+                        "editable", "editableAbsent", "readOnly",
+                        "ambiguousOwner", "unsupportedOwner",
+                    )
                     and row.get("blockReasonDiagnostic")
                     else self._discovery_reason(reason_code, language)
                 )
@@ -538,7 +565,12 @@ class Hades2SaveWorkspace:
 
     def _known_absent_quest_rows(self, language):
         state = self._game_state()
-        statuses = state.get("QuestStatus")
+        try:
+            statuses = state.get("QuestStatus")
+        except AmbiguousLuaKeyError:
+            # save_narrative.rows owns the explicit ambiguous identities when
+            # the QuestStatus container itself is duplicated.
+            return []
         if not isinstance(statuses, LuaTable):
             return []
         observed = {

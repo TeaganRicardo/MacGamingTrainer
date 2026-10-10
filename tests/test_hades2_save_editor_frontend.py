@@ -487,6 +487,15 @@ struct Main {
               discoveryFilterParams["stateFilter"] as? String == "absent" else {
             fail("discovery state filter did not reach Save Workspace")
         }
+        model.setDiscoveryFilter("unsupported")
+        pump(0.20)
+        guard let unsupportedFilterCommand = commands(at: commandLog).last(where: {
+                  $0["command"] as? String == "save_editor_query"
+              }),
+              let unsupportedFilterParams = unsupportedFilterCommand["params"] as? [String: Any],
+              unsupportedFilterParams["stateFilter"] as? String == "unsupported" else {
+            fail("unsupported discovery filter did not reach Save Workspace")
+        }
 
         model.selectDomain(.investigate)
         pump(0.25)

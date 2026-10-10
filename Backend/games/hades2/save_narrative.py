@@ -52,7 +52,7 @@ def _game_state(root):
 
 
 def _table(state, name):
-    value = state[name]
+    value = state.get(name)
     if not isinstance(value, LuaTable):
         raise ValueError("Save Editor {} is malformed.".format(name))
     return value
@@ -159,7 +159,7 @@ def _validated_dialogue_owners(root, name, authority):
 
 def _row(*, entry_id, domain, key, path, label, english, value,
          value_type, editable, operations, group, choices=None,
-         block_reason_code=None):
+         block_reason_code=None, owner_state=None):
     row = {
         "id": entry_id, "domain": domain, "rawId": key, "path": path,
         "name": label, "englishName": english, "value": value,
@@ -169,6 +169,8 @@ def _row(*, entry_id, domain, key, path, label, english, value,
     }
     if block_reason_code:
         row["blockReasonCode"] = block_reason_code
+    if owner_state:
+        row["ownerState"] = owner_state
     return row
 
 
@@ -176,21 +178,40 @@ def rows(root, domain, language="zh-CN", game_path=None):
     state = _game_state(root)
     result = []
     if domain == "flags":
-        flags = _table(state, "Flags")
+        try:
+            flags = _table(state, "Flags")
+            flags_owner_state = None
+        except AmbiguousLuaKeyError:
+            flags = None
+            flags_owner_state = "ambiguous"
+        except ValueError:
+            flags = None
+            flags_owner_state = "unsupported"
         for name, (group, zh, en) in _FLAG_DESCRIPTORS.items():
-            try:
-                value = _read_bool(flags, name)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
-                continue  # Malformed flags remain accessible in Advanced.
+            value = None
+            owner_state = flags_owner_state
+            if flags is not None:
+                try:
+                    value = _read_bool(flags, name)
+                except AmbiguousLuaKeyError:
+                    owner_state = "ambiguous"
+                except ValueError:
+                    owner_state = "unsupported"
+            editable = owner_state is None
             result.append(_row(
                 entry_id="flag:" + name, domain="flags", key=name,
                 path=["GameState", "Flags", name],
                 label=zh if language == "zh-CN" else en, english=en, value=value,
-                value_type="boolean", editable=True, operations=("set",),
+                value_type="boolean", editable=editable,
+                operations=("set",) if editable else (),
                 group=_GROUP_NAMES[group][0 if language == "zh-CN" else 1],
                 choices=(False, True),
+                block_reason_code=(
+                    "ambiguousOwner" if owner_state == "ambiguous"
+                    else "unsupportedOwner" if owner_state == "unsupported"
+                    else None
+                ),
+                owner_state=owner_state,
             ))
     if domain == "dialogue":
         lines = _table(state, "TextLinesRecord")
@@ -241,17 +262,46 @@ def rows(root, domain, language="zh-CN", game_path=None):
             row["blockReasonDiagnostic"] = str(block) if block else None
             result.append(row)
     if domain == "progression":
-        statuses = _table(state, "QuestStatus")
-        names = set(k for k, _ in statuses.entries() if isinstance(k, str))
+        try:
+            statuses = _table(state, "QuestStatus")
+            statuses_owner_state = None
+            names = {
+                key for key, _ in statuses.entries()
+                if isinstance(key, str) and key in QUEST_IDS
+            }
+        except AmbiguousLuaKeyError:
+            statuses = None
+            statuses_owner_state = "ambiguous"
+            names = set(QUEST_IDS)
+        except ValueError:
+            statuses = None
+            statuses_owner_state = "unsupported"
+            names = set(QUEST_IDS)
         official = official_display_names(names, language, game_path=game_path)
-        english = official if language == "en" else official_display_names(names, "en", game_path=game_path)
-        for name in sorted(names & QUEST_IDS):
-            status = statuses.get(name)
-            if status not in _QUEST_STATUSES:
-                continue
+        english = (
+            official if language == "en"
+            else official_display_names(names, "en", game_path=game_path)
+        )
+        for name in sorted(names):
+            owner_state = statuses_owner_state
+            status = None
+            if statuses is not None:
+                try:
+                    status = statuses.get(name)
+                except AmbiguousLuaKeyError:
+                    owner_state = "ambiguous"
+                else:
+                    if status not in _QUEST_STATUSES:
+                        owner_state = "unsupported"
             label = official.get(name) or (("任务 · " if language == "zh-CN" else "Quest · ") + name)
             en = english.get(name) or ("Quest · " + name)
-            editable = status != "CashedOut"
+            editable = owner_state is None and status != "CashedOut"
+            block_reason = (
+                "ambiguousOwner" if owner_state == "ambiguous"
+                else "unsupportedOwner" if owner_state == "unsupported"
+                else None if editable
+                else "rewardClaimed"
+            )
             result.append(_row(
                 entry_id="quest:" + name, domain="progression", key=name,
                 path=["GameState", "QuestStatus", name],
@@ -259,7 +309,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 editable=editable, operations=("setEnum",) if editable else (),
                 group=_GROUP_NAMES["quest"][0 if language == "zh-CN" else 1],
                 choices=("Unlocked", "Complete") if editable else (),
-                block_reason_code=None if editable else "rewardClaimed",
+                block_reason_code=block_reason,
+                owner_state=owner_state,
             ))
     return result
 
@@ -273,6 +324,12 @@ def descriptor(root, entry_id, game_path=None):
         return None
     for row in rows(root, domain, "en", game_path=game_path):
         if row["id"] == entry_id:
+            if row.get("ownerState") == "ambiguous":
+                raise AmbiguousLuaKeyError(
+                    "Save Editor semantic owner is ambiguous."
+                )
+            if row.get("ownerState") == "unsupported":
+                raise ValueError("Save Editor semantic owner is unsupported.")
             return {
                 "id": entry_id, "domain": domain, "rawId": row["rawId"],
                 "path": row["path"], "before": row["value"],

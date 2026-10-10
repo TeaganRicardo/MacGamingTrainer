@@ -142,7 +142,7 @@ struct Hades2SaveEditorView: View {
                         set: { model.setDiscoveryFilter($0) }
                     )
                 ) {
-                    ForEach(["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unknown"], id: \.self) { value in
+                    ForEach(["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unsupported", "unknown"], id: \.self) { value in
                         Text(text("hades2.saveEditor.discovery.filter." + value)).tag(value)
                     }
                 }
@@ -560,7 +560,7 @@ struct Hades2SaveEditorView: View {
         }
         let known = [
             "editable", "editableAbsent", "readOnly", "unknownRaw",
-            "ambiguousOwner", "ambiguousRaw", "knownAbsent",
+            "ambiguousOwner", "unsupportedOwner", "ambiguousRaw", "knownAbsent",
             "rewardClaimed", "starterWeapon", "baseWeaponRequired",
             "giftHistoryLinked",
         ]
