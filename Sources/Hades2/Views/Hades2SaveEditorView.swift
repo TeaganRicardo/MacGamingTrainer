@@ -285,9 +285,17 @@ struct Hades2SaveEditorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(text("hades2.saveEditor.investigate." + (detail.sourceStatus == "available" ? detail.status + "Reason" : "sourceReason")))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if detail.status == "recorded" && !detail.canStage {
+                Text(text("hades2.saveEditor.investigate.block." + (detail.blockReasonCode ?? "invalidOwner")))
+                    .font(.caption)
+                    .foregroundStyle(theme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(detail.reason)
+            } else {
+                Text(text("hades2.saveEditor.investigate." + (detail.sourceStatus == "available" ? detail.status + "Reason" : "sourceReason")))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if detail.sourceResolution == "unresolved" {
                 Text(text("hades2.saveEditor.investigate.sourceUnresolved"))
                     .font(.caption)
