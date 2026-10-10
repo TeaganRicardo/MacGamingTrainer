@@ -32,7 +32,7 @@ def document():
         "TextLinesRecord": table({}),
         "TextLinesChoiceRecord": table({}),
         "GiftTextLinesOrderRecord": table({}),
-        "QuestStatus": table({}),
+        "QuestStatus": table({"QuestHelpDora": "CashedOut"}),
         "WeaponsUnlocked": table({"WeaponStaffSwing": True}),
         "WorldUpgrades": table({}),
         "WorldUpgradesAdded": table({}),
@@ -107,6 +107,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert flag["state"] == "absent"
     assert flag["editable"] is True
     assert flag["reasonCode"] == "editableAbsent"
+
+    claimed = workspace.query(
+        domain="discover",
+        search="QuestHelpDora",
+        language="en",
+    )
+    claimed_quest = next(item for item in claimed["items"] if item["id"] == "quest:QuestHelpDora")
+    assert claimed_quest["state"] == "observed"
+    assert claimed_quest["editable"] is False
+    assert claimed_quest["reasonCode"] == "rewardClaimed"
+    assert "reward" in claimed_quest["reason"].casefold()
+
+    starter = workspace.query(
+        domain="discover",
+        search="WeaponStaffSwing",
+        language="en",
+    )
+    starter_weapon = next(item for item in starter["items"] if item["id"] == "weapon:WeaponStaffSwing")
+    assert starter_weapon["editable"] is False
+    assert starter_weapon["reasonCode"] == "starterWeapon"
 
     # Compound semantic owners must report the semantic state, not merely the
     # presence of the row's display path. The default Staff aspect is owned by
