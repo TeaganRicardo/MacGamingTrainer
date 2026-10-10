@@ -14,6 +14,14 @@ def table(values):
 
 
 def document():
+    unknown = {
+        "MysteryCounter": 7.0,
+        "Nested": table({"OpaqueThing": "kept"}),
+    }
+    unknown.update({
+        "BulkItem{:03d}".format(index): float(index)
+        for index in range(240)
+    })
     state = table({
         "Resources": table({"MetaCurrency": 123.0}),
         "Flags": table({"HasPinnedAnyBoon": True}),
@@ -25,10 +33,7 @@ def document():
         "WorldUpgrades": table({}),
         "WorldUpgradesAdded": table({}),
         "LastWeaponUpgradeName": table({}),
-        "UnknownFutureField": table({
-            "MysteryCounter": 7.0,
-            "Nested": table({"OpaqueThing": "kept"}),
-        }),
+        "UnknownFutureField": table(unknown),
     })
     root = table({"GameState": state, "CurrentRun": table({})})
     header = Hades2SaveHeader(
@@ -135,6 +140,20 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert mystery["editable"] is False
     assert mystery["reasonCode"] == "unknownRaw"
     assert mystery["path"] == ["GameState", "UnknownFutureField", "MysteryCounter"]
+
+    # Global discovery still pages large unknown result sets at the Workspace
+    # boundary instead of requiring the frontend to receive the raw tree.
+    bulk = workspace.query(
+        domain="discover",
+        search="BulkItem",
+        offset=100,
+        limit=50,
+        language="en",
+    )
+    assert bulk["total"] == 240
+    assert len(bulk["items"]) == 50
+    assert bulk["items"][0]["rawId"] == "BulkItem100"
+    assert all(item["domain"] == "advanced" for item in bulk["items"])
 
     # Empty discovery is useful but does not dump every absent/unknown identity.
     default = workspace.query(domain="discover", search="", language="en")
