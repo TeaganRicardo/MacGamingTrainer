@@ -76,6 +76,16 @@ SAVE_EDITOR_MUTATION_KINDS = (
     "setCounter",
 )
 
+SAVE_EDITOR_INVESTIGATION_FILTERS = (
+    "all", "recorded", "notRecorded", "ambiguous", "unknown",
+)
+SAVE_EDITOR_DISCOVERY_FILTERS = (
+    "all", "observed", "absent", "editable", "readOnly", "ambiguous", "unknown",
+)
+SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
+    (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
+))
+
 
 def _page(offset, limit):
     if type(offset) is not int or offset < 0:
@@ -606,9 +616,39 @@ class Hades2SaveWorkspace:
         visit(self.document.lua_state, [])
         return rows
 
-    def _discovery_rows(self, search, language):
+    def _discovery_rows(self, search, language, state_filter):
         semantic = self._semantic_discovery_rows(language)
         semantic.extend(self._known_absent_quest_rows(language))
+
+        investigation = self._narrative_investigation().query(
+            self.document.lua_state,
+            search=search,
+            offset=0,
+            limit=100_000,
+            language=language,
+            permissions=self._dialogue_write_decisions(),
+            state_filter="all",
+        )
+        investigation_state = {
+            "recorded": "observed",
+            "notRecorded": "absent",
+            "ambiguous": "ambiguous",
+            "unknown": "unknown",
+        }
+        for source in investigation["items"]:
+            row = dict(source)
+            row["state"] = investigation_state.get(row.get("status"), "unknown")
+            row["editable"] = bool(row.get("canStage"))
+            # Investigation owns the safe stage identity. Discovery reports
+            # editability but sends the user through the detailed owner flow.
+            row["mutationKinds"] = []
+            row["reasonCode"] = (
+                "editable" if row["editable"]
+                else row.get("blockReasonCode") or "readOnly"
+            )
+            row["_search"] = (row["rawId"], row["name"], row["englishName"])
+            semantic.append(row)
+
         semantic_paths = {
             tuple(row["path"]) for row in semantic
             if isinstance(row.get("path"), list)
@@ -619,12 +659,22 @@ class Hades2SaveWorkspace:
             if not needle:
                 if row["state"] != "observed":
                     continue
-            elif not any(needle in token.casefold() for token in row["_search"]):
+            elif row.get("domain") != "investigate" and not any(
+                needle in token.casefold() for token in row["_search"]
+            ):
                 continue
             item = dict(row)
             item.pop("_search", None)
             rows.append(item)
         rows.extend(self._raw_discovery_rows(needle, semantic_paths, language))
+
+        if state_filter == "editable":
+            rows = [row for row in rows if row.get("editable") is True]
+        elif state_filter == "readOnly":
+            rows = [row for row in rows if row.get("editable") is not True]
+        elif state_filter != "all":
+            rows = [row for row in rows if row.get("state") == state_filter]
+
         rank = {"observed": 0, "absent": 1, "ambiguous": 2, "unknown": 3}
         rows.sort(key=lambda row: (
             rank.get(row.get("state"), 4),
@@ -684,10 +734,16 @@ class Hades2SaveWorkspace:
         if language not in ("zh-CN", "en"):
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
-        if stateFilter not in ("all", "recorded", "notRecorded", "ambiguous", "unknown"):
-            raise ValueError("Save Editor investigation filter is invalid.")
+        if domain == "investigate":
+            if stateFilter not in SAVE_EDITOR_INVESTIGATION_FILTERS:
+                raise ValueError("Save Editor investigation filter is invalid.")
+        elif domain == "discover":
+            if stateFilter not in SAVE_EDITOR_DISCOVERY_FILTERS:
+                raise ValueError("Save Editor discovery filter is invalid.")
+        elif stateFilter != "all":
+            raise ValueError("Save Editor state filter is not supported for this domain.")
         if domain == "discover":
-            rows = self._discovery_rows(search, language)
+            rows = self._discovery_rows(search, language, stateFilter)
             total = len(rows)
             return {
                 "profile": self.profile,
