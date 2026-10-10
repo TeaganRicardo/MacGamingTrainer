@@ -82,8 +82,13 @@ SecondOwner = {
     (english / '_NPCData_Nemesis.en.sjson').write_text('''{
  Texts = [
   { Id = "Nemesis_0408" DisplayName = "Second authored line" Speaker = "Nemesis" Event = "NemesisPostTrueEnding01" }
-  { Id = "Nemesis_0407" DisplayName = "My father has returned" Speaker = "Nemesis" Event = "NemesisPostTrueEnding01" }
+  { Id = "Nemesis_0407" DisplayName = "My father has returned" Speaker = "Nemesis" Event = "NemesisPostTrueEnding01"
+    // Id = "InjectedCue"
+    // DisplayName = "INJECTED TRANSLATION"
+  }
   { Id = "Nemesis_0252" DisplayName = "Fought Chronos repeatedly" Speaker = "Nemesis" Event = "NemesisAboutChronosBossFights01" }
+  { Id = "Nemesis_GenericVoice01" DisplayName = "Unrelated ambient speech" Event = "NPC_Nemesis_01.InteractVoiceLines" }
+  { Id = "Nemesis_EventOnly01" DisplayName = "Unresolved event wording" Event = "NemesisOnlyLocalizationEvent01" }
   // { Id = "Commented_01" DisplayName = "Not live" Event = "NemesisPostTrueEnding01" }
  ]
 }
@@ -132,6 +137,22 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert finding.query(search='My father has returned', offset=0, limit=10, language='en', writable=set())['total'] == 1
     assert finding.query(search='Nemesis_0407', offset=0, limit=10, language='en', writable=set())['total'] == 1
     assert finding.query(search='TrueEndingFinale01', offset=0, limit=10, language='en', writable=set())['total'] >= 1
+    # Native SJSON comments are not fields: the active cue must survive,
+    # and the commented words must never enter the searchable text index.
+    assert finding.query(search='INJECTED TRANSLATION', offset=0, limit=10, language='en', writable=set())['total'] == 0
+    assert finding.query(search='InjectedCue', offset=0, limit=10, language='en', writable=set())['total'] == 0
+    # Event keys can be generic voice entrypoints, not scripted scenes.
+    # An Event without an authored scene/reset identity is only a clue.
+    for token in ('NPC_Nemesis_01.InteractVoiceLines', 'NemesisOnlyLocalizationEvent01'):
+        event_only = finding.query(search=token, offset=0, limit=10, language='en', writable=set())
+        assert event_only['total'] == 1
+        assert event_only['items'][0]['status'] == 'unknown'
+        assert not event_only['items'][0]['canStage']
+        unresolved = finding.detail(event_only['items'][0]['rawId'], 'en', set())
+        assert unresolved['sourceResolution'] == 'unresolved'
+        assert not unresolved['canStage']
+    assert finding.query(search='NemesisOnlyLocalizationEvent01', offset=0, limit=10,
+                         language='en', writable=set(), state_filter='notRecorded')['total'] == 0
     assert finding.query(search='PreTrueEnding01', offset=0, limit=10, language='en', writable=set())['items'][0]['status'] == 'notRecorded'
     assert finding.query(search='Nemesis', offset=1, limit=1, language='en', writable=set())['total'] == found['total']
 
