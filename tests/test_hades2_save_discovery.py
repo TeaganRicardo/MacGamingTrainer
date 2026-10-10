@@ -21,6 +21,10 @@ def document():
             ("SameKey", 1.0),
             ("SameKey", 2.0),
         ]),
+        "DuplicateContainers": LuaTable(0, 2, [
+            ("Twin", table({"DeepNeedle": 1.0})),
+            ("Twin", table({"DeepNeedle": 2.0})),
+        ]),
     }
     unknown.update({
         "BulkItem{:03d}".format(index): float(index)
@@ -348,6 +352,20 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert duplicate["editable"] is False
     assert duplicate["reasonCode"] == "ambiguousRaw"
     assert duplicate["pathAmbiguous"] is True
+
+    # Ambiguity on a parent container must propagate to descendants reached by
+    # raw discovery. Those descendants need distinct physical identities and
+    # must never advertise an exact Advanced path that cannot be resolved.
+    deep = workspace.query(
+        domain="discover",
+        search="DeepNeedle",
+        language="en",
+    )["items"]
+    assert len(deep) == 2
+    assert len({item["id"] for item in deep}) == 2
+    assert all(item["state"] == "ambiguous" for item in deep)
+    assert all(item["reasonCode"] == "ambiguousRaw" for item in deep)
+    assert all(item["pathAmbiguous"] is True for item in deep)
 
     # Unknown data is searchable without granting write authority and keeps the
     # exact Advanced path needed to inspect it.

@@ -629,11 +629,13 @@ class Hades2SaveWorkspace:
             return []
         rows = []
 
-        def visit(table, path):
+        def visit(table, path, physical_path=(), ancestor_ambiguous=False):
             if not isinstance(table, LuaTable):
                 return
             for physical_index, key, value, ambiguous in table.physical_entries():
                 item_path = [*path, key]
+                occurrence_path = (*physical_path, physical_index)
+                path_ambiguous = ancestor_ambiguous or ambiguous
                 kind = _value_type(value)
                 key_text = str(key)
                 scalar = _json_scalar(value)
@@ -642,11 +644,21 @@ class Hades2SaveWorkspace:
                     tuple(item_path) not in semantic_paths
                     and (needle in key_text.casefold() or needle in value_text.casefold())
                 ):
-                    reason_code = "ambiguousRaw" if ambiguous else "unknownRaw"
+                    reason_code = (
+                        "ambiguousRaw" if path_ambiguous else "unknownRaw"
+                    )
+                    # A descendant of a duplicated container cannot be
+                    # addressed by its semantic key path alone. Preserve the
+                    # physical occurrence trail in its opaque identity and
+                    # propagate path ambiguity so the frontend never offers an
+                    # unsafe Advanced drill-down.
+                    suffix = str(physical_index)
+                    if ancestor_ambiguous:
+                        suffix = ".".join(str(index) for index in occurrence_path)
                     row = {
                         "id": "advanced:" + json.dumps(
                             item_path, ensure_ascii=True, separators=(",", ":")
-                        ) + ":" + str(physical_index),
+                        ) + ":" + suffix,
                         "domain": "advanced",
                         "rawId": key_text,
                         "path": item_path,
@@ -656,8 +668,8 @@ class Hades2SaveWorkspace:
                         "valueType": kind,
                         "editable": False,
                         "mutationKinds": [],
-                        "pathAmbiguous": ambiguous,
-                        "state": "ambiguous" if ambiguous else "unknown",
+                        "pathAmbiguous": path_ambiguous,
+                        "state": "ambiguous" if path_ambiguous else "unknown",
                         "reasonCode": reason_code,
                         "reason": self._discovery_reason(reason_code, language),
                     }
@@ -665,7 +677,12 @@ class Hades2SaveWorkspace:
                         row["childCount"] = len(value)
                     rows.append(row)
                 if isinstance(value, LuaTable):
-                    visit(value, item_path)
+                    visit(
+                        value,
+                        item_path,
+                        occurrence_path,
+                        path_ambiguous,
+                    )
 
         visit(self.document.lua_state, [])
         return rows
