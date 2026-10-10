@@ -36,6 +36,14 @@ _GROUP_NAMES = {
 _QUEST_STATUSES = ("Unlocked", "Complete", "CashedOut")
 
 
+class DialogueWriteBlocked(ValueError):
+    """A stable rejection reason from the same owner that stages dialogue."""
+
+    def __init__(self, code, diagnostic):
+        self.code = code
+        super().__init__(diagnostic)
+
+
 def _game_state(root):
     state = root["GameState"]
     if not isinstance(state, LuaTable):
@@ -64,7 +72,7 @@ def _dialogue_unique_value(owner, name):
     for key, entry in owner.entries():
         if type(key) is str and key == name:
             if found:
-                raise ValueError("Save Editor dialogue owner has duplicate keys.")
+                raise DialogueWriteBlocked("ambiguousOwner", "Save Editor dialogue owner has duplicate keys.")
             found = True
             value = entry
     return value
@@ -82,24 +90,24 @@ def _dialogue_authority(root):
     choice_history = _dialogue_unique_value(state, "TextLinesChoiceRecord")
     if not all(isinstance(owner, LuaTable)
                for owner in (lines, gift_history, choice_history)):
-        raise ValueError("Save Editor dialogue companion history is unavailable.")
+        raise DialogueWriteBlocked("companionMissing", "Save Editor dialogue companion history is unavailable.")
     gifted_ids = set()
     seen_people = set()
     for person, history in gift_history.entries():
         if type(person) is not str or not isinstance(history, LuaTable):
-            raise ValueError("Save Editor gift dialogue history is malformed.")
+            raise DialogueWriteBlocked("giftHistory", "Save Editor gift dialogue history is malformed.")
         if person in seen_people:
-            raise ValueError("Save Editor gift dialogue owner has duplicate keys.")
+            raise DialogueWriteBlocked("giftHistory", "Save Editor gift dialogue owner has duplicate keys.")
         seen_people.add(person)
         seen_indexes = set()
         for index, line in history.entries():
             if (type(index) not in (int, float) or index < 1 or
                     not float(index).is_integer() or type(line) is not str):
-                raise ValueError("Save Editor gift dialogue history is malformed.")
+                raise DialogueWriteBlocked("giftHistory", "Save Editor gift dialogue history is malformed.")
             # Lua numeric keys share one identity for 1 and 1.0.
             numeric_key = float(index)
             if numeric_key in seen_indexes:
-                raise ValueError("Save Editor gift dialogue history has duplicate indexes.")
+                raise DialogueWriteBlocked("giftHistory", "Save Editor gift dialogue history has duplicate indexes.")
             seen_indexes.add(numeric_key)
             gifted_ids.add(line)
 
@@ -109,7 +117,7 @@ def _dialogue_authority(root):
     run = _dialogue_unique_value(root, "CurrentRun")
     if run is not None:
         if not isinstance(run, LuaTable):
-            raise ValueError("Save Editor current-run dialogue history is malformed.")
+            raise DialogueWriteBlocked("currentRun", "Save Editor current-run dialogue history is malformed.")
         for field, expected_type in (
             ("TextLinesRecord", bool),
             ("HubTextLinesRecord", bool),
@@ -118,16 +126,16 @@ def _dialogue_authority(root):
             value = _dialogue_unique_value(run, field)
             if value is not None:
                 if not isinstance(value, LuaTable):
-                    raise ValueError("Save Editor current-run dialogue history is malformed.")
+                    raise DialogueWriteBlocked("currentRun", "Save Editor current-run dialogue history is malformed.")
                 owners.append(("CurrentRun." + field, value, expected_type))
         room = _dialogue_unique_value(run, "CurrentRoom")
         if room is not None:
             if not isinstance(room, LuaTable):
-                raise ValueError("Save Editor current-room dialogue history is malformed.")
+                raise DialogueWriteBlocked("currentRun", "Save Editor current-room dialogue history is malformed.")
             room_lines = _dialogue_unique_value(room, "TextLinesRecord")
             if room_lines is not None:
                 if not isinstance(room_lines, LuaTable):
-                    raise ValueError("Save Editor current-room dialogue history is malformed.")
+                    raise DialogueWriteBlocked("currentRun", "Save Editor current-room dialogue history is malformed.")
                 owners.append(("CurrentRun.CurrentRoom.TextLinesRecord", room_lines, bool))
     return gifted_ids, owners
 
@@ -136,16 +144,16 @@ def _validated_dialogue_owners(root, name, authority):
     # StoryResetData.TextLines is a native-authored reset boundary. Neither a
     # boolean observation nor missing gift evidence grants write authority.
     if name not in STORY_RESET_TEXT_IDS:
-        raise ValueError("Save Editor dialogue identity is not a native reset target.")
+        raise DialogueWriteBlocked("notResettable", "Save Editor dialogue identity is not a native reset target.")
     if _dialogue_unique_value(_table(_game_state(root), "TextLinesRecord"), name) is not True:
-        raise ValueError("Save Editor dialogue must be a played record.")
+        raise DialogueWriteBlocked("notPlayed", "Save Editor dialogue must be a played record.")
     gifted_ids, owners = authority
     if name in gifted_ids:
-        raise ValueError("Save Editor gift-linked dialogue cannot be reset alone.")
+        raise DialogueWriteBlocked("giftLinked", "Save Editor gift-linked dialogue cannot be reset alone.")
     for _owner_name, record, expected_type in owners:
         before = _dialogue_unique_value(record, name)
         if before is not None and type(before) is not expected_type:
-            raise ValueError("Save Editor linked dialogue history is malformed.")
+            raise DialogueWriteBlocked("linkedHistory", "Save Editor linked dialogue history is malformed.")
     return owners
 
 
@@ -184,8 +192,10 @@ def rows(root, domain, language="zh-CN", game_path=None):
         lines = _table(state, "TextLinesRecord")
         try:
             authority = _dialogue_authority(root)
-        except ValueError:
+            authority_error = None
+        except ValueError as error:
             authority = None  # Keep the recorded rows inspectable, but read-only.
+            authority_error = error
         seen_lines = set()
         for name, value in lines.entries():
             if not isinstance(name, str) or type(value) is not bool:
@@ -198,14 +208,18 @@ def rows(root, domain, language="zh-CN", game_path=None):
             # A gift event also changes GiftRecord/order/choice history. It
             # cannot safely be reset by treating one text flag as independent.
             writable = False
+            block = authority_error if value is True else DialogueWriteBlocked(
+                "notPlayed", "Save Editor dialogue must be a played record."
+            )
             if authority is not None and value is True:
                 try:
                     _validated_dialogue_owners(root, name, authority)
-                except ValueError:
-                    pass
+                except ValueError as error:
+                    block = error
                 else:
                     writable = True
-            result.append(_row(
+                    block = None
+            row = _row(
                 entry_id="dialogue:" + name, domain="dialogue", key=name,
                 path=["GameState", "TextLinesRecord", name],
                 label=("对话记录 · " if language == "zh-CN" else "Dialogue record · ") + name,
@@ -214,7 +228,14 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 operations=("set",) if writable else (),
                 group=_GROUP_NAMES["dialogue"][0 if language == "zh-CN" else 1],
                 choices=(False, True),
-            ))
+            )
+            # Share the exact native companion-owner verdict with the
+            # investigation. Never infer editability from the scene index.
+            row["blockReasonCode"] = (
+                getattr(block, "code", "invalidOwner") if block else None
+            )
+            row["blockReasonDiagnostic"] = str(block) if block else None
+            result.append(row)
     if domain == "progression":
         statuses = _table(state, "QuestStatus")
         names = set(k for k, _ in statuses.entries() if isinstance(k, str))
