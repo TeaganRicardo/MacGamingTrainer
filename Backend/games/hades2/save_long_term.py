@@ -168,38 +168,48 @@ def rows(root, domain, language="zh-CN", game_path=None):
             gift_record = None
             gift_totals = None
         if isinstance(gift_record, LuaTable) and isinstance(gift_totals, LuaTable):
-            gift_names = {
-                key for key, value in gift_record.entries()
-                if isinstance(key, str) and isinstance(value, LuaTable)
-            }
-            resources = {
-                key
-                for _, record in gift_record.entries()
-                if isinstance(record, LuaTable)
-                for key, _ in record.entries()
-                if isinstance(key, str)
-            }
-            gift_native, gift_en = _display(
-                gift_names | resources, language, game_path
-            )
-            for person in sorted(gift_names):
-                try:
-                    record = gift_record[person]
-                except AmbiguousLuaKeyError:
+            person_records = {}
+            resources = set()
+            for _index, person, record, ambiguous in gift_record.physical_entries():
+                if not isinstance(person, str) or not isinstance(record, LuaTable):
                     continue
-                seen_resources = set()
-                for _index, resource, value, ambiguous in record.physical_entries():
-                    if not isinstance(resource, str) or resource in seen_resources:
-                        continue
-                    seen_resources.add(resource)
+                person_records.setdefault(person, []).append((record, ambiguous))
+                resources.update(
+                    resource
+                    for _child_index, resource, _value, _child_ambiguous
+                    in record.physical_entries()
+                    if isinstance(resource, str)
+                )
+            gift_native, gift_en = _display(
+                set(person_records) | resources, language, game_path
+            )
+            for person in sorted(person_records):
+                records = person_records[person]
+                person_ambiguous = (
+                    len(records) > 1 or any(ambiguous for _record, ambiguous in records)
+                )
+                by_resource = {}
+                for record, _person_ambiguous in records:
+                    for _index, resource, value, ambiguous in record.physical_entries():
+                        if not isinstance(resource, str):
+                            continue
+                        by_resource.setdefault(resource, []).append((value, ambiguous))
+                for resource in sorted(by_resource):
+                    occurrences = by_resource[resource]
                     owner_state = None
                     presented_value = None
-                    if ambiguous:
+                    if (
+                        person_ambiguous
+                        or len(occurrences) > 1
+                        or any(ambiguous for _value, ambiguous in occurrences)
+                    ):
                         owner_state = "ambiguous"
-                    elif _integer(value):
-                        presented_value = int(value)
                     else:
-                        owner_state = "unsupported"
+                        value = occurrences[0][0]
+                        if _integer(value):
+                            presented_value = int(value)
+                        else:
+                            owner_state = "unsupported"
                     title = (
                         (gift_native.get(person) or person) + " · " +
                         (gift_native.get(resource) or resource)

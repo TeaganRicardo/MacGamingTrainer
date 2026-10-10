@@ -260,6 +260,27 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert safe_gift["state"] == "observed"
     assert safe_gift["reasonCode"] == "giftHistoryLinked"
 
+    gift_person_session = Session()
+    gift_person_state = gift_person_session.document.lua_state["GameState"]
+    gift_person_state["GiftRecord"] = LuaTable(0, 2, [
+        ("Hecate", table({"GiftPoints": 1.0})),
+        ("Hecate", table({"MedeaPoints": 1.0})),
+    ])
+    gift_person_state["GiftResourceRecord"] = table({"GiftPoints": 1.0})
+    gift_person_workspace = Hades2SaveWorkspace(
+        gift_person_session, "Profile1", game_path=game
+    )
+    ambiguous_person_gift = next(
+        item for item in gift_person_workspace.query(
+            domain="discover",
+            search="Hecate / GiftPoints",
+            language="en",
+        )["items"]
+        if item["id"] == "gift:Hecate:GiftPoints"
+    )
+    assert ambiguous_person_gift["state"] == "ambiguous"
+    assert ambiguous_person_gift["reasonCode"] == "ambiguousOwner"
+
     arcana_session = Session()
     arcana_state = arcana_session.document.lua_state["GameState"]
     arcana_state["MetaUpgradeState"] = LuaTable(0, 3, [
