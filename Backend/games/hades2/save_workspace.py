@@ -426,6 +426,28 @@ class Hades2SaveWorkspace:
                 return "ambiguous"
         return "observed"
 
+    def _semantic_state(self, row):
+        state = self._path_state(row["path"])
+        if state != "absent":
+            return state
+        # Some semantic descriptors are owned by a linked native record rather
+        # than the presentation path carried by the row. A meaningful non-
+        # default value proves that the semantic owner was observed even when
+        # this particular physical key is absent (for example a default weapon
+        # aspect owned by its base weapon).
+        value = row.get("value")
+        if value is True:
+            return "observed"
+        if (
+            type(value) in (int, float)
+            and not isinstance(value, bool)
+            and value != 0
+        ):
+            return "observed"
+        if isinstance(value, str) and value:
+            return "observed"
+        return "absent"
+
     def _semantic_discovery_rows(self, language):
         domains = (
             "resources", "playerStats", "progression",
@@ -485,7 +507,7 @@ class Hades2SaveWorkspace:
             alias_by_id = {row["id"]: row for row in aliases}
             for source in rows:
                 row = dict(source)
-                state = self._path_state(row["path"])
+                state = self._semantic_state(row)
                 if state == "ambiguous":
                     row["editable"] = False
                     row["mutationKinds"] = []
