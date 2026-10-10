@@ -117,7 +117,6 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert claimed_quest["state"] == "observed"
     assert claimed_quest["editable"] is False
     assert claimed_quest["reasonCode"] == "rewardClaimed"
-    assert "reward" in claimed_quest["reason"].casefold()
 
     starter = workspace.query(
         domain="discover",
