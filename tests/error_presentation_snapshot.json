@@ -116,6 +116,18 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidMutation"
     },
+    "Save Editor investigation filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor investigation identity is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor native scene identity is unknown.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
     "Save Editor language is unsupported.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"

@@ -38,6 +38,7 @@ enum Hades2Command: String {
     case openSpecialChoice = "open_special_choice"
     case saveEditorOpen = "save_editor_open"
     case saveEditorQuery = "save_editor_query"
+    case saveEditorDetail = "save_editor_detail"
     case saveEditorStage = "save_editor_stage"
     case saveEditorReview = "save_editor_review"
     case saveEditorCancel = "save_editor_cancel"
@@ -58,6 +59,8 @@ enum Hades2Command: String {
         case .connect: return 90.0
         case .disconnect: return 12.0
         case .launch: return 10.0
+        case .saveEditorQuery: return 30.0
+        case .saveEditorDetail: return 30.0
         case .saveEditorApply: return 30.0
         case .diagnostics: return 70.0
         case .exportDiagnostics: return 85.0

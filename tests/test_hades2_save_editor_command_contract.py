@@ -19,6 +19,10 @@ class Probe:
         self.calls.append(("query", params))
         return {"domain": params["domain"], "items": []}
 
+    def detail_save_editor(self, params):
+        self.calls.append(("detail", params))
+        return {"scene": "NemesisPostTrueEnding01", "sourceStatus": "available"}
+
     def stage_save_editor(self, params):
         self.calls.append(("stage", params))
         return {"count": 1, "changes": []}
@@ -56,6 +60,18 @@ queried = contract.dispatch(
 )
 assert queried == {"domain": "resources", "items": []}
 
+investigated = contract.dispatch(
+    "save_editor_query",
+    {"domain": "investigate", "search": "Nemesis", "stateFilter": "notRecorded", "language": "zh-CN"},
+    "investigate",
+)
+assert investigated["domain"] == "investigate"
+assert contract.dispatch(
+    "save_editor_detail",
+    {"entryId": "investigate:NemesisPostTrueEnding01", "language": "zh-CN"},
+    "detail",
+)["scene"] == "NemesisPostTrueEnding01"
+
 staged = contract.dispatch(
     "save_editor_stage",
     {"entryId": "resource:MetaCurrency", "operation": "set", "value": 500},
@@ -76,6 +92,19 @@ assert probe.calls == [
         "path": [],
         "language": "en",
     }),
+    ("query", {
+        "domain": "investigate",
+        "search": "Nemesis",
+        "offset": 0,
+        "limit": 100,
+        "path": [],
+        "language": "zh-CN",
+        "stateFilter": "notRecorded",
+    }),
+    ("detail", {
+        "entryId": "investigate:NemesisPostTrueEnding01",
+        "language": "zh-CN",
+    }),
     ("stage", {
         "entryId": "resource:MetaCurrency",
         "operation": "set",
@@ -90,6 +119,7 @@ metadata = {row["name"]: row["timeoutSeconds"] for row in command_metadata()}
 for name in (
     "save_editor_open",
     "save_editor_query",
+    "save_editor_detail",
     "save_editor_stage",
     "save_editor_review",
     "save_editor_cancel",
@@ -97,12 +127,16 @@ for name in (
 ):
     assert name in metadata
 assert metadata["save_editor_apply"] == 30.0
+assert metadata["save_editor_query"] == 30.0
+assert metadata["save_editor_detail"] == 30.0
 
 for command, params, presentation in (
     ("save_editor_query", {"domain": "resources", "limit": 0}, "hades2.saveEditor.error.invalidQuery"),
     ("save_editor_query", {"domain": "resources", "limit": 201}, "hades2.saveEditor.error.invalidQuery"),
     ("save_editor_query", {"domain": "resources", "search": "x" * 257}, "hades2.saveEditor.error.invalidQuery"),
     ("save_editor_query", {"domain": "resources", "language": "fr"}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_query", {"domain": "investigate", "stateFilter": "forged"}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_detail", {"entryId": "resource:MetaCurrency"}, "hades2.saveEditor.error.invalidQuery"),
     ("save_editor_stage", {"entryId": "", "operation": "set", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
     ("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "raw", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
 ):

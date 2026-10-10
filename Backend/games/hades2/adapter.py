@@ -954,6 +954,11 @@ class Hades2Adapter(GameAdapter):
     def query_save_editor(self, params):
         return self._require_save_workspace().query(**params)
 
+    def detail_save_editor(self, params):
+        return self._require_save_workspace().investigate(
+            params["entryId"], params["language"]
+        )
+
     def stage_save_editor(self, params):
         return self._require_save_workspace().stage(
             params["entryId"],
