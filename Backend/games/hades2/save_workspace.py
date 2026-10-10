@@ -11,7 +11,7 @@ import math
 from . import save_equipment, save_long_term, save_narrative
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
-from .save_native_ids import RESOURCE_IDS
+from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import resolve_active_profile_save
@@ -383,6 +383,10 @@ class Hades2SaveWorkspace:
                 "当前可识别，但尚无经过验证的独立写入所有权。",
                 "Recognized state is read-only because independent write ownership is not verified.",
             ),
+            "knownAbsent": (
+                "原生已知项目当前未记录；其完整写入生命周期尚未验证，因此保持只读。",
+                "Native-known state is absent; its complete write lifecycle is not yet verified, so it remains read-only.",
+            ),
             "unknownRaw": (
                 "修改器尚不了解此存档数据；保留原值，仅可在“高级”中只读查看。",
                 "Unknown save data is preserved and available read-only in Advanced.",
@@ -500,6 +504,62 @@ class Hades2SaveWorkspace:
                 result.append(row)
         return result
 
+    def _known_absent_quest_rows(self, language):
+        state = self._game_state()
+        statuses = state.get("QuestStatus")
+        if not isinstance(statuses, LuaTable):
+            return []
+        observed = {
+            key for key, _ in statuses.entries()
+            if isinstance(key, str)
+        }
+        missing = sorted(QUEST_IDS - observed)
+        if not missing:
+            return []
+        current = official_display_names(
+            missing, language, game_path=self._game_path
+        )
+        english = (
+            current if language == "en"
+            else official_display_names(missing, "en", game_path=self._game_path)
+        )
+        chinese = (
+            current if language == "zh-CN"
+            else official_display_names(missing, "zh-CN", game_path=self._game_path)
+        )
+        zh = language == "zh-CN"
+        rows = []
+        for name in missing:
+            localized = current.get(name) or (("任务 · " if zh else "Quest · ") + name)
+            english_name = english.get(name) or ("Quest · " + name)
+            row = {
+                "id": "quest:" + name,
+                "domain": "progression",
+                "rawId": name,
+                "path": ["GameState", "QuestStatus", name],
+                "name": localized,
+                "englishName": english_name,
+                "value": None,
+                "valueType": "enum",
+                "editable": False,
+                "mutationKinds": [],
+                "group": "命运清单" if zh else "Fated List quests",
+                "choices": [],
+                "state": "absent",
+                "reasonCode": "knownAbsent",
+                "reason": self._discovery_reason("knownAbsent", language),
+                "_search": tuple({
+                    token for token in (
+                        name,
+                        localized,
+                        english_name,
+                        chinese.get(name),
+                    ) if token
+                }),
+            }
+            rows.append(row)
+        return rows
+
     def _raw_discovery_rows(self, needle, semantic_paths, language):
         if not needle:
             return []
@@ -548,6 +608,7 @@ class Hades2SaveWorkspace:
 
     def _discovery_rows(self, search, language):
         semantic = self._semantic_discovery_rows(language)
+        semantic.extend(self._known_absent_quest_rows(language))
         semantic_paths = {
             tuple(row["path"]) for row in semantic
             if isinstance(row.get("path"), list)
@@ -704,6 +765,57 @@ class Hades2SaveWorkspace:
             "relativePath": self.relative_path,
             "domains": list(SAVE_EDITOR_DOMAINS),
             "pendingCount": len(self._pending),
+            "coverage": [
+                {
+                    "id": "resources",
+                    "discoverability": "supported",
+                    "understanding": "supported",
+                    "write": "supported",
+                    "reasonCode": "verifiedDescriptors",
+                },
+                {
+                    "id": "playerHistory",
+                    "discoverability": "partial",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "playerHistoryPartial",
+                },
+                {
+                    "id": "narrative",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "narrativePartial",
+                },
+                {
+                    "id": "relationships",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "relationshipsPartial",
+                },
+                {
+                    "id": "progression",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "progressionPartial",
+                },
+                {
+                    "id": "equipment",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "equipmentPartial",
+                },
+                {
+                    "id": "unknown",
+                    "discoverability": "supported",
+                    "understanding": "readOnly",
+                    "write": "readOnly",
+                    "reasonCode": "unknownReadOnly",
+                },
+            ],
         }
 
     def _descriptor(self, entry_id):
