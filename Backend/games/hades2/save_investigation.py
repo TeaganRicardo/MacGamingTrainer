@@ -273,14 +273,23 @@ def _load_native(game_path, expected_hash):
                 if closing - opening > 50000:
                     continue
                 record = raw[opening + 1:closing]
-                fields = {k: _sjson_unescape(v) for k, v in _TEXT_FIELD.findall(record)}
+                # A syntactically valid field must occur outside comments and
+                # quoted literals. Unmasked record regexes can otherwise turn
+                # commented-out Id/DisplayName assignments into official text
+                # (or discard the real entry when a second Id is seen).
+                record_mask = masked[opening + 1:closing]
+                fields = {}
+                for field in _TEXT_FIELD.finditer(record):
+                    name = field.group(1)
+                    if record_mask[field.start():field.start() + len(name)] == name:
+                        fields[name] = _sjson_unescape(field.group(2))
                 cue_id = fields.get('Id')
                 if not cue_id or not fields.get('DisplayName'):
                     continue
                 # A Texts entry owns its Id directly. Its outer Texts wrapper
                 # and any nested content must not yield duplicate translations.
-                identifiers = list(re.finditer(r'\bId\s*=', record))
-                if len(identifiers) != 1 or '{' in masked[opening + 1:opening + 1 + identifiers[0].start()]:
+                identifiers = list(re.finditer(r'\bId\s*=', record_mask))
+                if len(identifiers) != 1 or '{' in record_mask[:identifiers[0].start()]:
                     continue
                 entry = {'id': cue_id, 'text': fields['DisplayName'], 'speaker': fields.get('Speaker', ''),
                          'event': fields.get('Event', ''), 'source': path.name}
@@ -372,7 +381,7 @@ class NativeDialogueInvestigation:
         native = self.native
         state = 'ambiguous' if scene in ambiguous or '__owner__' in ambiguous else (
             'recorded' if records.get(scene) is True else
-            'notRecorded' if scene in native['scenes'] or scene in native['events'] or scene in STORY_RESET_TEXT_IDS else 'unknown')
+            'notRecorded' if scene in native['scenes'] or scene in STORY_RESET_TEXT_IDS else 'unknown')
         return state
 
     def _text_records(self, scene):
@@ -414,7 +423,7 @@ class NativeDialogueInvestigation:
         elif state == 'ambiguous':
             reason = 'Duplicate or inaccessible native record owner; write blocked.'
         else:
-            reason = 'No verified native identity for this observed record.'
+            reason = 'No verified script scene identity: localization Event tags alone can name voice-line entrypoints.'
         if self.native['status'] != 'available':
             can_stage = False
             reason = 'Supported game source missing or version mismatch; native context unavailable.'
