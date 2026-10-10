@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-08
+Updated: 2026-10-10
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -38,7 +38,7 @@ The 2026-10-05 architecture correction adopts root-cause-first scope discipline.
 
 ## Real-game acceptance baseline
 
-On 2026-10-08 the user confirmed real-game acceptance of the latest patch, **revision 96 / #392 / PR #393**, and authorized continued performance development. The delivered QA candidate was `24e06cbab2e7049aef923d674a71ddf77d958fac`; its resident source is identical to current `main@46c99d8479a2c650961a1d51c0791b46b1fa7831`.
+On 2026-10-08 the user confirmed real-game acceptance of the latest patch, **revision 96 / #392 / PR #393**, and authorized continued performance development. The delivered QA candidate was `24e06cbab2e7049aef923d674a71ddf77d958fac`; its resident source is identical to the merged baseline at `46c99d8479a2c650961a1d51c0791b46b1fa7831`.
 
 Accepted resident source SHA256:
 
@@ -125,7 +125,10 @@ Mutation testing audits selected test sensitivity. It is not an ordinary feature
 
 Planning issue #124 is the sequencing authority.
 
-- #392's latest patch is user-accepted. #376 is the active performance frontier: ordinary-operation pause overhead is addressed at the Hades transport seam, with LLDB-observed stops and OS-running handoff after successful detach. Error replies retain authoritative attachment observations, including release followed by a resume error. Populated offline resident profiling additionally removes repeated whole-inventory observation scans at revision 97. Actual Host/sidecar/UI latency and real-game resident-maintenance confirmation remain separate; the new resident source is pending user acceptance.
+- #397 Save Editor is the selected product-delivery frontier. The structured document, semantic discovery and source-backed dialogue investigation are merged. PR #430 also corrected editor-window presentation ownership; PR #442 supplies the three-pane workbench foundation. The selected narrative/history/progression workflows, complete cross-domain staged-item management, managed-backup entry and explicit hot writing remain incomplete. A passing build or the workbench foundation does not establish full product delivery. Scheduling and dependencies remain in #124.
+- The user-approved editor contract is a fixed originally-read document plus an explicit write target. Later target changes and active-profile switches do not invalidate that source or target, and Apply must not silently reparse/rebase. H-01/M-01 from the 2026-10-10 audit were withdrawn because those overwrites are intended. Current entry still selects the active profile, and current Apply remains stopped-only; backup-source/non-active target entry and hot writing are selected work, not implemented capabilities. Preserve target containment/identity, codec validation, pre-write recovery evidence, atomic replacement, installed-byte verification and truthful outcomes. Ordinary restore/staged-restore keeps its own transaction policy. A successful disk write does not imply a running-game memory reload.
+- The user-approved workbench keeps diagnostic state, editability and coverage metadata in the internal index. Normal results use recognizable entities, categories and targeted search; do not restore recorded/unrecorded, ambiguous or editable/read-only badges and filters as a product requirement. Source/condition detail remains on demand, and unsupported writes retain the owning validation/reason without adding default visual clutter.
+- #392's focused latest-patch acceptance remains valid. #376's transport and populated-observation optimizations are merged, with LLDB-observed stops, authoritative attachment observations and OS-running handoff after detach. Further Host/sidecar/UI latency and real-game resident-maintenance evidence remains deferred behind selected product functionality. Resident revision 97 and consolidated feature/load/visual acceptance remain pending user execution on an exact artifact.
 
 - #214 exact-head governance convergence is complete.
 - #262 / PR #271 identity migration is complete.
@@ -145,19 +148,19 @@ Planning issue #124 is the sequencing authority.
 - #319 Echo previous-run exact acquisition is complete in this source at resident revision 66: concrete eligible previous-run God boons materialize directly without opening the native random choice screen; final real-game acceptance remains part of the consolidated manual pass.
 - #320 Well/temporary lifecycle management is complete in main at resident revision 67; final real-game acceptance remains part of the consolidated manual pass.
 - #335 completes the residual direct special-NPC mounted-management frontier at resident revision 72: native source/processed semantics decide level, rarity and removal capability; one-shot/external/setup-owned effects receive explicit not-applicable dispositions rather than a deferred bucket.
-- #239 implementation children are complete; parent manual acceptance remains pending and is intentionally consolidated with the later resident acceptance pass.
+- #239 implementation children are complete; unperformed family checks remain in the consolidated resident acceptance pass, separately from development issue closure.
 - #327 implements the equipped Familiar runtime owner at resident revision 68; final real-game acceptance remains part of the consolidated manual pass.
 - #329 selected-Keepsake owner-aware removal is implemented at resident revision 69.
 - #332 completes the meaningful Keepsake runtime upgrade surface at resident revision 70: rank/rarity can be overridden through owner rebuild without advancing durable progression, while a separate StackNum-style level is explicitly not meaningful.
 - #330 implements exact Arcana runtime ownership at resident revision 71. Safe declarative card effects can receive a current-run rank override without changing durable `Unlocked`, `Equipped`, `Level`, adjacency or Grasp ownership; callback/setup-state cards fail closed, and runtime-only removal remains unavailable because durable equipped ownership would reapply it.
-- #240 implementation children are complete; parent real-game acceptance remains intentionally consolidated with the later resident acceptance pass.
-- #221 remains the feature parent; owner/lifecycle families stay explicitly split across #237–#240 rather than collapsing into a raw-trait mutator.
+- #240 implementation children are complete; unperformed family checks remain in the consolidated resident acceptance pass, separately from development issue closure.
+- #221's selected mounted-management implementation is complete; owner/lifecycle families remain explicitly split across #237–#240 rather than collapsing into a raw-trait mutator. Development Done does not imply consolidated manual acceptance.
 
-The selected feature queue is complete enough for the admitted governance correction #364. #364 changes development/review scope rules only and does not change product/runtime semantics. Future governance work still requires concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence; root-cause-first is not authorization for open-ended cleanup.
+The earlier governance correction #364 is complete and changes development/review scope rules only. Future governance work still requires concrete correctness, ownership, runtime/data-safety, compatibility, presentation-identity, packaging or verification-trust evidence; root-cause-first is not authorization for open-ended cleanup.
 
 The user authorizes independently reviewed, automated-green merges before one consolidated final manual acceptance after the selected index work. Missing gameplay/visual verification alone does not block unrelated eligible development, but unexecuted manual checks remain pending and must not be described as accepted.
 
-Hades II Save Editor is not implicitly authorized by the current sequence. Any future binary save mutation design still requires explicit design/safety approval.
+Hades II Save Editor and its explicit-target/static-edit direction are selected and authorized under #397. New threads should follow that contract and the current code's remaining limitations, without requesting renewed approval for already-selected editing work. Gameplay/load/visual acceptance remains user-executed, never RDC-executed.
 
 ## Current non-blocking risks
 
