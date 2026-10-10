@@ -564,7 +564,11 @@
     "hades2.saveEditor.coverage.reason.relationshipsPartial": "Interaction counters are supported; gift and relationship lifecycle editing remains deliberately read-only where ownership is incomplete.",
     "hades2.saveEditor.coverage.reason.progressionPartial": "Selected quest, Arcana and objective state is modeled; broader permanent progression remains incomplete.",
     "hades2.saveEditor.coverage.reason.equipmentPartial": "Selected weapons, aspects, tools and Familiar state is modeled; full progression workflow remains incomplete.",
-    "hades2.saveEditor.coverage.reason.unknownReadOnly": "Unknown data is searchable and preserved, but never receives generic write authority."
+    "hades2.saveEditor.coverage.reason.unknownReadOnly": "Unknown data is searchable and preserved, but never receives generic write authority.",
+    "hades2.saveEditor.discovery.reason.rewardClaimed": "The quest reward was already claimed; rolling back only the status would leave granted rewards and linked records inconsistent.",
+    "hades2.saveEditor.discovery.reason.starterWeapon": "The starter weapon is native baseline ownership and cannot be revoked as an independent unlock.",
+    "hades2.saveEditor.discovery.reason.baseWeaponRequired": "The base weapon must be owned before its default aspect progression can be edited safely.",
+    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "Gift counts are linked to gift order, dialogue and outcome history and cannot be edited safely as standalone counters."
   },
   "language": "en"
 }
