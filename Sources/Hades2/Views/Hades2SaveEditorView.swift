@@ -120,7 +120,7 @@ struct Hades2SaveEditorView: View {
             }
         }
         .frame(width: 1180)
-        .background(theme.background.ignoresSafeArea())
+        .trainerSurface(.canvas)
         .confirmationDialog(
             text("hades2.saveEditor.workbench.confirmTitle"),
             isPresented: $confirmingApply,
@@ -198,7 +198,7 @@ struct Hades2SaveEditorView: View {
             navigationButton(.advanced)
         }
         .padding(10)
-        .background(theme.sidebarBackground)
+        .trainerSurface(.sidebar)
     }
 
     private func navigationButton(_ item: Hades2SaveWorkbenchSection) -> some View {
@@ -213,10 +213,8 @@ struct Hades2SaveEditorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 9)
-                .background(
-                    section == item ? theme.mutedFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: theme.compactCornerRadius)
-                )
+                .trainerSurface(section == item ? .selected : .clear,
+                                cornerRadius: theme.compactCornerRadius)
         }
         .buttonStyle(.plain)
         .disabled(model.busy || model.profile.isEmpty)
@@ -249,7 +247,7 @@ struct Hades2SaveEditorView: View {
                     }
                 }
                 .padding(10)
-                .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 8))
+                .trainerSurface(.subtle, cornerRadius: 8)
 
                 if section == .story {
                     Picker(
@@ -315,10 +313,9 @@ struct Hades2SaveEditorView: View {
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 11)
-                                .background(
-                                    selectedEntityID == entity.id
-                                        ? theme.mutedFill : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 8)
+                                .trainerSurface(
+                                    selectedEntityID == entity.id ? .selected : .clear,
+                                    cornerRadius: 8
                                 )
                             }
                             .buttonStyle(.plain)
@@ -468,7 +465,7 @@ struct Hades2SaveEditorView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 10))
+            .trainerSurface(.subtle, cornerRadius: 10)
         }
     }
 
@@ -580,10 +577,10 @@ struct Hades2SaveEditorView: View {
                         }
                     }
                     .padding(10)
-                    .background(
+                    .trainerSurface(
                         model.selectedInvestigationID == scene.rawID
-                            ? theme.mutedFill : theme.subtleFill,
-                        in: RoundedRectangle(cornerRadius: 8)
+                            ? .selected : .subtle,
+                        cornerRadius: 8
                     )
                 }
                 .buttonStyle(.plain)
@@ -749,7 +746,7 @@ struct Hades2SaveEditorView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
-        .background(theme.panel)
+        .trainerSurface(.panel)
     }
 
     private func reviewValue(
