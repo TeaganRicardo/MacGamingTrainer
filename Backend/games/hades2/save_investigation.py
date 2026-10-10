@@ -305,7 +305,9 @@ def _load_native(game_path, expected_hash):
                 entry = {'id': cue_id, 'text': fields['DisplayName'], 'speaker': fields.get('Speaker', ''),
                          'event': fields.get('Event', ''), 'source': path.name}
                 by_language[language][cue_id].append(entry)
-                if language == 'en' and entry['event']:
+                # Both installed languages can own Event annotations; never
+                # require an English counterpart to discover a zh-only cue.
+                if entry['event']:
                     events[entry['event']].append(cue_id)
 
     candidates = set(STORY_RESET_TEXT_IDS)
@@ -411,8 +413,10 @@ class NativeDialogueInvestigation:
         zh = native['text']['zh-CN']
         return [{'cueId': cue, 'en': [x['text'] for x in en.get(cue, ())],
                  'zhCN': [x['text'] for x in zh.get(cue, ())],
-                 'speaker': next((x['speaker'] for x in en.get(cue, ()) if x['speaker']), ''),
-                 'events': sorted(set(x['event'] for x in en.get(cue, ()) if x['event']))}
+                 'speaker': next((x['speaker'] for lang in (en, zh)
+                                  for x in lang.get(cue, ()) if x['speaker']), ''),
+                 'events': sorted(set(x['event'] for lang in (en, zh)
+                                      for x in lang.get(cue, ()) if x['event']))}
                 for cue in ids]
 
     def _summary_row(self, scene, language, records, ambiguous, writable):
