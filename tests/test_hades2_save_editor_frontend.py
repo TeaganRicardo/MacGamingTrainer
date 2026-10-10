@@ -373,13 +373,15 @@ struct Main {
         // parallel edit identity; each original descriptor remains selectable.
         func sample(
             _ id: String, _ domain: String, _ rawID: String, _ name: String,
-            group: String? = nil
+            group: String? = nil, entityID: String? = nil,
+            entityName: String? = nil
         ) -> Hades2SaveEditorEntry {
             Hades2SaveEditorEntry(
                 id: id, domain: domain, rawID: rawID, path: [],
                 displayName: name, englishName: name, value: AnyHashable(1),
                 valueType: "integer", editable: true, mutationKinds: ["set"],
-                group: group, choices: [], choiceNames: [:], constraints: nil,
+                group: group, entityID: entityID, entityName: entityName,
+                choices: [], choiceNames: [:], constraints: nil,
                 childCount: nil, pathAmbiguous: false, investigationStatus: nil,
                 investigationSnippet: nil, investigationSourceStatus: nil,
                 investigationReason: nil, discoveryState: nil,
@@ -391,7 +393,8 @@ struct Main {
             sample("gift:Nemesis:Nectar", "relationships", "Nemesis / Nectar", "Nemesis · Nectar"),
             sample("investigate:NemesisPostTrueEnding01", "investigate",
                    "NemesisPostTrueEnding01", "Nemesis · NemesisPostTrueEnding01",
-                   group: "Nemesis"),
+                   group: "Nemesis", entityID: "person:Nemesis",
+                   entityName: "Nemesis"),
             sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast", "Sorceress · Unlocked"),
             sample("card:ChanneledCast:Level", "progression", "ChanneledCast", "Sorceress · Level"),
             sample("resource:MetaCurrency", "resources", "MetaCurrency", "Ashes"),

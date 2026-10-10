@@ -167,6 +167,15 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     found = finding.query(root, search='Nemesis', offset=0, limit=100, language='zh-CN', permissions={})
     assert found['total'] >= 2
     assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01', 'NemesisBathHouseRepeatable01'}
+    grouped = next(row for row in found['items'] if row['rawId'] == 'NemesisPostTrueEnding01')
+    assert grouped['entityId'] == 'person:Nemesis'
+    assert grouped['entityName'] == '涅墨西斯'
+    english = finding.query(
+        root, search='NemesisPostTrueEnding01', offset=0, limit=10,
+        language='en', permissions={},
+    )['items'][0]
+    assert english['entityId'] == grouped['entityId']
+    assert english['entityName'] == 'Nemesis'
     # Two real native scenes lack both StoryReset and a matching SJSON Event.
     # Their immediate owners are authored TextLineSets, not voice-line lists.
     bath = finding.query(root, search='NemesisBathHouseRepeatable01', offset=0, limit=10, language='zh-CN', permissions={})

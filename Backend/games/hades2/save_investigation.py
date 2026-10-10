@@ -480,6 +480,8 @@ class NativeDialogueInvestigation:
             'value': state == 'recorded', 'valueType': 'boolean',
             'editable': False, 'mutationKinds': [],
             'group': person or ('Other dialogue' if language == 'en' else '其他对话'),
+            'entityId': 'person:' + person if person else None,
+            'entityName': localized[language] if person else None,
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
             'reason': reason, 'blockReasonCode': block_code,
             'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',

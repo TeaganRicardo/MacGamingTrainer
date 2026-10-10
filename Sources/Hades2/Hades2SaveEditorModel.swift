@@ -94,6 +94,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let editable: Bool
     let mutationKinds: [String]
     let group: String?
+    let entityID: String?
+    let entityName: String?
     let choices: [String]
     let choiceNames: [String: String]
     let constraints: Hades2SaveEditorConstraints?
@@ -119,6 +121,8 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.editable == rhs.editable
             && lhs.mutationKinds == rhs.mutationKinds
             && lhs.group == rhs.group
+            && lhs.entityID == rhs.entityID
+            && lhs.entityName == rhs.entityName
             && lhs.choices == rhs.choices
             && lhs.choiceNames == rhs.choiceNames
             && lhs.constraints == rhs.constraints
@@ -700,6 +704,8 @@ final class Hades2SaveEditorModel: ObservableObject {
             editable: editable,
             mutationKinds: mutationKinds,
             group: row["group"] as? String,
+            entityID: row["entityId"] as? String,
+            entityName: row["entityName"] as? String,
             choices: row["choices"] as? [String] ?? [],
             choiceNames: row["choiceNames"] as? [String: String] ?? [:],
             constraints: constraints,

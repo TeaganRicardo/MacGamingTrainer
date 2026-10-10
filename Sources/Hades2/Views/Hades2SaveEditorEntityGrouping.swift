@@ -42,11 +42,10 @@ enum Hades2SaveEditorEntityGrouping {
                 return ("person:" + person, parts.first ?? entry.displayName)
             }
         case "investigate":
-            if let person = entry.group,
-               !person.isEmpty,
-               person != "Other dialogue",
-               person != "其他对话" {
-                return ("person:" + person, parts.first ?? person)
+            if let identity = entry.entityID,
+               let name = entry.entityName,
+               !identity.isEmpty, !name.isEmpty {
+                return (identity, name)
             }
         case "progression":
             if entry.id.hasPrefix("card:") {
