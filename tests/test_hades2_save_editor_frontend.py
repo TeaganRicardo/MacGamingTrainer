@@ -475,6 +475,19 @@ struct Main {
             fail("discovery result did not navigate to its Advanced owner")
         }
 
+        model.selectDomain(.discover)
+        pump(0.20)
+        model.setDiscoveryFilter("absent")
+        pump(0.20)
+        guard let discoveryFilterCommand = commands(at: commandLog).last(where: {
+                  $0["command"] as? String == "save_editor_query"
+              }),
+              let discoveryFilterParams = discoveryFilterCommand["params"] as? [String: Any],
+              discoveryFilterParams["domain"] as? String == "discover",
+              discoveryFilterParams["stateFilter"] as? String == "absent" else {
+            fail("discovery state filter did not reach Save Workspace")
+        }
+
         model.selectDomain(.investigate)
         pump(0.25)
         if model.items.count != 1 || model.items[0].investigationStatus != "recorded"
