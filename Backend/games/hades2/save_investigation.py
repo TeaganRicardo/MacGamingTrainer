@@ -166,19 +166,30 @@ def _raw(value):
 
 
 def _observed_path(root, path):
+    """Report stored evidence, never future scene eligibility.
+
+    Only durable GameState fields can be observed from a cold save.
+    CurrentRun and nonliteral authored selectors require live context.
+    """
     if not path or path[0] != 'GameState':
-        return 'unknown'
+        return 'unknown', None
     current = root
     try:
         for part in path:
             if not isinstance(current, LuaTable):
-                return 'unknown'
+                return 'unknown', None
             current = current.get(part)
     except AmbiguousLuaKeyError:
-        return 'ambiguous'
-    if current is None or current is False:
-        return 'absent'
-    return 'recorded'
+        return 'ambiguous', None
+    if current is None:
+        return 'absent', None
+    if type(current) is bool:
+        return ('recorded' if current else 'absent'), str(current).lower()
+    if type(current) in (int, float, str):
+        # Bounded diagnostic values, not an instruction to infer a predicate.
+        value = str(current)
+        return 'recorded', value[:120] + ('...' if len(value) > 120 else '')
+    return 'recorded', None
 
 
 def _requirement_nodes(node, root):
@@ -199,11 +210,11 @@ def _requirement_nodes(node, root):
     if path:
         # For Path + predicate, observing a value is not evaluating the full
         # comparison. Likewise PathFalse is a cold-state fact, not eligibility.
-        evidence = _observed_path(root, path)
+        evidence, observation = _observed_path(root, path)
         name = next(k for k in ('PathTrue', 'PathFalse', 'Path') if k in fields)
         suffix = ' / ' + ', '.join(k + ': ' + _raw(v) for k, v in fields.items() if k not in ('Path', 'PathTrue', 'PathFalse')) if len(fields) > 1 else ''
         children.append({'kind': 'path', 'text': name + ': ' + '.'.join(str(p) for p in path) + suffix,
-                         'evidence': evidence, 'children': []})
+                         'evidence': evidence, 'observation': observation, 'children': []})
     for key, item in fields.items():
         if key in ('Path', 'PathTrue', 'PathFalse') or (path and key in ('HasAll', 'HasAny', 'HasNone', 'Comparison', 'Value', 'Min', 'Max')):
             continue
