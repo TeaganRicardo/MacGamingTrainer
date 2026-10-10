@@ -11,7 +11,7 @@ import math
 from . import save_equipment, save_long_term, save_narrative
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
-from .save_native_ids import RESOURCE_IDS
+from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import resolve_active_profile_save
@@ -56,6 +56,7 @@ _PLAYER_STAT_FIELDS = (
 
 SAVE_EDITOR_DOMAINS = (
     "overview",
+    "discover",
     "resources",
     "playerStats",
     "progression",
@@ -74,6 +75,17 @@ SAVE_EDITOR_MUTATION_KINDS = (
     "setEnum",
     "setCounter",
 )
+
+SAVE_EDITOR_INVESTIGATION_FILTERS = (
+    "all", "recorded", "notRecorded", "ambiguous", "unknown",
+)
+SAVE_EDITOR_DISCOVERY_FILTERS = (
+    "all", "observed", "absent", "editable", "readOnly",
+    "ambiguous", "unsupported", "unknown",
+)
+SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
+    (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
+))
 
 
 def _page(offset, limit):
@@ -199,7 +211,6 @@ class Hades2SaveWorkspace:
         }
 
     def _resource_rows(self, language):
-        resources = self._resources()
         identifiers = RESOURCE_IDS
         names = official_display_names(
             identifiers,
@@ -213,29 +224,36 @@ class Hades2SaveWorkspace:
 
         rows = []
         for key in sorted(RESOURCE_IDS):
-            try:
-                descriptor = self._resource_descriptor(key)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
-                continue
-            rows.append({
-                "id": descriptor["id"],
-                "domain": descriptor["domain"],
+            row = {
+                "id": "resource:" + key,
+                "domain": "resources",
                 "rawId": key,
-                "path": descriptor["path"],
+                "path": ["GameState", "Resources", key],
                 "name": names.get(key) or key,
                 "englishName": english.get(key) or key,
-                "value": descriptor["before"],
+                "value": None,
                 "valueType": "integer",
-                "editable": True,
-                "mutationKinds": list(descriptor["mutationKinds"]),
+                "editable": False,
+                "mutationKinds": [],
                 "constraints": {
                     "min": 0,
                     "max": MAX_AMOUNT,
                     "integer": True,
                 },
-            })
+            }
+            try:
+                descriptor = self._resource_descriptor(key)
+            except AmbiguousLuaKeyError:
+                row["ownerState"] = "ambiguous"
+                row["blockReasonCode"] = "ambiguousOwner"
+            except ValueError:
+                row["ownerState"] = "unsupported"
+                row["blockReasonCode"] = "unsupportedOwner"
+            else:
+                row["value"] = descriptor["before"]
+                row["editable"] = True
+                row["mutationKinds"] = list(descriptor["mutationKinds"])
+            rows.append(row)
         return rows
 
     def _player_stat_descriptor(self, identifier):
@@ -282,20 +300,32 @@ class Hades2SaveWorkspace:
     def _player_stat_rows(self, language):
         rows = []
         for field in _PLAYER_STAT_FIELDS:
-            descriptor = self._player_stat_descriptor(field["id"])
-            rows.append({
-                "id": descriptor["id"],
-                "domain": descriptor["domain"],
-                "rawId": descriptor["rawId"],
-                "path": descriptor["path"],
-                "name": descriptor["names"][language],
-                "englishName": descriptor["names"]["en"],
-                "value": descriptor["before"],
-                "valueType": descriptor["valueType"],
-                "editable": True,
-                "mutationKinds": list(descriptor["mutationKinds"]),
-                "constraints": descriptor["constraints"],
-            })
+            row = {
+                "id": "playerStat:" + field["id"],
+                "domain": "playerStats",
+                "rawId": field["id"],
+                "path": ["GameState", field["id"]],
+                "name": field["names"][language],
+                "englishName": field["names"]["en"],
+                "value": None,
+                "valueType": field["valueType"],
+                "editable": False,
+                "mutationKinds": [],
+                "constraints": dict(field["constraints"]),
+            }
+            try:
+                descriptor = self._player_stat_descriptor(field["id"])
+            except AmbiguousLuaKeyError:
+                row["ownerState"] = "ambiguous"
+                row["blockReasonCode"] = "ambiguousOwner"
+            except ValueError:
+                row["ownerState"] = "unsupported"
+                row["blockReasonCode"] = "unsupportedOwner"
+            else:
+                row["value"] = descriptor["before"]
+                row["editable"] = True
+                row["mutationKinds"] = list(descriptor["mutationKinds"])
+            rows.append(row)
         return rows
 
     def _overview_rows(self, language):
@@ -366,6 +396,366 @@ class Hades2SaveWorkspace:
             rows.append(row)
         return rows
 
+    @staticmethod
+    def _discovery_reason(code, language):
+        zh = language == "zh-CN"
+        messages = {
+            "editable": (
+                "已记录，并且原生所有权已验证，可安全编辑。",
+                "Observed with verified native ownership; supported for editing.",
+            ),
+            "editableAbsent": (
+                "原生已知项目当前未记录；其所有权已验证，可通过受支持操作写入。",
+                "Native-known state is absent; its verified owner supports the advertised edit.",
+            ),
+            "readOnly": (
+                "当前可识别，但尚无经过验证的独立写入所有权。",
+                "Recognized state is read-only because independent write ownership is not verified.",
+            ),
+            "knownAbsent": (
+                "原生已知项目当前未记录；其完整写入生命周期尚未验证，因此保持只读。",
+                "Native-known state is absent; its complete write lifecycle is not yet verified, so it remains read-only.",
+            ),
+            "unknownRaw": (
+                "修改器尚不了解此存档数据；保留原值，仅可在“高级”中只读查看。",
+                "Unknown save data is preserved and available read-only in Advanced.",
+            ),
+            "ambiguousOwner": (
+                "存档中存在重复或歧义所有权；仅允许只读检查。",
+                "Duplicate or ambiguous save ownership is read-only.",
+            ),
+            "unsupportedOwner": (
+                "原生身份已知，但当前存档中的所有者或值不符合受支持结构；仅允许只读检查。",
+                "The native identity is known, but its saved owner or value is outside the supported structure; it remains read-only.",
+            ),
+            "ambiguousRaw": (
+                "此原始路径存在重复键或路径歧义；仅允许只读检查。",
+                "This raw path contains duplicate keys or ambiguous ownership and is read-only.",
+            ),
+        }
+        pair = messages.get(code, messages["readOnly"])
+        return pair[0] if zh else pair[1]
+
+    def _path_state(self, path):
+        current = self.document.lua_state
+        for key in path:
+            if not isinstance(current, LuaTable):
+                return "unknown"
+            try:
+                current = current[key]
+            except KeyError:
+                return "absent"
+            except AmbiguousLuaKeyError:
+                return "ambiguous"
+        return "observed"
+
+    def _semantic_state(self, row):
+        owner_state = row.get("ownerState")
+        if owner_state in ("ambiguous", "unsupported"):
+            return owner_state
+        state = self._path_state(row["path"])
+        if state != "absent":
+            return state
+        # Some semantic descriptors are owned by a linked native record rather
+        # than the presentation path carried by the row. A meaningful non-
+        # default value proves that the semantic owner was observed even when
+        # this particular physical key is absent (for example a default weapon
+        # aspect owned by its base weapon).
+        value = row.get("value")
+        if value is True:
+            return "observed"
+        if (
+            type(value) in (int, float)
+            and not isinstance(value, bool)
+            and value != 0
+        ):
+            return "observed"
+        if isinstance(value, str) and value:
+            return "observed"
+        return "absent"
+
+    def _semantic_discovery_rows(self, language):
+        domains = (
+            "resources", "playerStats", "progression",
+            "flags", "relationships", "weapons",
+        )
+        other_language = "en" if language == "zh-CN" else "zh-CN"
+        result = []
+        for domain in domains:
+            if domain == "resources":
+                rows = self._resource_rows(language)
+                aliases = self._resource_rows(other_language)
+            elif domain == "playerStats":
+                rows = self._player_stat_rows(language)
+                aliases = self._player_stat_rows(other_language)
+            elif domain in ("flags", "progression"):
+                rows = save_narrative.rows(
+                    self.document.lua_state, domain, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_narrative.rows(
+                    self.document.lua_state, domain, other_language,
+                    game_path=self._game_path,
+                )
+                if domain == "progression":
+                    rows.extend(save_long_term.rows(
+                        self.document.lua_state, domain, language,
+                        game_path=self._game_path,
+                    ))
+                    aliases.extend(save_long_term.rows(
+                        self.document.lua_state, domain, other_language,
+                        game_path=self._game_path,
+                    ))
+            elif domain == "relationships":
+                rows = save_long_term.rows(
+                    self.document.lua_state, domain, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_long_term.rows(
+                    self.document.lua_state, domain, other_language,
+                    game_path=self._game_path,
+                )
+            else:
+                rows = save_equipment.rows(
+                    self.document.lua_state, language,
+                    game_path=self._game_path,
+                )
+                aliases = save_equipment.rows(
+                    self.document.lua_state, other_language,
+                    game_path=self._game_path,
+                )
+
+            alias_by_id = {row["id"]: row for row in aliases}
+            for source in rows:
+                row = dict(source)
+                state = self._semantic_state(row)
+                if state == "ambiguous":
+                    row["editable"] = False
+                    row["mutationKinds"] = []
+                    reason_code = "ambiguousOwner"
+                elif state == "unsupported":
+                    row["editable"] = False
+                    row["mutationKinds"] = []
+                    reason_code = "unsupportedOwner"
+                elif row.get("editable"):
+                    reason_code = "editable" if state == "observed" else "editableAbsent"
+                else:
+                    reason_code = row.get("blockReasonCode") or "readOnly"
+                alias = alias_by_id.get(row["id"], {})
+                row["state"] = state
+                row["reasonCode"] = reason_code
+                row["reason"] = (
+                    row.get("blockReasonDiagnostic")
+                    if reason_code not in (
+                        "editable", "editableAbsent", "readOnly",
+                        "ambiguousOwner", "unsupportedOwner",
+                    )
+                    and row.get("blockReasonDiagnostic")
+                    else self._discovery_reason(reason_code, language)
+                )
+                row["_search"] = tuple({
+                    str(value) for value in (
+                        row.get("rawId"), row.get("name"), row.get("englishName"),
+                        row.get("group"), alias.get("name"), alias.get("englishName"),
+                        alias.get("group"),
+                    ) if value
+                })
+                result.append(row)
+        return result
+
+    def _known_absent_quest_rows(self, language):
+        state = self._game_state()
+        try:
+            statuses = state.get("QuestStatus")
+        except AmbiguousLuaKeyError:
+            # save_narrative.rows owns the explicit ambiguous identities when
+            # the QuestStatus container itself is duplicated.
+            return []
+        if not isinstance(statuses, LuaTable):
+            return []
+        observed = {
+            key for key, _ in statuses.entries()
+            if isinstance(key, str)
+        }
+        missing = sorted(QUEST_IDS - observed)
+        if not missing:
+            return []
+        current = official_display_names(
+            missing, language, game_path=self._game_path
+        )
+        english = (
+            current if language == "en"
+            else official_display_names(missing, "en", game_path=self._game_path)
+        )
+        chinese = (
+            current if language == "zh-CN"
+            else official_display_names(missing, "zh-CN", game_path=self._game_path)
+        )
+        zh = language == "zh-CN"
+        rows = []
+        for name in missing:
+            localized = current.get(name) or (("任务 · " if zh else "Quest · ") + name)
+            english_name = english.get(name) or ("Quest · " + name)
+            row = {
+                "id": "quest:" + name,
+                "domain": "progression",
+                "rawId": name,
+                "path": ["GameState", "QuestStatus", name],
+                "name": localized,
+                "englishName": english_name,
+                "value": None,
+                "valueType": "enum",
+                "editable": False,
+                "mutationKinds": [],
+                "group": "命运清单" if zh else "Fated List quests",
+                "choices": [],
+                "state": "absent",
+                "reasonCode": "knownAbsent",
+                "reason": self._discovery_reason("knownAbsent", language),
+                "_search": tuple({
+                    token for token in (
+                        name,
+                        localized,
+                        english_name,
+                        chinese.get(name),
+                    ) if token
+                }),
+            }
+            rows.append(row)
+        return rows
+
+    def _raw_discovery_rows(self, needle, semantic_paths, language):
+        if not needle:
+            return []
+        rows = []
+
+        def visit(table, path, physical_path=(), ancestor_ambiguous=False):
+            if not isinstance(table, LuaTable):
+                return
+            for physical_index, key, value, ambiguous in table.physical_entries():
+                item_path = [*path, key]
+                occurrence_path = (*physical_path, physical_index)
+                path_ambiguous = ancestor_ambiguous or ambiguous
+                kind = _value_type(value)
+                key_text = str(key)
+                scalar = _json_scalar(value)
+                value_text = "" if scalar is None else str(scalar)
+                if (
+                    tuple(item_path) not in semantic_paths
+                    and (needle in key_text.casefold() or needle in value_text.casefold())
+                ):
+                    reason_code = (
+                        "ambiguousRaw" if path_ambiguous else "unknownRaw"
+                    )
+                    # A descendant of a duplicated container cannot be
+                    # addressed by its semantic key path alone. Preserve the
+                    # physical occurrence trail in its opaque identity and
+                    # propagate path ambiguity so the frontend never offers an
+                    # unsafe Advanced drill-down.
+                    suffix = str(physical_index)
+                    if ancestor_ambiguous:
+                        suffix = ".".join(str(index) for index in occurrence_path)
+                    row = {
+                        "id": "advanced:" + json.dumps(
+                            item_path, ensure_ascii=True, separators=(",", ":")
+                        ) + ":" + suffix,
+                        "domain": "advanced",
+                        "rawId": key_text,
+                        "path": item_path,
+                        "name": key_text,
+                        "englishName": key_text,
+                        "value": scalar,
+                        "valueType": kind,
+                        "editable": False,
+                        "mutationKinds": [],
+                        "pathAmbiguous": path_ambiguous,
+                        "state": "ambiguous" if path_ambiguous else "unknown",
+                        "reasonCode": reason_code,
+                        "reason": self._discovery_reason(reason_code, language),
+                    }
+                    if isinstance(value, LuaTable):
+                        row["childCount"] = len(value)
+                    rows.append(row)
+                if isinstance(value, LuaTable):
+                    visit(
+                        value,
+                        item_path,
+                        occurrence_path,
+                        path_ambiguous,
+                    )
+
+        visit(self.document.lua_state, [])
+        return rows
+
+    def _discovery_rows(self, search, language, state_filter):
+        semantic = self._semantic_discovery_rows(language)
+        semantic.extend(self._known_absent_quest_rows(language))
+
+        investigation = self._narrative_investigation().query(
+            self.document.lua_state,
+            search=search,
+            offset=0,
+            limit=100_000,
+            language=language,
+            permissions=self._dialogue_write_decisions(),
+            state_filter="all",
+        )
+        investigation_state = {
+            "recorded": "observed",
+            "notRecorded": "absent",
+            "ambiguous": "ambiguous",
+            "unknown": "unknown",
+        }
+        for source in investigation["items"]:
+            row = dict(source)
+            row["state"] = investigation_state.get(row.get("status"), "unknown")
+            row["editable"] = bool(row.get("canStage"))
+            # Investigation owns the safe stage identity. Discovery reports
+            # editability but sends the user through the detailed owner flow.
+            row["mutationKinds"] = []
+            row["reasonCode"] = (
+                "editable" if row["editable"]
+                else row.get("blockReasonCode") or "readOnly"
+            )
+            row["_search"] = (row["rawId"], row["name"], row["englishName"])
+            semantic.append(row)
+
+        semantic_paths = {
+            tuple(row["path"]) for row in semantic
+            if isinstance(row.get("path"), list)
+        }
+        needle = search.casefold().strip()
+        rows = []
+        for row in semantic:
+            if not needle:
+                if row["state"] != "observed":
+                    continue
+            elif row.get("domain") != "investigate" and not any(
+                needle in token.casefold() for token in row["_search"]
+            ):
+                continue
+            item = dict(row)
+            item.pop("_search", None)
+            rows.append(item)
+        rows.extend(self._raw_discovery_rows(needle, semantic_paths, language))
+
+        if state_filter == "editable":
+            rows = [row for row in rows if row.get("editable") is True]
+        elif state_filter == "readOnly":
+            rows = [row for row in rows if row.get("editable") is not True]
+        elif state_filter != "all":
+            rows = [row for row in rows if row.get("state") == state_filter]
+
+        rank = {"observed": 0, "absent": 1, "ambiguous": 2, "unknown": 3}
+        rows.sort(key=lambda row: (
+            rank.get(row.get("state"), 4),
+            not row.get("editable", False),
+            str(row.get("group") or "").casefold(),
+            row["name"].casefold(),
+            row["rawId"].casefold(),
+        ))
+        return rows
+
     def _narrative_investigation(self):
         if self._investigation is None:
             self._investigation = NativeDialogueInvestigation(self._game_path)
@@ -415,8 +805,26 @@ class Hades2SaveWorkspace:
         if language not in ("zh-CN", "en"):
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
-        if stateFilter not in ("all", "recorded", "notRecorded", "ambiguous", "unknown"):
-            raise ValueError("Save Editor investigation filter is invalid.")
+        if domain == "investigate":
+            if stateFilter not in SAVE_EDITOR_INVESTIGATION_FILTERS:
+                raise ValueError("Save Editor investigation filter is invalid.")
+        elif domain == "discover":
+            if stateFilter not in SAVE_EDITOR_DISCOVERY_FILTERS:
+                raise ValueError("Save Editor discovery filter is invalid.")
+        elif stateFilter != "all":
+            raise ValueError("Save Editor state filter is not supported for this domain.")
+        if domain == "discover":
+            rows = self._discovery_rows(search, language, stateFilter)
+            total = len(rows)
+            return {
+                "profile": self.profile,
+                "relativePath": self.relative_path,
+                "domain": domain,
+                "offset": offset,
+                "limit": limit,
+                "total": total,
+                "items": rows[offset:offset + limit],
+            }
         if domain == "investigate":
             results = self._narrative_investigation().query(
                 self.document.lua_state,
@@ -484,6 +892,57 @@ class Hades2SaveWorkspace:
             "relativePath": self.relative_path,
             "domains": list(SAVE_EDITOR_DOMAINS),
             "pendingCount": len(self._pending),
+            "coverage": [
+                {
+                    "id": "resources",
+                    "discoverability": "supported",
+                    "understanding": "supported",
+                    "write": "supported",
+                    "reasonCode": "verifiedDescriptors",
+                },
+                {
+                    "id": "playerHistory",
+                    "discoverability": "partial",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "playerHistoryPartial",
+                },
+                {
+                    "id": "narrative",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "narrativePartial",
+                },
+                {
+                    "id": "relationships",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "relationshipsPartial",
+                },
+                {
+                    "id": "progression",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "progressionPartial",
+                },
+                {
+                    "id": "equipment",
+                    "discoverability": "supported",
+                    "understanding": "partial",
+                    "write": "partial",
+                    "reasonCode": "equipmentPartial",
+                },
+                {
+                    "id": "unknown",
+                    "discoverability": "supported",
+                    "understanding": "readOnly",
+                    "write": "readOnly",
+                    "reasonCode": "unknownReadOnly",
+                },
+            ],
         }
 
     def _descriptor(self, entry_id):

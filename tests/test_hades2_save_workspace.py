@@ -562,7 +562,18 @@ malformed = Hades2SaveWorkspace.open(malformed_service)
 gift_rows = malformed.query(domain="relationships", language="en")["items"]
 assert next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")["editable"] is False
 card_rows = malformed.query(domain="progression", language="en")["items"]
-assert all(row["id"] != "card:ChanneledCast:Level" for row in card_rows)
+malformed_card = next(
+    row for row in card_rows if row["id"] == "card:ChanneledCast:Level"
+)
+assert malformed_card["editable"] is False
+assert malformed_card["ownerState"] == "unsupported"
+assert malformed_card["blockReasonCode"] == "unsupportedOwner"
+try:
+    malformed.stage("card:ChanneledCast:Level", "set", 2)
+except ValueError:
+    pass
+else:
+    raise AssertionError("malformed Arcana owner became writable")
 
 # Gift quantities need not equal gift-event count. No synthetic gifts or
 # dialogue events may be manufactured when the two representations differ.
