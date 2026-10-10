@@ -602,6 +602,12 @@ private struct Hades2NarrativeConditionView: View {
                 Text(label("hades2.saveEditor.investigate.path." + node.evidence, []))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                if let observation = node.observation {
+                    Text(label("hades2.saveEditor.investigate.path.observation", [observation]))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
