@@ -5,6 +5,7 @@ Import only under the Xcode Python ABI.
 """
 import subprocess
 import time
+from hades2_lldb_worker_support import phase
 
 from games.hades2 import transport as transport_module
 from games.hades2.transport import Hades2LuaTransport, TransportError
@@ -131,27 +132,32 @@ def symbol_address(module, target, name):
     return addresses.pop()
 
 
-def attach_helper(executable, delay, *, tick_interval_us=0):
+def attach_helper(executable, delay, *, tick_interval_us=0, diagnostics=False):
     child = subprocess.Popen([str(executable), str(delay), str(tick_interval_us)])
     debugger = None
     transport = Hades2LuaTransport.__new__(Hades2LuaTransport)
     transport.process = None
     try:
         time.sleep(0.05)
-        lldb.SBDebugger.Initialize()
-        debugger = lldb.SBDebugger.Create()
+        with phase('debugger.initialize', enabled=diagnostics):
+            lldb.SBDebugger.Initialize()
+        with phase('debugger.create', enabled=diagnostics):
+            debugger = lldb.SBDebugger.Create()
         debugger.SetAsync(True)
         listener = debugger.GetListener()
-        target = debugger.CreateTarget("")
+        with phase('target.create', enabled=diagnostics):
+            target = debugger.CreateTarget("")
         error = lldb.SBError()
-        process = target.AttachToProcessWithID(listener, child.pid, error)
+        with phase('target.attach', enabled=diagnostics):
+            process = target.AttachToProcessWithID(listener, child.pid, error)
         assert error.Success(), str(error)
 
         module = target.GetModuleAtIndex(0)
-        addresses = {
-            expected: symbol_address(module, target, actual)
-            for expected, actual in SYMBOLS.items()
-        }
+        with phase('target.symbols', enabled=diagnostics):
+            addresses = {
+                expected: symbol_address(module, target, actual)
+                for expected, actual in SYMBOLS.items()
+            }
 
         transport.debugger = debugger
         transport.listener = listener
@@ -167,24 +173,27 @@ def attach_helper(executable, delay, *, tick_interval_us=0):
         transport.address = lambda name: addresses[name]
         return child, debugger, transport, addresses
     except BaseException:
-        cleanup(child, debugger, transport)
+        cleanup(child, debugger, transport, diagnostics=diagnostics)
         raise
 
 
-def cleanup(child, debugger, transport):
+def cleanup(child, debugger, transport, *, diagnostics=False):
     try:
         process = getattr(transport, "process", None)
         if process is not None and process.IsValid():
             state = process.GetState()
             if state not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
-                process.Kill()
+                with phase('cleanup.targetKill', enabled=diagnostics):
+                    process.Kill()
     finally:
         try:
             if debugger is not None:
-                lldb.SBDebugger.Destroy(debugger)
+                with phase('cleanup.debuggerDestroy', enabled=diagnostics):
+                    lldb.SBDebugger.Destroy(debugger)
         finally:
             try:
                 child.kill()
             except ProcessLookupError:
                 pass
-            child.wait(timeout=5)
+            with phase('cleanup.childWait', enabled=diagnostics):
+                child.wait(timeout=5)
