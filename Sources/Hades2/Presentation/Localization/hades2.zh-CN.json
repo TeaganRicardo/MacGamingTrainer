@@ -564,7 +564,11 @@
     "hades2.saveEditor.coverage.reason.relationshipsPartial": "互动计数已支持；赠礼和关系生命周期在所有权不完整时仍保持只读。",
     "hades2.saveEditor.coverage.reason.progressionPartial": "已覆盖部分任务、塔罗牌和目标状态；更完整的永久成长流程仍待补齐。",
     "hades2.saveEditor.coverage.reason.equipmentPartial": "已覆盖部分武器、形态、工具与魔宠状态；完整成长流程仍待补齐。",
-    "hades2.saveEditor.coverage.reason.unknownReadOnly": "未知数据可搜索且会原样保留，但不会获得通用写入权限。"
+    "hades2.saveEditor.coverage.reason.unknownReadOnly": "未知数据可搜索且会原样保留，但不会获得通用写入权限。",
+    "hades2.saveEditor.discovery.reason.rewardClaimed": "任务奖励已领取；只回退任务状态会使已发放奖励和关联记录不一致。",
+    "hades2.saveEditor.discovery.reason.starterWeapon": "初始武器属于原生基础所有权，不能作为独立解锁项撤销。",
+    "hades2.saveEditor.discovery.reason.baseWeaponRequired": "需要先拥有对应基础武器，才能安全修改默认形态进度。",
+    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "赠礼计数与赠礼顺序、对话和奖励结果相互关联，不能作为独立计数安全修改。"
   },
   "language": "zh-CN"
 }
