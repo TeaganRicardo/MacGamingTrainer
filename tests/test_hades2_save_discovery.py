@@ -17,6 +17,10 @@ def document():
     unknown = {
         "MysteryCounter": 7.0,
         "Nested": table({"OpaqueThing": "kept"}),
+        "DuplicateOwner": LuaTable(0, 2, [
+            ("SameKey", 1.0),
+            ("SameKey", 2.0),
+        ]),
     }
     unknown.update({
         "BulkItem{:03d}".format(index): float(index)
@@ -130,6 +134,24 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         language="en",
         stateFilter="observed",
     )["total"] == 0
+
+    concept = workspace.query(
+        domain="discover",
+        search="Weapon aspects",
+        language="en",
+    )
+    assert any(item["id"] == "aspect:BaseStaffAspect" for item in concept["items"])
+
+    ambiguous = workspace.query(
+        domain="discover",
+        search="SameKey",
+        language="en",
+    )
+    duplicate = next(item for item in ambiguous["items"] if item["rawId"] == "SameKey")
+    assert duplicate["state"] == "ambiguous"
+    assert duplicate["editable"] is False
+    assert duplicate["reasonCode"] == "ambiguousRaw"
+    assert duplicate["pathAmbiguous"] is True
 
     # Unknown data is searchable without granting write authority and keeps the
     # exact Advanced path needed to inspect it.
