@@ -466,6 +466,7 @@
     "hades2.saveEditor.workbench.reviewApply": "查看更改",
     "hades2.saveEditor.workbench.noChanges": "尚无更改",
     "hades2.saveEditor.workbench.target": "写入目标：{0}",
+    "hades2.saveEditor.workbench.cancel": "取消",
     "hades2.saveEditor.workbench.confirmTitle": "确定应用这些存档修改？",
     "hades2.saveEditor.workbench.confirmBody": "将先创建可恢复备份，再覆盖 {0}。",
     "hades2.saveEditor.workbench.yes": "是",

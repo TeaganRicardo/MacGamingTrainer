@@ -466,6 +466,7 @@
     "hades2.saveEditor.workbench.reviewApply": "Review Changes",
     "hades2.saveEditor.workbench.noChanges": "No pending changes",
     "hades2.saveEditor.workbench.target": "Write target: {0}",
+    "hades2.saveEditor.workbench.cancel": "Cancel",
     "hades2.saveEditor.workbench.confirmTitle": "Apply these save changes?",
     "hades2.saveEditor.workbench.confirmBody": "This will overwrite {0} after creating a recoverable snapshot.",
     "hades2.saveEditor.workbench.yes": "Yes",

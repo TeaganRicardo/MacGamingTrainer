@@ -129,7 +129,7 @@ struct Hades2SaveEditorView: View {
             Button(text("hades2.saveEditor.apply"), role: .destructive) {
                 model.apply()
             }
-            Button(localization.localized("host.done"), role: .cancel) {}
+            Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
         } message: {
             Text(text("hades2.saveEditor.workbench.confirmBody", arguments: [model.relativePath]))
         }
@@ -830,7 +830,7 @@ struct Hades2SaveEditorView: View {
 
     private func discoveryReason(_ entry: Hades2SaveEditorEntry, fallback: String) -> String {
         guard let code = entry.discoveryReasonCode else { return fallback }
-        if entry.domain == "investigate" {
+        if entry.domain == "investigate" || entry.domain == "dialogue" {
             return text("hades2.saveEditor.investigate.block." + code)
         }
         let known = [
