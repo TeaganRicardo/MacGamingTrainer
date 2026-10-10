@@ -363,10 +363,15 @@ struct Hades2SaveEditorView: View {
                     }
                 }
             } label: {
-                Image(systemName: filter == "all"
-                      ? "line.3.horizontal.decrease.circle"
-                      : "line.3.horizontal.decrease.circle.fill")
-                    .foregroundStyle(filter == "all" ? .secondary : theme.accent)
+                HStack(spacing: 5) {
+                    Image(systemName: filter == "all"
+                          ? "line.3.horizontal.decrease.circle"
+                          : "line.3.horizontal.decrease.circle.fill")
+                    if filter != "all" {
+                        Text(text(prefix + filter)).font(.caption).lineLimit(1)
+                    }
+                }
+                .foregroundStyle(filter == "all" ? .secondary : theme.accent)
             }
             .buttonStyle(.plain)
             .disabled(model.busy)

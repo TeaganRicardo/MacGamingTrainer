@@ -227,6 +227,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert good_relationship["editable"] is True
     assert good_relationship["entityId"] == "person:Hecate"
     assert bad_relationship["entityId"] == "person:Nemesis"
+    interaction_rows = {
+        row["id"]: row for row in relationship_workspace.query(
+            domain="relationships", language="en", limit=200,
+        )["items"]
+    }
+    assert interaction_rows["interaction:NPC_Hecate_Story_01"]["entityId"] == (
+        good_relationship["entityId"]
+    )
 
     gift_session = Session()
     gift_state = gift_session.document.lua_state["GameState"]
