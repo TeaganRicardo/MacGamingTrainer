@@ -175,7 +175,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert all(row['status'] == 'notRecorded' and not row['canStage'] for row in bath['items'] + typhon['items'])
     assert finding.detail(root, 'NemesisBathHouseRepeatable01', 'zh-CN', set())['lines'][0]['zhCN'] == ['再次泡温泉']
     assert finding.detail(root, 'HecateAboutTyphonFight02_B', 'en', set())['lines'][0]['en'] == ['Typhon follow-up']
-    assert finding.query(root, search='InteractVoiceLines', offset=0, limit=10, language='en', writable=set())['total'] == 0
+    voice_clues = finding.query(root, search='InteractVoiceLines', offset=0, limit=20, language='en', writable=set())['items']
+    assert not any(row['rawId'] == 'InteractVoiceLines' for row in voice_clues)
+    assert any(row['rawId'] == 'NPC_Nemesis_01.InteractVoiceLines' and row['status'] == 'unknown'
+               for row in voice_clues)
     # Searching the same bilingual character label shown in result headings
     # must find her scenes even when none of their dialogue contains that name.
     localized = finding.query(root, search='涅墨西斯', offset=0, limit=100, language='zh-CN', writable=set())
