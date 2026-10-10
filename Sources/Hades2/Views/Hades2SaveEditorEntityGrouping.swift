@@ -49,7 +49,9 @@ enum Hades2SaveEditorEntityGrouping {
             }
         case "progression":
             if entry.id.hasPrefix("card:") {
-                return ("arcana:" + entry.rawID, parts.first ?? entry.displayName)
+                let name = parts.count > 1
+                    ? parts.dropLast().joined(separator: " · ") : entry.displayName
+                return ("arcana:" + entry.rawID, name)
             }
         case "weapons":
             if entry.id.hasPrefix("weapon:")

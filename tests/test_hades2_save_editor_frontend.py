@@ -397,12 +397,17 @@ struct Main {
                    entityName: "Nemesis"),
             sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast", "Sorceress · Unlocked"),
             sample("card:ChanneledCast:Level", "progression", "ChanneledCast", "Sorceress · Level"),
+            sample("card:ManaOverTime:Unlocked", "progression", "ManaOverTime",
+                   "Arcana · ManaOverTime · Unlocked"),
+            sample("card:ManaOverTime:Level", "progression", "ManaOverTime",
+                   "Arcana · ManaOverTime · Level"),
             sample("resource:MetaCurrency", "resources", "MetaCurrency", "Ashes"),
         ])
-        if grouped.count != 3
+        if grouped.count != 4
             || grouped[0].title != "Nemesis" || grouped[0].entries.count != 3
             || grouped[1].title != "Sorceress" || grouped[1].entries.count != 2
-            || grouped[2].title != "Ashes" || grouped[2].entries.count != 1 {
+            || grouped[2].title != "Arcana · ManaOverTime" || grouped[2].entries.count != 2
+            || grouped[3].title != "Ashes" || grouped[3].entries.count != 1 {
             fail("Save Editor entity grouping lost physical edit descriptors")
         }
         let defaults = InMemoryDefaults()

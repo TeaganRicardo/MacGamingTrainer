@@ -755,6 +755,9 @@ struct Hades2SaveEditorView: View {
     private func reviewValue(
         _ value: AnyHashable?, for change: Hades2SaveEditorChange
     ) -> String {
+        if change.operation == "setEnum", let raw = value?.base as? String {
+            return enumTitle(raw)
+        }
         if let bool = value?.base as? Bool {
             if change.domain == "dialogue" || change.domain == "flags" {
                 return text(bool ? "hades2.saveEditor.true" : "hades2.saveEditor.false")
