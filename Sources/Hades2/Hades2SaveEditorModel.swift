@@ -124,6 +124,7 @@ struct Hades2NarrativeCondition: Identifiable {
     let kind: String
     let label: String
     let evidence: String
+    let observation: String?
     let children: [Hades2NarrativeCondition]
 
     init?(_ raw: [String: Any]) {
@@ -139,6 +140,7 @@ struct Hades2NarrativeCondition: Identifiable {
         self.kind = kind
         self.label = label
         self.evidence = evidence
+        observation = raw["observation"] as? String
         children = parsed
     }
 }
