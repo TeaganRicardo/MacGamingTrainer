@@ -8,6 +8,8 @@ enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
     case resources
     case playerStats
     case progression
+    case quests
+    case arcana
     case investigate
     case dialogue
     case flags

@@ -77,12 +77,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     (text / "zh-CN").mkdir(parents=True)
     (text / "en" / "Resources.en.sjson").write_text(
         'Texts = { { Id = "MetaCurrency", DisplayName = "Ashes", }, '
-        '{ Id = "QuestHelpOdysseus", DisplayName = "The Wanderer\'s Task", }, }',
+        '{ Id = "QuestHelpOdysseus", DisplayName = "The Wanderer\'s Task", }, '
+        '{ Id = "WeaponDagger", DisplayName = "Sister Blades", }, }',
         encoding="utf-8",
     )
     (text / "zh-CN" / "Resources.zh-CN.sjson").write_text(
         'Texts = { { Id = "MetaCurrency", DisplayName = "灰烬", }, '
-        '{ Id = "QuestHelpOdysseus", DisplayName = "流浪者的使命", }, }',
+        '{ Id = "QuestHelpOdysseus", DisplayName = "流浪者的使命", }, '
+        '{ Id = "WeaponDagger", DisplayName = "姊妹双刃", }, }',
         encoding="utf-8",
     )
 
@@ -223,6 +225,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     assert good_relationship["state"] == "observed"
     assert good_relationship["editable"] is True
+    assert good_relationship["entityId"] == "person:Hecate"
+    assert bad_relationship["entityId"] == "person:Nemesis"
 
     gift_session = Session()
     gift_state = gift_session.document.lua_state["GameState"]
@@ -259,6 +263,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     assert safe_gift["state"] == "observed"
     assert safe_gift["reasonCode"] == "giftHistoryLinked"
+    assert safe_gift["entityId"] == good_relationship["entityId"]
 
     gift_person_session = Session()
     gift_person_state = gift_person_session.document.lua_state["GameState"]
@@ -308,6 +313,17 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert good_arcana["state"] == "observed"
     assert good_arcana["editable"] is True
 
+    arcana_scope = arcana_workspace.query(domain="arcana", search="", language="en")
+    assert arcana_scope["items"]
+    assert all(row["id"].startswith("card:") for row in arcana_scope["items"])
+    quest_scope = arcana_workspace.query(domain="quests", search="", language="en")
+    assert quest_scope["items"]
+    assert all(row["id"].startswith(("quest:", "objective:"))
+               for row in quest_scope["items"])
+    assert not {row["id"] for row in quest_scope["items"]} & {
+        row["id"] for row in arcana_scope["items"]
+    }
+
     weapon_session = Session()
     weapon_state = weapon_session.document.lua_state["GameState"]
     weapon_state["WeaponsUnlocked"] = LuaTable(0, 3, [
@@ -340,6 +356,31 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
         for change in weapon_workspace.review()["changes"]
     )
     weapon_workspace.cancel()
+
+    # A single native weapon identity owns all aspects and the selection.
+    # Its key cannot change when the player changes the UI language.
+    owned_weapon_session = Session()
+    owned_weapon_session.document.lua_state["GameState"]["WeaponsUnlocked"] = table({
+        "WeaponStaffSwing": True, "WeaponDagger": True,
+    })
+    owned_workspace = Hades2SaveWorkspace(
+        owned_weapon_session, "Profile1", game_path=game
+    )
+    by_locale = {}
+    for locale in ("zh-CN", "en"):
+        by_locale[locale] = {
+            row["id"]: row
+            for row in owned_workspace.query(
+                domain="weapons", language=locale, limit=200,
+            )["items"]
+        }
+        for key in ("weapon:WeaponDagger", "aspect:DaggerBackstabAspect",
+                    "aspectSelection:WeaponDagger"):
+            assert by_locale[locale][key]["entityId"] == "weapon:WeaponDagger"
+    assert by_locale["zh-CN"]["weapon:WeaponDagger"]["entityName"] != (
+        by_locale["en"]["weapon:WeaponDagger"]["entityName"]
+    )
+    assert by_locale["en"]["weapon:WeaponDagger"]["entityName"] == "Sister Blades"
 
     # A source-owned identity can be discoverable even when no value is present.
     absent = workspace.query(
@@ -500,7 +541,30 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert bulk["items"][0]["rawId"] == "BulkItem100"
     assert all(item["domain"] == "advanced" for item in bulk["items"])
 
-    # Empty discovery is useful but does not dump every absent/unknown identity.
+    # A deliberate filter must expose absent and non-editable native catalog
+    # identities without a search string. It must be applied BEFORE paging.
+    missing_page = workspace.query(
+        domain="discover", search="", stateFilter="absent",
+        offset=0, limit=7, language="en",
+    )
+    assert missing_page["total"] > 7
+    assert len(missing_page["items"]) == 7
+    assert all(item["state"] == "absent" for item in missing_page["items"])
+    later_missing = workspace.query(
+        domain="discover", search="", stateFilter="absent",
+        offset=7, limit=7, language="en",
+    )
+    assert later_missing["total"] == missing_page["total"]
+    assert not ({x["id"] for x in later_missing["items"]}
+                & {x["id"] for x in missing_page["items"]})
+    blocked_page = workspace.query(
+        domain="discover", search="", stateFilter="readOnly",
+        offset=0, limit=40, language="en",
+    )
+    assert blocked_page["total"] > 0
+    assert all(not row["editable"] for row in blocked_page["items"])
+
+    # Empty unfiltered discovery still avoids a catalog flood.
     default = workspace.query(domain="discover", search="", language="en")
     assert all(item["state"] == "observed" for item in default["items"])
     assert not any(item["rawId"] == "HasUsedWeaponShopNavigation" for item in default["items"])

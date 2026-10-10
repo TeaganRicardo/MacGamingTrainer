@@ -16,7 +16,7 @@ extension View {
     }
 }
 
-private enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
+enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all
     case story
     case people
@@ -34,7 +34,7 @@ private enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
         case .story: return .investigate
         case .people: return .relationships
         case .resources: return .resources
-        case .growth: return .progression
+        case .growth: return .arcana
         case .equipment: return .weapons
         case .records: return .playerStats
         case .advanced: return .advanced
@@ -245,6 +245,7 @@ struct Hades2SaveEditorView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    stateFilterMenu
                 }
                 .padding(10)
                 .trainerSurface(.subtle, cornerRadius: 8)
@@ -263,7 +264,7 @@ struct Hades2SaveEditorView: View {
                         Text(text("hades2.saveEditor.workbench.story.scenes"))
                             .tag(Hades2SaveEditorDomain.investigate)
                         Text(text("hades2.saveEditor.workbench.story.quests"))
-                            .tag(Hades2SaveEditorDomain.progression)
+                            .tag(Hades2SaveEditorDomain.quests)
                         Text(text("hades2.saveEditor.workbench.story.flags"))
                             .tag(Hades2SaveEditorDomain.flags)
                         Text(text("hades2.saveEditor.workbench.story.dialogue"))
@@ -328,6 +329,49 @@ struct Hades2SaveEditorView: View {
             Divider()
             pagingControls
                 .padding(12)
+        }
+    }
+
+    @ViewBuilder
+    private var stateFilterMenu: some View {
+        if section == .all || (section == .story && model.selectedDomain == .investigate) {
+            let discovery = section == .all
+            let filter = discovery ? model.discoveryFilter : model.investigationFilter
+            let choices = discovery
+                ? ["all", "observed", "absent", "editable", "readOnly",
+                   "ambiguous", "unsupported", "unknown"]
+                : ["all", "recorded", "notRecorded", "ambiguous", "unknown"]
+            let prefix = discovery
+                ? "hades2.saveEditor.discovery.filter."
+                : "hades2.saveEditor.investigate."
+            Menu {
+                ForEach(choices, id: \.self) { value in
+                    Button {
+                        selectedEntityID = nil
+                        if discovery {
+                            model.setDiscoveryFilter(value)
+                        } else {
+                            model.setInvestigationFilter(value)
+                        }
+                    } label: {
+                        HStack {
+                            Text(text(prefix + value))
+                            if filter == value {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: filter == "all"
+                      ? "line.3.horizontal.decrease.circle"
+                      : "line.3.horizontal.decrease.circle.fill")
+                    .foregroundStyle(filter == "all" ? .secondary : theme.accent)
+            }
+            .buttonStyle(.plain)
+            .disabled(model.busy)
+            .help(text("hades2.saveEditor.workbench.filter"))
+            .accessibilityLabel(text("hades2.saveEditor.workbench.filter"))
         }
     }
 
@@ -485,14 +529,17 @@ struct Hades2SaveEditorView: View {
     @ViewBuilder
     private func editorControl(_ entry: Hades2SaveEditorEntry) -> some View {
         if entry.valueType == "boolean" {
-            Toggle(
-                booleanTitle(for: entry),
-                isOn: Binding(
-                    get: { draftBinding(for: entry).wrappedValue == "true" },
-                    set: { draftBinding(for: entry).wrappedValue = $0 ? "true" : "false" }
+            HStack {
+                Spacer()
+                TrainerToggleControl(
+                    isOn: draftBinding(for: entry).wrappedValue == "true",
+                    enabled: !model.busy,
+                    helpText: entry.displayName,
+                    onChange: { value in
+                        draftBinding(for: entry).wrappedValue = value ? "true" : "false"
+                    }
                 )
-            )
-            .toggleStyle(.switch)
+            }
         } else if entry.valueType == "enum" && !entry.choices.isEmpty {
             Picker(
                 text("hades2.saveEditor.value"),
@@ -764,18 +811,6 @@ struct Hades2SaveEditorView: View {
                         : "hades2.saveEditor.workbench.no")
         }
         return valueText(value)
-    }
-
-    private func booleanTitle(for entry: Hades2SaveEditorEntry) -> String {
-        if entry.id.hasPrefix("weapon:")
-            || entry.id.hasPrefix("familiar:")
-            || entry.id.hasSuffix(":Unlocked") {
-            return text("hades2.saveEditor.workbench.unlocked")
-        }
-        if entry.domain == "dialogue" || entry.domain == "flags" {
-            return text("hades2.saveEditor.workbench.recorded")
-        }
-        return text("hades2.saveEditor.workbench.enabled")
     }
 
     private func draftBinding(for entry: Hades2SaveEditorEntry) -> Binding<String> {

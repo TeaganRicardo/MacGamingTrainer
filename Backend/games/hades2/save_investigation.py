@@ -492,11 +492,14 @@ class NativeDialogueInvestigation:
             'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
         }
 
-    def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all"):
+    def query(
+        self, save_root, *, search, offset, limit, language, permissions,
+        state_filter="all", include_catalog=False,
+    ):
         records, ambiguous = self._records(save_root)
         # An empty search never floods the user with thousands of unobserved
         # native scenes; deliberate queries expand the discoverable index.
-        if search.strip():
+        if search.strip() or state_filter != "all" or include_catalog:
             candidates = set(records) | set(self.native['events']) | set(self.native['scenes']) | set(STORY_RESET_TEXT_IDS)
         else:
             candidates = {name for name, value in records.items() if value is True}

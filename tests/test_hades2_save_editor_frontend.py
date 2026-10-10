@@ -31,7 +31,8 @@ for raw in sys.stdin:
             'profile': 'Profile1',
             'relativePath': 'Profile1.sav',
             'domains': [
-                'overview', 'discover', 'resources', 'playerStats', 'progression', 'investigate', 'dialogue',
+                'overview', 'discover', 'resources', 'playerStats', 'progression',
+                'quests', 'arcana', 'investigate', 'dialogue',
                 'flags', 'relationships', 'weapons', 'advanced',
             ],
             'pendingCount': 0,
@@ -49,7 +50,19 @@ for raw in sys.stdin:
         domain = req['params']['domain']
         path = req['params']['path']
         if domain == 'discover':
-            if req['params']['search'] == 'MysteryCounter':
+            if req['params']['stateFilter'] == 'absent':
+                items = [{
+                    'id': 'flag:KnownAbsent{:03d}'.format(index),
+                    'domain': 'flags', 'rawId': 'KnownAbsent{:03d}'.format(index),
+                    'path': ['GameState', 'Flags', 'KnownAbsent{:03d}'.format(index)],
+                    'name': 'Unseen event {:03d}'.format(index),
+                    'englishName': 'Unseen event {:03d}'.format(index),
+                    'value': None, 'valueType': 'boolean',
+                    'editable': False, 'mutationKinds': [],
+                    'state': 'absent', 'reasonCode': 'knownAbsent',
+                    'reason': 'No saved record for this event.',
+                } for index in range(215)]
+            elif req['params']['search'] == 'MysteryCounter':
                 items = [{
                     'id': 'advanced:["GameState","UnknownFutureField","MysteryCounter"]:0',
                     'domain': 'advanced',
@@ -82,6 +95,26 @@ for raw in sys.stdin:
                     'reasonCode': 'editable',
                     'reason': 'Observed with verified native ownership; supported for editing.',
                 }]
+        elif domain == 'quests':
+            items = [{
+                'id': 'quest:QuestHelpDora', 'domain': 'progression',
+                'rawId': 'QuestHelpDora',
+                'path': ['GameState', 'QuestStatus', 'QuestHelpDora'],
+                'name': 'Dora quest', 'englishName': 'Dora quest',
+                'value': 'Complete', 'valueType': 'enum',
+                'editable': False, 'mutationKinds': [],
+            }]
+        elif domain == 'arcana':
+            items = [{
+                'id': 'card:ChanneledCast:Level', 'domain': 'progression',
+                'rawId': 'ChanneledCast',
+                'path': ['GameState', 'MetaUpgradeState', 'ChanneledCast', 'Level'],
+                'name': 'Sorceress', 'englishName': 'Sorceress',
+                'entityId': 'arcana:ChanneledCast', 'entityName': 'Sorceress',
+                'value': 2, 'valueType': 'integer',
+                'editable': True, 'mutationKinds': ['set'],
+                'constraints': {'min': 1, 'max': 3, 'integer': True},
+            }]
         elif domain == 'investigate':
             lang = req['params']['language']
             items = [{
@@ -100,13 +133,16 @@ for raw in sys.stdin:
                 'snippet': '我从未忘记' if lang == 'zh-CN' else 'I still remember',
             }]
         elif domain == 'weapons':
+            name = '姊妹双刃' if req['params']['language'] == 'zh-CN' else 'Sister Blades'
             items = [{
                 'id': 'aspectSelection:WeaponDagger',
                 'domain': 'weapons',
                 'rawId': 'WeaponDagger',
                 'path': ['GameState', 'LastWeaponUpgradeName', 'WeaponDagger'],
-                'name': 'Sister Blades · Selected aspect',
+                'name': name + ' · Selected aspect',
                 'englishName': 'Sister Blades · Selected aspect',
+                'entityId': 'weapon:WeaponDagger',
+                'entityName': name,
                 'value': '',
                 'valueType': 'enum',
                 'editable': True,
@@ -233,7 +269,7 @@ for raw in sys.stdin:
             'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
             'total': len(items),
-            'items': items,
+            'items': items[req['params']['offset']:req['params']['offset'] + req['params']['limit']],
             'sourceStatus': 'available' if domain == 'investigate' else None,
         }
     elif command == 'save_editor_detail':
@@ -389,18 +425,23 @@ struct Main {
             )
         }
         let grouped = Hades2SaveEditorEntityGrouping.entities(from: [
-            sample("interaction:Nemesis", "relationships", "Nemesis", "Interactions · Nemesis"),
-            sample("gift:Nemesis:Nectar", "relationships", "Nemesis / Nectar", "Nemesis · Nectar"),
+            sample("interaction:Nemesis", "relationships", "Nemesis", "Interactions · Nemesis",
+                   entityID: "person:Nemesis", entityName: "Nemesis"),
+            sample("gift:Nemesis:Nectar", "relationships", "Nemesis / Nectar", "Nemesis · Nectar",
+                   entityID: "person:Nemesis", entityName: "Nemesis"),
             sample("investigate:NemesisPostTrueEnding01", "investigate",
                    "NemesisPostTrueEnding01", "Nemesis · NemesisPostTrueEnding01",
-                   group: "Nemesis", entityID: "person:Nemesis",
-                   entityName: "Nemesis"),
-            sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast", "Sorceress · Unlocked"),
-            sample("card:ChanneledCast:Level", "progression", "ChanneledCast", "Sorceress · Level"),
+                   entityID: "person:Nemesis", entityName: "Nemesis"),
+            sample("card:ChanneledCast:Unlocked", "progression", "ChanneledCast",
+                   "Sorceress · Unlocked", entityID: "arcana:ChanneledCast", entityName: "Sorceress"),
+            sample("card:ChanneledCast:Level", "progression", "ChanneledCast",
+                   "Sorceress · Level", entityID: "arcana:ChanneledCast", entityName: "Sorceress"),
             sample("card:ManaOverTime:Unlocked", "progression", "ManaOverTime",
-                   "Arcana · ManaOverTime · Unlocked"),
+                   "Arcana · ManaOverTime · Unlocked",
+                   entityID: "arcana:ManaOverTime", entityName: "Arcana · ManaOverTime"),
             sample("card:ManaOverTime:Level", "progression", "ManaOverTime",
-                   "Arcana · ManaOverTime · Level"),
+                   "Arcana · ManaOverTime · Level",
+                   entityID: "arcana:ManaOverTime", entityName: "Arcana · ManaOverTime"),
             sample("resource:MetaCurrency", "resources", "MetaCurrency", "Ashes"),
         ])
         if grouped.count != 4
@@ -409,6 +450,31 @@ struct Main {
             || grouped[2].title != "Arcana · ManaOverTime" || grouped[2].entries.count != 2
             || grouped[3].title != "Ashes" || grouped[3].entries.count != 1 {
             fail("Save Editor entity grouping lost physical edit descriptors")
+        }
+        let englishWeapons = Hades2SaveEditorEntityGrouping.entities(from: [
+            sample("weapon:WeaponDagger", "weapons", "WeaponDagger", "Sister Blades",
+                   entityID: "weapon:WeaponDagger", entityName: "Sister Blades"),
+            sample("aspect:DaggerBackstabAspect", "weapons", "DaggerBackstabAspect",
+                   "Sister Blades · Aspect of Melinoe · Rank",
+                   entityID: "weapon:WeaponDagger", entityName: "Sister Blades"),
+            sample("weapon:WeaponTorch", "weapons", "WeaponTorch", "Sister Blades",
+                   entityID: "weapon:WeaponTorch", entityName: "Sister Blades"),
+        ])
+        let chineseWeapons = Hades2SaveEditorEntityGrouping.entities(from: [
+            sample("weapon:WeaponDagger", "weapons", "WeaponDagger", "姊妹双刃",
+                   entityID: "weapon:WeaponDagger", entityName: "姊妹双刃"),
+            sample("aspect:DaggerBackstabAspect", "weapons", "DaggerBackstabAspect",
+                   "姊妹双刃 · 墨利诺厄形态 · 等级",
+                   entityID: "weapon:WeaponDagger", entityName: "姊妹双刃"),
+            sample("weapon:WeaponTorch", "weapons", "WeaponTorch", "姊妹双刃",
+                   entityID: "weapon:WeaponTorch", entityName: "姊妹双刃"),
+        ])
+        let selectedWeaponID = englishWeapons[0].id
+        if englishWeapons.count != 2 || chineseWeapons.count != 2
+            || englishWeapons[0].entries.count != 2
+            || !chineseWeapons.contains(where: { $0.id == selectedWeaponID })
+            || englishWeapons[0].title == chineseWeapons[0].title {
+            fail("Weapon selection changed identity across language or collided on a label")
         }
         let defaults = InMemoryDefaults()
         defaults.set(
@@ -574,6 +640,17 @@ struct Main {
               discoveryFilterParams["stateFilter"] as? String == "absent" else {
             fail("discovery state filter did not reach Save Workspace")
         }
+        if model.total != 215 || model.items.count != 100
+            || model.items.first?.discoveryState != "absent" {
+            fail("Absent-state discovery did not load a useful full results page")
+        }
+        model.nextPage()
+        pump(0.25)
+        if model.offset != 100 || model.total != 215
+            || model.items.count != 100
+            || model.items.first?.rawID != "KnownAbsent100" {
+            fail("Absent-state browsing filtered AFTER paging or lost its scope")
+        }
         model.setDiscoveryFilter("unsupported")
         pump(0.20)
         guard let unsupportedFilterCommand = commands(at: commandLog).last(where: {
@@ -625,6 +702,21 @@ struct Main {
             fail("playerStats descriptor row was not decoded")
         }
 
+        if Hades2SaveWorkbenchSection.growth.domain != .arcana
+            || Hades2SaveWorkbenchSection.story.domain != .investigate {
+            fail("Workbench navigation resolves the wrong source domain")
+        }
+        model.selectDomain(.quests)
+        pump(0.20)
+        if model.items.map(\.id) != ["quest:QuestHelpDora"] {
+            fail("Quest navigation included unrelated progression data")
+        }
+        model.selectDomain(.arcana)
+        pump(0.20)
+        if model.items.map(\.id) != ["card:ChanneledCast:Level"] {
+            fail("Growth navigation included unrelated quest progress")
+        }
+
         model.selectDomain(.weapons)
         pump(0.20)
         guard let selector = model.items.first else { fail("equipment selector is missing") }
@@ -636,6 +728,17 @@ struct Main {
             || selector.choiceNames["DaggerBlockAspect"] != "Aspect of Artemis"
             || selector.group != "Weapon aspects" {
             fail("localized equipment selection contract was not decoded")
+        }
+        let chosenWeaponID = Hades2SaveEditorEntityGrouping.entities(from: model.items).first?.id
+        let chineseWeaponName = model.items.first?.entityName
+        model.setLanguage(.en)
+        pump(0.25)
+        let localizedWeapon = Hades2SaveEditorEntityGrouping.entities(from: model.items).first
+        if chosenWeaponID != "weapon:WeaponDagger"
+            || localizedWeapon?.id != chosenWeaponID
+            || chineseWeaponName == localizedWeapon?.title
+            || localizedWeapon?.title != "Sister Blades" {
+            fail("Selection did not survive a real model language reload")
         }
 
         model.selectDomain(.advanced)

@@ -30,38 +30,12 @@ enum Hades2SaveEditorEntityGrouping {
     }
 
     private static func identity(for entry: Hades2SaveEditorEntry) -> (String, String) {
-        let parts = entry.displayName.components(separatedBy: " · ")
-        switch entry.domain {
-        case "relationships":
-            if entry.id.hasPrefix("interaction:") || entry.id.hasPrefix("specialInteraction:") {
-                return ("person:" + entry.rawID, parts.last ?? entry.displayName)
-            }
-            if entry.id.hasPrefix("gift:") {
-                let identity = String(entry.id.dropFirst("gift:".count))
-                let person = identity.split(separator: ":", maxSplits: 1).first.map(String.init) ?? identity
-                return ("person:" + person, parts.first ?? entry.displayName)
-            }
-        case "investigate":
-            if let identity = entry.entityID,
-               let name = entry.entityName,
-               !identity.isEmpty, !name.isEmpty {
-                return (identity, name)
-            }
-        case "progression":
-            if entry.id.hasPrefix("card:") {
-                let name = parts.count > 1
-                    ? parts.dropLast().joined(separator: " · ") : entry.displayName
-                return ("arcana:" + entry.rawID, name)
-            }
-        case "weapons":
-            if entry.id.hasPrefix("weapon:")
-                || entry.id.hasPrefix("aspect:")
-                || entry.id.hasPrefix("aspectSelection:") {
-                let name = parts.first ?? entry.displayName
-                return ("weaponName:" + name, name)
-            }
-        default:
-            break
+        // The game-owned index supplies stable identity and localized title.
+        // No display string, group label, or positional field name may
+        // determine an entity's identity across language changes.
+        if let id = entry.entityID, !id.isEmpty,
+           let name = entry.entityName, !name.isEmpty {
+            return (id, name)
         }
         return ("entry:" + entry.id, entry.displayName)
     }

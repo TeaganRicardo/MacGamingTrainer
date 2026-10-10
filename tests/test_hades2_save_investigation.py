@@ -164,6 +164,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     finding = NativeDialogueInvestigation(game, expected_hash=checksum)
     assert finding.native['status'] == 'available'
     assert finding.query(root, search='', offset=0, limit=30, language='en', permissions={})['total'] == 2
+    without_history = finding.query(
+        root, search='', offset=0, limit=100, language='en',
+        permissions={}, state_filter='notRecorded',
+    )
+    assert without_history['total'] > 0
+    assert all(row['status'] == 'notRecorded' for row in without_history['items'])
+    assert without_history['total'] > 2
+    assert len(without_history['items']) == min(100, without_history['total'])
     found = finding.query(root, search='Nemesis', offset=0, limit=100, language='zh-CN', permissions={})
     assert found['total'] >= 2
     assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01', 'NemesisBathHouseRepeatable01'}

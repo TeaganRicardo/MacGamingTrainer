@@ -50,9 +50,23 @@ def _display(ids, language, game_path):
     return native, en
 
 
+def _npc_person(native_id):
+    if not native_id.startswith("NPC_"):
+        return native_id
+    name = native_id[len("NPC_"):]
+    for variant in (
+        "_Story_01", "_Field_01", "_Home_01", "_Past_01",
+        "_DreamRun", "_01", "_02", "_03", "_04",
+    ):
+        if name.endswith(variant):
+            return name[:-len(variant)]
+    return name
+
+
 def _row(entry_id, domain, raw_id, path, label, en, value, value_type,
          *, group, editable=True, maximum=_MAX,
-         block_reason_code=None, owner_state=None):
+         block_reason_code=None, owner_state=None,
+         entity_id=None, entity_name=None):
     result = {
         "id": entry_id, "domain": domain, "rawId": raw_id, "path": path,
         "name": label, "englishName": en, "value": value,
@@ -61,6 +75,9 @@ def _row(entry_id, domain, raw_id, path, label, en, value, value_type,
         "group": group,
         "choices": [False, True] if value_type == "boolean" else [],
     }
+    if entity_id is not None:
+        result["entityId"] = entity_id
+        result["entityName"] = entity_name
     if value_type == "integer":
         result["constraints"] = {"min": 0 if not entry_id.startswith("card:") else 1,
                                  "max": maximum, "integer": True}
@@ -117,6 +134,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
                     else None
                 ),
                 owner_state=owner_state,
+                entity_id="person:" + _npc_person(name),
+                entity_name=title if title != name else _npc_person(name),
             ))
 
         try:
@@ -159,6 +178,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
                         else None
                     ),
                     owner_state=owner_state,
+                    entity_id="person:" + _npc_person(name),
+                    entity_name=special_native.get(name) or _npc_person(name),
                 ))
 
         try:
@@ -231,6 +252,8 @@ def rows(root, domain, language="zh-CN", game_path=None):
                             else "giftHistoryLinked"
                         ),
                         owner_state=owner_state,
+                        entity_id="person:" + person,
+                        entity_name=gift_native.get(person) or person,
                     ))
 
     if domain == "progression":
@@ -303,6 +326,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 group="塔罗牌" if zh else "Arcana",
                 editable=editable, block_reason_code=block_reason,
                 owner_state=owner_state,
+                entity_id="arcana:" + name, entity_name=title,
             ))
             result.append(_row(
                 "card:{}:Level".format(name), domain, name,
@@ -312,6 +336,7 @@ def rows(root, domain, language="zh-CN", game_path=None):
                 group="塔罗牌" if zh else "Arcana", maximum=_ARCANA_MAX_LEVEL,
                 editable=editable, block_reason_code=block_reason,
                 owner_state=owner_state,
+                entity_id="arcana:" + name, entity_name=title,
             ))
 
         try:
