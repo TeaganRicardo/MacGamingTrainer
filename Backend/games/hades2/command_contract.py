@@ -18,7 +18,11 @@ from .diagnostics import build_diagnostics, export_diagnostics
 from .error_presentation import Hades2PresentationError, presentation_for
 from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
 from .runtime_error_presentation import present_runtime_error
-from .save_workspace import SAVE_EDITOR_DOMAINS, SAVE_EDITOR_MUTATION_KINDS
+from .save_workspace import (
+    SAVE_EDITOR_DOMAINS,
+    SAVE_EDITOR_MUTATION_KINDS,
+    SAVE_EDITOR_STATE_FILTERS,
+)
 from .schema import (
     BOON_RARITY_TARGETS,
     MAX_AMOUNT,
@@ -321,8 +325,8 @@ def _save_editor_query(raw):
     path = params.get("path", [])
     language = params.get("language", "zh-CN")
     state_filter = params.get("stateFilter", "all")
-    if state_filter not in ("all", "recorded", "notRecorded", "ambiguous", "unknown"):
-        raise ValueError("Save Editor investigation filter is invalid.")
+    if state_filter not in SAVE_EDITOR_STATE_FILTERS:
+        raise ValueError("Save Editor state filter is invalid.")
     if domain not in SAVE_EDITOR_DOMAINS:
         raise ValueError("Save Editor query domain is invalid.")
     if not isinstance(search, str) or len(search) > 256:

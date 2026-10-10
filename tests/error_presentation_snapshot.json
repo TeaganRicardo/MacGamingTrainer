@@ -116,7 +116,19 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidMutation"
     },
+    "Save Editor discovery filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
     "Save Editor investigation filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor state filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor state filter is not supported for this domain.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
     },

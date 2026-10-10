@@ -50,6 +50,46 @@ def _markers(state):
     return tuple(_table(state, field) for field in _MARKER_FIELDS)
 
 
+def _merge_owner_state(*states):
+    if "ambiguous" in states:
+        return "ambiguous"
+    if "unsupported" in states:
+        return "unsupported"
+    return None
+
+
+def _marker_write_state(state, keys):
+    try:
+        markers = _markers(state)
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    except ValueError:
+        return "unsupported"
+    for table in markers:
+        for key in keys:
+            try:
+                _flag(table, key)
+            except AmbiguousLuaKeyError:
+                return "ambiguous"
+            except ValueError:
+                return "unsupported"
+    return None
+
+
+def _selection_write_state(state, weapon):
+    try:
+        _selection(state, weapon)
+    except AmbiguousLuaKeyError:
+        return "ambiguous"
+    except ValueError:
+        return "unsupported"
+    return None
+
+
+def _aspect_tier_keys(aspect):
+    return (aspect, *("{}{}".format(aspect, tier) for tier in range(2, 6)))
+
+
 def _owned(state, key):
     # The actual game gives the starter weapon through WeaponsUnlocked
     # without a corresponding WorldUpgrade purchase. Purchase mirrors are
@@ -128,7 +168,8 @@ def _names(ids, language, game_path):
 
 
 def _row(entry_id, key, path, name, english, value, kind, group,
-         *, editable=True, maximum=None, choices=(), choice_names=None):
+         *, editable=True, maximum=None, choices=(), choice_names=None,
+         block_reason_code=None, owner_state=None):
     row = {
         "id": entry_id, "domain": "weapons", "rawId": key,
         "path": path, "name": name, "englishName": english,
@@ -143,6 +184,10 @@ def _row(entry_id, key, path, name, english, value, kind, group,
                              "max": maximum, "integer": True}
     if choice_names is not None:
         row["choiceNames"] = choice_names
+    if block_reason_code:
+        row["blockReasonCode"] = block_reason_code
+    if owner_state:
+        row["ownerState"] = owner_state
     return row
 
 
@@ -162,40 +207,92 @@ def rows(root, language="zh-CN", game_path=None):
     for weapon, aspects in _WEAPONS.items():
         title = native.get(weapon) or weapon
         english = en.get(weapon) or weapon
+        weapon_owner_state = None
+        owned = None
         try:
             owned = _owned(state, weapon)
         except AmbiguousLuaKeyError:
-            raise
+            weapon_owner_state = "ambiguous"
         except ValueError:
-            continue
+            weapon_owner_state = "unsupported"
+        if weapon_owner_state is None and weapon != "WeaponStaffSwing":
+            marker_keys = [weapon]
+            selection_state = None
+            if owned is True:
+                for aspect in aspects:
+                    marker_keys.extend(_aspect_tier_keys(aspect))
+                selection_state = _selection_write_state(state, weapon)
+            weapon_owner_state = _merge_owner_state(
+                _marker_write_state(state, marker_keys),
+                selection_state,
+            )
+        weapon_editable = (
+            weapon_owner_state is None and weapon != "WeaponStaffSwing"
+        )
         result.append(_row(
             "weapon:" + weapon, weapon, ["GameState", "WeaponsUnlocked", weapon],
             title, english, owned, "boolean", world_group,
-            editable=weapon != "WeaponStaffSwing",
+            editable=weapon_editable,
             choices=(False, True),
+            block_reason_code=(
+                "ambiguousOwner" if weapon_owner_state == "ambiguous"
+                else "unsupportedOwner" if weapon_owner_state == "unsupported"
+                else "starterWeapon" if weapon == "WeaponStaffSwing"
+                else None
+            ),
+            owner_state=weapon_owner_state,
         ))
+
         for aspect in aspects:
+            aspect_owner_state = None
+            level = None
             try:
                 level = _rank(state, aspect)
             except AmbiguousLuaKeyError:
-                raise
+                aspect_owner_state = "ambiguous"
             except ValueError:
-                continue
+                aspect_owner_state = "unsupported"
             name = native.get(aspect) or aspect
             english_name = en.get(aspect) or aspect
+            if aspect_owner_state is None:
+                marker_keys = list(_aspect_tier_keys(aspect))
+                if owned is False:
+                    marker_keys.append(weapon)
+                selection_state = (
+                    _selection_write_state(state, weapon)
+                    if aspect not in _DEFAULT_ASPECTS else None
+                )
+                aspect_owner_state = _merge_owner_state(
+                    _marker_write_state(state, marker_keys),
+                    selection_state,
+                )
+            aspect_editable = (
+                aspect_owner_state is None
+                and (owned is True or aspect not in _DEFAULT_ASPECTS)
+            )
             result.append(_row(
                 "aspect:" + aspect, aspect, ["GameState", "WeaponsUnlocked", aspect],
                 title + " · " + name + (" · 等级" if zh else " · Rank"),
                 english + " · " + english_name + " · Rank", level, "integer", aspect_group,
-                editable=owned or aspect not in _DEFAULT_ASPECTS, maximum=5,
+                editable=aspect_editable, maximum=5,
+                block_reason_code=(
+                    "ambiguousOwner" if aspect_owner_state == "ambiguous"
+                    else "unsupportedOwner" if aspect_owner_state == "unsupported"
+                    else None if aspect_editable
+                    else "baseWeaponRequired"
+                ),
+                owner_state=aspect_owner_state,
             ))
-        if owned:
+
+        if owned is True:
+            selection_owner_state = None
+            chosen = None
             try:
                 chosen = _selection(state, weapon)
             except AmbiguousLuaKeyError:
-                raise
+                selection_owner_state = "ambiguous"
             except ValueError:
-                continue
+                selection_owner_state = "unsupported"
             choices = ("", *aspects)
             choice_names = {"": "默认形态" if zh else "Default aspect"}
             choice_names.update({
@@ -207,52 +304,111 @@ def rows(root, language="zh-CN", game_path=None):
                 ["GameState", "LastWeaponUpgradeName", weapon],
                 title + (" · 装备形态" if zh else " · Selected aspect"),
                 english + " · Selected aspect", chosen, "enum", aspect_group,
+                editable=selection_owner_state is None,
                 choices=choices, choice_names=choice_names,
+                block_reason_code=(
+                    "ambiguousOwner" if selection_owner_state == "ambiguous"
+                    else "unsupportedOwner" if selection_owner_state == "unsupported"
+                    else None
+                ),
+                owner_state=selection_owner_state,
             ))
 
     for tool in _TOOLS:
+        tool_owner_state = None
+        level = None
         try:
             level = _tool_level(state, tool)
         except AmbiguousLuaKeyError:
-            raise
+            tool_owner_state = "ambiguous"
         except ValueError:
-            continue
+            tool_owner_state = "unsupported"
+        if tool_owner_state is None:
+            tool_owner_state = _marker_write_state(
+                state, (tool, tool + "2")
+            )
         name = native.get(tool) or tool
         english = en.get(tool) or tool
         result.append(_row(
             "tool:" + tool, tool, ["GameState", "WeaponsUnlocked", tool],
             name + (" · 等级" if zh else " · Level"),
             english + " · Level", level, "integer", tool_group, maximum=2,
+            editable=tool_owner_state is None,
+            block_reason_code=(
+                "ambiguousOwner" if tool_owner_state == "ambiguous"
+                else "unsupportedOwner" if tool_owner_state == "unsupported"
+                else None
+            ),
+            owner_state=tool_owner_state,
         ))
 
-    familiar_unlocks = state.get("FamiliarsUnlocked")
-    if isinstance(familiar_unlocks, LuaTable):
+    try:
+        familiar_unlocks = state.get("FamiliarsUnlocked")
+    except AmbiguousLuaKeyError:
+        familiar_unlocks = None
+        familiar_owner_state = "ambiguous"
+    else:
+        familiar_owner_state = (
+            None if familiar_unlocks is None or isinstance(familiar_unlocks, LuaTable)
+            else "unsupported"
+        )
+
+    if isinstance(familiar_unlocks, LuaTable) or familiar_owner_state is not None:
         for familiar in _FAMILIARS:
-            try:
-                owned = _flag(familiar_unlocks, familiar)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
-                continue
+            owner_state = familiar_owner_state
+            owned = None
+            if isinstance(familiar_unlocks, LuaTable):
+                try:
+                    owned = _flag(familiar_unlocks, familiar)
+                except AmbiguousLuaKeyError:
+                    owner_state = "ambiguous"
+                except ValueError:
+                    owner_state = "unsupported"
             name = native.get(familiar) or familiar
             english = en.get(familiar) or familiar
             result.append(_row(
                 "familiar:" + familiar, familiar,
                 ["GameState", "FamiliarsUnlocked", familiar],
-                name, english, owned, "boolean", familiar_group, choices=(False, True),
+                name, english, owned, "boolean", familiar_group,
+                editable=owner_state is None,
+                choices=(False, True),
+                block_reason_code=(
+                    "ambiguousOwner" if owner_state == "ambiguous"
+                    else "unsupportedOwner" if owner_state == "unsupported"
+                    else None
+                ),
+                owner_state=owner_state,
             ))
-        chosen = state.get("EquippedFamiliar")
-        if chosen is None or (isinstance(chosen, str) and chosen in _FAMILIARS):
-            choices = ("", *_FAMILIARS)
-            choice_names = {"": "不携带" if zh else "None"}
-            choice_names.update({f: native.get(f) or f for f in _FAMILIARS})
-            result.append(_row(
-                "familiarSelection", "EquippedFamiliar",
-                ["GameState", "EquippedFamiliar"],
-                "当前魔宠" if zh else "Equipped Familiar",
-                "Equipped Familiar", chosen or "", "enum", familiar_group,
-                choices=choices, choice_names=choice_names,
-            ))
+
+        selection_owner_state = familiar_owner_state
+        chosen = None
+        if selection_owner_state is None:
+            try:
+                chosen = state.get("EquippedFamiliar")
+            except AmbiguousLuaKeyError:
+                selection_owner_state = "ambiguous"
+            else:
+                if chosen is not None and (
+                    not isinstance(chosen, str) or chosen not in _FAMILIARS
+                ):
+                    selection_owner_state = "unsupported"
+        choices = ("", *_FAMILIARS)
+        choice_names = {"": "不携带" if zh else "None"}
+        choice_names.update({f: native.get(f) or f for f in _FAMILIARS})
+        result.append(_row(
+            "familiarSelection", "EquippedFamiliar",
+            ["GameState", "EquippedFamiliar"],
+            "当前魔宠" if zh else "Equipped Familiar",
+            "Equipped Familiar", chosen or "", "enum", familiar_group,
+            editable=selection_owner_state is None,
+            choices=choices, choice_names=choice_names,
+            block_reason_code=(
+                "ambiguousOwner" if selection_owner_state == "ambiguous"
+                else "unsupportedOwner" if selection_owner_state == "unsupported"
+                else None
+            ),
+            owner_state=selection_owner_state,
+        ))
     return result
 
 
@@ -264,6 +420,12 @@ def descriptor(root, entry_id, game_path=None):
         return None
     for row in rows(root, "en", game_path=game_path):
         if row["id"] == entry_id:
+            if row.get("ownerState") == "ambiguous":
+                raise AmbiguousLuaKeyError(
+                    "Save Editor semantic owner is ambiguous."
+                )
+            if row.get("ownerState") == "unsupported":
+                raise ValueError("Save Editor semantic owner is unsupported.")
             return {
                 "id": entry_id, "domain": "weapons", "rawId": row["rawId"],
                 "path": row["path"], "before": row["value"],
@@ -368,40 +530,36 @@ def _semantic_values(root):
     for weapon, aspects in _WEAPONS.items():
         try:
             values["weapon:" + weapon] = _owned(state, weapon)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             continue
         for aspect in aspects:
             try:
                 values["aspect:" + aspect] = _rank(state, aspect)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
+            except (AmbiguousLuaKeyError, ValueError):
                 pass
         try:
             values["aspectSelection:" + weapon] = _selection(state, weapon)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             pass
     for tool in _TOOLS:
         try:
             values["tool:" + tool] = _tool_level(state, tool)
-        except AmbiguousLuaKeyError:
-            raise
-        except ValueError:
+        except (AmbiguousLuaKeyError, ValueError):
             pass
-    familiars = state.get("FamiliarsUnlocked")
+    try:
+        familiars = state.get("FamiliarsUnlocked")
+    except AmbiguousLuaKeyError:
+        familiars = None
     if isinstance(familiars, LuaTable):
         for familiar in _FAMILIARS:
             try:
                 values["familiar:" + familiar] = _flag(familiars, familiar)
-            except AmbiguousLuaKeyError:
-                raise
-            except ValueError:
+            except (AmbiguousLuaKeyError, ValueError):
                 pass
-        value = state.get("EquippedFamiliar")
+        try:
+            value = state.get("EquippedFamiliar")
+        except AmbiguousLuaKeyError:
+            value = object()
         if value is None or (isinstance(value, str) and value in _FAMILIARS):
             values["familiarSelection"] = value or ""
     return values

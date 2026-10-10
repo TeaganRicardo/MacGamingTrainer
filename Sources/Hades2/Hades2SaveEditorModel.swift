@@ -4,6 +4,7 @@ import Combine
 
 enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
     case overview
+    case discover
     case resources
     case playerStats
     case progression
@@ -61,6 +62,14 @@ struct Hades2SaveEditorConstraints: Equatable {
     let integer: Bool
 }
 
+struct Hades2SaveEditorCoverage: Identifiable, Equatable {
+    let id: String
+    let discoverability: String
+    let understanding: String
+    let write: String
+    let reasonCode: String
+}
+
 struct Hades2SaveEditorChange: Identifiable, Equatable {
     let entryID: String
     let domain: String
@@ -94,6 +103,9 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let investigationSnippet: String?
     let investigationSourceStatus: String?
     let investigationReason: String?
+    let discoveryState: String?
+    let discoveryReasonCode: String?
+    let discoveryReason: String?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -116,6 +128,9 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.investigationSnippet == rhs.investigationSnippet
             && lhs.investigationSourceStatus == rhs.investigationSourceStatus
             && lhs.investigationReason == rhs.investigationReason
+            && lhs.discoveryState == rhs.discoveryState
+            && lhs.discoveryReasonCode == rhs.discoveryReasonCode
+            && lhs.discoveryReason == rhs.discoveryReason
     }
 }
 
@@ -266,12 +281,14 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var profile = ""
     @Published private(set) var relativePath = ""
     @Published private(set) var availableDomains: [Hades2SaveEditorDomain] = []
-    @Published var selectedDomain: Hades2SaveEditorDomain = .resources
+    @Published private(set) var coverage: [Hades2SaveEditorCoverage] = []
+    @Published var selectedDomain: Hades2SaveEditorDomain = .discover
     @Published var search = ""
     @Published private(set) var offset = 0
     @Published private(set) var total = 0
     @Published private(set) var items: [Hades2SaveEditorEntry] = []
     @Published private(set) var advancedPath: [Hades2SaveEditorPathComponent] = []
+    @Published private(set) var discoveryFilter = "all"
     @Published private(set) var investigationFilter = "all"
     @Published private(set) var selectedInvestigationID: String?
     @Published private(set) var investigationDetail: Hades2SaveInvestigationDetail?
@@ -302,7 +319,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.selectedDomain = .resources
+            self.selectedDomain = .discover
             self.query(offset: 0)
         }
     }
@@ -320,6 +337,15 @@ final class Hades2SaveEditorModel: ObservableObject {
         let path = selectedDomain == .advanced
             ? advancedPath.map(\.jsonValue)
             : []
+        let stateFilter: String
+        switch selectedDomain {
+        case .discover:
+            stateFilter = discoveryFilter
+        case .investigate:
+            stateFilter = investigationFilter
+        default:
+            stateFilter = "all"
+        }
         perform(
             .saveEditorQuery(
                 domain: selectedDomain.rawValue,
@@ -328,7 +354,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 limit: Self.pageSize,
                 path: path,
                 language: language.rawValue,
-                stateFilter: selectedDomain == .investigate ? investigationFilter : "all"
+                stateFilter: stateFilter
             ),
             operation: "hades2.saveEditor.operation.query",
             announceSuccess: false
@@ -380,6 +406,12 @@ final class Hades2SaveEditorModel: ObservableObject {
         query(offset: 0)
     }
 
+    func setDiscoveryFilter(_ value: String) {
+        guard ["all", "observed", "absent", "editable", "readOnly", "ambiguous", "unsupported", "unknown"].contains(value) else { return }
+        discoveryFilter = value
+        query(offset: 0)
+    }
+
     func setInvestigationFilter(_ value: String) {
         guard ["all", "recorded", "notRecorded", "ambiguous", "unknown"].contains(value) else { return }
         investigationFilter = value
@@ -413,9 +445,35 @@ final class Hades2SaveEditorModel: ObservableObject {
         selectedDomain = domain
         selectedInvestigationID = nil
         investigationDetail = nil
+        discoveryFilter = "all"
         investigationFilter = "all"
         search = ""
         advancedPath = []
+        query(offset: 0)
+    }
+
+    func openDiscoveryEntry(_ entry: Hades2SaveEditorEntry) {
+        guard selectedDomain == .discover else { return }
+        selectedInvestigationID = nil
+        investigationDetail = nil
+        discoveryFilter = "all"
+
+        if entry.domain == Hades2SaveEditorDomain.advanced.rawValue {
+            selectedDomain = .advanced
+            advancedPath = Array(entry.path.dropLast())
+            search = entry.rawID
+            query(offset: 0)
+            return
+        }
+
+        guard let domain = Hades2SaveEditorDomain(rawValue: entry.domain),
+              domain != .discover else { return }
+        selectedDomain = domain
+        advancedPath = []
+        search = entry.rawID
+        if domain == .investigate {
+            investigationFilter = "all"
+        }
         query(offset: 0)
     }
 
@@ -519,6 +577,28 @@ final class Hades2SaveEditorModel: ObservableObject {
         self.profile = profile
         self.relativePath = relativePath
         availableDomains = rawDomains.compactMap(Hades2SaveEditorDomain.init(rawValue:))
+
+        var decodedCoverage: [Hades2SaveEditorCoverage] = []
+        if let rawCoverage = result["coverage"] as? [[String: Any]] {
+            for row in rawCoverage {
+                guard let id = row["id"] as? String,
+                      let discoverability = row["discoverability"] as? String,
+                      let understanding = row["understanding"] as? String,
+                      let write = row["write"] as? String,
+                      let reasonCode = row["reasonCode"] as? String
+                else { return false }
+                decodedCoverage.append(
+                    Hades2SaveEditorCoverage(
+                        id: id,
+                        discoverability: discoverability,
+                        understanding: understanding,
+                        write: write,
+                        reasonCode: reasonCode
+                    )
+                )
+            }
+        }
+        coverage = decodedCoverage
         return true
     }
 
@@ -627,7 +707,10 @@ final class Hades2SaveEditorModel: ObservableObject {
             investigationStatus: row["status"] as? String,
             investigationSnippet: row["snippet"] as? String,
             investigationSourceStatus: row["sourceStatus"] as? String,
-            investigationReason: row["reason"] as? String
+            investigationReason: row["reason"] as? String,
+            discoveryState: row["state"] as? String,
+            discoveryReasonCode: row["reasonCode"] as? String,
+            discoveryReason: row["reason"] as? String
         )
     }
 

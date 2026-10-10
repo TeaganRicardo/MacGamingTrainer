@@ -50,8 +50,7 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var multiplier = "2"
     @ViewState<Bool> private var statsExpanded = false
     @ViewState<Bool> private var profileManager = false
-    @ViewState<Bool> private var saveEditorSheet = false
-    @ViewState<Hades2SaveEditorModel?> private var saveEditorModel = nil
+    @ViewState<Hades2SaveEditorPresentation?> private var saveEditorPresentation = nil
     @ViewState<Bool> private var diagnosticSheet = false
     @ViewState<String> private var moneyFactor = "2"
     @ViewState<String> private var materialFactor = "2"
@@ -879,14 +878,7 @@ struct Hades2TrainerView: View {
         rootContent
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
             .sheet(isPresented: $profileManager) { Hades2ProfileManagerView(model: model, isPresented: $profileManager) }
-            .sheet(
-                isPresented: $saveEditorSheet,
-                onDismiss: { saveEditorModel = nil }
-            ) {
-                if let saveEditorModel {
-                    Hades2SaveEditorView(model: saveEditorModel, isPresented: $saveEditorSheet)
-                }
-            }
+            .hades2SaveEditorSheet($saveEditorPresentation)
             .sheet(isPresented: $diagnosticSheet) { Hades2DiagnosticsView(model: model, isPresented: $diagnosticSheet) }
     }
 
@@ -1583,8 +1575,9 @@ struct Hades2TrainerView: View {
                 HStack(spacing: 12) {
                     Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }
                     Button {
-                        saveEditorModel = model.makeSaveEditorModel()
-                        saveEditorSheet = true
+                        saveEditorPresentation = Hades2SaveEditorPresentation(
+                            model: model.makeSaveEditorModel()
+                        )
                     } label: {
                         Label(text("hades2.saveEditor.title"), systemImage: "externaldrive.badge.gearshape")
                     }
