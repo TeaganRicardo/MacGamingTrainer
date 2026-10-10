@@ -31,7 +31,7 @@ for raw in sys.stdin:
             'profile': 'Profile1',
             'relativePath': 'Profile1.sav',
             'domains': [
-                'overview', 'resources', 'playerStats', 'progression', 'dialogue',
+                'overview', 'resources', 'playerStats', 'progression', 'investigate', 'dialogue',
                 'flags', 'relationships', 'weapons', 'advanced',
             ],
             'pendingCount': 0,
@@ -39,7 +39,24 @@ for raw in sys.stdin:
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
-        if domain == 'weapons':
+        if domain == 'investigate':
+            lang = req['params']['language']
+            items = [{
+                'id': 'investigate:NemesisPostTrueEnding01',
+                'domain': 'investigate',
+                'rawId': 'NemesisPostTrueEnding01',
+                'path': ['GameState', 'TextLinesRecord', 'NemesisPostTrueEnding01'],
+                'name': 'Nemesis · NemesisPostTrueEnding01',
+                'englishName': 'Nemesis · NemesisPostTrueEnding01',
+                'value': True,
+                'valueType': 'boolean',
+                'editable': False,
+                'mutationKinds': [],
+                'status': 'recorded',
+                'sourceStatus': 'available',
+                'snippet': '我从未忘记' if lang == 'zh-CN' else 'I still remember',
+            }]
+        elif domain == 'weapons':
             items = [{
                 'id': 'aspectSelection:WeaponDagger',
                 'domain': 'weapons',
@@ -161,6 +178,30 @@ for raw in sys.stdin:
             'limit': req['params']['limit'],
             'total': len(items),
             'items': items,
+            'sourceStatus': 'available' if domain == 'investigate' else None,
+        }
+    elif command == 'save_editor_detail':
+        scene = req['params']['entryId'].removeprefix('investigate:')
+        result = {
+            'scene': scene, 'status': 'recorded', 'sourceStatus': 'available',
+            'reason': 'Recorded; owner verified.', 'canStage': True,
+            'stageID': 'dialogue:' + scene, 'character': 'Nemesis',
+            'sourceResolution': 'resolved', 'futureEligibility': 'unknown',
+            'definitions': [{
+                'file': 'NPCData_Nemesis.lua', 'line': 42, 'partner': False,
+                'requirements': [{
+                    'line': 43, 'scope': 'scene',
+                    'tree': {'kind': 'and', 'text': 'AND', 'evidence': 'unknown', 'children': [
+                        {'kind': 'path', 'text': 'CurrentRun.TextLinesRecord.TrueEndingFinale01',
+                         'evidence': 'unknown', 'children': []},
+                    ]},
+                }],
+                'cueIDs': ['Nemesis_0407'],
+            }],
+            'lines': [{
+                'cueId': 'Nemesis_0407', 'speaker': 'Nemesis', 'events': [scene],
+                'en': ['I still remember'], 'zhCN': ['我从未忘记'],
+            }],
         }
     elif command == 'save_editor_stage':
         pending_value = req['params']['value']
@@ -356,6 +397,38 @@ struct Main {
         guard let searchParams = commands(at: commandLog).last?["params"] as? [String: Any],
               searchParams["search"] as? String == "ash" else {
             fail("search was not delegated to the backend query")
+        }
+
+        model.selectDomain(.investigate)
+        pump(0.25)
+        if model.items.count != 1 || model.items[0].investigationStatus != "recorded"
+            || model.items[0].investigationSnippet != "I still remember" {
+            fail("searchable narrative entry was not projected to the player model")
+        }
+        model.inspect(model.items[0])
+        pump(0.25)
+        guard let nativeDetail = model.investigationDetail else {
+            fail("on-demand narrative detail did not cross Host command boundary")
+        }
+        if nativeDetail.scene != "NemesisPostTrueEnding01"
+            || nativeDetail.definitions.count != 1
+            || nativeDetail.definitions.first?.requirements.count != 1
+            || nativeDetail.definitions.first?.requirements.first?.tree.children.first?.evidence != "unknown"
+            || nativeDetail.lines.first?.chinese != ["我从未忘记"]
+            || nativeDetail.futureEligibility != "unknown" {
+            fail("native source, bilingual line or future-eligibility evidence was lost")
+        }
+        model.setInvestigationFilter("notRecorded")
+        pump(0.25)
+        guard let filtering = commands(at: commandLog).last(where: { $0["command"] as? String == "save_editor_query" }),
+              let filteringParams = filtering["params"] as? [String: Any],
+              filteringParams["stateFilter"] as? String == "notRecorded" else {
+            fail("narrative filter did not reach Save Workspace")
+        }
+        model.setLanguage(.zhCN)
+        pump(0.25)
+        if model.items.first?.investigationSnippet != "我从未忘记" {
+            fail("narrative evidence did not follow active UI language")
         }
 
         model.selectDomain(.playerStats)

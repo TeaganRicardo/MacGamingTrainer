@@ -7,6 +7,7 @@ enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
     case resources
     case playerStats
     case progression
+    case investigate
     case dialogue
     case flags
     case relationships
@@ -89,6 +90,10 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let constraints: Hades2SaveEditorConstraints?
     let childCount: Int?
     let pathAmbiguous: Bool
+    let investigationStatus: String?
+    let investigationSnippet: String?
+    let investigationSourceStatus: String?
+    let investigationReason: String?
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
@@ -107,6 +112,151 @@ struct Hades2SaveEditorEntry: Identifiable, Equatable {
             && lhs.constraints == rhs.constraints
             && lhs.childCount == rhs.childCount
             && lhs.pathAmbiguous == rhs.pathAmbiguous
+            && lhs.investigationStatus == rhs.investigationStatus
+            && lhs.investigationSnippet == rhs.investigationSnippet
+            && lhs.investigationSourceStatus == rhs.investigationSourceStatus
+            && lhs.investigationReason == rhs.investigationReason
+    }
+}
+
+struct Hades2NarrativeCondition: Identifiable {
+    let id = UUID()
+    let kind: String
+    let label: String
+    let evidence: String
+    let observation: String?
+    let children: [Hades2NarrativeCondition]
+
+    init?(_ raw: [String: Any]) {
+        guard let kind = raw["kind"] as? String,
+              let label = raw["text"] as? String,
+              let evidence = raw["evidence"] as? String,
+              let nested = raw["children"] as? [[String: Any]] else { return nil }
+        var parsed: [Hades2NarrativeCondition] = []
+        for child in nested {
+            guard let item = Hades2NarrativeCondition(child) else { return nil }
+            parsed.append(item)
+        }
+        self.kind = kind
+        self.label = label
+        self.evidence = evidence
+        observation = raw["observation"] as? String
+        children = parsed
+    }
+}
+
+struct Hades2NarrativeRequirements: Identifiable {
+    let id = UUID()
+    let line: Int
+    let tree: Hades2NarrativeCondition
+
+    init?(_ raw: [String: Any]) {
+        guard let line = Hades2SaveInvestigationDetail.number(raw["line"]),
+              let source = raw["tree"] as? [String: Any],
+              let tree = Hades2NarrativeCondition(source) else { return nil }
+        self.line = line
+        self.tree = tree
+    }
+}
+
+struct Hades2NarrativeSource: Identifiable {
+    let id: String
+    let file: String
+    let line: Int
+    let partner: Bool
+    let requirements: [Hades2NarrativeRequirements]
+
+    init?(_ raw: [String: Any]) {
+        guard let file = raw["file"] as? String,
+              let line = Hades2SaveInvestigationDetail.number(raw["line"]),
+              let partner = raw["partner"] as? Bool,
+              let requirements = raw["requirements"] as? [[String: Any]] else { return nil }
+        var parsed: [Hades2NarrativeRequirements] = []
+        for req in requirements {
+            guard let item = Hades2NarrativeRequirements(req) else { return nil }
+            parsed.append(item)
+        }
+        self.file = file
+        self.line = line
+        self.partner = partner
+        self.requirements = parsed
+        id = "\(file):\(line)"
+    }
+}
+
+struct Hades2NarrativeLine: Identifiable {
+    let id = UUID()
+    let cueID: String
+    let english: [String]
+    let chinese: [String]
+    let speaker: String
+    let events: [String]
+
+    init?(_ raw: [String: Any]) {
+        guard let cueID = raw["cueId"] as? String,
+              let english = raw["en"] as? [String],
+              let chinese = raw["zhCN"] as? [String],
+              let speaker = raw["speaker"] as? String,
+              let events = raw["events"] as? [String] else { return nil }
+        self.cueID = cueID
+        self.english = english
+        self.chinese = chinese
+        self.speaker = speaker
+        self.events = events
+    }
+}
+
+struct Hades2SaveInvestigationDetail {
+    let scene: String
+    let status: String
+    let sourceStatus: String
+    let reason: String
+    let blockReasonCode: String?
+    let canStage: Bool
+    let stageID: String
+    let definitions: [Hades2NarrativeSource]
+    let lines: [Hades2NarrativeLine]
+    let sourceResolution: String
+    let futureEligibility: String
+
+    static func number(_ value: Any?) -> Int? {
+        guard let value = value as? NSNumber,
+              CFGetTypeID(value) != CFBooleanGetTypeID() else { return nil }
+        return value.intValue
+    }
+
+    init?(_ raw: [String: Any]) {
+        guard let scene = raw["scene"] as? String,
+              let status = raw["status"] as? String,
+              let sourceStatus = raw["sourceStatus"] as? String,
+              let reason = raw["reason"] as? String,
+              let canStage = raw["canStage"] as? Bool,
+              let stageID = raw["stageID"] as? String,
+              let sourceResolution = raw["sourceResolution"] as? String,
+              let futureEligibility = raw["futureEligibility"] as? String,
+              let sources = raw["definitions"] as? [[String: Any]],
+              let cueLines = raw["lines"] as? [[String: Any]] else { return nil }
+        var parsedSources: [Hades2NarrativeSource] = []
+        var parsedLines: [Hades2NarrativeLine] = []
+        for source in sources {
+            guard let item = Hades2NarrativeSource(source) else { return nil }
+            parsedSources.append(item)
+        }
+        for line in cueLines {
+            guard let item = Hades2NarrativeLine(line) else { return nil }
+            parsedLines.append(item)
+        }
+        self.scene = scene
+        self.status = status
+        self.sourceStatus = sourceStatus
+        self.reason = reason
+        blockReasonCode = raw["blockReasonCode"] as? String
+        self.canStage = canStage
+        self.stageID = stageID
+        self.sourceResolution = sourceResolution
+        self.futureEligibility = futureEligibility
+        definitions = parsedSources
+        lines = parsedLines
     }
 }
 
@@ -122,6 +272,10 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var total = 0
     @Published private(set) var items: [Hades2SaveEditorEntry] = []
     @Published private(set) var advancedPath: [Hades2SaveEditorPathComponent] = []
+    @Published private(set) var investigationFilter = "all"
+    @Published private(set) var selectedInvestigationID: String?
+    @Published private(set) var investigationDetail: Hades2SaveInvestigationDetail?
+    @Published private(set) var investigationSourceStatus = "missing"
     @Published private(set) var pendingChanges: [Hades2SaveEditorChange] = []
     @Published private(set) var busy = false
     @Published private(set) var failure: TrainerTextToken?
@@ -140,6 +294,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     func open(language: TrainerPresentationLanguage) {
         self.language = language
         failure = nil
+        selectedInvestigationID = nil
+        investigationDetail = nil
         perform(.saveEditorOpen, operation: "hades2.saveEditor.operation.open") { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
             guard self.applySummary(result) else {
@@ -171,7 +327,8 @@ final class Hades2SaveEditorModel: ObservableObject {
                 offset: boundedOffset,
                 limit: Self.pageSize,
                 path: path,
-                language: language.rawValue
+                language: language.rawValue,
+                stateFilter: selectedDomain == .investigate ? investigationFilter : "all"
             ),
             operation: "hades2.saveEditor.operation.query",
             announceSuccess: false
@@ -198,6 +355,14 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.total = total
             self.offset = offset
             self.items = decoded
+            self.investigationSourceStatus = result["sourceStatus"] as? String ?? "missing"
+            if self.selectedDomain == .investigate,
+               let selected = decoded.first(where: { $0.rawID == self.selectedInvestigationID }) {
+                self.inspect(selected)
+            } else {
+                self.selectedInvestigationID = nil
+                self.investigationDetail = nil
+            }
             for entry in decoded {
                 self.knownDisplayNames[entry.id] = entry.displayName
             }
@@ -210,12 +375,45 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func submitSearch() {
+        selectedInvestigationID = nil
+        investigationDetail = nil
         query(offset: 0)
+    }
+
+    func setInvestigationFilter(_ value: String) {
+        guard ["all", "recorded", "notRecorded", "ambiguous", "unknown"].contains(value) else { return }
+        investigationFilter = value
+        selectedInvestigationID = nil
+        investigationDetail = nil
+        query(offset: 0)
+    }
+
+    func inspect(_ entry: Hades2SaveEditorEntry) {
+        guard selectedDomain == .investigate, entry.domain == "investigate" else { return }
+        selectedInvestigationID = entry.rawID
+        investigationDetail = nil
+        perform(
+            .saveEditorDetail(entryID: entry.id, language: language.rawValue),
+            operation: "hades2.saveEditor.operation.detail", announceSuccess: false
+        ) { [weak self] reply in
+            guard let self, self.selectedInvestigationID == entry.rawID,
+                  reply.success, let result = reply.result else { return }
+            guard let detail = Hades2SaveInvestigationDetail(result),
+                  detail.scene == entry.rawID else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.investigationDetail = detail
+            self.failure = nil
+        }
     }
 
     func selectDomain(_ domain: Hades2SaveEditorDomain) {
         guard availableDomains.contains(domain) else { return }
         selectedDomain = domain
+        selectedInvestigationID = nil
+        investigationDetail = nil
+        investigationFilter = "all"
         search = ""
         advancedPath = []
         query(offset: 0)
@@ -425,7 +623,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             choiceNames: row["choiceNames"] as? [String: String] ?? [:],
             constraints: constraints,
             childCount: intValue(row["childCount"]),
-            pathAmbiguous: row["pathAmbiguous"] as? Bool ?? false
+            pathAmbiguous: row["pathAmbiguous"] as? Bool ?? false,
+            investigationStatus: row["status"] as? String,
+            investigationSnippet: row["snippet"] as? String,
+            investigationSourceStatus: row["sourceStatus"] as? String,
+            investigationReason: row["reason"] as? String
         )
     }
 

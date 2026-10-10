@@ -9,6 +9,7 @@ import json
 import math
 
 from . import save_equipment, save_long_term, save_narrative
+from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
 from .save_native_ids import RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
@@ -58,6 +59,7 @@ SAVE_EDITOR_DOMAINS = (
     "resources",
     "playerStats",
     "progression",
+    "investigate",
     "dialogue",
     "flags",
     "relationships",
@@ -121,12 +123,13 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One editor workspace pinned to the active Hades profile save."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "profile")
+    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "profile")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
         self._game_path = game_path
         self._pending = {}
+        self._investigation = None
         self.profile = profile
 
     @property
@@ -363,6 +366,37 @@ class Hades2SaveWorkspace:
             rows.append(row)
         return rows
 
+    def _narrative_investigation(self):
+        if self._investigation is None:
+            self._investigation = NativeDialogueInvestigation(self._game_path)
+        return self._investigation
+
+    def _dialogue_write_decisions(self):
+        # Reuse the actual descriptor/companion validator, including its
+        # precise block reason. Do not make investigation its own write policy.
+        try:
+            observed = save_narrative.rows(
+                self.document.lua_state, "dialogue", "en", game_path=self._game_path
+            )
+        except (ValueError, AmbiguousLuaKeyError, KeyError):
+            return {}
+        return {
+            row["rawId"]: {
+                "allowed": row["editable"],
+                "code": row.get("blockReasonCode"),
+                "diagnostic": row.get("blockReasonDiagnostic"),
+            }
+            for row in observed
+        }
+
+    def investigate(self, entry_id, language="zh-CN"):
+        if language not in ("en", "zh-CN") or not isinstance(entry_id, str) or not entry_id.startswith("investigate:") or len(entry_id) > 512:
+            raise ValueError("Save Editor investigation identity is invalid.")
+        return self._narrative_investigation().detail(
+            self.document.lua_state, entry_id[len("investigate:"):],
+            language, self._dialogue_write_decisions()
+        )
+
     def query(
         self,
         *,
@@ -372,6 +406,7 @@ class Hades2SaveWorkspace:
         limit=100,
         path=None,
         language="zh-CN",
+        stateFilter="all",
     ):
         if domain not in SAVE_EDITOR_DOMAINS:
             raise ValueError("Save Editor domain is unknown.")
@@ -380,6 +415,18 @@ class Hades2SaveWorkspace:
         if language not in ("zh-CN", "en"):
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
+        if stateFilter not in ("all", "recorded", "notRecorded", "ambiguous", "unknown"):
+            raise ValueError("Save Editor investigation filter is invalid.")
+        if domain == "investigate":
+            results = self._narrative_investigation().query(
+                self.document.lua_state,
+                search=search, offset=offset, limit=limit, language=language,
+                permissions=self._dialogue_write_decisions(), state_filter=stateFilter,
+            )
+            return {
+                "profile": self.profile, "relativePath": self.relative_path,
+                "domain": domain, "offset": offset, "limit": limit, **results,
+            }
 
         if domain == "overview":
             rows = self._overview_rows(language)

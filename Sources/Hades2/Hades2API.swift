@@ -33,7 +33,8 @@ enum Hades2Request {
     case advanceTraitLifecycle(CurrentRunTrait)
     case openSpecialChoice(source: String)
     case saveEditorOpen
-    case saveEditorQuery(domain: String, search: String, offset: Int, limit: Int, path: [Any], language: String)
+    case saveEditorQuery(domain: String, search: String, offset: Int, limit: Int, path: [Any], language: String, stateFilter: String)
+    case saveEditorDetail(entryID: String, language: String)
     case saveEditorStage(entryID: String, operation: String, value: Any?)
     case saveEditorReview, saveEditorCancel, saveEditorApply
     case listProfiles
@@ -81,6 +82,7 @@ enum Hades2Request {
         case .openSpecialChoice: return .openSpecialChoice
         case .saveEditorOpen: return .saveEditorOpen
         case .saveEditorQuery: return .saveEditorQuery
+        case .saveEditorDetail: return .saveEditorDetail
         case .saveEditorStage: return .saveEditorStage
         case .saveEditorReview: return .saveEditorReview
         case .saveEditorCancel: return .saveEditorCancel
@@ -178,7 +180,7 @@ enum Hades2Request {
             return Self.traitTargetParams(trait)
         case .openSpecialChoice(let source):
             return ["source": source]
-        case .saveEditorQuery(let domain, let search, let offset, let limit, let path, let language):
+        case .saveEditorQuery(let domain, let search, let offset, let limit, let path, let language, let stateFilter):
             return [
                 "domain": domain,
                 "search": search,
@@ -186,7 +188,10 @@ enum Hades2Request {
                 "limit": limit,
                 "path": path,
                 "language": language,
+                "stateFilter": stateFilter,
             ]
+        case .saveEditorDetail(let entryID, let language):
+            return ["entryId": entryID, "language": language]
         case .saveEditorStage(let entryID, let operation, let value):
             var result: [String: Any] = ["entryId": entryID, "operation": operation]
             if let value { result["value"] = value }

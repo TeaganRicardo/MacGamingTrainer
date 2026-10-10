@@ -320,6 +320,9 @@ def _save_editor_query(raw):
     limit = params.get("limit", 100)
     path = params.get("path", [])
     language = params.get("language", "zh-CN")
+    state_filter = params.get("stateFilter", "all")
+    if state_filter not in ("all", "recorded", "notRecorded", "ambiguous", "unknown"):
+        raise ValueError("Save Editor investigation filter is invalid.")
     if domain not in SAVE_EDITOR_DOMAINS:
         raise ValueError("Save Editor query domain is invalid.")
     if not isinstance(search, str) or len(search) > 256:
@@ -341,7 +344,7 @@ def _save_editor_query(raw):
         raise ValueError("Save Editor query path is invalid.")
     if language not in ("zh-CN", "en"):
         raise ValueError("Save Editor query language is invalid.")
-    return {
+    result = {
         "domain": domain,
         "search": search,
         "offset": offset,
@@ -349,6 +352,19 @@ def _save_editor_query(raw):
         "path": path,
         "language": language,
     }
+    if "stateFilter" in params:
+        result["stateFilter"] = state_filter
+    return result
+
+
+def _save_editor_detail(raw):
+    params = _params(raw)
+    entry_id = params.get("entryId")
+    language = params.get("language", "zh-CN")
+    if (not isinstance(entry_id, str) or not entry_id.startswith("investigate:")
+            or not 13 < len(entry_id) <= 512 or language not in ("en", "zh-CN")):
+        raise ValueError("Save Editor investigation identity is invalid.")
+    return {"entryId": entry_id, "language": language}
 
 
 def _save_editor_stage(raw):
@@ -561,8 +577,15 @@ _COMMAND_SPECS = (
     _spec("save_editor_open", invoke=_direct("open_save_editor")),
     _spec(
         "save_editor_query",
+        timeout=30.0,
         validate=_save_editor_query,
         invoke=_save_editor_query_invoke,
+    ),
+    _spec(
+        "save_editor_detail",
+        timeout=30.0,
+        validate=_save_editor_detail,
+        invoke=lambda adapter, params: adapter.detail_save_editor(params),
     ),
     _spec(
         "save_editor_stage",
