@@ -368,9 +368,7 @@ class Hades2SaveWorkspace:
 
     def _narrative_investigation(self):
         if self._investigation is None:
-            self._investigation = NativeDialogueInvestigation(
-                self.document.lua_state, self._game_path
-            )
+            self._investigation = NativeDialogueInvestigation(self._game_path)
         return self._investigation
 
     def _writable_dialogue(self):
@@ -388,7 +386,8 @@ class Hades2SaveWorkspace:
         if language not in ("en", "zh-CN") or not isinstance(entry_id, str) or not entry_id.startswith("investigate:") or len(entry_id) > 512:
             raise ValueError("Save Editor investigation identity is invalid.")
         return self._narrative_investigation().detail(
-            entry_id[len("investigate:"):], language, self._writable_dialogue()
+            self.document.lua_state, entry_id[len("investigate:"):],
+            language, self._writable_dialogue()
         )
 
     def query(
@@ -413,6 +412,7 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor investigation filter is invalid.")
         if domain == "investigate":
             results = self._narrative_investigation().query(
+                self.document.lua_state,
                 search=search, offset=offset, limit=limit, language=language,
                 writable=self._writable_dialogue(), state_filter=stateFilter,
             )
