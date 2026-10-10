@@ -128,7 +128,8 @@ def _names(ids, language, game_path):
 
 
 def _row(entry_id, key, path, name, english, value, kind, group,
-         *, editable=True, maximum=None, choices=(), choice_names=None):
+         *, editable=True, maximum=None, choices=(), choice_names=None,
+         block_reason_code=None, block_reason_diagnostic=None):
     row = {
         "id": entry_id, "domain": "weapons", "rawId": key,
         "path": path, "name": name, "englishName": english,
@@ -143,6 +144,10 @@ def _row(entry_id, key, path, name, english, value, kind, group,
                              "max": maximum, "integer": True}
     if choice_names is not None:
         row["choiceNames"] = choice_names
+    if block_reason_code:
+        row["blockReasonCode"] = block_reason_code
+    if block_reason_diagnostic:
+        row["blockReasonDiagnostic"] = block_reason_diagnostic
     return row
 
 
@@ -173,6 +178,13 @@ def rows(root, language="zh-CN", game_path=None):
             title, english, owned, "boolean", world_group,
             editable=weapon != "WeaponStaffSwing",
             choices=(False, True),
+            block_reason_code="starterWeapon" if weapon == "WeaponStaffSwing" else None,
+            block_reason_diagnostic=(
+                ("初始武器属于原生基础所有权，不能作为独立解锁项撤销。"
+                 if zh else
+                 "The starter weapon is native baseline ownership and cannot be revoked as an independent unlock.")
+                if weapon == "WeaponStaffSwing" else None
+            ),
         ))
         for aspect in aspects:
             try:
@@ -183,11 +195,18 @@ def rows(root, language="zh-CN", game_path=None):
                 continue
             name = native.get(aspect) or aspect
             english_name = en.get(aspect) or aspect
+            aspect_editable = owned or aspect not in _DEFAULT_ASPECTS
             result.append(_row(
                 "aspect:" + aspect, aspect, ["GameState", "WeaponsUnlocked", aspect],
                 title + " · " + name + (" · 等级" if zh else " · Rank"),
                 english + " · " + english_name + " · Rank", level, "integer", aspect_group,
-                editable=owned or aspect not in _DEFAULT_ASPECTS, maximum=5,
+                editable=aspect_editable, maximum=5,
+                block_reason_code=None if aspect_editable else "baseWeaponRequired",
+                block_reason_diagnostic=None if aspect_editable else (
+                    "需要先拥有对应基础武器，才能安全修改默认形态进度。"
+                    if zh else
+                    "The base weapon must be owned before its default aspect progression can be edited safely."
+                ),
             ))
         if owned:
             try:
