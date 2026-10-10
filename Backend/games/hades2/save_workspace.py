@@ -371,23 +371,30 @@ class Hades2SaveWorkspace:
             self._investigation = NativeDialogueInvestigation(self._game_path)
         return self._investigation
 
-    def _writable_dialogue(self):
-        # Reuse the existing native/companion owner policy. An investigation
-        # must not grant additional mutation authority.
+    def _dialogue_write_decisions(self):
+        # Reuse the actual descriptor/companion validator, including its
+        # precise block reason. Do not make investigation its own write policy.
         try:
             observed = save_narrative.rows(
                 self.document.lua_state, "dialogue", "en", game_path=self._game_path
             )
         except (ValueError, AmbiguousLuaKeyError, KeyError):
-            return set()
-        return {row["rawId"] for row in observed if row["editable"]}
+            return {}
+        return {
+            row["rawId"]: {
+                "allowed": row["editable"],
+                "code": row.get("blockReasonCode"),
+                "diagnostic": row.get("blockReasonDiagnostic"),
+            }
+            for row in observed
+        }
 
     def investigate(self, entry_id, language="zh-CN"):
         if language not in ("en", "zh-CN") or not isinstance(entry_id, str) or not entry_id.startswith("investigate:") or len(entry_id) > 512:
             raise ValueError("Save Editor investigation identity is invalid.")
         return self._narrative_investigation().detail(
             self.document.lua_state, entry_id[len("investigate:"):],
-            language, self._writable_dialogue()
+            language, self._dialogue_write_decisions()
         )
 
     def query(
@@ -414,7 +421,7 @@ class Hades2SaveWorkspace:
             results = self._narrative_investigation().query(
                 self.document.lua_state,
                 search=search, offset=offset, limit=limit, language=language,
-                writable=self._writable_dialogue(), state_filter=stateFilter,
+                permissions=self._dialogue_write_decisions(), state_filter=stateFilter,
             )
             return {
                 "profile": self.profile, "relativePath": self.relative_path,
