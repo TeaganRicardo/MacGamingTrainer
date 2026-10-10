@@ -1,15 +1,30 @@
 import SwiftUI
 
+struct Hades2SaveEditorPresentation: Identifiable {
+    let model: Hades2SaveEditorModel
+
+    var id: ObjectIdentifier { ObjectIdentifier(model) }
+}
+
+extension View {
+    func hades2SaveEditorSheet(
+        _ presentation: Binding<Hades2SaveEditorPresentation?>
+    ) -> some View {
+        sheet(item: presentation) { item in
+            Hades2SaveEditorView(model: item.model)
+        }
+    }
+}
+
 struct Hades2SaveEditorView: View {
     @StateObject private var model: Hades2SaveEditorModel
-    @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var drafts: [String: String] = [:]
 
-    init(model: Hades2SaveEditorModel, isPresented: Binding<Bool>) {
+    init(model: Hades2SaveEditorModel) {
         _model = StateObject(wrappedValue: model)
-        _isPresented = isPresented
     }
 
     private func text(_ key: String, arguments: [String] = []) -> String {
@@ -70,7 +85,7 @@ struct Hades2SaveEditorView: View {
                 }
                 Spacer()
                 Button(localization.localized("host.done")) {
-                    isPresented = false
+                    dismiss()
                 }
             }
         }
