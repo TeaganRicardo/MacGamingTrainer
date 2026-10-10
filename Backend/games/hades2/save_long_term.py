@@ -51,7 +51,8 @@ def _display(ids, language, game_path):
 
 
 def _row(entry_id, domain, raw_id, path, label, en, value, value_type,
-         *, group, editable=True, maximum=_MAX):
+         *, group, editable=True, maximum=_MAX,
+         block_reason_code=None, block_reason_diagnostic=None):
     result = {
         "id": entry_id, "domain": domain, "rawId": raw_id, "path": path,
         "name": label, "englishName": en, "value": value,
@@ -63,6 +64,10 @@ def _row(entry_id, domain, raw_id, path, label, en, value, value_type,
     if value_type == "integer":
         result["constraints"] = {"min": 0 if not entry_id.startswith("card:") else 1,
                                  "max": maximum, "integer": True}
+    if block_reason_code:
+        result["blockReasonCode"] = block_reason_code
+    if block_reason_diagnostic:
+        result["blockReasonDiagnostic"] = block_reason_diagnostic
     return result
 
 
@@ -135,6 +140,12 @@ def rows(root, domain, language="zh-CN", game_path=None):
                         title, english, int(value), "integer",
                         group="赠礼记录" if zh else "Gift history",
                         editable=writable, maximum=999999,
+                        block_reason_code="giftHistoryLinked",
+                        block_reason_diagnostic=(
+                            "赠礼计数与赠礼顺序、对话和奖励结果相互关联，不能作为独立计数安全修改。"
+                            if zh else
+                            "Gift counts are linked to gift order, dialogue, and outcome history and cannot be edited safely as standalone counters."
+                        ),
                     ))
     if domain == "progression":
         states = state.get("MetaUpgradeState")
