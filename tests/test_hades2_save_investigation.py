@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2 import save_narrative
 from games.hades2.save_investigation import NativeDialogueInvestigation
 
 
@@ -162,64 +163,64 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     ))
     finding = NativeDialogueInvestigation(game, expected_hash=checksum)
     assert finding.native['status'] == 'available'
-    assert finding.query(root, search='', offset=0, limit=30, language='en', writable=set())['total'] == 2
-    found = finding.query(root, search='Nemesis', offset=0, limit=100, language='zh-CN', writable=set())
+    assert finding.query(root, search='', offset=0, limit=30, language='en', permissions={})['total'] == 2
+    found = finding.query(root, search='Nemesis', offset=0, limit=100, language='zh-CN', permissions={})
     assert found['total'] >= 2
     assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01', 'NemesisBathHouseRepeatable01'}
     # Two real native scenes lack both StoryReset and a matching SJSON Event.
     # Their immediate owners are authored TextLineSets, not voice-line lists.
-    bath = finding.query(root, search='NemesisBathHouseRepeatable01', offset=0, limit=10, language='zh-CN', writable=set())
-    typhon = finding.query(root, search='HecateAboutTyphonFight02_B', offset=0, limit=10, language='zh-CN', writable=set())
+    bath = finding.query(root, search='NemesisBathHouseRepeatable01', offset=0, limit=10, language='zh-CN', permissions={})
+    typhon = finding.query(root, search='HecateAboutTyphonFight02_B', offset=0, limit=10, language='zh-CN', permissions={})
     assert [row['rawId'] for row in bath['items']] == ['NemesisBathHouseRepeatable01']
     assert [row['rawId'] for row in typhon['items']] == ['HecateAboutTyphonFight02_B']
     assert all(row['status'] == 'notRecorded' and not row['canStage'] for row in bath['items'] + typhon['items'])
-    assert finding.detail(root, 'NemesisBathHouseRepeatable01', 'zh-CN', set())['lines'][0]['zhCN'] == ['再次泡温泉']
-    assert finding.detail(root, 'HecateAboutTyphonFight02_B', 'en', set())['lines'][0]['en'] == ['Typhon follow-up']
-    voice_clues = finding.query(root, search='InteractVoiceLines', offset=0, limit=20, language='en', writable=set())['items']
+    assert finding.detail(root, 'NemesisBathHouseRepeatable01', 'zh-CN', {})['lines'][0]['zhCN'] == ['再次泡温泉']
+    assert finding.detail(root, 'HecateAboutTyphonFight02_B', 'en', {})['lines'][0]['en'] == ['Typhon follow-up']
+    voice_clues = finding.query(root, search='InteractVoiceLines', offset=0, limit=20, language='en', permissions={})['items']
     assert not any(row['rawId'] == 'InteractVoiceLines' for row in voice_clues)
     assert any(row['rawId'] == 'NPC_Nemesis_01.InteractVoiceLines' and row['status'] == 'unknown'
                for row in voice_clues)
     # Searching the same bilingual character label shown in result headings
     # must find her scenes even when none of their dialogue contains that name.
-    localized = finding.query(root, search='涅墨西斯', offset=0, limit=100, language='zh-CN', writable=set())
+    localized = finding.query(root, search='涅墨西斯', offset=0, limit=100, language='zh-CN', permissions={})
     assert {'NemesisPostTrueEnding01', 'NemesisBathHouseRepeatable01'} <= {row['rawId'] for row in localized['items']}
-    assert finding.query(root, search='我的父亲', offset=0, limit=10, language='zh-CN', writable=set())['total'] == 1
+    assert finding.query(root, search='我的父亲', offset=0, limit=10, language='zh-CN', permissions={})['total'] == 1
     # A zh-CN-only Event/Id is still discoverable; its English counterpart
     # is explicitly missing, not silently copied or synthesized.
-    chinese_only = finding.query(root, search='仅中文场景', offset=0, limit=10, language='zh-CN', writable=set())
+    chinese_only = finding.query(root, search='仅中文场景', offset=0, limit=10, language='zh-CN', permissions={})
     assert [row['rawId'] for row in chinese_only['items']] == ['HecateChineseEventOnly01']
-    only_line = finding.detail(root, 'HecateChineseEventOnly01', 'zh-CN', set())['lines'][0]
+    only_line = finding.detail(root, 'HecateChineseEventOnly01', 'zh-CN', {})['lines'][0]
     assert only_line['zhCN'] == ['仅中文场景'] and only_line['en'] == []
     assert only_line['speaker'] == '赫卡忒'
     assert only_line['events'] == ['HecateChineseEventOnly01']
-    assert finding.query(root, search='My father has returned', offset=0, limit=10, language='en', writable=set())['total'] == 1
-    assert finding.query(root, search='Nemesis_0407', offset=0, limit=10, language='en', writable=set())['total'] == 1
-    assert finding.query(root, search='TrueEndingFinale01', offset=0, limit=10, language='en', writable=set())['total'] >= 1
+    assert finding.query(root, search='My father has returned', offset=0, limit=10, language='en', permissions={})['total'] == 1
+    assert finding.query(root, search='Nemesis_0407', offset=0, limit=10, language='en', permissions={})['total'] == 1
+    assert finding.query(root, search='TrueEndingFinale01', offset=0, limit=10, language='en', permissions={})['total'] >= 1
     # Native SJSON comments are not fields: the active cue must survive,
     # and the commented words must never enter the searchable text index.
-    assert finding.query(root, search='INJECTED TRANSLATION', offset=0, limit=10, language='en', writable=set())['total'] == 0
-    assert finding.query(root, search='InjectedCue', offset=0, limit=10, language='en', writable=set())['total'] == 0
+    assert finding.query(root, search='INJECTED TRANSLATION', offset=0, limit=10, language='en', permissions={})['total'] == 0
+    assert finding.query(root, search='InjectedCue', offset=0, limit=10, language='en', permissions={})['total'] == 0
     # Event keys can be generic voice entrypoints, not scripted scenes.
     # An Event without an authored scene/reset identity is only a clue.
     for token in ('NPC_Nemesis_01.InteractVoiceLines', 'NemesisOnlyLocalizationEvent01'):
-        event_only = finding.query(root, search=token, offset=0, limit=10, language='en', writable=set())
+        event_only = finding.query(root, search=token, offset=0, limit=10, language='en', permissions={})
         assert event_only['total'] == 1
         assert event_only['items'][0]['status'] == 'unknown'
         assert not event_only['items'][0]['canStage']
-        unresolved = finding.detail(root, event_only['items'][0]['rawId'], 'en', set())
+        unresolved = finding.detail(root, event_only['items'][0]['rawId'], 'en', {})
         assert unresolved['sourceResolution'] == 'unresolved'
         assert not unresolved['canStage']
     assert finding.query(root, search='NemesisOnlyLocalizationEvent01', offset=0, limit=10,
-                         language='en', writable=set(), state_filter='notRecorded')['total'] == 0
-    assert finding.query(root, search='PreTrueEnding01', offset=0, limit=10, language='en', writable=set())['items'][0]['status'] == 'notRecorded'
-    assert finding.query(root, search='Nemesis', offset=1, limit=1, language='en', writable=set())['total'] == found['total']
+                         language='en', permissions={}, state_filter='notRecorded')['total'] == 0
+    assert finding.query(root, search='PreTrueEnding01', offset=0, limit=10, language='en', permissions={})['items'][0]['status'] == 'notRecorded'
+    assert finding.query(root, search='Nemesis', offset=1, limit=1, language='en', permissions={})['total'] == found['total']
 
-    nemesis = finding.detail(root, 'NemesisPostTrueEnding01', 'en', set())
+    nemesis = finding.detail(root, 'NemesisPostTrueEnding01', 'en', {})
     assert [item['cueId'] for item in nemesis['lines'][:2]] == ['Nemesis_0407', 'Nemesis_0408']
     assert nemesis['status'] == 'recorded' and nemesis['futureEligibility'] == 'unknown'
     n = flatten(nemesis['definitions'][0]['requirements'][0]['tree'])
     assert any('CurrentRun.TextLinesRecord.TrueEndingFinale01' in entry['text'] and entry['evidence'] == 'unknown' for entry in n)
-    and_nodes = finding.detail(root, 'NemesisAboutChronosBossFights01', 'en', set())['definitions'][0]['requirements'][0]['tree']
+    and_nodes = finding.detail(root, 'NemesisAboutChronosBossFights01', 'en', {})['definitions'][0]['requirements'][0]['tree']
     all_nodes = flatten(and_nodes)
     assert any('CurrentRun.RoomsEntered.I_Boss01' in entry['text'] for entry in all_nodes)
     # The authored comparison is not an eligibility prediction; the actual
@@ -234,36 +235,70 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert any('GameState.EnemyKills.Chronos' in entry['text'] and 'Comparison: >=' in entry['text'] for entry in all_nodes)
     assert any('GameState.TextLinesRecord.NemesisGift03' in entry['text'] for entry in all_nodes)
 
-    variant = finding.detail(root, 'HecateAboutUltimateProgress03', 'zh-CN', set())
-    variant_a = finding.detail(root, 'HecateAboutUltimateProgress03_A', 'zh-CN', set())
+    variant = finding.detail(root, 'HecateAboutUltimateProgress03', 'zh-CN', {})
+    variant_a = finding.detail(root, 'HecateAboutUltimateProgress03_A', 'zh-CN', {})
     assert variant['lines'][0]['cueId'] == variant_a['lines'][0]['cueId'] == 'Hecate_0795'
     assert variant['lines'][0]['zhCN'] == ['同一台词']
     assert any(entry['kind'] == 'or' for entry in flatten(variant['definitions'][0]['requirements'][0]['tree']))
-    assert finding.detail(root, 'HecateAboutUltimateProgress04', 'zh-CN', set())['lines'][0]['zhCN'] == ['跨文件翻译']
-    assert finding.detail(root, 'PreTrueEnding01', 'en', set())['definitions'] == []
-    assert len(finding.detail(root, 'HadesWithPersephone01', 'en', set())['definitions']) == 2
-    no_translation = finding.detail(root, 'HecateAboutTyphonFight03', 'zh-CN', set())['lines']
+    assert finding.detail(root, 'HecateAboutUltimateProgress04', 'zh-CN', {})['lines'][0]['zhCN'] == ['跨文件翻译']
+    assert finding.detail(root, 'PreTrueEnding01', 'en', {})['definitions'] == []
+    assert len(finding.detail(root, 'HadesWithPersephone01', 'en', {})['definitions']) == 2
+    no_translation = finding.detail(root, 'HecateAboutTyphonFight03', 'zh-CN', {})['lines']
     assert len(no_translation) == 2 and all(not v['en'] and not v['zhCN'] for v in no_translation)
-    hermes_missing = finding.detail(root, 'HermesFieldAboutTyphon03', 'zh-CN', set())['lines']
+    hermes_missing = finding.detail(root, 'HermesFieldAboutTyphon03', 'zh-CN', {})['lines']
     assert [line['cueId'] for line in hermes_missing] == ['MelinoeField_4215']
     assert not hermes_missing[0]['zhCN'] and not hermes_missing[0]['en']
 
     allowed = finding.query(root, search='NemesisPostTrueEnding01', offset=0, limit=10,
-                            language='en', writable={'NemesisPostTrueEnding01'})['items'][0]
+                            language='en', permissions={'NemesisPostTrueEnding01': {'allowed': True, 'code': None, 'diagnostic': None}})['items'][0]
     assert allowed['canStage'] and allowed['stageID'] == 'dialogue:NemesisPostTrueEnding01'
     duplicated = LuaTable(0, 2, [('NemesisPostTrueEnding01', True), ('NemesisPostTrueEnding01', False)])
     conflicting_root = lua(GameState=lua(TextLinesRecord=duplicated))
     conflict = NativeDialogueInvestigation(game, expected_hash=checksum)
     conflicted = conflict.query(conflicting_root, search='NemesisPostTrueEnding01', offset=0, limit=20,
-                                language='en', writable={'NemesisPostTrueEnding01'})['items'][0]
+                                language='en', permissions={'NemesisPostTrueEnding01': {'allowed': True, 'code': None, 'diagnostic': None}})['items'][0]
     assert conflicted['status'] == 'ambiguous' and not conflicted['canStage']
-    assert conflict.detail(conflicting_root, 'NemesisPostTrueEnding01', 'en', {'NemesisPostTrueEnding01'})['canStage'] is False
+    assert conflict.detail(conflicting_root, 'NemesisPostTrueEnding01', 'en', {'NemesisPostTrueEnding01': {'allowed': True, 'code': None, 'diagnostic': None}})['canStage'] is False
     missing = NativeDialogueInvestigation(game / 'missing', expected_hash=checksum)
-    assert missing.query(root, search='', offset=0, limit=10, language='en', writable={'NemesisPostTrueEnding01'})['items'][0]['canStage'] is False
+    assert missing.query(root, search='', offset=0, limit=10, language='en', permissions={'NemesisPostTrueEnding01': {'allowed': True, 'code': None, 'diagnostic': None}})['items'][0]['canStage'] is False
     assert missing.native['status'] == 'missing'
     wrong = NativeDialogueInvestigation(game, expected_hash='f' * 64)
-    assert wrong.native['status'] == 'mismatch' and not wrong.detail(root, 'NemesisPostTrueEnding01', 'en', set())['definitions']
+    assert wrong.native['status'] == 'mismatch' and not wrong.detail(root, 'NemesisPostTrueEnding01', 'en', {})['definitions']
 
+
+    # A scene can be real and recorded yet forbidden as a standalone reset.
+    # The actual Hades narrative write owner supplies the diagnosis displayed
+    # by the investigation; the latter must not independently grant a write.
+    protected_root = lua(GameState=lua(
+        TextLinesRecord=lua(NemesisPostTrueEnding01=True, NemesisBathHouseRepeatable01=True),
+        GiftTextLinesOrderRecord=lua(Nemesis=LuaTable(
+            1, 0, [(1.0, 'NemesisPostTrueEnding01')]
+        )),
+        TextLinesChoiceRecord=lua(),
+    ))
+    narrative_rows = save_narrative.rows(protected_root, 'dialogue', 'en')
+    decisions = {
+        row['rawId']: {
+            'allowed': row['editable'],
+            'code': row['blockReasonCode'],
+            'diagnostic': row['blockReasonDiagnostic'],
+        } for row in narrative_rows
+    }
+    assert decisions['NemesisPostTrueEnding01']['code'] == 'giftLinked'
+    assert decisions['NemesisBathHouseRepeatable01']['code'] == 'notResettable'
+    for scene, code in (
+        ('NemesisPostTrueEnding01', 'giftLinked'),
+        ('NemesisBathHouseRepeatable01', 'notResettable'),
+    ):
+        summary = finding.query(
+            protected_root, search=scene, offset=0, limit=10,
+            language='en', permissions=decisions,
+        )['items'][0]
+        detail = finding.detail(protected_root, scene, 'en', decisions)
+        assert summary['status'] == detail['status'] == 'recorded'
+        assert not summary['canStage'] and not detail['canStage']
+        assert summary['blockReasonCode'] == detail['blockReasonCode'] == code
+        assert summary['reason'] == decisions[scene]['diagnostic']
 
     # The workspace must use the currently committed cold-save document, not
     # a LuaTable retained when investigation was first opened. Use the real
