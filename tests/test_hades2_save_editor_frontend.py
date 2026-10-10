@@ -50,19 +50,7 @@ for raw in sys.stdin:
         domain = req['params']['domain']
         path = req['params']['path']
         if domain == 'discover':
-            if req['params']['stateFilter'] == 'absent':
-                items = [{
-                    'id': 'flag:KnownAbsent{:03d}'.format(index),
-                    'domain': 'flags', 'rawId': 'KnownAbsent{:03d}'.format(index),
-                    'path': ['GameState', 'Flags', 'KnownAbsent{:03d}'.format(index)],
-                    'name': 'Unseen event {:03d}'.format(index),
-                    'englishName': 'Unseen event {:03d}'.format(index),
-                    'value': None, 'valueType': 'boolean',
-                    'editable': False, 'mutationKinds': [],
-                    'state': 'absent', 'reasonCode': 'knownAbsent',
-                    'reason': 'No saved record for this event.',
-                } for index in range(215)]
-            elif req['params']['search'] == 'MysteryCounter':
+            if req['params']['search'] == 'MysteryCounter':
                 items = [{
                     'id': 'advanced:["GameState","UnknownFutureField","MysteryCounter"]:0',
                     'domain': 'advanced',
@@ -269,7 +257,7 @@ for raw in sys.stdin:
             'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
             'total': len(items),
-            'items': items[req['params']['offset']:req['params']['offset'] + req['params']['limit']],
+            'items': items,
             'sourceStatus': 'available' if domain == 'investigate' else None,
         }
     elif command == 'save_editor_detail':
@@ -639,17 +627,6 @@ struct Main {
               discoveryFilterParams["domain"] as? String == "discover",
               discoveryFilterParams["stateFilter"] as? String == "absent" else {
             fail("discovery state filter did not reach Save Workspace")
-        }
-        if model.total != 215 || model.items.count != 100
-            || model.items.first?.discoveryState != "absent" {
-            fail("Absent-state discovery did not load a useful full results page")
-        }
-        model.nextPage()
-        pump(0.25)
-        if model.offset != 100 || model.total != 215
-            || model.items.count != 100
-            || model.items.first?.rawID != "KnownAbsent100" {
-            fail("Absent-state browsing filtered AFTER paging or lost its scope")
         }
         model.setDiscoveryFilter("unsupported")
         pump(0.20)

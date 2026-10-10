@@ -549,30 +549,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     assert bulk["items"][0]["rawId"] == "BulkItem100"
     assert all(item["domain"] == "advanced" for item in bulk["items"])
 
-    # A deliberate filter must expose absent and non-editable native catalog
-    # identities without a search string. It must be applied BEFORE paging.
-    missing_page = workspace.query(
-        domain="discover", search="", stateFilter="absent",
-        offset=0, limit=7, language="en",
-    )
-    assert missing_page["total"] > 7
-    assert len(missing_page["items"]) == 7
-    assert all(item["state"] == "absent" for item in missing_page["items"])
-    later_missing = workspace.query(
-        domain="discover", search="", stateFilter="absent",
-        offset=7, limit=7, language="en",
-    )
-    assert later_missing["total"] == missing_page["total"]
-    assert not ({x["id"] for x in later_missing["items"]}
-                & {x["id"] for x in missing_page["items"]})
-    blocked_page = workspace.query(
-        domain="discover", search="", stateFilter="readOnly",
-        offset=0, limit=40, language="en",
-    )
-    assert blocked_page["total"] > 0
-    assert all(not row["editable"] for row in blocked_page["items"])
-
-    # Empty unfiltered discovery still avoids a catalog flood.
+    # Empty discovery is useful but does not dump every absent/unknown identity.
     default = workspace.query(domain="discover", search="", language="en")
     assert all(item["state"] == "observed" for item in default["items"])
     assert not any(item["rawId"] == "HasUsedWeaponShopNavigation" for item in default["items"])

@@ -245,7 +245,6 @@ struct Hades2SaveEditorView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    stateFilterMenu
                 }
                 .padding(10)
                 .trainerSurface(.subtle, cornerRadius: 8)
@@ -329,54 +328,6 @@ struct Hades2SaveEditorView: View {
             Divider()
             pagingControls
                 .padding(12)
-        }
-    }
-
-    @ViewBuilder
-    private var stateFilterMenu: some View {
-        if section == .all || (section == .story && model.selectedDomain == .investigate) {
-            let discovery = section == .all
-            let filter = discovery ? model.discoveryFilter : model.investigationFilter
-            let choices = discovery
-                ? ["all", "observed", "absent", "editable", "readOnly",
-                   "ambiguous", "unsupported", "unknown"]
-                : ["all", "recorded", "notRecorded", "ambiguous", "unknown"]
-            let prefix = discovery
-                ? "hades2.saveEditor.discovery.filter."
-                : "hades2.saveEditor.investigate."
-            Menu {
-                ForEach(choices, id: \.self) { value in
-                    Button {
-                        selectedEntityID = nil
-                        if discovery {
-                            model.setDiscoveryFilter(value)
-                        } else {
-                            model.setInvestigationFilter(value)
-                        }
-                    } label: {
-                        HStack {
-                            Text(text(prefix + value))
-                            if filter == value {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: filter == "all"
-                          ? "line.3.horizontal.decrease.circle"
-                          : "line.3.horizontal.decrease.circle.fill")
-                    if filter != "all" {
-                        Text(text(prefix + filter)).font(.caption).lineLimit(1)
-                    }
-                }
-                .foregroundStyle(filter == "all" ? .secondary : theme.accent)
-            }
-            .buttonStyle(.plain)
-            .disabled(model.busy)
-            .help(text("hades2.saveEditor.workbench.filter"))
-            .accessibilityLabel(text("hades2.saveEditor.workbench.filter"))
         }
     }
 

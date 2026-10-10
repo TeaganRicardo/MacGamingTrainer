@@ -456,7 +456,6 @@
     "hades2.saveEditor.workbench.sourceHint": "读取来源与写入目标",
     "hades2.saveEditor.workbench.addChange": "加入更改",
     "hades2.saveEditor.workbench.staged": "已加入更改",
-    "hades2.saveEditor.workbench.filter": "筛选结果",
     "hades2.saveEditor.workbench.limitation": "为什么不能修改？",
     "hades2.saveEditor.workbench.technical": "技术信息",
     "hades2.saveEditor.workbench.browse": "浏览",
