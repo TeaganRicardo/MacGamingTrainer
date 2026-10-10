@@ -306,6 +306,22 @@ for raw in sys.stdin:
 
 harness = r'''
 import Foundation
+import SwiftUI
+import AppKit
+
+struct SaveEditorPresentationHarness: View {
+    let model: Hades2SaveEditorModel
+    @State private var presentation: Hades2SaveEditorPresentation? = nil
+
+    var body: some View {
+        Text("host")
+            .frame(width: 600, height: 400)
+            .hades2SaveEditorSheet($presentation)
+            .onAppear {
+                presentation = Hades2SaveEditorPresentation(model: model)
+            }
+    }
+}
 
 func fail(_ message: String) -> Never {
     fputs("FAIL: \(message)\\n", stderr)
@@ -314,6 +330,13 @@ func fail(_ message: String) -> Never {
 
 func pump(_ seconds: TimeInterval) {
     RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+}
+
+func pumpUntil(timeout: TimeInterval = 2.0, _ condition: () -> Bool) {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() && Date() < deadline {
+        RunLoop.current.run(until: min(deadline, Date().addingTimeInterval(0.02)))
+    }
 }
 
 func commands(at url: URL) -> [[String: Any]] {
@@ -345,10 +368,32 @@ struct Main {
         )
 
         let model = Hades2SaveEditorModel(session: session)
-        model.open(language: .en)
-        pump(0.50)
+        let defaults = InMemoryDefaults()
+        defaults.set(
+            TrainerPresentationLanguage.en.rawValue,
+            forKey: TrainerLocalizationStore.userDefaultsKey
+        )
+        let localization = TrainerLocalizationStore(defaults: defaults)
+        let app = NSApplication.shared
+        app.setActivationPolicy(.prohibited)
+        app.finishLaunching()
+        let root = SaveEditorPresentationHarness(model: model)
+            .environmentObject(localization)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = NSHostingView(rootView: root)
+        window.orderFront(nil)
+        pumpUntil {
+            commands(at: commandLog).count >= 2
+        }
 
-        if model.profile != "Profile1" { fail("profile was not decoded") }
+        if model.profile != "Profile1" {
+            fail("Save Editor sheet did not mount the editor model")
+        }
         if model.relativePath != "Profile1.sav" { fail("relative path was not decoded") }
         if model.availableDomains != Hades2SaveEditorDomain.allCases {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
