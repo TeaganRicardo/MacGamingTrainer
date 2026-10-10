@@ -701,6 +701,7 @@ class Hades2SaveWorkspace:
             language=language,
             permissions=self._dialogue_write_decisions(),
             state_filter="all",
+            include_unobserved=state_filter != "all",
         )
         investigation_state = {
             "recorded": "observed",
@@ -729,10 +730,10 @@ class Hades2SaveWorkspace:
         needle = search.casefold().strip()
         rows = []
         for row in semantic:
-            if not needle:
+            if not needle and state_filter == "all":
                 if row["state"] != "observed":
                     continue
-            elif row.get("domain") != "investigate" and not any(
+            elif needle and row.get("domain") != "investigate" and not any(
                 needle in token.casefold() for token in row["_search"]
             ):
                 continue
