@@ -1,13 +1,14 @@
-"""Read-only, installed-source investigation of Hades II dialogue in a cold save.
+"""Read-only, installed-source investigation of Hades II dialogue in a static save.
 
-All narrative content is read from the supported game installation, never bundled
-with the Trainer. Source ownership is many-to-many; game-state observations are
+Narrative content is read from the game installation, never bundled with the
+Trainer. A matching reset manifest does not certify every installed input as a
+supported build. Source ownership is many-to-many; game-state observations are
 not predictions of future dialogue eligibility.
 """
 
-from collections import defaultdict
-from functools import lru_cache
+from collections import defaultdict, OrderedDict
 import hashlib
+import json
 from pathlib import Path
 import re
 
@@ -21,6 +22,7 @@ _TEXT_FIELD = re.compile(r'\b(Id|Event|Speaker|DisplayName)\s*=\s*"((?:\\.|[^"\\
 _CUE = re.compile(r'\bCue\s*=\s*"/VO/((?:\\.|[^"\\])*)"')
 _STRING = re.compile(r'^"((?:\\.|[^"\\])*)"$')
 _LUA_TOKENS = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?|[{}=,;\[\].()]|[^\s]', re.S)
+_NATIVE_CACHE = OrderedDict()
 
 
 def _masked(text, *, lua):
@@ -254,30 +256,64 @@ def _original_roots(game_path):
     return None, None
 
 
-def _load_native(game_path, expected_hash):
+def _capture_native(game_path):
+    """Identity and parsing use the same bytes, including unreadable inputs.
+
+    Recheck the selected roots and complete consumed file set at each public
+    query boundary. Timestamps cannot detect replacement with preserved mtime.
+    Capturing bytes also avoids hashing one version and parsing another.
+    """
     scripts, texts = _original_roots(game_path)
-    if scripts is None:
-        return {'status': 'missing', 'scenes': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}}, 'errors': []}
-    sentinel = scripts / 'StoryResetData.lua'
-    try:
-        observed_hash = hashlib.sha256(sentinel.read_bytes()).hexdigest()
-    except OSError:
-        return {'status': 'missing', 'scenes': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}}, 'errors': []}
-    if observed_hash != expected_hash:
-        return {'status': 'mismatch', 'scenes': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}}, 'errors': []}
+    roots = [str(path.resolve()) for path in (scripts, texts)] if scripts else []
+    inputs, errors = [], []
+    if scripts:
+        groups = [('Scripts', scripts, sorted(scripts.glob('*.lua')))]
+        groups.extend((language, texts / language, sorted((texts / language).rglob('*.sjson')))
+                      for language in ('en', 'zh-CN'))
+        for owner, folder, paths in groups:
+            for path in paths:
+                if path.name.startswith('._'):
+                    continue
+                name = path.relative_to(folder).as_posix()
+                try:
+                    content = path.read_bytes()
+                    raw = content.decode('utf-8-sig')
+                except OSError:
+                    content, raw = None, None
+                    errors.append({'input': owner + '/' + name, 'reason': 'unreadable'})
+                except UnicodeError:
+                    raw = None
+                    errors.append({'input': owner + '/' + name, 'reason': 'invalidEncoding'})
+                digest = hashlib.sha256(content).hexdigest() if content is not None else None
+                inputs.append((owner, name, digest, raw))
+    manifest = {'roots': roots, 'inputs': [item[:3] for item in inputs]}
+    identity = hashlib.sha256(json.dumps(manifest, ensure_ascii=True, separators=(',', ':')).encode()).hexdigest()
+    return {'identity': identity, 'roots': roots, 'inputs': inputs, 'errors': errors}
+
+
+def _load_native(source, expected_hash):
+    observed_hash = next((digest for owner, name, digest, raw in source['inputs']
+                          if owner == 'Scripts' and name == 'StoryResetData.lua'), None)
+    provenance = {
+        'roots': source['roots'], 'storyResetSHA256': observed_hash,
+        'expectedStoryResetSHA256': expected_hash,
+        'storyResetVerification': 'matched' if observed_hash == expected_hash else 'missing' if observed_hash is None else 'mismatch',
+        # Only StoryResetData has a supported hash here. Installed NPC scripts
+        # and translations remain observed evidence, never new write authority.
+        'buildVerification': 'unverified',
+        'limitation': 'The complete installed script/localization set has no supported-build digest manifest.',
+    }
+    result = {'status': 'available', 'scenes': {}, 'events': {}, 'text': {'en': {}, 'zh-CN': {}},
+              'errors': source['errors'], 'sourceIdentity': source['identity'], 'sourceProvenance': provenance}
+    if observed_hash is None or observed_hash != expected_hash:
+        result['status'] = 'missing' if observed_hash is None else 'mismatch'
+        return result
 
     by_language = {'en': defaultdict(list), 'zh-CN': defaultdict(list)}
     events = defaultdict(list)
     for language in ('en', 'zh-CN'):
-        folder = texts / language
-        if not folder.is_dir():
-            continue
-        for path in sorted(folder.rglob('*.sjson')):
-            if path.name.startswith('._'):
-                continue
-            try:
-                raw = path.read_text(encoding='utf-8-sig')
-            except (OSError, UnicodeError):
+        for owner, filename, digest, raw in source['inputs']:
+            if owner != language or raw is None:
                 continue
             # Per-record Id positions, bounded by the enclosing Texts item.
             masked = _masked(raw, lua=False)
@@ -305,7 +341,7 @@ def _load_native(game_path, expected_hash):
                 if len(identifiers) != 1 or '{' in record_mask[:identifiers[0].start()]:
                     continue
                 entry = {'id': cue_id, 'text': fields['DisplayName'], 'speaker': fields.get('Speaker', ''),
-                         'event': fields.get('Event', ''), 'source': path.name}
+                         'event': fields.get('Event', ''), 'source': filename}
                 by_language[language][cue_id].append(entry)
                 # Both installed languages can own Event annotations; never
                 # require an English counterpart to discover a zh-only cue.
@@ -315,12 +351,8 @@ def _load_native(game_path, expected_hash):
     candidates = set(STORY_RESET_TEXT_IDS)
     candidates.update(events)
     scenes = defaultdict(list)
-    for path in sorted(scripts.glob('*.lua')):
-        if path.name.startswith('._'):
-            continue
-        try:
-            raw = path.read_text(encoding='utf-8-sig')
-        except (OSError, UnicodeError):
+    for owner, filename, digest, raw in source['inputs']:
+        if owner != 'Scripts' or raw is None:
             continue
         masked = _masked(raw, lua=True)
         parents = {}
@@ -358,32 +390,38 @@ def _load_native(game_path, expected_hash):
                 name not in candidates
             ):
                 continue
-            scenes[name].append({'file': path.name, 'line': raw.count('\n', 0, match.start()) + 1,
+            scenes[name].append({'file': filename, 'line': raw.count('\n', 0, match.start()) + 1,
                                  'script': body, 'search': active_body, 'cues': cues,
                                  'partner': partner})
-    return {'status': 'available', 'scenes': dict(scenes), 'events': dict(events),
-            'text': {lang: dict(index) for lang, index in by_language.items()}, 'errors': []}
+    result.update(scenes=dict(scenes), events=dict(events),
+                  text={lang: dict(index) for lang, index in by_language.items()})
+    return result
 
 
-@lru_cache(maxsize=2)
-def _cached(game_path, expected_hash, signature):
-    return _load_native(game_path, expected_hash)
+def _cached(source, expected_hash):
+    # Retain parsed source evidence only, not the large input snapshot or any
+    # mutable save document. Freshness and supported-reset validity are distinct.
+    key = (source['identity'], expected_hash)
+    if key not in _NATIVE_CACHE:
+        _NATIVE_CACHE[key] = _load_native(source, expected_hash)
+    _NATIVE_CACHE.move_to_end(key)
+    while len(_NATIVE_CACHE) > 2:
+        _NATIVE_CACHE.popitem(last=False)
+    return _NATIVE_CACHE[key]
 
 
 class NativeDialogueInvestigation:
-    """Search installed version-pinned native evidence with cold save state."""
+    """Search current installed evidence with the caller's static save state."""
 
     def __init__(self, game_path=None, *, expected_hash=_SUPPORTED_STORY_SHA):
         # Cache only source evidence, never a LuaTable from a mutable Save
         # document. Query/detail receive the workspace's current document.
-        path = str(game_path) if game_path is not None else None
-        scripts, _ = _original_roots(path)
-        try:
-            signature = (scripts / 'StoryResetData.lua').stat().st_mtime_ns if scripts else None
-        except OSError:
-            signature = None
-        self.native = _cached(path, expected_hash, signature)
+        self.game_path = str(game_path) if game_path is not None else None
         self.expected_hash = expected_hash
+        self._refresh()
+
+    def _refresh(self):
+        self.native = _cached(_capture_native(self.game_path), self.expected_hash)
 
     def _records(self, save_root):
         try:
@@ -472,7 +510,7 @@ class NativeDialogueInvestigation:
         if self.native['status'] != 'available':
             can_stage = False
             block_code = 'sourceUnavailable'
-            reason = 'Supported game source missing or version mismatch; native context unavailable.'
+            reason = 'Game source missing or reset-manifest mismatch; native context unavailable.'
         sources = self.native['scenes'].get(scene) or ()
         native_person = bool(person) and (
             any('NPCData_' + person in source.get('file', '') for source in sources)
@@ -488,15 +526,17 @@ class NativeDialogueInvestigation:
             'entityId': 'person:' + person if native_person else None,
             'entityName': localized[language] if native_person else None,
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
+            'sourceIdentity': self.native['sourceIdentity'],
             'reason': reason, 'blockReasonCode': block_code,
             'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',
         }
 
-    def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all"):
+    def query(self, save_root, *, search, offset, limit, language, permissions, state_filter="all", include_unobserved=False):
+        self._refresh()
         records, ambiguous = self._records(save_root)
         # An empty search never floods the user with thousands of unobserved
         # native scenes; deliberate queries expand the discoverable index.
-        if search.strip():
+        if search.strip() or state_filter != 'all' or include_unobserved:
             candidates = set(records) | set(self.native['events']) | set(self.native['scenes']) | set(STORY_RESET_TEXT_IDS)
         else:
             candidates = {name for name, value in records.items() if value is True}
@@ -519,9 +559,12 @@ class NativeDialogueInvestigation:
             if state_filter == "all" or row["status"] == state_filter:
                 rows.append(row)
         rows.sort(key=lambda row: (row['status'] != 'recorded', row['group'].casefold(), row['rawId']))
-        return {'total': len(rows), 'items': rows[offset:offset + limit], 'sourceStatus': self.native['status']}
+        return {'total': len(rows), 'items': rows[offset:offset + limit], 'sourceStatus': self.native['status'],
+                'sourceIdentity': self.native['sourceIdentity'], 'sourceProvenance': self.native['sourceProvenance'],
+                'sourceErrors': self.native['errors']}
 
     def detail(self, save_root, scene, language, permissions):
+        self._refresh()
         records, ambiguous = self._records(save_root)
         if scene not in records and scene not in STORY_RESET_TEXT_IDS and scene not in self.native['scenes'] and scene not in self.native['events']:
             raise ValueError('Save Editor native scene identity is unknown.')
@@ -548,6 +591,8 @@ class NativeDialogueInvestigation:
                                 'partner': definition['partner'], 'requirements': authored,
                                 'cueIDs': definition['cues']})
         return {'scene': scene, 'status': overview['status'], 'sourceStatus': self.native['status'],
+                'sourceIdentity': self.native['sourceIdentity'], 'sourceProvenance': self.native['sourceProvenance'],
+                'sourceErrors': self.native['errors'],
                 'reason': overview['reason'], 'blockReasonCode': overview['blockReasonCode'],
                 'canStage': overview['canStage'],
                 'stageID': overview['stageID'], 'character': overview['group'],
