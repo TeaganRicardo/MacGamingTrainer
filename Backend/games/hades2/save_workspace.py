@@ -60,6 +60,8 @@ SAVE_EDITOR_DOMAINS = (
     "resources",
     "playerStats",
     "progression",
+    "quests",
+    "arcana",
     "investigate",
     "dialogue",
     "flags",
@@ -842,14 +844,19 @@ class Hades2SaveWorkspace:
             rows = self._resource_rows(language)
         elif domain == "playerStats":
             rows = self._player_stat_rows(language)
-        elif domain in ("flags", "dialogue", "progression"):
+        elif domain in ("flags", "dialogue", "progression", "quests", "arcana"):
+            owner_domain = "progression" if domain in ("quests", "arcana") else domain
             rows = save_narrative.rows(
-                self.document.lua_state, domain, language, game_path=self._game_path
+                self.document.lua_state, owner_domain, language, game_path=self._game_path
             )
-            if domain == "progression":
+            if owner_domain == "progression":
                 rows.extend(save_long_term.rows(
-                    self.document.lua_state, domain, language, game_path=self._game_path
+                    self.document.lua_state, owner_domain, language, game_path=self._game_path
                 ))
+                if domain == "quests":
+                    rows = [row for row in rows if row["id"].startswith(("quest:", "objective:"))]
+                elif domain == "arcana":
+                    rows = [row for row in rows if row["id"].startswith("card:")]
         elif domain == "relationships":
             rows = save_long_term.rows(
                 self.document.lua_state, domain, language, game_path=self._game_path

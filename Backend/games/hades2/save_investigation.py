@@ -473,6 +473,11 @@ class NativeDialogueInvestigation:
             can_stage = False
             block_code = 'sourceUnavailable'
             reason = 'Supported game source missing or version mismatch; native context unavailable.'
+        sources = self.native['scenes'].get(scene) or ()
+        native_person = bool(person) and (
+            any('NPCData_' + person in source.get('file', '') for source in sources)
+            or any(self.native['text'][locale].get(npc) for locale in ('en', 'zh-CN'))
+        )
         return {
             'id': 'investigate:' + scene, 'domain': 'investigate', 'rawId': scene,
             'path': ['GameState', 'TextLinesRecord', scene],
@@ -480,6 +485,8 @@ class NativeDialogueInvestigation:
             'value': state == 'recorded', 'valueType': 'boolean',
             'editable': False, 'mutationKinds': [],
             'group': person or ('Other dialogue' if language == 'en' else '其他对话'),
+            'entityId': 'person:' + person if native_person else None,
+            'entityName': localized[language] if native_person else None,
             'status': state, 'snippet': subtitle, 'sourceStatus': self.native['status'],
             'reason': reason, 'blockReasonCode': block_code,
             'canStage': can_stage, 'stageID': 'dialogue:' + scene if can_stage else '',

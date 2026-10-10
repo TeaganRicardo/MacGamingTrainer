@@ -169,7 +169,8 @@ def _names(ids, language, game_path):
 
 def _row(entry_id, key, path, name, english, value, kind, group,
          *, editable=True, maximum=None, choices=(), choice_names=None,
-         block_reason_code=None, owner_state=None):
+         block_reason_code=None, owner_state=None,
+         entity_id=None, entity_name=None):
     row = {
         "id": entry_id, "domain": "weapons", "rawId": key,
         "path": path, "name": name, "englishName": english,
@@ -178,6 +179,9 @@ def _row(entry_id, key, path, name, english, value, kind, group,
                          ["set"] if editable else [],
         "group": group, "choices": list(choices),
     }
+    if entity_id is not None:
+        row["entityId"] = entity_id
+        row["entityName"] = entity_name
     if maximum is not None:
         row["constraints"] = {"min": 1 if entry_id.startswith("aspect:") and
                              key in _DEFAULT_ASPECTS else 0,
@@ -241,6 +245,7 @@ def rows(root, language="zh-CN", game_path=None):
                 else None
             ),
             owner_state=weapon_owner_state,
+            entity_id="weapon:" + weapon, entity_name=title,
         ))
 
         for aspect in aspects:
@@ -282,6 +287,7 @@ def rows(root, language="zh-CN", game_path=None):
                     else "baseWeaponRequired"
                 ),
                 owner_state=aspect_owner_state,
+                entity_id="weapon:" + weapon, entity_name=title,
             ))
 
         if owned is True:
@@ -312,6 +318,7 @@ def rows(root, language="zh-CN", game_path=None):
                     else None
                 ),
                 owner_state=selection_owner_state,
+                entity_id="weapon:" + weapon, entity_name=title,
             ))
 
     for tool in _TOOLS:
