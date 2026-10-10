@@ -105,6 +105,7 @@ SecondOwner = {
 ] }''', encoding='utf-8')
     (chinese / '_NPCData_Hecate.zh-CN.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0795" DisplayName = "同一台词" }
+ { Id = "Hecate_ZHOnly9001" DisplayName = "仅中文场景" Event = "HecateChineseEventOnly01" Speaker = "赫卡忒" }
 ] }''', encoding='utf-8')
     (chinese / '_EnemyData_Hecate.zh-CN.sjson').write_text('''{ Texts = [
  { Id = "Hecate_0942" DisplayName = "跨文件翻译" }
@@ -134,6 +135,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
     assert found['total'] >= 2
     assert {row['rawId'] for row in found['items']} >= {'NemesisPostTrueEnding01', 'NemesisAboutChronosBossFights01'}
     assert finding.query(search='我的父亲', offset=0, limit=10, language='zh-CN', writable=set())['total'] == 1
+    # A zh-CN-only Event/Id is still discoverable; its English counterpart
+    # is explicitly missing, not silently copied or synthesized.
+    chinese_only = finding.query(search='仅中文场景', offset=0, limit=10, language='zh-CN', writable=set())
+    assert [row['rawId'] for row in chinese_only['items']] == ['HecateChineseEventOnly01']
+    only_line = finding.detail('HecateChineseEventOnly01', 'zh-CN', set())['lines'][0]
+    assert only_line['zhCN'] == ['仅中文场景'] and only_line['en'] == []
+    assert only_line['speaker'] == '赫卡忒'
+    assert only_line['events'] == ['HecateChineseEventOnly01']
     assert finding.query(search='My father has returned', offset=0, limit=10, language='en', writable=set())['total'] == 1
     assert finding.query(search='Nemesis_0407', offset=0, limit=10, language='en', writable=set())['total'] == 1
     assert finding.query(search='TrueEndingFinale01', offset=0, limit=10, language='en', writable=set())['total'] >= 1
