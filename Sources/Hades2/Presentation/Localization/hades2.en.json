@@ -58,6 +58,7 @@
     "hades2.error.invalidCommand": "Unknown command.",
     "hades2.error.invalidCommandValue": "The command is invalid.",
     "hades2.error.invalidLegendaryDuo": "The Legendary / Duo settings are invalid.",
+    "hades2.error.invalidNextOccurrence": "The next eligible encounter request is invalid.",
     "hades2.error.invalidNextRoomReward": "The next room reward is invalid.",
     "hades2.error.invalidParamsObject": "params must be an object.",
     "hades2.error.invalidRarityMultiplier": "The rarity multiplier must be between 0% and 1000%.",
