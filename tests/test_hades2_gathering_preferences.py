@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     adapter.state['gatheringTargets'] = {'mining': {'available': True, 'scopeToken': 'ephemeral'}}
     adapter.save_profile('Gathering')
     envelope = json.loads(adapter.profile_service.path('Gathering').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 8
+    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 9
     assert envelope['desired']['gatheringProbabilities'] == wanted
     assert 'gatheringTargets' not in envelope['desired'] and 'scopeToken' not in envelope['desired']
     adapter.reset_desired()
