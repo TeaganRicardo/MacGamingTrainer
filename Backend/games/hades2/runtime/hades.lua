@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 97 then
+if previousModule and previousModule.revision ~= 98 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 97 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 97, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 98, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -352,10 +352,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local trainerSource = "MacGamingTrainer"
   local trainerInvincibilityFlag = "MacGamingTrainerInvincibility"
-  local invincibilityBlockedEffects = {
-    "HecatePolymorphStun",
-    "MiasmaSlow",
-  }
+  local invincibilityProtection
   local function requireFunctions(label, functions)
     for _, name in ipairs(functions) do
       if type(_G[name]) ~= "function" then error("Unsupported " .. label .. ": missing " .. name) end
@@ -502,27 +499,12 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   local function releaseInvincibility()
+    invincibilityProtection.release()
     restoreInvincibilityHitCount(M.invincibilityHitHero)
     M.invincibilityHitHero = nil
     M.invincibilityHitBaseline = nil
     M.invincibilityHitBaselineKnown = false
     M.invincibility = false
-    local effectHero = M.invincibilityEffectBlockHero
-    if effectHero and effectHero.ObjectId ~= nil and type(RemoveEffectBlock) == "function" then
-      for _, effectName in ipairs(invincibilityBlockedEffects) do
-        pcall(RemoveEffectBlock, { Id = effectHero.ObjectId, Name = effectName })
-      end
-    end
-    M.invincibilityEffectBlockHero = nil
-    local hero = M.invincibilityHero
-    if hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag] then
-      if type(SetUnitVulnerable) == "function" then
-        pcall(SetUnitVulnerable, hero, trainerInvincibilityFlag)
-      else
-        hero.InvulnerableFlags[trainerInvincibilityFlag] = nil
-      end
-    end
-    M.invincibilityHero = nil
     releaseHeroDamageRouterIfUnused()
   end
   local function releaseHealth()
@@ -1322,9 +1304,7 @@ if __MacGamingTrainerV1 == nil then
       M.session, M.run, M.hero = SessionState, CurrentRun, hero
       M.featureErrors = {}
     end
-    local invincibilityFlagActive = M.invincibilityHero == hero and type(hero) == "table"
-      and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
-    if M.invincibility and (not owns("Damage") or not invincibilityFlagActive) then releaseInvincibility() end
+    if M.invincibility and (not owns("Damage") or not invincibilityProtection.active(hero)) then releaseInvincibility() end
     if M.infiniteHealth and (not owns("Damage") or not owns("SacrificeHealth")) then releaseHealth() end
     if M.infiniteMana and not owns("ManaDelta") then releaseMana() end
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
@@ -6932,11 +6912,106 @@ if __MacGamingTrainerV1 == nil then
       return original(victim, triggerArgs)
     end)
   end
-  local function installInvincibility()
-    requireFunctions("invincibility", {
+  invincibilityProtection = (function()
+    -- Engine effects and impact forces precede Lua Damage, even for attacks
+    -- with no damage. Block only verified hostile payloads on the current Hero;
+    -- enemy enhancements, player skills/curses and scripted transformations
+    -- retain their native owners. See #448's target-build coverage inventory.
+    local blockedEffects = {
+      "HecatePolymorphStun", "MiasmaSlow", "StasisStun", "EliteManaDrain",
+      "HeroOnHitStun", "OnHitStun", "EliteAttributeStun", "Rooted",
+      "KnockbackGrip", "MeleeAttackVictimGrip", "ScreamerSlow", "VacuumSlow",
+      "LavaSlow", "ChillEffect", "ChillStatueEffect", "MatiHypnosisSlow",
+      "WebSlow", "GhostWallHalt", "Inked",
+    }
+    local required = {
       "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
       "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
-    })
+      "AddPlayerImmuneToForce", "RemovePlayerImmuneToForce", "SetThingProperty",
+      "GetPlayerGameplayElapsedTimeMultiplier",
+    }
+    local owner
+    local function supported()
+      for _, name in ipairs(required) do if type(_G[name]) ~= "function" then return false end end
+      return true
+    end
+    local function refreshPlayerTime(hero)
+      SetThingProperty({ DestinationId = hero.ObjectId, Property = "ElapsedTimeMultiplier",
+        Value = GetPlayerGameplayElapsedTimeMultiplier(), ValueChangeType = "Absolute", DataValue = false })
+    end
+    local function active(hero)
+      return owner ~= nil and owner.hero == hero and owner.session == SessionState
+        and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
+        and type(hero.ImmuneToForceFlags) == "table" and hero.ImmuneToForceFlags[trainerInvincibilityFlag]
+        and owns("GetPlayerGameplayElapsedTimeMultiplier")
+    end
+    local function release()
+      local previous = owner
+      owner = nil
+      releaseHook("GetPlayerGameplayElapsedTimeMultiplier")
+      if previous == nil then return end
+      local hero = previous.hero
+      -- Hades can reuse ObjectId 1 for a replacement Hero. Never remove that
+      -- replacement's native blocks or write its force/time properties.
+      local currentHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      local sameObject = previous.session == SessionState
+        and (hero == currentHero or (currentHero and hero.ObjectId ~= currentHero.ObjectId))
+      if sameObject then
+        for _, effectName in ipairs(previous.effects) do
+          pcall(RemoveEffectBlock, { Id = hero.ObjectId, Name = effectName })
+        end
+      end
+      if previous.invulnerableFlags and previous.invulnerableFlags[trainerInvincibilityFlag] then
+        if sameObject and hero.InvulnerableFlags == previous.invulnerableFlags then
+          pcall(SetUnitVulnerable, hero, trainerInvincibilityFlag)
+        else
+          previous.invulnerableFlags[trainerInvincibilityFlag] = nil
+        end
+      end
+      local flags = previous.forceFlags
+      if flags[trainerInvincibilityFlag] then
+        flags[trainerInvincibilityFlag] = nil
+        if sameObject and hero.ImmuneToForceFlags == flags and next(flags) == nil then
+          pcall(SetThingProperty, { DestinationId = hero.ObjectId, Property = "ImmuneToForce", Value = false })
+        end
+      end
+      if hero == currentHero and previous.session == SessionState then pcall(refreshPlayerTime, hero) end
+    end
+    local function install(hero)
+      requireFunctions("invincibility", required)
+      if type(hero.ImmuneToForceFlags) ~= "table" then error("Unsupported invincibility: force owner unavailable") end
+      if owner == nil then
+        owner = { hero = hero, session = SessionState, effects = {}, forceFlags = hero.ImmuneToForceFlags }
+        for _, effectName in ipairs(blockedEffects) do
+          AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
+          owner.effects[#owner.effects + 1] = effectName
+          ClearEffect({ Id = hero.ObjectId, Name = effectName })
+        end
+      end
+      if not hero.ImmuneToForceFlags[trainerInvincibilityFlag] then
+        AddPlayerImmuneToForce(trainerInvincibilityFlag)
+      end
+      if type(hero.InvulnerableFlags) ~= "table" or not hero.InvulnerableFlags[trainerInvincibilityFlag] then
+        SetUnitInvulnerable(hero, trainerInvincibilityFlag, { Silent = true })
+        owner.invulnerableFlags = hero.InvulnerableFlags
+      end
+      if not owns("GetPlayerGameplayElapsedTimeMultiplier") then
+        installHook("GetPlayerGameplayElapsedTimeMultiplier", function(original, ...)
+          if owner == nil or type(SessionState.PlayerGameplaySlows) ~= "table" then return original(...) end
+          -- Keep Chronos' native ledger, enemy slow, phase cleanup and visuals.
+          -- Only its hostile player contribution is excluded from this query.
+          local result = 1
+          for name, data in pairs(SessionState.PlayerGameplaySlows) do
+            if name ~= "ChronosTimeSlow" then result = math.min(result, data.Amount) end
+          end
+          return result
+        end)
+        refreshPlayerTime(hero)
+      end
+    end
+    return { install = install, release = release, supported = supported, active = active }
+  end)()
+  local function installInvincibility()
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
     if M.invincibilityHitHero ~= hero or not M.invincibilityHitBaselineKnown then
@@ -6944,17 +7019,7 @@ if __MacGamingTrainerV1 == nil then
       M.invincibilityHitBaseline = hero.Hits
       M.invincibilityHitBaselineKnown = true
     end
-    if M.invincibilityEffectBlockHero ~= hero then
-      for _, effectName in ipairs(invincibilityBlockedEffects) do
-        AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
-        ClearEffect({ Id = hero.ObjectId, Name = effectName })
-      end
-      M.invincibilityEffectBlockHero = hero
-    end
-    if M.invincibilityHero ~= hero or not (type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]) then
-      SetUnitInvulnerable(hero, trainerInvincibilityFlag, { Silent = true })
-      M.invincibilityHero = hero
-    end
+    invincibilityProtection.install(hero)
     M.invincibility = true
   end
   local function installHealth()
@@ -7555,8 +7620,8 @@ if __MacGamingTrainerV1 == nil then
   featureRegistry = {
     invincibility = {
       install = installInvincibility, release = releaseInvincibility,
-      support = function() return type(Damage) == "function" and type(SetUnitInvulnerable) == "function" and type(SetUnitVulnerable) == "function" end,
-      active = function(hero) return M.invincibility and owns("Damage") and M.invincibilityHero == hero and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag] end,
+      support = invincibilityProtection.supported,
+      active = function(hero) return M.invincibility and owns("Damage") and invincibilityProtection.active(hero) end,
     },
     infiniteHealth = {
       install = installHealth, release = releaseHealth,
