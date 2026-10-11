@@ -16,11 +16,13 @@ from .schema import (
     MAX_AMOUNT,
     MULTIPLIERS,
     NEXT_ROOM_REWARD_MAX_LENGTH,
+    NEXT_OCCURRENCE_MAX_LENGTH,
     STAT_RULES,
     TOGGLES,
     default_boon_rarity,
     desired_feature_defaults,
     is_valid_next_room_reward,
+    is_valid_next_occurrence_target,
     normalize_desired_feature_value,
     normalize_gathering_probabilities,
     normalize_chaos_gate_probability,
@@ -39,7 +41,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 8
+DESIRED_STATE_SCHEMA_VERSION = 9
 
 
 def _finite_number(value):
@@ -176,6 +178,9 @@ def normalize_persisted_desired(raw, schema_version):
         migrated.pop('chaosGateProbability',None)
     if schema_version < 8 and isinstance(migrated,dict):
         migrated.pop('forceEnableRerolls',None)
+    if schema_version < 9 and isinstance(migrated,dict):
+        migrated.pop('nextOccurrenceTarget',None)
+        migrated.pop('nextOccurrenceToken',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
@@ -190,7 +195,7 @@ class Hades2PreferenceStore:
         values=desired_feature_defaults()
         values.update(
             boonRarity=default_boon_rarity(),
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,gatheringProbabilities={},chaosGateProbability=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,nextOccurrenceTarget=None,nextOccurrenceToken=None,gatheringProbabilities={},chaosGateProbability=None,
         )
         return values
 
@@ -222,6 +227,12 @@ class Hades2PreferenceStore:
         token=raw.get('nextRoomRewardToken')
         if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
             result['nextRoomRewardToken']=token
+        occurrence=raw.get('nextOccurrenceTarget')
+        if is_valid_next_occurrence_target(occurrence):
+            result['nextOccurrenceTarget']=occurrence
+        occurrence_token=raw.get('nextOccurrenceToken')
+        if result['nextOccurrenceTarget'] is not None and isinstance(occurrence_token,str) and 0<len(occurrence_token)<=NEXT_OCCURRENCE_MAX_LENGTH:
+            result['nextOccurrenceToken']=occurrence_token
         return result
 
     def load(self):
