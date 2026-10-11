@@ -325,7 +325,10 @@ else:
                     'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
                 },
             },
-            'artifact': {'file': 'TestTrainer.zip', 'sha256': 'a' * 64},
+            'artifact': {
+                'file': self.artifact.name,
+                'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
+            },
             'origin': 'github',
             'workflow': {'name': 'Build 2 macOS', 'eventName': 'workflow_dispatch'},
             'moduleId': 'hades2',
@@ -337,6 +340,7 @@ else:
             return subprocess.run([
                 sys.executable, str(VERIFY_SCRIPT),
                 '--provenance', str(provenance),
+                '--artifact', str(self.artifact),
                 '--repo-root', str(self.root),
                 '--expected-source-sha', actual,
                 '--module-id', 'hades2',
@@ -368,6 +372,12 @@ else:
         rejected = verify(wrong_workflow)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn('workflow source', rejected.stderr)
+
+        wrong_artifact = json.loads(json.dumps(manifest))
+        wrong_artifact['artifact']['sha256'] = 'd' * 64
+        rejected = verify(wrong_artifact)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('artifact SHA-256', rejected.stderr)
 
     def test_workflow_dispatch_does_not_invent_pull_request(self):
         event_path = Path(self.temporary.name) / 'dispatch.json'
