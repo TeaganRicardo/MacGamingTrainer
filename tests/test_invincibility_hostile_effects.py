@@ -22,13 +22,33 @@ end
 CurrentRun = { Hero = hero(1), CurrentRoom = {}, NumRerolls = 0, PickedTraits = {}, BannedTraits = {} }
 local units = { [1] = CurrentRun.Hero }
 local blocks, effects, forceImmune, playerTime = {}, {}, {}, {}
-local function count(id, name) return blocks[id] and blocks[id][name] or 0 end
+local unitTokens = { [1] = {} }
+local function count(id, name) return blocks[id] and blocks[id][name] and 1 or 0 end
 AddEffectBlock = function(args)
   blocks[args.Id] = blocks[args.Id] or {}
-  blocks[args.Id][args.Name] = count(args.Id, args.Name) + 1
+  blocks[args.Id][args.Name] = true
+  return args
 end
 RemoveEffectBlock = function(args)
-  blocks[args.Id][args.Name] = math.max(0, count(args.Id, args.Name) - 1)
+  if args.All ~= true and not (type(args.All) == 'string' and string.lower(args.All) == 'true')
+      and args.Name and blocks[args.Id] then blocks[args.Id][args.Name] = nil end
+  return args
+end
+__MGTHadesNativeV1 = {
+  abi = 1,
+  unitIdentity = function(id) return unitTokens[id] end,
+  snapshotEffectBlocks = function(id)
+    if not unitTokens[id] then return nil, 'unit unavailable' end
+    local snapshot = { objectId = id, unitToken = unitTokens[id], blocked = {} }
+    for name, blocked in pairs(blocks[id] or {}) do snapshot.blocked[name] = blocked end
+    return snapshot
+  end,
+}
+SetupHeroObject = function()
+  local unit = CurrentRun.Hero
+  units[unit.ObjectId] = unit; unitTokens[unit.ObjectId] = {}
+  blocks[unit.ObjectId] = {}; forceImmune[unit.ObjectId] = false
+  unit.InvulnerableFlags = {}; unit.ImmuneToForceFlags = {}
 end
 ClearEffect = function(args)
   if effects[args.Id] then effects[args.Id][args.Name] = nil end
@@ -177,14 +197,17 @@ assert(playerTime[1] == 1, 'disable resurrected a finished Chronos slow')
     "lifecycle": r'''
 AddEffectBlock({ Id = 1, Name = 'StasisStun' }); AddPlayerImmuneToForce('NativeSkill')
 enable(true); enable(true)
-assert(count(1, 'StasisStun') == 2, 'repeat enable leaked an effect lease')
+assert(count(1, 'StasisStun') == 1, 'repeat enable changed native set membership')
 enable(false)
 assert(count(1, 'StasisStun') == 1 and forceImmune[1], 'disable removed native protection')
 RemovePlayerImmuneToForce('NativeSkill'); RemoveEffectBlock({ Id = 1, Name = 'StasisStun' })
 enable(true)
 local old = CurrentRun.Hero
+-- Native World disposal removes its units before the replacement world is
+-- observed. Retained Lua Hero tables are not retained native Unit objects.
+units[1] = nil; unitTokens[1] = nil; blocks[1] = nil; forceImmune[1] = nil
 CurrentRun = { Hero = hero(2), CurrentRoom = {}, NumRerolls = 0, PickedTraits = {}, BannedTraits = {} }
-units[2] = CurrentRun.Hero
+units[2] = CurrentRun.Hero; unitTokens[2] = {}
 local state = M.dispatch('status', { includeCatalogs = false })
 assert(state.activeFeatures.invincibility, 'Hero replacement lost durable intent')
 assert(count(1, 'StasisStun') == 0 and not next(old.ImmuneToForceFlags), 'old owner retained protection')
@@ -214,12 +237,12 @@ end
     "reused_hero_id": r'''
 enable(true)
 local old = CurrentRun.Hero
-CurrentRun.Hero = hero(1); units[1] = CurrentRun.Hero
+CurrentRun.Hero = hero(1); units[1] = CurrentRun.Hero; unitTokens[1] = {}
 -- The engine has reset the unit and a native skill owns the new unit's block.
 blocks[1] = {}; forceImmune[1] = false
 AddEffectBlock({ Id = 1, Name = 'StasisStun' }); AddPlayerImmuneToForce('NativeSkill')
 M.dispatch('status', { includeCatalogs = false })
-assert(count(1, 'StasisStun') == 2, 'old owner removed a replacement native block')
+assert(count(1, 'StasisStun') == 1, 'old owner removed a replacement native block')
 assert(not next(old.ImmuneToForceFlags), 'old Hero retained the Trainer flag')
 enable(false)
 assert(count(1, 'StasisStun') == 1 and forceImmune[1], 'disable removed replacement native protection')
@@ -230,6 +253,120 @@ local replacement = function() return 0.7 end
 GetPlayerGameplayElapsedTimeMultiplier = replacement
 enable(false)
 assert(GetPlayerGameplayElapsedTimeMultiplier == replacement, 'disable replaced a foreign time hook')
+''',
+    "native_set_intent": r'''
+AddEffectBlock({ Id = 1, Name = 'StasisStun' })
+enable(true)
+RemoveEffectBlock({ Id = 1, Name = 'StasisStun' })
+assert(count(1, 'StasisStun') == 1, 'native cleanup defeated Trainer protection')
+AddEffectBlock({ Id = 1, Name = 'Inked' })
+AddEffectBlock({ Id = 1, Name = 'Inked' })
+RemoveEffectBlock({ Id = 1, Name = 'Inked' })
+assert(count(1, 'Inked') == 1, 'delayed native remover defeated protection')
+AddEffectBlock({ Id = 1, Name = 'Rooted' })
+RemoveEffectBlock({ Id = 1, All = true })
+enable(false)
+assert(count(1, 'StasisStun') == 0 and count(1, 'Inked') == 0,
+  'disable resurrected a finished native block')
+assert(count(1, 'Rooted') == 1, 'disable erased a current native block')
+''',
+    "same_hero_rebinding": r'''
+enable(true)
+local oldFlags = CurrentRun.Hero.InvulnerableFlags
+CurrentRun.CurrentRoom = {}
+SetupHeroObject()
+AddEffectBlock({ Id = 1, Name = 'StasisStun' })
+AddPlayerImmuneToForce('NativeSkill')
+M.dispatch('status', { includeCatalogs = false })
+enable(false)
+assert(count(1, 'StasisStun') == 1 and forceImmune[1], 'old owner erased replacement protection')
+assert(not oldFlags.MacGamingTrainerInvincibility, 'old owner leaked its flag')
+''',
+    "sampling_events_and_flags": r'''
+AddEffectBlock({ Id = 1, Name = 'StasisStun' })
+local nativeSnapshot = __MGTHadesNativeV1.snapshotEffectBlocks
+__MGTHadesNativeV1.snapshotEffectBlocks = function(id)
+  local stale = nativeSnapshot(id)
+  -- Native query table allocation can run same-thread game finalizers after
+  -- the C collector read. These later native events supersede that snapshot.
+  RemoveEffectBlock({ Id = id, Name = 'StasisStun' })
+  AddEffectBlock({ Id = id, Name = 'Inked' })
+  CurrentRun.Hero.InvulnerableFlags = { NativeSkill = true }
+  CurrentRun.Hero.ImmuneToForceFlags = { NativeSkill = true }
+  return stale
+end
+enable(true); enable(false)
+assert(count(1, 'StasisStun') == 0 and count(1, 'Inked') == 1, 'sampling lost last native events')
+assert(CurrentRun.Hero.InvulnerableFlags.NativeSkill and CurrentRun.Hero.ImmuneToForceFlags.NativeSkill,
+  'sampling restored stale flag owners')
+''',
+    "sampling_failure": r'''
+local add, remove, setup = AddEffectBlock, RemoveEffectBlock, SetupHeroObject
+__MGTHadesNativeV1.snapshotEffectBlocks = function(id)
+  AddEffectBlock({ Id = id, Name = 'Inked' })
+  return nil, 'unreadable block set'
+end
+assert(not pcall(enable, true), 'unreadable snapshot was treated as empty')
+assert(not M.terminalActionUnknown, 'read failure before Trainer writes closed trust')
+assert(AddEffectBlock == add and RemoveEffectBlock == remove and SetupHeroObject == setup,
+  'failed sampling retained temporary interception')
+assert(count(1, 'Inked') == 1 and count(1, 'StasisStun') == 0,
+  'failed sampling rewrote native membership')
+assert(not next(CurrentRun.Hero.InvulnerableFlags) and not next(CurrentRun.Hero.ImmuneToForceFlags))
+''',
+    "native_returns_and_all": r'''
+enable(true)
+local add = { Id = 1, Name = 'Inked', All = true }
+local all = { Id = 1, Name = 'Inked', All = 'TrUe' }
+assert(AddEffectBlock(add) == add and RemoveEffectBlock(all) == all, 'native args-table result changed')
+local remove = { Id = 1, Name = 'StasisStun', All = 1 }
+assert(RemoveEffectBlock(remove) == remove, 'suppressed native remove lost its result')
+enable(false)
+assert(count(1, 'Inked') == 1 and count(1, 'StasisStun') == 0,
+  'All was confused with named-set membership')
+''',
+    "world_change_during_native_write": r'''
+local add = AddEffectBlock
+AddEffectBlock = function(args)
+  add(args)
+  CurrentRun.CurrentRoom = {}
+end
+local ok, message = pcall(enable, true)
+assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN:', 1, true),
+  'native write followed a changed world and reported success')
+assert(M.terminalActionUnknown)
+assert(count(1, 'StasisStun') == 0, 'later Trainer writes crossed the changed owner')
+''',
+    "partial_install_unknown": r'''
+SetUnitInvulnerable = function(unit, flag)
+  unit.InvulnerableFlags[flag] = true
+  error('after invulnerability mutation')
+end
+local ok, message = pcall(enable, true)
+assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN:', 1, true),
+  'partial installation did not surface uncertainty')
+assert(M.terminalActionUnknown, 'partial installation retained mutation trust')
+assert(next(CurrentRun.Hero.InvulnerableFlags), 'partial owner evidence was discarded')
+local before = count(1, 'StasisStun')
+assert(not pcall(enable, false), 'uncertain operation was automatically retried')
+assert(count(1, 'StasisStun') == before, 'uncertain cleanup changed native membership')
+local args = { Id = 1, Name = 'Inked' }
+assert(AddEffectBlock(args) == args, 'Trainer taint stopped an ordinary game Add')
+SetupHeroObject()
+assert(not next(CurrentRun.Hero.InvulnerableFlags), 'Trainer taint stopped ordinary Hero setup')
+''',
+    "partial_release_unknown": r'''
+enable(true)
+local nativeProperty = SetThingProperty
+SetThingProperty = function(args)
+  nativeProperty(args)
+  if args.Property == 'ImmuneToForce' and not args.Value then error('after force mutation') end
+end
+local ok, message = pcall(enable, false)
+assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN:', 1, true),
+  'partial release reported success')
+assert(M.terminalActionUnknown, 'partial release retained mutation trust')
+assert(not pcall(enable, false), 'partial release was blindly retried')
 ''',
 }
 with tempfile.TemporaryDirectory(prefix="mgt-invincibility-") as temporary:

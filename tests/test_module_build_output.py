@@ -58,6 +58,10 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     games.mkdir(parents=True)
     (resources / 'Backend/games/__init__.py').write_text('')
     (games / 'module.json').write_text(MANIFEST_PATH.read_text())
+    for library in MANIFEST.get('nativeLibraries', []):
+        native = games / 'native' / library['filename']
+        native.parent.mkdir(exist_ok=True)
+        native.write_bytes(b'temporary native library fixture')
     (resources / 'ACTIVE_GAME_ID').write_text('hades2\n')
     info = {
         'CFBundleIdentifier': MANIFEST['app']['bundleIdentifier'],
@@ -87,6 +91,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     command = [sys.executable, str(VERIFY), 'hades2', '--dist-dir', str(dist), '--print-app']
     selected = subprocess.check_output(command, text=True).strip()
     assert selected == str(app.resolve()), selected
+
+    for library in MANIFEST.get('nativeLibraries', []):
+        native = games / 'native' / library['filename']
+        native.unlink()
+        refused = subprocess.run(command, text=True, capture_output=True)
+        assert refused.returncode != 0 and 'native library' in refused.stderr
+        native.write_bytes(b'temporary native library fixture')
 
     # python-build-standalone exposes python3 as an in-tree symlink to the
     # versioned interpreter. That is safe only while the resolved target stays

@@ -6928,86 +6928,233 @@ if __MacGamingTrainerV1 == nil then
       "Damage", "SetUnitInvulnerable", "SetUnitVulnerable",
       "AddEffectBlock", "RemoveEffectBlock", "ClearEffect",
       "AddPlayerImmuneToForce", "RemovePlayerImmuneToForce", "SetThingProperty",
-      "GetPlayerGameplayElapsedTimeMultiplier",
+      "GetPlayerGameplayElapsedTimeMultiplier", "SetupHeroObject",
     }
     local owner
     local function supported()
       for _, name in ipairs(required) do if type(_G[name]) ~= "function" then return false end end
-      return true
+      local native = __MGTHadesNativeV1
+      return type(native) == "table" and native.abi == 1 and type(native.snapshotEffectBlocks) == "function"
+        and type(native.unitIdentity) == "function"
     end
-    local function refreshPlayerTime(hero)
-      SetThingProperty({ DestinationId = hero.ObjectId, Property = "ElapsedTimeMultiplier",
-        Value = GetPlayerGameplayElapsedTimeMultiplier(), ValueChangeType = "Absolute", DataValue = false })
+    local function identity(record)
+      local ok, token, message = pcall(record.native.unitIdentity, record.objectId)
+      if not ok or message ~= nil then
+        message = not ok and token or message
+        if record.phase ~= "sampling" then message = nativeOperations.taint(message) end
+        error(message)
+      end
+      return token
+    end
+    local function sameFrame(record)
+      return record.session == SessionState and record.run == CurrentRun
+        and record.room == (CurrentRun and CurrentRun.CurrentRoom)
+        and record.hero == (CurrentRun and CurrentRun.Hero)
+        and record.hero.ObjectId == record.objectId
     end
     local function active(hero)
-      return owner ~= nil and owner.hero == hero and owner.session == SessionState
+      return owner ~= nil and owner.phase == "protected" and owner.hero == hero and sameFrame(owner)
+        and identity(owner) == owner.unitToken
         and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
         and type(hero.ImmuneToForceFlags) == "table" and hero.ImmuneToForceFlags[trainerInvincibilityFlag]
+        and hero.InvulnerableFlags == owner.invulnerableFlags and hero.ImmuneToForceFlags == owner.forceFlags
+        and owns("AddEffectBlock") and owns("RemoveEffectBlock") and owns("SetupHeroObject")
         and owns("GetPlayerGameplayElapsedTimeMultiplier")
+    end
+    local function mutation(work)
+      local ok, message = nativeOperations.run(nil, "completed", work)
+      if not ok then error(message) end
+    end
+    local function enter(record, operation)
+      if owner ~= record or not sameFrame(record) or identity(record) ~= record.unitToken
+          or record.phase ~= "releasing" and (record.hero.InvulnerableFlags ~= record.invulnerableFlags
+            or record.hero.ImmuneToForceFlags ~= record.forceFlags)
+          or not owns("AddEffectBlock") or not owns("RemoveEffectBlock") or not owns("SetupHeroObject") then
+        error("Invincibility owner changed before native mutation")
+      end
+      operation.enter()
+    end
+    local function refreshPlayerTime(record, operation)
+      record.timeArgs.Value = GetPlayerGameplayElapsedTimeMultiplier()
+      enter(record, operation)
+      SetThingProperty(record.timeArgs)
+    end
+    local function releaseHooks()
+      releaseHook("AddEffectBlock")
+      releaseHook("RemoveEffectBlock")
+      releaseHook("SetupHeroObject")
+      releaseHook("GetPlayerGameplayElapsedTimeMultiplier")
     end
     local function release()
       local previous = owner
-      owner = nil
-      releaseHook("GetPlayerGameplayElapsedTimeMultiplier")
       if previous == nil then return end
-      local hero = previous.hero
-      -- Hades can reuse ObjectId 1 for a replacement Hero. Never remove that
-      -- replacement's native blocks or write its force/time properties.
-      local currentHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
-      local sameObject = previous.session == SessionState
-        and (hero == currentHero or (currentHero and hero.ObjectId ~= currentHero.ObjectId))
-      if sameObject then
-        for _, effectName in ipairs(previous.effects) do
-          pcall(RemoveEffectBlock, { Id = hero.ObjectId, Name = effectName })
-        end
+      if M.terminalActionUnknown then error("MGT_OUTCOME_UNKNOWN: Protection ownership is uncertain; do not retry") end
+      if previous.phase == "sampling" then
+        releaseHooks()
+        owner = nil
+        return
       end
-      if previous.invulnerableFlags and previous.invulnerableFlags[trainerInvincibilityFlag] then
-        if sameObject and hero.InvulnerableFlags == previous.invulnerableFlags then
-          pcall(SetUnitVulnerable, hero, trainerInvincibilityFlag)
-        else
+      if not owns("AddEffectBlock") or not owns("RemoveEffectBlock") then
+        error(nativeOperations.taint("Native effect-block tracking was replaced"))
+      end
+      -- A room/setup generation is part of identity: the allocator may reuse
+      -- both ObjectId and Unit*. Never tear an old lease down against that unit.
+      local sameUnit = sameFrame(previous) and identity(previous) == previous.unitToken
+      if sameUnit then
+        mutation(function(operation)
+          previous.phase = "releasing"
+          for _, slot in ipairs(previous.slots) do
+            enter(previous, operation)
+            if slot.present then previous.add(slot.args) else previous.remove(slot.args) end
+            slot.held = false
+          end
+          if previous.invulnerabilityAcquired then
+            if previous.hero.InvulnerableFlags == previous.invulnerableFlags then
+              enter(previous, operation)
+              SetUnitVulnerable(previous.hero, trainerInvincibilityFlag)
+            else previous.invulnerableFlags[trainerInvincibilityFlag] = nil end
+          end
+          if previous.forceAcquired then
+            enter(previous, operation)
+            previous.forceFlags[trainerInvincibilityFlag] = previous.forceBaseline
+            if previous.hero.ImmuneToForceFlags == previous.forceFlags and next(previous.forceFlags) == nil then
+              SetThingProperty(previous.forceArgs)
+            end
+          end
+          releaseHook("GetPlayerGameplayElapsedTimeMultiplier")
+          refreshPlayerTime(previous, operation)
+        end)
+      else
+        -- Only the captured Lua records survive their native unit's lifetime.
+        -- Clearing them does not address the replacement unit or its new flags.
+        if previous.invulnerabilityAcquired then
           previous.invulnerableFlags[trainerInvincibilityFlag] = nil
         end
+        if previous.forceAcquired then previous.forceFlags[trainerInvincibilityFlag] = previous.forceBaseline end
       end
-      local flags = previous.forceFlags
-      if flags[trainerInvincibilityFlag] then
-        flags[trainerInvincibilityFlag] = nil
-        if sameObject and hero.ImmuneToForceFlags == flags and next(flags) == nil then
-          pcall(SetThingProperty, { DestinationId = hero.ObjectId, Property = "ImmuneToForce", Value = false })
-        end
-      end
-      if hero == currentHero and previous.session == SessionState then pcall(refreshPlayerTime, hero) end
+      releaseHooks()
+      owner = nil
     end
     local function install(hero)
       requireFunctions("invincibility", required)
-      if type(hero.ImmuneToForceFlags) ~= "table" then error("Unsupported invincibility: force owner unavailable") end
-      if owner == nil then
-        owner = { hero = hero, session = SessionState, effects = {}, forceFlags = hero.ImmuneToForceFlags }
-        for _, effectName in ipairs(blockedEffects) do
-          AddEffectBlock({ Id = hero.ObjectId, Name = effectName })
-          owner.effects[#owner.effects + 1] = effectName
-          ClearEffect({ Id = hero.ObjectId, Name = effectName })
+      if owner ~= nil and active(hero) then return end
+      if owner ~= nil then release() end
+      if not supported() then error("Unsupported invincibility: native effect-block query unavailable") end
+      if type(hero.ImmuneToForceFlags) ~= "table" or type(hero.InvulnerableFlags) ~= "table" then
+        error("Unsupported invincibility: native protection flags unavailable")
+      end
+      local record = { hero = hero, objectId = hero.ObjectId, session = SessionState,
+        run = CurrentRun, room = CurrentRun.CurrentRoom, native = __MGTHadesNativeV1,
+        slots = {}, names = {}, phase = "sampling", unitToken = false,
+        invulnerableFlags = false, forceFlags = false, forceBaseline = false,
+        invulnerabilityAcquired = false, forceAcquired = false,
+        add = AddEffectBlock, remove = RemoveEffectBlock,
+        forceArgs = { DestinationId = hero.ObjectId, Property = "ImmuneToForce", Value = false },
+        timeArgs = { DestinationId = hero.ObjectId, Property = "ElapsedTimeMultiplier",
+          Value = 1, ValueChangeType = "Absolute", DataValue = false }, silent = { Silent = true } }
+      record.unitToken = identity(record)
+      if record.unitToken == nil then error("Unsupported invincibility: native Hero unavailable") end
+      -- Preallocate the event slots before interception. Sampling updates must
+      -- not allocate and trigger a nested finalizer that reverses event order.
+      for _, name in ipairs(blockedEffects) do
+        local slot = { name = name, seen = false, present = false, held = false,
+          args = { Id = record.objectId, Name = name } }
+        record.slots[#record.slots + 1] = slot
+        record.names[name] = slot
+      end
+      owner = record
+      local function tracked(args)
+        return owner == record and sameFrame(record) and type(args) == "table"
+          and args.Id == record.objectId and type(args.Name) == "string"
+          and not (tonumber(args.Delay) and tonumber(args.Delay) > 0)
+          and not (tonumber(args.MaxInterval) and tonumber(args.MaxInterval) > 0)
+          and record.names[args.Name]
+      end
+      -- The supported content uses synchronous scalar Id/Name calls. Other
+      -- native shapes remain untouched; native scheduled actions cannot be
+      -- represented by inventing a Lua timer or a reference count.
+      installHook("AddEffectBlock", function(original, args, ...)
+        local slot = tracked(args)
+        if not slot then return original(args, ...) end
+        -- Preserve normal game calls even if Trainer's own mutation trust is
+        -- closed. Native calls precede the nonallocating last-intent update.
+        local ok, result = pcall(original, args, ...)
+        if not ok then
+          if record.phase ~= "sampling" then result = nativeOperations.taint(result) end
+          error(result)
         end
+        slot.present, slot.seen = true, true
+        return result
+      end)
+      installHook("RemoveEffectBlock", function(original, args, ...)
+        -- All clears a separate native byte; it never clears named blocks.
+        if type(args) == "table" and (args.All == true
+            or type(args.All) == "string" and string.lower(args.All) == "true") then
+          return original(args, ...)
+        end
+        local slot = tracked(args)
+        if not slot then return original(args, ...) end
+        local result = args
+        if not slot.held then result = original(args, ...) end
+        slot.present, slot.seen = false, true
+        return result
+      end)
+      installHook("SetupHeroObject", function(original, ...)
+        if M.terminalActionUnknown then return original(...) end
+        -- SetupHeroObject rebinds the same Lua Hero and resets its flag tables.
+        -- Retire the old generation before any new unit setup is observed.
+        releaseInvincibility()
+        return original(...)
+      end)
+      local snapshot, message = record.native.snapshotEffectBlocks(record.objectId)
+      if type(snapshot) ~= "table" then error(message or "Native effect-block snapshot unavailable") end
+      if owner ~= record or not sameFrame(record) or identity(record) ~= record.unitToken
+          or snapshot.unitToken ~= record.unitToken or snapshot.objectId ~= record.objectId
+          or type(snapshot.blocked) ~= "table" or not owns("AddEffectBlock") or not owns("RemoveEffectBlock") then
+        error("Hero changed while sampling native effect blocks")
       end
-      if not hero.ImmuneToForceFlags[trainerInvincibilityFlag] then
-        AddPlayerImmuneToForce(trainerInvincibilityFlag)
+      for _, slot in ipairs(record.slots) do
+        if not slot.seen then slot.present = not not snapshot.blocked[slot.name] end
       end
-      if type(hero.InvulnerableFlags) ~= "table" or not hero.InvulnerableFlags[trainerInvincibilityFlag] then
-        SetUnitInvulnerable(hero, trainerInvincibilityFlag, { Silent = true })
-        owner.invulnerableFlags = hero.InvulnerableFlags
-      end
-      if not owns("GetPlayerGameplayElapsedTimeMultiplier") then
+      -- Query table construction may run game finalizers. Capture the flag
+      -- owners only after sampling, immediately before Trainer's first write.
+      mutation(function(operation)
+        -- nativeOperations allocates its frame/closures before invoking work;
+        -- a finalizer there is still sampling and must enter the baseline.
+        record.invulnerableFlags, record.forceFlags = hero.InvulnerableFlags, hero.ImmuneToForceFlags
+        if type(record.invulnerableFlags) ~= "table" or type(record.forceFlags) ~= "table" then
+          error("Hero protection flags changed while sampling")
+        end
+        record.forceBaseline = record.forceFlags[trainerInvincibilityFlag]
+        for _, slot in ipairs(record.slots) do
+          enter(record, operation)
+          record.phase = "protected"
+          slot.held = true
+          record.add(slot.args)
+          enter(record, operation)
+          ClearEffect(slot.args)
+        end
+        if not record.forceFlags[trainerInvincibilityFlag] then
+          record.forceAcquired = true
+          enter(record, operation)
+          AddPlayerImmuneToForce(trainerInvincibilityFlag)
+        end
+        if not record.invulnerableFlags[trainerInvincibilityFlag] then
+          record.invulnerabilityAcquired = true
+          enter(record, operation)
+          SetUnitInvulnerable(hero, trainerInvincibilityFlag, record.silent)
+        end
         installHook("GetPlayerGameplayElapsedTimeMultiplier", function(original, ...)
-          if owner == nil or type(SessionState.PlayerGameplaySlows) ~= "table" then return original(...) end
-          -- Keep Chronos' native ledger, enemy slow, phase cleanup and visuals.
-          -- Only its hostile player contribution is excluded from this query.
+          if owner ~= record or not sameFrame(record)
+              or type(SessionState.PlayerGameplaySlows) ~= "table" then return original(...) end
           local result = 1
           for name, data in pairs(SessionState.PlayerGameplaySlows) do
             if name ~= "ChronosTimeSlow" then result = math.min(result, data.Amount) end
           end
           return result
         end)
-        refreshPlayerTime(hero)
-      end
+        refreshPlayerTime(record, operation)
+      end)
     end
     return { install = install, release = release, supported = supported, active = active }
   end)()
@@ -8766,6 +8913,7 @@ if __MacGamingTrainerV1 == nil then
       end
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
+        if M.terminalActionUnknown then error(message) end
         M.desiredFeatures[feature] = previous
         M.featureErrors[feature] = nil
         if feature == "moneyMultiplierEnabled" or feature == "resourceMultiplierEnabled" then M.featureErrors.economy = nil end

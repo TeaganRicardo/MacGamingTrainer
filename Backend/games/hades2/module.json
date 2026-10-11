@@ -25,6 +25,12 @@
     "previousRevisionPattern": "previousModule\\.revision\\s*~=\\s*(\\d+)",
     "moduleRevisionPattern": "version\\s*=\\s*1\\s*,\\s*revision\\s*=\\s*(\\d+)"
   },
+  "nativeLibraries": [
+    {
+      "source": "native/EffectBlockQuery.c",
+      "filename": "libMGTNativeEffectQuery.dylib"
+    }
+  ],
   "app": {
     "bundleIdentifier": "com.gao.macgamingtrainer",
     "displayName": "Mac Gaming Trainer"
