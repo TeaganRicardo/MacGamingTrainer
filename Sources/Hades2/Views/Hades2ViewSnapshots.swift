@@ -32,6 +32,7 @@ struct Hades2ViewStatSnapshot: Equatable {
 struct Hades2ViewConfigSnapshot: Equatable {
     let boonRarityMultiplier: Double
     let nextRoomReward: String?
+    let nextOccurrenceTarget: String?
     let elements: [ElementCount]
     let damageMultiplier: Double
     let moneyMultiplier: Double
@@ -41,6 +42,7 @@ struct Hades2ViewConfigSnapshot: Equatable {
 
 struct Hades2ViewCatalogSnapshot: Equatable {
     let materialID: String?
+    let occurrenceTargetIDs: [String]
     let olympianIDs: [String]
     let pickupIDs: [String]
     let specialIDs: [String]
