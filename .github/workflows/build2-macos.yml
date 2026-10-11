@@ -183,6 +183,7 @@ jobs:
           (cd artifacts && shasum -a 256 -c "$sidecar")
           python3 Tools/verify_build_provenance.py \
             --provenance "$provenance" \
+            --artifact "artifacts/${{ steps.package.outputs.artifact_name }}" \
             --repo-root "$GITHUB_WORKSPACE" \
             --expected-source-sha "${{ steps.version.outputs.source_sha }}" \
             --module-id hades2 \
