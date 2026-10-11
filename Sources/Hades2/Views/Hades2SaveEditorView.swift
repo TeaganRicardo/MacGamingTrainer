@@ -509,10 +509,11 @@ struct Hades2SaveEditorView: View {
             .labelsHidden()
             .frame(maxWidth: 240, alignment: .leading)
         } else {
-            Hades2SaveEditorTextField(
-                model: model, entry: entry, text: draftBinding(for: entry),
-                title: text("hades2.saveEditor.value")
-            )
+            TrainerTextField(title: text("hades2.saveEditor.value"), text: draftBinding(for: entry), onCommit: { edit in
+                model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
+            })
+            .id(entry.id)
+            .disabled(model.busy)
             .frame(maxWidth: 240, alignment: .leading)
         }
     }

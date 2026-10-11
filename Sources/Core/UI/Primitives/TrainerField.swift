@@ -7,10 +7,10 @@ struct TrainerNumberField: View {
     let width: CGFloat
     let enabled: Bool
     let alignment: TextAlignment
-    let onCommit: (String) -> String
+    let onCommit: (TrainerTextField.Completion) -> String
     let onEditingChanged: (Bool) -> Void
 
-    init(text: Binding<String>, placeholder: String = "host.value", width: CGFloat = 90, enabled: Bool = true, alignment: TextAlignment = .center, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping (String) -> String = { $0 }) {
+    init(text: Binding<String>, placeholder: String = "host.value", width: CGFloat = 90, enabled: Bool = true, alignment: TextAlignment = .center, onEditingChanged: @escaping (Bool) -> Void = { _ in }, onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }) {
         self._text = text
         self.placeholder = placeholder
         self.width = width

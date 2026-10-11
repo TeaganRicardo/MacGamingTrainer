@@ -221,7 +221,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
 
-    private let mutationScheduler = Hades2MutationScheduler()
     private lazy var runLogWatcher = Hades2RunLogWatcher(directoryURL: runLogDirectoryURL) { [weak self] event in
         self?.handleRunLogEvent(event)
     }
@@ -385,7 +384,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             pendingRunReadySignal = false
             launchAttachGate.observeRuntimeReset()
             guard connected else { return }
-            invalidatePendingMutations()
+            invalidateTextEdits()
             status = "waiting"
             scene = event == .mainMenu ? "main_menu" : "loading"
             activeFeatures = [:]
@@ -467,7 +466,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func restartBackend() {
         guard !exiting else { return }
-        invalidatePendingMutations()
+        invalidateTextEdits()
         error = ""
         errorToken = nil
         notice = ""
@@ -517,7 +516,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         activationGraceWorkItems.values.forEach { $0.cancel() }
         activationGraceWorkItems = [:]
         activationGraceFeatures = []
-        invalidatePendingMutations()
+        invalidateTextEdits()
         pendingRunReadySignal = false
         pid = nil
         // Empty means "not detected yet"; the connection detail resolves that as
@@ -582,8 +581,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let oldPID = pid
         let desiredBeforeApply = Dictionary(uniqueKeysWithValues: Hades2FeatureKey.allCases.map { ($0, desiredFeatureEnabled($0)) })
 
-        if let value = patch.connected, wasConnected && !value { invalidatePendingMutations() }
-        if patch.pid.isPresent, oldPID != patch.pid.value { invalidatePendingMutations() }
+        if let value = patch.connected, wasConnected && !value { invalidateTextEdits() }
+        if patch.pid.isPresent, oldPID != patch.pid.value { invalidateTextEdits() }
         if let value = patch.connected { connected = value }
         if patch.pid.isPresent { pid = patch.pid.value }
         if let value = patch.version { version = value }
@@ -838,13 +837,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         TrainerTextToken(key: key, arguments: arguments)
     }
 
-    private func invalidatePendingMutations() {
-        mutationScheduler.invalidateAll()
+    private func invalidateTextEdits() {
         editGeneration &+= 1
-    }
-
-    private func flushPendingMutations() {
-        mutationScheduler.flushAll()
     }
 
     private func sendBarrier(
@@ -854,7 +848,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         announceSuccess: Bool = true,
         completion: ((Bool) -> Void)? = nil
     ) {
-        invalidatePendingMutations()
+        invalidateTextEdits()
         send(request, title: title, titleArguments: titleArguments, announceSuccess: announceSuccess, completion: completion)
     }
 
@@ -885,24 +879,15 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     // creates visible frame-time spikes. Runtime state is refreshed by user-driven
     // requests (and the explicit Refresh action) instead.
 
-    func enqueueMutation(
+    private func sendEdit(
         key: String,
         request: Hades2Request,
         title: String,
         titleArguments: [String] = [],
-        delay: TimeInterval = 0.35,
         completion: ((Bool) -> Void)? = nil
     ) {
-        mutationScheduler.schedule(key: key, delay: delay) { [weak self] in
-            self?.send(
-                request,
-                title: title,
-                titleArguments: titleArguments,
-                coalesceKey: key,
-                announceSuccess: false,
-                completion: completion
-            )
-        }
+        send(request, title: title, titleArguments: titleArguments,
+             coalesceKey: key, announceSuccess: false, completion: completion)
     }
 
     func feature(_ key: Hades2FeatureKey, value: Bool, completion: ((Bool) -> Void)? = nil) {
@@ -942,24 +927,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     /// Validation and runtime meaning stay with Hades; Core only owns completion.
     /// Invalid/unavailable edits restore the observed value and emit one notice.
-    func completeTextEdit(_ edit: Hades2RuntimeTextEdit, text: String, generation: UInt64) -> String {
+    func completeTextEdit(_ edit: Hades2RuntimeTextEdit, text: String, changed: Bool = true, generation: UInt64) -> String {
         var current: Double?
         var range = 0.0...999_999.0
         var integer = false
+        var localTarget = false
         var available = canSetResource
         var apply: (String) -> Void
         switch edit {
         case let .vital(vital, field):
             available = canSetVitals
             if vital == "health" { range = 1...999_999 }
-            switch (vital, field) {
-            case ("health", "current"): current = health
-            case ("health", "max"): current = maxHealth
-            case ("mana", "current"): current = mana
-            case ("mana", "max"): current = maxMana
-            case ("armor", "current"): current = armor
-            default: available = false
-            }
+            current = vitalValue(vital, field: field)
+            available = available && current != nil
             apply = { self.setVital(vital, field: field, text: $0) }
         case let .resource(id):
             current = id == "Money" ? money : resources.first(where: { $0.id == id })?.count
@@ -986,6 +966,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 "chargeSpeed": chargeSpeedLocked, "moveSpeed": moveSpeedLocked, "sprintSpeed": sprintSpeedLocked,
                 "dashSpeed": dashSpeedLocked, "attackSpeed": attackSpeedLocked, "manaRegen": manaRegenLocked,
                 "enemyDamage": enemyDamageLocked, "enemyHealth": enemyHealthLocked]
+            localTarget = locks[id] != true
             // An unlocked stat remains a local target until its explicit lock action.
             apply = { if locks[id] == true { self.setStat(id, text: $0, locked: true) } }
         case let .counter(id):
@@ -1022,6 +1003,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         default: restored = canonical(current)
         }
         guard generation == editGeneration else { return restored }
+        guard changed else { return localTarget ? text : restored }
         guard available && !busy && protocolCompatible else {
             presentFeedback(presentation("hades2.input.unavailable"), tone: .warning)
             return restored
@@ -1039,21 +1021,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return normalized
     }
 
+    private func vitalValue(_ vital: String, field: String) -> Double? {
+        switch (vital, field) {
+        case ("health", "current"): return health
+        case ("health", "max"): return maxHealth
+        case ("mana", "current"): return mana
+        case ("mana", "max"): return maxMana
+        case ("armor", "current"): return armor
+        default: return nil
+        }
+    }
+
     func setVital(_ vital: String, field: String, text: String) {
         guard canSetVitals, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if vital == "health" && value < 1 { return }
-        let current: Double?
-        switch (vital, field) {
-        case ("health", "current"): current = health
-        case ("health", "max"): current = maxHealth
-        case ("mana", "current"): current = mana
-        case ("mana", "max"): current = maxMana
-        case ("armor", "current"): current = armor
-        default: return
-        }
-        if let current = current, abs(current - value) < 0.0001 { return }
+        guard let current = vitalValue(vital, field: field) else { return }
+        if abs(current - value) < 0.0001 { return }
         let titleKey = vital == "health" ? "hades2.vital.health" : (vital == "mana" ? "hades2.vital.mana" : "hades2.vital.armor")
-        enqueueMutation(
+        sendEdit(
             key: "vital.\(vital).\(field)",
             request: .setVital(vital: vital, field: field, value: value),
             title: "hades2.op.updateVital",
@@ -1073,7 +1058,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         else { current = resources.first(where: { $0.id == resource })?.count }
         guard resource == "Money" || resources.contains(where: { $0.id == resource }) else { return }
         if let current = current, Int(current.rounded()) == count { return }
-        enqueueMutation(key: "resource.\(resource)", request: .setResource(resource: resource, amount: count), title: "hades2.op.updateResource")
+        sendEdit(key: "resource.\(resource)", request: .setResource(resource: resource, amount: count), title: "hades2.op.updateResource")
     }
 
     func lockResource(_ resource: String, locked: Bool) {
@@ -1085,7 +1070,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setRerolls(_ amount: String) {
         guard canSetResource, let count = amountValue(amount) else { return }
         if let current = rerolls, Int(current.rounded()) == count { return }
-        enqueueMutation(key: "rerolls", request: .setRerolls(amount: count), title: "hades2.op.updateRerolls")
+        sendEdit(key: "rerolls", request: .setRerolls(amount: count), title: "hades2.op.updateRerolls")
     }
 
     func lockRerolls(_ locked: Bool) {
@@ -1102,14 +1087,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
         let value = custom ? Double(text) : nil
         guard gatheringProbabilities[family] != value else { return }
-        enqueueMutation(key: "gathering.\(family.rawValue)", request: .setGathering(family: family, probability: value), title: "hades2.gathering.apply")
+        sendEdit(key: "gathering.\(family.rawValue)", request: .setGathering(family: family, probability: value), title: "hades2.gathering.apply")
     }
 
     func setChaosGateProbability(custom: Bool, text: String) {
         guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
         let value = custom ? Double(text) : nil
         guard chaosGateProbability != value else { return }
-        enqueueMutation(key: "chaosGateProbability", request: .setChaosGate(probability: value), title: "hades2.chaosGate.apply")
+        sendEdit(key: "chaosGateProbability", request: .setChaosGate(probability: value), title: "hades2.chaosGate.apply")
     }
 
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
@@ -1124,20 +1109,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func setStat(_ stat: String, text: String, locked: Bool) {
         guard canSetStats, let rule = Self.statRules[stat], statSupport[stat] != false, statAvailable[stat] != false else { return }
         if !locked {
-            mutationScheduler.cancel(key: "stat.\(stat)")
             send(.setStat(stat: stat, locked: false, value: nil), title: "hades2.op.unlockStat")
             return
         }
         guard let value = Double(text), value.isFinite, (rule.min...rule.max).contains(value) else { return }
         if rule.integer && value.rounded() != value { return }
         let encodedValue: Any = rule.integer ? Int(value) : value
-        enqueueMutation(key: "stat.\(stat)", request: .setStat(stat: stat, locked: true, value: encodedValue), title: "hades2.op.updateStatLock")
+        sendEdit(key: "stat.\(stat)", request: .setStat(stat: stat, locked: true, value: encodedValue), title: "hades2.op.updateStatLock")
     }
 
     func setElement(_ element: String, text: String) {
         guard canSetElements, let amount = amountValue(text), elements.contains(where: { $0.id == element }) else { return }
         if let current = elements.first(where: { $0.id == element })?.count, Int(current.rounded()) == amount { return }
-        enqueueMutation(key: "element.\(element)", request: .setElement(element: element, amount: amount), title: "hades2.op.updateElement")
+        sendEdit(key: "element.\(element)", request: .setElement(element: element, amount: amount), title: "hades2.op.updateElement")
     }
 
     func lockElement(_ element: String, locked: Bool) {
@@ -1149,7 +1133,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard canEditDesired, ["Common", "Rare", "Epic", "Heroic"].contains(target),
               let value = Double(multiplier), value.isFinite, (0...1000).contains(value) else { return }
         boonRarityTarget = target; boonRarityMultiplier = value; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
-        enqueueMutation(
+        sendEdit(
             key: "boon.rarity",
             request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
             title: "hades2.op.updateBoonRarity",
@@ -1169,7 +1153,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func saveProfile(_ name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        flushPendingMutations()
         send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile")
     }
 
@@ -1322,13 +1305,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case "resourceMultiplier": resourceMultiplier = value
         default: break
         }
-        enqueueMutation(key: "feature.\(key)", request: .setDesired(feature: key, value: value), title: "hades2.op.updateMultiplier")
+        sendEdit(key: "feature.\(key)", request: .setDesired(feature: key, value: value), title: "hades2.op.updateMultiplier")
     }
 
     func setCounter(_ counter: String, text: String) {
         guard canSetVitals, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if counter == "spellCharge", let current = spellCharge, abs(current - value) < 0.0001 { return }
-        enqueueMutation(key: "counter.\(counter)", request: .setCounter(counter: counter, value: value), title: "hades2.op.updateCounter")
+        sendEdit(key: "counter.\(counter)", request: .setCounter(counter: counter, value: value), title: "hades2.op.updateCounter")
     }
 
     private func applyProfileShortcuts(_ values: [String: Any]) {
@@ -1478,7 +1461,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func prepareForTermination(completion: @escaping (Bool) -> Void) {
         guard !exiting else { completion(true); return }
         exiting = true
-        invalidatePendingMutations()
+        invalidateTextEdits()
         guard backendSession.isRunning else {
             finishExit(completion: completion)
             return
@@ -1501,7 +1484,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func finishExit(completion: @escaping (Bool) -> Void) {
-        invalidatePendingMutations()
+        invalidateTextEdits()
         shuttingDown = true
         backendSession.stop(suppressTerminationError: true)
         completion(true)

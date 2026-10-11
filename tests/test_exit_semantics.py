@@ -34,7 +34,7 @@ final class ExitHarness {
     var nextRoomReward: String?
     var healthLocked = false, manaLocked = false, armorLocked = false
     var failReset = false, failCleanup = false
-    func invalidatePendingMutations() {}
+    func invalidateTextEdits() {}
     func sendBarrier(_ command: Hades2Command, title: String, announceSuccess: Bool,
                      completion: @escaping (Bool) -> Void) {
         commands.append(command)

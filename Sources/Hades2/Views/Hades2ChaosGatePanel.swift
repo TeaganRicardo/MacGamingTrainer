@@ -25,7 +25,7 @@ struct Hades2ChaosGatePanel: View {
                         Text(text("hades2.gathering.custom")).tag(true)
                     }.frame(width: 240).disabled(!model.canEditDesired)
                     TrainerTextField(title: text("hades2.gathering.percent"), text: $percentage, onEditingChanged: { editing = $0 }, onCommit: { value in
-                            model.completeTextEdit(.chaosGate, text: value, generation: generation)
+                            model.completeTextEdit(.chaosGate, text: value.text, changed: value.changed, generation: generation)
                         })
                         .frame(width: 65)
                         .disabled(!model.canEditDesired || !custom)

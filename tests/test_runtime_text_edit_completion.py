@@ -64,7 +64,7 @@ func fields(_ view: NSView) -> [NSTextField] {
  (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
 }
 func edit(_ field: NSTextField, to draft: String, in window: NSWindow) -> NSTextView {
- check(window.makeFirstResponder(field), "could not focus text field")
+ if field.currentEditor() == nil { check(window.makeFirstResponder(field), "could not focus text field") }
  guard let editor=field.currentEditor() as? NSTextView else { fatalError("field editor missing") }
  editor.selectAll(nil); editor.insertText(draft, replacementRange: editor.selectedRange())
  return editor
@@ -90,7 +90,6 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
   window.contentView=host; host.layoutSubtreeIfNeeded(); pump(0.5)
   guard var money=fields(host).first(where:{$0.isEditable && $0.stringValue == "123"}) else { fatalError("money text field not found: \(fields(host).map(\.stringValue))") }
   check(window.makeFirstResponder(money), "could not focus money field"); pump()
-  guard let editor=money.currentEditor() as? NSTextView else { fatalError("field editor missing") }
   try? FileManager.default.removeItem(at:log)
   func commands(_ command: String? = nil) -> [[String:Any]] {
    let text=(try? String(contentsOf:log,encoding:.utf8)) ?? ""
@@ -101,6 +100,14 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
    wait("\(command) did not complete \(count) requests") { commands(command).count==count && !model.busy }
    pump()
   }
+  guard let untyped=money.currentEditor() as? NSTextView else { fatalError("focused field editor missing") }
+  model.money=777; pump()
+  check(untyped.string=="123" && mutations().isEmpty, "refresh overwrote a focused editor before the first keystroke")
+  window.makeFirstResponder(nil); pump()
+  check(money.stringValue=="777" && mutations().isEmpty, "unchanged completion did not restore the latest observation")
+  model.money=123; pump()
+  check(window.makeFirstResponder(money), "could not refocus after unchanged completion")
+  guard let editor=money.currentEditor() as? NSTextView else { fatalError("field editor missing") }
   for draft in ["4", "40", "400"] {
    editor.selectAll(nil); editor.insertText(draft, replacementRange:editor.selectedRange()); pump(0.45)
    check(mutations().isEmpty, "typing submitted a runtime mutation before completion")
@@ -110,10 +117,14 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
   check(mutations().count==1, "blur did not submit one changed value")
   let params=mutations()[0]["params"] as? [String:Any]
   check(params?["amount"] as? Int == 400, "blur submitted a partial draft")
+  check(model.money==400, "completed edit remained deferred")
+  _ = edit(money, to:"123", in:window)
+  window.makeFirstResponder(nil); waitForCommand("set_resource",count:2)
+  check(model.money==123, "latest completed intent lost the return to the initial value")
   _ = edit(money, to:"401", in:window)
   check(window.makeFirstResponder(nil), "could not finish quick edit")
-  waitForCommand("set_resource", count:2)
-  check((mutations()[1]["params"] as? [String:Any])?["amount"] as? Int == 401,
+  waitForCommand("set_resource", count:3)
+  check((mutations()[2]["params"] as? [String:Any])?["amount"] as? Int == 401,
         "quick focus/edit/blur lost the draft")
 
   // A marked composition remains a draft across a real model refresh. Return
@@ -124,21 +135,21 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
   composing.setMarkedText("4.", selectedRange:NSRange(location:2,length:0), replacementRange:composing.selectedRange())
   check(composing.hasMarkedText(), "native marked-text fixture did not start")
   model.money=777; pump(0.45)
-  check(composing.string=="4." && mutations().count==2, "refresh or composition submitted/overwrote the draft")
+  check(composing.string=="4." && mutations().count==3, "refresh or composition submitted/overwrote the draft")
   composing.insertText("402", replacementRange:NSRange(location:0,length:composing.string.utf16.count))
   composing.doCommand(by: #selector(NSResponder.insertNewline(_:)))
-  waitForCommand("set_resource", count:3)
+  waitForCommand("set_resource", count:4)
   check(money.currentEditor()==nil && model.money==402, "Return did not finish: editor=\(String(describing: money.currentEditor())) money=\(String(describing: model.money)) draft=\(money.stringValue) responder=\(String(describing: window.firstResponder))")
   window.makeFirstResponder(nil); pump(0.45)
-  check(mutations().count==3, "Return followed by blur submitted twice")
+  check(mutations().count==4, "Return followed by blur submitted twice")
 
   for invalid in ["", "-", ".", "abc", "3.5", "9999999", "nan", "inf"] {
    _ = edit(money, to:invalid, in:window); window.makeFirstResponder(nil); pump(0.45)
-   check(mutations().count==3 && money.stringValue=="402", "invalid draft was applied or not restored: '\(invalid)' draft=\(money.stringValue) mutations=\(mutations().count) feedback=\(String(describing:model.feedbackNotice))")
+   check(mutations().count==4 && money.stringValue=="402", "invalid draft was applied or not restored: '\(invalid)' draft=\(money.stringValue) mutations=\(mutations().count) feedback=\(String(describing:model.feedbackNotice))")
    check(model.feedbackNotice?.text.key=="hades2.input.invalid", "invalid draft lost validation feedback")
   }
   _ = edit(money, to:"000402", in:window); window.makeFirstResponder(nil); pump(0.45)
-  check(mutations().count==3 && money.stringValue=="402", "normalization submitted an unchanged number")
+  check(mutations().count==4 && money.stringValue=="402", "normalization submitted an unchanged number")
 
   // The shared click seam keeps native control events intact and ignores a
   // field's own content and other windows. Actual empty window space blurs.
@@ -153,33 +164,34 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
   let blank=click(at:NSPoint(x:1,y:1),in:window)
   check(TrainerTextEditingDismissal.handle(blank,in:window) === blank && money.currentEditor()==nil,
         "blank-space click did not dismiss editing without consuming the event")
-  waitForCommand("set_resource", count:4); other.close()
+  waitForCommand("set_resource", count:5); other.close()
 
   guard let mana=fields(host).first(where:{$0.isEditable && $0.stringValue=="44"}) else { fatalError("mana field missing") }
   _ = edit(money,to:"404",in:window)
   _ = edit(mana,to:"45",in:window)
+  waitForCommand("set_resource",count:6)
   window.makeFirstResponder(nil)
-  waitForCommand("set_resource",count:5); waitForCommand("set_vital",count:1)
+  waitForCommand("set_vital",count:1)
   check(model.money==404 && model.mana==45, "focus switch lost or misrouted one of the drafts")
 
   model.refreshFromHost(); check(model.busy, "busy fixture did not begin")
   _ = edit(money,to:"405",in:window); window.makeFirstResponder(nil)
   check(model.feedbackNotice?.text.key=="hades2.input.unavailable", "busy edit lost its feedback")
   pump(0.45)
-  check(mutations().count==5 && money.stringValue=="404", "busy edit was deferred or not restored")
+  check(mutations().count==6 && money.stringValue=="404", "busy edit was deferred or not restored")
 
   _ = edit(money,to:"888",in:window); window.makeFirstResponder(nil)
-  waitForCommand("set_resource",count:6)
+  waitForCommand("set_resource",count:7)
   check(model.money==404 && money.stringValue=="888" && model.feedbackNotice?.tone == .warning,
         "backend rejection did not retain the attempted draft and error")
-  pump(0.45); check(mutations().count==6, "a rejected mutation was replayed")
+  pump(0.45); check(mutations().count==7, "a rejected mutation was replayed")
   _ = edit(money,to:"404",in:window); window.makeFirstResponder(nil); pump()
 
   // A profile barrier invalidates the callback captured at edit start.
   _ = edit(money,to:"555",in:window); pump()
   model.loadProfile("fixture-replacement")
   wait { model.money==200 && !model.busy }; window.makeFirstResponder(nil); pump(0.45)
-  check(mutations().count==6 && money.currentEditor()==nil, "profile replacement submitted a stale edit")
+  check(mutations().count==7 && money.currentEditor()==nil, "profile replacement submitted a stale edit")
   guard let replacement=fields(host).first(where:{$0.isEditable && $0.stringValue=="200"}) else { fatalError("profile replacement did not rebuild the numeric field") }
   money=replacement
 

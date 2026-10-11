@@ -42,10 +42,10 @@ struct TrainerInlineNameEditor: View {
 
     var body: some View {
         TrainerTextField(title: placeholder, text: $text, onCommit: { draft in
-            text = draft
+            text = draft.text
             onCommit()
             return text
-        }, onCancel: onCancel, commitUnchanged: true, focusOnAppear: true,
+        }, onCancel: onCancel, focusOnAppear: true,
             style: .plain, font: .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold))
             .trainerDismissTextEditingOnClickAway()
     }

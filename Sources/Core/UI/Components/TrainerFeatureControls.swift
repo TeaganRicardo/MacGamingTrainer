@@ -46,7 +46,7 @@ struct TrainerFeatureMultiplierRow: View {
     let icon: String
     let state: TrainerFeatureControlState
     @Binding var text: String
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
     var onEditingChanged: (Bool) -> Void = { _ in }
     let shortcutText: String?
     let action: () -> Void
@@ -79,7 +79,7 @@ struct TrainerCompactMultiplierRow: View {
     let icon: String
     let state: TrainerFeatureControlState
     @Binding var text: String
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
     var onEditingChanged: (Bool) -> Void = { _ in }
     let shortcutText: String?
     let action: () -> Void

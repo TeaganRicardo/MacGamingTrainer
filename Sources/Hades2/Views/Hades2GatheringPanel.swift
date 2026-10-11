@@ -31,7 +31,7 @@ struct Hades2GatheringPanel: View {
                             }.labelsHidden().frame(width: 150).disabled(!model.canEditDesired)
                             let draft = Binding<String>(get: { percentages[family] ?? "100" }, set: { percentages[family] = $0 })
                             TrainerTextField(title: text("hades2.gathering.percent"), text: draft, onEditingChanged: TrainerTextField.editingTracker($focusedFamily, equals: family), onCommit: { value in
-                                    model.completeTextEdit(.gathering(family), text: value, generation: generation)
+                                    model.completeTextEdit(.gathering(family), text: value.text, changed: value.changed, generation: generation)
                                 })
                                 .frame(width: 65).disabled(!model.canEditDesired || custom[family] != true)
                                 .accessibilityLabel(Text(text(family.titleKey) + " " + text("hades2.gathering.percent")))

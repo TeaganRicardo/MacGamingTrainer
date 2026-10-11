@@ -539,7 +539,8 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     /// Completing a Save field only stages a valid value in the open document.
     /// Invalid/busy drafts remain visible for correction; Apply stays explicit.
-    func completeTextEdit(_ entry: Hades2SaveEditorEntry, text: String) -> String {
+    func completeTextEdit(_ entry: Hades2SaveEditorEntry, text: String, changed: Bool = true) -> String {
+        guard changed else { return text }
         guard !busy else {
             failure = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
             return text

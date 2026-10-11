@@ -525,16 +525,18 @@ struct Main {
         }
 
         var draft = "123"
-        let fieldHost = NSHostingView(rootView: Hades2SaveEditorTextField(
-            model: model, entry: model.items[0],
-            text: Binding(get: { draft }, set: { draft = $0 }), title: "Value"
+        let entry = model.items[0]
+        let fieldHost = NSHostingView(rootView: TrainerTextField(
+            title: "Value", text: Binding(get: { draft }, set: { draft = $0 }), onCommit: { edit in
+                model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
+            }
         ))
         let editorWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 40),
                                     styleMask: [.titled], backing: .buffered, defer: false)
         editorWindow.contentView = fieldHost; fieldHost.layoutSubtreeIfNeeded(); pump(0.1)
         guard let field = fields(fieldHost).first(where: { $0.isEditable }),
               editorWindow.makeFirstResponder(field), let fieldEditor = field.currentEditor() as? NSTextView else {
-            fail("could not focus the production staged Save Editor field")
+            fail("could not focus the shared staged Save Editor field")
         }
         fieldEditor.selectAll(nil); fieldEditor.insertText("3.5", replacementRange: fieldEditor.selectedRange())
         editorWindow.makeFirstResponder(nil); pump(0.1)
@@ -542,7 +544,7 @@ struct Main {
             fail("invalid Save draft was truncated/staged or lost its correction feedback")
         }
         guard editorWindow.makeFirstResponder(field), let fieldEditor = field.currentEditor() as? NSTextView else {
-            fail("could not refocus the production staged Save Editor field")
+            fail("could not refocus the shared staged Save Editor field")
         }
         fieldEditor.selectAll(nil); fieldEditor.insertText("500", replacementRange: fieldEditor.selectedRange())
         pump(0.4)

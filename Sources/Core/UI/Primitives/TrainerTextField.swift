@@ -5,13 +5,16 @@ import SwiftUI
 /// completed value and returns the text to display; no keystroke is a commit.
 struct TrainerTextField: NSViewRepresentable {
     enum Style { case plain, rounded }
+    struct Completion {
+        let text: String
+        let changed: Bool
+    }
     @Environment(\.isEnabled) private var enabled
     let title: String
     @Binding var text: String
     var onEditingChanged: (Bool) -> Void = { _ in }
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (Completion) -> String = { $0.text }
     var onCancel: (() -> Void)?
-    var commitUnchanged = false
     var focusOnAppear = false
     var style: Style = .rounded
     var alignment: NSTextAlignment = .left
@@ -22,19 +25,18 @@ struct TrainerTextField: NSViewRepresentable {
             let initial: String
             let text: Binding<String>
             let onEditingChanged: (Bool) -> Void
-            let onCommit: (String) -> String
+            let onCommit: (Completion) -> String
             let onCancel: (() -> Void)?
-            let commitUnchanged: Bool
         }
         var parent: TrainerTextField
         var edit: Edit?
         init(_ parent: TrainerTextField) { self.parent = parent }
 
-        private func begin() {
+        func begin() {
             guard edit == nil else { return }
             edit = Edit(initial: parent.text, text: parent.$text,
                 onEditingChanged: parent.onEditingChanged, onCommit: parent.onCommit,
-                onCancel: parent.onCancel, commitUnchanged: parent.commitUnchanged)
+                onCancel: parent.onCancel)
             edit?.onEditingChanged(true)
         }
         func control(_ control: NSControl, textShouldBeginEditing fieldEditor: NSText) -> Bool {
@@ -50,7 +52,7 @@ struct TrainerTextField: NSViewRepresentable {
             guard let field = notification.object as? NSTextField, let completed = edit else { return }
             edit = nil
             let draft = field.stringValue
-            let normalized = draft == completed.initial && !completed.commitUnchanged ? draft : completed.onCommit(draft)
+            let normalized = completed.onCommit(Completion(text: draft, changed: draft != completed.initial))
             completed.text.wrappedValue = normalized
             field.stringValue = normalized
             completed.onEditingChanged(false)
@@ -83,7 +85,13 @@ struct TrainerTextField: NSViewRepresentable {
 
     final class Field: NSTextField {
         var focusOnAppear = false
+        var onFocus: (() -> Void)?
         private var didRequestFocus = false
+        override func becomeFirstResponder() -> Bool {
+            let acquired = super.becomeFirstResponder()
+            if acquired { onFocus?() }
+            return acquired
+        }
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard focusOnAppear, !didRequestFocus, let window else { return }
@@ -99,6 +107,7 @@ struct TrainerTextField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSTextField {
         let field = Field(frame: .zero)
         field.focusOnAppear = focusOnAppear
+        field.onFocus = { [weak coordinator = context.coordinator] in coordinator?.begin() }
         field.delegate = context.coordinator
         field.isEditable = true
         field.isSelectable = true

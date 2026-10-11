@@ -129,15 +129,15 @@ struct Main {
             fail("passive model projection emitted mutations: \(passiveMutations)")
         }
 
-        // Model-level delayed-lock contract: unlocking a stat must cancel only
-        // its own stale relock and leave the immediate unlock as the final intent.
+        // Completed lock edits use the existing request queue. An unlock must
+        // remain the final intent, with no delayed relock after it.
         try? FileManager.default.removeItem(at: commandLog)
         model.setStat("dodge", text: "33.3", locked: true)
         model.setStat("dodge", text: "33.3", locked: false)
         pump(0.60)
         let statCommands = commands(at: commandLog).filter { ($0["command"] as? String) == "set_stat" }
-        if statCommands.count != 1 { fail("unlock/relock emitted wrong set_stat count: \(statCommands)") }
-        let params = statCommands[0]["params"] as? [String: Any]
+        if statCommands.count != 2 { fail("unlock/relock emitted wrong set_stat count: \(statCommands)") }
+        let params = statCommands.last?["params"] as? [String: Any]
         if params?["stat"] as? String != "dodge" || params?["locked"] as? Bool != false {
             fail("stale locked=true mutation survived unlock: \(statCommands)")
         }

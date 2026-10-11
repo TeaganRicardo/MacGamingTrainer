@@ -21,7 +21,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     let emptyLabel: String
     let itemLabel: (Item) -> String
     let onLock: () -> Void
-    let onCommit: (String) -> String
+    let onCommit: (TrainerTextField.Completion) -> String
     let onEditingChanged: (Bool) -> Void
 
     init(
@@ -38,7 +38,7 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         itemLabel: @escaping (Item) -> String,
         onLock: @escaping () -> Void,
         onEditingChanged: @escaping (Bool) -> Void = { _ in },
-        onCommit: @escaping (String) -> String = { $0 }
+        onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }
     ) {
         self.title = title
         self.icon = icon

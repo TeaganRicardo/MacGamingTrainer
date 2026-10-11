@@ -1738,10 +1738,10 @@ struct Hades2TrainerView: View {
         TrainerTextField.editingTracker($focusedField, equals: field)
     }
 
-    private func completing(_ edit: Hades2RuntimeTextEdit) -> (String) -> String {
+    private func completing(_ edit: Hades2RuntimeTextEdit) -> (TrainerTextField.Completion) -> String {
         let generation = model.editGeneration
         return { draft in
-            model.completeTextEdit(edit, text: draft, generation: generation)
+            model.completeTextEdit(edit, text: draft.text, changed: draft.changed, generation: generation)
         }
     }
 

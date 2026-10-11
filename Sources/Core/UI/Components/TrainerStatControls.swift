@@ -8,8 +8,8 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
     @Binding var maximum: String
     let focus: Binding<Field?>
     let currentField: Field
-    var onCurrentCommit: (String) -> String = { $0 }
-    var onMaximumCommit: (String) -> String = { $0 }
+    var onCurrentCommit: (TrainerTextField.Completion) -> String = { $0.text }
+    var onMaximumCommit: (TrainerTextField.Completion) -> String = { $0.text }
     let maximumField: Field
     let locked: Bool
     let editable: Bool
@@ -43,7 +43,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
     let editable: Bool
     let placeholder: String
     let onLock: () -> Void
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
     init(
         title: String,
@@ -56,7 +56,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         editable: Bool,
         placeholder: String = "—",
         onLock: @escaping () -> Void,
-        onCommit: @escaping (String) -> String = { $0 }
+        onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }
     ) {
         self.title = title
         self.icon = icon
@@ -90,7 +90,7 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
     let focus: Binding<Field?>
     let focusValue: Field
     let detail: String?
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
     let editable: Bool
 
     var body: some View {
@@ -119,7 +119,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
     let available: Bool
     let editable: Bool
     let onLock: () -> Void
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
     private var isEditable: Bool { editable && supported && available }
 
@@ -151,7 +151,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
     let available: Bool
     let editable: Bool
     let onLockChange: (Bool) -> Void
-    var onCommit: (String) -> String = { $0 }
+    var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
 
     private var isEditable: Bool { editable && supported && available }
 
