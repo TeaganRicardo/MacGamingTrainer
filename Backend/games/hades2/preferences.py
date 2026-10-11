@@ -239,10 +239,17 @@ class Hades2PreferenceStore:
         if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
             result['nextRoomRewardToken']=token
         occurrence=raw.get('nextOccurrenceTarget')
-        if is_valid_next_occurrence_target(occurrence):
-            result['nextOccurrenceTarget']=occurrence
         occurrence_token=raw.get('nextOccurrenceToken')
-        if result['nextOccurrenceTarget'] is not None and isinstance(occurrence_token,str) and 0<len(occurrence_token)<=NEXT_OCCURRENCE_MAX_LENGTH:
+        occurrence_token_valid=(
+            isinstance(occurrence_token,str)
+            and 0<len(occurrence_token)<=NEXT_OCCURRENCE_MAX_LENGTH
+        )
+        if (
+            occurrence is not None
+            and is_valid_next_occurrence_target(occurrence)
+            and occurrence_token_valid
+        ):
+            result['nextOccurrenceTarget']=occurrence
             result['nextOccurrenceToken']=occurrence_token
         return result
 
