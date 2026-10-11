@@ -95,7 +95,7 @@ GameplaySetElapsedTimeMultiplier = function(args)
   end
 end
 -- Engine effects/force precede Lua Damage, including zero-damage attacks.
-local function projectile(name, effectNames, force, canAffectInvulnerable)
+local function projectile(name, effectNames, force, canAffectInvulnerable, damage)
   local unit = CurrentRun.Hero
   for _, effectName in ipairs(effectNames) do
     ApplyEffect({ DestinationId = unit.ObjectId, EffectName = effectName,
@@ -103,7 +103,7 @@ local function projectile(name, effectNames, force, canAffectInvulnerable)
   end
   if force and not forceImmune[unit.ObjectId] then unit.Displaced = true end
   unit.Hits = unit.Hits + 1
-  Damage(unit, { DamageAmount = 8, SourceProjectile = name, AttackerId = 10 })
+  Damage(unit, { DamageAmount = damage or 8, SourceProjectile = name, AttackerId = 10 })
 end
 dofile(assert(arg[1])); dofile(assert(arg[2]))
 local M = __MacGamingTrainerV1
@@ -144,7 +144,7 @@ local attributes = {
   Miasma = { 'MiasmaSlow' }, Molten = { 'LavaSlow' }, Orbit = { 'HeroOnHitStun' },
   Rooting = { 'Rooted', 'MeleeAttackVictimGrip' }, SpreadHitShields = {},
   StasisDeath = { 'StasisStun' }, Unflinching = {}, Vacuuming = {},
-  Hex = { 'HecatePolymorphStun' }, Rifts = { 'HeroOnHitStun' }, Homing = {}, Metallic = {},
+  Hex = { 'HecatePolymorphStun' }, Rifts = { 'HeroOnHitStun' }, Homing = {}, Metallic = {}, Radial = {},
 }
 for name, payload in pairs(attributes) do
   local enemy = hero(10); units[10] = enemy
@@ -158,6 +158,23 @@ for name, payload in pairs(attributes) do
     assert(not (effects[1] and effects[1][effect]), name .. ' applied ' .. effect)
   end
 end
+''',
+    "radial": r'''
+-- SiegeVine and ZombieSpawner can select Radial in the supported content.
+-- EliteRadialBeams owns its native enemy weapon and 11-point player hit.
+local enemy = hero(10); units[10] = enemy
+enemy.Weapons = { EliteRadialBeams = true }
+enable(true)
+projectile('EliteRadialBeams', {}, false, false, 11)
+assert(CurrentRun.Hero.Health == 100 and CurrentRun.Hero.HealthBuffer == 20 and CurrentRun.Hero.Hits == 3,
+  'Radial damaged protected Hero health/armor/hit accounting')
+assert(enemy.Weapons.EliteRadialBeams, 'Radial enemy weapon was removed')
+Damage(enemy, { DamageAmount = 11, AttackerId = 1 })
+assert(enemy.Health == 89, 'Radial enemy damage owner was changed')
+enable(false)
+projectile('EliteRadialBeams', {}, false, false, 11)
+assert(CurrentRun.Hero.Health == 89 and CurrentRun.Hero.HealthBuffer == 9 and CurrentRun.Hero.Hits == 4,
+  'disable retained Radial protection')
 ''',
     "existing_effects": r'''
 effects[1] = { StasisStun = true, Rooted = true, MiasmaSlow = true,
@@ -354,6 +371,12 @@ local args = { Id = 1, Name = 'Inked' }
 assert(AddEffectBlock(args) == args, 'Trainer taint stopped an ordinary game Add')
 SetupHeroObject()
 assert(not next(CurrentRun.Hero.InvulnerableFlags), 'Trainer taint stopped ordinary Hero setup')
+local replacement = { Id = 1, Name = 'StasisStun' }
+assert(AddEffectBlock(replacement) == replacement and RemoveEffectBlock(replacement) == replacement)
+assert(count(1, 'StasisStun') == 0, 'uncertain old lease suppressed replacement Unit cleanup')
+GameplaySetElapsedTimeMultiplier({ Name = 'ChronosTimeSlow', ElapsedTimeMultiplier = 0.3,
+  ApplyToPlayerUnits = true })
+assert(playerTime[1] == 0.3, 'uncertain old time lease changed replacement Unit gameplay')
 ''',
     "partial_release_unknown": r'''
 enable(true)
@@ -367,6 +390,10 @@ assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN:', 1, true),
   'partial release reported success')
 assert(M.terminalActionUnknown, 'partial release retained mutation trust')
 assert(not pcall(enable, false), 'partial release was blindly retried')
+SetupHeroObject()
+GameplaySetElapsedTimeMultiplier({ Name = 'ChronosTimeSlow', ElapsedTimeMultiplier = 0.3,
+  ApplyToPlayerUnits = true })
+assert(playerTime[1] == 0.3, 'uncertain old release changed the rebuilt Unit time owner')
 ''',
 }
 with tempfile.TemporaryDirectory(prefix="mgt-invincibility-") as temporary:

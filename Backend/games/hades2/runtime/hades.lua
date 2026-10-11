@@ -6952,8 +6952,11 @@ if __MacGamingTrainerV1 == nil then
         and record.hero == (CurrentRun and CurrentRun.Hero)
         and record.hero.ObjectId == record.objectId
     end
+    local function current(record)
+      return owner == record and record.intercepting and sameFrame(record)
+    end
     local function active(hero)
-      return owner ~= nil and owner.phase == "protected" and owner.hero == hero and sameFrame(owner)
+      return owner ~= nil and owner.phase == "protected" and owner.hero == hero and current(owner)
         and identity(owner) == owner.unitToken
         and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
         and type(hero.ImmuneToForceFlags) == "table" and hero.ImmuneToForceFlags[trainerInvincibilityFlag]
@@ -6966,7 +6969,7 @@ if __MacGamingTrainerV1 == nil then
       if not ok then error(message) end
     end
     local function enter(record, operation)
-      if owner ~= record or not sameFrame(record) or identity(record) ~= record.unitToken
+      if not current(record) or identity(record) ~= record.unitToken
           or record.phase ~= "releasing" and (record.hero.InvulnerableFlags ~= record.invulnerableFlags
             or record.hero.ImmuneToForceFlags ~= record.forceFlags)
           or not owns("AddEffectBlock") or not owns("RemoveEffectBlock") or not owns("SetupHeroObject") then
@@ -7045,7 +7048,7 @@ if __MacGamingTrainerV1 == nil then
       end
       local record = { hero = hero, objectId = hero.ObjectId, session = SessionState,
         run = CurrentRun, room = CurrentRun.CurrentRoom, native = __MGTHadesNativeV1,
-        slots = {}, names = {}, phase = "sampling", unitToken = false,
+        slots = {}, names = {}, phase = "sampling", intercepting = true, unitToken = false,
         invulnerableFlags = false, forceFlags = false, forceBaseline = false,
         invulnerabilityAcquired = false, forceAcquired = false,
         add = AddEffectBlock, remove = RemoveEffectBlock,
@@ -7064,7 +7067,7 @@ if __MacGamingTrainerV1 == nil then
       end
       owner = record
       local function tracked(args)
-        return owner == record and sameFrame(record) and type(args) == "table"
+        return current(record) and type(args) == "table"
           and args.Id == record.objectId and type(args.Name) == "string"
           and not (tonumber(args.Delay) and tonumber(args.Delay) > 0)
           and not (tonumber(args.MaxInterval) and tonumber(args.MaxInterval) > 0)
@@ -7100,7 +7103,12 @@ if __MacGamingTrainerV1 == nil then
         return result
       end)
       installHook("SetupHeroObject", function(original, ...)
-        if M.terminalActionUnknown then return original(...) end
+        if M.terminalActionUnknown then
+          -- Keep uncertain ownership evidence, but never apply that old lease
+          -- to the Unit rebuilt by ordinary game setup, even with a reused ID.
+          record.intercepting = false
+          return original(...)
+        end
         -- SetupHeroObject rebinds the same Lua Hero and resets its flag tables.
         -- Retire the old generation before any new unit setup is observed.
         releaseInvincibility()
@@ -7145,7 +7153,7 @@ if __MacGamingTrainerV1 == nil then
           SetUnitInvulnerable(hero, trainerInvincibilityFlag, record.silent)
         end
         installHook("GetPlayerGameplayElapsedTimeMultiplier", function(original, ...)
-          if owner ~= record or not sameFrame(record)
+          if not current(record)
               or type(SessionState.PlayerGameplaySlows) ~= "table" then return original(...) end
           local result = 1
           for name, data in pairs(SessionState.PlayerGameplaySlows) do
