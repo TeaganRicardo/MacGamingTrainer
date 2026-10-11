@@ -349,7 +349,8 @@ with tempfile.TemporaryDirectory(prefix='mgt-investigation-') as directory:
 
     # Match the installed-source gate to this *temporary* native-like fixture;
     # production keeps the fixed version hash and current Save policy.
-    with patch('games.hades2.save_investigation._cached', return_value=finding.native):
+    with patch('games.hades2.save_workspace.NativeDialogueInvestigation',
+               side_effect=lambda path: NativeDialogueInvestigation(path, expected_hash=checksum)):
         session = TestColdSession()
         workspace = Hades2SaveWorkspace(session, 'Profile1', game_path=game)
         first = workspace.query(domain='investigate', search='NemesisPostTrueEnding01', language='en')['items'][0]
