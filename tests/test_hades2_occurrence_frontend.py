@@ -29,7 +29,7 @@ assert "func setNextOccurrence(_ target: String?)" in model
 
 assert 'occurrenceTargets = occurrenceList' in runtime
 assert 'kind = definition.kind' in runtime and 'sourceId = definition.sourceId' in runtime
-assert 'occurrenceTargetIDs: model.occurrenceTargets.map(\.id)' in view
+assert r'occurrenceTargetIDs: model.occurrenceTargets.map(\.id)' in view
 assert 'ForEach(characters)' in view and 'ForEach(shops)' in view
 assert 'hades2.occurrence.title' in view and 'hades2.spawn.characterRewards' in view
 
