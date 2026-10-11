@@ -143,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert saved_pending['desired']['chaosGateProbability'] == 60
 
     future_path = base/'future-desired.json'
-    future_path.write_text(json.dumps(dict(persisted, schemaVersion=9)))
+    future_path.write_text(json.dumps(dict(persisted, schemaVersion=10)))
     before_bytes = future_path.read_bytes()
     store = Hades2PreferenceStore(future_path)
     defaults, loaded = store.load()
@@ -155,7 +155,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     service = Hades2ProfileService(base/'future-profiles')
     service.save('Future', {'chaosGateProbability': 100})
     path = service.path('Future')
-    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 9
+    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 10
     path.write_text(json.dumps(document)); before_bytes = path.read_bytes()
     for action in (lambda: service.load('Future'), lambda: service.save('Future', {})):
         try: action()
