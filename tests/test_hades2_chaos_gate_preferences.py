@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert restarted.preferences['chaosGateProbability'] == 80 and restarted.preference_dirty
     adapter.save_profile('Chaos Gate')
     envelope = json.loads(adapter.profile_service.path('Chaos Gate').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 8
+    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 9
     assert envelope['desired']['chaosGateProbability'] == 80
     adapter.reset_desired()
     assert adapter.preferences['chaosGateProbability'] is None and adapter.state['chaosGateProbability'] is None
