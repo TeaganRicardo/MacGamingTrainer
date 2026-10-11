@@ -66,6 +66,11 @@ assert next_occurrence_consumed(
     preferences, not_delivered, preference_dirty=False
 ) is True
 
+sparse = status_payload(target=None, consumed_token=None)
+sparse.pop("nextOccurrenceTarget")
+assert next_occurrence_consumed(preferences, sparse, preference_dirty=False) is False
+assert next_occurrence_consumed(preferences, sparse, preference_dirty=True) is False
+
 
 class OccurrenceSession(FakeResidentSession):
     def __init__(self, payload):
@@ -194,6 +199,16 @@ try:
     assert persisted["nextOccurrenceTarget"] == "npc:Nemesis"
     assert persisted["nextOccurrenceToken"] == token
     assert result["nextOccurrenceTarget"] == "npc:Nemesis"
+
+    armed_adapter.save_profile("Occurrence")
+    saved_token = armed_adapter.preferences["nextOccurrenceToken"]
+    armed_adapter.set_next_occurrence_desired("npc:Echo")
+    assert armed_adapter.preferences["nextOccurrenceToken"] != saved_token
+    loaded = armed_adapter.load_profile("Occurrence")
+    loaded_token = armed_adapter.preferences["nextOccurrenceToken"]
+    assert loaded["nextOccurrenceTarget"] == "npc:Nemesis"
+    assert isinstance(loaded_token, str) and loaded_token.startswith("profile-occurrence-")
+    assert loaded_token != saved_token
 finally:
     preparation.DATA = old_data
 
