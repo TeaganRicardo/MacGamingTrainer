@@ -71,6 +71,15 @@ cleared = Hades2PreferenceStore.normalize(
 assert cleared["nextOccurrenceTarget"] is None
 assert cleared["nextOccurrenceToken"] is None
 
+incomplete = Hades2PreferenceStore.normalize(
+    {
+        "nextOccurrenceTarget": "npc:Nemesis",
+        "nextOccurrenceToken": None,
+    }
+)
+assert incomplete["nextOccurrenceTarget"] is None
+assert incomplete["nextOccurrenceToken"] is None
+
 # Schema 8 never owned occurrence state. Unknown look-alike fields from an old
 # document are discarded; schema 9 is the first version allowed to restore them.
 legacy = normalize_persisted_desired(
