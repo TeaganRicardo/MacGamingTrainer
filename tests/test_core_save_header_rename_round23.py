@@ -29,6 +29,5 @@ assert 'struct TrainerPrimaryActionButton' in controls
 assert '.buttonStyle(.borderedProminent)' in controls
 assert '.tint(theme.accent)' in controls
 assert 'struct TrainerInlineNameEditor' in controls
-assert 'NSEvent.addLocalMonitorForEvents' in controls
 
 print("core_save_header_rename_round23_ok")

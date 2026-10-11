@@ -370,6 +370,10 @@ func commands(at url: URL) -> [[String: Any]] {
     }
 }
 
+func fields(_ view: NSView) -> [NSTextField] {
+    (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+
 @main
 struct Main {
     @MainActor
@@ -520,8 +524,36 @@ struct Main {
             fail("query page contract drifted")
         }
 
-        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
-        pump(0.25)
+        var draft = "123"
+        let entry = model.items[0]
+        let fieldHost = NSHostingView(rootView: TrainerTextField(
+            title: "Value", text: Binding(get: { draft }, set: { draft = $0 }), onCommit: { edit in
+                model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
+            }
+        ))
+        let editorWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 40),
+                                    styleMask: [.titled], backing: .buffered, defer: false)
+        editorWindow.contentView = fieldHost; fieldHost.layoutSubtreeIfNeeded(); pump(0.1)
+        guard let field = fields(fieldHost).first(where: { $0.isEditable }),
+              editorWindow.makeFirstResponder(field), let fieldEditor = field.currentEditor() as? NSTextView else {
+            fail("could not focus the shared staged Save Editor field")
+        }
+        fieldEditor.selectAll(nil); fieldEditor.insertText("3.5", replacementRange: fieldEditor.selectedRange())
+        editorWindow.makeFirstResponder(nil); pump(0.1)
+        if model.pendingCount != 0 || model.failure?.key != "hades2.saveEditor.invalidDraft" || draft != "3.5" {
+            fail("invalid Save draft was truncated/staged or lost its correction feedback")
+        }
+        guard editorWindow.makeFirstResponder(field), let fieldEditor = field.currentEditor() as? NSTextView else {
+            fail("could not refocus the shared staged Save Editor field")
+        }
+        fieldEditor.selectAll(nil); fieldEditor.insertText("500", replacementRange: fieldEditor.selectedRange())
+        pump(0.4)
+        if commands(at: commandLog).contains(where: { $0["command"] as? String == "save_editor_stage" }) {
+            fail("Save Editor typing staged an unfinished draft")
+        }
+        editorWindow.makeFirstResponder(nil)
+        pumpUntil { model.pendingCount == 1 && !model.busy }
+        editorWindow.close()
         if model.pendingCount != 1 || model.pendingChanges.count != 1 {
             fail("staged change was not projected into review state")
         }
