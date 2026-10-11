@@ -72,12 +72,11 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
             f"{requested_developer_dir!r}; expected {SUPPORTED_DEVELOPER_DIR!r}"
         )
 
-    selected_developer_dir = command_text(("xcode-select", "-p"))
-    if selected_developer_dir != SUPPORTED_DEVELOPER_DIR:
-        raise RuntimeError(
-            "xcode-select developer directory differs from supported toolchain: "
-            f"{selected_developer_dir!r}"
-        )
+    # DEVELOPER_DIR is the explicit selection consumed by xcrun/xcodebuild.
+    # Record xcode-select's host default separately because GitHub may change it
+    # independently of the workflow-selected toolchain.
+    selected_developer_dir = requested_developer_dir
+    xcode_select_developer_dir = command_text(("xcode-select", "-p"))
 
     xcode_version, xcode_build = xcode_identity()
     if xcode_version != SUPPORTED_XCODE_VERSION or xcode_build != SUPPORTED_XCODE_BUILD:
@@ -104,6 +103,7 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
         "developer": {
             "requestedDeveloperDir": requested_developer_dir,
             "selectedDeveloperDir": selected_developer_dir,
+            "xcodeSelectDeveloperDir": xcode_select_developer_dir,
             "xcodeVersion": xcode_version,
             "xcodeBuild": xcode_build,
             "sdk": {
