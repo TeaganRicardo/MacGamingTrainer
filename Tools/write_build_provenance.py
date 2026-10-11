@@ -32,6 +32,23 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def tracked_source_identity(repo_root: Path, relative_name: str) -> dict[str, str]:
+    relative = Path(relative_name)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise RuntimeError(f"tracked source path must stay inside the repository: {relative_name}")
+    path = (repo_root / relative).resolve()
+    if repo_root not in path.parents or not path.is_file() or path.is_symlink():
+        raise RuntimeError(f"tracked source file is missing or unsafe: {relative_name}")
+    subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", relative.as_posix()],
+        cwd=repo_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return {"path": relative.as_posix(), "sha256": sha256_file(path)}
+
+
 def require_env(env: Mapping[str, str], name: str) -> str:
     value = env.get(name, "").strip()
     if not value:
@@ -304,6 +321,7 @@ def build_manifest(
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
     name_label: str = "",
+    workflow_source: str = "",
 ) -> dict[str, object]:
     source_plist = require_product_identity(repo_root, product_version, bundle_build)
     source_sha = git_value(repo_root, "HEAD")
@@ -326,6 +344,12 @@ def build_manifest(
         "artifact": {"file": artifact.name, "sha256": digest},
         "origin": "local" if local else "github",
     }
+
+    if workflow_source:
+        build_inputs = manifest["buildInputs"]
+        if not isinstance(build_inputs, dict):
+            raise RuntimeError("invalid build inputs metadata")
+        build_inputs["workflowSource"] = tracked_source_identity(repo_root, workflow_source)
 
     if not local:
         event_name = require_env(env, "GITHUB_EVENT_NAME")
@@ -394,11 +418,12 @@ def write_metadata(
     generated_copies: tuple[str, ...] = (),
     module_id: str = "",
     name_label: str = "",
+    workflow_source: str = "",
 ) -> tuple[Path, Path, dict[str, object]]:
     manifest = build_manifest(
         artifact, product_version, bundle_build, repo_root, env,
         local=local, generated_copies=generated_copies, module_id=module_id,
-        name_label=name_label,
+        name_label=name_label, workflow_source=workflow_source,
     )
     sidecar = artifact.with_name(f"{artifact.name}.sha256")
     provenance = artifact.with_name(f"{artifact.stem}.provenance.json")
@@ -424,6 +449,7 @@ def main() -> int:
     parser.add_argument("--name-label", default="")
     parser.add_argument("--module-id", default="")
     parser.add_argument("--generated-copy", action="append", default=[])
+    parser.add_argument("--workflow-source", default="")
     parser.add_argument("--local", action="store_true")
     args = parser.parse_args()
 
@@ -443,6 +469,7 @@ def main() -> int:
             artifact, args.product_version, args.bundle_build, repo_root, os.environ,
             local=args.local, generated_copies=tuple(args.generated_copy),
             module_id=args.module_id, name_label=args.name_label,
+            workflow_source=args.workflow_source,
         )
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
         print(f"Unable to write build provenance: {error}", file=sys.stderr)
