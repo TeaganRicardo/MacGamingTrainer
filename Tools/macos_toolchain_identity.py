@@ -133,6 +133,59 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
     }
 
 
+def verify_recorded_macos_toolchain(toolchain: object) -> None:
+    if not isinstance(toolchain, dict):
+        raise RuntimeError("provenance macOS toolchain must be an object")
+    host = toolchain.get("host")
+    developer = toolchain.get("developer")
+    if not isinstance(host, dict) or not isinstance(developer, dict):
+        raise RuntimeError("provenance macOS toolchain is missing host/developer identity")
+
+    expected_host = {
+        "runnerLabel": SUPPORTED_RUNNER_LABEL,
+        "runnerOS": "macOS",
+        "runnerArch": SUPPORTED_RUNNER_ARCH,
+        "imageMutable": True,
+    }
+    for field, expected in expected_host.items():
+        if host.get(field) != expected:
+            raise RuntimeError(f"provenance host {field} differs from supported identity")
+    for field in ("imageOS", "imageVersion", "macOSVersion", "macOSBuild"):
+        if not isinstance(host.get(field), str) or not host[field].strip():
+            raise RuntimeError(f"provenance host {field} is missing")
+
+    expected_developer = {
+        "selectedDeveloperDir": SUPPORTED_DEVELOPER_DIR,
+        "xcodeVersion": SUPPORTED_XCODE_VERSION,
+        "xcodeBuild": SUPPORTED_XCODE_BUILD,
+    }
+    for field, expected in expected_developer.items():
+        if developer.get(field) != expected:
+            raise RuntimeError(f"provenance developer {field} differs from supported identity")
+    if developer.get("requestedDeveloperDir") != developer.get("selectedDeveloperDir"):
+        raise RuntimeError("provenance requested and selected developer directories differ")
+    if not isinstance(developer.get("xcodeSelectDeveloperDir"), str) or not developer["xcodeSelectDeveloperDir"].strip():
+        raise RuntimeError("provenance xcode-select developer directory is missing")
+
+    required_fields = {
+        "sdk": ("name", "path", "version", "build"),
+        "swift": ("path", "version"),
+        "clang": ("path", "version"),
+        "lldb": ("path", "version", "pythonModulePath"),
+        "xcodePython": ("path", "version"),
+    }
+    for owner, fields in required_fields.items():
+        identity = developer.get(owner)
+        if not isinstance(identity, dict):
+            raise RuntimeError(f"provenance developer {owner} identity is missing")
+        for field in fields:
+            value = identity.get(field)
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(f"provenance developer {owner}.{field} is missing")
+    if developer["sdk"]["name"] != "macosx":
+        raise RuntimeError("provenance SDK identity is not macosx")
+
+
 def main() -> int:
     try:
         print(json.dumps(collect_macos_toolchain(), indent=2, sort_keys=True))
