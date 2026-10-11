@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         result = adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'desired')
         assert result['chaosGateProbability'] == value
     persisted = json.loads((base/'desired-state.json').read_text())
-    assert persisted['schemaVersion'] == 8 and persisted['chaosGateProbability'] == 80
+    assert persisted['schemaVersion'] == 9 and persisted['chaosGateProbability'] == 80
     assert persisted['gatheringProbabilities'] == {'flora': 25}
     assert not {'ForceSecretDoor', 'ForceNextRoom', 'door', 'scopeToken'} & set(persisted)
     restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
