@@ -279,19 +279,19 @@
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
     },
-    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 8），": {
+    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），": {
       "arguments": [
         "kind",
         "1",
-        "8"
+        "9"
       ],
       "key": "hades2.error.preferenceOlderFormat"
     },
-    "kind 使用了更新的数据格式（schemaVersion=9，当前支持 8），": {
+    "kind 使用了更新的数据格式（schemaVersion=10，当前支持 9），": {
       "arguments": [
         "kind",
-        "9",
-        "8"
+        "10",
+        "9"
       ],
       "key": "hades2.error.preferenceNewerFormat"
     },
