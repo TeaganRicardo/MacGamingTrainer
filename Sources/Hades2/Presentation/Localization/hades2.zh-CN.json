@@ -30,6 +30,7 @@
     "hades2.error.debuggerInternal": "LLDB 调试后端发生内部错误。",
     "hades2.error.debuggerProtocol": "LLDB 调试后端协议不兼容。",
     "hades2.error.debuggerUnavailable": "无法启动 LLDB 调试后端。",
+    "hades2.error.nativeQueryUnavailable": "连接所需的组件不可用，请重新安装当前版本并重启游戏。",
     "hades2.error.disconnectBeforePrepare": "请断开连接并退出游戏后操作。",
     "hades2.error.duplicateConflict": "同一请求 ID 的内容发生变化。",
     "hades2.error.elementRange": "元素数量必须为 0–{0} 的整数。",

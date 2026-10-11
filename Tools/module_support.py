@@ -54,12 +54,19 @@ class AppResource:
 
 
 @dataclass(frozen=True)
+class NativeLibrary:
+    source: str
+    filename: str
+
+
+@dataclass(frozen=True)
 class BuildManifest:
     runtime: GameModuleManifest
     frontend: FrontendBuildSpec
     app: AppBuildSpec
     requirements: BuildRequirements
     app_resources: tuple
+    native_libraries: tuple
     raw: dict
 
     @property
@@ -212,7 +219,29 @@ def load_manifest(game_id: str) -> BuildManifest:
         if not entitlement_path.is_file() or module_dir not in entitlement_path.parents:
             raise ManifestError('entitlements must exist inside the selected game module.')
 
-    return BuildManifest(runtime, frontend_spec, app_spec, requirements, tuple(app_resources), raw)
+    native_libraries = []
+    native_value = raw.get('nativeLibraries', [])
+    if not isinstance(native_value, list):
+        raise ManifestError('nativeLibraries must be a list.')
+    filenames = set()
+    module_dir = path.parent.resolve()
+    for index, item in enumerate(native_value):
+        field = f'nativeLibraries[{index}]'
+        if not isinstance(item, dict) or set(item) != {'source', 'filename'}:
+            raise ManifestError(f'{field} must contain exactly source and filename.')
+        source = _safe_relative_path(item['source'], f'{field}.source')
+        source_path = (module_dir / source).resolve()
+        if source_path.suffix != '.c' or not source_path.is_file() or module_dir not in source_path.parents:
+            raise ManifestError(f'{field}.source must be a C source inside the selected module.')
+        filename = item['filename']
+        if not isinstance(filename, str) or not re.fullmatch(r'lib[A-Za-z0-9_]+\.dylib', filename):
+            raise ManifestError(f'{field}.filename must be a library filename.')
+        if filename in filenames:
+            raise ManifestError(f'nativeLibraries has duplicate filename: {filename}.')
+        filenames.add(filename)
+        native_libraries.append(NativeLibrary(source, filename))
+
+    return BuildManifest(runtime, frontend_spec, app_spec, requirements, tuple(app_resources), tuple(native_libraries), raw)
 
 
 def normalized_manifest(manifest: BuildManifest) -> dict:
@@ -239,6 +268,10 @@ def normalized_manifest(manifest: BuildManifest) -> dict:
         'appResources': [
             {'source': resource.source, 'destination': resource.destination}
             for resource in manifest.app_resources
+        ],
+        'nativeLibraries': [
+            {'source': library.source, 'filename': library.filename}
+            for library in manifest.native_libraries
         ],
     }
 

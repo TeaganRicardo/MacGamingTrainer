@@ -55,12 +55,42 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     assert normalized['id'] == game_id
     assert normalized['frontend']['moduleType'] == 'ReferenceFixtureGameModule'
     assert normalized['appResources'] == []  # No Hades-specific resource required by a second module.
+    assert normalized['nativeLibraries'] == []
     assert normalized['buildRequirements'] == {
         'lldbPython': False,
         'debuggerEntitlement': False,
         'entitlements': '',
     }
     assert 'saveManagement' not in normalized
+
+    # Native code is an optional selected-module build input. Validate real
+    # declarations in this isolated module; Core/reference need no Hades code.
+    manifest = backend_module / 'module.json'
+    original_manifest = manifest.read_text()
+    native_source = backend_module / 'native/Query.c'
+    native_source.parent.mkdir()
+    native_source.write_text('int fixture_query(void) { return 1; }\n')
+    declaration = {'source': 'native/Query.c', 'filename': 'libFixtureQuery.dylib'}
+    declared = json.loads(original_manifest)
+    declared['nativeLibraries'] = [declaration]
+    manifest.write_text(json.dumps(declared))
+    built = json.loads(subprocess.check_output([
+        'python3', str(tools / 'validate_game_module.py'), game_id, '--json'
+    ], text=True, cwd=project, env=env))
+    assert built['nativeLibraries'] == [declaration]
+    for invalid in (
+        [{'source': '../outside.c', 'filename': 'libFixtureQuery.dylib'}],
+        [{'source': 'native/missing.c', 'filename': 'libFixtureQuery.dylib'}],
+        [{'source': 'native/Query.c', 'filename': '../outside.dylib'}],
+        [declaration, declaration],
+    ):
+        declared['nativeLibraries'] = invalid
+        manifest.write_text(json.dumps(declared))
+        refused = subprocess.run([
+            'python3', str(tools / 'validate_game_module.py'), game_id
+        ], text=True, capture_output=True, cwd=project, env=env)
+        assert refused.returncode != 0 and 'nativeLibraries' in refused.stderr, refused
+    manifest.write_text(original_manifest)
 
     generated = project / 'Generated/ActiveGameModule.swift'
     subprocess.run([

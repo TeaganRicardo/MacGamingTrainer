@@ -53,6 +53,8 @@ class FakeError:
 
 class FakeExpressionOptions:
     last_timeout_us = None
+    stop_others = None
+    try_all_threads = None
 
     def SetLanguage(self, value):
         pass
@@ -65,6 +67,12 @@ class FakeExpressionOptions:
 
     def SetUnwindOnError(self, value):
         pass
+
+    def SetStopOthers(self, value):
+        type(self).stop_others = value
+
+    def SetTryAllThreads(self, value):
+        type(self).try_all_threads = value
 
 
 class FakeResult:
@@ -166,6 +174,8 @@ large.alive = lambda: False
 large_source = 'x' * 325_841
 assert large.execute(large_source, expression_timeout_seconds=5.0) == '{}'
 assert FakeExpressionOptions.last_timeout_us == 5_000_000
+assert FakeExpressionOptions.stop_others is True
+assert FakeExpressionOptions.try_all_threads is False
 assert large.process.allocated_size == len(large_source.encode('utf-8')) + 1 + LUA_TRANSPORT_RESULT_LIMIT_BYTES
 assert large.target.deleted == [1], 'successful expression leaked its synchronization breakpoint'
 
