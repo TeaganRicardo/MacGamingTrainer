@@ -314,6 +314,25 @@ assert outcome.reply is None
 assert session.calls == []
 
 
+# A full replay does not invent an empty occurrence mutation. One-shot routing
+# crosses the resident seam only while either desired or observed state is armed.
+empty_desired = Hades2PreferenceStore.defaults()
+empty_observed = matching_observation(empty_desired)
+empty_session = ApplyingSession(empty_observed)
+empty_reconciler = Hades2DesiredStateReconciler(
+    empty_session, request_id_factory=deterministic_ids()
+)
+empty_outcome = empty_reconciler.reconcile(
+    empty_desired, empty_observed, force_full=True
+)
+assert empty_outcome.confirmed is True
+assert empty_session.calls
+assert all(
+    command != "set_next_occurrence"
+    for command, _ in empty_session.calls[0]
+)
+
+
 # A cross-family mismatch is planned as one resident batch and confirmed against
 # the returned observation. gameSpeed remains outside the resident reconciler.
 mismatch = matching_observation(desired)
