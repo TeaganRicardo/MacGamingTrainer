@@ -94,6 +94,7 @@ final class TrainerBackendSession {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
@@ -105,6 +106,7 @@ final class TrainerBackendSession {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout,
+            started: started,
             reply: reply,
             completion: completion
         )
@@ -284,7 +286,7 @@ final class TrainerBackendSession {
                 } else {
                     configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
-                        $0.busy = false
+                        $0.busy = self.client.hasInFlightRequest
                         $0.errorCode = failure.code
                         $0.error = self.hostClientFailurePresentation(failure)
                     }

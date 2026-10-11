@@ -40,64 +40,14 @@ struct TrainerInlineNameEditor: View {
     let onCommit: () -> Void
     let onCancel: () -> Void
 
-    @FocusState private var focused: Bool
-    @State private var eventMonitor: Any?
-    @State private var finished = false
-
     var body: some View {
-        TextField(placeholder, text: $text)
-            .textFieldStyle(.plain)
-            .font(.headline.weight(.semibold))
-            .focused($focused)
-            .onSubmit { finish(commit: true) }
-            .onExitCommand { finish(commit: false) }
-            .onAppear {
-                installClickAwayMonitor()
-                DispatchQueue.main.async { focused = true }
-            }
-            .onDisappear { removeClickAwayMonitor() }
-            .onChange(of: focused) { wasFocused, isFocused in
-                if wasFocused && !isFocused {
-                    finish(commit: true)
-                }
-            }
-    }
-
-    private func installClickAwayMonitor() {
-        guard eventMonitor == nil else { return }
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            guard !clickIsInsideActiveTextField(event) else { return event }
-            DispatchQueue.main.async { finish(commit: true) }
-            return event
-        }
-    }
-
-    private func clickIsInsideActiveTextField(_ event: NSEvent) -> Bool {
-        guard let window = event.window,
-              let editor = window.firstResponder as? NSTextView,
-              let field = editor.delegate as? NSTextField else {
-            return false
-        }
-        let point = field.convert(event.locationInWindow, from: nil)
-        return field.bounds.contains(point)
-    }
-
-    private func finish(commit: Bool) {
-        guard !finished else { return }
-        finished = true
-        removeClickAwayMonitor()
-        focused = false
-        if commit {
+        TrainerTextField(title: placeholder, text: $text, onCommit: { draft in
+            text = draft.text
             onCommit()
-        } else {
-            onCancel()
-        }
-    }
-
-    private func removeClickAwayMonitor() {
-        guard let eventMonitor else { return }
-        NSEvent.removeMonitor(eventMonitor)
-        self.eventMonitor = nil
+            return text
+        }, onCancel: onCancel, focusOnAppear: true,
+            style: .plain, font: .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold))
+            .trainerDismissTextEditingOnClickAway()
     }
 }
 

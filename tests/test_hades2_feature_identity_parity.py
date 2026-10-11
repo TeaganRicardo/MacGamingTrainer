@@ -267,7 +267,6 @@ def swift_view_toggle_routes(view, toggles):
                for i in range(len(combat) - 7)), "Swift damage multiplier control missing"
     for expected in (
         ["enabled", ":", "model", ".", "damageEnabled"],
-        ["model", ".", "setMultiplier", "(", damage, ",", "text", ":", "$0"],
         ["model", ".", "feature", "(", ".", "damageEnabled", ",", "value", ":", "!", "model", ".", "damageEnabled"],
     ):
         assert contains_tokens(combat, expected), "Swift damage multiplier view misroutes " + str(expected)
@@ -340,8 +339,6 @@ def validate_swift_consumers(root, toggles):
     multiplier_row = view_tokens[multiplier_row_start:]
     row_contracts = (
         ["featurePresentation", "(", "toggle", ",", "enabled", ":", "enabled"],
-        ["configIntentBinding", "(", "text", ",", "key", ":", "feature"],
-        ["model", ".", "setMultiplier", "(", "feature", ",", "text", ":", "$0"],
         ["model", ".", "feature", "(", "toggle", ",", "value", ":", "!", "enabled"],
     )
     for expected in row_contracts:
@@ -354,8 +351,9 @@ def validate_swift_consumers(root, toggles):
     assert contains_tokens(speed_tokens, ["setDesired", "(", "feature", ":", "gameSpeed", ",", "value", ":", "value"]), (
         "Swift gameSpeed control must keep its separate desired-state route"
     )
-    for marker, dispatched in (("private var gameSpeedInputBinding", "$0"),
-                                ("private var gameSpeedSliderValue", "gameSpeedInput")):
+    # Runtime text completion is exercised through native fields on macOS;
+    # a per-keystroke setter route is no longer the UI contract.
+    for marker, dispatched in (("private var gameSpeedSliderValue", "gameSpeedInput"),):
         control = swift_tokens(balanced_text_block(view, marker))
         assert contains_tokens(control, ["model", ".", "setGameSpeed", "(", dispatched, ")"]), (
             "Swift gameSpeed UI control must dispatch to setGameSpeed: " + marker

@@ -35,6 +35,8 @@ for raw in sys.stdin:
     if command == 'hang':
         time.sleep(5)
         continue
+    if command == 'slow':
+        time.sleep(0.20)
     print(json.dumps({
         'type':'result', 'id':req.get('id',''), 'protocolVersion':6,
         'moduleProtocolVersion':5, 'gameID':args.game, 'ok':True,
@@ -80,7 +82,7 @@ let backendProcess = BackendProcess(
     maxStdoutBufferBytes: 1_048_576,
     forceKillDelay: 0.10
 )
-let session = TrainerBackendSession(client: BackendClient(process: backendProcess))
+let session = TrainerBackendSession(client: BackendClient(process: backendProcess, maxQueueDepth: 1))
 var states: [TrainerBackendStatus] = []
 var payloadCommands: [String] = []
 
@@ -106,6 +108,30 @@ func waitForRecovery(after stateIndex: Int, notice: String) {
 }
 
 // A hard child crash is recovered globally without any module-specific restart code.
+// Per-request start is execution evidence, not acceptance/queueing evidence.
+do {
+    var events: [String] = []
+    session.send("slow", operation: "slow", timeout: requestTimeout,
+                 started: { events.append("start-slow") },
+                 completion: { _ in events.append("finish-slow") })
+    session.send("queued", operation: "queued", timeout: requestTimeout,
+                 started: { events.append("start-queued") },
+                 completion: { _ in events.append("finish-queued") })
+    if events != ["start-slow"] { fail("queued request was reported started before execution: \(events)") }
+    var rejectedStarted = false
+    var rejectedCompletion: Bool? = nil
+    session.send("overflow", operation: "overflow", timeout: requestTimeout,
+                 started: { rejectedStarted = true }, completion: { rejectedCompletion = $0 })
+    if rejectedStarted || rejectedCompletion != false { fail("queue-full request started or retained its completion") }
+    if !session.currentStatus.busy || session.currentStatus.errorCode != "backend_queue_full" {
+        fail("queue-full rejection hid the active request: \(session.currentStatus)")
+    }
+    if !waitUntil(waitBudget, { events.count == 4 }) { fail("request start/completion callbacks did not settle") }
+    if events != ["start-slow", "finish-slow", "start-queued", "finish-queued"] {
+        fail("request start/completion callbacks changed FIFO order: \(events)")
+    }
+}
+
 do {
     let startIndex = states.count
     var crashCompletion: Bool? = nil
@@ -122,8 +148,13 @@ do {
     let startIndex = states.count
     var hangCompletion: Bool? = nil
     session.send("hang", operation: "hang", timeout: 0.15, completion: { hangCompletion = $0 })
+    var queuedStarted = false
+    var queuedCompletion: Bool? = nil
+    session.send("cancelled-on-timeout", operation: "cancelled", timeout: requestTimeout,
+                 started: { queuedStarted = true }, completion: { queuedCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if hangCompletion != false { fail("timeout request completion must fail") }
+    if queuedStarted || queuedCompletion != false { fail("terminal cancellation started or retained a queued request") }
     var ping: Bool? = nil
     session.send("ping-after-timeout", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("timeout recovery backend cannot accept request") }
