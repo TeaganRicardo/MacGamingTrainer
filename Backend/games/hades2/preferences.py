@@ -132,6 +132,17 @@ def next_room_reward_consumed(preferences, decoded, preference_dirty):
     return isinstance(token,str) and bool(token) and consumed==token
 
 
+def next_occurrence_consumed(preferences, decoded, preference_dirty):
+    if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
+    target=preferences.get('nextOccurrenceTarget')
+    if target is None or decoded.get('nextOccurrenceTarget') is not None:return False
+    if not preference_dirty:return True
+    token=preferences.get('nextOccurrenceToken')
+    diagnostics=decoded.get('runtimeDiagnostics')
+    consumed=diagnostics.get('lastConsumedNextOccurrenceToken') if isinstance(diagnostics,dict) else None
+    return isinstance(token,str) and bool(token) and consumed==token
+
+
 def migrate_legacy_boon_semantics(raw, schema_version):
     """Canonicalize pre-v3 boon controls to explicit force semantics.
 
