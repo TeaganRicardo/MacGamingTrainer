@@ -38,6 +38,7 @@ def matching_observation(desired):
         "rerolls": 0,
         "elements": [],
         "nextRoomReward": desired["nextRoomReward"],
+        "nextOccurrenceTarget": desired["nextOccurrenceTarget"],
         "runtimeDiagnostics": {},
     }
     for key in MULTIPLIERS:
@@ -78,6 +79,10 @@ def matching_observation(desired):
     if desired["nextRoomReward"] is not None:
         observation["runtimeDiagnostics"]["nextRoomRewardToken"] = desired[
             "nextRoomRewardToken"
+        ]
+    if desired["nextOccurrenceTarget"] is not None:
+        observation["runtimeDiagnostics"]["nextOccurrenceToken"] = desired[
+            "nextOccurrenceToken"
         ]
     return observation
 
@@ -123,6 +128,8 @@ class ApplyingSession:
             return "chaosGateProbability"
         if command == "set_next_room_reward":
             return "nextRoomReward"
+        if command == "set_next_occurrence":
+            return "nextOccurrence"
         return command
 
     def _apply(self, command, params):
@@ -250,6 +257,14 @@ class ApplyingSession:
             else:
                 diagnostics["nextRoomRewardToken"] = params.get("token")
             return
+        if command == "set_next_occurrence":
+            self.observation["nextOccurrenceTarget"] = params["target"]
+            diagnostics = self.observation.setdefault("runtimeDiagnostics", {})
+            if params["target"] is None:
+                diagnostics.pop("nextOccurrenceToken", None)
+            else:
+                diagnostics["nextOccurrenceToken"] = params.get("token")
+            return
         raise AssertionError("unexpected command: " + command)
 
 
@@ -274,6 +289,8 @@ desired.update(
     elementLocks={"Fire": 7},
     nextRoomReward="WeaponUpgrade",
     nextRoomRewardToken="reward-token",
+    nextOccurrenceTarget="npc:Nemesis",
+    nextOccurrenceToken="occurrence-token",
     gatheringProbabilities={"flora": 25.0},
     chaosGateProbability=75.0,
 )
@@ -324,6 +341,7 @@ for row in mismatch["elements"]:
     if row["id"] == "Fire":
         row.update(locked=False, count=1)
 mismatch["nextRoomReward"] = None
+mismatch["nextOccurrenceTarget"] = None
 mismatch["runtimeDiagnostics"] = {}
 
 session = ApplyingSession(mismatch)
@@ -360,6 +378,11 @@ assert any(command == "lock_rerolls" for command, _ in batch)
 assert any(command == "set_element" for command, _ in batch)
 assert any(command == "lock_element" for command, _ in batch)
 assert any(command == "set_next_room_reward" for command, _ in batch)
+assert any(
+    command == "set_next_occurrence"
+    and params == {"target": "npc:Nemesis", "token": "occurrence-token"}
+    for command, params in batch
+)
 assert all(
     not (command == "set_feature" and params.get("feature") == "gameSpeed")
     for command, params in batch
