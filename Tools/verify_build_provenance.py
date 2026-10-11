@@ -30,6 +30,7 @@ def verify_provenance(
     expected_generated_copies: int | None = None,
     expected_workflow: str = "",
     expected_event: str = "",
+    expected_workflow_source: str = "",
     require_macos_toolchain: bool = False,
     match_current_macos_toolchain: bool = False,
 ) -> dict[str, object]:
@@ -64,6 +65,20 @@ def verify_provenance(
         raise RuntimeError("provenance generatedCopies must be an array")
     if expected_generated_copies is not None and len(generated) != expected_generated_copies:
         raise RuntimeError("provenance generated-copy count differs from expected build inputs")
+
+    if expected_workflow_source:
+        workflow_path = Path(expected_workflow_source)
+        if workflow_path.is_absolute() or not workflow_path.parts or ".." in workflow_path.parts:
+            raise RuntimeError("expected workflow source must stay inside the repository")
+        workflow_file = (repo_root / workflow_path).resolve()
+        if repo_root not in workflow_file.parents or not workflow_file.is_file():
+            raise RuntimeError("expected workflow source is missing")
+        expected_workflow_input = {
+            "path": workflow_path.as_posix(),
+            "sha256": sha256_file(workflow_file),
+        }
+        if build_inputs.get("workflowSource") != expected_workflow_input:
+            raise RuntimeError("provenance workflow source differs from current source")
 
     if manifest.get("origin") != "github":
         raise RuntimeError("release/QA provenance must originate from GitHub")
@@ -133,6 +148,7 @@ def main() -> int:
     parser.add_argument("--expected-generated-copies", type=int)
     parser.add_argument("--expected-workflow", default="")
     parser.add_argument("--expected-event", default="")
+    parser.add_argument("--expected-workflow-source", default="")
     parser.add_argument("--require-macos-toolchain", action="store_true")
     parser.add_argument("--match-current-macos-toolchain", action="store_true")
     args = parser.parse_args()
@@ -146,6 +162,7 @@ def main() -> int:
             expected_generated_copies=args.expected_generated_copies,
             expected_workflow=args.expected_workflow,
             expected_event=args.expected_event,
+            expected_workflow_source=args.expected_workflow_source,
             require_macos_toolchain=args.require_macos_toolchain,
             match_current_macos_toolchain=args.match_current_macos_toolchain,
         )
