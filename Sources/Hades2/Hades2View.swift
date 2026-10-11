@@ -782,6 +782,7 @@ struct Hades2TrainerView: View {
             TrainerSection(title: text("hades2.section.spawn"), icon: "sparkles") {
                 boonPanel
                 nextRoomRewardPanel
+                nextOccurrencePanel
             }
             TrainerSection(title: text("hades2.section.elements"), icon: "circle.hexagongrid.fill") {
                 elementPanel
@@ -895,6 +896,7 @@ struct Hades2TrainerView: View {
         Hades2ViewConfigSnapshot(
             boonRarityMultiplier: model.boonRarityMultiplier,
             nextRoomReward: model.nextRoomReward,
+            nextOccurrenceTarget: model.nextOccurrenceTarget,
             elements: model.elements,
             damageMultiplier: model.damageMultiplier,
             moneyMultiplier: model.moneyMultiplier,
@@ -906,6 +908,7 @@ struct Hades2TrainerView: View {
     private var catalogSnapshot: Hades2ViewCatalogSnapshot {
         Hades2ViewCatalogSnapshot(
             materialID: material?.id,
+            occurrenceTargetIDs: model.occurrenceTargets.map(\.id),
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
             specialIDs: specialBoons.map(\.id),
@@ -1032,6 +1035,7 @@ struct Hades2TrainerView: View {
             boonRarityFactor = compactNumber(snapshot.boonRarityMultiplier)
         }
         model.selectedNextRoomReward = snapshot.nextRoomReward ?? ""
+        model.selectedNextOccurrenceTarget = snapshot.nextOccurrenceTarget ?? ""
         syncElementInputs(snapshot.elements)
         if focusedField != .damageMultiplier { multiplier = compactNumber(snapshot.damageMultiplier) }
         if focusedField != .moneyMultiplier { moneyFactor = compactNumber(snapshot.moneyMultiplier) }
@@ -1056,6 +1060,10 @@ struct Hades2TrainerView: View {
     private func applyCatalogChanges(from oldValue: Hades2ViewCatalogSnapshot, to newValue: Hades2ViewCatalogSnapshot) {
         if oldValue.materialID != newValue.materialID && focusedField != .material {
             materialAmount = material.map { number($0.count) } ?? ""
+        }
+        if !model.selectedNextOccurrenceTarget.isEmpty
+            && !newValue.occurrenceTargetIDs.contains(model.selectedNextOccurrenceTarget) {
+            model.selectedNextOccurrenceTarget = ""
         }
         if !newValue.olympianIDs.contains(model.selectedOlympianReward) { model.selectedOlympianReward = newValue.olympianIDs.first ?? "" }
         if !newValue.pickupIDs.contains(model.selectedPickupReward) { model.selectedPickupReward = newValue.pickupIDs.first ?? "" }
@@ -1295,6 +1303,50 @@ struct Hades2TrainerView: View {
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
             Button(text("hades2.nextRoom.apply")) { model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward) }.disabled(!model.canEditDesired)
         }.trainerPanel()
+    }
+
+    private var nextOccurrencePanel: some View {
+        let characters = model.occurrenceTargets.filter { $0.kind == "character" }
+        let shops = model.occurrenceTargets.filter { $0.kind == "shop" }
+        return HStack(spacing: 14) {
+            Label(text("hades2.occurrence.title"), systemImage: "figure.walk.motion")
+                .font(.subheadline.weight(.semibold))
+            if model.nextOccurrenceTarget != nil {
+                Text(text("hades2.occurrence.pending"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Picker(text("hades2.occurrence.title"), selection: $model.selectedNextOccurrenceTarget) {
+                Text(text("hades2.occurrence.noRequest")).tag("")
+                if !characters.isEmpty {
+                    Section(text("hades2.occurrence.characters")) {
+                        ForEach(characters) { target in
+                            Text(text(target.titleKey)).tag(target.id)
+                        }
+                    }
+                }
+                if !shops.isEmpty {
+                    Section(text("hades2.occurrence.shop")) {
+                        ForEach(shops) { target in
+                            Text(text(target.titleKey)).tag(target.id)
+                        }
+                    }
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 360)
+            .disabled(!model.canEditDesired)
+            Button(text("hades2.occurrence.apply")) {
+                model.setNextOccurrence(
+                    model.selectedNextOccurrenceTarget.isEmpty
+                        ? nil
+                        : model.selectedNextOccurrenceTarget
+                )
+            }
+            .disabled(!model.canEditDesired)
+        }
+        .trainerPanel()
     }
 
     private var resourcePanel: some View {
