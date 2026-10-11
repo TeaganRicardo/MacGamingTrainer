@@ -5,7 +5,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.command_contract import Hades2CommandContract
-from games.hades2.preferences import DESIRED_STATE_SCHEMA_VERSION, Hades2PreferenceStore
+from games.hades2.preferences import (
+    DESIRED_STATE_SCHEMA_VERSION,
+    Hades2PreferenceStore,
+    normalize_persisted_desired,
+)
 
 
 class RuntimeProbe:
@@ -66,5 +70,27 @@ cleared = Hades2PreferenceStore.normalize(
 )
 assert cleared["nextOccurrenceTarget"] is None
 assert cleared["nextOccurrenceToken"] is None
+
+# Schema 8 never owned occurrence state. Unknown look-alike fields from an old
+# document are discarded; schema 9 is the first version allowed to restore them.
+legacy = normalize_persisted_desired(
+    {
+        "nextOccurrenceTarget": "npc:Nemesis",
+        "nextOccurrenceToken": "legacy-lookalike",
+    },
+    8,
+)
+assert legacy["nextOccurrenceTarget"] is None
+assert legacy["nextOccurrenceToken"] is None
+
+current = normalize_persisted_desired(
+    {
+        "nextOccurrenceTarget": "npc:Nemesis",
+        "nextOccurrenceToken": "current-token",
+    },
+    9,
+)
+assert current["nextOccurrenceTarget"] == "npc:Nemesis"
+assert current["nextOccurrenceToken"] == "current-token"
 
 print("hades2_occurrence_desired_state_contract_ok")
