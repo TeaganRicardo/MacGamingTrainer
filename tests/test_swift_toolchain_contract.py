@@ -66,6 +66,7 @@ for name in ("build2-macos.yml", "module-build-matrix.yml"):
     assert "python3 Tools/macos_toolchain_identity.py" in source, name
     assert "Tools/verify_build_provenance.py" in source, name
     assert "--match-current-macos-toolchain" in source, name
+    assert "--expected-workflow-source .github/workflows/" in source, name
     assert "macos-latest" not in source, name
 
 release = (workflow_root / "direct-release.yml").read_text()
@@ -73,5 +74,6 @@ assert "runs-on: macos-26" in release
 assert "macos-latest" not in release
 assert "Tools/verify_build_provenance.py" in release
 assert "--require-macos-toolchain" in release
+assert "--expected-workflow-source .github/workflows/build2-macos.yml" in release
 
 print("swift_toolchain_ci_contract_ok")
