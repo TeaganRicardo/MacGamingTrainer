@@ -85,6 +85,16 @@ nativeEncounterForced = {}
 ForceNextRoom = nil
 ForceNextEncounter = nil
 
+-- Deterministically pick the last candidate so a mixed forced pool exposes
+-- accidental Trainer/native priority changes rather than favoring index one.
+nativeRandomCalls = 0
+GetRandomValue = function(pool)
+  assert(type(pool) == "table" and #pool > 0, "fixture expected a non-empty native random pool")
+  nativeRandomCalls = nativeRandomCalls + 1
+  return pool[#pool]
+end
+local nativeGetRandomValue = GetRandomValue
+
 IsRoomEligible = function(run, currentRoom, nextRoomData, args)
   if type(nextRoomData) ~= "table" then return false end
   if roomEligible[nextRoomData.Name] == false then return false end
@@ -105,16 +115,35 @@ ChooseNextRoomData = function(run, args, otherDoors)
   if ForceNextRoom ~= nil and RoomData[ForceNextRoom] ~= nil then return RoomData[ForceNextRoom] end
   if args.ForceNextRoom ~= nil and RoomData[args.ForceNextRoom] ~= nil then return RoomData[args.ForceNextRoom] end
   local current = run.CurrentRoom
-  local roomSet = RoomSets[args.RoomSetName or current.RoomSetName] or {}
+  local currentData = RoomData[current.Name] or current
+  if args.ForceNextRoomSet == nil and currentData.LinkedRoom ~= nil then
+    return RoomData[currentData.LinkedRoom]
+  end
+  if args.ForceNextRoomSet == nil and currentData.LinkedRooms ~= nil then
+    local eligible, forced = {}, {}
+    for _, name in ipairs(currentData.LinkedRooms) do
+      local data = RoomData[name]
+      if IsRoomEligible(run, currentData, data, args) then
+        eligible[#eligible + 1] = name
+        if IsRoomForced(run, currentData, data, args, otherDoors) then
+          forced[#forced + 1] = name
+        end
+      end
+    end
+    local chosen = GetRandomValue(#forced > 0 and forced or eligible)
+    return RoomData[chosen]
+  end
   local eligible, forced = {}, {}
-  for _, name in ipairs(roomSet) do
+  for _, name in ipairs(RoomSets[args.RoomSetName or current.RoomSetName] or {}) do
     local data = RoomData[name]
     if IsRoomEligible(run, current, data, args) then
       eligible[#eligible + 1] = data
-      if IsRoomForced(run, current, data, args, otherDoors) then forced[#forced + 1] = data end
+      if IsRoomForced(run, current, data, args, otherDoors) then
+        forced[#forced + 1] = data
+      end
     end
   end
-  return forced[1] or eligible[1]
+  return GetRandomValue(#forced > 0 and forced or eligible)
 end
 local nativeChooseNextRoomData = ChooseNextRoomData
 
@@ -128,15 +157,43 @@ CreateRoom = function(roomData, args)
   return room
 end
 
+CreateDoorRewardPreview = function(door)
+  door.PreviewCreated = true
+end
+local nativeCreateDoorRewardPreview = CreateDoorRewardPreview
+AssignRoomToExitDoor = function(door, chosen)
+  door.Room = chosen
+  MapState.OfferedExitDoors[door.ObjectId] = door
+end
+
 DoUnlockRoomExits = function(run, room)
-  MapState.OfferedExitDoors = {}
+  if type(MapState.OfferedExitDoors) ~= "table" then MapState.OfferedExitDoors = {} end
+  if next(MapState.OfferedExitDoors) == nil then
+    for index = 1, 2 do
+      MapState.OfferedExitDoors[index] = { ObjectId = index, ChooseRoomArgs = {} }
+    end
+  end
   local ordered = {}
-  for index = 1, 2 do
-    local door = { ObjectId = index, ChooseRoomArgs = {} }
-    local data = ChooseNextRoomData(run, door.ChooseRoomArgs, ordered)
-    door.Room = CreateRoom(data, { SkipChooseReward = true, SkipChooseEncounter = true })
-    ordered[#ordered + 1] = door
-    MapState.OfferedExitDoors[door.ObjectId] = door
+  for _, door in pairs(MapState.OfferedExitDoors) do ordered[#ordered + 1] = door end
+  table.sort(ordered, function(a, b) return a.ObjectId < b.ObjectId end)
+  -- Real RoomLogic excludes unavailable slots *before* room selection/preview,
+  -- and may retain preassigned doors in the global OfferedExitDoors map.
+  for _, index in pairs(room.UnavailableDoorIds or {}) do ordered[index] = nil end
+  for _, door in ipairs(ordered) do
+    if door.Room == nil then
+      local data = door.ForceRoomName and RoomData[door.ForceRoomName]
+        or ChooseNextRoomData(run, door.ChooseRoomArgs, ordered)
+      door.Room = CreateRoom(data, { SkipChooseReward = true, SkipChooseEncounter = true })
+      door.Room.NeedsReward = true
+    end
+    if door.Room.NeedsReward then
+      AssignRoomToExitDoor(door, door.Room)
+      door.Room.NeedsReward = false
+    end
+    if not door.SkipUnlock then
+      CreateDoorRewardPreview(door)
+      door.ReadyToUse = true
+    end
   end
 end
 local nativeDoUnlockRoomExits = DoUnlockRoomExits
@@ -181,7 +238,7 @@ ChooseEncounter = function(run, room, args)
         if IsEncounterForced(run, room, candidate) then forced[#forced + 1] = candidate end
       end
     end
-    data = forced[1] or eligible[1]
+    data = GetRandomValue(#forced > 0 and forced or eligible)
   end
   assert(type(data) == "table", "fixture ChooseEncounter found no encounter")
   return SetupEncounter(data, room)
