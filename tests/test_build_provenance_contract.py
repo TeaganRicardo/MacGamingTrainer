@@ -158,6 +158,112 @@ class BuildProvenanceContract(unittest.TestCase):
             f"{manifest['artifact']['sha256']}  {self.artifact.name}\n",
         )
 
+    def test_ci_macos_provenance_records_exact_host_and_native_toolchain(self):
+        actual = git(self.root, 'rev-parse', 'HEAD')
+        fake_bin = Path(self.temporary.name) / 'fake-bin'
+        fake_bin.mkdir()
+        script = fake_bin / 'tool'
+        script.write_text("""#!/usr/bin/env python3
+import pathlib
+import sys
+
+name = pathlib.Path(sys.argv[0]).name
+args = sys.argv[1:]
+if name == 'sw_vers':
+    values = {'-productVersion': '26.6.2', '-buildVersion': '25G83'}
+    print(values[args[0]])
+elif name == 'xcode-select':
+    print('/Applications/Xcode_26.6.app/Contents/Developer')
+elif name == 'xcodebuild':
+    print('Xcode 26.6\\nBuild version 17F113')
+elif name == 'xcrun':
+    values = {
+        ('--sdk', 'macosx', '--show-sdk-path'): '/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk',
+        ('--sdk', 'macosx', '--show-sdk-version'): '26.5',
+        ('--sdk', 'macosx', '--show-sdk-build-version'): '25F90',
+        ('--find', 'swiftc'): '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc',
+        ('swiftc', '--version'): 'Apple Swift version 6.3 (swiftlang-6.3.0.1 clang-1700.4.1.2)',
+        ('--find', 'clang'): '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang',
+        ('clang', '--version'): 'Apple clang version 17.0.0 (clang-1700.4.1.2)',
+        ('--find', 'lldb'): '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/lldb',
+        ('lldb', '--version'): 'lldb-2600.0.31.7',
+        ('lldb', '-P'): '/Applications/Xcode_26.6.app/Contents/SharedFrameworks/LLDB.framework/Resources/Python',
+        ('--find', 'python3'): '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/python3',
+        ('python3', '--version'): 'Python 3.9.6',
+    }
+    print(values[tuple(args)])
+else:
+    raise SystemExit(f'unexpected fake tool: {name} {args}')
+""")
+        script.chmod(0o755)
+        for name in ('sw_vers', 'xcode-select', 'xcodebuild', 'xcrun'):
+            (fake_bin / name).symlink_to(script)
+
+        event_path = Path(self.temporary.name) / 'dispatch.json'
+        event_path.write_text('{}')
+        env = {
+            **self.env,
+            'PATH': str(fake_bin) + os.pathsep + self.env.get('PATH', ''),
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+            'GITHUB_EVENT_PATH': str(event_path),
+            'GITHUB_WORKFLOW': 'Build 2 macOS',
+            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
+            'GITHUB_RUN_ID': '456',
+            'GITHUB_RUN_ATTEMPT': '1',
+            'GITHUB_RUN_NUMBER': '11',
+            'GITHUB_SHA': actual,
+            'RUNNER_OS': 'macOS',
+            'RUNNER_ARCH': 'ARM64',
+            'ImageOS': 'macos26',
+            'ImageVersion': '20260907.0351.1',
+            'MGT_MACOS_RUNNER_LABEL': 'macos-26',
+            'DEVELOPER_DIR': '/Applications/Xcode_26.6.app/Contents/Developer',
+        }
+        result = self.run_tool(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['toolchain'], {
+            'host': {
+                'runnerLabel': 'macos-26',
+                'runnerOS': 'macOS',
+                'runnerArch': 'ARM64',
+                'imageOS': 'macos26',
+                'imageVersion': '20260907.0351.1',
+                'imageMutable': True,
+                'macOSVersion': '26.6.2',
+                'macOSBuild': '25G83',
+            },
+            'developer': {
+                'requestedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'selectedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'xcodeVersion': '26.6',
+                'xcodeBuild': '17F113',
+                'sdk': {
+                    'name': 'macosx',
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk',
+                    'version': '26.5',
+                    'build': '25F90',
+                },
+                'swift': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc',
+                    'version': 'Apple Swift version 6.3 (swiftlang-6.3.0.1 clang-1700.4.1.2)',
+                },
+                'clang': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang',
+                    'version': 'Apple clang version 17.0.0 (clang-1700.4.1.2)',
+                },
+                'lldb': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/lldb',
+                    'version': 'lldb-2600.0.31.7',
+                    'pythonModulePath': '/Applications/Xcode_26.6.app/Contents/SharedFrameworks/LLDB.framework/Resources/Python',
+                },
+                'xcodePython': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/python3',
+                    'version': 'Python 3.9.6',
+                },
+            },
+        })
+
     def test_workflow_dispatch_does_not_invent_pull_request(self):
         event_path = Path(self.temporary.name) / 'dispatch.json'
         event_path.write_text('{}')
