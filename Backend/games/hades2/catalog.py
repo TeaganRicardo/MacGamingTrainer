@@ -12,6 +12,9 @@ _SPECIAL_SOURCE_LOCALIZATION_IDS = {
     'Medea': 'NPC_Medea_01',
     'Circe': 'NPC_Circe_01',
     'Icarus': 'NPC_Icarus_01',
+    'Nemesis': 'NPC_Nemesis_01',
+    'Heracles': 'NPC_Heracles_01',
+    'Charon': 'NPC_Charon_01',
     'Chaos': 'NPC_Chaos_01',
     'Selene': 'NPC_Selene_01',
 }
