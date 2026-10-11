@@ -393,4 +393,25 @@ class Hades2DesiredStateReconciler:
                 )
             )
 
+        wanted_occurrence = desired.get("nextOccurrenceTarget")
+        wanted_occurrence_token = desired.get("nextOccurrenceToken")
+        observed_occurrence = observed.get("nextOccurrenceTarget")
+        occurrence_matches = observed_occurrence == wanted_occurrence
+        if wanted_occurrence is not None:
+            occurrence_matches = (
+                occurrence_matches
+                and diagnostics.get("nextOccurrenceToken") == wanted_occurrence_token
+            )
+        if force_full or not occurrence_matches:
+            actions.append(
+                _Action(
+                    "set_next_occurrence",
+                    {
+                        "target": wanted_occurrence,
+                        "token": wanted_occurrence_token,
+                    },
+                    "nextOccurrence",
+                )
+            )
+
         return actions
