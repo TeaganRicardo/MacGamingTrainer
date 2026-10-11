@@ -175,7 +175,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     )
     assert saved_pending['desired']['gatheringProbabilities'] == valid | {'flora': 100}
 
-    future = dict(persisted, schemaVersion=9)
+    future = dict(persisted, schemaVersion=10)
     future_path = base/'future-desired.json'
     future_path.write_text(json.dumps(future))
     before_bytes = future_path.read_bytes()
@@ -189,7 +189,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     service = Hades2ProfileService(base/'future-profiles')
     service.save('Future', {'gatheringProbabilities': valid})
     path = service.path('Future')
-    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 9
+    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 10
     path.write_text(json.dumps(document)); before_bytes = path.read_bytes()
     for action in (lambda: service.load('Future'), lambda: service.save('Future', {})):
         try: action()
