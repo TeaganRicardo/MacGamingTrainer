@@ -17,7 +17,9 @@ for workflow in WORKFLOWS:
     assert workflow.is_file(), workflow
     text = workflow.read_text()
 
-    first_setup = text.index('actions/setup-python@v5')
+    setup_match = re.search(r'actions/setup-python@[0-9a-f]{40}', text)
+    assert setup_match, f'{workflow.name}: setup-python must use an immutable commit'
+    first_setup = setup_match.start()
     first_python = min(
         index for token in ('python3 ', 'python -')
         if (index := text.find(token)) >= 0
@@ -64,7 +66,7 @@ for workflow in WORKFLOWS:
     # The executable checkout must be the same HEAD_SHA used for diff scope.
     # A scope-only HEAD_SHA with default PR merge checkout gives false
     # exact-head provenance even when both trees happen to match.
-    checkouts = re.findall(r'^([ ]*)- uses: actions/checkout@v4\n((?:[ ]+[^\n]*\n)*)', text, re.M)
+    checkouts = re.findall(r'^([ ]*)- uses: actions/checkout@[0-9a-f]{40}[^\n]*\n((?:[ ]+[^\n]*\n)*)', text, re.M)
     assert checkouts, f'{workflow.name}: no executable checkout found'
     for _, block in checkouts:
         assert re.search(r'^\s+ref: \$\{\{ env\.HEAD_SHA \}\}$', block, re.M), (
@@ -95,7 +97,7 @@ build2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in build2
 assert 'needs_macos: ${{ steps.scope.outputs.needs_macos }}' in build2
 assert 'needs: scope' in build2
-assert "needs.scope.outputs.needs_macos == 'true' && 'macos-latest' || 'ubuntu-latest'" in build2
+assert "needs.scope.outputs.needs_macos == 'true' && 'macos-26' || 'ubuntu-latest'" in build2
 assert "steps.scope.outputs.needs_macos != 'true' && steps.scope.outputs.needs_macos != 'false'" in build2
 assert "needs.scope.outputs.needs_macos == 'false'" in build2
 assert 'bash Tools/run_macos_checks.sh' in build2
@@ -105,7 +107,7 @@ module_matrix = (ROOT / '.github/workflows/module-build-matrix.yml').read_text()
 assert 'scope:\n    runs-on: ubuntu-latest' in module_matrix
 assert 'needs_module: ${{ steps.scope.outputs.needs_module }}' in module_matrix
 assert 'needs: scope' in module_matrix
-assert "needs.scope.outputs.needs_module == 'true' && 'macos-latest' || 'ubuntu-latest'" in module_matrix
+assert "needs.scope.outputs.needs_module == 'true' && 'macos-26' || 'ubuntu-latest'" in module_matrix
 assert "steps.scope.outputs.needs_module != 'true' && steps.scope.outputs.needs_module != 'false'" in module_matrix
 assert "needs.scope.outputs.needs_module == 'false'" in module_matrix
 assert '- reference_fixture' in module_matrix
@@ -137,7 +139,7 @@ for step in (
     "Verify declared invariants fail under mutation",
     "Package release candidate",
     "Verify release provenance and checksum",
-    "actions/upload-artifact@v4",
+    "actions/upload-artifact@",
 ):
     pos = build2.index(step)
     window = build2[pos:pos + 700]
@@ -151,7 +153,7 @@ assert "Verify package" in build2
 for step in (
     "Retain reference module artifact and source provenance",
     "Verify reference artifact checksum and declared inputs",
-    "actions/upload-artifact@v4",
+    "actions/upload-artifact@",
 ):
     pos = module_matrix.index(step)
     window = module_matrix[pos:pos + 700]

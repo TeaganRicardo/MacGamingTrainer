@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'Tools/write_build_provenance.py'
+VERIFY_SCRIPT = ROOT / 'Tools/verify_build_provenance.py'
 
 
 def git(root, *args):
@@ -158,6 +159,226 @@ class BuildProvenanceContract(unittest.TestCase):
             f"{manifest['artifact']['sha256']}  {self.artifact.name}\n",
         )
 
+    def test_ci_macos_provenance_records_exact_host_and_native_toolchain(self):
+        actual = git(self.root, 'rev-parse', 'HEAD')
+        fake_bin = Path(self.temporary.name) / 'fake-bin'
+        fake_bin.mkdir()
+        script = fake_bin / 'tool'
+        script.write_text("""#!/usr/bin/env python3
+import pathlib
+import sys
+
+name = pathlib.Path(sys.argv[0]).name
+args = sys.argv[1:]
+if name == 'sw_vers':
+    values = {'-productVersion': '26.6.2', '-buildVersion': '25G83'}
+    print(values[args[0]])
+elif name == 'xcode-select':
+    print('/Applications/Xcode_26.6.app/Contents/Developer')
+elif name == 'xcodebuild':
+    print('Xcode 26.6\\nBuild version 17F113')
+elif name == 'xcrun':
+    values = {
+        ('--sdk', 'macosx', '--show-sdk-path'): '/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk',
+        ('--sdk', 'macosx', '--show-sdk-version'): '26.5',
+        ('--sdk', 'macosx', '--show-sdk-build-version'): '25F90',
+        ('--find', 'swiftc'): '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc',
+        ('swiftc', '--version'): 'Apple Swift version 6.3 (swiftlang-6.3.0.1 clang-1700.4.1.2)',
+        ('--find', 'clang'): '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang',
+        ('clang', '--version'): 'Apple clang version 17.0.0 (clang-1700.4.1.2)',
+        ('--find', 'lldb'): '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/lldb',
+        ('lldb', '--version'): 'lldb-2600.0.31.7',
+        ('lldb', '-P'): '/Applications/Xcode_26.6.app/Contents/SharedFrameworks/LLDB.framework/Resources/Python',
+        ('--find', 'python3'): '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/python3',
+        ('python3', '--version'): 'Python 3.9.6',
+    }
+    print(values[tuple(args)])
+else:
+    raise SystemExit(f'unexpected fake tool: {name} {args}')
+""")
+        script.chmod(0o755)
+        for name in ('sw_vers', 'xcode-select', 'xcodebuild', 'xcrun'):
+            (fake_bin / name).symlink_to(script)
+
+        event_path = Path(self.temporary.name) / 'dispatch.json'
+        event_path.write_text('{}')
+        env = {
+            **self.env,
+            'PATH': str(fake_bin) + os.pathsep + self.env.get('PATH', ''),
+            'GITHUB_EVENT_NAME': 'workflow_dispatch',
+            'GITHUB_EVENT_PATH': str(event_path),
+            'GITHUB_WORKFLOW': 'Build 2 macOS',
+            'GITHUB_REPOSITORY': 'TeaganRicardo/MacGamingTrainer',
+            'GITHUB_RUN_ID': '456',
+            'GITHUB_RUN_ATTEMPT': '1',
+            'GITHUB_RUN_NUMBER': '11',
+            'GITHUB_SHA': actual,
+            'RUNNER_OS': 'macOS',
+            'RUNNER_ARCH': 'ARM64',
+            'ImageOS': 'macos26',
+            'ImageVersion': '20260907.0351.1',
+            'MGT_MACOS_RUNNER_LABEL': 'macos-26',
+            'DEVELOPER_DIR': '/Applications/Xcode_26.6.app/Contents/Developer',
+        }
+        result = self.run_tool(env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['toolchain'], {
+            'host': {
+                'runnerLabel': 'macos-26',
+                'runnerOS': 'macOS',
+                'runnerArch': 'ARM64',
+                'imageOS': 'macos26',
+                'imageVersion': '20260907.0351.1',
+                'imageMutable': True,
+                'macOSVersion': '26.6.2',
+                'macOSBuild': '25G83',
+            },
+            'developer': {
+                'requestedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'selectedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'xcodeSelectDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'xcodeVersion': '26.6',
+                'xcodeBuild': '17F113',
+                'sdk': {
+                    'name': 'macosx',
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk',
+                    'version': '26.5',
+                    'build': '25F90',
+                },
+                'swift': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc',
+                    'version': 'Apple Swift version 6.3 (swiftlang-6.3.0.1 clang-1700.4.1.2)',
+                },
+                'clang': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang',
+                    'version': 'Apple clang version 17.0.0 (clang-1700.4.1.2)',
+                },
+                'lldb': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/lldb',
+                    'version': 'lldb-2600.0.31.7',
+                    'pythonModulePath': '/Applications/Xcode_26.6.app/Contents/SharedFrameworks/LLDB.framework/Resources/Python',
+                },
+                'xcodePython': {
+                    'path': '/Applications/Xcode_26.6.app/Contents/Developer/usr/bin/python3',
+                    'version': 'Python 3.9.6',
+                },
+            },
+        })
+
+        missing_image = dict(env)
+        missing_image.pop('ImageVersion')
+        rejected = self.run_tool(env=missing_image)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('ImageVersion', rejected.stderr)
+
+    def test_verifier_centralizes_source_module_and_recorded_toolchain_policy(self):
+        module = self.root / 'Backend/games/hades2'
+        module.mkdir(parents=True)
+        module_manifest = module / 'module.json'
+        module_manifest.write_text(json.dumps({
+            'id': 'hades2', 'displayName': 'Hades II',
+            'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
+        }))
+        workflow = self.root / '.github/workflows/build2-macos.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Build 2 macOS\n')
+        subprocess.run(['git', 'add', 'Backend', '.github'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'module and workflow'], cwd=self.root, check=True)
+        actual = git(self.root, 'rev-parse', 'HEAD')
+        tree = git(self.root, 'rev-parse', 'HEAD^{tree}')
+        provenance = Path(self.temporary.name) / 'fixture.provenance.json'
+        toolchain = {
+            'host': {
+                'runnerLabel': 'macos-26', 'runnerOS': 'macOS', 'runnerArch': 'ARM64',
+                'imageOS': 'macos26', 'imageVersion': '20260907.0351.1',
+                'imageMutable': True, 'macOSVersion': '26.6.2', 'macOSBuild': '25G83',
+            },
+            'developer': {
+                'requestedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'selectedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'xcodeSelectDeveloperDir': '/Applications/Xcode.app/Contents/Developer',
+                'xcodeVersion': '26.6', 'xcodeBuild': '17F113',
+                'sdk': {'name': 'macosx', 'path': '/SDKs/MacOSX26.5.sdk',
+                        'version': '26.5', 'build': '25F90'},
+                'swift': {'path': '/toolchain/swiftc', 'version': 'Apple Swift version 6.3'},
+                'clang': {'path': '/toolchain/clang', 'version': 'Apple clang version 17.0.0'},
+                'lldb': {'path': '/toolchain/lldb', 'version': 'lldb-2600.0.31.7',
+                         'pythonModulePath': '/LLDB/Python'},
+                'xcodePython': {'path': '/toolchain/python3', 'version': 'Python 3.9.6'},
+            },
+        }
+        manifest = {
+            'schemaVersion': 1,
+            'productVersion': '0.1.0',
+            'bundleBuild': '7',
+            'source': {'commit': actual, 'tree': tree},
+            'buildInputs': {
+                'checkout': 'clean',
+                'generatedCopies': [],
+                'moduleManifest': {
+                    'path': 'Backend/games/hades2/module.json',
+                    'sha256': hashlib.sha256(module_manifest.read_bytes()).hexdigest(),
+                },
+                'workflowSource': {
+                    'path': '.github/workflows/build2-macos.yml',
+                    'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
+                },
+            },
+            'artifact': {
+                'file': self.artifact.name,
+                'sha256': hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
+            },
+            'origin': 'github',
+            'workflow': {'name': 'Build 2 macOS', 'eventName': 'workflow_dispatch'},
+            'moduleId': 'hades2',
+            'toolchain': toolchain,
+        }
+
+        def verify(payload):
+            provenance.write_text(json.dumps(payload))
+            return subprocess.run([
+                sys.executable, str(VERIFY_SCRIPT),
+                '--provenance', str(provenance),
+                '--artifact', str(self.artifact),
+                '--repo-root', str(self.root),
+                '--expected-source-sha', actual,
+                '--module-id', 'hades2',
+                '--expected-checkout', 'clean',
+                '--expected-generated-copies', '0',
+                '--expected-workflow', 'Build 2 macOS',
+                '--expected-event', 'workflow_dispatch',
+                '--expected-workflow-source', '.github/workflows/build2-macos.yml',
+                '--require-macos-toolchain',
+            ], cwd=self.root, env=self.env, text=True, capture_output=True)
+
+        valid = verify(manifest)
+        self.assertEqual(valid.returncode, 0, valid.stderr)
+
+        wrong_toolchain = json.loads(json.dumps(manifest))
+        wrong_toolchain['toolchain']['developer']['xcodeBuild'] = 'wrong'
+        rejected = verify(wrong_toolchain)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('xcodeBuild', rejected.stderr)
+
+        wrong_module = json.loads(json.dumps(manifest))
+        wrong_module['buildInputs']['moduleManifest']['sha256'] = 'b' * 64
+        rejected = verify(wrong_module)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('module manifest', rejected.stderr)
+
+        wrong_workflow = json.loads(json.dumps(manifest))
+        wrong_workflow['buildInputs']['workflowSource']['sha256'] = 'c' * 64
+        rejected = verify(wrong_workflow)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('workflow source', rejected.stderr)
+
+        wrong_artifact = json.loads(json.dumps(manifest))
+        wrong_artifact['artifact']['sha256'] = 'd' * 64
+        rejected = verify(wrong_artifact)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('artifact SHA-256', rejected.stderr)
+
     def test_workflow_dispatch_does_not_invent_pull_request(self):
         event_path = Path(self.temporary.name) / 'dispatch.json'
         event_path.write_text('{}')
@@ -178,6 +399,25 @@ class BuildProvenanceContract(unittest.TestCase):
         self.assertNotIn('pullRequest', manifest)
         self.assertEqual(manifest['workflow']['eventName'], 'workflow_dispatch')
         self.assertEqual(manifest['workflow']['runId'], '456')
+
+    def test_producer_workflow_source_is_recorded_as_tracked_build_input(self):
+        workflow = self.root / '.github/workflows/build2-macos.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Build 2 macOS\n')
+        subprocess.run(['git', 'add', '.github'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'workflow'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+
+        result = self.run_tool(
+            '--local',
+            '--workflow-source', '.github/workflows/build2-macos.yml',
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['buildInputs']['workflowSource'], {
+            'path': '.github/workflows/build2-macos.yml',
+            'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
+        })
 
     def test_declared_fixture_copy_is_recorded_and_must_match_tracked_source(self):
         source = self.root / 'ContractFixtures/reference_module/backend'

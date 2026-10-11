@@ -38,4 +38,46 @@ macos_list = (ROOT / "Tools/macos_only_tests.txt").read_text().splitlines()
 for name in SWIFT_TESTS:
     assert name in macos_list, "compiled-only tests must run in the macOS lane"
 
+
+# Standing workflow dependencies are supply-chain inputs. Keep the exact commit
+# immutable; the trailing comment preserves the reviewed upstream release tag.
+pins = {
+    "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262 # v4.4.0",
+    "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0",
+    "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2",
+}
+workflow_root = ROOT / ".github" / "workflows"
+pinned_workflows = (
+    "linux-contracts.yml",
+    "build2-macos.yml",
+    "module-build-matrix.yml",
+    "direct-release.yml",
+)
+for name in pinned_workflows:
+    source = (workflow_root / name).read_text()
+    for action, pin in pins.items():
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(f"- uses: {action}@"):
+                use = stripped.removeprefix("- uses: ")
+                assert use == f"{action}@{pin}", (name, use)
+
+for name in ("build2-macos.yml", "module-build-matrix.yml"):
+    source = (workflow_root / name).read_text()
+    assert "'macos-26' || 'ubuntu-latest'" in source, name
+    assert "MGT_MACOS_RUNNER_LABEL: macos-26" in source, name
+    assert "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer" in source, name
+    assert "python3 Tools/macos_toolchain_identity.py" in source, name
+    assert "Tools/verify_build_provenance.py" in source, name
+    assert "--match-current-macos-toolchain" in source, name
+    assert "--expected-workflow-source .github/workflows/" in source, name
+    assert "macos-latest" not in source, name
+
+release = (workflow_root / "direct-release.yml").read_text()
+assert "runs-on: macos-26" in release
+assert "macos-latest" not in release
+assert "Tools/verify_build_provenance.py" in release
+assert "--require-macos-toolchain" in release
+assert "--expected-workflow-source .github/workflows/build2-macos.yml" in release
+
 print("swift_toolchain_ci_contract_ok")
