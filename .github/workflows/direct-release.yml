@@ -131,6 +131,7 @@ jobs:
             --expected-generated-copies 0 \
             --expected-workflow "Build 2 macOS" \
             --expected-event workflow_dispatch \
+            --expected-workflow-source .github/workflows/build2-macos.yml \
             --require-macos-toolchain
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
           echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
