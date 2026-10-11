@@ -6754,12 +6754,29 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  local occurrenceTargets, occurrenceTargetOrder
+
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
-    local boonList, rewardList = nil, nil
-    if includeCatalogs ~= false then boonList, rewardList = boons(), rewards() end
+    local boonList, rewardList, occurrenceList = nil, nil, nil
+    if includeCatalogs ~= false then
+      boonList, rewardList = boons(), rewards()
+      occurrenceList = setmetatable({}, arrayMeta)
+      if type(occurrenceTargets) == "table" and type(occurrenceTargetOrder) == "table" then
+        for _, id in ipairs(occurrenceTargetOrder) do
+          local definition = occurrenceTargets[id]
+          if type(definition) == "table" then
+            occurrenceList[#occurrenceList + 1] = {
+              id = id,
+              kind = definition.kind,
+              sourceId = definition.sourceId,
+            }
+          end
+        end
+      end
+    end
     local support = statSupport()
     local statAvailable = statAvailableMap(support)
     local currentScene = sceneName()
@@ -6857,6 +6874,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
+      occurrenceTargets = occurrenceList,
       lastAction = actionLedger.latestReceipt() or jsonNull,
       runtimeOutcomeUnknown = not not M.terminalActionUnknown,
       featureErrors = M.featureErrors,
@@ -7532,37 +7550,44 @@ if __MacGamingTrainerV1 == nil then
     M.boonRarityEnabled = true
   end
 
-  local occurrenceTargets = {
-    ["npc:Arachne"] = { rooms = { F_Story01 = true } },
-    ["npc:Narcissus"] = { rooms = { G_Story01 = true } },
-    ["npc:Hades"] = { rooms = { I_Story01 = true } },
-    ["npc:Medea"] = { rooms = { N_Story01 = true } },
-    ["npc:Circe"] = { rooms = { O_Story01 = true } },
-    ["npc:Dionysus"] = { rooms = { P_Story01 = true } },
-    ["npc:Echo"] = { encounters = { Story_Echo_01 = true } },
-    ["npc:Artemis"] = { encounters = {
+  occurrenceTargetOrder = {
+    "npc:Arachne", "npc:Artemis", "npc:Narcissus", "npc:Echo",
+    "npc:Nemesis", "npc:Hades", "npc:Medea", "npc:Heracles",
+    "npc:Circe", "npc:Icarus", "npc:Dionysus", "npc:Athena",
+    "shop:Charon",
+  }
+  occurrenceTargets = {
+    ["npc:Arachne"] = { kind = "character", sourceId = "Arachne", rooms = { F_Story01 = true } },
+    ["npc:Narcissus"] = { kind = "character", sourceId = "Narcissus", rooms = { G_Story01 = true } },
+    ["npc:Hades"] = { kind = "character", sourceId = "Hades", rooms = { I_Story01 = true } },
+    ["npc:Medea"] = { kind = "character", sourceId = "Medea", rooms = { N_Story01 = true } },
+    ["npc:Circe"] = { kind = "character", sourceId = "Circe", rooms = { O_Story01 = true } },
+    ["npc:Dionysus"] = { kind = "character", sourceId = "Dionysus", rooms = { P_Story01 = true } },
+    ["npc:Echo"] = { kind = "character", sourceId = "Echo", encounters = { Story_Echo_01 = true } },
+    ["npc:Artemis"] = { kind = "character", sourceId = "Artemis", encounters = {
       ArtemisCombatF = true, ArtemisCombatF2 = true, ArtemisCombatIntro = true,
       ArtemisCombatG = true, ArtemisCombatG2 = true,
       ArtemisCombatN = true, ArtemisCombatN2 = true,
     } },
-    ["npc:Athena"] = { encounters = {
+    ["npc:Athena"] = { kind = "character", sourceId = "Athena", encounters = {
       AthenaCombatP = true, AthenaCombatP02 = true, AthenaCombatIntro = true,
     } },
-    ["npc:Icarus"] = { encounters = {
+    ["npc:Icarus"] = { kind = "character", sourceId = "Icarus", encounters = {
       IcarusCombatO = true, IcarusCombatO2 = true, IcarusCombatIntro = true,
       IcarusCombatP = true, IcarusCombatP2 = true,
     } },
-    ["npc:Nemesis"] = { encounters = {
+    ["npc:Nemesis"] = { kind = "character", sourceId = "Nemesis", encounters = {
       NemesisCombatF = true, NemesisCombatG = true, NemesisCombatH = true,
       NemesisCombatI = true, NemesisCombatIntro = true,
       NemesisRandomEvent = true, BridgeNemesisRandomEvent = true,
     } },
-    ["npc:Heracles"] = { encounters = {
+    ["npc:Heracles"] = { kind = "character", sourceId = "Heracles", encounters = {
       HeraclesCombatN = true, HeraclesCombatN2 = true, HeraclesCombatIntro = true,
       HeraclesCombatO = true, HeraclesCombatO2 = true,
       HeraclesCombatP = true, HeraclesCombatP2 = true,
     } },
     ["shop:Charon"] = {
+      kind = "shop", sourceId = "Charon",
       rooms = {
         F_Shop01 = true, G_Shop01 = true, N_Shop01 = true,
         O_Shop01 = true, P_Shop01 = true,
