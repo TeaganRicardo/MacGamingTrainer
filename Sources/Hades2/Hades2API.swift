@@ -22,6 +22,7 @@ enum Hades2Request {
     case lockElement(element: String, locked: Bool)
     case setBoonRarity(target: String, multiplier: Double, forceLegendary: Bool, forceDuo: Bool)
     case setNextRoomReward(String?)
+    case setNextOccurrence(String?)
     case spawnReward(String)
     case acquireChaosPair(blessing: String, curse: String)
     case openSellTraits
@@ -70,6 +71,7 @@ enum Hades2Request {
         case .lockElement: return .lockElement
         case .setBoonRarity: return .setBoonRarityDesired
         case .setNextRoomReward: return .setNextRoomRewardDesired
+        case .setNextOccurrence: return .setNextOccurrenceDesired
         case .spawnReward: return .spawnReward
         case .acquireChaosPair: return .acquireChaosPair
         case .openSellTraits: return .openSellTraits
@@ -154,6 +156,8 @@ enum Hades2Request {
             return ["target": target, "multiplier": multiplier, "forceLegendary": forceLegendary, "forceDuo": forceDuo]
         case .setNextRoomReward(let reward):
             return ["reward": reward ?? NSNull()]
+        case .setNextOccurrence(let target):
+            return ["target": target ?? NSNull()]
         case .spawnReward(let reward):
             return ["reward": reward]
         case .acquireChaosPair(let blessing, let curse):
