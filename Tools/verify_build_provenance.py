@@ -26,6 +26,7 @@ def verify_provenance(
     *,
     expected_source_sha: str,
     module_id: str,
+    artifact_path: Path | None = None,
     expected_checkout: str,
     expected_generated_copies: int | None = None,
     expected_workflow: str = "",
@@ -135,12 +136,21 @@ def verify_provenance(
         raise RuntimeError("provenance artifact filename is invalid")
     if not isinstance(artifact.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"]):
         raise RuntimeError("provenance artifact SHA-256 is invalid")
+    if artifact_path is not None:
+        artifact_path = artifact_path.resolve()
+        if not artifact_path.is_file():
+            raise RuntimeError("artifact referenced by provenance verification is missing")
+        if artifact["file"] != artifact_path.name:
+            raise RuntimeError("provenance artifact filename differs from retained artifact")
+        if artifact["sha256"] != sha256_file(artifact_path):
+            raise RuntimeError("provenance artifact SHA-256 differs from retained artifact")
     return manifest
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--provenance", type=Path, required=True)
+    parser.add_argument("--artifact", type=Path)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--expected-source-sha", required=True)
     parser.add_argument("--module-id", required=True)
@@ -158,6 +168,7 @@ def main() -> int:
             args.repo_root,
             expected_source_sha=args.expected_source_sha,
             module_id=args.module_id,
+            artifact_path=args.artifact,
             expected_checkout=args.expected_checkout,
             expected_generated_copies=args.expected_generated_copies,
             expected_workflow=args.expected_workflow,
