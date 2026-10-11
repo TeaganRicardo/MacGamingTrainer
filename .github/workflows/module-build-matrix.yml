@@ -53,6 +53,11 @@ jobs:
     if: ${{ always() }}
     runs-on: ${{ needs.scope.result == 'success' && needs.scope.outputs.needs_module == 'true' && 'macos-26' || 'ubuntu-latest' }}
     timeout-minutes: 15
+    env:
+      # macos-26 is GA but its hosted image is serviced in place. Exact image
+      # identity and native tool versions are retained in artifact provenance.
+      MGT_MACOS_RUNNER_LABEL: macos-26
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
