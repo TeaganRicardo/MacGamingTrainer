@@ -122,29 +122,16 @@ jobs:
           provenance="$(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print)"
           sidecar="$(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print)"
           (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
-          python3 - "$provenance" "$GITHUB_SHA" "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}" <<'PY'
-          import json
-          import sys
-
-          path, sha, version, build = sys.argv[1:5]
-          manifest = json.load(open(path, encoding="utf-8"))
-          assert manifest["source"]["commit"] == sha, manifest["source"]
-          assert manifest["productVersion"] == version, manifest.get("productVersion")
-          assert str(manifest["bundleBuild"]) == build, manifest.get("bundleBuild")
-          assert manifest["buildInputs"]["checkout"] == "clean", manifest["buildInputs"]
-          assert manifest["moduleId"] == "hades2", manifest
-          assert manifest["residentRuntime"]["sourceSha256"] == manifest["residentRuntime"]["packagedSha256"]
-          toolchain = manifest["toolchain"]
-          assert toolchain["host"]["runnerLabel"] == "macos-26", toolchain
-          assert toolchain["host"]["imageVersion"], toolchain
-          assert toolchain["host"]["imageMutable"] is True, toolchain
-          developer = toolchain["developer"]
-          assert developer["selectedDeveloperDir"] == "/Applications/Xcode_26.6.app/Contents/Developer", developer
-          assert developer["xcodeVersion"] == "26.6", developer
-          assert developer["xcodeBuild"] == "17F113", developer
-          for owner in ("sdk", "swift", "clang", "lldb", "xcodePython"):
-              assert developer[owner], (owner, developer)
-          PY
+          python3 Tools/verify_build_provenance.py \
+            --provenance "$provenance" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --expected-source-sha "$GITHUB_SHA" \
+            --module-id hades2 \
+            --expected-checkout clean \
+            --expected-generated-copies 0 \
+            --expected-workflow "Build 2 macOS" \
+            --expected-event workflow_dispatch \
+            --require-macos-toolchain
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
           echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
           echo "sidecar=$sidecar" >> "$GITHUB_OUTPUT"
