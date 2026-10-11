@@ -37,6 +37,20 @@ def run(code):
 
 
 CASES = {
+    "catalog_exposes_stable_identity_without_native_route_ids": r"""
+local status = M.dispatch("status", { includeCatalogs = true })
+assert(type(status.occurrenceTargets) == "table" and #status.occurrenceTargets == 13)
+local seen = {}
+for _, row in ipairs(status.occurrenceTargets) do
+  assert(type(row.id) == "string" and type(row.kind) == "string" and type(row.sourceId) == "string")
+  assert(row.rooms == nil and row.encounters == nil and row.room == nil and row.encounter == nil,
+    "catalog leaked native routing internals")
+  seen[row.id] = row
+end
+assert(seen["npc:Nemesis"].sourceId == "Nemesis" and seen["npc:Nemesis"].kind == "character")
+assert(seen["shop:Charon"].sourceId == "Charon" and seen["shop:Charon"].kind == "shop")
+print("occurrence_routing_ok")
+""",
     "room_target_waits_for_native_eligibility_and_consumes_on_offer": r"""
 setRoomSet("F")
 roomEligible.F_Story01 = false
