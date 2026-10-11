@@ -135,7 +135,8 @@ def next_room_reward_consumed(preferences, decoded, preference_dirty):
 def next_occurrence_consumed(preferences, decoded, preference_dirty):
     if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
     target=preferences.get('nextOccurrenceTarget')
-    if target is None or decoded.get('nextOccurrenceTarget') is not None:return False
+    if target is None or 'nextOccurrenceTarget' not in decoded:return False
+    if decoded.get('nextOccurrenceTarget') is not None:return False
     if not preference_dirty:return True
     token=preferences.get('nextOccurrenceToken')
     diagnostics=decoded.get('runtimeDiagnostics')
