@@ -377,8 +377,8 @@ def _regex_probes() -> list[str]:
         "prepareWhileRunning": "请先退出 Hades II；",
         "unverifiedBuildWarning": "未经验证的游戏版本：version=1.2, build=3, UUID=abc。",
         "commandLaunchFailed": "无法运行 some tool：detail",
-        "preferenceNewerFormat": "kind 使用了更新的数据格式（schemaVersion=9，当前支持 8），",
-        "preferenceOlderFormat": "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 8），",
+        "preferenceNewerFormat": "kind 使用了更新的数据格式（schemaVersion=10，当前支持 9），",
+        "preferenceOlderFormat": "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），",
     }
     rules = getattr(ep, "REGISTRY", None)
     if rules is None:
