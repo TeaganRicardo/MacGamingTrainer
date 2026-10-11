@@ -180,30 +180,17 @@ jobs:
           test -f "$provenance"
           test -f "artifacts/$sidecar"
           (cd artifacts && shasum -a 256 -c "$sidecar")
-          python3 - "$provenance" "${{ steps.version.outputs.source_sha }}" "${{ steps.version.outputs.source_tree }}" <<'PY'
-          import json
-          import sys
-
-          manifest = json.load(open(sys.argv[1], encoding="utf-8"))
-          assert manifest["source"] == {
-              "commit": sys.argv[2],
-              "tree": sys.argv[3],
-          }, manifest["source"]
-          assert manifest["buildInputs"]["checkout"] == "clean", manifest["buildInputs"]
-          assert manifest["buildInputs"]["moduleManifest"]["path"] == "Backend/games/hades2/module.json"
-          assert manifest["moduleId"] == "hades2", manifest
-          assert manifest["residentRuntime"]["sourceSha256"] == manifest["residentRuntime"]["packagedSha256"]
-          toolchain = manifest["toolchain"]
-          assert toolchain["host"]["runnerLabel"] == "macos-26", toolchain
-          assert toolchain["host"]["imageVersion"], toolchain
-          assert toolchain["host"]["imageMutable"] is True, toolchain
-          developer = toolchain["developer"]
-          assert developer["selectedDeveloperDir"] == "/Applications/Xcode_26.6.app/Contents/Developer", developer
-          assert developer["xcodeVersion"] == "26.6", developer
-          assert developer["xcodeBuild"] == "17F113", developer
-          for owner in ("sdk", "swift", "clang", "lldb", "xcodePython"):
-              assert developer[owner], (owner, developer)
-          PY
+          python3 Tools/verify_build_provenance.py \
+            --provenance "$provenance" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --expected-source-sha "${{ steps.version.outputs.source_sha }}" \
+            --module-id hades2 \
+            --expected-checkout clean \
+            --expected-generated-copies 0 \
+            --expected-workflow "Build 2 macOS" \
+            --expected-event workflow_dispatch \
+            --require-macos-toolchain \
+            --match-current-macos-toolchain
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
