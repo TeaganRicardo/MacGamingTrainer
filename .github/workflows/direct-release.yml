@@ -124,6 +124,7 @@ jobs:
           (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
           python3 Tools/verify_build_provenance.py \
             --provenance "$provenance" \
+            --artifact "$artifact" \
             --repo-root "$GITHUB_WORKSPACE" \
             --expected-source-sha "$GITHUB_SHA" \
             --module-id hades2 \
