@@ -121,6 +121,7 @@ struct Hades2SaveEditorView: View {
         }
         .frame(width: 1180)
         .trainerSurface(.canvas)
+        .trainerDismissTextEditingOnClickAway()
         .confirmationDialog(
             text("hades2.saveEditor.workbench.confirmTitle"),
             isPresented: $confirmingApply,
@@ -508,13 +509,11 @@ struct Hades2SaveEditorView: View {
             .labelsHidden()
             .frame(maxWidth: 240, alignment: .leading)
         } else {
-            TextField(
-                text("hades2.saveEditor.value"),
-                text: draftBinding(for: entry)
+            Hades2SaveEditorTextField(
+                model: model, entry: entry, text: draftBinding(for: entry),
+                title: text("hades2.saveEditor.value")
             )
-            .textFieldStyle(.roundedBorder)
             .frame(maxWidth: 240, alignment: .leading)
-            .onSubmit { stageDraft(for: entry) }
         }
     }
 
@@ -786,37 +785,12 @@ struct Hades2SaveEditorView: View {
     }
 
     private func stageDraft(for entry: Hades2SaveEditorEntry) {
-        guard let value = parsedDraft(for: entry) else { return }
-        let operation = entry.mutationKinds.contains("setEnum") ? "setEnum" : "set"
-        model.stage(entryID: entry.id, operation: operation, value: value)
+        let draft = draftBinding(for: entry)
+        draft.wrappedValue = model.completeTextEdit(entry, text: draft.wrappedValue)
     }
 
     private func parsedDraft(for entry: Hades2SaveEditorEntry) -> Any? {
-        let raw = drafts[entry.id] ?? valueText(entry.value)
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if entry.valueType == "enum" {
-            return entry.choices.contains(trimmed) ? trimmed : nil
-        }
-        guard !trimmed.isEmpty else { return nil }
-        if entry.constraints?.integer == true || entry.valueType == "integer" {
-            guard let value = Int(trimmed) else { return nil }
-            if let minimum = entry.constraints?.minimum, Double(value) < minimum { return nil }
-            if let maximum = entry.constraints?.maximum, Double(value) > maximum { return nil }
-            return value
-        }
-        if entry.valueType == "number" {
-            guard let value = Double(trimmed), value.isFinite else { return nil }
-            if let minimum = entry.constraints?.minimum, value < minimum { return nil }
-            if let maximum = entry.constraints?.maximum, value > maximum { return nil }
-            return value
-        }
-        if entry.valueType == "boolean" {
-            if trimmed == "true" { return true }
-            if trimmed == "false" { return false }
-            return nil
-        }
-        if entry.valueType == "string" { return trimmed }
-        return nil
+        model.parsedTextDraft(for: entry, text: draftBinding(for: entry).wrappedValue)
     }
 
     private func discoveryReason(_ entry: Hades2SaveEditorEntry, fallback: String) -> String {

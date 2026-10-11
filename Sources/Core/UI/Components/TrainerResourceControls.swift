@@ -21,6 +21,8 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     let emptyLabel: String
     let itemLabel: (Item) -> String
     let onLock: () -> Void
+    let onCommit: (String) -> String
+    let onEditingChanged: (Bool) -> Void
 
     init(
         title: String,
@@ -34,7 +36,9 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         searchPlaceholder: String = "host.resource.searchPlaceholder",
         emptyLabel: String = "host.resource.noMatches",
         itemLabel: @escaping (Item) -> String,
-        onLock: @escaping () -> Void
+        onLock: @escaping () -> Void,
+        onEditingChanged: @escaping (Bool) -> Void = { _ in },
+        onCommit: @escaping (String) -> String = { $0 }
     ) {
         self.title = title
         self.icon = icon
@@ -48,6 +52,8 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
         self.emptyLabel = emptyLabel
         self.itemLabel = itemLabel
         self.onLock = onLock
+        self.onEditingChanged = onEditingChanged
+        self.onCommit = onCommit
     }
 
     var body: some View {
@@ -79,7 +85,8 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
 
             HStack(spacing: 12) {
                 Spacer()
-                TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading)
+                TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
+                    .id(selection)
                 Button(action: onLock) {
                     Label(localization.localized(locked ? "host.locked" : "host.lock"), systemImage: locked ? "lock.fill" : "lock.open")
                         .foregroundStyle(locked ? theme.accent : .secondary)

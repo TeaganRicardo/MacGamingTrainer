@@ -12,6 +12,12 @@ struct Hades2RuntimeIssuePresentation: Hashable {
     let token: TrainerTextToken
 }
 
+enum Hades2RuntimeTextEdit {
+    case vital(String, field: String), resource(String), rerolls, element(String)
+    case stat(String), counter(String), multiplier(String), gameSpeed, boonRarity
+    case gathering(Hades2GatheringFamily), chaosGate
+}
+
 final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private static let expectedHostProtocolVersion = Hades2GameModule.descriptor.expectedHostProtocolVersion
     private static let expectedModuleProtocolVersion = Hades2GameModule.descriptor.expectedModuleProtocolVersion
@@ -932,6 +938,105 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private func amountValue(_ text: String) -> Int? {
         guard let value = Int(text), (0...999_999).contains(value) else { return nil }
         return value
+    }
+
+    /// Validation and runtime meaning stay with Hades; Core only owns completion.
+    /// Invalid/unavailable edits restore the observed value and emit one notice.
+    func completeTextEdit(_ edit: Hades2RuntimeTextEdit, text: String, generation: UInt64) -> String {
+        var current: Double?
+        var range = 0.0...999_999.0
+        var integer = false
+        var available = canSetResource
+        var apply: (String) -> Void
+        switch edit {
+        case let .vital(vital, field):
+            available = canSetVitals
+            if vital == "health" { range = 1...999_999 }
+            switch (vital, field) {
+            case ("health", "current"): current = health
+            case ("health", "max"): current = maxHealth
+            case ("mana", "current"): current = mana
+            case ("mana", "max"): current = maxMana
+            case ("armor", "current"): current = armor
+            default: available = false
+            }
+            apply = { self.setVital(vital, field: field, text: $0) }
+        case let .resource(id):
+            current = id == "Money" ? money : resources.first(where: { $0.id == id })?.count
+            integer = true
+            available = canSetResource && current != nil
+            apply = { self.setResource(id, amount: $0) }
+        case .rerolls:
+            current = rerolls; integer = true
+            apply = { self.setRerolls($0) }
+        case let .element(id):
+            current = elements.first(where: { $0.id == id })?.count
+            integer = true; available = canSetElements && current != nil
+            apply = { self.setElement(id, text: $0) }
+        case let .stat(id):
+            let rule = Self.statRules[id]
+            range = (rule?.min ?? 0)...(rule?.max ?? 0); integer = rule?.integer ?? false
+            available = canSetStats && rule != nil && statSupport[id] != false && statAvailable[id] != false
+            let values: [String: Double?] = ["grasp": graspValue, "dodge": dodgeValue, "crit": critValue,
+                "chargeSpeed": chargeSpeedValue, "moveSpeed": moveSpeedValue, "sprintSpeed": sprintSpeedValue,
+                "dashSpeed": dashSpeedValue, "attackSpeed": attackSpeedValue, "manaRegen": manaRegenValue,
+                "enemyDamage": enemyDamageValue, "enemyHealth": enemyHealthValue]
+            current = values[id] ?? nil
+            let locks = ["grasp": graspLocked, "dodge": dodgeLocked, "crit": critLocked,
+                "chargeSpeed": chargeSpeedLocked, "moveSpeed": moveSpeedLocked, "sprintSpeed": sprintSpeedLocked,
+                "dashSpeed": dashSpeedLocked, "attackSpeed": attackSpeedLocked, "manaRegen": manaRegenLocked,
+                "enemyDamage": enemyDamageLocked, "enemyHealth": enemyHealthLocked]
+            // An unlocked stat remains a local target until its explicit lock action.
+            apply = { if locks[id] == true { self.setStat(id, text: $0, locked: true) } }
+        case let .counter(id):
+            current = id == "spellCharge" ? spellCharge : nil
+            available = canSetVitals && current != nil
+            apply = { self.setCounter(id, text: $0) }
+        case let .multiplier(id):
+            let values = ["damageMultiplier": damageMultiplier, "moneyMultiplier": moneyMultiplier,
+                "resourceMultiplier": resourceMultiplier]
+            current = values[id]; range = 1...100; available = canEditDesired && current != nil
+            apply = { self.setMultiplier(id, text: $0) }
+        case .gameSpeed:
+            current = gameSpeed; range = Self.gameSpeedInputRange; available = canEditDesired
+            apply = { self.setGameSpeed($0) }
+        case .boonRarity:
+            current = boonRarityMultiplier; range = 0...1000; available = canEditDesired
+            apply = { self.setBoonRarity(target: self.boonRarityTarget, multiplier: $0,
+                forceLegendary: self.boonForceLegendary, forceDuo: self.boonForceDuo) }
+        case let .gathering(family):
+            current = gatheringProbabilities[family]; range = 0...100; available = canEditDesired
+            apply = { self.setGatheringProbability(family, custom: true, text: $0) }
+        case .chaosGate:
+            current = chaosGateProbability; range = 0...100; available = canEditDesired
+            apply = { self.setChaosGateProbability(custom: true, text: $0) }
+        }
+        func canonical(_ value: Double?) -> String {
+            guard let value, value.isFinite else { return "" }
+            return value.rounded() == value ? String(format: "%.0f", value) : String(value)
+        }
+        let restored: String
+        switch edit {
+        case .gameSpeed: restored = String(format: "%.1f", gameSpeed)
+        case .gathering, .chaosGate: restored = canonical(current ?? 100)
+        default: restored = canonical(current)
+        }
+        guard generation == editGeneration else { return restored }
+        guard available && !busy && protocolCompatible else {
+            presentFeedback(presentation("hades2.input.unavailable"), tone: .warning)
+            return restored
+        }
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Double(raw), value.isFinite, range.contains(value),
+              !integer || (Int(raw) != nil && value.rounded() == value) else {
+            presentFeedback(presentation("hades2.input.invalid"), tone: .warning)
+            return restored
+        }
+        let normalized: String
+        if case .gameSpeed = edit { normalized = String(format: "%.1f", (value * 10).rounded() / 10) }
+        else { normalized = canonical(value) }
+        if current != Double(normalized) { apply(normalized) }
+        return normalized
     }
 
     func setVital(_ vital: String, field: String, text: String) {

@@ -513,6 +513,46 @@ final class Hades2SaveEditorModel: ObservableObject {
         query(offset: max(0, offset - Self.pageSize))
     }
 
+    func parsedTextDraft(for entry: Hades2SaveEditorEntry, text: String) -> Any? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if entry.valueType == "enum" { return entry.choices.contains(trimmed) ? trimmed : nil }
+        guard !trimmed.isEmpty else { return nil }
+        if entry.constraints?.integer == true || entry.valueType == "integer" {
+            guard let value = Int(trimmed) else { return nil }
+            if let minimum = entry.constraints?.minimum, Double(value) < minimum { return nil }
+            if let maximum = entry.constraints?.maximum, Double(value) > maximum { return nil }
+            return value
+        }
+        if entry.valueType == "number" {
+            guard let value = Double(trimmed), value.isFinite else { return nil }
+            if let minimum = entry.constraints?.minimum, value < minimum { return nil }
+            if let maximum = entry.constraints?.maximum, value > maximum { return nil }
+            return value
+        }
+        if entry.valueType == "boolean" {
+            if trimmed == "true" { return true }
+            if trimmed == "false" { return false }
+            return nil
+        }
+        return entry.valueType == "string" ? trimmed : nil
+    }
+
+    /// Completing a Save field only stages a valid value in the open document.
+    /// Invalid/busy drafts remain visible for correction; Apply stays explicit.
+    func completeTextEdit(_ entry: Hades2SaveEditorEntry, text: String) -> String {
+        guard !busy else {
+            failure = TrainerTextToken(key: "hades2.saveEditor.unavailableDraft")
+            return text
+        }
+        guard entry.editable, !entry.mutationKinds.isEmpty,
+              let value = parsedTextDraft(for: entry, text: text) else {
+            failure = TrainerTextToken(key: "hades2.saveEditor.invalidDraft")
+            return text
+        }
+        stage(entryID: entry.id, operation: entry.mutationKinds.contains("setEnum") ? "setEnum" : "set", value: value)
+        return String(describing: value)
+    }
+
     func stage(entryID: String, operation: String, value: Any?) {
         perform(
             .saveEditorStage(entryID: entryID, operation: operation, value: value),

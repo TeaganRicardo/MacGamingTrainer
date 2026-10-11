@@ -30,6 +30,7 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
             }
         }
         .background(theme.background.ignoresSafeArea())
+        .trainerDismissTextEditingOnClickAway()
     }
 }
 

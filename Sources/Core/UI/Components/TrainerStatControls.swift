@@ -6,8 +6,10 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
     let tint: Color
     @Binding var current: String
     @Binding var maximum: String
-    let focus: FocusState<Field?>.Binding
+    let focus: Binding<Field?>
     let currentField: Field
+    var onCurrentCommit: (String) -> String = { $0 }
+    var onMaximumCommit: (String) -> String = { $0 }
     let maximumField: Field
     let locked: Bool
     let editable: Bool
@@ -18,22 +20,12 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
             TrainerLockButton(locked: locked, enabled: editable, action: onLock)
         } content: {
             HStack(spacing: 2) {
-                TextField("—", text: $current)
-                    .textFieldStyle(.plain)
-                    .multilineTextAlignment(.center)
+                TrainerTextField(title: "—", text: $current, onEditingChanged: TrainerTextField.editingTracker(focus, equals: currentField), onCommit: onCurrentCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
                     .frame(width: 54)
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .focused(focus, equals: currentField)
                     .disabled(!editable)
                 Text("/").foregroundStyle(.secondary)
-                TextField("—", text: $maximum)
-                    .textFieldStyle(.plain)
-                    .multilineTextAlignment(.center)
+                TrainerTextField(title: "—", text: $maximum, onEditingChanged: TrainerTextField.editingTracker(focus, equals: maximumField), onCommit: onMaximumCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
                     .frame(width: 54)
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .focused(focus, equals: maximumField)
                     .disabled(!editable)
             }
         }
@@ -45,24 +37,26 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
     let icon: String
     let tint: Color
     @Binding var text: String
-    let focus: FocusState<Field?>.Binding
+    let focus: Binding<Field?>
     let focusValue: Field
     let locked: Bool
     let editable: Bool
     let placeholder: String
     let onLock: () -> Void
+    var onCommit: (String) -> String = { $0 }
 
     init(
         title: String,
         icon: String,
         tint: Color,
         text: Binding<String>,
-        focus: FocusState<Field?>.Binding,
+        focus: Binding<Field?>,
         focusValue: Field,
         locked: Bool,
         editable: Bool,
         placeholder: String = "—",
-        onLock: @escaping () -> Void
+        onLock: @escaping () -> Void,
+        onCommit: @escaping (String) -> String = { $0 }
     ) {
         self.title = title
         self.icon = icon
@@ -74,19 +68,15 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         self.editable = editable
         self.placeholder = placeholder
         self.onLock = onLock
+        self.onCommit = onCommit
     }
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
             TrainerLockButton(locked: locked, enabled: editable, action: onLock)
         } content: {
-            TextField(placeholder, text: $text)
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+            TrainerTextField(title: placeholder, text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)
-                .focused(focus, equals: focusValue)
                 .disabled(!editable)
         }
     }
@@ -97,9 +87,10 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
     let icon: String
     let tint: Color
     @Binding var text: String
-    let focus: FocusState<Field?>.Binding
+    let focus: Binding<Field?>
     let focusValue: Field
     let detail: String?
+    var onCommit: (String) -> String = { $0 }
     let editable: Bool
 
     var body: some View {
@@ -108,13 +99,8 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
                 Text(detail).font(.caption2).foregroundStyle(.secondary)
             }
         } content: {
-            TextField("—", text: $text)
-                .textFieldStyle(.plain)
-                .multilineTextAlignment(.center)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+            TrainerTextField(title: "—", text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)
-                .focused(focus, equals: focusValue)
                 .disabled(!editable)
         }
     }
@@ -125,7 +111,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
     let title: String
     let icon: String
     @Binding var text: String
-    let focus: FocusState<Field?>.Binding
+    let focus: Binding<Field?>
     let focusValue: Field
     let suffix: String
     let locked: Bool
@@ -133,6 +119,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
     let available: Bool
     let editable: Bool
     let onLock: () -> Void
+    var onCommit: (String) -> String = { $0 }
 
     private var isEditable: Bool { editable && supported && available }
 
@@ -141,13 +128,8 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
             TrainerLockButton(locked: locked, enabled: isEditable, action: onLock)
         } content: {
             HStack(spacing: 3) {
-                TextField("—", text: $text)
-                    .textFieldStyle(.plain)
-                    .multilineTextAlignment(.center)
+                TrainerTextField(title: "—", text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                     .frame(width: 58)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .focused(focus, equals: focusValue)
                     .disabled(!isEditable)
                 if !suffix.isEmpty {
                     Text(suffix).font(.caption).foregroundStyle(.secondary)
@@ -161,7 +143,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
 struct TrainerInlineStatEditor<Field: Hashable>: View {
     let title: String
     @Binding var text: String
-    let focus: FocusState<Field?>.Binding
+    let focus: Binding<Field?>
     let focusValue: Field
     let suffix: String
     let locked: Bool
@@ -169,6 +151,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
     let available: Bool
     let editable: Bool
     let onLockChange: (Bool) -> Void
+    var onCommit: (String) -> String = { $0 }
 
     private var isEditable: Bool { editable && supported && available }
 
@@ -177,8 +160,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
             HStack(spacing: 12) {
                 Text(title).font(.subheadline.weight(.semibold))
                 Spacer()
-                TrainerNumberField(text: $text, placeholder: "host.value", width: 90, enabled: isEditable, alignment: .leading)
-                    .focused(focus, equals: focusValue)
+                TrainerNumberField(text: $text, placeholder: "host.value", width: 90, enabled: isEditable, alignment: .leading, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit)
                 if !suffix.isEmpty {
                     Text(suffix).foregroundStyle(.secondary).frame(width: 18)
                 }
