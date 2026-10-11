@@ -170,7 +170,8 @@ jobs:
             --product-version "${{ steps.version.outputs.version }}" \
             --bundle-build "${{ steps.version.outputs.build }}" \
             --repo-root "$GITHUB_WORKSPACE" \
-            --module-id hades2
+            --module-id hades2 \
+            --workflow-source .github/workflows/build2-macos.yml
 
       - name: Verify release provenance and checksum
         if: needs.scope.outputs.needs_macos == 'true' && github.event_name == 'workflow_dispatch'
@@ -189,6 +190,7 @@ jobs:
             --expected-generated-copies 0 \
             --expected-workflow "Build 2 macOS" \
             --expected-event workflow_dispatch \
+            --expected-workflow-source .github/workflows/build2-macos.yml \
             --require-macos-toolchain \
             --match-current-macos-toolchain
 
