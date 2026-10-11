@@ -54,6 +54,9 @@ class ProbeAdapter:
     def set_next_room_reward_desired(self, reward):
         return self._record("set_next_room_reward_desired", reward)
 
+    def set_next_occurrence_desired(self, target):
+        return self._record("set_next_occurrence_desired", target)
+
     def set_gathering_desired(self, family, probability):
         return self._record("set_gathering_desired", family, probability)
 
@@ -119,7 +122,7 @@ assert names == [
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
     "generate_gathering", "set_stat", "set_element", "lock_element",
-    "set_boon_rarity_desired", "set_next_room_reward_desired",
+    "set_boon_rarity_desired", "set_next_room_reward_desired", "set_next_occurrence_desired",
     "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
@@ -403,6 +406,14 @@ contract.dispatch(
     "reward-desired",
 )
 assert probe.calls == [("set_next_room_reward_desired", "WeaponUpgrade")]
+probe.calls.clear()
+contract.dispatch(
+    "set_next_occurrence_desired",
+    {"target": "npc:Nemesis"},
+    "occurrence-desired",
+)
+assert probe.calls == [("set_next_occurrence_desired", "npc:Nemesis")]
+expect_error("set_next_occurrence_desired", {"target": ""}, "下一次遭遇目标无效。")
 
 
 # Non-request-id runtime commands must not inherit the Host request identity.
