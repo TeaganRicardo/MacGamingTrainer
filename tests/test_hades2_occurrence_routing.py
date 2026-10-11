@@ -62,6 +62,7 @@ for _, door in pairs(MapState.OfferedExitDoors) do
 end
 
 roomEligible.F_Story01 = true
+MapState.OfferedExitDoors = {}
 CurrentRun.RoomCreations = {}
 CurrentRun.CurrentRoom.RoomCreations = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
@@ -89,6 +90,7 @@ assert(M.nextOccurrenceTarget == "npc:Arachne",
 assert(MapState.OfferedExitDoors[1].Room.Name == "F_Forced01",
   "native forced room lost priority in fixture")
 nativeRoomForced.F_Forced01 = nil
+MapState.OfferedExitDoors = {}
 CurrentRun.RoomCreations = {}
 CurrentRun.CurrentRoom.RoomCreations = {}
 DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
@@ -171,12 +173,88 @@ assert(forced.Name == "CombatNormal" and M.nextOccurrenceTarget == "npc:Nemesis"
   "explicit native ForceNextEncounter was overridden or consumed")
 print("occurrence_routing_ok")
 """,
+    "linked_room_native_force_precedes_trainer_target": r"""
+setRoomSet("F")
+CurrentRun.CurrentRoom.LinkedRooms = { "F_Story01", "F_Forced01" }
+nativeRoomForced.F_Forced01 = true
+setOccurrence("npc:Arachne", "linked-room-token")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[1].Room.Name == "F_Forced01")
+assert(M.nextOccurrenceTarget == "npc:Arachne" and M.lastConsumedNextOccurrenceToken == nil,
+  "Trainer displaced native forced linked-room routing")
+nativeRoomForced.F_Forced01 = nil
+MapState.OfferedExitDoors = {}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[1].Room.Name == "F_Story01")
+assert(M.lastConsumedNextOccurrenceToken == "linked-room-token")
+print("occurrence_routing_ok")
+""",
+    "explicit_native_room_force_precedes_trainer_target": r"""
+setRoomSet("F")
+ForceNextRoom = "F_Forced01"
+setOccurrence("npc:Arachne", "explicit-force-token")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[1].Room.Name == "F_Forced01")
+assert(M.nextOccurrenceTarget == "npc:Arachne",
+  "Trainer displaced explicit ForceNextRoom")
+ForceNextRoom = nil
+MapState.OfferedExitDoors = {}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(M.lastConsumedNextOccurrenceToken == "explicit-force-token")
+print("occurrence_routing_ok")
+""",
+    "unavailable_preexisting_target_door_does_not_consume": r"""
+setRoomSet("F")
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, Room = { Name = "F_Story01", RoomSetName = "F" } },
+  [2] = { ObjectId = 2, Room = { Name = "F_Combat01", RoomSetName = "F" } },
+}
+CurrentRun.CurrentRoom.UnavailableDoorIds = { 1 }
+setOccurrence("npc:Arachne", "unavailable-door-token")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(M.nextOccurrenceTarget == "npc:Arachne"
+  and M.lastConsumedNextOccurrenceToken == nil,
+  "unavailable persistent target-shaped door consumed pending request")
+assert(not MapState.OfferedExitDoors[1].PreviewCreated and not MapState.OfferedExitDoors[1].ReadyToUse)
+CurrentRun.CurrentRoom.UnavailableDoorIds = nil
+MapState.OfferedExitDoors = {}
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(M.lastConsumedNextOccurrenceToken == "unavailable-door-token",
+  "subsequently genuinely offered target room did not consume")
+print("occurrence_routing_ok")
+""",
+    "skip_unlock_target_door_waits_until_actually_offered": r"""
+setRoomSet("F")
+MapState.OfferedExitDoors = {
+  [1] = { ObjectId = 1, SkipUnlock = true, ChooseRoomArgs = {} },
+}
+setOccurrence("npc:Arachne", "skip-unlock-token")
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[1].Room.Name == "F_Story01",
+  "fixture did not reserve target room on skipped door")
+assert(M.nextOccurrenceTarget == "npc:Arachne"
+  and M.lastConsumedNextOccurrenceToken == nil,
+  "skipped/unusable exit falsely consumed the one-shot")
+assert(not MapState.OfferedExitDoors[1].PreviewCreated
+  and not MapState.OfferedExitDoors[1].ReadyToUse)
+MapState.OfferedExitDoors[1].SkipUnlock = false
+DoUnlockRoomExits(CurrentRun, CurrentRun.CurrentRoom)
+assert(MapState.OfferedExitDoors[1].PreviewCreated
+  and MapState.OfferedExitDoors[1].ReadyToUse)
+assert(M.lastConsumedNextOccurrenceToken == "skip-unlock-token",
+  "genuinely unlocked door did not generate consumption receipt")
+print("occurrence_routing_ok")
+""",
     "cleanup_restores_native_routing_owners": r"""
 setRoomSet("F")
 setOccurrence("npc:Arachne", "cleanup-token")
 assert(IsRoomForced ~= nativeIsRoomForced and DoUnlockRoomExits ~= nativeDoUnlockRoomExits)
+assert(ChooseNextRoomData ~= nativeChooseNextRoomData and GetRandomValue ~= nativeGetRandomValue)
+assert(CreateDoorRewardPreview ~= nativeCreateDoorRewardPreview)
 M.dispatch("cleanup", { includeCatalogs = false })
 assert(IsRoomForced == nativeIsRoomForced and DoUnlockRoomExits == nativeDoUnlockRoomExits)
+assert(ChooseNextRoomData == nativeChooseNextRoomData and GetRandomValue == nativeGetRandomValue)
+assert(CreateDoorRewardPreview == nativeCreateDoorRewardPreview)
 assert(IsEncounterForced == nativeIsEncounterForced and ChooseEncounter == nativeChooseEncounter)
 assert(M.nextOccurrenceTarget == nil and M.nextOccurrenceToken == nil)
 print("occurrence_routing_ok")
