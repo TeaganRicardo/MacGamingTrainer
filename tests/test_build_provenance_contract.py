@@ -280,8 +280,11 @@ else:
             'id': 'hades2', 'displayName': 'Hades II',
             'app': {'displayName': 'Test', 'bundleIdentifier': 'com.example.test'},
         }))
-        subprocess.run(['git', 'add', 'Backend'], cwd=self.root, check=True)
-        subprocess.run(['git', 'commit', '-qm', 'module'], cwd=self.root, check=True)
+        workflow = self.root / '.github/workflows/build2-macos.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Build 2 macOS\n')
+        subprocess.run(['git', 'add', 'Backend', '.github'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'module and workflow'], cwd=self.root, check=True)
         actual = git(self.root, 'rev-parse', 'HEAD')
         tree = git(self.root, 'rev-parse', 'HEAD^{tree}')
         provenance = Path(self.temporary.name) / 'fixture.provenance.json'
@@ -317,6 +320,10 @@ else:
                     'path': 'Backend/games/hades2/module.json',
                     'sha256': hashlib.sha256(module_manifest.read_bytes()).hexdigest(),
                 },
+                'workflowSource': {
+                    'path': '.github/workflows/build2-macos.yml',
+                    'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
+                },
             },
             'artifact': {'file': 'TestTrainer.zip', 'sha256': 'a' * 64},
             'origin': 'github',
@@ -337,6 +344,7 @@ else:
                 '--expected-generated-copies', '0',
                 '--expected-workflow', 'Build 2 macOS',
                 '--expected-event', 'workflow_dispatch',
+                '--expected-workflow-source', '.github/workflows/build2-macos.yml',
                 '--require-macos-toolchain',
             ], cwd=self.root, env=self.env, text=True, capture_output=True)
 
@@ -354,6 +362,12 @@ else:
         rejected = verify(wrong_module)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn('module manifest', rejected.stderr)
+
+        wrong_workflow = json.loads(json.dumps(manifest))
+        wrong_workflow['buildInputs']['workflowSource']['sha256'] = 'c' * 64
+        rejected = verify(wrong_workflow)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('workflow source', rejected.stderr)
 
     def test_workflow_dispatch_does_not_invent_pull_request(self):
         event_path = Path(self.temporary.name) / 'dispatch.json'
@@ -375,6 +389,25 @@ else:
         self.assertNotIn('pullRequest', manifest)
         self.assertEqual(manifest['workflow']['eventName'], 'workflow_dispatch')
         self.assertEqual(manifest['workflow']['runId'], '456')
+
+    def test_producer_workflow_source_is_recorded_as_tracked_build_input(self):
+        workflow = self.root / '.github/workflows/build2-macos.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Build 2 macOS\n')
+        subprocess.run(['git', 'add', '.github'], cwd=self.root, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'workflow'], cwd=self.root, check=True)
+        self.refresh_artifact_name()
+
+        result = self.run_tool(
+            '--local',
+            '--workflow-source', '.github/workflows/build2-macos.yml',
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['buildInputs']['workflowSource'], {
+            'path': '.github/workflows/build2-macos.yml',
+            'sha256': hashlib.sha256(workflow.read_bytes()).hexdigest(),
+        })
 
     def test_declared_fixture_copy_is_recorded_and_must_match_tracked_source(self):
         source = self.root / 'ContractFixtures/reference_module/backend'
