@@ -64,11 +64,14 @@ for name in ("build2-macos.yml", "module-build-matrix.yml"):
     assert "MGT_MACOS_RUNNER_LABEL: macos-26" in source, name
     assert "DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer" in source, name
     assert "python3 Tools/macos_toolchain_identity.py" in source, name
+    assert "Tools/verify_build_provenance.py" in source, name
+    assert "--match-current-macos-toolchain" in source, name
     assert "macos-latest" not in source, name
 
 release = (workflow_root / "direct-release.yml").read_text()
 assert "runs-on: macos-26" in release
 assert "macos-latest" not in release
-assert 'manifest["toolchain"]' in release
+assert "Tools/verify_build_provenance.py" in release
+assert "--require-macos-toolchain" in release
 
 print("swift_toolchain_ci_contract_ok")
