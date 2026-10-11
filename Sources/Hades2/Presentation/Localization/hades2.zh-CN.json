@@ -58,6 +58,7 @@
     "hades2.error.invalidCommand": "未知命令。",
     "hades2.error.invalidCommandValue": "command 无效。",
     "hades2.error.invalidLegendaryDuo": "Legendary / Duo 设置无效。",
+    "hades2.error.invalidNextOccurrence": "下一次合资格遭遇请求无效。",
     "hades2.error.invalidNextRoomReward": "下一房奖励无效。",
     "hades2.error.invalidParamsObject": "params 必须是对象。",
     "hades2.error.invalidRarityMultiplier": "稀有度倍率必须为 0–1000%。",
