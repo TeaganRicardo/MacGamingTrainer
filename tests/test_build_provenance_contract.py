@@ -236,6 +236,7 @@ else:
             'developer': {
                 'requestedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
                 'selectedDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
+                'xcodeSelectDeveloperDir': '/Applications/Xcode_26.6.app/Contents/Developer',
                 'xcodeVersion': '26.6',
                 'xcodeBuild': '17F113',
                 'sdk': {
@@ -263,6 +264,12 @@ else:
                 },
             },
         })
+
+        missing_image = dict(env)
+        missing_image.pop('ImageVersion')
+        rejected = self.run_tool(env=missing_image)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn('ImageVersion', rejected.stderr)
 
     def test_workflow_dispatch_does_not_invent_pull_request(self):
         event_path = Path(self.temporary.name) / 'dispatch.json'
