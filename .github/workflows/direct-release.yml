@@ -9,15 +9,15 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.15.0-rc.3'
 
@@ -122,19 +122,18 @@ jobs:
           provenance="$(find artifacts -maxdepth 1 -type f -name '*.provenance.json' -print)"
           sidecar="$(find artifacts -maxdepth 1 -type f -name '*.zip.sha256' -print)"
           (cd artifacts && shasum -a 256 -c "$(basename "$sidecar")")
-          python3 - "$provenance" "$GITHUB_SHA" "${{ steps.version.outputs.version }}" "${{ steps.version.outputs.build }}" <<'PY'
-          import json
-          import sys
-
-          path, sha, version, build = sys.argv[1:5]
-          manifest = json.load(open(path, encoding="utf-8"))
-          assert manifest["source"]["commit"] == sha, manifest["source"]
-          assert manifest["productVersion"] == version, manifest.get("productVersion")
-          assert str(manifest["bundleBuild"]) == build, manifest.get("bundleBuild")
-          assert manifest["buildInputs"]["checkout"] == "clean", manifest["buildInputs"]
-          assert manifest["moduleId"] == "hades2", manifest
-          assert manifest["residentRuntime"]["sourceSha256"] == manifest["residentRuntime"]["packagedSha256"]
-          PY
+          python3 Tools/verify_build_provenance.py \
+            --provenance "$provenance" \
+            --artifact "$artifact" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --expected-source-sha "$GITHUB_SHA" \
+            --module-id hades2 \
+            --expected-checkout clean \
+            --expected-generated-copies 0 \
+            --expected-workflow "Build 2 macOS" \
+            --expected-event workflow_dispatch \
+            --expected-workflow-source .github/workflows/build2-macos.yml \
+            --require-macos-toolchain
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
           echo "provenance=$provenance" >> "$GITHUB_OUTPUT"
           echo "sidecar=$sidecar" >> "$GITHUB_OUTPUT"
