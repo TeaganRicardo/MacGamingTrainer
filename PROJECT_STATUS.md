@@ -17,10 +17,10 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 
 - Product release identity: `Info.plist` owns SemVer `0.2.1` and bundle build `5`. Do not duplicate these values into another source of truth.
 - Host protocol: 6.
-- Hades II module protocol: 13.
-- Hades II desired-state schema: 8.
+- Hades II module protocol: 14.
+- Hades II desired-state schema: 9.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 98.
+- Hades II resident runtime revision: 99.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - Invincibility's native effect-block query is a Hades-owned persistent C library, ABI 1, restricted to that exact arm64 UUID and verified function prefixes. It exposes only read-only Unit identity and a copied block-set snapshot; unknown builds cannot reuse its field offsets. The supported content's synchronous scalar Add/Remove calls are tracked with native last-write set semantics. Lua keeps the current game intent separately from Trainer protection, including sampling-time finalizers and room/setup generation changes; other native argument shapes pass through unchanged. The library remains loaded for the game process lifetime because Lua may retain callbacks after detach. Helper loading, real hostile effects, room remount and reconnect acceptance remain pending user-run QA.
