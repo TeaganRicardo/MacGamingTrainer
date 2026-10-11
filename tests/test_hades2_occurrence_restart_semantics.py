@@ -204,6 +204,7 @@ try:
     saved_token = armed_adapter.preferences["nextOccurrenceToken"]
     armed_adapter.set_next_occurrence_desired("npc:Echo")
     assert armed_adapter.preferences["nextOccurrenceToken"] != saved_token
+    armed_adapter.state["connected"] = False
     loaded = armed_adapter.load_profile("Occurrence")
     loaded_token = armed_adapter.preferences["nextOccurrenceToken"]
     assert loaded["nextOccurrenceTarget"] == "npc:Nemesis"
