@@ -21,13 +21,14 @@ def require_env(env: Mapping[str, str], name: str) -> str:
     return value
 
 
-def command_text(command: Sequence[str]) -> str:
+def command_text(command: Sequence[str], env: Mapping[str, str] | None = None) -> str:
     result = subprocess.run(
         list(command),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        env=None if env is None else dict(env),
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
@@ -40,8 +41,8 @@ def command_text(command: Sequence[str]) -> str:
     return value
 
 
-def xcode_identity() -> tuple[str, str]:
-    lines = command_text(("xcodebuild", "-version")).splitlines()
+def xcode_identity(env: Mapping[str, str] | None = None) -> tuple[str, str]:
+    lines = command_text(("xcodebuild", "-version"), env).splitlines()
     if len(lines) < 2 or not lines[0].startswith("Xcode ") or not lines[1].startswith("Build version "):
         raise RuntimeError("unexpected xcodebuild -version output")
     return lines[0][len("Xcode "):].strip(), lines[1][len("Build version "):].strip()
@@ -76,9 +77,9 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
     # Record xcode-select's host default separately because GitHub may change it
     # independently of the workflow-selected toolchain.
     selected_developer_dir = requested_developer_dir
-    xcode_select_developer_dir = command_text(("xcode-select", "-p"))
+    xcode_select_developer_dir = command_text(("xcode-select", "-p"), env)
 
-    xcode_version, xcode_build = xcode_identity()
+    xcode_version, xcode_build = xcode_identity(env)
     if xcode_version != SUPPORTED_XCODE_VERSION or xcode_build != SUPPORTED_XCODE_BUILD:
         raise RuntimeError(
             "unsupported Xcode identity "
@@ -97,8 +98,8 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
             # version is retained above; this field prevents consumers from
             # mistaking the selected YAML label for a hermetic VM image.
             "imageMutable": True,
-            "macOSVersion": command_text(("sw_vers", "-productVersion")),
-            "macOSBuild": command_text(("sw_vers", "-buildVersion")),
+            "macOSVersion": command_text(("sw_vers", "-productVersion"), env),
+            "macOSBuild": command_text(("sw_vers", "-buildVersion"), env),
         },
         "developer": {
             "requestedDeveloperDir": requested_developer_dir,
@@ -108,26 +109,26 @@ def collect_macos_toolchain(env: Mapping[str, str] | None = None) -> dict[str, o
             "xcodeBuild": xcode_build,
             "sdk": {
                 "name": "macosx",
-                "path": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-path")),
-                "version": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-version")),
-                "build": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-build-version")),
+                "path": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-path"), env),
+                "version": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-version"), env),
+                "build": command_text(("xcrun", "--sdk", "macosx", "--show-sdk-build-version"), env),
             },
             "swift": {
-                "path": command_text(("xcrun", "--find", "swiftc")),
-                "version": command_text(("xcrun", "swiftc", "--version")),
+                "path": command_text(("xcrun", "--find", "swiftc"), env),
+                "version": command_text(("xcrun", "swiftc", "--version"), env),
             },
             "clang": {
-                "path": command_text(("xcrun", "--find", "clang")),
-                "version": command_text(("xcrun", "clang", "--version")),
+                "path": command_text(("xcrun", "--find", "clang"), env),
+                "version": command_text(("xcrun", "clang", "--version"), env),
             },
             "lldb": {
-                "path": command_text(("xcrun", "--find", "lldb")),
-                "version": command_text(("xcrun", "lldb", "--version")),
-                "pythonModulePath": command_text(("xcrun", "lldb", "-P")),
+                "path": command_text(("xcrun", "--find", "lldb"), env),
+                "version": command_text(("xcrun", "lldb", "--version"), env),
+                "pythonModulePath": command_text(("xcrun", "lldb", "-P"), env),
             },
             "xcodePython": {
-                "path": command_text(("xcrun", "--find", "python3")),
-                "version": command_text(("xcrun", "python3", "--version")),
+                "path": command_text(("xcrun", "--find", "python3"), env),
+                "version": command_text(("xcrun", "python3", "--version"), env),
             },
         },
     }
