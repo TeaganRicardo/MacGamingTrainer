@@ -217,8 +217,8 @@ final class Hades2API {
         _ request: Hades2Request,
         operation: String,
         operationArguments: [String] = [],
-        coalesceKey: String? = nil,
         announceSuccess: Bool = true,
+        started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
@@ -227,9 +227,9 @@ final class Hades2API {
             params: request.params,
             operation: operation,
             operationArguments: operationArguments,
-            coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: request.command.timeout,
+            started: started,
             reply: reply,
             completion: completion
         )

@@ -25,7 +25,7 @@ for raw in sys.stdin:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     print(json.dumps({
         'type':'result','id':req['id'],'protocolVersion':6,
-        'moduleProtocolVersion':5,'gameID':args.game,'ok':True,
+        'moduleProtocolVersion':13,'gameID':args.game,'ok':True,
         'result':{'connected':True},
     }), flush=True)
 '''
@@ -233,7 +233,7 @@ for raw in sys.stdin:
         handle.write(json.dumps(req, sort_keys=True) + '\n')
     print(json.dumps({
         'type':'result','id':req['id'],'protocolVersion':6,
-        'moduleProtocolVersion':5,'gameID':args.game,'ok':True,
+        'moduleProtocolVersion':13,'gameID':args.game,'ok':True,
         'result':{'connected':True},
     }), flush=True)
 '''

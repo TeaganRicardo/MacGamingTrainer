@@ -67,6 +67,7 @@ final class BackendClient {
         let coalesceKey: String?
         let announceSuccess: Bool
         let timeout: TimeInterval
+        let started: (() -> Void)?
         let reply: ((BackendReply) -> Void)?
         let completion: ((Bool) -> Void)?
     }
@@ -144,6 +145,7 @@ final class BackendClient {
         coalesceKey: String? = nil,
         announceSuccess: Bool = true,
         timeout: TimeInterval = 6.0,
+        started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
@@ -167,6 +169,7 @@ final class BackendClient {
             coalesceKey: coalesceKey,
             announceSuccess: announceSuccess,
             timeout: timeout.isFinite && timeout > 0 ? timeout : 6.0,
+            started: started,
             reply: reply,
             completion: completion
         )
@@ -226,6 +229,7 @@ final class BackendClient {
         }
         do {
             current = request
+            request.started?()
             onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
             try process.send(["id": request.id, "command": request.command, "params": request.params])
             scheduleTimeout(for: request)

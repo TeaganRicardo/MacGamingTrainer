@@ -1543,7 +1543,7 @@ struct Hades2TrainerView: View {
                     Button { model.disableAll() } label: {
                         Label("\(localization.localized("host.disableAll"))  \(model.shortcutText(.disableAll))", systemImage: "power")
                     }
-                        .disabled(!model.connected || model.busy || model.exiting)
+                        .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
                 }
                 HStack(spacing: 12) {
                     Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }
@@ -1554,7 +1554,7 @@ struct Hades2TrainerView: View {
                     } label: {
                         Label(text("hades2.saveEditor.title"), systemImage: "externaldrive.badge.gearshape")
                     }
-                    .disabled(!model.backendAvailable || model.busy || model.exiting)
+                    .disabled(!model.backendAvailable || !model.canAcceptRuntimeAction || model.exiting)
                     Button { diagnosticSheet = true; model.runDiagnostics() } label: { Label(text("hades2.manage.diagnostics"), systemImage: "stethoscope") }
                     Spacer()
                 }
@@ -1563,7 +1563,7 @@ struct Hades2TrainerView: View {
                     Button { model.restoreOriginalSignature() } label: { Label(text("hades2.manage.restoreSigning"), systemImage: "arrow.uturn.backward.circle") }
                     Spacer()
                 }
-                .disabled(model.busy || model.exiting)
+                .disabled(!model.canAcceptRuntimeAction || model.exiting)
                 Hades2ManagementUtilities(model: model)
             }.trainerPanel()
         }

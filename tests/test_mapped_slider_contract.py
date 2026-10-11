@@ -48,7 +48,6 @@ assert "onPreviewValue:" in view
 assert "model.setGameSpeed(gameSpeedInput)" in view
 assert "ForEach([0.25, 0.5, 1.0, 1.5, 2.0, 3.0]" not in view
 assert "Hades2ViewInputSnapshot" not in snapshots
-assert 'coalesceKey: "feature.gameSpeed"' in model
 assert "gameSpeedInputRange = 0.0...10.0" in model
 
 harness = r"""

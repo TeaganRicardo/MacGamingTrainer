@@ -21,6 +21,7 @@ state={'connected':True, 'status':'ready', 'scene':'run',
        'money':123,'health':99,'maxHealth':120,'mana':44,'maxMana':60,'armor':7,'spellCharge':12,'rerolls':3,
        'damageMultiplier':2,'moneyMultiplier':3,'resourceMultiplier':4,'gameSpeed':1,
        'gatheringProbabilities':{'mining':25},'chaosGateProbability':50,
+       'gatheringTargets':{'mining':{'available':True,'scopeToken':'fixture-mining'}},
        'resources':[{'id':'MetaCurrency','name':'Ashes','englishName':'Ashes','count':17,'locked':False}],
        'elements':[{'id':'Fire','name':'Fire','count':18,'locked':False}],
        'stats':{'dodge':{'value':19,'locked':True},'crit':{'value':20,'locked':False},'grasp':{'value':21,'locked':True}}}
@@ -40,10 +41,17 @@ for raw in sys.stdin:
  if command=='set_counter': state[params['counter']]=params['value']
  if command=='set_rerolls': state['rerolls']=params['amount']
  if command=='set_element': state['elements'][0]['count']=params['amount']
- if command=='set_stat': state['stats'][params['stat']]={'value':params['value'],'locked':params['locked']}
+ if command=='set_stat':
+  previous=state['stats'].get(params['stat'], {})
+  state['stats'][params['stat']]={'value':params.get('value',previous.get('value')),'locked':params['locked']}
  if command=='set_desired': state[params['feature']]=params['value']
  if command=='set_boon_rarity_desired': state['boonRarity']=params
- if command=='set_gathering_desired': state['gatheringProbabilities'][params['family']]=params['probability']
+ if command=='set_gathering_desired':
+  time.sleep(.20)
+  state['gatheringProbabilities'][params['family']]=params['probability']
+ if command=='generate_gathering':
+  assert params=={'family':'mining','scopeToken':'fixture-mining'}
+  state['gatheringTargets']['mining']={'available':False,'reason':'hades2.gathering.unavailable.existing'}
  if command=='set_chaos_gate_desired': state['chaosGateProbability']=params['probability']
  if command=='load_profile': state['money']=200
  if command=='disconnect': state['connected']=False
@@ -72,6 +80,12 @@ func edit(_ field: NSTextField, to draft: String, in window: NSWindow) -> NSText
 func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
  NSEvent.mouseEvent(with:.leftMouseDown, location:point, modifierFlags:[], timestamp:0,
                    windowNumber:window.windowNumber, context:nil, eventNumber:1, clickCount:1, pressure:1)!
+}
+final class GenerateAction: NSObject {
+ let model: Hades2TrainerModel
+ var presses=0
+ init(_ model: Hades2TrainerModel) { self.model=model }
+ @objc(generateClicked:) func clicked(_ sender: Any?) { presses += 1; model.generateGathering(.mining) }
 }
 @main struct Main {
  @MainActor static func main() throws {
@@ -232,6 +246,40 @@ func click(at point: NSPoint, in window: NSWindow) -> NSEvent {
   complete(.chaosGate,"65.5",command:"set_chaos_gate_desired")
   let oneShots=commands().filter { ["spawn_reward","generate_gathering","restore","save_editor_apply"].contains($0["command"] as? String ?? "") }
   check(oneShots.isEmpty, "numeric completion executed an explicit action")
+
+  // Each completed control action retains its accepted place in the queue.
+  // A later lock cannot replace an earlier lock across the intervening unlock.
+  let beforeLocks=commands("set_stat").count
+  model.refreshFromHost(); check(model.busy, "queue-order fixture did not begin")
+  model.setStat("dodge",text:"33.3",locked:true)
+  model.setStat("dodge",text:"33.3",locked:false)
+  model.setStat("dodge",text:"44.4",locked:true)
+  waitForCommand("set_stat",count:beforeLocks+3)
+  let locks=commands("set_stat").suffix(3).compactMap { $0["params"] as? [String:Any] }
+  check(locks.map { $0["locked"] as? Bool } == [true,false,true] && model.dodgeLocked && model.dodgeValue==44.4,
+        "completed lock/unlock/lock actions changed order or lost the last accepted intent")
+
+  // The click that completes a field still activates its originally available
+  // control. The edit runs first; one explicit generation follows exactly once.
+  guard let probability=fields(host).first(where:{$0.isEditable && $0.stringValue=="35.5"}) else { fatalError("mining probability field missing") }
+  check(model.canGenerateGathering(.mining), "generation fixture was not available before editing")
+  let beforeProbability=commands("set_gathering_desired").count
+  _ = edit(probability,to:"36.5",in:window)
+  let action=GenerateAction(model)
+  let button=NSButton(title:"Generate",target:action,action:NSSelectorFromString("generateClicked:"))
+  let buttonClick=click(at:NSPoint(x:1,y:1),in:window)
+  check(TrainerTextEditingDismissal.handle(buttonClick,in:window) === buttonClick && probability.currentEditor()==nil,
+        "control click was consumed or did not complete the probability")
+  check(model.busy && model.canGenerateGathering(.mining), "completed edit disabled the control clicked to finish it")
+  button.performClick(nil)
+  check(!model.canGenerateGathering(.mining), "a queued explicit action did not close admission immediately")
+  model.generateGathering(.mining)
+  waitForCommand("generate_gathering",count:1)
+  check(action.presses==1 && commands("set_gathering_desired").count==beforeProbability+1,
+        "a control click lost its action or repeated the completion")
+  let actionOrder=commands().suffix(2).compactMap { $0["command"] as? String }
+  check(actionOrder==["set_gathering_desired","generate_gathering"] && model.gatheringProbabilities[.mining]==36.5,
+        "explicit generation ran before the completed probability or was replayed")
 
   model.toggleConnectionFromHost(); wait { !model.connected && !model.busy }
   let resourceCount=commands("set_resource").count
