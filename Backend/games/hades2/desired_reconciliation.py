@@ -402,7 +402,10 @@ class Hades2DesiredStateReconciler:
                 occurrence_matches
                 and diagnostics.get("nextOccurrenceToken") == wanted_occurrence_token
             )
-        if force_full or not occurrence_matches:
+        occurrence_present = (
+            wanted_occurrence is not None or observed_occurrence is not None
+        )
+        if occurrence_present and (force_full or not occurrence_matches):
             actions.append(
                 _Action(
                     "set_next_occurrence",
