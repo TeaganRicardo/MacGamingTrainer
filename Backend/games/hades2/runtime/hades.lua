@@ -493,17 +493,8 @@ if __MacGamingTrainerV1 == nil then
   local function releaseHeroDamageRouterIfUnused()
     if not M.invincibility and not M.infiniteHealth and M.statTargets.enemyDamage == nil then releaseHook("Damage") end
   end
-  local function restoreInvincibilityHitCount(hero)
-    if M.invincibilityHitBaselineKnown and M.invincibilityHitHero == hero and type(hero) == "table" then
-      hero.Hits = M.invincibilityHitBaseline
-    end
-  end
   local function releaseInvincibility()
     invincibilityProtection.release()
-    restoreInvincibilityHitCount(M.invincibilityHitHero)
-    M.invincibilityHitHero = nil
-    M.invincibilityHitBaseline = nil
-    M.invincibilityHitBaselineKnown = false
     M.invincibility = false
     releaseHeroDamageRouterIfUnused()
   end
@@ -1424,7 +1415,7 @@ if __MacGamingTrainerV1 == nil then
       for id in pairs(M.resourceLocks) do enforceResource(id) end
     end
     if not ready() then return end
-    if M.invincibility then restoreInvincibilityHitCount(CurrentRun.Hero) end
+    invincibilityProtection.restoreHits(CurrentRun.Hero)
     for vital in pairs(M.vitalLocks) do enforceVital(vital) end
     enforceElements()
     if M.instantCastCooldown then
@@ -6876,10 +6867,10 @@ if __MacGamingTrainerV1 == nil then
     if owns("Damage") then return end
     installHook("Damage", function(original, victim, triggerArgs)
       if victim == CurrentRun.Hero then
-        if M.invincibility then
+        if invincibilityProtection.protects(victim) then
           -- OnHit increments Hero.Hits before it reaches Damage(). Restore the
           -- pre-Invincibility baseline before skipping the vanilla damage pipeline.
-          restoreInvincibilityHitCount(victim)
+          invincibilityProtection.restoreHits(victim)
           -- Stop at the outer Lua damage entry. This skips armor loss, hit-stun,
           -- knockback and normal hostile on-hit processing inside Damage().
           return nil
@@ -6955,8 +6946,16 @@ if __MacGamingTrainerV1 == nil then
     local function current(record)
       return owner == record and record.intercepting and sameFrame(record)
     end
+    local function protects(hero)
+      -- Installed feature state is a projection. Callback authority belongs to
+      -- this generation, including the Damage router and automatic Hits upkeep.
+      return owner ~= nil and owner.published and owner.hero == hero and current(owner)
+    end
+    local function restoreHits(hero)
+      if protects(hero) then hero.Hits = owner.hitBaseline end
+    end
     local function active(hero)
-      return owner ~= nil and owner.phase == "protected" and owner.hero == hero and current(owner)
+      return owner ~= nil and owner.published and owner.phase == "protected" and owner.hero == hero and current(owner)
         and identity(owner) == owner.unitToken
         and type(hero.InvulnerableFlags) == "table" and hero.InvulnerableFlags[trainerInvincibilityFlag]
         and type(hero.ImmuneToForceFlags) == "table" and hero.ImmuneToForceFlags[trainerInvincibilityFlag]
@@ -7027,6 +7026,7 @@ if __MacGamingTrainerV1 == nil then
           releaseHook("GetPlayerGameplayElapsedTimeMultiplier")
           refreshPlayerTime(previous, operation)
         end)
+        restoreHits(previous.hero)
       else
         -- Only the captured Lua records survive their native unit's lifetime.
         -- Clearing them does not address the replacement unit or its new flags.
@@ -7048,6 +7048,7 @@ if __MacGamingTrainerV1 == nil then
       end
       local record = { hero = hero, objectId = hero.ObjectId, session = SessionState,
         run = CurrentRun, room = CurrentRun.CurrentRoom, native = __MGTHadesNativeV1,
+        hitBaseline = false, published = false,
         slots = {}, names = {}, phase = "sampling", intercepting = true, unitToken = false,
         invulnerableFlags = false, forceFlags = false, forceBaseline = false,
         invulnerabilityAcquired = false, forceAcquired = false,
@@ -7133,6 +7134,7 @@ if __MacGamingTrainerV1 == nil then
         if type(record.invulnerableFlags) ~= "table" or type(record.forceFlags) ~= "table" then
           error("Hero protection flags changed while sampling")
         end
+        record.hitBaseline = hero.Hits
         record.forceBaseline = record.forceFlags[trainerInvincibilityFlag]
         for _, slot in ipairs(record.slots) do
           enter(record, operation)
@@ -7163,17 +7165,14 @@ if __MacGamingTrainerV1 == nil then
         end)
         refreshPlayerTime(record, operation)
       end)
+      record.published = true
     end
-    return { install = install, release = release, supported = supported, active = active }
+    return { install = install, release = release, supported = supported, active = active,
+      protects = protects, restoreHits = restoreHits }
   end)()
   local function installInvincibility()
     ensureHeroDamageRouter()
     local hero = CurrentRun.Hero
-    if M.invincibilityHitHero ~= hero or not M.invincibilityHitBaselineKnown then
-      M.invincibilityHitHero = hero
-      M.invincibilityHitBaseline = hero.Hits
-      M.invincibilityHitBaselineKnown = true
-    end
     invincibilityProtection.install(hero)
     M.invincibility = true
   end

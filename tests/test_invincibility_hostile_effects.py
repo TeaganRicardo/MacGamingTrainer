@@ -299,6 +299,18 @@ enable(false)
 assert(count(1, 'StasisStun') == 1 and forceImmune[1], 'old owner erased replacement protection')
 assert(not oldFlags.MacGamingTrainerInvincibility, 'old owner leaked its flag')
 ''',
+    "replacement_hit_accounting": r'''
+enable(true)
+-- Room setup reuses the Lua Hero; the departed Unit's hit baseline must not
+-- overwrite accounting already owned by the replacement generation.
+CurrentRun.CurrentRoom = {}
+CurrentRun.Hero.Hits = 9
+SetupHeroObject()
+assert(CurrentRun.Hero.Hits == 9, 'departed protection restored its Hits into the replacement generation')
+enable(false)
+projectile('NativeReplacementHit', {}, false, false)
+assert(CurrentRun.Hero.Hits == 10, 'replacement generation retained departed hit accounting')
+''',
     "sampling_events_and_flags": r'''
 AddEffectBlock({ Id = 1, Name = 'StasisStun' })
 local nativeSnapshot = __MGTHadesNativeV1.snapshotEffectBlocks
@@ -310,9 +322,14 @@ __MGTHadesNativeV1.snapshotEffectBlocks = function(id)
   AddEffectBlock({ Id = id, Name = 'Inked' })
   CurrentRun.Hero.InvulnerableFlags = { NativeSkill = true }
   CurrentRun.Hero.ImmuneToForceFlags = { NativeSkill = true }
+  CurrentRun.Hero.Hits = 7
   return stale
 end
-enable(true); enable(false)
+enable(true)
+projectile('PostSamplingHit', {}, false, false)
+assert(CurrentRun.Hero.Hits == 7, 'protection restored accounting from before sampling completed')
+enable(false)
+assert(CurrentRun.Hero.Hits == 7, 'release restored accounting from before sampling completed')
 assert(count(1, 'StasisStun') == 0 and count(1, 'Inked') == 1, 'sampling lost last native events')
 assert(CurrentRun.Hero.InvulnerableFlags.NativeSkill and CurrentRun.Hero.ImmuneToForceFlags.NativeSkill,
   'sampling restored stale flag owners')
@@ -371,6 +388,9 @@ local args = { Id = 1, Name = 'Inked' }
 assert(AddEffectBlock(args) == args, 'Trainer taint stopped an ordinary game Add')
 SetupHeroObject()
 assert(not next(CurrentRun.Hero.InvulnerableFlags), 'Trainer taint stopped ordinary Hero setup')
+projectile('NativeAfterUncertainInstall', {}, false, false)
+assert(CurrentRun.Hero.Health == 92 and CurrentRun.Hero.HealthBuffer == 12 and CurrentRun.Hero.Hits == 4,
+  'incomplete protection was published on the rebuilt Unit')
 local replacement = { Id = 1, Name = 'StasisStun' }
 assert(AddEffectBlock(replacement) == replacement and RemoveEffectBlock(replacement) == replacement)
 assert(count(1, 'StasisStun') == 0, 'uncertain old lease suppressed replacement Unit cleanup')
@@ -391,6 +411,12 @@ assert(not ok and tostring(message):find('MGT_OUTCOME_UNKNOWN:', 1, true),
 assert(M.terminalActionUnknown, 'partial release retained mutation trust')
 assert(not pcall(enable, false), 'partial release was blindly retried')
 SetupHeroObject()
+projectile('NativeAfterUncertainRelease', {}, false, false)
+assert(CurrentRun.Hero.Health == 92 and CurrentRun.Hero.HealthBuffer == 12 and CurrentRun.Hero.Hits == 4,
+  'uncertain old Damage/Hits lease adopted the rebuilt Unit')
+CurrentRun.Hero.Hits = 9
+UpdateTimers(0.016)
+assert(CurrentRun.Hero.Hits == 9, 'timer restored a retired Unit hit baseline')
 GameplaySetElapsedTimeMultiplier({ Name = 'ChronosTimeSlow', ElapsedTimeMultiplier = 0.3,
   ApplyToPlayerUnits = true })
 assert(playerTime[1] == 0.3, 'uncertain old release changed the rebuilt Unit time owner')
