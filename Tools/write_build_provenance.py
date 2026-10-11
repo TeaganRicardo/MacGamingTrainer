@@ -15,6 +15,7 @@ from typing import Mapping
 
 from resident_runtime import parse_resident_runtime_declaration
 from module_support import app_spec_from_manifest
+from macos_toolchain_identity import collect_macos_toolchain
 
 
 def git_value(repo_root: Path, revision: str) -> str:
@@ -358,9 +359,20 @@ def build_manifest(
         elif event_name == "push" and require_env(env, "GITHUB_SHA") != source_sha:
             raise RuntimeError("push event SHA differs from executing checkout")
 
+        if env.get("RUNNER_OS") == "macOS":
+            manifest["toolchain"] = collect_macos_toolchain(env)
+
     if module_id:
         app_root = require_packaged_module_identity(repo_root, artifact, module_id, source_plist)
         manifest["moduleId"] = module_id
+        module_manifest = repo_root / "Backend/games" / module_id / "module.json"
+        build_inputs = manifest["buildInputs"]
+        if not isinstance(build_inputs, dict):
+            raise RuntimeError("invalid build inputs metadata")
+        build_inputs["moduleManifest"] = {
+            "path": module_manifest.relative_to(repo_root).as_posix(),
+            "sha256": sha256_file(module_manifest),
+        }
         python_runtime = python_runtime_identity(repo_root, artifact, app_root)
         if python_runtime is not None:
             manifest["pythonRuntime"] = python_runtime
