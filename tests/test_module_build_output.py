@@ -47,7 +47,7 @@ BUILD2 = (ROOT / '.github/workflows/build2-macos.yml').read_text()
 assert 'dist/Mac Gaming Trainer.app' not in BUILD2
 assert 'Tools/verify_module_build.py hades2 --print-app' in BUILD2
 assert 'Tools/write_build_provenance.py' in WORKFLOW
-assert 'actions/upload-artifact@v4' in WORKFLOW
+assert 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2' in WORKFLOW
 
 with tempfile.TemporaryDirectory(prefix='mgt-dirty-dist-') as temporary:
     dist = Path(temporary)
