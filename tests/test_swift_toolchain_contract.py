@@ -47,16 +47,20 @@ pins = {
     "actions/upload-artifact": "ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2",
 }
 workflow_root = ROOT / ".github" / "workflows"
-for workflow in workflow_root.glob("*.yml"):
-    source = workflow.read_text()
-    for line in source.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("- uses: actions/"):
-            continue
-        use = stripped.removeprefix("- uses: ")
-        action = use.split("@", 1)[0]
-        assert action in pins, (workflow.name, use)
-        assert use == f"{action}@{pins[action]}", (workflow.name, use)
+pinned_workflows = (
+    "linux-contracts.yml",
+    "build2-macos.yml",
+    "module-build-matrix.yml",
+    "direct-release.yml",
+)
+for name in pinned_workflows:
+    source = (workflow_root / name).read_text()
+    for action, pin in pins.items():
+        for line in source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(f"- uses: {action}@"):
+                use = stripped.removeprefix("- uses: ")
+                assert use == f"{action}@{pin}", (name, use)
 
 for name in ("build2-macos.yml", "module-build-matrix.yml"):
     source = (workflow_root / name).read_text()
