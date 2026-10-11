@@ -40,7 +40,7 @@ for name in SWIFT_TESTS:
 
 
 # Standing workflow dependencies are supply-chain inputs. Keep the exact commit
-# immutable; the trailing comment preserves the reviewed upstream major tag.
+# immutable; the trailing comment preserves the reviewed upstream release tag.
 pins = {
     "actions/checkout": "11d5960a326750d5838078e36cf38b85af677262 # v4.4.0",
     "actions/setup-python": "a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0",
