@@ -19,7 +19,7 @@ from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VE
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 FAMILIES = ('flora', 'mining', 'digging', 'shades', 'fishing')
-assert DESIRED_STATE_SCHEMA_VERSION == 8
+assert DESIRED_STATE_SCHEMA_VERSION == 9
 assert PROFILE_SCHEMA_VERSION == 6
 assert Hades2PreferenceStore.defaults()['gatheringProbabilities'] == {}
 valid = dict(zip(FAMILIES, (0, 100, 32.5, 1, 99)))
@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
         result = adapter.dispatch('set_gathering_desired', {'family': family, 'probability': percentage}, 'desired-'+family)
         assert result['gatheringProbabilities'][family] == percentage
     persisted = json.loads((base/'desired-state.json').read_text())
-    assert persisted['schemaVersion'] == 8 and persisted['gatheringProbabilities'] == valid
+    assert persisted['schemaVersion'] == 9 and persisted['gatheringProbabilities'] == valid
     assert not {'gatheringTargets', 'scopeToken', 'generate_gathering'} & set(persisted)
     restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['gatheringProbabilities'] == valid and restarted.preference_dirty
