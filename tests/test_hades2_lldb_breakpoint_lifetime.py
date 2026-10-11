@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from hades2_lldb_worker_support import run_lldb_worker
+from hades2_lldb_worker_support import run_lldb_worker, phase, worker_failure_output
 
 # GitHub's runner Python is not ABI-matched to Xcode's private _lldb
 # extension. Run the regression under the same Xcode Python + LLDB module path
@@ -18,10 +18,11 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
     path = str(Path(__file__).resolve())
     environment = dict(os.environ)
     environment["MGT_LLDB_EMBEDDED_TEST"] = "1"
-    lldb_python_path = subprocess.check_output(
-        ["/usr/bin/xcrun", "lldb", "-P"],
-        text=True,
-    ).strip()
+    with phase('environment.lldbPythonPath'):
+        lldb_python_path = subprocess.check_output(
+            ["/usr/bin/xcrun", "lldb", "-P"],
+            text=True,
+        ).strip()
     existing_pythonpath = environment.get("PYTHONPATH", "")
     environment["PYTHONPATH"] = (
         lldb_python_path
@@ -29,34 +30,38 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
         else lldb_python_path + os.pathsep + existing_pythonpath
     )
     try:
-        stdout = run_lldb_worker(
-            ["/usr/bin/xcrun", "python3", path],
-            environment,
-            timeout=30,
-        )
+        with phase('worker.run'):
+            stdout = run_lldb_worker(
+                ["/usr/bin/xcrun", "python3", path],
+                environment,
+                timeout=30,
+                diagnostics=True,
+            )
     except subprocess.TimeoutExpired as error:
         raise AssertionError(
-            "Xcode-Python LLDB breakpoint-lifetime regression exceeded 30 seconds"
+            "Xcode-Python LLDB breakpoint-lifetime regression exceeded 30 seconds:\n"
+            + worker_failure_output(error)
         ) from error
     except subprocess.CalledProcessError as error:
         raise AssertionError(
             "Xcode-Python LLDB regression failed:\n"
-            + (error.stdout or "") + (error.stderr or "")
+            + worker_failure_output(error)
         ) from error
     if "hades2_lldb_breakpoint_lifetime_ok" not in stdout:
         raise AssertionError(
             "Xcode-Python LLDB regression failed:\n"
             + stdout
         )
-    print("hades2_lldb_breakpoint_lifetime_ok")
+    print(stdout, end='')
     raise SystemExit(0)
 
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from hades2_lldb_fixture import (
-    HELPER_SOURCE, TransportError, attach_helper, cleanup, lldb,
-)
-from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
+with phase('worker.importNativeModules'):
+    from hades2_lldb_fixture import (
+        HELPER_SOURCE, TransportError, attach_helper, cleanup, lldb,
+    )
+    from games.hades2.lldb_time_warp import LLDBProcessTimeWarpDriver
 
 PROGRESS_SOURCE = r"""
 #include <fcntl.h>
@@ -101,30 +106,34 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
     source = temporary / "helper.c"
     executable = temporary / "helper"
     source.write_text(HELPER_SOURCE + PROGRESS_SOURCE, encoding="utf-8")
-    subprocess.run(
-        ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    with phase('fixture.compile'):
+        subprocess.run(
+            ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
     progress_path = temporary / "progress"
     progress_path.write_bytes(bytes(8))
     os.environ["MGT_LLDB_FIXTURE_PROGRESS"] = str(progress_path)
     progress_file = progress_path.open("r+b")
     progress = mmap.mmap(progress_file.fileno(), 8)
-    child, debugger, transport, addresses = attach_helper(executable, 0)
+    child, debugger, transport, addresses = attach_helper(executable, 0, diagnostics=True)
     try:
         # Repeated operations must leave no pending stop signal, breakpoint or
         # focus change. Verify native entry counts rather than a timing bound or
         # the debugger primitive used to pause the target.
         for index in range(8):
-            assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
+            with phase(f'expression.success.{index}'):
+                assert transport.execute("return true", expression_timeout_seconds=1.0) == "{}"
             assert transport.process.GetState() == lldb.eStateRunning
             assert transport.target.GetNumBreakpoints() == 0, "successful expression leaked a breakpoint"
-            transport.stop(time.monotonic() + 2)
+            with phase(f'target.stop.{index}'):
+                transport.stop(time.monotonic() + 2)
             stop_id = transport.process.GetStopID()
-            transport.stop(time.monotonic() + 2)
+            with phase(f'target.alreadyStopped.{index}'):
+                transport.stop(time.monotonic() + 2)
             assert transport.process.GetStopID() == stop_id, "already stopped target stopped again"
             error = lldb.SBError()
             focus = transport.process.ReadMemory(
@@ -133,38 +142,48 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
             assert error.Success() and focus == b"\x01", (str(error), focus)
             entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
             assert error.Success() and entered == index + 1, (str(error), entered)
-            transport.resume(time.monotonic() + 2)
+            with phase(f'target.resume.{index}'):
+                transport.resume(time.monotonic() + 2)
         # Time Warp calls expressions at the signal stop itself, without Lua's
         # subsequent World::Update breakpoint. Exercise that direct consumer.
         driver = LLDBProcessTimeWarpDriver(transport, lldb_module=lldb)
-        with driver.session():
+        with phase('expression.timeWarpRunning'), driver.session():
             assert driver.abi() == 1
         assert transport.process.GetState() == lldb.eStateRunning
-        transport.stop(time.monotonic() + 2)
-        with driver.session():
+        with phase('timeWarp.stop'):
+            transport.stop(time.monotonic() + 2)
+        with phase('expression.timeWarpStopped'), driver.session():
             assert driver.abi() == 1
         assert transport.process.GetState() == lldb.eStateStopped
-        transport.resume(time.monotonic() + 2)
+        with phase('timeWarp.resume'):
+            transport.resume(time.monotonic() + 2)
         process = transport.process
-        transport.detach()
+        with phase('target.detach'):
+            transport.detach()
         assert process.GetState() == lldb.eStateDetached
         assert child.poll() is None, "detach terminated the target"
         assert transport.process is None and transport.pid is None
-        assert_progress(progress)
+        with phase('target.detachedProgress'):
+            assert_progress(progress)
     finally:
-        cleanup(child, debugger, transport)
+        cleanup(child, debugger, transport, diagnostics=True)
 
     # Repeated fresh targets cover detach from both running and already stopped
     # sessions without using reattach itself as the liveness observer.
     for index in range(8):
-        child, debugger, transport, addresses = attach_helper(executable, 0)
+        child, debugger, transport, addresses = attach_helper(executable, 0, diagnostics=True)
         try:
-            transport.resume(time.monotonic() + 2)
-            if index % 2 == 0:transport.stop(time.monotonic() + 2)
-            transport.detach()
-            assert_progress(progress)
+            with phase(f'detachCycle.resume.{index}'):
+                transport.resume(time.monotonic() + 2)
+            if index % 2 == 0:
+                with phase(f'detachCycle.stop.{index}'):
+                    transport.stop(time.monotonic() + 2)
+            with phase(f'detachCycle.detach.{index}'):
+                transport.detach()
+            with phase(f'detachCycle.progress.{index}'):
+                assert_progress(progress)
         finally:
-            cleanup(child, debugger, transport)
+            cleanup(child, debugger, transport, diagnostics=True)
 
     progress.close()
     progress_file.close()
@@ -176,10 +195,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
     # call can finish before an overloaded debugger delivers its halt, which is
     # a valid known completion rather than an unknown outcome. The native entry
     # marker proves this case actually crossed into pcall before interruption.
-    child, debugger, transport, addresses = attach_helper(executable, -1)
+    child, debugger, transport, addresses = attach_helper(executable, -1, diagnostics=True)
     try:
         try:
-            transport.execute("return true", expression_timeout_seconds=0.1)
+            with phase('expression.blocked'):
+                transport.execute("return true", expression_timeout_seconds=0.1)
         except TransportError as error:
             assert error.code == "outcome_unknown", error.code
             message = str(error).lower()
@@ -188,7 +208,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
             raise AssertionError("blocked expression unexpectedly completed")
         assert transport.tainted is True
         assert transport.target.GetNumBreakpoints() == 0, "timeout path leaked a breakpoint"
-        transport.stop(time.monotonic() + 2)
+        with phase('blockedExpression.stop'):
+            transport.stop(time.monotonic() + 2)
         error = lldb.SBError()
         entered = transport.process.ReadUnsignedFromMemory(addresses["fixture_pcall_entries"], 4, error)
         assert error.Success() and entered == 1, (str(error), entered)
@@ -196,14 +217,16 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
             addresses["_ZN3sgg13ConfigOptions20RequireFocusToUpdateE"], 1, error
         )
         assert error.Success() and focus == b"\x01", (str(error), focus)
-        transport.resume(time.monotonic() + 2)
+        with phase('blockedExpression.resume'):
+            transport.resume(time.monotonic() + 2)
         try:
-            transport.execute("return true")
+            with phase('expression.taintedRefusal'):
+                transport.execute("return true")
         except TransportError as error:
             assert error.code == "restart_required", error.code
         else:
             raise AssertionError("tainted transport allowed a second native call")
     finally:
-        cleanup(child, debugger, transport)
+        cleanup(child, debugger, transport, diagnostics=True)
 
 print("hades2_lldb_breakpoint_lifetime_ok")

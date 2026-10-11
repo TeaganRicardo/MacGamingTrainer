@@ -7,12 +7,13 @@ import tempfile
 import time
 from pathlib import Path
 
-from hades2_lldb_worker_support import run_lldb_worker
+from hades2_lldb_worker_support import run_lldb_worker, worker_failure_output
 
 WORKER = r'''
 import subprocess, sys, time
 child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
 print(child.pid, flush=True)
+print('phase=expression.begin', file=sys.stderr, flush=True)
 try:
     time.sleep(60)
 finally:
@@ -40,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix='mgt-profile-lifetime-') as temporary:
             if isinstance(output, bytes):
                 output = output.decode()
             child_pid = int(output.strip())
+            assert 'phase=expression.begin' in worker_failure_output(error), (
+                'timeout reporting discarded the last flushed native-worker phase'
+            )
         else:
             raise AssertionError('LLDB fixture worker unexpectedly returned before timeout')
         deadline = time.monotonic() + 2
