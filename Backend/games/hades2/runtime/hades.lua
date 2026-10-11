@@ -16,7 +16,7 @@ end
 if __MacGamingTrainerV1 == nil then
   local M = {
     version = 1, revision = 98, damageMultiplier = 2, damageEnabled = false,
-    invincibility = false, invincibilityHitHero = nil, invincibilityHitBaseline = nil, invincibilityHitBaselineKnown = false, infiniteHealth = false, infiniteMana = false,
+    invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
     moneyMultiplier = 2, moneyMultiplierEnabled = false,
