@@ -159,6 +159,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var boonForceLegendary = false
     @Published var boonForceDuo = false
     @Published var nextRoomReward: String?
+    @Published var nextOccurrenceTarget: String?
+    @Published var occurrenceTargets: [Hades2OccurrenceTarget] = []
     @Published var health: Double?
     @Published var maxHealth: Double?
     @Published var healthLocked = false
@@ -189,6 +191,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedSpecialReward = ""
     @Published var selectedExactBoon = ""
     @Published var selectedNextRoomReward = ""
+    @Published var selectedNextOccurrenceTarget = ""
     @Published var statSupport: [String: Bool] = [:]
     @Published var statAvailable: [String: Bool] = [:]
     @Published var graspValue: Double?
@@ -642,6 +645,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             if let value = rarity.forceDuo { boonForceDuo = value }
         }
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
+        if patch.nextOccurrenceTarget.isPresent { nextOccurrenceTarget = patch.nextOccurrenceTarget.value }
+        if let value = patch.occurrenceTargets { occurrenceTargets = value }
         if patch.rerolls.isPresent { rerolls = patch.rerolls.value }
         if let value = patch.rerollsLocked { rerollsLocked = value }
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
@@ -1161,6 +1166,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard canEditDesired else { return }
         nextRoomReward = reward
         send(.setNextRoomReward(reward), title: reward == nil ? "hades2.op.clearNextRoom" : "hades2.op.setNextRoom")
+    }
+
+    func setNextOccurrence(_ target: String?) {
+        guard canEditDesired else { return }
+        nextOccurrenceTarget = target
+        send(.setNextOccurrence(target), title: target == nil ? "hades2.op.clearNextOccurrence" : "hades2.op.setNextOccurrence")
     }
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
