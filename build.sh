@@ -360,6 +360,10 @@ codesign --force --sign - --timestamp=none "$TIME_WARP_DYLIB"
 codesign --verify --strict "$TIME_WARP_DYLIB"
 cp "$TIME_WARP_ROOT/vendor/fishhook/LICENSE" "$TIME_WARP_NATIVE_DIR/LICENSE.fishhook"
 
+"$PYTHON" "$ROOT/Tools/build_module_native.py" "$NORMALIZED_MANIFEST" \
+    "$BACKEND/games/$ACTIVE_GAME_ID" "$GENERATED_DIR" --clang "$CLANG" --sdk "$SDK" \
+    --minimum-macos "$MIN_MACOS" --architectures "${ARCHITECTURES[@]}"
+
 find "$BACKEND" -name '__pycache__' -type d -prune -exec rm -rf {} +
 printf '%s\n' "$ACTIVE_GAME_ID" > "${CONTENTS}/Resources/ACTIVE_GAME_ID"
 

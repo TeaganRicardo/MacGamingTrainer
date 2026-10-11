@@ -13,6 +13,7 @@ import lldb
 from core.adapter import AdapterError as TransportError
 
 from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from .native_effect_query import prepare_native_query
 
 
 class Hades2LuaTransport:
@@ -24,7 +25,7 @@ class Hades2LuaTransport:
             self.debugger.GetCommandInterpreter().HandleCommand('settings set '+setting+' '+value,result)
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
-        self.target=None; self.process=None; self.pid=None; self.addresses={}
+        self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
@@ -55,7 +56,7 @@ class Hades2LuaTransport:
             )
             raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
 
-        self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None
+        self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None; self.native_runtime_installer=None
         try:
             phase=time.monotonic()
             try:
@@ -79,6 +80,11 @@ class Hades2LuaTransport:
                     self.address(name)
             finally:
                 profile['symbols']=time.monotonic()-phase
+            phase=time.monotonic()
+            try:
+                self.native_runtime_installer=prepare_native_query(self,lldb)
+            finally:
+                profile['nativeQuery']=time.monotonic()-phase
         except Exception as exc:
             profile['total']=time.monotonic()-started
             logging.info(
@@ -254,15 +260,20 @@ class Hades2LuaTransport:
             if self.process.WriteMemory(scratch,payload+b'\0',err)!=len(payload)+1 or err.Fail():raise TransportError('memory_error',str(err))
             out=scratch+len(payload)+1
             a=self.address
+            installer=getattr(self,'native_runtime_installer',None)
+            install=f'((int(*)(void*)){installer})(L)' if installer is not None else '0'
             # One expression; preserve the stack even on a Lua error. Copy result
             # before popping it, so host-side reading cannot race the Lua GC.
             expression=f'''({{
                 void *L=(void*){L};
                 int top=((int(*)(void*)){a('lua_gettop')})(L);
-                int rc=((int(*)(void*,const char*,unsigned long,const char*,const char*)){a('luaL_loadbufferx')})(L,(const char*){scratch},{len(payload)},"MacGamingTrainer",(const char*)0);
+                int rc={install};
+                if(rc==0) rc=((int(*)(void*,const char*,unsigned long,const char*,const char*)){a('luaL_loadbufferx')})(L,(const char*){scratch},{len(payload)},"MacGamingTrainer",(const char*)0);
                 if(rc==0) rc=((int(*)(void*,int,int,int,int,void*)){a('lua_pcallk')})(L,0,1,0,0,(void*)0);
                 unsigned long n=0;
-                const char *s=((const char*(*)(void*,int,unsigned long*)){a('lua_tolstring')})(L,-1,&n);
+                const char *s;
+                if(rc<0){{s="Native query registration rejected the target or Lua stack";n=sizeof("Native query registration rejected the target or Lua stack")-1;}}
+                else s=((const char*(*)(void*,int,unsigned long*)){a('lua_tolstring')})(L,-1,&n);
                 char *o=(char*){out};
                 if(n>={cap}){{n={cap}-1;rc=100;}}
                 if(s){{for(unsigned long i=0;i<n;++i)o[i]=s[i];}} else {{n=0;rc=101;}}
@@ -274,6 +285,7 @@ class Hades2LuaTransport:
                 raise ValueError('expression_timeout_seconds must be within (0, 30].')
             opts=lldb.SBExpressionOptions();opts.SetLanguage(lldb.eLanguageTypeC_plus_plus)
             opts.SetTimeoutInMicroSeconds(int(expression_timeout_seconds*1000000));opts.SetIgnoreBreakpoints(True);opts.SetUnwindOnError(True)
+            opts.SetStopOthers(True);opts.SetTryAllThreads(False)
             expression_started=time.monotonic()
             result=th.GetFrameAtIndex(0).EvaluateExpression(expression,opts)
             self.last_expression_duration=time.monotonic()-expression_started
@@ -322,7 +334,7 @@ class Hades2LuaTransport:
             if error.Fail():raise TransportError('detach_failed',str(error))
             detached_pid=self.pid
             self.drain()
-        self.process=None;self.pid=None;self.addresses={};self.tainted=False
+        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None
         if detached_pid is not None:
             # LLDB has released the target, but macOS may retain its BSD stop
             # signal. Complete the process handoff after debugger ownership ends.

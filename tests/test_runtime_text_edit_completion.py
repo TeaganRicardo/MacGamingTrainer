@@ -191,7 +191,7 @@ final class GenerateAction: NSObject {
   model.refreshFromHost(); check(model.busy, "busy fixture did not begin")
   _ = edit(money,to:"405",in:window); window.makeFirstResponder(nil)
   check(model.feedbackNotice?.text.key=="hades2.input.unavailable", "busy edit lost its feedback")
-  pump(0.45)
+  wait { !model.busy }
   check(mutations().count==6 && money.stringValue=="404", "busy edit was deferred or not restored")
 
   _ = edit(money,to:"888",in:window); window.makeFirstResponder(nil)

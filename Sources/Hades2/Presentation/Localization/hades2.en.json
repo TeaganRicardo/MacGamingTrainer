@@ -30,6 +30,7 @@
     "hades2.error.debuggerInternal": "The LLDB debugger backend encountered an internal error.",
     "hades2.error.debuggerProtocol": "The LLDB debugger backend protocol is incompatible.",
     "hades2.error.debuggerUnavailable": "The LLDB debugger backend could not be started.",
+    "hades2.error.nativeQueryUnavailable": "A required connection component is unavailable. Reinstall the current version and restart the game.",
     "hades2.error.disconnectBeforePrepare": "Disconnect and quit the game before this operation.",
     "hades2.error.duplicateConflict": "The same request ID was reused with different content.",
     "hades2.error.elementRange": "The element count must be an integer between 0 and {0}.",

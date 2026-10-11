@@ -92,6 +92,10 @@ def verify_module_build(game_id, dist_dir):
     if module_manifests != [manifest_path]:
         raise ValueError(f'Expected exactly the selected module manifest in {app}; found {module_manifests}')
     verify_python_runtime(resources, manifest)
+    for library in manifest.native_libraries:
+        native = games_dir / game_id / 'native' / library.filename
+        if not native.is_file() or native.is_symlink():
+            raise ValueError(f'Declared module native library is missing or unsafe: {native}')
     return app
 
 
