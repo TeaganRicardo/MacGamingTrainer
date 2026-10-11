@@ -20,7 +20,7 @@ from games.hades2.preferences import (
     next_room_reward_consumed,
 )
 
-assert DESIRED_STATE_SCHEMA_VERSION == 8
+assert DESIRED_STATE_SCHEMA_VERSION == 9
 
 # Early-access reward ids migrate to current identities or are retired.
 for old, expected in (
