@@ -134,6 +134,7 @@ adapter = Hades2Adapter(transport=FakeTransport())
 adapter.state.update({
     'connected': True,
     'status': 'ready',
+    'capabilities': {'setFeature': True},
     'desiredFeatures': {},
     'stats': {},
     'resources': [],
