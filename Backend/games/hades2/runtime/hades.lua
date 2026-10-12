@@ -8181,23 +8181,23 @@ if __MacGamingTrainerV1 == nil then
       support = function() return type(SetPlayerAttackSpecialChargeSpeed) == "function" and type(RemovePlayerAttackSpecialChargeSpeed) == "function" end,
       value = function() return M.statTargets.chargeSpeed or 100 end,
     },
-    moveSpeed = {, available = heroOwnerAvailable
-      install = installMoveSpeedLock, release = releaseMoveSpeedLock, min = 10, max = 1000,
+    moveSpeed = {
+      available = heroOwnerAvailable, install = installMoveSpeedLock, release = releaseMoveSpeedLock, min = 10, max = 1000,
       support = function() return type(SetUnitProperty) == "function" end,
       value = function(hero) return M.statTargets.moveSpeed or currentMoveSpeedPercent(hero) or 100 end,
     },
-    sprintSpeed = {, available = heroOwnerAvailable
-      install = installSprintSpeedLock, release = releaseSprintSpeedLock, min = 10, max = 1000,
+    sprintSpeed = {
+      available = heroOwnerAvailable, install = installSprintSpeedLock, release = releaseSprintSpeedLock, min = 10, max = 1000,
       support = function() return type(SetWeaponProperty) == "function" end,
       value = function(hero) return M.statTargets.sprintSpeed or currentSprintSpeedPercent(hero) or 100 end,
     },
-    dashSpeed = {, available = heroOwnerAvailable
-      install = installDashSpeedLock, release = releaseDashSpeedLock, min = 10, max = 1000,
+    dashSpeed = {
+      available = heroOwnerAvailable, install = installDashSpeedLock, release = releaseDashSpeedLock, min = 10, max = 1000,
       support = function() return type(SetWeaponProperty) == "function" and type(GetBaseDataValue) == "function" and type(GetWeaponDataValue) == "function" end,
       value = function(hero) return M.statTargets.dashSpeed or currentDashSpeedPercent(hero) or 100 end,
     },
-    attackSpeed = {, available = heroOwnerAvailable
-      install = installAttackSpeedLock, release = releaseAttackSpeedLock, min = 10, max = 1000,
+    attackSpeed = {
+      available = heroOwnerAvailable, install = installAttackSpeedLock, release = releaseAttackSpeedLock, min = 10, max = 1000,
       support = function() return type(ApplyUnitPropertyChanges) == "function" and type(WeaponData) == "table" and type(WeaponSets) == "table" and type(WeaponSets.HeroPrimarySecondaryWeapons) == "table" end,
       value = function(hero) return M.statTargets.attackSpeed or currentAttackSpeedPercent(hero) or 100 end,
     },
