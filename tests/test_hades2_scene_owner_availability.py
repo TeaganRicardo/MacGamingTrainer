@@ -157,6 +157,12 @@ do
     resource = "Money", locked = true, includeCatalogs = false,
   })
   check(relocked.moneyLocked, "missing Money UI prevented resource lock ownership")
+  M.dispatch("set_resource", {
+    resource = "Money", amount = 19, requestId = "resource-without-ui",
+    includeCatalogs = false,
+  })
+  eq(GameState.Resources.Money, 19,
+    "Money inventory mutation was incorrectly owned by its optional UI observer")
   M.dispatch("lock_resource", { resource = "Money", locked = false, includeCatalogs = false })
   UpdateMoneyUI = moneyDisplay
 end
