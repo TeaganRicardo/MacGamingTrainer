@@ -642,7 +642,7 @@ def lua_dispatch_source(root, toggles, multipliers):
     assert contains_tokens(damage, ["local", "hero", "=", "M", ".", "sceneOwners", ".", "hero", "(", ")"]), (
         "Lua damage consumer must resolve the current Hero owner before applying the multiplier"
     )
-    assert contains_tokens(damage, ["if", "M", ".", "damageEnabled", "and", "hero", "~=", "nil",
+    assert contains_tokens(damage, ["if", "M", ".", "damageEnabled", "and", "hero", "~", "=", "nil",
                                     "and", "attacker", "==", "hero", "then", "return", "result", "*",
                                     "M", ".", "damageMultiplier"]), (
         "Lua damage consumer must gate and apply its matching multiplier to the current Hero owner"
