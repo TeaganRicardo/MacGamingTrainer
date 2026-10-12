@@ -552,7 +552,8 @@ struct Main {
         )
         let special = makeBoon(id: "TalentDrop", group: "special", kind: "consumable", sourceID: "Selene")
         try withModel(expectedNewCommands: 1) { model in
-            model.capabilities["spawnReward"] = true
+            model.capabilities["acquireExactReward"] = true
+            model.capabilities["spawnReward"] = false
             model.boons = [exact, special]
             check(model.exactBoonOptions.map(\.id) == [exact.id], "exact catalog projection is wrong")
             check(!model.specialRewardOptions.contains { $0.id == exact.id }, "exact trait leaked into Character Rewards")
