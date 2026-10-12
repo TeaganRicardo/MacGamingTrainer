@@ -301,13 +301,13 @@ def manifest() -> list[Mutation]:
             ident="error-registry-producer",
             invariant="a registered runtime refusal must point at a live producer",
             path=ROOT / "Backend/games/hades2/error_presentation.py",
-            old=("  'message': 'Trait mutation requires an active run room',\n"
-                 "  'key': 'hades2.error.traitMutationNeedsRun',\n"
+            old=("  'message': 'Trait mutation requires a live trait owner',\n"
+                 "  'key': 'hades2.error.traitMutationNeedsOwner',\n"
                  "  'runtime_only': True,\n"
                  "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'set_trait_remaining_uses', 'expire_trait', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget'}}},"),
-            new=("  'message': 'Trait mutation requires an active run room',\n"
-                 "  'key': 'hades2.error.traitMutationNeedsRun',\n"
+            new=("  'message': 'Trait mutation requires a live trait owner',\n"
+                 "  'key': 'hades2.error.traitMutationNeedsOwner',\n"
                  "  'runtime_only': True,\n"
                  "  'runtime': {'commands': ['set_trait_level', 'set_trait_rarity', 'set_trait_remaining_uses', 'expire_trait', 'remove_trait', 'advance_trait_lifecycle'], "
                  "'producer': {'kind': 'helper', 'name': 'resolveTraitTarget_missing'}}},"),
