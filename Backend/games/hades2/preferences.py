@@ -16,11 +16,13 @@ from .schema import (
     MAX_AMOUNT,
     MULTIPLIERS,
     NEXT_ROOM_REWARD_MAX_LENGTH,
+    NEXT_OCCURRENCE_MAX_LENGTH,
     STAT_RULES,
     TOGGLES,
     default_boon_rarity,
     desired_feature_defaults,
     is_valid_next_room_reward,
+    is_valid_next_occurrence_target,
     normalize_desired_feature_value,
     normalize_gathering_probabilities,
     normalize_chaos_gate_probability,
@@ -39,7 +41,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 8
+DESIRED_STATE_SCHEMA_VERSION = 9
 
 
 def _finite_number(value):
@@ -130,6 +132,18 @@ def next_room_reward_consumed(preferences, decoded, preference_dirty):
     return isinstance(token,str) and bool(token) and consumed==token
 
 
+def next_occurrence_consumed(preferences, decoded, preference_dirty):
+    if not isinstance(preferences,dict) or not isinstance(decoded,dict):return False
+    target=preferences.get('nextOccurrenceTarget')
+    if target is None or 'nextOccurrenceTarget' not in decoded:return False
+    if decoded.get('nextOccurrenceTarget') is not None:return False
+    if not preference_dirty:return True
+    token=preferences.get('nextOccurrenceToken')
+    diagnostics=decoded.get('runtimeDiagnostics')
+    consumed=diagnostics.get('lastConsumedNextOccurrenceToken') if isinstance(diagnostics,dict) else None
+    return isinstance(token,str) and bool(token) and consumed==token
+
+
 def migrate_legacy_boon_semantics(raw, schema_version):
     """Canonicalize pre-v3 boon controls to explicit force semantics.
 
@@ -176,6 +190,9 @@ def normalize_persisted_desired(raw, schema_version):
         migrated.pop('chaosGateProbability',None)
     if schema_version < 8 and isinstance(migrated,dict):
         migrated.pop('forceEnableRerolls',None)
+    if schema_version < 9 and isinstance(migrated,dict):
+        migrated.pop('nextOccurrenceTarget',None)
+        migrated.pop('nextOccurrenceToken',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
@@ -190,7 +207,7 @@ class Hades2PreferenceStore:
         values=desired_feature_defaults()
         values.update(
             boonRarity=default_boon_rarity(),
-            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,gatheringProbabilities={},chaosGateProbability=None,
+            statLocks={},vitalLocks={},resourceLocks={},rerollsLock=None,elementLocks={},nextRoomReward=None,nextRoomRewardToken=None,nextOccurrenceTarget=None,nextOccurrenceToken=None,gatheringProbabilities={},chaosGateProbability=None,
         )
         return values
 
@@ -222,6 +239,19 @@ class Hades2PreferenceStore:
         token=raw.get('nextRoomRewardToken')
         if result['nextRoomReward'] is not None and isinstance(token,str) and 0<len(token)<=NEXT_ROOM_REWARD_MAX_LENGTH:
             result['nextRoomRewardToken']=token
+        occurrence=raw.get('nextOccurrenceTarget')
+        occurrence_token=raw.get('nextOccurrenceToken')
+        occurrence_token_valid=(
+            isinstance(occurrence_token,str)
+            and 0<len(occurrence_token)<=NEXT_OCCURRENCE_MAX_LENGTH
+        )
+        if (
+            occurrence is not None
+            and is_valid_next_occurrence_target(occurrence)
+            and occurrence_token_valid
+        ):
+            result['nextOccurrenceTarget']=occurrence
+            result['nextOccurrenceToken']=occurrence_token
         return result
 
     def load(self):

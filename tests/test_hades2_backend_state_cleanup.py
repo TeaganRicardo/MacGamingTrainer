@@ -34,6 +34,15 @@ struct Main {
             logSink: TrainerLogSink(url: URL(fileURLWithPath: "/dev/null"))
         )
 
+        let setOccurrence = Hades2Request.setNextOccurrence("npc:Nemesis")
+        check(setOccurrence.command == .setNextOccurrenceDesired,
+              "occurrence request routed to the wrong Host command")
+        check(setOccurrence.params["target"] as? String == "npc:Nemesis",
+              "occurrence target identity was not serialized opaquely")
+        let clearOccurrence = Hades2Request.setNextOccurrence(nil)
+        check(clearOccurrence.params["target"] is NSNull,
+              "clearing occurrence did not serialize explicit null")
+
         // U-03: a sparse payload cannot clear a warning. Explicit null or an
         // empty warnings array clears it; nonempty values replace it.
         model.warning = "stale warning"
@@ -56,13 +65,34 @@ struct Main {
 
         // Resident full snapshots explicitly clear nullable run observations;
         // sparse Profile/Save patches still preserve them and the catalogs.
-        model.apply(["spellChargeCost": 20.0, "nextRoomReward": "RoomMoneyDrop"])
+        model.apply([
+            "spellChargeCost": 20.0,
+            "nextRoomReward": "RoomMoneyDrop",
+            "nextOccurrenceTarget": "npc:Nemesis",
+            "occurrenceTargets": [
+                ["id": "npc:Nemesis", "kind": "character", "sourceId": "Nemesis"],
+                ["id": "shop:Charon", "kind": "shop", "sourceId": "Charon"],
+            ],
+        ])
         model.apply(["profiles": []])
-        check(model.spellChargeCost == 20 && model.nextRoomReward == "RoomMoneyDrop",
-              "sparse Profile payload erased run observations")
-        model.apply(["spellChargeCost": NSNull(), "nextRoomReward": NSNull()])
-        check(model.spellChargeCost == nil && model.nextRoomReward == nil,
-              "full resident null did not clear absent Hex/reward state")
+        check(
+            model.spellChargeCost == 20
+                && model.nextRoomReward == "RoomMoneyDrop"
+                && model.nextOccurrenceTarget == "npc:Nemesis"
+                && model.occurrenceTargets.map(\.id) == ["npc:Nemesis", "shop:Charon"],
+            "sparse Profile payload erased run or occurrence state"
+        )
+        model.apply([
+            "spellChargeCost": NSNull(),
+            "nextRoomReward": NSNull(),
+            "nextOccurrenceTarget": NSNull(),
+        ])
+        check(
+            model.spellChargeCost == nil
+                && model.nextRoomReward == nil
+                && model.nextOccurrenceTarget == nil,
+            "full resident null did not clear absent Hex/reward/occurrence state"
+        )
 
         // A Core-owned feature failure keeps its Host presentation identity and
         // arguments across the untyped backend payload. Legacy runtime-owned
@@ -101,6 +131,7 @@ struct Main {
         model.moneyMultiplierEnabled = true
         model.resourceMultiplierEnabled = true
         model.nextRoomReward = "RoomMoneyDrop"
+        model.nextOccurrenceTarget = "npc:Nemesis"
 
         model.connected = true
         model.pid = 123
@@ -272,8 +303,13 @@ struct Main {
               "durable multiplier intent was cleared")
         check(model.boonRarityTarget == "Legendary" && model.boonRarityMultiplier == 175.0,
               "durable boon rarity intent was cleared")
-        check(model.boonForceLegendary && model.boonForceDuo && model.nextRoomReward == "RoomMoneyDrop",
-              "durable reward intent was cleared")
+        check(
+            model.boonForceLegendary
+                && model.boonForceDuo
+                && model.nextRoomReward == "RoomMoneyDrop"
+                && model.nextOccurrenceTarget == "npc:Nemesis",
+            "durable reward/occurrence intent was cleared"
+        )
         check(model.moneyMultiplierEnabled && model.resourceMultiplierEnabled,
               "durable multiplier toggles were cleared")
 

@@ -66,6 +66,7 @@ def is_known_element(value):
 MAX_AMOUNT = 999999
 BOON_RARITY_TARGETS = ('Common','Rare','Epic','Heroic')
 NEXT_ROOM_REWARD_MAX_LENGTH = 128
+NEXT_OCCURRENCE_MAX_LENGTH = 128
 
 # Wire identities only. Native generation/collection strategy is Lua-owned.
 GATHERING_FAMILIES = frozenset(('flora','mining','digging','shades','fishing'))
@@ -105,6 +106,12 @@ def validate_chaos_gate_probability(value):
 
 def is_valid_next_room_reward(value):
     return value is None or (isinstance(value,str) and len(value)<=NEXT_ROOM_REWARD_MAX_LENGTH)
+
+
+def is_valid_next_occurrence_target(value):
+    return value is None or (
+        isinstance(value,str) and 0 < len(value) <= NEXT_OCCURRENCE_MAX_LENGTH
+    )
 
 
 def default_boon_rarity():

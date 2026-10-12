@@ -300,6 +300,30 @@
       "englishValue": "Icarus",
       "englishSource": "HelpText.en.sjson"
     },
+    "Nemesis": {
+      "value": "涅墨西斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Nemesis_01",
+      "englishValue": "Nemesis",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "Heracles": {
+      "value": "赫拉克勒斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Heracles_01",
+      "englishValue": "Heracles",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "Charon": {
+      "value": "卡戎",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Charon_01",
+      "englishValue": "Charon",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
     "Chaos": {
       "value": "卡俄斯",
       "source": "HelpText.zh-CN.sjson",

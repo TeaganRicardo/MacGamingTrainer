@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 98 then
+if previousModule and previousModule.revision ~= 100 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 98 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 98, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 100, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -25,6 +25,7 @@ if __MacGamingTrainerV1 == nil then
     boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
     nextRoomRewardOriginRoom = nil, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
+    nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
     desiredFeatures = {
       invincibility = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
       instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
@@ -826,6 +827,15 @@ if __MacGamingTrainerV1 == nil then
     M.nextRoomRewardPatchedValue = nil
     M.nextRoomRewardPatchRoom = nil
   end
+  local function releaseOccurrenceRouting()
+    releaseHook("ChooseNextRoomData")
+    releaseHook("IsRoomForced")
+    releaseHook("DoUnlockRoomExits")
+    releaseHook("CreateDoorRewardPreview")
+    releaseHook("IsEncounterForced")
+    releaseHook("ChooseEncounter")
+    releaseHook("GetRandomValue")
+  end
   local function releaseEconomyRuntime()
     M.moneyMultiplierEnabled, M.resourceMultiplierEnabled = false, false
     releaseHook("AddResource")
@@ -1197,6 +1207,7 @@ if __MacGamingTrainerV1 == nil then
     if forceRerolls ~= nil then forceRerolls.release() end
     M.forceEnableRerolls = false
     releaseNextRoomReward()
+    releaseOccurrenceRouting()
     releaseEconomyRuntime()
     releaseRerollsRuntime()
     releaseStatsRuntime()
@@ -1212,6 +1223,8 @@ if __MacGamingTrainerV1 == nil then
     M.statTargets = {}
     M.nextRoomReward = nil
     M.nextRoomRewardToken = nil
+    M.nextOccurrenceTarget = nil
+    M.nextOccurrenceToken = nil
   end
   local function disable()
     clearDesired()
@@ -1221,7 +1234,8 @@ if __MacGamingTrainerV1 == nil then
   local function anyDesired()
     for _, value in pairs(M.desiredFeatures) do if value then return true end end
     return next(M.resourceLocks) ~= nil or next(M.vitalLocks) ~= nil or next(M.elementLocks) ~= nil or M.rerollsLock ~= nil
-      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
+      or next(M.statTargets) ~= nil or M.nextRoomReward ~= nil or M.nextOccurrenceTarget ~= nil
+      or next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil
   end
   local function anyRuntimeActive()
     return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
@@ -1232,6 +1246,8 @@ if __MacGamingTrainerV1 == nil then
       or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
       or owns("AddResource") or owns("SpendResource") or owns("UpdateRerollUI")
       or owns("CreateRoom") or owns("GetHarvestPointSpawnChance") or owns("IsSecretDoorEligible")
+      or owns("ChooseNextRoomData") or owns("IsRoomForced") or owns("DoUnlockRoomExits") or owns("CreateDoorRewardPreview")
+      or owns("IsEncounterForced") or owns("ChooseEncounter") or owns("GetRandomValue")
       or owns("GetMaxMetaUpgradeCost") or owns("CalculateCritChance")
       or owns("GetTotalHeroTraitValue") or M.statRuntime.dodge ~= nil or M.statRuntime.chargeSpeed ~= nil
       or M.statRuntime.moveSpeed ~= nil or M.statRuntime.sprintSpeed ~= nil or M.statRuntime.dashSpeed ~= nil or M.statRuntime.attackSpeed ~= nil or M.statRuntime.manaRegen ~= nil or M.statRuntime.enemyDamage or M.statRuntime.enemyHealth ~= nil
@@ -6742,12 +6758,29 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  local occurrenceTargets, occurrenceTargetOrder
+
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
     local list = resources()
-    local boonList, rewardList = nil, nil
-    if includeCatalogs ~= false then boonList, rewardList = boons(), rewards() end
+    local boonList, rewardList, occurrenceList = nil, nil, nil
+    if includeCatalogs ~= false then
+      boonList, rewardList = boons(), rewards()
+      occurrenceList = setmetatable({}, arrayMeta)
+      if type(occurrenceTargets) == "table" and type(occurrenceTargetOrder) == "table" then
+        for _, id in ipairs(occurrenceTargetOrder) do
+          local definition = occurrenceTargets[id]
+          if type(definition) == "table" then
+            occurrenceList[#occurrenceList + 1] = {
+              id = id,
+              kind = definition.kind,
+              sourceId = definition.sourceId,
+            }
+          end
+        end
+      end
+    end
     local support = statSupport()
     local statAvailable = statAvailableMap(support)
     local currentScene = sceneName()
@@ -6828,6 +6861,7 @@ if __MacGamingTrainerV1 == nil then
       currentRunTraitIdentityPersistent = false,
       currentRunTraitsReason = traitListReason == nil and jsonNull or traitListReason,
       nextRoomReward = M.nextRoomReward == nil and jsonNull or M.nextRoomReward,
+      nextOccurrenceTarget = M.nextOccurrenceTarget == nil and jsonNull or M.nextOccurrenceTarget,
       damageMultiplier = M.damageMultiplier,
       moneyMultiplier = M.moneyMultiplier, moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
       resourceMultiplier = M.resourceMultiplier, resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
@@ -6844,6 +6878,7 @@ if __MacGamingTrainerV1 == nil then
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
+      occurrenceTargets = occurrenceList,
       lastAction = actionLedger.latestReceipt() or jsonNull,
       runtimeOutcomeUnknown = not not M.terminalActionUnknown,
       featureErrors = M.featureErrors,
@@ -6859,6 +6894,13 @@ if __MacGamingTrainerV1 == nil then
         nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors or jsonNull,
         nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
         lastConsumedNextRoomRewardToken = M.lastConsumedNextRoomRewardToken or jsonNull,
+        nextOccurrenceHooks = {
+          room = owns("ChooseNextRoomData") and owns("IsRoomForced") and owns("DoUnlockRoomExits")
+            and owns("CreateDoorRewardPreview") and owns("GetRandomValue"),
+          encounter = owns("ChooseEncounter") and owns("IsEncounterForced") and owns("GetRandomValue"),
+        },
+        nextOccurrenceToken = M.nextOccurrenceToken or jsonNull,
+        lastConsumedNextOccurrenceToken = M.lastConsumedNextOccurrenceToken or jsonNull,
       },
     }
   end
@@ -7513,6 +7555,249 @@ if __MacGamingTrainerV1 == nil then
     M.boonRarityEnabled = true
   end
 
+  occurrenceTargetOrder = {
+    "npc:Arachne", "npc:Artemis", "npc:Narcissus", "npc:Echo",
+    "npc:Nemesis", "npc:Hades", "npc:Medea", "npc:Heracles",
+    "npc:Circe", "npc:Icarus", "npc:Dionysus", "npc:Athena",
+    "shop:Charon",
+  }
+  occurrenceTargets = {
+    ["npc:Arachne"] = { kind = "character", sourceId = "Arachne", rooms = { F_Story01 = true } },
+    ["npc:Narcissus"] = { kind = "character", sourceId = "Narcissus", rooms = { G_Story01 = true } },
+    ["npc:Hades"] = { kind = "character", sourceId = "Hades", rooms = { I_Story01 = true } },
+    ["npc:Medea"] = { kind = "character", sourceId = "Medea", rooms = { N_Story01 = true } },
+    ["npc:Circe"] = { kind = "character", sourceId = "Circe", rooms = { O_Story01 = true } },
+    ["npc:Dionysus"] = { kind = "character", sourceId = "Dionysus", rooms = { P_Story01 = true } },
+    ["npc:Echo"] = { kind = "character", sourceId = "Echo", encounters = { Story_Echo_01 = true } },
+    ["npc:Artemis"] = { kind = "character", sourceId = "Artemis", encounters = {
+      ArtemisCombatF = true, ArtemisCombatF2 = true, ArtemisCombatIntro = true,
+      ArtemisCombatG = true, ArtemisCombatG2 = true,
+      ArtemisCombatN = true, ArtemisCombatN2 = true,
+    } },
+    ["npc:Athena"] = { kind = "character", sourceId = "Athena", encounters = {
+      AthenaCombatP = true, AthenaCombatP02 = true, AthenaCombatIntro = true,
+    } },
+    ["npc:Icarus"] = { kind = "character", sourceId = "Icarus", encounters = {
+      IcarusCombatO = true, IcarusCombatO2 = true, IcarusCombatIntro = true,
+      IcarusCombatP = true, IcarusCombatP2 = true,
+    } },
+    ["npc:Nemesis"] = { kind = "character", sourceId = "Nemesis", encounters = {
+      NemesisCombatF = true, NemesisCombatG = true, NemesisCombatH = true,
+      NemesisCombatI = true, NemesisCombatIntro = true,
+      NemesisRandomEvent = true, BridgeNemesisRandomEvent = true,
+    } },
+    ["npc:Heracles"] = { kind = "character", sourceId = "Heracles", encounters = {
+      HeraclesCombatN = true, HeraclesCombatN2 = true, HeraclesCombatIntro = true,
+      HeraclesCombatO = true, HeraclesCombatO2 = true,
+      HeraclesCombatP = true, HeraclesCombatP2 = true,
+    } },
+    ["shop:Charon"] = {
+      kind = "shop", sourceId = "Charon",
+      rooms = {
+        F_Shop01 = true, G_Shop01 = true, N_Shop01 = true,
+        O_Shop01 = true, P_Shop01 = true,
+      },
+      encounters = { BridgeShop = true },
+    },
+  }
+
+  local function occurrenceDefinition()
+    return occurrenceTargets[M.nextOccurrenceTarget]
+  end
+
+  local function occurrenceRoomMatches(definition, room)
+    return type(definition) == "table" and type(definition.rooms) == "table"
+      and type(room) == "table" and definition.rooms[room.Name] == true
+  end
+
+  local function occurrenceEncounterMatches(definition, encounter)
+    return type(definition) == "table" and type(definition.encounters) == "table"
+      and type(encounter) == "table" and definition.encounters[encounter.Name] == true
+  end
+
+  local function consumeNextOccurrence(target, token)
+    if M.nextOccurrenceTarget ~= target or M.nextOccurrenceToken ~= token then return false end
+    M.lastConsumedNextOccurrenceToken = token
+    M.nextOccurrenceTarget = nil
+    M.nextOccurrenceToken = nil
+    M.featureErrors.nextOccurrence = nil
+    releaseOccurrenceRouting()
+    return true
+  end
+
+  -- Native ChooseNextRoomData / ChooseEncounter select randomly from a complete
+  -- forced pool before trying the eligible pool. Observe the native force
+  -- predicates unchanged, and choose the requested target only from the native
+  -- eligible pool when *no* candidate was natively forced. This preserves
+  -- linked-room, explicit-force, priority, eligibility and SetupEncounter owners.
+  M.occurrenceRouting = { selection = nil, offering = nil }
+
+  function M.occurrenceRouting.choose(kind, original, ...)
+    local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
+    local definition = occurrenceTargets[target]
+    if definition == nil or token == nil then return original(...) end
+    local previous = M.occurrenceRouting.selection
+    M.occurrenceRouting.selection = {
+      kind = kind, target = target, token = token, eligible = {}, nativeForced = false,
+    }
+    local packed = table.pack(pcall(original, ...))
+    M.occurrenceRouting.selection = previous
+    if not packed[1] then error(packed[2]) end
+    return table.unpack(packed, 2, packed.n)
+  end
+
+  function M.occurrenceRouting.observeForced(kind, original, currentRun, room, candidate, ...)
+    local native = original(currentRun, room, candidate, ...)
+    local selection = M.occurrenceRouting.selection
+    if selection ~= nil and selection.kind == kind and M.nextOccurrenceTarget == selection.target
+        and M.nextOccurrenceToken == selection.token then
+      if native then selection.nativeForced = true end
+      -- These calls originate only after native Is*Eligible has admitted the
+      -- candidate. The identical data table must appear in the chosen pool.
+      if type(candidate) == "table" then selection.eligible[candidate] = true end
+    end
+    return native
+  end
+
+  function M.occurrenceRouting.random(original, pool, ...)
+    local selection = M.occurrenceRouting.selection
+    if selection ~= nil and not selection.nativeForced
+        and M.nextOccurrenceTarget == selection.target and M.nextOccurrenceToken == selection.token
+        and type(pool) == "table" then
+      local definition = occurrenceTargets[selection.target]
+      local choices = {}
+      for _, candidate in ipairs(pool) do
+        local data = candidate
+        if selection.kind == "room" and type(candidate) == "string" then
+          data = type(RoomData) == "table" and RoomData[candidate] or nil
+        end
+        if selection.eligible[data] then
+          local matched = selection.kind == "room"
+            and occurrenceRoomMatches(definition, data)
+            or selection.kind == "encounter" and occurrenceEncounterMatches(definition, data)
+          if matched then choices[#choices + 1] = candidate end
+        end
+      end
+      if #choices > 0 then
+        -- Retain native weighted sampling among multiple eligible variants.
+        return original(choices, ...)
+      end
+    end
+    return original(pool, ...)
+  end
+
+  function M.occurrenceRouting.preview(original, door, ...)
+    local packed = table.pack(original(door, ...))
+    -- Called only for doors the native unlock loop really processes and does
+    -- not skip. Global OfferedExitDoors can also hold unavailable/persistent
+    -- rooms which have not been offered in this invocation.
+    if M.occurrenceRouting.offering ~= nil and type(door) == "table" then
+      local offering = M.occurrenceRouting.offering
+      if M.nextOccurrenceTarget == offering.target and M.nextOccurrenceToken == offering.token then
+        offering.doors[#offering.doors + 1] = door
+      end
+    end
+    return table.unpack(packed, 1, packed.n)
+  end
+
+  function M.occurrenceRouting.unlock(original, run, room, ...)
+    local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
+    local definition = occurrenceTargets[target]
+    if token == nil or type(definition) ~= "table" or type(definition.rooms) ~= "table" then
+      return original(run, room, ...)
+    end
+    local previous = M.occurrenceRouting.offering
+    local offering = { target = target, token = token, doors = {} }
+    M.occurrenceRouting.offering = offering
+    local packed = table.pack(pcall(original, run, room, ...))
+    M.occurrenceRouting.offering = previous
+    if not packed[1] then error(packed[2]) end
+    if M.nextOccurrenceTarget == target and M.nextOccurrenceToken == token then
+      for _, door in ipairs(offering.doors) do
+        if door.ReadyToUse == true and not door.SkipUnlock and door.ObjectId ~= nil
+            and type(MapState) == "table" and type(MapState.OfferedExitDoors) == "table"
+            and MapState.OfferedExitDoors[door.ObjectId] == door
+            and occurrenceRoomMatches(definition, door.Room) then
+          consumeNextOccurrence(target, token)
+          break
+        end
+      end
+    end
+    return table.unpack(packed, 2, packed.n)
+  end
+
+  local function installOccurrenceRouting()
+    local definition = occurrenceDefinition()
+    if definition == nil then error("Unsupported next occurrence target") end
+    local hasRooms = type(definition.rooms) == "table" and next(definition.rooms) ~= nil
+    local hasEncounters = type(definition.encounters) == "table" and next(definition.encounters) ~= nil
+
+    if hasRooms then
+      requireFunctions("next occurrence room routing",
+        { "ChooseNextRoomData", "IsRoomForced", "DoUnlockRoomExits", "CreateDoorRewardPreview", "GetRandomValue" })
+      if not owns("ChooseNextRoomData") then
+        installHook("ChooseNextRoomData", function(original, ...)
+          return M.occurrenceRouting.choose("room", original, ...)
+        end)
+      end
+      if not owns("IsRoomForced") then
+        installHook("IsRoomForced", function(original, ...)
+          return M.occurrenceRouting.observeForced("room", original, ...)
+        end)
+      end
+      if not owns("CreateDoorRewardPreview") then
+        installHook("CreateDoorRewardPreview", function(original, ...)
+          return M.occurrenceRouting.preview(original, ...)
+        end)
+      end
+      if not owns("DoUnlockRoomExits") then
+        installHook("DoUnlockRoomExits", function(original, ...)
+          return M.occurrenceRouting.unlock(original, ...)
+        end)
+      end
+    else
+      releaseHook("ChooseNextRoomData")
+      releaseHook("IsRoomForced")
+      releaseHook("DoUnlockRoomExits")
+      releaseHook("CreateDoorRewardPreview")
+    end
+
+    if hasEncounters then
+      requireFunctions("next occurrence encounter routing",
+        { "ChooseEncounter", "IsEncounterForced", "GetRandomValue" })
+      if not owns("ChooseEncounter") then
+        installHook("ChooseEncounter", function(original, ...)
+          local target, token = M.nextOccurrenceTarget, M.nextOccurrenceToken
+          local definitionAtStart = occurrenceTargets[target]
+          local packed = table.pack(M.occurrenceRouting.choose("encounter", original, ...))
+          if M.nextOccurrenceTarget == target and M.nextOccurrenceToken == token
+              and occurrenceEncounterMatches(definitionAtStart, packed[1]) then
+            consumeNextOccurrence(target, token)
+          end
+          return table.unpack(packed, 1, packed.n)
+        end)
+      end
+      if not owns("IsEncounterForced") then
+        installHook("IsEncounterForced", function(original, ...)
+          return M.occurrenceRouting.observeForced("encounter", original, ...)
+        end)
+      end
+    else
+      releaseHook("ChooseEncounter")
+      releaseHook("IsEncounterForced")
+    end
+
+    if hasRooms or hasEncounters then
+      if not owns("GetRandomValue") then
+        installHook("GetRandomValue", function(original, ...)
+          return M.occurrenceRouting.random(original, ...)
+        end)
+      end
+    else
+      releaseHook("GetRandomValue")
+    end
+  end
+
   local nextRoomDirectRewards = {
     RoomMoneyDrop=true, MetaCurrencyDrop=true, MetaCardPointsCommonDrop=true, MemPointsCommonDrop=true,
     MaxHealthDrop=true, MaxManaDrop=true, StackUpgrade=true, WeaponUpgrade=true, HermesUpgrade=true,
@@ -7971,6 +8256,13 @@ if __MacGamingTrainerV1 == nil then
         if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
       else
         releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
+      end
+    end
+    if onlyKey == nil or onlyKey == "nextOccurrence" then
+      if M.nextOccurrenceTarget ~= nil and ready() and sceneName() == "run" then
+        if not featureAttempt("nextOccurrence", true, installOccurrenceRouting, releaseOccurrenceRouting, raiseOnError) then allOk = false end
+      else
+        releaseOccurrenceRouting(); M.featureErrors.nextOccurrence = nil
       end
     end
     local availableStats = statAvailableMap(statSupport())
@@ -8884,6 +9176,23 @@ if __MacGamingTrainerV1 == nil then
       if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
     end
+    if command == "set_next_occurrence" then
+      local target, token = params.target, params.token
+      if target ~= nil and type(target) ~= "string" then error("Next occurrence target must be a string or nil") end
+      if target ~= nil then
+        if occurrenceTargets[target] == nil then error("Unsupported next occurrence target") end
+        if type(token) ~= "string" or #token == 0 or #token > 128 then error("Next occurrence token is invalid") end
+        M.nextOccurrenceTarget = target
+        M.nextOccurrenceToken = token
+      else
+        M.nextOccurrenceTarget = nil
+        M.nextOccurrenceToken = nil
+      end
+      M.featureErrors.nextOccurrence = nil
+      reconcileDesired(true, "nextOccurrence")
+      if anyDesired() then installGuard() elseif not anyRuntimeActive() then releaseGuard() end
+      return state(params.includeCatalogs)
+    end
     if command == "set_boon_rarity" then
       local target = params.target or M.boonRarityTarget
       local multiplier = params.multiplier or (M.boonRarityMultiplier * 100)
@@ -9154,6 +9463,7 @@ if __MacGamingTrainerV1 == nil then
     set_element = true,
     lock_element = true,
     set_next_room_reward = true,
+    set_next_occurrence = true,
   }
   function M.dispatchBatch(calls)
     if type(calls) ~= "table" then error("Preference replay batch must be a table") end

@@ -65,6 +65,8 @@ struct Hades2StatePatch {
     let resourceMultiplier: Double?
     let boonRarity: Hades2BoonRaritySnapshot?
     let nextRoomReward: Hades2FieldPatch<String>
+    let nextOccurrenceTarget: Hades2FieldPatch<String>
+    let occurrenceTargets: [Hades2OccurrenceTarget]?
     let rerolls: Hades2FieldPatch<Double>
     let rerollsLocked: Bool?
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
@@ -130,6 +132,13 @@ struct Hades2StatePatch {
             )
         } else { boonRarity = nil }
         nextRoomReward = Self.field(payload, "nextRoomReward", String.self)
+        nextOccurrenceTarget = Self.field(payload, "nextOccurrenceTarget", String.self)
+        occurrenceTargets = (payload["occurrenceTargets"] as? [[String: Any]])?.compactMap { row in
+            guard let id = row["id"] as? String, !id.isEmpty,
+                  let kind = row["kind"] as? String, !kind.isEmpty,
+                  let sourceID = row["sourceId"] as? String, !sourceID.isEmpty else { return nil }
+            return Hades2OccurrenceTarget(id: id, kind: kind, sourceID: sourceID)
+        }
         rerolls = Self.numberField(payload, "rerolls")
         rerollsLocked = payload["rerollsLocked"] as? Bool
         if let raw = payload["chaosGateProbability"] {
