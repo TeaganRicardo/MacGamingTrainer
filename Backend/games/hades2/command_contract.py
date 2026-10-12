@@ -30,6 +30,7 @@ from .schema import (
     VITALS,
     is_known_element,
     is_valid_next_room_reward,
+    is_valid_next_occurrence_target,
     validate_desired_feature_value,
     validate_gathering_desired,
     validate_chaos_gate_probability,
@@ -316,6 +317,14 @@ def _next_room_reward(raw):
     return {"reward": reward}
 
 
+def _next_occurrence(raw):
+    params = _params(raw)
+    target = params.get("target")
+    if not is_valid_next_occurrence_target(target):
+        raise ValueError("下一次遭遇目标无效。")
+    return {"target": target}
+
+
 def _save_editor_query(raw):
     params = _params(raw)
     domain = params.get("domain")
@@ -424,6 +433,10 @@ def _chaos_gate_invoke(adapter, params):
 
 def _next_room_invoke(adapter, params):
     return adapter.set_next_room_reward_desired(params["reward"])
+
+
+def _next_occurrence_invoke(adapter, params):
+    return adapter.set_next_occurrence_desired(params["target"])
 
 
 def _list_profiles(adapter, params):
@@ -551,6 +564,11 @@ _COMMAND_SPECS = (
         "set_next_room_reward_desired",
         validate=_next_room_reward,
         invoke=_next_room_invoke,
+    ),
+    _spec(
+        "set_next_occurrence_desired",
+        validate=_next_occurrence,
+        invoke=_next_occurrence_invoke,
     ),
     _spec("spawn_reward", request_id=True, validate=_spawn_reward),
     _spec("acquire_chaos_pair", request_id=True, validate=_chaos_pair),

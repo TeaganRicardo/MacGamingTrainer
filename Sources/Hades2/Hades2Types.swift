@@ -11,6 +11,14 @@ struct MaterialResource: Identifiable {
     let sortOrder: Int
 }
 
+struct Hades2OccurrenceTarget: Identifiable, Equatable {
+    let id: String
+    let kind: String
+    let sourceID: String
+
+    var titleKey: String { "hades2.occurrence.target.\(sourceID)" }
+}
+
 struct BoonOption: Identifiable {
     let id: String
     let name: String

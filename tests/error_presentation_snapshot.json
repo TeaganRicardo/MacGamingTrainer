@@ -279,19 +279,19 @@
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
     },
-    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 8），": {
+    "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），": {
       "arguments": [
         "kind",
         "1",
-        "8"
+        "9"
       ],
       "key": "hades2.error.preferenceOlderFormat"
     },
-    "kind 使用了更新的数据格式（schemaVersion=9，当前支持 8），": {
+    "kind 使用了更新的数据格式（schemaVersion=10，当前支持 9），": {
       "arguments": [
         "kind",
-        "9",
-        "8"
+        "10",
+        "9"
       ],
       "key": "hades2.error.preferenceNewerFormat"
     },
@@ -1329,6 +1329,22 @@
     "额外魔力恢复必须为 0–1000/秒。": {
       "arguments": [],
       "key": "hades2.error.manaRegenRange"
+    },
+    "下一次遭遇目标无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
+    "Unsupported next occurrence target": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
+    "Next occurrence target must be a string or nil": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
+    "Next occurrence token is invalid": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
     }
   },
   "fallback_key": "hades2.error.runtimeActionFailed",
