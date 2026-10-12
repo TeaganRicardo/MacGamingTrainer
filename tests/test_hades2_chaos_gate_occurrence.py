@@ -155,8 +155,9 @@ draw = 0
 local room = CreateRoom(input, {})
 assert(room.SecretChanceSuccess and draws == before + 1, 'Native inclusive-zero identity changed')
 local cost = GetSecretDoorCost; GetSecretDoorCost = nil
-assert(not pcall(setChaos, 100), 'missing native lifecycle API accepted controlled setup')
-assert(CreateRoom == nativeCreate and IsSecretDoorEligible == nativeEligible and spawns == 0 and forceUses == 0)
+setChaos(100)
+assert(M.chaosGateProbability == 100, 'missing native entry point erased future-room intent')
+assert(CreateRoom == nativeCreate and IsSecretDoorEligible == nativeEligible and spawns == 0 and forceUses == 0, 'missing owner installed a partial Chaos hook')
 GetSecretDoorCost = cost
 setGathering({mining=0}); setChaos(0)
 fault = true
@@ -173,6 +174,49 @@ local foreignEligibility = function() return true end
 CreateRoom, IsSecretDoorEligible = foreignCreate, foreignEligibility
 M.dispatch('cleanup', {includeCatalogs=false})
 assert(CreateRoom == foreignCreate and IsSecretDoorEligible == foreignEligibility and GetHarvestPointSpawnChance == nativeChance, 'cleanup overwrote foreign hooks')
+print('chaos_gate_ok')
+"""
+
+CASES['gathering_owner_survives_unavailable_chaos_native_and_recovers'] = r"""
+setGathering({mining=0})
+setChaos(100)
+assert(CreateRoom ~= nativeCreate and GetHarvestPointSpawnChance ~= nativeChance
+  and IsSecretDoorEligible ~= nativeEligible, 'fixture did not initially own both feature families')
+local nativeCost = GetSecretDoorCost
+GetSecretDoorCost = nil
+setChaos(0)
+assert(M.chaosGateProbability == 0, 'unavailable Chaos owner lost durable intent')
+assert(CreateRoom ~= nativeCreate and GetHarvestPointSpawnChance ~= nativeChance,
+  'missing Chaos native function disabled an independently supported Gathering owner')
+assert(IsSecretDoorEligible == nativeEligible, 'unavailable Chaos owner retained stale hook')
+draw = 0
+local room = CreateRoom({Name='GatheringOnly',RoomSetName='F',HasPickaxePoint=true}, {})
+assert(not room.PickaxePointSuccess, 'Gathering zero stopped controlling a newly generated room')
+GetSecretDoorCost = nativeCost
+UpdateTimers(0)
+assert(IsSecretDoorEligible ~= nativeEligible and CreateRoom ~= nativeCreate,
+  'restored Chaos functions did not re-arm the dormant owner')
+print('chaos_gate_ok')
+"""
+
+CASES['chaos_owner_survives_unavailable_gathering_native_and_recovers'] = r"""
+setGathering({mining=0})
+setChaos(100)
+local nativeFamiliar = HasFamiliarTool
+HasFamiliarTool = nil
+setGathering({mining=0})
+assert(M.gatheringProbabilities.mining == 0, 'unavailable Gathering owner lost durable intent')
+assert(CreateRoom ~= nativeCreate and IsSecretDoorEligible ~= nativeEligible,
+  'missing Gathering native function disabled an independently supported Chaos owner')
+assert(GetHarvestPointSpawnChance == nativeChance,
+  'unavailable Gathering owner retained a stale tool-chance hook')
+draw = 0
+local room = CreateRoom({Name='ChaosOnly',RoomSetName='F',SecretSpawnChance=.2}, {})
+assert(room.SecretChanceSuccess, 'Chaos probability stopped controlling a newly generated room')
+HasFamiliarTool = nativeFamiliar
+UpdateTimers(0)
+assert(GetHarvestPointSpawnChance ~= nativeChance and CreateRoom ~= nativeCreate,
+  'restored Gathering functions did not re-arm the dormant owner')
 print('chaos_gate_ok')
 """
 

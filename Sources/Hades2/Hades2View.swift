@@ -1165,7 +1165,7 @@ struct Hades2TrainerView: View {
     private var expandedSessionMetrics: some View {
         editableAmountMetric(
             text("hades2.metric.rerolls"), icon: "dice.fill", text: $rerollAmount, focus: .rerolls,
-            color: accent, locked: model.rerollsLocked, enabled: model.canSetResource,
+            color: accent, locked: model.rerollsLocked, enabled: model.canSetRerolls,
             edit: .rerolls
         ) {
             model.lockRerolls(!model.rerollsLocked)
@@ -1698,7 +1698,7 @@ struct Hades2TrainerView: View {
             onMaximumCommit: completing(.vital(vital, field: "max")),
             maximumField: maxField,
             locked: locked,
-            editable: model.canSetVitals,
+            editable: model.canSetVital(vital),
             onLock: { model.lockVital(vital, locked: !locked) }
         )
     }
@@ -1730,7 +1730,7 @@ struct Hades2TrainerView: View {
             focusValue: focus,
             detail: detail,
             onCommit: completing(edit),
-            editable: model.canSetVitals
+            editable: model.canSetSpellCharge
         )
     }
 

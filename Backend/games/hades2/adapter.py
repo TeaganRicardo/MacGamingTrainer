@@ -622,7 +622,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -634,7 +634,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
             result=self.execute('set_next_occurrence',{'target':target,'token':self.preferences.get('nextOccurrenceToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -655,7 +655,11 @@ class Hades2Adapter(GameAdapter):
 
         if not isinstance(observed_state,dict):raise TypeError('reconciliation requires a runtime observation.')
         observed=observed_state
-        if observed.get('status')!='ready':
+        # A compatible resident can own session hooks before combat ready().
+        # The Hades reconciler selects executable actions by each native owner.
+        status=observed.get('status')
+        capabilities=observed.get('capabilities')
+        if status!='ready' and not (status=='waiting' and isinstance(capabilities,dict) and capabilities.get('setFeature') is True):
             self._overlay_preferences()
             return dict(self.state)
 
@@ -835,7 +839,11 @@ class Hades2Adapter(GameAdapter):
             decoded['warnings']=list(dict.fromkeys([*prior_warnings,*catalog_warnings]))
         capabilities=decoded.get('capabilities')
         if not isinstance(capabilities,dict):capabilities={}
-        capabilities=dict(disconnected_capabilities(),**capabilities)
+        # A connected resident is authoritative about its own capabilities.
+        # Never inject disconnected=False defaults into an attached runtime:
+        # those synthetic negatives make an omitted/older fixture look as if
+        # the native owner explicitly refused replay.
+        capabilities=dict(capabilities)
         capabilities['hotBackup']=True;capabilities['hotRestore']=False
         decoded['capabilities']=capabilities
         for key in _TRANSIENT_ACTION_RESULT_FIELDS:
@@ -938,7 +946,11 @@ class Hades2Adapter(GameAdapter):
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             self._observe_game_speed()
             if not host_observation_only and command=='status' and self.preference_dirty:
-                return self._replay_preferences(copy.deepcopy(self.state))
+                # Reconcile from this resident observation, not from the
+                # public state overlaid with optimistic durable preferences.
+                # Otherwise a still-dormant lock can look confirmed and skip
+                # its native lock_* command when the owner becomes available.
+                return self._replay_preferences(copy.deepcopy(decoded))
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
                     self._save_preferences()

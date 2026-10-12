@@ -16,7 +16,8 @@ import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game'); args=p.parse_args()
 log=pathlib.Path(__file__).with_suffix('.commands.jsonl')
 state={'connected':True, 'status':'ready', 'scene':'run',
-       'capabilities':{'setResource':True,'setVitals':True,'setStats':True,'setElements':True},
+       'capabilities':{'setResource':True,'setVitals':True,'setHealth':True,'setMana':True,'setArmor':True,
+                       'setRerolls':True,'setSpellCharge':True,'activeRun':True,'setStats':True,'setElements':True},
        'featureSupport':{'gameSpeed':True},
        'money':123,'health':99,'maxHealth':120,'mana':44,'maxMana':60,'armor':7,'spellCharge':12,'rerolls':3,
        'damageMultiplier':2,'moneyMultiplier':3,'resourceMultiplier':4,'gameSpeed':1,
@@ -73,7 +74,7 @@ func fields(_ view: NSView) -> [NSTextField] {
 }
 func edit(_ field: NSTextField, to draft: String, in window: NSWindow) -> NSTextView {
  if field.currentEditor() == nil { check(window.makeFirstResponder(field), "could not focus text field") }
- guard let editor=field.currentEditor() as? NSTextView else { fatalError("field editor missing") }
+ guard let editor=field.currentEditor() as? NSTextView else { fatalError("field editor missing: draft=\(draft) field=\(field.stringValue) editable=\(field.isEditable) firstResponder=\(String(describing:window.firstResponder)) mounted=\(field.window === window)") }
  editor.selectAll(nil); editor.insertText(draft, replacementRange: editor.selectedRange())
  return editor
 }
