@@ -124,8 +124,9 @@ class Hades2DesiredStateReconciler:
     def _owner_available(cls, action, observed):
         command, params = action.command, action.params
         if command in (
-            "set_feature", "set_boon_rarity",
+            "stage_desired_locks", "set_feature", "set_boon_rarity",
             "set_gathering_probabilities", "set_chaos_gate_probability",
+            "set_next_room_reward", "set_next_occurrence",
         ):
             return cls._capability(observed, "setFeature")
         if command == "set_stat":
@@ -144,11 +145,31 @@ class Hades2DesiredStateReconciler:
             return cls._capability(observed, "setRerolls")
         if command in ("set_element", "lock_element"):
             return cls._capability(observed, "setElements")
-        if command in ("set_next_room_reward", "set_next_occurrence"):
-            # Preserve unconsumed identity; never inject a room/encounter action
-            # into an ownerless menu, loading phase, or hub.
-            return observed.get("status") == "ready" and observed.get("scene") == "run"
         raise AssertionError("Replay action lacks an owner: " + command)
+
+    @classmethod
+    def _stage_missing_owner_locks(cls, desired, observed):
+        capacities = ("setHealth", "setMana", "setArmor", "setResource",
+                      "setRerolls", "setElements")
+        stats = _mapping(observed.get("statAvailable"))
+        missing = any(not cls._capability(observed, name) for name in capacities)
+        missing = missing or any(value is False for value in stats.values())
+        if not missing:
+            return None
+
+        snapshot = {
+            "statLocks": copy.deepcopy(_mapping(desired.get("statLocks"))),
+            "vitalLocks": copy.deepcopy(_mapping(desired.get("vitalLocks"))),
+            "resourceLocks": copy.deepcopy(_mapping(desired.get("resourceLocks"))),
+            "elementLocks": copy.deepcopy(_mapping(desired.get("elementLocks"))),
+            "rerollsLock": desired.get("rerollsLock"),
+        }
+        existing = _mapping(observed.get("residentDesiredLocks"))
+        if existing == snapshot or not any(
+            snapshot[key] for key in ("statLocks", "vitalLocks", "resourceLocks", "elementLocks")
+        ) and snapshot["rerollsLock"] is None and not any(existing.values()):
+            return None
+        return _Action("stage_desired_locks", snapshot, "residentDesiredLocks")
 
     def _materialize(self, actions):
         calls = []
@@ -161,6 +182,9 @@ class Hades2DesiredStateReconciler:
 
     def _diff(self, desired, observed, *, force_full):
         actions = []
+        staged = self._stage_missing_owner_locks(desired, observed)
+        if staged is not None:
+            actions.append(staged)
         lock_releases = []
         lock_updates = []
         desired_features = _mapping(observed.get("desiredFeatures"))

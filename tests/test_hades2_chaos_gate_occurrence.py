@@ -155,8 +155,9 @@ draw = 0
 local room = CreateRoom(input, {})
 assert(room.SecretChanceSuccess and draws == before + 1, 'Native inclusive-zero identity changed')
 local cost = GetSecretDoorCost; GetSecretDoorCost = nil
-assert(not pcall(setChaos, 100), 'missing native lifecycle API accepted controlled setup')
-assert(CreateRoom == nativeCreate and IsSecretDoorEligible == nativeEligible and spawns == 0 and forceUses == 0)
+setChaos(100)
+assert(M.chaosGateProbability == 100, 'missing native entry point erased future-room intent')
+assert(CreateRoom == nativeCreate and IsSecretDoorEligible == nativeEligible and spawns == 0 and forceUses == 0, 'missing owner installed a partial Chaos hook')
 GetSecretDoorCost = cost
 setGathering({mining=0}); setChaos(0)
 fault = true

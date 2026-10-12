@@ -622,7 +622,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready' and self.state.get('scene')=='run':
+        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -634,7 +634,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready' and self.state.get('scene')=='run':
+        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
             result=self.execute('set_next_occurrence',{'target':target,'token':self.preferences.get('nextOccurrenceToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 

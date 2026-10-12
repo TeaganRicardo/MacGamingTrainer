@@ -177,6 +177,19 @@ CurrentHubRoom = nil
 CurrentRun = newTrainingRun(101, 40, 100, 1, 2)
 status()
 
+-- Replay-safe lock targets can be staged before any Hero exists. They must
+-- automatically remount on the future Hero without another Host round trip.
+local deferredLocks = M.dispatchBatch({
+  { command = "stage_desired_locks", params = {
+    statLocks = { moveSpeed = 150 },
+    vitalLocks = { health = { current = 40, max = 100 } },
+    resourceLocks = {}, elementLocks = { Fire = 7 }, rerollsLock = 1,
+  } },
+})
+check(deferredLocks.healthLocked and deferredLocks.stats.moveSpeed.locked,
+  "ownerless lock staging was lost")
+eq(deferredLocks.residentDesiredLocks.statLocks.moveSpeed, 150, "staged stat intent")
+
 -- A genuine Crossroads training owner must be recognized as such, even
 -- when its active Hero has no Mana and a run-shaped CurrentRoom is present.
 CurrentHubRoom = {}
@@ -188,6 +201,11 @@ check(not training.capabilities.setMana, "missing Mana exposed a writable Mana c
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
 CurrentHubRoom = nil
+-- The resident applies targets on the lifecycle tick, before any UI edit.
+UpdateTimers(0)
+eq(CurrentRun.Hero.Health, 40, "staged health not restored without Host event")
+eq(CurrentRun.Hero.Elements.Fire, 7, "staged elements not restored without Host event")
+eq(CurrentRun.NumRerolls, 1, "staged rerolls not restored without Host event")
 
 local statState = M.dispatch("set_stat", {
   stat = "moveSpeed",

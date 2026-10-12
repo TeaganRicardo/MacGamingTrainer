@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 102 then
+if previousModule and previousModule.revision ~= 103 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 102 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 102, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 103, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1470,8 +1470,10 @@ if __MacGamingTrainerV1 == nil then
         or M.hero ~= (type(CurrentRun) == "table" and CurrentRun.Hero or nil)) then return end
     -- Save-backed inventory locks are meaningful in the Crossroads too; keep
     -- those invariants before applying Hero-only combat locks.
-    if type(GameState) == "table" and type(GameState.Resources) == "table" then
-      for id in pairs(M.resourceLocks) do enforceResource(id) end
+    if resourceCatalogReady() then
+      for id in pairs(M.resourceLocks) do
+        if id == "Money" or type(ResourceData[id]) == "table" then enforceResource(id) end
+      end
     end
     local hero = M.sceneOwners.hero()
     if hero == nil then return end
@@ -6955,6 +6957,13 @@ if __MacGamingTrainerV1 == nil then
       spellCharge = number(CurrentRun and CurrentRun.SpellCharge), spellChargeCost = spellChargeCost == nil and jsonNull or spellChargeCost,
       money = number(GameState.Resources and GameState.Resources.Money), moneyLocked = M.resourceLocks.Money ~= nil,
       rerolls = number(CurrentRun and CurrentRun.NumRerolls), rerollsLocked = M.rerollsLock ~= nil,
+      -- Private resident receipt of the durable lock targets. These tables
+      -- represent intent even when their native owners are not yet mounted.
+      residentDesiredLocks = {
+        statLocks = M.statTargets, vitalLocks = M.vitalLocks,
+        resourceLocks = M.resourceLocks, elementLocks = M.elementLocks,
+        rerollsLock = M.rerollsLock == nil and jsonNull or M.rerollsLock,
+      },
       gatheringProbabilities = roomGeneration.snapshot(),
       chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
       gatheringTargets = roomGeneration.observe(),
@@ -8349,7 +8358,7 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     if onlyKey == nil or onlyKey == "nextRoomReward" then
-      if M.nextRoomReward ~= nil then
+      if M.nextRoomReward ~= nil and ready() and sceneName() == "run" then
         if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
       else
         releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
@@ -9153,6 +9162,55 @@ if __MacGamingTrainerV1 == nil then
       end
     elseif preferenceReplayDepth == 0 then synchronize() end
     if command == "status" then return state(params.includeCatalogs) end
+    if command == "stage_desired_locks" then
+      -- This is an internal, idempotent preference-replay operation. In a menu
+      -- or Hero-less hub, transport the complete lock intent into resident Lua
+      -- once, so the existing frame/owner guard can remount it later without a
+      -- Host timer or an unrelated status request.
+      if preferenceReplayDepth == 0 then error("Desired lock staging requires a replay batch") end
+      for _, key in ipairs({ "statLocks", "vitalLocks", "resourceLocks", "elementLocks" }) do
+        if type(params[key]) ~= "table" then error("Invalid staged lock family: " .. key) end
+      end
+      local stats, vitals, resources, elements = {}, {}, {}, {}
+      for stat, value in pairs(params.statLocks) do
+        local entry = statRegistry[stat]
+        if entry == nil or not finite(value) or value < entry.min or value > entry.max
+            or entry.integer and value % 1 ~= 0 then error("Invalid staged stat") end
+        stats[stat] = value
+      end
+      for vital, row in pairs(params.vitalLocks) do
+        local minimum = vital == "health" and 1 or 0
+        if (vital ~= "health" and vital ~= "mana" and vital ~= "armor")
+            or type(row) ~= "table" or not finite(row.current)
+            or row.current < minimum or row.current > 999999 then error("Invalid staged vital") end
+        if vital ~= "armor" then
+          if not finite(row.max) or row.max < minimum or row.max > 999999
+              or row.current > row.max then error("Invalid staged vital maximum") end
+          vitals[vital] = { current = row.current, max = row.max }
+        else
+          vitals[vital] = { current = row.current }
+        end
+      end
+      for id, value in pairs(params.resourceLocks) do
+        if type(id) ~= "string" or #id == 0 or not finite(value)
+            or value % 1 ~= 0 or value < 0 or value > 999999 then error("Invalid staged resource") end
+        resources[id] = value
+      end
+      for element, value in pairs(params.elementLocks) do
+        if type(element) ~= "string" or #element == 0 or not finite(value)
+            or value % 1 ~= 0 or value < 0 or value > 999999 then error("Invalid staged element") end
+        elements[element] = value
+      end
+      local rerolls = params.rerollsLock
+      if rerolls ~= nil and (not finite(rerolls) or rerolls % 1 ~= 0
+          or rerolls < 0 or rerolls > 999999) then error("Invalid staged rerolls") end
+      M.statTargets, M.vitalLocks, M.resourceLocks = stats, vitals, resources
+      M.elementLocks, M.rerollsLock = elements, rerolls
+      reconcileDesired(false)
+      if anyDesired() then installGuard()
+      elseif not anyRuntimeActive() then releaseGuard() end
+      return state(params.includeCatalogs)
+    end
     if command == "generate_gathering" then
       local target
       return actionLedger.run(command, params, function(record) return roomGeneration.generate(record, target) end,
@@ -9546,6 +9604,7 @@ if __MacGamingTrainerV1 == nil then
   end
 
   local preferenceReplayCommands = {
+    stage_desired_locks = true,
     set_feature = true,
     set_boon_rarity = true,
     set_gathering_probabilities = true,

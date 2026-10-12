@@ -63,8 +63,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     batch = batches[0]
     assert ("set_feature", {"feature": "damageEnabled", "value": True}) in batch
     assert ("set_feature", {"feature": "infiniteAmmo", "value": True}) in batch
+    assert any(command == "stage_desired_locks" for command, _ in batch), (
+        "cold attach failed to give ownerless locks to the resident"
+    )
     unsafe = {"set_stat", "set_vital", "lock_vital", "set_rerolls", "lock_rerolls",
-              "set_element", "lock_element", "set_next_room_reward", "set_next_occurrence"}
+              "set_element", "lock_element"}
     assert not (unsafe & {command for command, _ in batch}), (
         "missing owner sent unsafe replay mutations to the resident"
     )
