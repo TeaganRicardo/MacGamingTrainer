@@ -94,7 +94,6 @@ struct Main {
 
         model.connected = true
         model.capabilities = [
-            "setVitals": true,
             "setHealth": true,
             "setMana": true,
             "setArmor": true,
@@ -138,9 +137,20 @@ struct Main {
         // spell-charge editing. These controls depend on different native owners.
         model.status = "ready"
         model.scene = "run"
-        if model.canOpenNativeBoonScreen {
+        if model.canUseActiveRunActions {
             fail("native actions ignored a missing active-run owner")
         }
+        // The resident capability is the Hades-owned operation owner. Host
+        // presentation status/scene must not re-derive that native policy.
+        model.capabilities["activeRun"] = true
+        model.status = "waiting"
+        model.scene = "crossroads"
+        if !model.canUseActiveRunActions {
+            fail("native UI re-derived active-run ownership from presentation state")
+        }
+        model.capabilities["activeRun"] = false
+        model.status = "ready"
+        model.scene = "run"
         model.capabilities["setMana"] = false
         model.capabilities["setRerolls"] = false
         model.capabilities["setSpellCharge"] = false
@@ -500,8 +510,9 @@ struct Main {
         requireTargetParams(sent[2])
         requireTargetParams(sent[3], expectedFamily: "chaos")
 
-        // Model capability guards and non-run state fail closed before the
-        // backend transport boundary.
+        // Trait-specific capabilities and the resident active-run owner fail
+        // closed before the backend transport boundary. Presentation scene is
+        // deliberately not an independent native-action gate.
         try withModel(expectedNewCommands: 0) { model in
             let blocked = makeTrait(
                 levelCapability: .none,
@@ -512,11 +523,13 @@ struct Main {
             model.setTraitRarity(blocked, rarity: "Epic")
             model.removeTrait(blocked)
             model.advanceTraitLifecycle(blocked)
+            model.capabilities["activeRun"] = false
             model.scene = "loading"
             model.setTraitLevel(trait, targetLevel: "5")
             model.setTraitRarity(trait, rarity: "Heroic")
             model.removeTrait(trait)
             model.advanceTraitLifecycle(chaosTrait)
+            model.capabilities["activeRun"] = true
             model.scene = "run"
             model.setTraitLevel(trait, targetLevel: "2")
             model.setTraitLevel(trait, targetLevel: "1")

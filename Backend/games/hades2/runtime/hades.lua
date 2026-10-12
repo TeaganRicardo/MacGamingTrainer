@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 105 then
+if previousModule and previousModule.revision ~= 106 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 105 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 105, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 106, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -443,12 +443,15 @@ if __MacGamingTrainerV1 == nil then
     end
     return "main_menu"
   end
-  local function ready()
-    local hero = M.sceneOwners.hero()
-    local room = type(CurrentHubRoom) == "table" and CurrentHubRoom
-      or (type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil)
-    return hero ~= nil and type(room) == "table"
-      and finite(hero.Health) and finite(hero.Mana)
+  -- Active run/room operations belong to a live Run, Room and Hero identity.
+  -- Health and Mana are separate, transient vital owners: an absent vital does
+  -- not invalidate trait inventory or native room actions. A retained Run
+  -- object during the Crossroads is not an active adventure transaction owner.
+  function M.sceneOwners.activeRun()
+    return type(CurrentRun) == "table"
+      and type(CurrentRun.CurrentRoom) == "table"
+      and type(CurrentHubRoom) ~= "table"
+      and M.sceneOwners.heroAvailable()
   end
   local function resourceCatalogReady()
     return type(ResourceData) == "table" and type(ResourceDisplayOrderData) == "table"
@@ -3976,7 +3979,7 @@ if __MacGamingTrainerV1 == nil then
 
     local currentRunTraits = function()
       local result = setmetatable({}, arrayMeta)
-      if not ready() or sceneName() ~= "run" or type(CurrentRun) ~= "table"
+      if not M.sceneOwners.activeRun() or type(CurrentRun) ~= "table"
           or type(CurrentRun.Hero) ~= "table" or type(CurrentRun.Hero.Traits) ~= "table" then
         return result, "noActiveRun"
       end
@@ -4057,7 +4060,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function resolveTraitTarget(params)
-      if not ready() or sceneName() ~= "run" then error("Trait mutation requires an active run room") end
+      if not M.sceneOwners.activeRun() then error("Trait mutation requires an active run room") end
       if params.generationId ~= M.traitInventoryGeneration then
         error("Trait selection belongs to a stale runtime generation")
       end
@@ -4653,7 +4656,7 @@ if __MacGamingTrainerV1 == nil then
     end
     local function inspect(family)
       local strategy = strategies[family]
-      if not strategy or M.terminalActionUnknown or not ready() or sceneName() ~= "run" or type(MapState) ~= "table" or type(MapState.ActiveObstacles) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
+      if not strategy or M.terminalActionUnknown or not M.sceneOwners.activeRun() or type(MapState) ~= "table" or type(MapState.ActiveObstacles) ~= "table" then return nil, "hades2.gathering.unavailable.scene" end
       local room, hero = CurrentRun.CurrentRoom, CurrentRun.Hero
       if MapState.HostilePolymorph then return nil, "hades2.gathering.unavailable.polymorph" end
       if (type(ScreenState) == "table" and ScreenState.InTransition) or next(ActiveScreens or {}) ~= nil then return nil, "hades2.gathering.unavailable.scene" end
@@ -6882,7 +6885,7 @@ if __MacGamingTrainerV1 == nil then
     activeFeatureMap.resourceMultiplierEnabled = activeResources
     if M.desiredFeatures.moneyMultiplierEnabled and economySupported and not activeMoney then dormantFeatureMap.moneyMultiplierEnabled = true end
     if M.desiredFeatures.resourceMultiplierEnabled and economySupported and not activeResources then dormantFeatureMap.resourceMultiplierEnabled = true end
-    local canSpawn = ready() and currentScene == "run" and type(MapState) == "table"
+    local canSpawn = M.sceneOwners.activeRun() and type(MapState) == "table"
       and type(MapState.RoomRequiredObjects) == "table" and type(LootObjects) == "table"
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
     -- and never desired state.
@@ -6899,8 +6902,8 @@ if __MacGamingTrainerV1 == nil then
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}
     for _, stat in ipairs(statOrder or {}) do statsState[stat] = statState(stat, hero, support) end
-    -- Scene operability is broader than the strict combat/reward ready() gate.
-    -- Editable commands have their own owner-specific capabilities.
+    -- Session display readiness is distinct from native operation ownership.
+    -- Editable commands independently expose the owner-specific capabilities.
     local sceneOperational = currentScene == "crossroads"
       or (currentScene == "run" and M.sceneOwners.heroAvailable())
     return {
@@ -6912,7 +6915,7 @@ if __MacGamingTrainerV1 == nil then
         setFeature = true,
         -- Strict native active-room transactions require the full combat
         -- owner; reward spawning has additional reward-specific prerequisites.
-        activeRun = ready() and currentScene == "run",
+        activeRun = M.sceneOwners.activeRun(),
         setHealth = M.sceneOwners.healthAvailable() and type(UpdateHealthUI) == "function",
         setMana = M.sceneOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
           and type(UpdateManaMeterUI) == "function",
@@ -8366,14 +8369,14 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     if onlyKey == nil or onlyKey == "nextRoomReward" then
-      if M.nextRoomReward ~= nil and ready() and sceneName() == "run" then
+      if M.nextRoomReward ~= nil and M.sceneOwners.activeRun() then
         if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
       else
         releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
       end
     end
     if onlyKey == nil or onlyKey == "nextOccurrence" then
-      if M.nextOccurrenceTarget ~= nil and ready() and sceneName() == "run" then
+      if M.nextOccurrenceTarget ~= nil and M.sceneOwners.activeRun() then
         if not featureAttempt("nextOccurrence", true, installOccurrenceRouting, releaseOccurrenceRouting, raiseOnError) then allOk = false end
       else
         releaseOccurrenceRouting(); M.featureErrors.nextOccurrence = nil
@@ -9036,7 +9039,7 @@ if __MacGamingTrainerV1 == nil then
 
     local function prepare(command, params)
       if command == "acquire_chaos_pair" then
-        if not ready() or sceneName() ~= "run"
+        if not M.sceneOwners.activeRun()
             or (type(ScreenState) == "table" and ScreenState.InTransition)
             or type(params.blessing) ~= "string" or params.blessing == ""
             or type(params.curse) ~= "string" or params.curse == "" then
@@ -9046,7 +9049,7 @@ if __MacGamingTrainerV1 == nil then
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
 
-      if not ready() or sceneName() ~= "run" then
+      if not M.sceneOwners.activeRun() then
         error("Reward spawning requires an active run room")
       end
       local _, allowed = rewards()
@@ -9459,7 +9462,7 @@ if __MacGamingTrainerV1 == nil then
       return traitManagement.mutate(command, params)
     end
     if command == "open_sell_traits" then
-      if not ready() or sceneName() ~= "run" then error("Boon selling requires an active run room") end
+      if not M.sceneOwners.activeRun() then error("Boon selling requires an active run room") end
       requireFunctions("native boon sell screen", {
         "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
         "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation", "UseableOff",
@@ -9498,7 +9501,7 @@ if __MacGamingTrainerV1 == nil then
       end)
     end
     if command == "open_special_choice" then
-      if not ready() or sceneName() ~= "run" then error("Special blessing choice requires an active run room") end
+      if not M.sceneOwners.activeRun() then error("Special blessing choice requires an active run room") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
       requireFunctions("native special blessing choice", {
         "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable", "DeepCopyTable",

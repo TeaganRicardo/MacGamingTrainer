@@ -244,7 +244,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     private var presentedActionReceipt: Hades2ActionReceipt?
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     var canEditDesired: Bool { backendAvailable && !exiting }
-    var canSetVitals: Bool { connected && capabilities["setVitals"] == true && !exiting }
     func canSetVital(_ vital: String) -> Bool {
         let key: String
         switch vital {
@@ -259,9 +258,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetSpellCharge: Bool { connected && capabilities["setSpellCharge"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && canAcceptRuntimeAction && !exiting }
-    var canOpenNativeBoonScreen: Bool {
-        connected && capabilities["activeRun"] == true && status == "ready"
-            && scene == "run" && canAcceptRuntimeAction && !exiting
+    var canUseActiveRunActions: Bool {
+        connected && capabilities["activeRun"] == true && canAcceptRuntimeAction && !exiting
     }
     var exactBoonOptions: [BoonOption] {
         boons.filter {
@@ -310,7 +308,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     var canPerformSelectedSpecialReward: Bool {
         guard let option = selectedSpecialBoon else { return false }
-        return option.kind == "native_choice" ? canOpenNativeBoonScreen : canSpawnReward
+        return option.kind == "native_choice" ? canUseActiveRunActions : canSpawnReward
     }
     var canSetStats: Bool { connected && capabilities["setStats"] == true && !exiting }
     var canSetElements: Bool { connected && capabilities["setElements"] == true && !exiting }
@@ -1134,7 +1132,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
-        canOpenNativeBoonScreen && protocolCompatible && gatheringTargets[family]?.available == true
+        canUseActiveRunActions && protocolCompatible && gatheringTargets[family]?.available == true
     }
 
     func generateGathering(_ family: Hades2GatheringFamily) {
@@ -1238,12 +1236,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func openSellTraits() {
-        guard canOpenNativeBoonScreen else { return }
+        guard canUseActiveRunActions else { return }
         send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
     }
 
     func setTraitLevel(_ trait: CurrentRunTrait, targetLevel: String) {
-        guard canOpenNativeBoonScreen, trait.canIncreaseLevel else { return }
+        guard canUseActiveRunActions, trait.canIncreaseLevel else { return }
         let trimmed = targetLevel.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let level = Int(trimmed), level > trait.level, level <= 999_999 else { return }
         send(
@@ -1255,7 +1253,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setTraitRarity(_ trait: CurrentRunTrait, rarity: String) {
-        guard canOpenNativeBoonScreen, trait.canSetRarity,
+        guard canUseActiveRunActions, trait.canSetRarity,
               trait.availableRarities.contains(rarity), rarity != trait.rarity else { return }
         send(
             .setTraitRarity(trait, rarity: rarity),
@@ -1266,7 +1264,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setTraitRemainingUses(_ trait: CurrentRunTrait, targetRemainingUses: String) {
-        guard canOpenNativeBoonScreen, trait.canSetRemainingUses else { return }
+        guard canUseActiveRunActions, trait.canSetRemainingUses else { return }
         let trimmed = targetRemainingUses.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let uses = Int(trimmed), (1...999_999).contains(uses),
               trait.remainingUses != Double(uses) else { return }
@@ -1279,7 +1277,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func expireTrait(_ trait: CurrentRunTrait) {
-        guard canOpenNativeBoonScreen, trait.canExpire else { return }
+        guard canUseActiveRunActions, trait.canExpire else { return }
         send(
             .expireTrait(trait),
             title: "hades2.receipt.traitExpiryAction",
@@ -1293,7 +1291,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     /// bounded force removal is single-instance and only exists for an audited
     /// direct strategy.
     func removeTrait(_ trait: CurrentRunTrait) {
-        guard canOpenNativeBoonScreen, trait.canRemove else { return }
+        guard canUseActiveRunActions, trait.canRemove else { return }
         send(
             .removeTrait(trait),
             title: "hades2.receipt.traitRemoveAction",
@@ -1302,7 +1300,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func advanceTraitLifecycle(_ trait: CurrentRunTrait) {
-        guard canOpenNativeBoonScreen, trait.canAdvanceLifecycle else { return }
+        guard canUseActiveRunActions, trait.canAdvanceLifecycle else { return }
         send(
             .advanceTraitLifecycle(trait),
             title: "hades2.receipt.traitLifecycleAction",
@@ -1314,7 +1312,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func performSpecialReward(_ reward: String) {
         guard let option = specialRewardOptions.first(where: { $0.id == reward }) else { return }
         if option.kind == "native_choice" {
-            guard canOpenNativeBoonScreen, !option.sourceId.isEmpty else { return }
+            guard canUseActiveRunActions, !option.sourceId.isEmpty else { return }
             send(
                 .openSpecialChoice(source: option.sourceId),
                 title: "hades2.receipt.openChoice",

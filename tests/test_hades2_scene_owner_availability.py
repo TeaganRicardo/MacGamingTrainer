@@ -248,7 +248,10 @@ check(training.capabilities.setHealth, "health editor unavailable with valid Her
 check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
-check(not training.capabilities.activeRun, "incomplete Hero exposed active-run transactions")
+check(not training.capabilities.activeRun, "hub training exposed active-run transactions")
+local trainingMenuOk, trainingMenuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
+check(not trainingMenuOk and tostring(trainingMenuError):find("requires an active run room", 1, true) ~= nil,
+  "Crossroads training wrongly admitted a native adventure-run menu")
 CurrentHubRoom = nil
 -- The resident applies targets on the lifecycle tick, before any UI edit.
 UpdateTimers(0)
@@ -295,7 +298,20 @@ local rerollState = M.dispatch("lock_rerolls", {
 })
 check(rerollState.rerollsLocked, "reroll lock was rejected by unrelated mana state")
 
--- A complete adventure owner enables native active-run transactions.
+-- A live adventure Run/Room/Hero is one owner even if an unrelated vital
+-- is momentarily absent. A native menu can then independently reject missing
+-- *native menu APIs*, not the entire live run because Mana is unavailable.
+local runWithoutMana = status()
+eq(runWithoutMana.scene, "run", "adventure owner scene identity")
+check(runWithoutMana.capabilities.activeRun,
+  "active-run owner was incorrectly gated on missing Mana")
+check(runWithoutMana.currentRunTraitsReason ~= "noActiveRun",
+  "trait inventory was incorrectly gated on missing Mana")
+local menuOk, menuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
+check(not menuOk and tostring(menuError):find("missing OpenSellTraitMenu", 1, true) ~= nil,
+  "native sell menu was refused by an unrelated vital rather than its own missing native API")
+
+-- Filling in Mana changes only Mana capability, not the already-live run owner.
 CurrentRun.Hero.Mana, CurrentRun.Hero.MaxMana = 20, 50
 check(status().capabilities.activeRun, "complete run owner hidden")
 
