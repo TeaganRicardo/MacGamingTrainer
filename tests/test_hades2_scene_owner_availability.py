@@ -161,6 +161,15 @@ do
   UpdateMoneyUI = moneyDisplay
 end
 
+-- Resource inventory is owned by GameState, not by the presentation scene.
+-- The same save-backed owner remains editable when no hub/run room is active.
+CurrentHubRoom = nil
+local menuResource = status()
+eq(menuResource.scene, "main_menu", "owner-only resource scene identity")
+check(menuResource.capabilities.setResource,
+  "resource inventory owner was hidden outside the Crossroads label")
+CurrentHubRoom = {}
+
 -- Crossroads can expose global game functions while no run Hero exists.
 -- Durable global hooks should arm immediately instead of waiting for the
 -- combat-ready aggregate predicate.
@@ -248,10 +257,27 @@ check(training.capabilities.setHealth, "health editor unavailable with valid Her
 check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
-check(not training.capabilities.activeRun, "hub training exposed active-run transactions")
+check(training.capabilities.traitInventory,
+  "Hero trait inventory owner was hidden by the Crossroads label")
+check(training.capabilities.traitMutation,
+  "Hero trait mutation owner was hidden by the Crossroads label")
+check(training.capabilities.activeRun == nil,
+  "aggregate activeRun capability survived owner decomposition")
+check(training.currentRunTraitsReason ~= "noActiveRun",
+  "trait inventory still depends on an adventure-run partition")
 local trainingMenuOk, trainingMenuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
-check(not trainingMenuOk and tostring(trainingMenuError):find("requires an active run room", 1, true) ~= nil,
-  "Crossroads training wrongly admitted a native adventure-run menu")
+check(not trainingMenuOk and tostring(trainingMenuError):find("missing OpenSellTraitMenu", 1, true) ~= nil,
+  "native sell menu was refused by scene partition instead of its own native prerequisites")
+
+-- A room is current by object identity, not by a Crossroads-vs-run label.
+-- If the hub pointer and CurrentRun.CurrentRoom identify the same room owner,
+-- room/reward operations can expose their own capability.
+CurrentHubRoom = CurrentRun.CurrentRoom
+local sharedRoomOwner = status()
+check(sharedRoomOwner.capabilities.roomContext,
+  "current room owner was hidden because CurrentHubRoom exists")
+check(sharedRoomOwner.capabilities.spawnReward,
+  "reward context was hidden despite a resolvable room/Hero/map owner")
 CurrentHubRoom = nil
 -- The resident applies targets on the lifecycle tick, before any UI edit.
 UpdateTimers(0)
@@ -303,8 +329,14 @@ check(rerollState.rerollsLocked, "reroll lock was rejected by unrelated mana sta
 -- *native menu APIs*, not the entire live run because Mana is unavailable.
 local runWithoutMana = status()
 eq(runWithoutMana.scene, "run", "adventure owner scene identity")
-check(runWithoutMana.capabilities.activeRun,
-  "active-run owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.traitInventory,
+  "trait inventory owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.traitMutation,
+  "trait mutation owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.roomContext,
+  "room owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.activeRun == nil,
+  "aggregate activeRun capability survived owner decomposition")
 check(runWithoutMana.currentRunTraitsReason ~= "noActiveRun",
   "trait inventory was incorrectly gated on missing Mana")
 local menuOk, menuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
@@ -313,7 +345,9 @@ check(not menuOk and tostring(menuError):find("missing OpenSellTraitMenu", 1, tr
 
 -- Filling in Mana changes only Mana capability, not the already-live run owner.
 CurrentRun.Hero.Mana, CurrentRun.Hero.MaxMana = 20, 50
-check(status().capabilities.activeRun, "complete run owner hidden")
+local afterMana = status()
+check(afterMana.capabilities.traitInventory and afterMana.capabilities.roomContext,
+  "unrelated Mana owner changed existing trait/room owners")
 
 -- Losing the Hero must release Hero-owned runtime state without erasing durable
 -- intent. Global session hooks remain usable in the Crossroads.
