@@ -456,23 +456,22 @@ if __MacGamingTrainerV1 == nil then
     if type(CurrentHubRoom) == "table" and CurrentHubRoom ~= room then return nil end
     return room
   end
-  function M.runtimeOwners.traitInventory()
-    local run, hero = M.runtimeOwners.run(), M.runtimeOwners.hero()
-    if run == nil or hero == nil or type(hero.Traits) ~= "table" then return nil end
-    return { run = run, hero = hero, traits = hero.Traits }
-  end
-  function M.runtimeOwners.traitMutation()
-    return M.runtimeOwners.traitInventory()
-  end
-  function M.runtimeOwners.nativeChoice()
+  function M.runtimeOwners.runHero()
     local run, hero = M.runtimeOwners.run(), M.runtimeOwners.hero()
     if run == nil or hero == nil then return nil end
     return { run = run, hero = hero }
   end
+  function M.runtimeOwners.traitInventory()
+    local owner = M.runtimeOwners.runHero()
+    if owner == nil or type(owner.hero.Traits) ~= "table" then return nil end
+    owner.traits = owner.hero.Traits
+    return owner
+  end
   function M.runtimeOwners.roomContext()
-    local run, hero, room = M.runtimeOwners.run(), M.runtimeOwners.hero(), M.runtimeOwners.currentRoom()
-    if run == nil or hero == nil or room == nil then return nil end
-    return { run = run, hero = hero, room = room }
+    local owner, room = M.runtimeOwners.runHero(), M.runtimeOwners.currentRoom()
+    if owner == nil or room == nil then return nil end
+    owner.room = room
+    return owner
   end
   function M.runtimeOwners.rewardContext()
     local owner = M.runtimeOwners.roomContext()
@@ -4111,7 +4110,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function resolveTraitTarget(params)
-      local owner = M.runtimeOwners.traitMutation()
+      local owner = M.runtimeOwners.traitInventory()
       if owner == nil then error("Trait mutation requires a live trait owner") end
       if params.generationId ~= M.traitInventoryGeneration then
         error("Trait selection belongs to a stale runtime generation")
@@ -6942,11 +6941,11 @@ if __MacGamingTrainerV1 == nil then
     if M.desiredFeatures.moneyMultiplierEnabled and economySupported and not activeMoney then dormantFeatureMap.moneyMultiplierEnabled = true end
     if M.desiredFeatures.resourceMultiplierEnabled and economySupported and not activeResources then dormantFeatureMap.resourceMultiplierEnabled = true end
     local traitOwner = M.runtimeOwners.traitInventory()
-    local traitMutationOwner = M.runtimeOwners.traitMutation()
+    local traitMutationOwner = M.runtimeOwners.traitInventory()
     local roomOwner = M.runtimeOwners.roomContext()
     local rewardOwner = M.runtimeOwners.rewardContext()
-    local nativeChoiceOwner = M.runtimeOwners.nativeChoice()
-    local exactRewardOwner = nativeChoiceOwner
+    local runHeroOwner = M.runtimeOwners.runHero()
+    local exactRewardOwner = runHeroOwner
     local sellTraitsFunctions = {
       "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
       "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation", "UseableOff",
@@ -6962,10 +6961,10 @@ if __MacGamingTrainerV1 == nil then
     }
     local canSellTraits = traitOwner ~= nil and M.nativeFunctionsAvailable(sellTraitsFunctions)
       and type(ScreenData) == "table" and type(ScreenData.SellTraits) == "table"
-    local canOpenSpecialChoice = nativeChoiceOwner ~= nil and M.nativeFunctionsAvailable(specialChoiceFunctions)
+    local canOpenSpecialChoice = runHeroOwner ~= nil and M.nativeFunctionsAvailable(specialChoiceFunctions)
       and type(EnemyData) == "table" and type(PresetEventArgs) == "table" and type(TraitData) == "table"
     local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
-    local canAcquireChaosPair = nativeChoiceOwner ~= nil and M.nativeFunctionsAvailable(chaosPairFunctions)
+    local canAcquireChaosPair = runHeroOwner ~= nil and M.nativeFunctionsAvailable(chaosPairFunctions)
       and type(chaosSource) == "table" and not not chaosSource.TransformingTraits
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
     -- and never desired state.
@@ -9173,7 +9172,7 @@ if __MacGamingTrainerV1 == nil then
 
     local function prepare(command, params)
       if command == "acquire_chaos_pair" then
-        if M.runtimeOwners.nativeChoice() == nil
+        if M.runtimeOwners.runHero() == nil
             or (type(ScreenState) == "table" and ScreenState.InTransition)
             or type(params.blessing) ~= "string" or params.blessing == ""
             or type(params.curse) ~= "string" or params.curse == "" then
@@ -9190,7 +9189,7 @@ if __MacGamingTrainerV1 == nil then
       if not entry then error("Unknown or unsupported reward") end
       local exactTrait = entry.kind == "trait" and entry.group == "exact"
       if exactTrait then
-        if M.runtimeOwners.nativeChoice() == nil then
+        if M.runtimeOwners.runHero() == nil then
           error("Exact reward acquisition requires a live Hero/run owner")
         end
       elseif M.runtimeOwners.rewardContext() == nil then
@@ -9649,7 +9648,7 @@ if __MacGamingTrainerV1 == nil then
       end)
     end
     if command == "open_special_choice" then
-      if M.runtimeOwners.nativeChoice() == nil then error("Special blessing choice requires a live Hero/run owner") end
+      if M.runtimeOwners.runHero() == nil then error("Special blessing choice requires a live Hero/run owner") end
       if type(ScreenState) == "table" and ScreenState.InTransition then error("Cannot open special blessing choice during a transition") end
       requireFunctions("native special blessing choice", {
         "AreScreensActive", "OpenUpgradeChoiceMenu", "ShallowCopyTable", "DeepCopyTable",
