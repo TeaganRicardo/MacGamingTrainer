@@ -2701,7 +2701,8 @@ if __MacGamingTrainerV1 == nil then
     return ok and not not value
   end
   local function castWeaponGateVerified(runtime)
-    if type(runtime) ~= "table" or not ready() or runtime.hero ~= CurrentRun.Hero then return false end
+    local hero = currentHeroOwner()
+    if type(runtime) ~= "table" or hero == nil or runtime.hero ~= hero then return false end
     for _, weaponName in ipairs(castModel.effectiveWeapons(runtime.hero)) do
       for _, property in ipairs(castModel.propertyOrder) do
         local value, ok = readCastWeaponProperty(property, runtime.hero, weaponName)
@@ -6825,7 +6826,7 @@ if __MacGamingTrainerV1 == nil then
     end
     local featureSupportMap, activeFeatureMap, dormantFeatureMap = featureRuntimeMaps(hero)
     local spellChargeCost = nil
-    if ready() and type(currentSpellRuntime) == "function" then
+    if type(currentSpellRuntime) == "function" then
       local ok, _, _, _, cost = pcall(currentSpellRuntime)
       if ok and finite(cost) then spellChargeCost = cost end
     end
@@ -7428,16 +7429,17 @@ if __MacGamingTrainerV1 == nil then
         -- Do not fabricate the fish/reward. Wait for the game's own genuine
         -- success window, then submit the same state transition as a valid Use
         -- press. This keeps rarity selection and FishingEndPresentation native.
-        while M.autoMiniGames and ready() and type(CurrentRun.Hero) == "table"
-            and not CurrentRun.Hero.FishingInput do
-          if CurrentRun.Hero.FishingState == "Success" then
-            CurrentRun.Hero.FishingInput = true
+        local hero = currentHeroOwner()
+        if hero == nil then return original(args, ...) end
+        while M.autoMiniGames and currentHeroOwner() == hero and not hero.FishingInput do
+          if hero.FishingState == "Success" then
+            hero.FishingInput = true
             if type(SetThreadWait) == "function" then pcall(SetThreadWait, "Fishing", 0.01) end
             return
           end
           wait(0.01)
         end
-        if not M.autoMiniGames and ready() then return original(args, ...) end
+        if not M.autoMiniGames and currentHeroOwner() == hero then return original(args, ...) end
       end)
     end
     if type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then
@@ -9124,7 +9126,7 @@ if __MacGamingTrainerV1 == nil then
     if command == "cleanup" or command == "disable_all" then
       local hadMana = M.infiniteMana
       disable()
-      if hadMana and ready() and type(UpdateWeaponMana) == "function" and type(UpdateManaMeterUI) == "function" then refreshMana() end
+      if hadMana and manaOwnerAvailable() and type(UpdateWeaponMana) == "function" and type(UpdateManaMeterUI) == "function" then refreshMana() end
       return state(params.includeCatalogs)
     end
     if command == "set_vital" then
@@ -9132,7 +9134,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_counter" then
-      if not ready() then error("Game scene does not expose counter editing") end
+      if not heroOwnerAvailable() then error("Game scene does not expose counter editing") end
       if params.counter ~= "spellCharge" then error("Unknown counter") end
       if not finite(params.value) or params.value < 0 or params.value > 999999 then error("Counter value must be 0..999999") end
       CurrentRun.SpellCharge = params.value
@@ -9248,7 +9250,7 @@ if __MacGamingTrainerV1 == nil then
       M.boonRarityMultiplier = multiplier / 100
       if params.forceLegendary ~= nil then M.boonForceLegendary = params.forceLegendary end
       if params.forceDuo ~= nil then M.boonForceDuo = params.forceDuo end
-      if M.desiredFeatures.boonRarityEnabled and ready() then reconcileDesired(true, "boonRarityEnabled") end
+      if M.desiredFeatures.boonRarityEnabled then reconcileDesired(true, "boonRarityEnabled") end
       return state(params.includeCatalogs)
     end
     if command == "set_feature" then
@@ -9269,7 +9271,7 @@ if __MacGamingTrainerV1 == nil then
         if entry ~= nil then entry.release()
         elseif feature == "moneyMultiplierEnabled" then M.moneyMultiplierEnabled = false
         elseif feature == "resourceMultiplierEnabled" then M.resourceMultiplierEnabled = false end
-        if feature == "infiniteMana" and ready() then refreshMana() end
+        if feature == "infiniteMana" and manaOwnerAvailable() then refreshMana() end
       end
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
