@@ -116,9 +116,9 @@ class Hades2DesiredStateReconciler:
         capabilities = _mapping(observed.get("capabilities"))
         if name in capabilities:
             return capabilities[name] is True
-        # Historical ready observations did not carry per-owner capabilities;
-        # current residents explicitly expose them, even when false.
-        return observed.get("status") == "ready"
+        # Current residents explicitly expose owner capabilities. Missing
+        # evidence is not permission to infer availability from presentation.
+        return False
 
     @classmethod
     def _owner_available(cls, action, observed):
@@ -132,9 +132,7 @@ class Hades2DesiredStateReconciler:
         if command == "set_stat":
             available = _mapping(observed.get("statAvailable"))
             stat = params["stat"]
-            return cls._capability(observed, "setStats") and (
-                available.get(stat, observed.get("status") == "ready") is True
-            )
+            return cls._capability(observed, "setStats") and available.get(stat) is True
         if command in ("set_vital", "lock_vital"):
             return cls._capability(observed, {
                 "health": "setHealth", "mana": "setMana", "armor": "setArmor",
