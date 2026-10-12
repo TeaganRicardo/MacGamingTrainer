@@ -137,7 +137,7 @@ struct Main {
         model.pid = 123
         model.version = "1.139672"
         model.scene = "run"
-        model.capabilities = ["setVitals": true]
+        model.capabilities = ["setHealth": true, "setMana": true, "setArmor": true]
         model.activeFeatures = ["invincibility": true]
         model.dormantFeatures = ["infiniteMana": true]
         model.featureSupport = ["invincibility": true]

@@ -16,8 +16,8 @@ import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game'); args=p.parse_args()
 log=pathlib.Path(__file__).with_suffix('.commands.jsonl')
 state={'connected':True, 'status':'ready', 'scene':'run',
-       'capabilities':{'setResource':True,'setVitals':True,'setHealth':True,'setMana':True,'setArmor':True,
-                       'setRerolls':True,'setSpellCharge':True,'activeRun':True,'setStats':True,'setElements':True},
+       'capabilities':{'setResource':True,'setHealth':True,'setMana':True,'setArmor':True,
+                       'setRerolls':True,'setSpellCharge':True,'setStats':True,'setElements':True},
        'featureSupport':{'gameSpeed':True},
        'money':123,'health':99,'maxHealth':120,'mana':44,'maxMana':60,'armor':7,'spellCharge':12,'rerolls':3,
        'damageMultiplier':2,'moneyMultiplier':3,'resourceMultiplier':4,'gameSpeed':1,
