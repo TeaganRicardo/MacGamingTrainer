@@ -147,6 +147,29 @@ do
   check(state.activeFeatures.autoMiniGames, "late native fishing entry point did not arm")
 end
 
+-- Room generation probabilities are durable future-room intent. Missing
+-- early native functions do not turn initial hub replay into a failed batch.
+do
+  local state = M.dispatch("set_gathering_probabilities", {
+    probabilities = { flora = 45 }, includeCatalogs = false,
+  })
+  eq(state.gatheringProbabilities.flora, 45, "gathering pending intent")
+  check(M.hooks["CreateRoom"] == nil, "room generation installed without native owner")
+  CreateRoom = function(data) return data end
+  DeepCopyTable = function(value) return value end
+  ShallowCopyTable = function(value) return value end
+  HasFamiliarTool = function() return false end
+  GetTotalHeroTraitValue = function() return 0 end
+  IsGameStateEligible = function() return true end
+  UpdateTimers(0)
+  check(M.hooks["CreateRoom"] ~= nil, "room generation did not remount when functions appeared")
+  state = M.dispatch("set_chaos_gate_probability", {
+    probability = 0, includeCatalogs = false,
+  })
+  eq(state.chaosGateProbability, 0, "Chaos probability lost without native door owner")
+  check(M.hooks["CreateRoom"] == nil, "half-installed room generation survived missing Chaos functions")
+end
+
 -- A training Hero can own health/elements/rerolls/movement even while an
 -- unrelated mana field is absent. Each durable family must follow its actual
 -- owner rather than the all-purpose ready() predicate.

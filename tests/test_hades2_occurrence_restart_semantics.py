@@ -180,7 +180,7 @@ try:
         resident_session=armed_session,
         time_warp_controller=FakeTimeWarpController(),
     )
-    armed_adapter.state["status"] = "ready"
+    armed_adapter.state.update(status="ready", scene="run")
     result = armed_adapter.set_next_occurrence_desired("npc:Nemesis")
     token = armed_adapter.preferences["nextOccurrenceToken"]
     assert isinstance(token, str) and token.startswith("next-occurrence-")

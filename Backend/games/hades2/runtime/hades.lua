@@ -4480,6 +4480,28 @@ if __MacGamingTrainerV1 == nil then
         and frame.run == CurrentRun and type(CurrentRun) == "table" and frame.hero == CurrentRun.Hero
     end
     local function enabled() return next(M.gatheringProbabilities) ~= nil or M.chaosGateProbability ~= nil end
+    local nativeFunctions = {
+      room = { "CreateRoom", "DeepCopyTable", "ShallowCopyTable" },
+      chaos = { "IsSecretDoorEligible", "IsRoomEligible", "GetIdsByType", "ChooseNextRoomData", "HandleSecretSpawns", "AttemptUseDoor", "GetSecretDoorCost" },
+      gathering = { "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" },
+      toolChance = { "GetHarvestPointSpawnChance" },
+    }
+    local function functionsPresent(names)
+      for _, name in ipairs(names) do if type(_G[name]) ~= "function" then return false end end
+      return true
+    end
+    local function usesToolChance()
+      for family, strategy in pairs(strategies) do
+        if strategy.tool and M.gatheringProbabilities[family] ~= nil then return true end
+      end
+      return false
+    end
+    local function available()
+      return functionsPresent(nativeFunctions.room)
+        and (M.chaosGateProbability == nil or functionsPresent(nativeFunctions.chaos))
+        and (next(M.gatheringProbabilities) == nil or functionsPresent(nativeFunctions.gathering))
+        and (not usesToolChance() or functionsPresent(nativeFunctions.toolChance))
+    end
     local function chaosDestinationAvailable(run, room)
       if type(RoomData) ~= "table" or type(RoomSets) ~= "table" or type(RoomSets.Chaos) ~= "table"
           or type(RoomSets[room.RoomSetName]) ~= "table" or room.RoomSetName == "Chaos" or room.UsePreviousRoomSet or room.DoAnomalies then return false end
@@ -4503,9 +4525,9 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("IsSecretDoorEligible")
     end
     local function install()
-      requireFunctions("room generation", { "CreateRoom", "DeepCopyTable", "ShallowCopyTable" })
+      requireFunctions("room generation", nativeFunctions.room)
       if M.chaosGateProbability ~= nil then
-        requireFunctions("Chaos Gate room generation", { "IsSecretDoorEligible", "IsRoomEligible", "GetIdsByType", "ChooseNextRoomData", "HandleSecretSpawns", "AttemptUseDoor", "GetSecretDoorCost" })
+        requireFunctions("Chaos Gate room generation", nativeFunctions.chaos)
         installHook("IsSecretDoorEligible", function(original, run, room)
           local captured = chaosRooms[room]
           if room.ForceSecretDoor or not liveFrame(captured) or run ~= CurrentRun or room ~= CurrentRun.CurrentRoom then return original(run, room) end
@@ -4518,12 +4540,10 @@ if __MacGamingTrainerV1 == nil then
         end, "session")
       else releaseHook("IsSecretDoorEligible") end
       if next(M.gatheringProbabilities) ~= nil then
-        requireFunctions("gathering room generation", { "HasFamiliarTool", "GetTotalHeroTraitValue", "IsGameStateEligible" })
+        requireFunctions("gathering room generation", nativeFunctions.gathering)
       end
-      local controlsTools = false
-      for family, strategy in pairs(strategies) do if strategy.tool and M.gatheringProbabilities[family] ~= nil then controlsTools = true end end
-      if controlsTools then
-        requireFunctions("gathering chance", { "GetHarvestPointSpawnChance" })
+      if usesToolChance() then
+        requireFunctions("gathering chance", nativeFunctions.toolChance)
         installHook("GetHarvestPointSpawnChance", function(original, data, room)
           local frame = frames[coroutine.running()]
           if not liveFrame(frame) then return original(data, room) end
@@ -4591,12 +4611,12 @@ if __MacGamingTrainerV1 == nil then
         normalized[family] = value
       end
       M.gatheringProbabilities = normalized
-      if enabled() then install() else release() end
+      if enabled() and available() then install() else release() end
     end
     local function setChaosProbability(value)
       if value ~= nil and (not finite(value) or value < 0 or value > 100) then error("Invalid Chaos Gate probability") end
       M.chaosGateProbability = value
-      if enabled() then install() else release() end
+      if enabled() and available() then install() else release() end
     end
     local generated = setmetatable({}, { __mode = "k" })
     local observation, serial = nil, 0
@@ -4765,7 +4785,7 @@ if __MacGamingTrainerV1 == nil then
       for family, value in pairs(M.gatheringProbabilities) do result[family] = value end
       return result
     end
-    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
+    return { release = release, install = install, enabled = enabled, available = available, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
   end)()
 
   forceRerolls = (function()
@@ -8307,7 +8327,12 @@ if __MacGamingTrainerV1 == nil then
       run(key, desired, entry)
     end
     if onlyKey == nil or onlyKey == "gathering" or onlyKey == "chaosGate" then
-      if not featureAttempt("roomGeneration", roomGeneration.enabled(), roomGeneration.install, roomGeneration.release, raiseOnError) then allOk = false end
+      if roomGeneration.enabled() and not roomGeneration.available() then
+        roomGeneration.release()
+        M.featureErrors.roomGeneration = nil
+      elseif not featureAttempt("roomGeneration", roomGeneration.enabled(), roomGeneration.install, roomGeneration.release, raiseOnError) then
+        allOk = false
+      end
     end
     if onlyKey == nil or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
       if (M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then

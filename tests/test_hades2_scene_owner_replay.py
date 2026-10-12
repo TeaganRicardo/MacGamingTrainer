@@ -72,4 +72,27 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     assert adapter.preferences["statLocks"]["moveSpeed"] == 150
     assert observed["status"] == "waiting"
 
+    # The same resident later enters an owned run: pending locks and the
+    # unconsumed one-shot may now cross the resident boundary, without a new
+    # click or a second copy of the user's stored intent.
+    resident.payload.update({
+        "status": "ready",
+        "scene": "run",
+        "capabilities": {
+            **waiting["capabilities"],
+            "setHealth": True, "setMana": True, "setArmor": True,
+            "setRerolls": True, "setSpellCharge": True, "setElements": True,
+        },
+        "statAvailable": {"moveSpeed": True},
+        "stats": {"moveSpeed": {"locked": False, "target": None, "value": 100}},
+        "health": 20, "maxHealth": 80, "rerolls": 1,
+    })
+    adapter.execute("status", {})
+    batches = [call["batch"] for call in resident.calls if call["kind"] == "reconcile"]
+    assert len(batches) == 2, "owner recovery did not attempt deferred replay"
+    available_commands = {command for command, _ in batches[-1]}
+    assert {"set_stat", "set_vital", "lock_vital", "set_rerolls",
+            "lock_rerolls", "set_next_room_reward"} <= available_commands
+    assert adapter.preferences["nextRoomRewardToken"] == "room-owner-token"
+
 print("hades2_scene_owner_replay_ok")
