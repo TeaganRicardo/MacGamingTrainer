@@ -7914,6 +7914,21 @@ if __MacGamingTrainerV1 == nil then
     return table.unpack(packed, 2, packed.n)
   end
 
+  local function occurrenceRoutingAvailable()
+    local definition = occurrenceDefinition()
+    if definition == nil then return false end
+    local hasRooms = type(definition.rooms) == "table" and next(definition.rooms) ~= nil
+    local hasEncounters = type(definition.encounters) == "table" and next(definition.encounters) ~= nil
+    if hasRooms and not functionsAvailable({
+        "ChooseNextRoomData", "IsRoomForced", "DoUnlockRoomExits",
+        "CreateDoorRewardPreview", "GetRandomValue",
+      }) then return false end
+    if hasEncounters and not functionsAvailable({
+        "ChooseEncounter", "IsEncounterForced", "GetRandomValue",
+      }) then return false end
+    return hasRooms or hasEncounters
+  end
+
   local function installOccurrenceRouting()
     local definition = occurrenceDefinition()
     if definition == nil then error("Unsupported next occurrence target") end
@@ -8055,6 +8070,22 @@ if __MacGamingTrainerV1 == nil then
     end
     M.nextRoomRewardPatchedDoors = patched
     return patched
+  end
+
+  local function nextRoomRewardSupported()
+    local reward = M.nextRoomReward
+    if reward == nil then return false end
+    if reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
+        or reward == "MemPointsCommonDrop" or reward == "MaxHealthDrop" or reward == "MaxManaDrop"
+        or reward == "StackUpgrade" or reward == "WeaponUpgrade" or reward == "HermesUpgrade" then
+      return true
+    end
+    return type(LootData) == "table" and type(LootData[reward]) == "table"
+  end
+
+  local function nextRoomRewardRoutingAvailable()
+    return nextRoomRewardSupported()
+      and functionsAvailable({ "ChooseRoomReward", "StartRoom" })
   end
 
   local function installNextRoomReward()
@@ -8449,14 +8480,14 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     if onlyKey == nil or onlyKey == "nextRoomReward" then
-      if M.nextRoomReward ~= nil then
+      if M.nextRoomReward ~= nil and nextRoomRewardRoutingAvailable() then
         if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
       else
         releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
       end
     end
     if onlyKey == nil or onlyKey == "nextOccurrence" then
-      if M.nextOccurrenceTarget ~= nil then
+      if M.nextOccurrenceTarget ~= nil and occurrenceRoutingAvailable() then
         if not featureAttempt("nextOccurrence", true, installOccurrenceRouting, releaseOccurrenceRouting, raiseOnError) then allOk = false end
       else
         releaseOccurrenceRouting(); M.featureErrors.nextOccurrence = nil
@@ -9426,8 +9457,13 @@ if __MacGamingTrainerV1 == nil then
         local validDirect = reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
           or reward == "MemPointsCommonDrop" or reward == "MaxHealthDrop" or reward == "MaxManaDrop"
           or reward == "StackUpgrade" or reward == "WeaponUpgrade" or reward == "HermesUpgrade"
-        local validLoot = type(LootData) == "table" and type(LootData[reward]) == "table"
-        if not validDirect and not validLoot then error("Unsupported next room reward") end
+        local lootCatalogLoaded = type(LootData) == "table"
+        local validLoot = lootCatalogLoaded and type(LootData[reward]) == "table"
+        -- A not-yet-loaded LootData catalog is an absent validation owner, not
+        -- evidence that durable intent is invalid. Validate once the catalog exists.
+        if not validDirect and lootCatalogLoaded and not validLoot then
+          error("Unsupported next room reward")
+        end
         M.nextRoomReward = reward
         M.nextRoomRewardToken = token
       else
