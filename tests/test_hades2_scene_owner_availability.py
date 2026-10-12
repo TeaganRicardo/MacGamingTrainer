@@ -149,6 +149,16 @@ do
     "resource lock did not attach native hooks after function owner appeared")
   M.dispatch("lock_resource", { resource = "Money", locked = false, includeCatalogs = false })
   check(M.resourceLocks.Money == nil, "resource lock was not released")
+  -- Native Money UI is a view observer, not the lock owner. Its temporary
+  -- absence must not prevent exact inventory intent from being recorded.
+  local moneyDisplay = UpdateMoneyUI
+  UpdateMoneyUI = nil
+  local relocked = M.dispatch("lock_resource", {
+    resource = "Money", locked = true, includeCatalogs = false,
+  })
+  check(relocked.moneyLocked, "missing Money UI prevented resource lock ownership")
+  M.dispatch("lock_resource", { resource = "Money", locked = false, includeCatalogs = false })
+  UpdateMoneyUI = moneyDisplay
 end
 
 -- Crossroads can expose global game functions while no run Hero exists.
@@ -202,7 +212,10 @@ do
     probability = 0, includeCatalogs = false,
   })
   eq(state.chaosGateProbability, 0, "Chaos probability lost without native door owner")
-  check(M.hooks["CreateRoom"] == nil, "half-installed room generation survived missing Chaos functions")
+  check(M.hooks["CreateRoom"] ~= nil,
+    "missing Chaos owner incorrectly removed the independently ready Gathering owner")
+  check(M.hooks["IsSecretDoorEligible"] == nil,
+    "missing Chaos native functions installed its invalid eligibility hook")
 end
 
 -- A training Hero can own health/elements/rerolls/movement even while an
