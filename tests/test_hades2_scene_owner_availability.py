@@ -173,10 +173,6 @@ end
 -- A training Hero can own health/elements/rerolls/movement even while an
 -- unrelated mana field is absent. Each durable family must follow its actual
 -- owner rather than the all-purpose ready() predicate.
-CurrentHubRoom = nil
-CurrentRun = newTrainingRun(101, 40, 100, 1, 2)
-status()
-
 -- Replay-safe lock targets can be staged before any Hero exists. They must
 -- automatically remount on the future Hero without another Host round trip.
 local deferredLocks = M.dispatchBatch({
@@ -189,6 +185,10 @@ local deferredLocks = M.dispatchBatch({
 check(deferredLocks.healthLocked and deferredLocks.stats.moveSpeed.locked,
   "ownerless lock staging was lost")
 eq(deferredLocks.residentDesiredLocks.statLocks.moveSpeed, 150, "staged stat intent")
+
+CurrentHubRoom = nil
+CurrentRun = newTrainingRun(101, 40, 100, 1, 2)
+status()
 
 -- A genuine Crossroads training owner must be recognized as such, even
 -- when its active Hero has no Mana and a run-shaped CurrentRoom is present.

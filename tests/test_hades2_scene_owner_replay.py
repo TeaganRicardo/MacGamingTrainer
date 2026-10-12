@@ -94,8 +94,12 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     batches = [call["batch"] for call in resident.calls if call["kind"] == "reconcile"]
     assert len(batches) == 2, "owner recovery did not attempt deferred replay"
     available_commands = {command for command, _ in batches[-1]}
-    assert {"set_stat", "set_vital", "lock_vital", "set_rerolls",
-            "lock_rerolls", "set_next_room_reward"} <= available_commands
+    required = {"set_stat", "set_vital", "lock_vital", "set_rerolls",
+                "lock_rerolls", "set_next_room_reward"}
+    assert required <= available_commands, (
+        f"missing {sorted(required - available_commands)} from recovery batch "
+        f"{batches[-1]!r}; observation {adapter.state!r}"
+    )
     assert adapter.preferences["nextRoomRewardToken"] == "room-owner-token"
 
 print("hades2_scene_owner_replay_ok")
