@@ -133,22 +133,26 @@ struct Main {
             fail("passive model projection emitted mutations: \(passiveMutations)")
         }
 
-        // A present health owner must not enable unrelated Mana, reroll or
-        // spell-charge editing. These controls depend on different native owners.
+        // A present health owner must not enable unrelated operation owners.
         model.status = "ready"
         model.scene = "run"
-        if model.canUseActiveRunActions {
-            fail("native actions ignored a missing active-run owner")
+        if model.canMutateTraits || model.canOpenSellTraits
+            || model.canOpenSpecialChoice || model.canAcquireChaosPair {
+            fail("unrelated owner capabilities leaked from vital state")
         }
-        // The resident capability is the Hades-owned operation owner. Host
-        // presentation status/scene must not re-derive that native policy.
-        model.capabilities["activeRun"] = true
+        // Resident capabilities are Hades-owned operation owners. Host
+        // presentation status/scene must not re-derive that native policy, and
+        // one operation owner must not silently authorize another.
+        model.capabilities["traitMutation"] = true
         model.status = "waiting"
         model.scene = "crossroads"
-        if !model.canUseActiveRunActions {
-            fail("native UI re-derived active-run ownership from presentation state")
+        if !model.canMutateTraits {
+            fail("trait UI re-derived ownership from presentation state")
         }
-        model.capabilities["activeRun"] = false
+        if model.canOpenSellTraits || model.canOpenSpecialChoice || model.canAcquireChaosPair {
+            fail("trait owner leaked into unrelated native operations")
+        }
+        model.capabilities["traitMutation"] = false
         model.status = "ready"
         model.scene = "run"
         model.capabilities["setMana"] = false
@@ -466,7 +470,7 @@ struct Main {
             model.connected = true
             model.status = "ready"
             model.scene = "run"
-            model.capabilities["activeRun"] = true
+            model.capabilities["traitMutation"] = true
             body(model)
 
             let expectedTotal = before + expectedNewCommands
@@ -510,9 +514,9 @@ struct Main {
         requireTargetParams(sent[2])
         requireTargetParams(sent[3], expectedFamily: "chaos")
 
-        // Trait-specific capabilities and the resident active-run owner fail
-        // closed before the backend transport boundary. Presentation scene is
-        // deliberately not an independent native-action gate.
+        // Trait-specific capability and row semantics fail closed before the
+        // backend transport boundary. Presentation scene is deliberately not
+        // an independent native-action gate.
         try withModel(expectedNewCommands: 0) { model in
             let blocked = makeTrait(
                 levelCapability: .none,
@@ -523,13 +527,13 @@ struct Main {
             model.setTraitRarity(blocked, rarity: "Epic")
             model.removeTrait(blocked)
             model.advanceTraitLifecycle(blocked)
-            model.capabilities["activeRun"] = false
+            model.capabilities["traitMutation"] = false
             model.scene = "loading"
             model.setTraitLevel(trait, targetLevel: "5")
             model.setTraitRarity(trait, rarity: "Heroic")
             model.removeTrait(trait)
             model.advanceTraitLifecycle(chaosTrait)
-            model.capabilities["activeRun"] = true
+            model.capabilities["traitMutation"] = true
             model.scene = "run"
             model.setTraitLevel(trait, targetLevel: "2")
             model.setTraitLevel(trait, targetLevel: "1")
@@ -580,7 +584,7 @@ struct Main {
             targetID: "ChaosDamageCurse"
         )
         try withModel(expectedNewCommands: 1) { model in
-            model.capabilities["spawnReward"] = true
+            model.capabilities["acquireChaosPair"] = true
             model.boons = [chaosBlessing, chaosCurse]
             model.acquireChaosPair(
                 blessingReward: chaosBlessing.id,
