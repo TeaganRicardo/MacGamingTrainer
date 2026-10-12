@@ -242,7 +242,7 @@ end
 
 -- A training Hero can own health/elements/rerolls/movement even while an
 -- unrelated mana field is absent. Each durable family must follow its actual
--- owner rather than the all-purpose ready() predicate.
+-- owner rather than any aggregate scene-readiness predicate.
 -- Replay-safe lock targets can be staged before any Hero exists. They must
 -- automatically remount on the future Hero without another Host round trip.
 local deferredLocks = M.dispatchBatch({
