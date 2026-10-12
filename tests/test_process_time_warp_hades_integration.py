@@ -132,6 +132,9 @@ assert adapter.preference_dirty is True
 adapter.runtime.status()
 transport.sources.clear()
 adapter.state["status"] = "waiting"
+# Lua owner capability has not been observed after generation reset. The
+# process Time Warp may operate, but resident replay must remain pending.
+adapter.state["capabilities"]["setFeature"] = False
 state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert adapter.time_warp.speed == 2.0
 assert state["activeFeatures"]["gameSpeed"] is True
@@ -141,6 +144,7 @@ assert transport.sources == []
 # In a ready scene, the rest of the profile still replays through Lua, but the
 # Lua batch must not carry process-owned gameSpeed.
 adapter.state["status"] = "ready"
+adapter.state["capabilities"]["setFeature"] = True
 state = adapter._replay_preferences(copy.deepcopy(adapter.state),force_full=True)
 assert transport.sources
 assert "gameSpeed" not in transport.sources[-1]
