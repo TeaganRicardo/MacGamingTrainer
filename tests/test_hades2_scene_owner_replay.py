@@ -72,6 +72,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
         "missing owner sent unsafe replay mutations to the resident"
     )
     assert adapter.preference_dirty, "unavailable Hero-owned locks were discarded"
+    assert observed["healthLocked"] is True and observed["rerollsLocked"] is True, (
+        "public desired projection should remain visible but unconfirmed"
+    )
     assert adapter.preferences["statLocks"]["moveSpeed"] == 150
     assert observed["status"] == "waiting"
 

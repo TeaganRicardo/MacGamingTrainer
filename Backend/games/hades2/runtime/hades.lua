@@ -6905,12 +6905,14 @@ if __MacGamingTrainerV1 == nil then
         -- loaded. Individual owners decide whether their controls are usable;
         -- session-safe hooks can arm while Hero-owned state remains dormant.
         setFeature = true,
-        setHealth = M.sceneOwners.healthAvailable(),
-        setMana = M.sceneOwners.manaAvailable(),
+        setHealth = M.sceneOwners.healthAvailable() and type(UpdateHealthUI) == "function",
+        setMana = M.sceneOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
+          and type(UpdateManaMeterUI) == "function",
         setArmor = M.sceneOwners.heroAvailable(),
         setVitals = M.sceneOwners.healthAvailable() or M.sceneOwners.manaAvailable()
           or M.sceneOwners.heroAvailable(),
-        setRerolls = M.sceneOwners.rerollsAvailable(),
+        setRerolls = M.sceneOwners.rerollsAvailable() and type(UpdateRerollUI) == "function"
+          and type(ShowRerollUI) == "function",
         setSpellCharge = M.sceneOwners.heroAvailable(),
         setResource = resourceReady(),
         spawnReward = canSpawn, setStats = anyAvailableStat(statAvailable),

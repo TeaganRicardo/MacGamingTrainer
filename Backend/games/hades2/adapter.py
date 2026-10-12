@@ -946,7 +946,11 @@ class Hades2Adapter(GameAdapter):
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
             self._observe_game_speed()
             if not host_observation_only and command=='status' and self.preference_dirty:
-                return self._replay_preferences(copy.deepcopy(self.state))
+                # Reconcile from this resident observation, not from the
+                # public state overlaid with optimistic durable preferences.
+                # Otherwise a still-dormant lock can look confirmed and skip
+                # its native lock_* command when the owner becomes available.
+                return self._replay_preferences(copy.deepcopy(decoded))
             if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
                 if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
                     self._save_preferences()

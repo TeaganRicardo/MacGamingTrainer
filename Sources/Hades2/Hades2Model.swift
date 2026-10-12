@@ -259,7 +259,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetSpellCharge: Bool { connected && capabilities["setSpellCharge"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && canAcceptRuntimeAction && !exiting }
-    var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && canAcceptRuntimeAction && !exiting }
+    var canOpenNativeBoonScreen: Bool { canSpawnReward && status == "ready" && scene == "run" }
     var exactBoonOptions: [BoonOption] {
         boons.filter {
             $0.group == "exact" && $0.acquisitionMode != "echoLastRunExact"

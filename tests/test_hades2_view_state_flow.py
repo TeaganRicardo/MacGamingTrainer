@@ -136,6 +136,11 @@ struct Main {
 
         // A present health owner must not enable unrelated Mana, reroll or
         // spell-charge editing. These controls depend on different native owners.
+        model.status = "ready"
+        model.scene = "run"
+        if model.canOpenNativeBoonScreen {
+            fail("native active-run actions ignored a missing spawnReward owner")
+        }
         model.capabilities["setMana"] = false
         model.capabilities["setRerolls"] = false
         model.capabilities["setSpellCharge"] = false
