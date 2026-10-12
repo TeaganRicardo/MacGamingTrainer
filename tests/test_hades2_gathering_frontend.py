@@ -22,7 +22,8 @@ trace = pathlib.Path(__file__).with_suffix('.trace')
 for raw in sys.stdin:
  req = json.loads(raw)
  with trace.open('a') as out: out.write(json.dumps(req) + '\n')
- state = {'connected': True, 'status': 'ready', 'scene': 'run', 'gatheringProbabilities': probabilities,
+ state = {'connected': True, 'status': 'ready', 'scene': 'run',
+          'capabilities': {'activeRun': True}, 'gatheringProbabilities': probabilities,
           'gatheringTargets': {name: {'available': True, 'scopeToken': 'observed-' + name} for name in ('flora', 'mining', 'digging', 'shades', 'fishing')}}
  if req['command'] == 'set_gathering_desired':
   family, value = req['params']['family'], req['params']['probability']
