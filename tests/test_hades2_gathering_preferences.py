@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-gathering-preferences-') as tempora
     # Durable commit must happen before a native setter and exactly once.
     calls = []
     transport.live = True
-    adapter.state.update(status='ready', connected=True)
+    adapter.state.update(status='ready', connected=True, capabilities={'setFeature': True})
     adapter.preference_dirty = True  # another pending desired action remains pending
     original_save = adapter.preference_store.save
     def save(preferences):
