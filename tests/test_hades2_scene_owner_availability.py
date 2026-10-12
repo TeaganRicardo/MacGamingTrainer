@@ -116,6 +116,41 @@ local function newTrainingRun(objectId, health, maxHealth, rerolls, fire)
   }
 end
 
+-- GameState inventory editing in a Hero-less hub does not require native
+-- resource transaction functions. A lock records durable intent and uses the
+-- existing UpdateTimers owner until the AddResource/SpendResource hooks arrive.
+do
+  ResourceData.Money = {}
+  GameState.Resources.Money = 12
+  UpdateMoneyUI = function() end
+  local before = status()
+  check(before.capabilities.setResource, "Crossroads direct resource editing hidden")
+  M.dispatch("set_resource", { resource = "Money", amount = 18,
+    requestId = "crossroads-direct-resource", includeCatalogs = false })
+  eq(GameState.Resources.Money, 18, "Crossroads direct inventory editing")
+  local locked = M.dispatch("lock_resource", {
+    resource = "Money", locked = true, includeCatalogs = false,
+  })
+  check(locked.moneyLocked and M.resourceLocks.Money == 18,
+    "Crossroads resource lock could not be staged without native transaction hooks")
+  check(M.hooks.AddResource == nil and M.hooks.SpendResource == nil,
+    "missing transaction owner installed invalid resource hooks")
+  GameState.Resources.Money = 1
+  UpdateTimers(0)
+  eq(GameState.Resources.Money, 18, "ownerless resource lock guard failed")
+  AddResource = function(id, value)
+    GameState.Resources[id] = (GameState.Resources[id] or 0) + value
+  end
+  SpendResource = function(id, value)
+    GameState.Resources[id] = (GameState.Resources[id] or 0) - value
+  end
+  UpdateTimers(0)
+  check(M.hooks.AddResource ~= nil and M.hooks.SpendResource ~= nil,
+    "resource lock did not attach native hooks after function owner appeared")
+  M.dispatch("lock_resource", { resource = "Money", locked = false, includeCatalogs = false })
+  check(M.resourceLocks.Money == nil, "resource lock was not released")
+end
+
 -- Crossroads can expose global game functions while no run Hero exists.
 -- Durable global hooks should arm immediately instead of waiting for the
 -- combat-ready aggregate predicate.

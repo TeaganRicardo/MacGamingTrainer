@@ -177,6 +177,49 @@ assert(CreateRoom == foreignCreate and IsSecretDoorEligible == foreignEligibilit
 print('chaos_gate_ok')
 """
 
+CASES['gathering_owner_survives_unavailable_chaos_native_and_recovers'] = r"""
+setGathering({mining=0})
+setChaos(100)
+assert(CreateRoom ~= nativeCreate and GetHarvestPointSpawnChance ~= nativeChance
+  and IsSecretDoorEligible ~= nativeEligible, 'fixture did not initially own both feature families')
+local nativeCost = GetSecretDoorCost
+GetSecretDoorCost = nil
+setChaos(0)
+assert(M.chaosGateProbability == 0, 'unavailable Chaos owner lost durable intent')
+assert(CreateRoom ~= nativeCreate and GetHarvestPointSpawnChance ~= nativeChance,
+  'missing Chaos native function disabled an independently supported Gathering owner')
+assert(IsSecretDoorEligible == nativeEligible, 'unavailable Chaos owner retained stale hook')
+draw = 0
+local room = CreateRoom({Name='GatheringOnly',RoomSetName='F',HasPickaxePoint=true}, {})
+assert(not room.PickaxePointSuccess, 'Gathering zero stopped controlling a newly generated room')
+GetSecretDoorCost = nativeCost
+UpdateTimers(0)
+assert(IsSecretDoorEligible ~= nativeEligible and CreateRoom ~= nativeCreate,
+  'restored Chaos functions did not re-arm the dormant owner')
+print('chaos_gate_ok')
+"""
+
+CASES['chaos_owner_survives_unavailable_gathering_native_and_recovers'] = r"""
+setGathering({mining=0})
+setChaos(100)
+local nativeFamiliar = HasFamiliarTool
+HasFamiliarTool = nil
+setGathering({mining=0})
+assert(M.gatheringProbabilities.mining == 0, 'unavailable Gathering owner lost durable intent')
+assert(CreateRoom ~= nativeCreate and IsSecretDoorEligible ~= nativeEligible,
+  'missing Gathering native function disabled an independently supported Chaos owner')
+assert(GetHarvestPointSpawnChance == nativeChance,
+  'unavailable Gathering owner retained a stale tool-chance hook')
+draw = 0
+local room = CreateRoom({Name='ChaosOnly',RoomSetName='F',SecretSpawnChance=.2}, {})
+assert(room.SecretChanceSuccess, 'Chaos probability stopped controlling a newly generated room')
+HasFamiliarTool = nativeFamiliar
+UpdateTimers(0)
+assert(GetHarvestPointSpawnChance ~= nativeChance and CreateRoom ~= nativeCreate,
+  'restored Gathering functions did not re-arm the dormant owner')
+print('chaos_gate_ok')
+"""
+
 for code in CASES.values():
     run(code)
 print('hades2_chaos_gate_occurrence_ok')
