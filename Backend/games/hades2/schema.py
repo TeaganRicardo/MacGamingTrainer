@@ -145,8 +145,8 @@ def disconnected_capabilities():
         'setRerolls':False,'setSpellCharge':False,'setResource':False,
         'setStats':False,'setElements':False,
         'traitInventory':False,'traitMutation':False,'roomContext':False,
-        'sellTraits':False,'specialChoice':False,'acquireChaosPair':False,
-        'spawnReward':False,
+        'sellTraits':False,'specialChoice':False,'acquireExactReward':False,
+        'acquireChaosPair':False,'spawnReward':False,
         'hotBackup':True,'hotRestore':False,'diagnostics':True,
     }
 
