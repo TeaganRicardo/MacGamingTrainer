@@ -280,6 +280,10 @@ check(training.capabilities.traitInventory,
   "Hero trait inventory owner was hidden by the Crossroads label")
 check(training.capabilities.traitMutation,
   "Hero trait mutation owner was hidden by the Crossroads label")
+check(training.capabilities.acquireExactReward,
+  "exact Trait acquisition was incorrectly coupled to Room/Reward Context")
+check(not training.capabilities.spawnReward,
+  "room-backed reward spawning escaped without a current Room owner")
 check(training.capabilities.activeRun == nil,
   "aggregate activeRun capability survived owner decomposition")
 check(training.currentRunTraitsReason ~= "noActiveRun",
