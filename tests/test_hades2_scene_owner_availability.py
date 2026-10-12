@@ -175,6 +175,12 @@ local menuResource = status()
 eq(menuResource.scene, "main_menu", "ownerless resource scene identity")
 check(not menuResource.capabilities.setResource,
   "main menu fabricated a resource inventory owner from container tables alone")
+M.resourceLocks.Money = 19
+GameState.Resources.Money = 1
+UpdateTimers(0)
+eq(GameState.Resources.Money, 1,
+  "staged resource lock bypassed the missing inventory owner in main menu")
+M.resourceLocks.Money = nil
 CurrentHubRoom = {}
 
 -- Crossroads can expose global game functions while no run Hero exists.
