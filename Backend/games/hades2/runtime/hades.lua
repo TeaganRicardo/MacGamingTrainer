@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 100 then
+if previousModule and previousModule.revision ~= 101 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 100 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 100, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 101, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -390,22 +390,55 @@ if __MacGamingTrainerV1 == nil then
     SetPlayerVulnerable(screen.Name)
   end
 
+  local function currentHeroOwner()
+    if type(CurrentRun) ~= "table" or type(CurrentRun.Hero) ~= "table" then return nil end
+    local hero = CurrentRun.Hero
+    if hero.ObjectId == nil or hero.IsDead then return nil end
+    return hero
+  end
+  local function heroOwnerAvailable()
+    return currentHeroOwner() ~= nil
+  end
+  local function healthOwnerAvailable()
+    local hero = currentHeroOwner()
+    return hero ~= nil and finite(hero.Health) and finite(hero.MaxHealth)
+  end
+  local function manaOwnerAvailable()
+    local hero = currentHeroOwner()
+    return hero ~= nil and finite(hero.Mana) and finite(hero.MaxMana)
+  end
+  local function vitalOwnerAvailable(vital)
+    if vital == "health" then return healthOwnerAvailable() end
+    if vital == "mana" then return manaOwnerAvailable() end
+    if vital == "armor" then return heroOwnerAvailable() end
+    return false
+  end
+  local function elementOwnerAvailable()
+    local hero = currentHeroOwner()
+    return hero ~= nil and type(hero.Elements) == "table"
+  end
+  local function rerollsOwnerAvailable()
+    return type(CurrentRun) == "table" and finite(CurrentRun.NumRerolls)
+  end
+  local function manaRegenOwnerAvailable()
+    local hero = currentHeroOwner()
+    return hero ~= nil and type(hero.ManaRegenSources) == "table"
+  end
   local function sceneName()
     if type(CurrentHubRoom) == "table" then return "crossroads" end
-    if type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
-        and CurrentRun.Hero.ObjectId ~= nil and not CurrentRun.Hero.IsDead then
+    local hero = currentHeroOwner()
+    if hero ~= nil then
       if type(CurrentRun.CurrentRoom) == "table" then return "run" end
       return "loading"
     end
     return "main_menu"
   end
   local function ready()
+    local hero = currentHeroOwner()
     local room = type(CurrentHubRoom) == "table" and CurrentHubRoom
       or (type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil)
-    return type(CurrentRun) == "table" and type(CurrentRun.Hero) == "table"
-      and CurrentRun.Hero.ObjectId ~= nil and not CurrentRun.Hero.IsDead
-      and type(room) == "table"
-      and finite(CurrentRun.Hero.Health) and finite(CurrentRun.Hero.Mana)
+    return hero ~= nil and type(room) == "table"
+      and finite(hero.Health) and finite(hero.Mana)
   end
   local function resourceCatalogReady()
     return type(ResourceData) == "table" and type(ResourceDisplayOrderData) == "table"
@@ -690,8 +723,8 @@ if __MacGamingTrainerV1 == nil then
     return weapon
   end
   local function ensureCastRuntime()
-    if not ready() then return nil end
-    local hero = CurrentRun.Hero
+    local hero = currentHeroOwner()
+    if hero == nil then return nil end
     if type(M.castRuntime) == "table" and M.castRuntime.hero == hero then return M.castRuntime end
     local runtime = {
       hero = hero, weapons = {}, appliedWeapons = {},
@@ -708,7 +741,7 @@ if __MacGamingTrainerV1 == nil then
     return runtime
   end
   local function applyCastAvailability()
-    if not M.instantCastCooldown or not ready() then return false end
+    if not M.instantCastCooldown or not heroOwnerAvailable() then return false end
     local runtime = ensureCastRuntime()
     if runtime == nil then return false end
     local weaponHook = M.hooks["SetWeaponProperty"]
@@ -1430,10 +1463,13 @@ if __MacGamingTrainerV1 == nil then
     if type(GameState) == "table" and type(GameState.Resources) == "table" then
       for id in pairs(M.resourceLocks) do enforceResource(id) end
     end
-    if not ready() then return end
-    invincibilityProtection.restoreHits(CurrentRun.Hero)
-    for vital in pairs(M.vitalLocks) do enforceVital(vital) end
-    enforceElements()
+    local hero = currentHeroOwner()
+    if hero == nil then return end
+    invincibilityProtection.restoreHits(hero)
+    for vital in pairs(M.vitalLocks) do
+      if vitalOwnerAvailable(vital) then enforceVital(vital) end
+    end
+    if elementOwnerAvailable() then enforceElements() end
     if M.instantCastCooldown then
       if not forceCastAvailable() then
         M.featureErrors.instantCastCooldown = "Unable to keep the cast delivery weapon available"
@@ -1442,7 +1478,7 @@ if __MacGamingTrainerV1 == nil then
     if M.hexAlwaysReady then
       if refillHex() then M.featureErrors.hexAlwaysReady = nil end
     end
-    if M.rerollsLock ~= nil and finite(CurrentRun.NumRerolls)
+    if M.rerollsLock ~= nil and rerollsOwnerAvailable()
         and (not M.terminalActionUnknown or owns("UpdateRerollUI"))
         and CurrentRun.NumRerolls ~= M.rerollsLock and type(UpdateRerollUI) == "function" then
       CurrentRun.NumRerolls = M.rerollsLock
@@ -2646,8 +2682,7 @@ if __MacGamingTrainerV1 == nil then
       local entry = statRegistry and statRegistry[stat] or nil
       local available = false
       if support[stat] and entry ~= nil then
-        if entry.available == nil then available = ready()
-        else
+        if entry.available ~= nil then
           local ok, value = pcall(entry.available)
           available = ok and not not value
         end
@@ -2661,8 +2696,7 @@ if __MacGamingTrainerV1 == nil then
     return false
   end
   local function featureAvailable(entry)
-    if entry == nil then return false end
-    if entry.available == nil then return ready() end
+    if entry == nil or entry.available == nil then return false end
     local ok, value = pcall(entry.available)
     return ok and not not value
   end
@@ -2685,7 +2719,7 @@ if __MacGamingTrainerV1 == nil then
       castVariantWeapons = castModel.variantWeapons,
     }
     if type(runtime) ~= "table" then return diagnostics end
-    diagnostics.heroBound = ready() and runtime.hero == CurrentRun.Hero or false
+    diagnostics.heroBound = heroOwnerAvailable() and runtime.hero == currentHeroOwner() or false
     diagnostics.applied = not not runtime.applied
     if not diagnostics.heroBound then
       diagnostics.weaponGateVerified = false
@@ -6825,11 +6859,13 @@ if __MacGamingTrainerV1 == nil then
       status = ready() and "ready" or "waiting", scene = currentScene,
       capabilities = {
         -- Desired feature state can be accepted as soon as the Lua runtime is
-        -- loaded. Individual run-only features report dormant until their
-        -- environment exists; hub-safe hooks can arm immediately.
-        setFeature = true, setVitals = ready(), setResource = resourceReady(),
+        -- loaded. Individual owners decide whether their controls are usable;
+        -- session-safe hooks can arm while Hero-owned state remains dormant.
+        setFeature = true,
+        setVitals = healthOwnerAvailable() or manaOwnerAvailable() or heroOwnerAvailable(),
+        setResource = resourceReady(),
         spawnReward = canSpawn, setStats = anyAvailableStat(statAvailable),
-        setElements = ready() and type(hero.Elements) == "table", hotBackup = true, hotRestore = false,
+        setElements = elementOwnerAvailable(), hotBackup = true, hotRestore = false,
       },
       featureSupport = featureSupportMap,
       desiredFeatures = {
@@ -6908,7 +6944,8 @@ if __MacGamingTrainerV1 == nil then
     requireFunctions("hero damage routing", { "Damage" })
     if owns("Damage") then return end
     installHook("Damage", function(original, victim, triggerArgs)
-      if victim == CurrentRun.Hero then
+      local hero = currentHeroOwner()
+      if hero ~= nil and victim == hero then
         if invincibilityProtection.protects(victim) then
           -- OnHit increments Hero.Hits before it reaches Damage(). Restore the
           -- pre-Invincibility baseline before skipping the vanilla damage pipeline.
@@ -6923,7 +6960,7 @@ if __MacGamingTrainerV1 == nil then
           if attackerId == nil and type(triggerArgs.AttackerTable) == "table" then attackerId = triggerArgs.AttackerTable.ObjectId end
           -- Only scale damage that can be attributed to something other than
           -- the hero. Self-damage / sacrifices retain their native semantics.
-          if attackerId ~= nil and attackerId ~= CurrentRun.Hero.ObjectId then
+          if attackerId ~= nil and attackerId ~= hero.ObjectId then
             routedArgs = {}
             for key, value in pairs(triggerArgs) do routedArgs[key] = value end
             routedArgs.DamageAmount = math.max(0, triggerArgs.DamageAmount * M.statTargets.enemyDamage / 100)
@@ -7298,13 +7335,14 @@ if __MacGamingTrainerV1 == nil then
     if not forceCastAvailable() then error("Unable to arm cast delivery multi-fire path") end
   end
   currentSpellRuntime = function()
-    if not ready() or type(CurrentRun.Hero.Traits) ~= "table"
+    local hero = currentHeroOwner()
+    if hero == nil or type(hero.Traits) ~= "table"
         or type(GetWeaponData) ~= "function" or type(GetManaSpendCost) ~= "function" then return nil end
-    for _, trait in ipairs(CurrentRun.Hero.Traits) do
+    for _, trait in ipairs(hero.Traits) do
       if type(trait) == "table" and trait.Slot == "Spell" and type(trait.PreEquipWeapons) == "table"
           and type(trait.PreEquipWeapons[1]) == "string" then
         local weaponName = trait.PreEquipWeapons[1]
-        local okData, data = pcall(GetWeaponData, CurrentRun.Hero, weaponName)
+        local okData, data = pcall(GetWeaponData, hero, weaponName)
         if okData and type(data) == "table" then
           local okCost, cost = pcall(GetManaSpendCost, data)
           if okCost and finite(cost) and cost > 0 then return trait, weaponName, data, cost end
@@ -7351,8 +7389,8 @@ if __MacGamingTrainerV1 == nil then
     refillHex()
   end
   local function refillAmmo()
-    local hero = CurrentRun.Hero
-    if type(hero.Ammo) ~= "table" then return end
+    local hero = currentHeroOwner()
+    if hero == nil or type(hero.Ammo) ~= "table" then return end
     for weaponName, current in pairs(hero.Ammo) do
       if type(weaponName) == "string" and finite(current) then
         local ok, maximum = pcall(GetMaxAmmo, weaponName)
@@ -7927,7 +7965,8 @@ if __MacGamingTrainerV1 == nil then
     if M.damageEnabled then return end
     installHook("CalculateDamageMultipliers", function(original, attacker, victim, weaponData, triggerArgs)
       local result = original(attacker, victim, weaponData, triggerArgs)
-      if M.damageEnabled and attacker == CurrentRun.Hero then return result * M.damageMultiplier end
+      local hero = currentHeroOwner()
+      if M.damageEnabled and hero ~= nil and attacker == hero then return result * M.damageMultiplier end
       return result
     end)
     M.damageEnabled = true
@@ -7999,7 +8038,8 @@ if __MacGamingTrainerV1 == nil then
     ensureStatTraitValueRouter()
     if not owns("CalculateCritChance") then
       installHook("CalculateCritChance", function(original, attacker, victim, weaponData, triggerArgs, ...)
-        if M.statTargets.crit ~= nil and attacker == CurrentRun.Hero then
+        local hero = currentHeroOwner()
+        if M.statTargets.crit ~= nil and hero ~= nil and attacker == hero then
           local luck = GetTotalHeroTraitValue("LuckMultiplier", { IsMultiplier = true })
           if not finite(luck) or luck <= 0 then luck = 1 end
           local chance = math.max(0, math.min(1, M.statTargets.crit / 100)) / luck
@@ -8059,37 +8099,42 @@ if __MacGamingTrainerV1 == nil then
   featureRegistry = {
     invincibility = {
       install = installInvincibility, release = releaseInvincibility,
+      available = function()
+        local hero = currentHeroOwner()
+        return hero ~= nil and type(hero.InvulnerableFlags) == "table"
+          and type(hero.ImmuneToForceFlags) == "table"
+      end,
       support = invincibilityProtection.supported,
       active = function(hero) return M.invincibility and owns("Damage") and invincibilityProtection.active(hero) end,
     },
     infiniteHealth = {
-      install = installHealth, release = releaseHealth,
+      install = installHealth, release = releaseHealth, available = function() return true end,
       support = function() return type(Damage) == "function" and type(SacrificeHealth) == "function" end,
       active = function() return M.infiniteHealth and owns("Damage") and owns("SacrificeHealth") and SessionState.BlockHeroDeath end,
     },
     infiniteMana = {
-      install = installMana, release = releaseMana,
+      install = installMana, release = releaseMana, available = manaOwnerAvailable,
       support = function() return type(ManaDelta) == "function" end,
       active = function() return M.infiniteMana and owns("ManaDelta") and SessionState.UnlimitedMana end,
     },
     damageEnabled = {
-      install = installDamage, release = releaseDamage,
+      install = installDamage, release = releaseDamage, available = function() return true end,
       support = function() return type(CalculateDamageMultipliers) == "function" end,
       active = function() return M.damageEnabled and owns("CalculateDamageMultipliers") end,
     },
     instantCastCooldown = {
-      install = installInstantCastCooldown, release = releaseInstantCastCooldown,
+      install = installInstantCastCooldown, release = releaseInstantCastCooldown, available = heroOwnerAvailable,
       support = function() return type(SetEffectProperty) == "function" and type(SetWeaponProperty) == "function" and type(GetWeaponDataValue) == "function" end,
       active = function(hero) return M.instantCastCooldown and owns("SetEffectProperty") and owns("SetWeaponProperty") and type(M.castRuntime) == "table" and M.castRuntime.hero == hero and M.castRuntime.applied and castWeaponGateVerified(M.castRuntime) end,
     },
     hexAlwaysReady = {
-      install = installHex, release = releaseHex,
+      install = installHex, release = releaseHex, available = function() return true end,
       support = function() return type(SpellFire) == "function" and type(GetWeaponData) == "function" and type(GetManaSpendCost) == "function" and type(SetWeaponProperty) == "function" end,
       active = function() return M.hexAlwaysReady and owns("SpellFire") and type(M.hexRuntime) == "table" and M.hexRuntime.ready end,
       dormant = function() return M.desiredFeatures.hexAlwaysReady and owns("SpellFire") and type(M.hexRuntime) == "table" and M.hexRuntime.reason == "noSpell" end,
     },
     infiniteAmmo = {
-      install = installAmmo, release = releaseAmmo,
+      install = installAmmo, release = releaseAmmo, available = function() return true end,
       support = function() return type(UpdateWeaponAmmo) == "function" and type(GetMaxAmmo) == "function" end,
       active = function() return M.infiniteAmmo and owns("UpdateWeaponAmmo") end,
     },
@@ -8109,7 +8154,7 @@ if __MacGamingTrainerV1 == nil then
       active = function() return M.boonRarityEnabled and owns("GetRarityChances") and owns("SetTraitsOnLoot") end,
     },
     forceEnableRerolls = {
-      install = installForceEnableRerolls, release = releaseForceEnableRerolls,
+      install = installForceEnableRerolls, release = releaseForceEnableRerolls, available = function() return true end,
       support = forceRerolls.supported,
       active = function() return M.forceEnableRerolls and forceRerolls.active() end,
     },
@@ -8122,53 +8167,52 @@ if __MacGamingTrainerV1 == nil then
       value = function(_, support) if support.grasp then local ok,v=pcall(GetMaxMetaUpgradeCost); if ok and finite(v) then return v end end end,
     },
     dodge = {
-      install = installDodgeLock, release = releaseDodgeLock, min = 0, max = 100,
+      install = installDodgeLock, release = releaseDodgeLock, min = 0, max = 100, available = heroOwnerAvailable,
       support = function() return type(GetTotalHeroTraitValue) == "function" and type(SetLifeProperty) == "function" end,
       value = function(hero) if M.statTargets.dodge ~= nil then return M.statTargets.dodge end local v=getDodgeRaw(hero); return finite(v) and v * 100 or nil end,
     },
     crit = {
-      install = installCritLock, release = releaseCritLock, min = 0, max = 100,
+      install = installCritLock, release = releaseCritLock, min = 0, max = 100, available = function() return true end,
       support = function() return type(CalculateCritChance) == "function" and type(GetTotalHeroTraitValue) == "function" end,
       value = function() return M.statTargets.crit end,
     },
     chargeSpeed = {
-      install = installChargeSpeedLock, release = releaseChargeSpeedLock, min = 10, max = 1000,
+      install = installChargeSpeedLock, release = releaseChargeSpeedLock, min = 10, max = 1000, available = function() return true end,
       support = function() return type(SetPlayerAttackSpecialChargeSpeed) == "function" and type(RemovePlayerAttackSpecialChargeSpeed) == "function" end,
       value = function() return M.statTargets.chargeSpeed or 100 end,
     },
-    moveSpeed = {
+    moveSpeed = {, available = heroOwnerAvailable
       install = installMoveSpeedLock, release = releaseMoveSpeedLock, min = 10, max = 1000,
       support = function() return type(SetUnitProperty) == "function" end,
       value = function(hero) return M.statTargets.moveSpeed or currentMoveSpeedPercent(hero) or 100 end,
     },
-    sprintSpeed = {
+    sprintSpeed = {, available = heroOwnerAvailable
       install = installSprintSpeedLock, release = releaseSprintSpeedLock, min = 10, max = 1000,
       support = function() return type(SetWeaponProperty) == "function" end,
       value = function(hero) return M.statTargets.sprintSpeed or currentSprintSpeedPercent(hero) or 100 end,
     },
-    dashSpeed = {
+    dashSpeed = {, available = heroOwnerAvailable
       install = installDashSpeedLock, release = releaseDashSpeedLock, min = 10, max = 1000,
       support = function() return type(SetWeaponProperty) == "function" and type(GetBaseDataValue) == "function" and type(GetWeaponDataValue) == "function" end,
       value = function(hero) return M.statTargets.dashSpeed or currentDashSpeedPercent(hero) or 100 end,
     },
-    attackSpeed = {
+    attackSpeed = {, available = heroOwnerAvailable
       install = installAttackSpeedLock, release = releaseAttackSpeedLock, min = 10, max = 1000,
       support = function() return type(ApplyUnitPropertyChanges) == "function" and type(WeaponData) == "table" and type(WeaponSets) == "table" and type(WeaponSets.HeroPrimarySecondaryWeapons) == "table" end,
       value = function(hero) return M.statTargets.attackSpeed or currentAttackSpeedPercent(hero) or 100 end,
     },
     manaRegen = {
-      install = installManaRegenLock, release = releaseManaRegenLock, min = 0, max = 1000,
-      support = function() return ready() and type(CurrentRun.Hero.ManaRegenSources) == "table" end,
+      install = installManaRegenLock, release = releaseManaRegenLock, min = 0, max = 1000, available = manaRegenOwnerAvailable,
       value = function(hero) return M.statTargets.manaRegen or currentTrainerManaRegen(hero) or 0 end,
     },
     enemyDamage = {
-      install = installEnemyDamageLock, release = releaseEnemyDamageLock, min = 0, max = 1000,
+      install = installEnemyDamageLock, release = releaseEnemyDamageLock, min = 0, max = 1000, available = function() return true end,
       support = function() return type(Damage) == "function" end,
       value = function() return M.statTargets.enemyDamage or 100 end,
     },
     enemyHealth = {
-      install = installEnemyHealthLock, release = releaseEnemyHealthLock, min = 10, max = 1000,
-      support = function() return type(SetupUnit) == "function" and type(ActiveEnemies) == "table" end,
+      install = installEnemyHealthLock, release = releaseEnemyHealthLock, min = 10, max = 1000, available = function() return true end,
+      support = function() return type(SetupUnit) == "function" end,
       value = function() return M.statTargets.enemyHealth or 100 end,
     },
   }
@@ -8243,7 +8287,7 @@ if __MacGamingTrainerV1 == nil then
       elseif not reconcileEconomy(raiseOnError) then allOk = false end
     end
     if onlyKey == nil or onlyKey == "rerolls" then
-      if M.rerollsLock ~= nil and ready() then
+      if M.rerollsLock ~= nil and rerollsOwnerAvailable() then
         if not featureAttempt("rerolls", true, installRerolls, releaseRerollsRuntime, raiseOnError) then allOk = false end
       elseif M.rerollsLock ~= nil then
         releaseRerollsRuntime(); M.featureErrors.rerolls = nil
@@ -8986,9 +9030,9 @@ if __MacGamingTrainerV1 == nil then
     if id == "Money" then refreshMoney() end
   end
   local function editVital(vital, field, value)
-    if not ready() then error("Game scene does not expose vital editing") end
-    if not finite(value) or value < 0 or value > 999999 then error("Vital value must be 0..999999") end
     if vital ~= "health" and vital ~= "mana" and vital ~= "armor" then error("Unknown vital") end
+    if not vitalOwnerAvailable(vital) then error("Game scene does not expose vital editing") end
+    if not finite(value) or value < 0 or value > 999999 then error("Vital value must be 0..999999") end
     if field ~= "current" and field ~= "max" then error("Unknown vital field") end
     local hero = CurrentRun.Hero
     if vital == "health" then
@@ -9099,8 +9143,8 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "lock_vital" then
-      if not ready() then error("Game scene does not expose vital locking") end
       if params.vital ~= "health" and params.vital ~= "mana" and params.vital ~= "armor" then error("Unknown vital") end
+      if not vitalOwnerAvailable(params.vital) then error("Game scene does not expose vital locking") end
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
       if params.locked then
         local hero = CurrentRun.Hero
@@ -9114,7 +9158,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_element" or command == "lock_element" then
-      if not ready() or type(CurrentRun.Hero.Elements) ~= "table" then error("Elements are unavailable") end
+      if not elementOwnerAvailable() then error("Elements are unavailable") end
       local element = params.element
       if type(element) ~= "string" or (type(TraitElementData) == "table" and TraitElementData[element] == nil) then error("Unknown element") end
       if command == "set_element" then
@@ -9261,7 +9305,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "lock_rerolls" then
-      if not ready() then error("Game scene does not expose rerolls") end
+      if not rerollsOwnerAvailable() then error("Game scene does not expose rerolls") end
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
       if params.locked then
         if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
@@ -9280,7 +9324,7 @@ if __MacGamingTrainerV1 == nil then
       return actionLedger.run(command, params, function() editResource(params.resource, params.amount) end)
     end
     if command == "set_rerolls" then
-      if not ready() then error("Game scene does not expose rerolls") end
+      if not rerollsOwnerAvailable() then error("Game scene does not expose rerolls") end
       integer(params.amount, 0)
       requireFunctions("reroll editing", { "UpdateRerollUI", "ShowRerollUI" })
       if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
