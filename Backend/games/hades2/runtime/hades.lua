@@ -390,6 +390,15 @@ if __MacGamingTrainerV1 == nil then
     SetPlayerVulnerable(screen.Name)
   end
 
+  -- Durable native-owner matrix:
+  --   session/game functions: resources/economy, infinite health, damage, Hex hook,
+  --     ammo hook, fishing/minigames, garden, boon rarity, force rerolls,
+  --     grasp/crit/enemy damage/enemy health;
+  --   live Hero identity: invincibility, infinite mana, cast, vitals/elements,
+  --     dodge/charge/move/sprint/dash/attack speed and mana regeneration;
+  --   run counter: rerolls;
+  --   room-generation owner: gathering/Chaos probabilities (owned by roomGeneration).
+  -- Direct reward/trait/occurrence actions deliberately keep stricter active-run owners.
   local sceneOwners = {}
   function sceneOwners.hero()
     if type(CurrentRun) ~= "table" or type(CurrentRun.Hero) ~= "table" then return nil end
@@ -8180,7 +8189,7 @@ if __MacGamingTrainerV1 == nil then
       value = function() return M.statTargets.crit end,
     },
     chargeSpeed = {
-      install = installChargeSpeedLock, release = releaseChargeSpeedLock, min = 10, max = 1000, available = function() return true end,
+      install = installChargeSpeedLock, release = releaseChargeSpeedLock, min = 10, max = 1000, available = sceneOwners.heroAvailable,
       support = function() return type(SetPlayerAttackSpecialChargeSpeed) == "function" and type(RemovePlayerAttackSpecialChargeSpeed) == "function" end,
       value = function() return M.statTargets.chargeSpeed or 100 end,
     },
