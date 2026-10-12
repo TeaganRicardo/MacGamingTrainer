@@ -167,13 +167,14 @@ do
   UpdateMoneyUI = moneyDisplay
 end
 
--- Resource inventory is owned by GameState, not by the presentation scene.
--- The same save-backed owner remains editable when no hub/run room is active.
+-- GameState tables alone do not prove that a save/profile owner is loaded.
+-- Main-menu presentation may retain containers, but without a Run or Hub scope
+-- there is no current resource inventory owner and mutation must fail closed.
 CurrentHubRoom = nil
 local menuResource = status()
-eq(menuResource.scene, "main_menu", "owner-only resource scene identity")
-check(menuResource.capabilities.setResource,
-  "resource inventory owner was hidden outside the Crossroads label")
+eq(menuResource.scene, "main_menu", "ownerless resource scene identity")
+check(not menuResource.capabilities.setResource,
+  "main menu fabricated a resource inventory owner from container tables alone")
 CurrentHubRoom = {}
 
 -- Crossroads can expose global game functions while no run Hero exists.
