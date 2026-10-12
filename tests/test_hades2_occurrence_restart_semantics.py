@@ -20,7 +20,7 @@ def status_payload(*, target=None, token=None, consumed_token=None):
     payload = {
         "status": "ready",
         "scene": "run",
-        "capabilities": {},
+        "capabilities": {"setFeature": True},
         "desiredFeatures": {key: bool(defaults[key]) for key in TOGGLES},
         "activeFeatures": {key: False for key in TOGGLES},
         "dormantFeatures": {},
@@ -180,7 +180,7 @@ try:
         resident_session=armed_session,
         time_warp_controller=FakeTimeWarpController(),
     )
-    armed_adapter.state.update(status="ready", scene="run")
+    armed_adapter.state.update(status="ready", scene="run", capabilities={"setFeature": True})
     result = armed_adapter.set_next_occurrence_desired("npc:Nemesis")
     token = armed_adapter.preferences["nextOccurrenceToken"]
     assert isinstance(token, str) and token.startswith("next-occurrence-")
