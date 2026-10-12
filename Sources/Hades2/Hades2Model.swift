@@ -245,6 +245,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetFeature: Bool { connected && capabilities["setFeature"] == true && !exiting }
     var canEditDesired: Bool { backendAvailable && !exiting }
     var canSetVitals: Bool { connected && capabilities["setVitals"] == true && !exiting }
+    func canSetVital(_ vital: String) -> Bool {
+        let key: String
+        switch vital {
+        case "health": key = "setHealth"
+        case "mana": key = "setMana"
+        case "armor": key = "setArmor"
+        default: return false
+        }
+        return connected && capabilities[key] == true && !exiting
+    }
+    var canSetRerolls: Bool { connected && capabilities["setRerolls"] == true && !exiting }
+    var canSetSpellCharge: Bool { connected && capabilities["setSpellCharge"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && canAcceptRuntimeAction && !exiting }
     var canOpenNativeBoonScreen: Bool { connected && status == "ready" && scene == "run" && canAcceptRuntimeAction && !exiting }
@@ -958,7 +970,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         var apply: (String) -> Void
         switch edit {
         case let .vital(vital, field):
-            available = canSetVitals
+            available = canSetVital(vital)
             if vital == "health" { range = 1...999_999 }
             current = vitalValue(vital, field: field)
             available = available && current != nil
@@ -969,7 +981,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             available = canSetResource && current != nil
             apply = { self.setResource(id, amount: $0) }
         case .rerolls:
-            current = rerolls; integer = true
+            current = rerolls; integer = true; available = canSetRerolls && current != nil
             apply = { self.setRerolls($0) }
         case let .element(id):
             current = elements.first(where: { $0.id == id })?.count
@@ -993,7 +1005,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             apply = { if locks[id] == true { self.setStat(id, text: $0, locked: true) } }
         case let .counter(id):
             current = id == "spellCharge" ? spellCharge : nil
-            available = canSetVitals && current != nil
+            available = canSetSpellCharge && current != nil
             apply = { self.setCounter(id, text: $0) }
         case let .multiplier(id):
             let values = ["damageMultiplier": damageMultiplier, "moneyMultiplier": moneyMultiplier,
@@ -1055,7 +1067,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setVital(_ vital: String, field: String, text: String) {
-        guard canSetVitals, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
+        guard canSetVital(vital), let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if vital == "health" && value < 1 { return }
         guard let current = vitalValue(vital, field: field) else { return }
         if abs(current - value) < 0.0001 { return }
@@ -1068,7 +1080,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func lockVital(_ vital: String, locked: Bool) {
-        guard canSetVitals, ["health", "mana", "armor"].contains(vital) else { return }
+        guard canSetVital(vital) else { return }
         send(.lockVital(vital: vital, locked: locked), title: locked ? "hades2.op.lockVital" : "hades2.op.unlockVital")
     }
 
@@ -1089,13 +1101,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setRerolls(_ amount: String) {
-        guard canSetResource, let count = amountValue(amount) else { return }
+        guard canSetRerolls, let count = amountValue(amount) else { return }
         if let current = rerolls, Int(current.rounded()) == count { return }
         sendEdit(request: .setRerolls(amount: count), title: "hades2.op.updateRerolls")
     }
 
     func lockRerolls(_ locked: Bool) {
-        guard canSetResource else { return }
+        guard canSetRerolls else { return }
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
     }
 
@@ -1335,7 +1347,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setCounter(_ counter: String, text: String) {
-        guard canSetVitals, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
+        guard counter == "spellCharge", canSetSpellCharge, let value = Double(text), value.isFinite, (0...999_999).contains(value) else { return }
         if counter == "spellCharge", let current = spellCharge, abs(current - value) < 0.0001 { return }
         sendEdit(request: .setCounter(counter: counter, value: value), title: "hades2.op.updateCounter")
     }

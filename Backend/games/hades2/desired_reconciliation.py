@@ -80,11 +80,11 @@ class Hades2DesiredStateReconciler:
         desired_snapshot = copy.deepcopy(desired) if isinstance(desired, dict) else {}
         observed_snapshot = copy.deepcopy(observed) if isinstance(observed, dict) else {}
 
-        actions = self._diff(
-            desired_snapshot,
-            observed_snapshot,
-            force_full=bool(force_full),
-        )
+        actions = [
+            action for action in self._diff(
+                desired_snapshot, observed_snapshot, force_full=bool(force_full)
+            ) if self._owner_available(action, observed_snapshot)
+        ]
         reply = None
         after = observed_snapshot
         if actions:
@@ -100,6 +100,8 @@ class Hades2DesiredStateReconciler:
                 if actual is not None and actual != wanted:
                     normalized_vital_locks[vital] = actual
             desired_snapshot.setdefault('vitalLocks', {}).update(normalized_vital_locks)
+        # Include deferred owners in confirmation; missing Hero fields do not
+        # turn pending desired intent into a false success.
         remaining = self._diff(desired_snapshot, after, force_full=False)
         mismatches = tuple(dict.fromkeys(action.mismatch for action in remaining))
         return DesiredReconciliationOutcome(
@@ -108,6 +110,45 @@ class Hades2DesiredStateReconciler:
             mismatches=mismatches,
             normalized_vital_locks=normalized_vital_locks,
         )
+
+    @staticmethod
+    def _capability(observed, name):
+        capabilities = _mapping(observed.get("capabilities"))
+        if name in capabilities:
+            return capabilities[name] is True
+        # Historical ready observations did not carry per-owner capabilities;
+        # current residents explicitly expose them, even when false.
+        return observed.get("status") == "ready"
+
+    @classmethod
+    def _owner_available(cls, action, observed):
+        command, params = action.command, action.params
+        if command in (
+            "set_feature", "set_boon_rarity",
+            "set_gathering_probabilities", "set_chaos_gate_probability",
+        ):
+            return cls._capability(observed, "setFeature")
+        if command == "set_stat":
+            available = _mapping(observed.get("statAvailable"))
+            stat = params["stat"]
+            return cls._capability(observed, "setStats") and (
+                available.get(stat, observed.get("status") == "ready") is True
+            )
+        if command in ("set_vital", "lock_vital"):
+            return cls._capability(observed, {
+                "health": "setHealth", "mana": "setMana", "armor": "setArmor",
+            }[params["vital"]])
+        if command in ("set_resource", "lock_resource"):
+            return cls._capability(observed, "setResource")
+        if command in ("set_rerolls", "lock_rerolls"):
+            return cls._capability(observed, "setRerolls")
+        if command in ("set_element", "lock_element"):
+            return cls._capability(observed, "setElements")
+        if command in ("set_next_room_reward", "set_next_occurrence"):
+            # Preserve unconsumed identity; never inject a room/encounter action
+            # into an ownerless menu, loading phase, or hub.
+            return observed.get("status") == "ready" and observed.get("scene") == "run"
+        raise AssertionError("Replay action lacks an owner: " + command)
 
     def _materialize(self, actions):
         calls = []

@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 101 then
+if previousModule and previousModule.revision ~= 102 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 101 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 101, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 102, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -2707,8 +2707,14 @@ if __MacGamingTrainerV1 == nil then
   end
   local function featureAvailable(entry)
     if entry == nil or entry.available == nil then return false end
-    local ok, value = pcall(entry.available)
-    return ok and not not value
+    -- Session hooks need their native entry points, not an unrelated Hero.
+    -- While game packages load, absence remains dormant durable intent.
+    if entry.support ~= nil then
+      local ok, supported = pcall(entry.support)
+      if not ok or not supported then return false end
+    end
+    local ok, available = pcall(entry.available)
+    return ok and not not available
   end
   local function castWeaponGateVerified(runtime)
     local hero = M.sceneOwners.hero()
@@ -2790,7 +2796,7 @@ if __MacGamingTrainerV1 == nil then
       supportMap[key] = entry ~= nil and evaluate(entry.support, true) or false
       activeMap[key] = entry ~= nil and evaluate(entry.active, false) or false
       local desired = entry and (entry.desired and evaluate(entry.desired, false) or not not M.desiredFeatures[key]) or false
-      local waitingForEnvironment = desired and supportMap[key] and not activeMap[key] and not featureAvailable(entry)
+      local waitingForEnvironment = desired and not activeMap[key] and not featureAvailable(entry)
       if entry and (evaluate(entry.dormant, false) or waitingForEnvironment) then dormantMap[key] = true end
     end
     return supportMap, activeMap, dormantMap
@@ -6866,14 +6872,24 @@ if __MacGamingTrainerV1 == nil then
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}
     for _, stat in ipairs(statOrder or {}) do statsState[stat] = statState(stat, hero, support) end
+    -- Scene operability is broader than the strict combat/reward ready() gate.
+    -- Editable commands have their own owner-specific capabilities.
+    local sceneOperational = currentScene == "crossroads"
+      or (currentScene == "run" and M.sceneOwners.heroAvailable())
     return {
-      status = ready() and "ready" or "waiting", scene = currentScene,
+      status = sceneOperational and "ready" or "waiting", scene = currentScene,
       capabilities = {
         -- Desired feature state can be accepted as soon as the Lua runtime is
         -- loaded. Individual owners decide whether their controls are usable;
         -- session-safe hooks can arm while Hero-owned state remains dormant.
         setFeature = true,
-        setVitals = M.sceneOwners.healthAvailable() or M.sceneOwners.manaAvailable() or M.sceneOwners.heroAvailable(),
+        setHealth = M.sceneOwners.healthAvailable(),
+        setMana = M.sceneOwners.manaAvailable(),
+        setArmor = M.sceneOwners.heroAvailable(),
+        setVitals = M.sceneOwners.healthAvailable() or M.sceneOwners.manaAvailable()
+          or M.sceneOwners.heroAvailable(),
+        setRerolls = M.sceneOwners.rerollsAvailable(),
+        setSpellCharge = M.sceneOwners.heroAvailable(),
         setResource = resourceReady(),
         spawnReward = canSpawn, setStats = anyAvailableStat(statAvailable),
         setElements = M.sceneOwners.elementsAvailable(), hotBackup = true, hotRestore = false,
