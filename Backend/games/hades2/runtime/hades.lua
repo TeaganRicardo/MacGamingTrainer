@@ -6998,7 +6998,7 @@ if __MacGamingTrainerV1 == nil then
         sellTraits = canSellTraits,
         specialChoice = canOpenSpecialChoice,
         acquireChaosPair = canAcquireChaosPair,
-        setHealth = M.runtimeOwners.healthAvailable() and type(UpdateHealthUI) == "function",
+        setHealth = M.runtimeOwners.healthAvailable(),
         setMana = M.runtimeOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
           and type(UpdateManaMeterUI) == "function",
         setArmor = M.runtimeOwners.heroAvailable(),
@@ -9237,7 +9237,6 @@ if __MacGamingTrainerV1 == nil then
     if field ~= "current" and field ~= "max" then error("Unknown vital field") end
     local hero = CurrentRun.Hero
     if vital == "health" then
-      requireFunctions("health editing", { "UpdateHealthUI" })
       if field == "max" then
         if value < 1 then error("Maximum health must be at least 1") end
         hero.MaxHealth = value
@@ -9574,7 +9573,6 @@ if __MacGamingTrainerV1 == nil then
       if not resourceReady() then error("Game scene does not expose resource editing") end
       validateResource(params.resource)
       integer(params.amount, 0)
-      if params.resource == "Money" and type(UpdateMoneyUI) ~= "function" then error("Unsupported money editing: missing UpdateMoneyUI") end
       return actionLedger.run(command, params, function() editResource(params.resource, params.amount) end)
     end
     if command == "set_rerolls" then
