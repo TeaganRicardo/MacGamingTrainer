@@ -134,12 +134,37 @@ do
   eq(ammoCalls, 0, "ammo install fabricated a Hero refill without a Hero owner")
 end
 
+-- Missing native functions must leave session intent dormant until the
+-- actual global entry point appears. The next lifecycle reconciliation arms it.
+do
+  local state = setFeature("autoMiniGames", true)
+  check(state.desiredFeatures.autoMiniGames, "missing fishing function discarded desired state")
+  check(state.dormantFeatures.autoMiniGames, "missing native function was not shown as dormant")
+  check(not state.activeFeatures.autoMiniGames, "missing native function reported active")
+  WaitForFishingInput = function() end
+  UpdateTimers(0)
+  state = status()
+  check(state.activeFeatures.autoMiniGames, "late native fishing entry point did not arm")
+end
+
 -- A training Hero can own health/elements/rerolls/movement even while an
 -- unrelated mana field is absent. Each durable family must follow its actual
 -- owner rather than the all-purpose ready() predicate.
 CurrentHubRoom = nil
 CurrentRun = newTrainingRun(101, 40, 100, 1, 2)
 status()
+
+-- A genuine Crossroads training owner must be recognized as such, even
+-- when its active Hero has no Mana and a run-shaped CurrentRoom is present.
+CurrentHubRoom = {}
+local training = status()
+eq(training.scene, "crossroads", "training scene identity")
+eq(training.status, "ready", "training owner must be operational")
+check(training.capabilities.setHealth, "health editor unavailable with valid Hero health")
+check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
+check(training.capabilities.setRerolls, "run counter owner unavailable in training")
+check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
+CurrentHubRoom = nil
 
 local statState = M.dispatch("set_stat", {
   stat = "moveSpeed",
