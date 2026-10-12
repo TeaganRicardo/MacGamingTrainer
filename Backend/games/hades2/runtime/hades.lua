@@ -354,7 +354,7 @@ if __MacGamingTrainerV1 == nil then
   local trainerSource = "MacGamingTrainer"
   local trainerInvincibilityFlag = "MacGamingTrainerInvincibility"
   local invincibilityProtection
-  local function functionsAvailable(functions)
+  M.nativeFunctionsAvailable = function(functions)
     for _, name in ipairs(functions) do
       if type(_G[name]) ~= "function" then return false end
     end
@@ -6959,12 +6959,12 @@ if __MacGamingTrainerV1 == nil then
       "DeepCopyTable", "GetEligibleTransformingTrait", "SetTraitsOnLoot",
       "GetProcessedTraitData", "AddTraitToHero",
     }
-    local canSellTraits = traitOwner ~= nil and functionsAvailable(sellTraitsFunctions)
+    local canSellTraits = traitOwner ~= nil and M.nativeFunctionsAvailable(sellTraitsFunctions)
       and type(ScreenData) == "table" and type(ScreenData.SellTraits) == "table"
-    local canOpenSpecialChoice = nativeChoiceOwner ~= nil and functionsAvailable(specialChoiceFunctions)
+    local canOpenSpecialChoice = nativeChoiceOwner ~= nil and M.nativeFunctionsAvailable(specialChoiceFunctions)
       and type(EnemyData) == "table" and type(PresetEventArgs) == "table" and type(TraitData) == "table"
     local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
-    local canAcquireChaosPair = nativeChoiceOwner ~= nil and functionsAvailable(chaosPairFunctions)
+    local canAcquireChaosPair = nativeChoiceOwner ~= nil and M.nativeFunctionsAvailable(chaosPairFunctions)
       and type(chaosSource) == "table" and not not chaosSource.TransformingTraits
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
     -- and never desired state.
@@ -7914,16 +7914,16 @@ if __MacGamingTrainerV1 == nil then
     return table.unpack(packed, 2, packed.n)
   end
 
-  local function occurrenceRoutingAvailable()
+  M.occurrenceRouting.available = function()
     local definition = occurrenceDefinition()
     if definition == nil then return false end
     local hasRooms = type(definition.rooms) == "table" and next(definition.rooms) ~= nil
     local hasEncounters = type(definition.encounters) == "table" and next(definition.encounters) ~= nil
-    if hasRooms and not functionsAvailable({
+    if hasRooms and not M.nativeFunctionsAvailable({
         "ChooseNextRoomData", "IsRoomForced", "DoUnlockRoomExits",
         "CreateDoorRewardPreview", "GetRandomValue",
       }) then return false end
-    if hasEncounters and not functionsAvailable({
+    if hasEncounters and not M.nativeFunctionsAvailable({
         "ChooseEncounter", "IsEncounterForced", "GetRandomValue",
       }) then return false end
     return hasRooms or hasEncounters
@@ -8072,7 +8072,7 @@ if __MacGamingTrainerV1 == nil then
     return patched
   end
 
-  local function nextRoomRewardSupported()
+  M.nextRoomRewardSupported = function()
     local reward = M.nextRoomReward
     if reward == nil then return false end
     if reward == "RoomMoneyDrop" or reward == "MetaCurrencyDrop" or reward == "MetaCardPointsCommonDrop"
@@ -8083,9 +8083,9 @@ if __MacGamingTrainerV1 == nil then
     return type(LootData) == "table" and type(LootData[reward]) == "table"
   end
 
-  local function nextRoomRewardRoutingAvailable()
-    return nextRoomRewardSupported()
-      and functionsAvailable({ "ChooseRoomReward", "StartRoom" })
+  M.nextRoomRewardRoutingAvailable = function()
+    return M.nextRoomRewardSupported()
+      and M.nativeFunctionsAvailable({ "ChooseRoomReward", "StartRoom" })
   end
 
   local function installNextRoomReward()
@@ -8480,14 +8480,14 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     if onlyKey == nil or onlyKey == "nextRoomReward" then
-      if M.nextRoomReward ~= nil and nextRoomRewardRoutingAvailable() then
+      if M.nextRoomReward ~= nil and M.nextRoomRewardRoutingAvailable() then
         if not featureAttempt("nextRoomReward", true, installNextRoomReward, releaseNextRoomReward, raiseOnError) then allOk = false end
       else
         releaseNextRoomReward(); M.featureErrors.nextRoomReward = nil
       end
     end
     if onlyKey == nil or onlyKey == "nextOccurrence" then
-      if M.nextOccurrenceTarget ~= nil and occurrenceRoutingAvailable() then
+      if M.nextOccurrenceTarget ~= nil and M.occurrenceRouting.available() then
         if not featureAttempt("nextOccurrence", true, installOccurrenceRouting, releaseOccurrenceRouting, raiseOnError) then allOk = false end
       else
         releaseOccurrenceRouting(); M.featureErrors.nextOccurrence = nil
