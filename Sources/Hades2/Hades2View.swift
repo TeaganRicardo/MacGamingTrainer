@@ -1427,7 +1427,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || chaosBlessingOptions.isEmpty)
+                        .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1444,7 +1444,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || chaosCurseOptions.isEmpty)
+                        .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
                     Button(text("hades2.spawn.acquire")) {
@@ -1454,7 +1454,7 @@ struct Hades2TrainerView: View {
                         )
                     }
                     .disabled(
-                        !model.canSpawnReward
+                        !model.canAcquireChaosPair
                             || !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection })
                             || !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection })
                     )
@@ -1485,7 +1485,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(width: 240)
-                        .disabled(!model.canSpawnReward || exactBoonSourceGroups.isEmpty)
+                        .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1502,14 +1502,14 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || selectedExactItems.isEmpty)
+                        .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
                     Button(text("hades2.spawn.acquire")) {
                         model.acquireExactBoon(model.selectedExactBoon)
                     }
                     .disabled(
-                        !model.canSpawnReward
+                        !model.canAcquireExactReward
                             || !selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
                     )
                 }
