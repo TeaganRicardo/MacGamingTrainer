@@ -8,13 +8,24 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from games.hades2.desired_reconciliation import Hades2DesiredStateReconciler
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
-from games.hades2.schema import MULTIPLIERS, TOGGLES
+from games.hades2.schema import MULTIPLIERS, STAT_RULES, TOGGLES
 
 
 def matching_observation(desired):
     observation = {
         "status": "ready",
         "scene": "run",
+        "capabilities": {
+            "setFeature": True,
+            "setHealth": True,
+            "setMana": True,
+            "setArmor": True,
+            "setResource": True,
+            "setRerolls": True,
+            "setStats": True,
+            "setElements": True,
+        },
+        "statAvailable": {key: True for key in STAT_RULES},
         "desiredFeatures": {key: bool(desired[key]) for key in TOGGLES},
         "activeFeatures": {},
         "dormantFeatures": {},
