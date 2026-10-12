@@ -95,6 +95,11 @@ struct Main {
         model.connected = true
         model.capabilities = [
             "setVitals": true,
+            "setHealth": true,
+            "setMana": true,
+            "setArmor": true,
+            "setRerolls": true,
+            "setSpellCharge": true,
             "setResource": true,
             "setStats": true,
             "setElements": true,
@@ -128,6 +133,34 @@ struct Main {
         if !passiveMutations.isEmpty {
             fail("passive model projection emitted mutations: \(passiveMutations)")
         }
+
+        // A present health owner must not enable unrelated Mana, reroll or
+        // spell-charge editing. These controls depend on different native owners.
+        model.status = "ready"
+        model.scene = "run"
+        if model.canOpenNativeBoonScreen {
+            fail("native actions ignored a missing active-run owner")
+        }
+        model.capabilities["setMana"] = false
+        model.capabilities["setRerolls"] = false
+        model.capabilities["setSpellCharge"] = false
+        if !model.canSetVital("health") || model.canSetVital("mana") ||
+           model.canSetRerolls || model.canSetSpellCharge {
+            fail("owner-specific editing flags were ignored")
+        }
+        try? FileManager.default.removeItem(at: commandLog)
+        model.setVital("mana", field: "current", text: "55")
+        model.lockVital("mana", locked: true)
+        model.setRerolls("5")
+        model.lockRerolls(true)
+        model.setCounter("spellCharge", text: "30")
+        pump(0.20)
+        if !commands(at: commandLog).isEmpty {
+            fail("unavailable owner was allowed to mutate native state")
+        }
+        model.capabilities["setMana"] = true
+        model.capabilities["setRerolls"] = true
+        model.capabilities["setSpellCharge"] = true
 
         // Completed lock edits use the existing request queue. An unlock must
         // remain the final intent, with no delayed relock after it.
@@ -423,6 +456,7 @@ struct Main {
             model.connected = true
             model.status = "ready"
             model.scene = "run"
+            model.capabilities["activeRun"] = true
             body(model)
 
             let expectedTotal = before + expectedNewCommands
