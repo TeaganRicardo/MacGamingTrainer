@@ -1529,9 +1529,10 @@ if __MacGamingTrainerV1 == nil then
   local function enforceLocks()
     if M.terminalActionUnknown and (M.session ~= SessionState or M.run ~= CurrentRun
         or M.hero ~= (type(CurrentRun) == "table" and CurrentRun.Hero or nil)) then return end
-    -- Save-backed inventory locks are meaningful in the Crossroads too; keep
-    -- those invariants before applying Hero-only combat locks.
-    if resourceCatalogReady() then
+    -- Durable inventory locks remain staged while their save-backed owner is
+    -- absent. Enforce them only when the same resource owner used by direct
+    -- editing is resolvable; scene labels are not part of this decision.
+    if M.runtimeOwners.resourceInventory() ~= nil then
       for id in pairs(M.resourceLocks) do
         if id == "Money" or type(ResourceData[id]) == "table" then enforceResource(id) end
       end
