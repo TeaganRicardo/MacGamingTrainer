@@ -839,7 +839,11 @@ class Hades2Adapter(GameAdapter):
             decoded['warnings']=list(dict.fromkeys([*prior_warnings,*catalog_warnings]))
         capabilities=decoded.get('capabilities')
         if not isinstance(capabilities,dict):capabilities={}
-        capabilities=dict(disconnected_capabilities(),**capabilities)
+        # A connected resident is authoritative about its own capabilities.
+        # Never inject disconnected=False defaults into an attached runtime:
+        # those synthetic negatives make an omitted/older fixture look as if
+        # the native owner explicitly refused replay.
+        capabilities=dict(capabilities)
         capabilities['hotBackup']=True;capabilities['hotRestore']=False
         decoded['capabilities']=capabilities
         for key in _TRANSIENT_ACTION_RESULT_FIELDS:
