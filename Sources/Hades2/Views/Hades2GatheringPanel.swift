@@ -20,37 +20,41 @@ struct Hades2GatheringPanel: View {
         let generation = model.editGeneration
         return TrainerSection(title: text("hades2.gathering.title"), icon: "leaf") {
             VStack(alignment: .leading, spacing: 12) {
-                Text(text("hades2.gathering.explanation")).font(.caption).foregroundStyle(.secondary)
                 ForEach(Hades2GatheringFamily.allCases) { family in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 10) {
                             Text(text(family.titleKey)).font(.subheadline.weight(.medium)).frame(width: 120, alignment: .leading)
-                            Picker(text("hades2.gathering.mode"), selection: Binding(get: { custom[family] ?? false }, set: { custom[family] = $0 })) {
-                                Text(text("hades2.gathering.native")).tag(false)
-                                Text(text("hades2.gathering.custom")).tag(true)
-                            }.labelsHidden().frame(width: 150).disabled(!model.canEditDesired)
+                            Toggle(text("hades2.gathering.custom"), isOn: Binding(
+                                get: { custom[family] ?? false },
+                                set: { enabled in
+                                    custom[family] = enabled
+                                    if !enabled {
+                                        model.setGatheringProbability(family, custom: false, text: "")
+                                    } else {
+                                        model.setGatheringProbability(family, custom: true, text: percentages[family] ?? "100")
+                                    }
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .disabled(!model.canEditDesired)
                             let draft = Binding<String>(get: { percentages[family] ?? "100" }, set: { percentages[family] = $0 })
                             TrainerTextField(title: text("hades2.gathering.percent"), text: draft, onEditingChanged: TrainerTextField.editingTracker($focusedFamily, equals: family), onCommit: { value in
-                                    model.completeTextEdit(.gathering(family), text: value.text, changed: value.changed, generation: generation)
-                                })
-                                .frame(width: 65).disabled(!model.canEditDesired || custom[family] != true)
-                                .accessibilityLabel(Text(text(family.titleKey) + " " + text("hades2.gathering.percent")))
+                                model.completeTextEdit(.gathering(family), text: value.text, changed: value.changed, generation: generation)
+                            })
+                            .frame(width: 65)
+                            .disabled(!model.canEditDesired || custom[family] != true)
+                            .accessibilityLabel(Text(text(family.titleKey) + " " + text("hades2.gathering.percent")))
                             Text("%").foregroundStyle(.secondary)
-                            Button(text("hades2.gathering.apply")) {
-                                model.setGatheringProbability(family, custom: custom[family] == true, text: percentages[family] ?? "100")
-                            }.disabled(!model.canEditDesired || (custom[family] == true && !model.validProbabilityPercentage(percentages[family] ?? "")))
                             Spacer(minLength: 0)
                             Button(text("hades2.gathering.generate")) { model.generateGathering(family) }
                                 .disabled(!model.canGenerateGathering(family))
                         }
-                        Text(text(family.collectionKey)).font(.caption).foregroundStyle(.secondary)
                         if let reason = model.gatheringTargets[family]?.reason {
                             Text(text(reason)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if family != Hades2GatheringFamily.allCases.last { Divider() }
                 }
-                Text(text("hades2.gathering.generateHelp")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .onAppear { synchronize() }
