@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 104 then
+if previousModule and previousModule.revision ~= 105 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 104 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 104, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 105, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -4498,11 +4498,17 @@ if __MacGamingTrainerV1 == nil then
       end
       return false
     end
-    local function available()
-      return functionsPresent(nativeFunctions.room)
-        and (M.chaosGateProbability == nil or functionsPresent(nativeFunctions.chaos))
-        and (next(M.gatheringProbabilities) == nil or functionsPresent(nativeFunctions.gathering))
+    -- Independent native owner prerequisites. The shared CreateRoom interception
+    -- stays active for either owner, even while the other is waiting for its
+    -- own entry points. This is not an all-or-nothing room availability gate.
+    local function gatheringAvailable()
+      return next(M.gatheringProbabilities) ~= nil and functionsPresent(nativeFunctions.room)
+        and functionsPresent(nativeFunctions.gathering)
         and (not usesToolChance() or functionsPresent(nativeFunctions.toolChance))
+    end
+    local function chaosAvailable()
+      return M.chaosGateProbability ~= nil and functionsPresent(nativeFunctions.room)
+        and functionsPresent(nativeFunctions.chaos)
     end
     local function chaosDestinationAvailable(run, room)
       if type(RoomData) ~= "table" or type(RoomSets) ~= "table" or type(RoomSets.Chaos) ~= "table"
@@ -4527,12 +4533,13 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("IsSecretDoorEligible")
     end
     local function install()
-      requireFunctions("room generation", nativeFunctions.room)
-      if M.chaosGateProbability ~= nil then
-        requireFunctions("Chaos Gate room generation", nativeFunctions.chaos)
+      local gathering, chaos = gatheringAvailable(), chaosAvailable()
+      if not gathering and not chaos then release(); return end
+      if chaos then
         installHook("IsSecretDoorEligible", function(original, run, room)
           local captured = chaosRooms[room]
-          if room.ForceSecretDoor or not liveFrame(captured) or run ~= CurrentRun or room ~= CurrentRun.CurrentRoom then return original(run, room) end
+          if not chaosAvailable() or room.ForceSecretDoor or not liveFrame(captured)
+              or run ~= CurrentRun or room ~= CurrentRun.CurrentRoom then return original(run, room) end
           -- Zero suppresses uncommitted Hero force before its native owner can
           -- consume it. Nonzero retains that force source's native eligibility.
           if captured.probability == 0 then return false end
@@ -4541,11 +4548,7 @@ if __MacGamingTrainerV1 == nil then
           return original(run, room)
         end, "session")
       else releaseHook("IsSecretDoorEligible") end
-      if next(M.gatheringProbabilities) ~= nil then
-        requireFunctions("gathering room generation", nativeFunctions.gathering)
-      end
-      if usesToolChance() then
-        requireFunctions("gathering chance", nativeFunctions.toolChance)
+      if gathering and usesToolChance() then
         installHook("GetHarvestPointSpawnChance", function(original, data, room)
           local frame = frames[coroutine.running()]
           if not liveFrame(frame) then return original(data, room) end
@@ -4563,10 +4566,12 @@ if __MacGamingTrainerV1 == nil then
         end, "session")
       else releaseHook("GetHarvestPointSpawnChance") end
       installHook("CreateRoom", function(original, roomData, args)
-        if M.terminalActionUnknown or type(CurrentRun) ~= "table" or not enabled() then return original(roomData, args) end
+        local gatheringReady, chaosReady = gatheringAvailable(), chaosAvailable()
+        if M.terminalActionUnknown or type(CurrentRun) ~= "table"
+            or (not gatheringReady and not chaosReady) then return original(roomData, args) end
         local input, inputArgs = DeepCopyTable(roomData), DeepCopyTable(args or {})
-        local probabilities = ShallowCopyTable(M.gatheringProbabilities)
-        local chaos = M.chaosGateProbability
+        local probabilities = gatheringReady and ShallowCopyTable(M.gatheringProbabilities) or {}
+        local chaos = chaosReady and M.chaosGateProbability or nil
         local roomSet = type(inputArgs.RoomOverrides) == "table" and inputArgs.RoomOverrides.RoomSetName or input.RoomSetName
         if chaos ~= nil and roomSet ~= "Chaos" then
           inputArgs.RoomOverrides = inputArgs.RoomOverrides or {}
@@ -4613,12 +4618,12 @@ if __MacGamingTrainerV1 == nil then
         normalized[family] = value
       end
       M.gatheringProbabilities = normalized
-      if enabled() and available() then install() else release() end
+      install()
     end
     local function setChaosProbability(value)
       if value ~= nil and (not finite(value) or value < 0 or value > 100) then error("Invalid Chaos Gate probability") end
       M.chaosGateProbability = value
-      if enabled() and available() then install() else release() end
+      install()
     end
     local generated = setmetatable({}, { __mode = "k" })
     local observation, serial = nil, 0
@@ -4787,7 +4792,7 @@ if __MacGamingTrainerV1 == nil then
       for family, value in pairs(M.gatheringProbabilities) do result[family] = value end
       return result
     end
-    return { release = release, install = install, enabled = enabled, available = available, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
+    return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
   end)()
 
   forceRerolls = (function()
@@ -8341,10 +8346,8 @@ if __MacGamingTrainerV1 == nil then
       run(key, desired, entry)
     end
     if onlyKey == nil or onlyKey == "gathering" or onlyKey == "chaosGate" then
-      if roomGeneration.enabled() and not roomGeneration.available() then
-        roomGeneration.release()
-        M.featureErrors.roomGeneration = nil
-      elseif not featureAttempt("roomGeneration", roomGeneration.enabled(), roomGeneration.install, roomGeneration.release, raiseOnError) then
+      if not featureAttempt("roomGeneration", roomGeneration.enabled(),
+          roomGeneration.install, roomGeneration.release, raiseOnError) then
         allOk = false
       end
     end
@@ -9404,20 +9407,19 @@ if __MacGamingTrainerV1 == nil then
       if not resourceReady() then error("Game scene does not expose resource editing") end
       validateResource(params.resource)
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
-      if params.locked then
-        if params.resource == "Money" then requireFunctions("money lock", { "UpdateMoneyUI" }) end
-        M.resourceLocks[params.resource] = number(GameState.Resources[params.resource])
-        installEconomy()
-        M.moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled
-        M.resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled
-        installGuard()
-      else
-        M.resourceLocks[params.resource] = nil
-        if not M.desiredFeatures.moneyMultiplierEnabled and not M.desiredFeatures.resourceMultiplierEnabled and not next(M.resourceLocks) then
-          releaseEconomyRuntime()
-        end
+      -- An inventory owner can accept an exact lock without AddResource or
+      -- SpendResource. The frame guard enforces it now; the existing economy
+      -- reconciler mounts the native spend/gain hooks when their owner appears.
+      local previous = M.resourceLocks[params.resource]
+      M.resourceLocks[params.resource] = params.locked
+        and number(GameState.Resources[params.resource]) or nil
+      local ok, message = pcall(reconcileDesired, true, "economy")
+      if not ok then
+        M.resourceLocks[params.resource] = previous
+        M.featureErrors.economy = nil
+        reconcileDesired(false, "economy")
+        error(message)
       end
-      if not anyDesired() and not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
     end
     if command == "lock_rerolls" then
