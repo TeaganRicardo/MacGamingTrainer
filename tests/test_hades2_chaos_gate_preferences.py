@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         return dict(adapter.state)
     adapter.execute = execute
     transport.live = True
-    adapter.state.update(status='ready', connected=True)
+    adapter.state.update(status='ready', connected=True, capabilities={'setFeature': True})
     adapter.preference_dirty = True
     adapter.dispatch('set_chaos_gate_desired', {'probability': 0}, 'zero')
     assert [call[0] for call in calls] == ['save', 'set_chaos_gate_probability']
@@ -183,7 +183,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         resident_session=reply_session,
         time_warp_controller=FakeTimeWarpController(),
     )
-    real.state.update(status='ready', connected=True)
+    real.state.update(status='ready', connected=True, capabilities={'setFeature': True})
     real.preference_initialized = True
     writes = []
     real_save = real.preference_store.save
