@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 103 then
+if previousModule and previousModule.revision ~= 104 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 103 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 103, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 104, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -6905,6 +6905,9 @@ if __MacGamingTrainerV1 == nil then
         -- loaded. Individual owners decide whether their controls are usable;
         -- session-safe hooks can arm while Hero-owned state remains dormant.
         setFeature = true,
+        -- Strict native active-room transactions require the full combat
+        -- owner; reward spawning has additional reward-specific prerequisites.
+        activeRun = ready() and currentScene == "run",
         setHealth = M.sceneOwners.healthAvailable() and type(UpdateHealthUI) == "function",
         setMana = M.sceneOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
           and type(UpdateManaMeterUI) == "function",

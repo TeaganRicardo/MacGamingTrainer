@@ -200,6 +200,7 @@ check(training.capabilities.setHealth, "health editor unavailable with valid Her
 check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
+check(not training.capabilities.activeRun, "incomplete Hero exposed active-run transactions")
 CurrentHubRoom = nil
 -- The resident applies targets on the lifecycle tick, before any UI edit.
 UpdateTimers(0)
@@ -245,6 +246,10 @@ local rerollState = M.dispatch("lock_rerolls", {
   includeCatalogs = false,
 })
 check(rerollState.rerollsLocked, "reroll lock was rejected by unrelated mana state")
+
+-- A complete adventure owner enables native active-run transactions.
+CurrentRun.Hero.Mana, CurrentRun.Hero.MaxMana = 20, 50
+check(status().capabilities.activeRun, "complete run owner hidden")
 
 -- Losing the Hero must release Hero-owned runtime state without erasing durable
 -- intent. Global session hooks remain usable in the Crossroads.

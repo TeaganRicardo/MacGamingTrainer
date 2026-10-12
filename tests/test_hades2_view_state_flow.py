@@ -139,7 +139,7 @@ struct Main {
         model.status = "ready"
         model.scene = "run"
         if model.canOpenNativeBoonScreen {
-            fail("native active-run actions ignored a missing spawnReward owner")
+            fail("native actions ignored a missing active-run owner")
         }
         model.capabilities["setMana"] = false
         model.capabilities["setRerolls"] = false
@@ -456,6 +456,7 @@ struct Main {
             model.connected = true
             model.status = "ready"
             model.scene = "run"
+            model.capabilities["activeRun"] = true
             body(model)
 
             let expectedTotal = before + expectedNewCommands
