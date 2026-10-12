@@ -24,7 +24,8 @@ count = 0
 status_count = 0
 for raw in sys.stdin:
     req = json.loads(raw)
-    payload = {'connected': True, 'status': 'ready', 'scene': 'run'}
+    payload = {'connected': True, 'status': 'ready', 'scene': 'run',
+               'capabilities': {'activeRun': True}}
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
              'moduleProtocolVersion': 14, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
