@@ -6946,6 +6946,7 @@ if __MacGamingTrainerV1 == nil then
     local roomOwner = M.runtimeOwners.roomContext()
     local rewardOwner = M.runtimeOwners.rewardContext()
     local nativeChoiceOwner = M.runtimeOwners.nativeChoice()
+    local exactRewardOwner = nativeChoiceOwner
     local sellTraitsFunctions = {
       "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
       "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation", "UseableOff",
@@ -6997,6 +6998,7 @@ if __MacGamingTrainerV1 == nil then
         roomContext = roomOwner ~= nil,
         sellTraits = canSellTraits,
         specialChoice = canOpenSpecialChoice,
+        acquireExactReward = exactRewardOwner ~= nil,
         acquireChaosPair = canAcquireChaosPair,
         setHealth = M.runtimeOwners.healthAvailable(),
         setMana = M.runtimeOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
@@ -8542,7 +8544,10 @@ if __MacGamingTrainerV1 == nil then
       open_special_choice = { "session", "run", "hero" },
       generate_gathering = { "session", "run", "hero", "room", "map" },
       acquire_chaos_pair = { "session", "run", "hero" },
-      spawn_reward = { "session", "run", "hero", "room", "map" },
+      spawn_reward = function(context)
+        return type(context) == "table" and context.ownerKeys
+          or { "session", "run", "hero", "room", "map" }
+      end,
     }
     local actionSemanticKeys = {
       set_resource = { "resource", "amount" },
@@ -8612,8 +8617,9 @@ if __MacGamingTrainerV1 == nil then
       -- Deterministic validation belongs after request-id deduplication. A
       -- duplicate successful mutation must return its prior receipt even though
       -- the live target has since changed or disappeared.
-      if preflight ~= nil then preflight() end
-      local ownerKeys = actionOwnerKeys[command]
+      local preflightContext = preflight ~= nil and preflight() or nil
+      local ownerSpec = actionOwnerKeys[command]
+      local ownerKeys = type(ownerSpec) == "function" and ownerSpec(preflightContext) or ownerSpec
       if type(ownerKeys) ~= "table" then error("Action owner is undefined for " .. tostring(command)) end
       local record = { requestId = requestId, command = command, fingerprint = fingerprint,
         status = "outcome_unknown", nativeOwner = nativeOperations.owner(ownerKeys) }
@@ -9177,14 +9183,19 @@ if __MacGamingTrainerV1 == nil then
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
 
-      if M.runtimeOwners.rewardContext() == nil then
-        error("Reward spawning requires a live reward context")
-      end
       local _, allowed = rewards()
       local rewardId = params.reward
       local entry = type(rewardId) == "string" and allowed[rewardId] or nil
       if not entry then entry = echoModel.hiddenEntry(rewardId) end
       if not entry then error("Unknown or unsupported reward") end
+      local exactTrait = entry.kind == "trait" and entry.group == "exact"
+      if exactTrait then
+        if M.runtimeOwners.nativeChoice() == nil then
+          error("Exact reward acquisition requires a live Hero/run owner")
+        end
+      elseif M.runtimeOwners.rewardContext() == nil then
+        error("Reward spawning requires a live reward context")
+      end
       if type(ScreenState) == "table" and ScreenState.InTransition then
         error("Cannot spawn a reward during a transition")
       end
@@ -9192,6 +9203,9 @@ if __MacGamingTrainerV1 == nil then
         rewardId = rewardId,
         entry = entry,
         exactPlan = prepareExactReward(entry),
+        ownerKeys = exactTrait
+          and { "session", "run", "hero" }
+          or { "session", "run", "hero", "room", "map" },
       }
     end
 
@@ -9358,7 +9372,10 @@ if __MacGamingTrainerV1 == nil then
       local plan
       return actionLedger.run(command, params,
         function(record) return rewardAcquisition.run(command, record, plan) end,
-        function() plan = rewardAcquisition.prepare(command, params) end)
+        function()
+          plan = rewardAcquisition.prepare(command, params)
+          return plan
+        end)
     end
     if command == "set_chaos_gate_probability" then
       roomGeneration.setChaosProbability(params.probability)
