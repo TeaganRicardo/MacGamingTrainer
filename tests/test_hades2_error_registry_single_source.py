@@ -70,11 +70,11 @@ for rule in runtime_rules:
 # registration site, not the key/argument result.
 CASES = (
     ("open_sell_traits", "Cannot open boon sell screen while another screen is active", "hades2.error.sellScreenBusy", ()),
-    ("open_sell_traits", "Boon selling requires an active run room", "hades2.error.sellNeedsRunRoom", ()),
+    ("open_sell_traits", "Boon selling requires a live trait owner", "hades2.error.sellNeedsTraitOwner", ()),
     ("open_sell_traits", "Native boon sell screen data is unavailable", "hades2.error.sellDataUnavailable", ()),
     ("open_special_choice", "Cannot open special blessing choice while another screen is active", "hades2.error.choiceScreenBusy", ()),
     ("open_special_choice", "Cannot open special blessing choice during a transition", "hades2.error.choiceDuringTransition", ()),
-    ("open_special_choice", "Special blessing choice requires an active run room", "hades2.error.choiceNeedsRunRoom", ()),
+    ("open_special_choice", "Special blessing choice requires a live Hero/run owner", "hades2.error.choiceNeedsHeroOwner", ()),
     ("open_special_choice", "Special blessing source has no audited native choice flow", "hades2.error.choiceNoAuditedFlow", ()),
     ("open_special_choice", "Special blessing source data is unavailable", "hades2.error.choiceSourceUnavailable", ()),
     ("open_special_choice", "Special blessing choice data is unavailable", "hades2.error.choiceDataUnavailable", ()),
@@ -85,7 +85,7 @@ CASES = (
     ("spawn_reward", "Selected boon became unavailable before acquisition", "hades2.error.exactNotEligible", ()),
     ("spawn_reward", "Echo previous-run boon is no longer eligible", "hades2.error.exactNotEligible", ()),
     ("spawn_reward", "Echo previous-run boon acquisition failed", "hades2.error.echoLastRunFailed", ()),
-    ("set_trait_level", "Trait mutation requires an active run room", "hades2.error.traitMutationNeedsRun", ()),
+    ("set_trait_level", "Trait mutation requires a live trait owner", "hades2.error.traitMutationNeedsOwner", ()),
     ("set_trait_level", "Trait selection belongs to a stale runtime generation", "hades2.error.traitSelectionStale", ()),
     ("set_trait_level", "Trait instance is no longer present", "hades2.error.traitTargetMissing", ()),
     ("set_trait_level", "Trait target changed since selection", "hades2.error.traitTargetChanged", ()),
