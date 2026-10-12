@@ -502,10 +502,16 @@ if __MacGamingTrainerV1 == nil then
     return type(CurrentRun) == "table" and type(CurrentRun.ResourcesGained) == "table"
       and type(CurrentRun.ResourcesSpent) == "table"
   end
+  function M.runtimeOwners.resourceInventory()
+    if not resourceCatalogReady() then return nil end
+    -- Container tables can exist before a profile/save is actually in scope.
+    -- A live Run or Hub room proves the current GameState belongs to an adopted
+    -- save lifecycle without choosing one of those regions as the authority.
+    if type(CurrentRun) ~= "table" and type(CurrentHubRoom) ~= "table" then return nil end
+    return { gameState = GameState, resources = GameState.Resources }
+  end
   local function resourceReady()
-    -- Save-backed inventory is the owner. Per-run accounting only selects the
-    -- native mutation path; it does not decide whether the inventory is editable.
-    return resourceCatalogReady()
+    return M.runtimeOwners.resourceInventory() ~= nil
   end
   local function economyReady()
     -- Multiplier/lock hooks are global function hooks and can be installed in
@@ -8529,7 +8535,14 @@ if __MacGamingTrainerV1 == nil then
   end
   actionLedger = (function()
     local actionOwnerKeys = {
-      set_resource = { "session", "gameState", "resources" },
+      set_resource = function()
+        local keys = { "session", "gameState", "resources" }
+        if resourceRunAccountingReady()
+            and type(AddResource) == "function" and type(SpendResource) == "function" then
+          keys[#keys + 1] = "run"
+        end
+        return keys
+      end,
       set_rerolls = { "session", "run" },
       open_sell_traits = { "session", "run", "hero" },
       set_trait_level = { "session", "run", "hero" },
