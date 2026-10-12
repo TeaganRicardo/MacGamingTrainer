@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 107 then
+if previousModule and previousModule.revision ~= 108 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 107 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 107, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 108, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -1356,7 +1356,11 @@ if __MacGamingTrainerV1 == nil then
     }
     local function owner(keys)
       local frame = {}
-      for _, key in ipairs(keys or { "session" }) do
+      -- Callers introduced by the owner decomposition pass the smallest tuple they
+      -- actually depend on. Existing native callback transactions that omit a
+      -- tuple retain the pre-decomposition frame: their rollback/commit safety
+      -- depends on Run/Hero/Room identity as well as the process session.
+      for _, key in ipairs(keys or { "session", "run", "hero", "room" }) do
         local read = readers[key]
         if read == nil then error("Unknown native owner key: " .. tostring(key)) end
         frame[key] = read()

@@ -20,7 +20,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Hades II module protocol: 14.
 - Hades II desired-state schema: 9.
 - Hades II Profile schema: 6.
-- Hades II resident runtime revision: 107.
+- Hades II resident runtime revision: 108.
 - Current Trainer-owned invulnerability identity: `invincibility` / 无敌模式 / Invincibility. Legacy `godMode` is accepted only at versioned migration/import boundaries and is free for a future native God Mode implementation if deliberately added.
 - Verified Hades II target: game 1.143476 / Steam build 25481925 / arm64 UUID `35CD2E50-2D78-3A63-835B-3EB1224C6D65`.
 - Invincibility's native effect-block query is a Hades-owned persistent C library, ABI 1, restricted to that exact arm64 UUID and verified function prefixes. It exposes only read-only Unit identity and a copied block-set snapshot; unknown builds cannot reuse its field offsets. The supported content's synchronous scalar Add/Remove calls are tracked with native last-write set semantics. Lua keeps the current game intent separately from Trainer protection, including sampling-time finalizers and room/setup generation changes; other native argument shapes pass through unchanged. The library remains loaded for the game process lifetime because Lua may retain callbacks after detach. Helper loading, real hostile effects, room remount and reconnect acceptance remain pending user-run QA.
@@ -46,7 +46,7 @@ Accepted resident source SHA256:
 
 `4fad5a44efbb4608267ffef9440f63100eed8f50b0199aa79bd9237f24117c8c`
 
-This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier accepted baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 107. Notable intervening resident changes include:
+This acceptance records the latest patch's native prompt/backing and narrative-choice presentation regression scope. It does not certify every earlier consolidated feature check. Revision 51 (`a6cf37b41639229bd64938d9587a9735fb16dd91`, accepted 2026-09-28) remains the earlier accepted baseline; unrecorded feature-family checks below remain pending. Current source contains resident revision 108. Notable intervening resident changes include:
 
 - revision 55: first live boon level/rarity/force-removal slice;
 - revision 56: separate exact-boon acquisition;
