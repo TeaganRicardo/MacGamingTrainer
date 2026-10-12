@@ -6941,11 +6941,9 @@ if __MacGamingTrainerV1 == nil then
     if M.desiredFeatures.moneyMultiplierEnabled and economySupported and not activeMoney then dormantFeatureMap.moneyMultiplierEnabled = true end
     if M.desiredFeatures.resourceMultiplierEnabled and economySupported and not activeResources then dormantFeatureMap.resourceMultiplierEnabled = true end
     local traitOwner = M.runtimeOwners.traitInventory()
-    local traitMutationOwner = M.runtimeOwners.traitInventory()
     local roomOwner = M.runtimeOwners.roomContext()
     local rewardOwner = M.runtimeOwners.rewardContext()
     local runHeroOwner = M.runtimeOwners.runHero()
-    local exactRewardOwner = runHeroOwner
     local sellTraitsFunctions = {
       "OpenSellTraitMenu", "AreScreensActive", "thread", "DeepCopyTable",
       "AltAspectRatioFramesHide", "OnScreenCloseStarted", "SetAnimation", "UseableOff",
@@ -6993,11 +6991,11 @@ if __MacGamingTrainerV1 == nil then
         -- session-safe hooks can arm while Hero-owned state remains dormant.
         setFeature = true,
         traitInventory = traitOwner ~= nil,
-        traitMutation = traitMutationOwner ~= nil,
+        traitMutation = traitOwner ~= nil,
         roomContext = roomOwner ~= nil,
         sellTraits = canSellTraits,
         specialChoice = canOpenSpecialChoice,
-        acquireExactReward = exactRewardOwner ~= nil,
+        acquireExactReward = runHeroOwner ~= nil,
         acquireChaosPair = canAcquireChaosPair,
         setHealth = M.runtimeOwners.healthAvailable(),
         setMana = M.runtimeOwners.manaAvailable() and type(UpdateWeaponMana) == "function"
