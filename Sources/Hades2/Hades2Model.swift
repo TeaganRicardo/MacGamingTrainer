@@ -258,6 +258,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     var canSetSpellCharge: Bool { connected && capabilities["setSpellCharge"] == true && !exiting }
     var canSetResource: Bool { connected && capabilities["setResource"] == true && !exiting }
     var canSpawnReward: Bool { connected && capabilities["spawnReward"] == true && canAcceptRuntimeAction && !exiting }
+    var canAcquireExactReward: Bool {
+        connected && capabilities["acquireExactReward"] == true && canAcceptRuntimeAction && !exiting
+    }
     var canAcquireChaosPair: Bool {
         connected && capabilities["acquireChaosPair"] == true && canAcceptRuntimeAction && !exiting
     }
@@ -1225,7 +1228,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func acquireExactBoon(_ reward: String) {
-        guard canSpawnReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return }
+        guard canAcquireExactReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return }
         send(.spawnReward(reward), title: "hades2.op.acquireExactBoon")
     }
 
