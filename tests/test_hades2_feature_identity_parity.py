@@ -639,7 +639,7 @@ def lua_dispatch_source(root, toggles, multipliers):
     assert "gameSpeed" not in multiplier_routes, "gameSpeed must remain Core-owned"
 
     damage = lua_function_tokens(text, "installDamage")
-    assert contains_tokens(damage, ["local", "hero", "=", "M", ".", "sceneOwners", ".", "hero", "(", ")"]), (
+    assert contains_tokens(damage, ["local", "hero", "=", "M", ".", "runtimeOwners", ".", "hero", "(", ")"]), (
         "Lua damage consumer must resolve the current Hero owner before applying the multiplier"
     )
     assert contains_tokens(damage, ["if", "M", ".", "damageEnabled", "and", "hero", "~", "=", "nil",
