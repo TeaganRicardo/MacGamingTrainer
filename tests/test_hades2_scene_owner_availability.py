@@ -260,6 +260,19 @@ local training = status()
 eq(training.scene, "crossroads", "training scene identity")
 eq(training.status, "ready", "training owner must be operational")
 check(training.capabilities.setHealth, "health editor unavailable with valid Hero health")
+local healthDisplay = UpdateHealthUI
+UpdateHealthUI = nil
+local healthWithoutUI = status()
+check(healthWithoutUI.capabilities.setHealth,
+  "health owner was incorrectly coupled to its optional UI observer")
+M.dispatch("set_vital", {
+  vital = "health", field = "current", value = 39, includeCatalogs = false,
+})
+eq(CurrentRun.Hero.Health, 39, "health mutation failed without optional UI observer")
+M.dispatch("set_vital", {
+  vital = "health", field = "current", value = 40, includeCatalogs = false,
+})
+UpdateHealthUI = healthDisplay
 check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
