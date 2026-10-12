@@ -78,6 +78,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     assert adapter.preferences["statLocks"]["moveSpeed"] == 150
     assert observed["status"] == "waiting"
 
+    # Durable session intent must cross the resident boundary whenever the
+    # resident advertises its session owner. Presentation "ready" is not an
+    # execution authority for boon/gathering/Chaos desired state.
+    before_direct = len(resident.calls)
+    adapter.set_boon_rarity_desired({
+        "target": "Rare", "multiplier": 125,
+        "forceLegendary": False, "forceDuo": False,
+    })
+    adapter.set_gathering_desired("flora", 35)
+    adapter.set_chaos_gate_desired(20)
+    direct = resident.calls[before_direct:]
+    assert [call["command"] for call in direct if call["kind"] == "mutate"] == [
+        "set_boon_rarity",
+        "set_gathering_probabilities",
+        "set_chaos_gate_probability",
+    ], f"waiting session owner was blocked by presentation readiness: {direct!r}"
+
     # The same resident later enters an owned run: pending locks and the
     # unconsumed one-shot may now cross the resident boundary, without a new
     # click or a second copy of the user's stored intent.
