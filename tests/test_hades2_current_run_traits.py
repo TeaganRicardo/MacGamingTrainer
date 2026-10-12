@@ -9,9 +9,11 @@ STATE = (ROOT / "Sources/Hades2/Hades2BackendState.swift").read_text(encoding="u
 
 
 # #187 remains the observation seam: current-run rows must come from the live
-# hero trait table rather than the acquisition catalog or desired state.
+# trait owner rather than the acquisition catalog or desired state. The owner
+# resolver, not each consumer, owns the CurrentRun/Hero traversal.
 block = LUA[LUA.index("local currentRunTraits = function()"):LUA.index("local function resolveTraitTarget")]
-assert "CurrentRun.Hero.Traits" in block
+assert "M.runtimeOwners.traitInventory()" in block
+assert "owner.traits" in block
 assert "boons()" not in block
 assert "rewards()" not in block
 assert "desiredFeatures" not in block
