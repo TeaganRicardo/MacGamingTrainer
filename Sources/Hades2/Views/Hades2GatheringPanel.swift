@@ -4,53 +4,59 @@ struct Hades2GatheringPanel: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @State private var focusedFamily: Hades2GatheringFamily?
-    @State private var custom: [Hades2GatheringFamily: Bool] = [:]
     @State private var percentages: [Hades2GatheringFamily: String] = [:]
 
     private func text(_ key: String) -> String {
         Hades2GameModule.resolveText(key: key, localization: localization)
     }
+
     private func synchronize(_ families: [Hades2GatheringFamily] = Hades2GatheringFamily.allCases) {
         for family in families where focusedFamily != family {
-            custom[family] = model.gatheringProbabilities[family] != nil
-            percentages[family] = model.gatheringProbabilities[family].map { String(format: "%g", $0) } ?? "100"
+            percentages[family] = model.gatheringProbabilities[family].map { String(format: "%g", $0) } ?? ""
         }
     }
+
+    private func icon(for family: Hades2GatheringFamily) -> String {
+        switch family {
+        case .flora: "leaf.fill"
+        case .mining: "hammer.fill"
+        case .digging: "mountain.2.fill"
+        case .shades: "person.crop.circle"
+        case .fishing: "fish.fill"
+        }
+    }
+
     var body: some View {
         let generation = model.editGeneration
         return TrainerSection(title: text("hades2.gathering.title"), icon: "leaf") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(text("hades2.gathering.explanation")).font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 1) {
                 ForEach(Hades2GatheringFamily.allCases) { family in
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 10) {
-                            Text(text(family.titleKey)).font(.subheadline.weight(.medium)).frame(width: 120, alignment: .leading)
-                            Picker(text("hades2.gathering.mode"), selection: Binding(get: { custom[family] ?? false }, set: { custom[family] = $0 })) {
-                                Text(text("hades2.gathering.native")).tag(false)
-                                Text(text("hades2.gathering.custom")).tag(true)
-                            }.labelsHidden().frame(width: 150).disabled(!model.canEditDesired)
-                            let draft = Binding<String>(get: { percentages[family] ?? "100" }, set: { percentages[family] = $0 })
-                            TrainerTextField(title: text("hades2.gathering.percent"), text: draft, onEditingChanged: TrainerTextField.editingTracker($focusedFamily, equals: family), onCommit: { value in
-                                    model.completeTextEdit(.gathering(family), text: value.text, changed: value.changed, generation: generation)
-                                })
-                                .frame(width: 65).disabled(!model.canEditDesired || custom[family] != true)
-                                .accessibilityLabel(Text(text(family.titleKey) + " " + text("hades2.gathering.percent")))
-                            Text("%").foregroundStyle(.secondary)
-                            Button(text("hades2.gathering.apply")) {
-                                model.setGatheringProbability(family, custom: custom[family] == true, text: percentages[family] ?? "100")
-                            }.disabled(!model.canEditDesired || (custom[family] == true && !model.validProbabilityPercentage(percentages[family] ?? "")))
-                            Spacer(minLength: 0)
-                            Button(text("hades2.gathering.generate")) { model.generateGathering(family) }
-                                .disabled(!model.canGenerateGathering(family))
-                        }
-                        Text(text(family.collectionKey)).font(.caption).foregroundStyle(.secondary)
-                        if let reason = model.gatheringTargets[family]?.reason {
-                            Text(text(reason)).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if family != Hades2GatheringFamily.allCases.last { Divider() }
+                    Hades2ProbabilityRow(
+                        title: text(family.titleKey),
+                        icon: icon(for: family),
+                        input: Binding(
+                            get: { percentages[family] ?? "" },
+                            set: { percentages[family] = $0 }
+                        ),
+                        hasOverride: model.gatheringProbabilities[family] != nil,
+                        enabled: model.canEditDesired,
+                        probabilityLabel: text("hades2.gathering.percent"),
+                        nativeLabel: text("hades2.gathering.native"),
+                        resetLabel: text("hades2.gathering.restoreNative"),
+                        probabilityHelp: text("hades2.gathering.explanation") + "\n" + text(family.collectionKey),
+                        onEditingChanged: TrainerTextField.editingTracker($focusedFamily, equals: family),
+                        onCommit: { completion in
+                            model.completeTextEdit(.gathering(family), text: completion.text,
+                                changed: completion.changed, generation: generation)
+                        },
+                        onReset: { model.setGatheringProbability(family, probability: nil) },
+                        generateLabel: text("hades2.gathering.generate"),
+                        generateHelp: model.gatheringTargets[family]?.reason.map { text($0) }
+                            ?? text("hades2.gathering.generateHelp"),
+                        canGenerate: model.canGenerateGathering(family),
+                        onGenerate: { model.generateGathering(family) }
+                    )
                 }
-                Text(text("hades2.gathering.generateHelp")).font(.caption).foregroundStyle(.secondary)
             }
         }
         .onAppear { synchronize() }

@@ -69,12 +69,23 @@ func wait(_ predicate: () -> Bool) {
         let host = NSHostingView(rootView: Hades2GameModule.makeContent(model: model).environmentObject(localization))
         host.frame = NSRect(x: 0, y: 0, width: 1100, height: 2200)
         host.layoutSubtreeIfNeeded()
-        model.setGatheringProbability(.mining, custom: true, text: "25.5")
+
+        let generation = model.editGeneration
+        check(model.completeTextEdit(.gathering(.flora), text: "", changed: false, generation: generation).isEmpty,
+              "Native focus/blur changed the display into an implied 100%")
+        check(model.completeTextEdit(.gathering(.flora), text: "100", generation: generation) == "100",
+              "explicit 100% was not accepted from Native")
+        wait { !model.busy && model.gatheringProbabilities[.flora] == 100 }
+        model.setGatheringProbability(.flora, probability: nil)
+        wait { !model.busy && model.gatheringProbabilities[.flora] == nil }
+        model.setGatheringProbability(.mining, probability: 0)
+        wait { !model.busy && model.gatheringProbabilities[.mining] == 0 }
+        model.setGatheringProbability(.mining, probability: 25.5)
         wait { !model.busy && model.gatheringProbabilities[.mining] == 25.5 }
-        model.setGatheringProbability(.mining, custom: true, text: "101")
+        model.setGatheringProbability(.mining, probability: 101)
         pump(0.1)
         check(model.gatheringProbabilities[.mining] == 25.5, "invalid percentage replaced accepted configuration")
-        model.setGatheringProbability(.mining, custom: false, text: "")
+        model.setGatheringProbability(.mining, probability: nil)
         wait { !model.busy && model.gatheringProbabilities.isEmpty }
         model.generateGathering(.flora)
         wait { !model.busy && model.feedbackNotice?.text.key == "hades2.receipt.completed" }
@@ -95,7 +106,7 @@ func wait(_ predicate: () -> Bool) {
         let trace = try String(contentsOf: worker.deletingPathExtension().appendingPathExtension("trace"), encoding: .utf8)
         let rows = trace.split(separator: "\n").map { try! JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
         check(rows.filter { $0["command"] as? String == "generate_gathering" }.count == 1, "generation replayed")
-        check(rows.filter { $0["command"] as? String == "set_gathering_desired" }.count == 2, "invalid edit sent or Native restore did not send")
+        check(rows.filter { $0["command"] as? String == "set_gathering_desired" }.count == 5, "invalid edit sent or Native restore did not send")
         check(!rows.contains { $0["command"] as? String == "status" }, "generation automatically polled")
         check(!Hades2StatePatch([:]).gatheringTargets.isPresent, "sparse envelope cleared observation")
         check(Hades2StatePatch(["gatheringTargets": ["flora": ["available": true, "scopeToken": ""]]]).gatheringTargets.value?[.flora] == nil, "invalid scope became actionable")

@@ -1034,10 +1034,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 forceLegendary: self.boonForceLegendary, forceDuo: self.boonForceDuo) }
         case let .gathering(family):
             current = gatheringProbabilities[family]; range = 0...100; available = canEditDesired
-            apply = { self.setGatheringProbability(family, custom: true, text: $0) }
+            apply = { if let probability = Double($0) { self.setGatheringProbability(family, probability: probability) } }
         case .chaosGate:
             current = chaosGateProbability; range = 0...100; available = canEditDesired
-            apply = { self.setChaosGateProbability(custom: true, text: $0) }
+            apply = { if let probability = Double($0) { self.setChaosGateProbability(probability) } }
         }
         func canonical(_ value: Double?) -> String {
             guard let value, value.isFinite else { return "" }
@@ -1046,7 +1046,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let restored: String
         switch edit {
         case .gameSpeed: restored = String(format: "%.1f", gameSpeed)
-        case .gathering, .chaosGate: restored = canonical(current ?? 100)
+        case .gathering, .chaosGate: restored = canonical(current)
         default: restored = canonical(current)
         }
         guard generation == editGeneration else { return restored }
@@ -1124,23 +1124,21 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
     }
 
-    func validProbabilityPercentage(_ text: String) -> Bool {
-        guard let value = Double(text), value.isFinite else { return false }
-        return (0...100).contains(value)
+    private func validOccurrenceProbability(_ value: Double?) -> Bool {
+        guard let value else { return true }
+        return value.isFinite && (0...100).contains(value)
     }
 
-    func setGatheringProbability(_ family: Hades2GatheringFamily, custom: Bool, text: String) {
-        guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
-        let value = custom ? Double(text) : nil
-        guard gatheringProbabilities[family] != value else { return }
-        sendEdit(request: .setGathering(family: family, probability: value), title: "hades2.gathering.apply")
+    func setGatheringProbability(_ family: Hades2GatheringFamily, probability: Double?) {
+        guard canEditDesired, validOccurrenceProbability(probability),
+              gatheringProbabilities[family] != probability else { return }
+        sendEdit(request: .setGathering(family: family, probability: probability), title: "hades2.gathering.apply")
     }
 
-    func setChaosGateProbability(custom: Bool, text: String) {
-        guard canEditDesired, !custom || validProbabilityPercentage(text) else { return }
-        let value = custom ? Double(text) : nil
-        guard chaosGateProbability != value else { return }
-        sendEdit(request: .setChaosGate(probability: value), title: "hades2.chaosGate.apply")
+    func setChaosGateProbability(_ probability: Double?) {
+        guard canEditDesired, validOccurrenceProbability(probability),
+              chaosGateProbability != probability else { return }
+        sendEdit(request: .setChaosGate(probability: probability), title: "hades2.chaosGate.apply")
     }
 
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
