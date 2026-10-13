@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 108 then
+if previousModule and previousModule.revision ~= 109 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 108 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 108, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 109, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -24,7 +24,7 @@ if __MacGamingTrainerV1 == nil then
     -- true means force one currently eligible special boon into the native pool.
     boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
-    nextRoomRewardOriginRoom = nil, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
+    nextRoomRewardRoutedRooms = {}, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
     desiredFeatures = {
       invincibility = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
@@ -910,7 +910,7 @@ if __MacGamingTrainerV1 == nil then
   local function releaseNextRoomReward()
     releaseHook("ChooseRoomReward")
     releaseHook("StartRoom")
-    M.nextRoomRewardOriginRoom = nil
+    M.nextRoomRewardRoutedRooms = {}
     M.nextRoomRewardPatchedDoors = 0
     M.nextRoomRewardPatchedValue = nil
     M.nextRoomRewardPatchRoom = nil
@@ -8048,6 +8048,18 @@ if __MacGamingTrainerV1 == nil then
     return rewardType, forceLoot
   end
 
+  local function markNextRoomRewardRoute(room)
+    if type(room) == "table" and M.nextRoomRewardToken ~= nil then
+      M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken
+    end
+  end
+
+  local function nextRoomRewardRouteMatches(room)
+    return type(room) == "table"
+      and M.nextRoomRewardToken ~= nil
+      and M.nextRoomRewardRoutedRooms[room] == M.nextRoomRewardToken
+  end
+
   local function patchOfferedNextRoomDoors()
     local wanted = M.nextRoomReward
     if wanted == nil or type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table" then
@@ -8061,6 +8073,7 @@ if __MacGamingTrainerV1 == nil then
       if ordinaryDoorReward(room, native) then
         local rewardType, forceLoot = forceNextRoomReward(room, wanted)
         if rewardType ~= nil then
+          markNextRoomRewardRoute(room)
           patched = patched + 1
           if type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table" then
             CurrentRun.CurrentRoom.OfferedRewards = CurrentRun.CurrentRoom.OfferedRewards or {}
@@ -8100,9 +8113,6 @@ if __MacGamingTrainerV1 == nil then
 
   local function installNextRoomReward()
     requireFunctions("next room reward", { "ChooseRoomReward", "StartRoom" })
-    if M.nextRoomRewardOriginRoom == nil and type(CurrentRun) == "table" then
-      M.nextRoomRewardOriginRoom = CurrentRun.CurrentRoom
-    end
     if not owns("ChooseRoomReward") then
       installHook("ChooseRoomReward", function(original, run, room, rewardStoreName, previouslyChosenRewards, args, ...)
         local native = original(run, room, rewardStoreName, previouslyChosenRewards, args, ...)
@@ -8112,20 +8122,18 @@ if __MacGamingTrainerV1 == nil then
         if wanted == nil or type(args) ~= "table" or type(args.Door) ~= "table"
             or not ordinaryDoorReward(room, native) then return native end
         local rewardType = forceNextRoomReward(room, wanted)
+        if rewardType ~= nil then markNextRoomRewardRoute(room) end
         return rewardType or native
       end)
     end
     if not owns("StartRoom") then
       installHook("StartRoom", function(original, currentRun, currentRoom, ...)
         local result = original(currentRun, currentRoom, ...)
-        if M.nextRoomReward ~= nil then
-          local origin = M.nextRoomRewardOriginRoom
-          if origin == nil or currentRoom ~= origin then
-            M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken
-            M.nextRoomReward = nil
-            M.nextRoomRewardToken = nil
-            releaseNextRoomReward()
-          end
+        if M.nextRoomReward ~= nil and nextRoomRewardRouteMatches(currentRoom) then
+          M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken
+          M.nextRoomReward = nil
+          M.nextRoomRewardToken = nil
+          releaseNextRoomReward()
         end
         return result
       end)
@@ -9261,7 +9269,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function editVital(vital, field, value)
     if vital ~= "health" and vital ~= "mana" and vital ~= "armor" then error("Unknown vital") end
-    if not M.runtimeOwners.vitalAvailable(vital) then error("Game scene does not expose vital editing") end
+    if not M.runtimeOwners.vitalAvailable(vital) then error("Vital owner is unavailable for editing") end
     if not finite(value) or value < 0 or value > 999999 then error("Vital value must be 0..999999") end
     if field ~= "current" and field ~= "max" then error("Unknown vital field") end
     local hero = CurrentRun.Hero
@@ -9413,7 +9421,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_counter" then
-      if not M.runtimeOwners.heroAvailable() then error("Game scene does not expose counter editing") end
+      if not M.runtimeOwners.heroAvailable() then error("Current Hero owner is unavailable for counter editing") end
       if params.counter ~= "spellCharge" then error("Unknown counter") end
       if not finite(params.value) or params.value < 0 or params.value > 999999 then error("Counter value must be 0..999999") end
       CurrentRun.SpellCharge = params.value
@@ -9425,7 +9433,7 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "lock_vital" then
       if params.vital ~= "health" and params.vital ~= "mana" and params.vital ~= "armor" then error("Unknown vital") end
-      if not M.runtimeOwners.vitalAvailable(params.vital) then error("Game scene does not expose vital locking") end
+      if not M.runtimeOwners.vitalAvailable(params.vital) then error("Vital owner is unavailable for locking") end
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
       if params.locked then
         local hero = CurrentRun.Hero
@@ -9468,7 +9476,7 @@ if __MacGamingTrainerV1 == nil then
         local support = statSupport()
         if not support[stat] then error("Stat is unavailable in this game build") end
         local available = statAvailableMap(support)
-        if not available[stat] then error("Stat is unavailable in the current scene") end
+        if not available[stat] then error("Stat owner is unavailable") end
         M.statTargets[stat] = value
       else
         M.statTargets[stat] = nil
@@ -9495,11 +9503,21 @@ if __MacGamingTrainerV1 == nil then
         if not validDirect and lootCatalogLoaded and not validLoot then
           error("Unsupported next room reward")
         end
+        if M.nextRoomReward ~= reward or M.nextRoomRewardToken ~= token then
+          M.nextRoomRewardRoutedRooms = {}
+          M.nextRoomRewardPatchedDoors = 0
+          M.nextRoomRewardPatchedValue = nil
+          M.nextRoomRewardPatchRoom = nil
+        end
         M.nextRoomReward = reward
         M.nextRoomRewardToken = token
       else
         M.nextRoomReward = nil
         M.nextRoomRewardToken = nil
+        M.nextRoomRewardRoutedRooms = {}
+        M.nextRoomRewardPatchedDoors = 0
+        M.nextRoomRewardPatchedValue = nil
+        M.nextRoomRewardPatchRoom = nil
       end
       M.featureErrors.nextRoomReward = nil
       reconcileDesired(true, "nextRoomReward")
@@ -9571,7 +9589,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "lock_resource" then
-      if not resourceReady() then error("Game scene does not expose resource editing") end
+      if not resourceReady() then error("Resource inventory owner is unavailable") end
       validateResource(params.resource)
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
       -- An inventory owner can accept an exact lock without AddResource or
@@ -9590,7 +9608,7 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "lock_rerolls" then
-      if not M.runtimeOwners.rerollsAvailable() then error("Game scene does not expose rerolls") end
+      if not M.runtimeOwners.rerollsAvailable() then error("Reroll owner is unavailable") end
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
       if params.locked then
         if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end

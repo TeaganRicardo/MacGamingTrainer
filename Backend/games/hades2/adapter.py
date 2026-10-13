@@ -560,7 +560,7 @@ class Hades2Adapter(GameAdapter):
             return dict(self.state)
         self.preference_dirty=True
         # Lua-owned desired state remains editable while detached and replays
-        # when a compatible scene becomes available.
+        # when the required resident owner becomes available.
         if self.runtime.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})

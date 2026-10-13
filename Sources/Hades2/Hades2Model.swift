@@ -943,7 +943,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         else { clearFeatureActivationGrace(key) }
         // Desired state belongs to the trainer profile, not to the debugger
         // connection. Keep the UI intent editable while detached and let the
-        // backend apply/replay it whenever a valid Lua scene becomes available.
+        // backend apply/replay it whenever the required resident owner becomes available.
         self[keyPath: key.modelKeyPath] = value
         send(.setDesired(feature: key.rawValue, value: value), title: "hades2.op.updateFeature", completion: completion)
     }
