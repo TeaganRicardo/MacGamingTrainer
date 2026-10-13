@@ -1,7 +1,12 @@
+import errno
+import hashlib
 import os
 import shutil
+import stat
 import tempfile
 import time
+import uuid
+from contextlib import ExitStack
 from pathlib import Path
 
 from .save_resolution import ResolvedSaveFile
@@ -127,18 +132,44 @@ class SaveRestoreTransaction:
             raise SaveRestoreError('Save destination escaped its declared root.') from error
         return destination
 
-    def _replace_file(self, source, destination, digest):
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_name = tempfile.mkstemp(prefix='.trainer-save-', dir=str(destination.parent))
-        os.close(fd)
-        temporary = Path(temp_name)
+    def _replace_file(self, source, destination, digest, *, directory_fd):
+        temporary = '.trainer-save-' + uuid.uuid4().hex
+        fd = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=directory_fd)
         try:
-            shutil.copy2(source, temporary)
-            if _sha256(temporary) != digest:
-                raise SaveRestoreError('Staged save file failed integrity verification.')
-            os.replace(temporary, destination)
+            with os.fdopen(fd, 'w+b') as staged, Path(source).open('rb') as original:
+                shutil.copyfileobj(original, staged)
+                staged.flush()
+                staged.seek(0)
+                actual = hashlib.sha256()
+                for chunk in iter(lambda: staged.read(1024 * 1024), b''):
+                    actual.update(chunk)
+                if actual.hexdigest() != digest:
+                    raise SaveRestoreError('Staged save file failed integrity verification.')
+                metadata = os.fstat(original.fileno())
+                os.fchmod(staged.fileno(), stat.S_IMODE(metadata.st_mode))
+                os.utime(staged.fileno(), ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+                if hasattr(os, 'listxattr'):
+                    # Match copy2's optional extended-metadata behavior while
+                    # keeping both endpoints bound to open files.
+                    ignored = {errno.ENOTSUP, errno.ENODATA, errno.EINVAL, errno.EPERM}
+                    try:
+                        for name in os.listxattr(original.fileno()):
+                            os.setxattr(staged.fileno(), name, os.getxattr(original.fileno(), name))
+                    except OSError as error:
+                        if error.errno not in ignored:
+                            raise
+                if hasattr(os, 'fchflags'):
+                    os.fchflags(staged.fileno(), metadata.st_flags)
+                os.fsync(staged.fileno())
+            # Both names are relative to the captured directory descriptor.
+            # Renaming or redirecting its pathname cannot redirect mutation.
+            os.replace(temporary, destination.name, src_dir_fd=directory_fd, dst_dir_fd=directory_fd)
+            os.fsync(directory_fd)
         finally:
-            temporary.unlink(missing_ok=True)
+            try:
+                os.unlink(temporary, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
 
     def _target_entries(self, verified):
         root = verified['root']
@@ -153,19 +184,40 @@ class SaveRestoreTransaction:
             hashes[key] = item['sha256']
         return entries, hashes
 
-    def _install_entries(self, entries):
-        for (root_id, relative), source, digest in entries:
-            self._replace_file(source, self._destination(root_id, relative), digest)
+    def _capture_destinations(self, keys, stack):
+        destinations = {}
+        for key in sorted(keys):
+            destination = self._destination(*key).resolve()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            stack.callback(os.close, descriptor)
+            destinations[key] = (destination, descriptor)
+        self._verify_destinations(destinations)
+        return destinations
 
-    def _delete_keys(self, keys):
-        for root_id, relative in keys:
-            destination = self._destination(root_id, relative)
-            if destination.is_symlink():
-                raise SaveRestoreError('Save deletion target cannot be a symbolic link.')
-            if destination.exists():
-                if not destination.is_file():
-                    raise SaveRestoreError('Save deletion target is not a regular file.')
-                destination.unlink()
+    def _verify_destinations(self, destinations):
+        for key, (destination, descriptor) in destinations.items():
+            current = self._destination(*key).resolve()
+            before, now = os.fstat(descriptor), current.parent.stat()
+            if current != destination or (before.st_dev, before.st_ino) != (now.st_dev, now.st_ino):
+                raise SaveRestoreError('Save transaction physical directory changed.')
+
+    def _install_entries(self, entries, destinations):
+        for key, source, digest in entries:
+            destination, descriptor = destinations[key]
+            self._replace_file(source, destination, digest, directory_fd=descriptor)
+
+    def _delete_keys(self, keys, destinations):
+        for key in keys:
+            destination, descriptor = destinations[key]
+            try:
+                metadata = os.stat(destination.name, dir_fd=descriptor, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(metadata.st_mode):
+                raise SaveRestoreError('Save deletion target is not a regular file.')
+            os.unlink(destination.name, dir_fd=descriptor)
+            os.fsync(descriptor)
 
     def _rollback_entries(self, rollback_rows, hashes):
         entries = []
@@ -188,12 +240,15 @@ class SaveRestoreTransaction:
         operation_name,
         post_install_verify=None,
         require_idle=False,
+        expected_paths=None,
     ):
         previous_snapshot_id = None
         mutation_started = False
         cleanup_rollback = True
+        destination_stack = ExitStack()
 
         try:
+            destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
             if preserve_current and rollback_rows:
                 previous = self.store.create_snapshot(
                     lambda: list(rollback_rows),
@@ -213,9 +268,12 @@ class SaveRestoreTransaction:
                     self._raise_race(False, 'Save changed before mutation could begin.')
                 self._ensure_cold_target_still_stopped(target_running)
 
+            self._verify_target_paths(expected_paths)
+            self._verify_destinations(destinations)
             mutation_started = True
-            self._install_entries(target_entries)
-            self._delete_keys(set(baseline_hashes) - set(target_hashes))
+            self._install_entries(target_entries, destinations)
+            self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations)
+            self._verify_destinations(destinations)
 
             if not self._verify_state(target_hashes):
                 raise SaveRestoreError('{} save set failed verification.'.format(operation_name))
@@ -251,8 +309,9 @@ class SaveRestoreTransaction:
             # recovery copy until rollback has completed and verified.
             cleanup_rollback = False
             try:
-                self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes))
-                self._delete_keys(set(target_hashes) - set(baseline_hashes))
+                self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes), destinations)
+                self._delete_keys(set(target_hashes) - set(baseline_hashes), destinations)
+                self._verify_destinations(destinations)
                 if not self._verify_state(baseline_hashes):
                     raise SaveRestoreError('Rollback verification failed.')
             except BaseException as rollback_error:
@@ -271,6 +330,7 @@ class SaveRestoreTransaction:
                 '{} failed; previous saves were rolled back.'.format(operation_name)
             ) from error
         finally:
+            destination_stack.close()
             if cleanup_rollback:
                 shutil.rmtree(rollback_root, ignore_errors=True)
 
@@ -292,7 +352,12 @@ class SaveRestoreTransaction:
             entries.append((key, source, _sha256(source)))
         return entries
 
-    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None):
+    def _verify_target_paths(self, expected_paths):
+        for (root_id, relative), expected in (expected_paths or {}).items():
+            if self._destination(root_id, relative).resolve() != expected:
+                raise SaveRestoreError('Save replacement physical target changed.')
+
+    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
         if post_install_verify is not None and not callable(post_install_verify):
             raise ValueError('Save replacement verifier must be callable.')
         entries = self._replacement_entries(replacements)
@@ -302,6 +367,13 @@ class SaveRestoreTransaction:
             or set(expected_hashes) != replacement_keys
         ):
             raise ValueError('Expected save hashes must cover every replacement target exactly.')
+        if expected_paths is not None:
+            if not isinstance(expected_paths, dict) or set(expected_paths) != replacement_keys:
+                raise ValueError('Expected save paths must cover every replacement target exactly.')
+            expected_paths = {key: Path(path) for key, path in expected_paths.items()}
+            if any(not path.is_absolute() for path in expected_paths.values()):
+                raise ValueError('Expected save paths must be captured absolute identities.')
+            self._verify_target_paths(expected_paths)
 
         rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
             False,
@@ -335,6 +407,7 @@ class SaveRestoreTransaction:
             operation_name='Save replacement',
             post_install_verify=post_install_verify,
             require_idle=True,
+            expected_paths=expected_paths,
         )
 
     def restore(self, snapshot_id, preserve_current=False, target_running=False):

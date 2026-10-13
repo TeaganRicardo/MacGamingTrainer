@@ -11,9 +11,21 @@ class Probe:
     def __init__(self):
         self.calls = []
 
-    def open_save_editor(self):
-        self.calls.append(("open", {}))
+    def open_save_editor(self, params):
+        self.calls.append(("open", params))
         return {"profile": "Profile1", "relativePath": "Profile1.sav"}
+
+    def save_editor_inventory(self, params):
+        self.calls.append(("inventory", params))
+        return {"sources": [], "targets": [], "defaultSource": None}
+
+    def set_save_editor_target(self, params):
+        self.calls.append(("target", params))
+        return {"target": params["target"]}
+
+    def validate_save_workspace(self, identifier):
+        if identifier != "selected-document":
+            raise ValueError("Save Editor document is no longer selected.")
 
     def query_save_editor(self, params):
         self.calls.append(("query", params))
@@ -117,7 +129,9 @@ assert probe.calls == [
 
 metadata = {row["name"]: row["timeoutSeconds"] for row in command_metadata()}
 for name in (
+    "save_editor_inventory",
     "save_editor_open",
+    "save_editor_target",
     "save_editor_query",
     "save_editor_detail",
     "save_editor_stage",
@@ -129,6 +143,34 @@ for name in (
 assert metadata["save_editor_apply"] == 30.0
 assert metadata["save_editor_query"] == 30.0
 assert metadata["save_editor_detail"] == 30.0
+
+source = {"rootId": "backup-root", "relativePath": "Profile2_Temp.sav"}
+target = {"rootId": "live-root", "relativePath": "Profile3.sav"}
+selection = {"snapshotId": "verified-backup", "source": source, "target": target}
+contract.dispatch("save_editor_inventory", {"snapshotId": "verified-backup"}, "inventory")
+contract.dispatch("save_editor_open", selection, "explicit-open")
+assert probe.calls[-2:] == [
+    ("inventory", {"snapshotId": "verified-backup"}), ("open", selection),
+]
+assert contract.dispatch("save_editor_target", {
+    "workspaceId": "selected-document", "target": target,
+}, "target")["target"] == target
+calls_before_invalid = list(probe.calls)
+for command, params in (
+    ("save_editor_open", {"snapshotId": ""}),
+    ("save_editor_open", {"source": {"rootId": "main"}}),
+    ("save_editor_open", {"source": {**source, "absolutePath": "/tmp/forged"}}),
+    ("save_editor_target", {}),
+    ("save_editor_target", {"target": target, "source": source}),
+    ("save_editor_target", {"target": target, "workspaceId": "old-document"}),
+    ("save_editor_apply", {"workspaceId": False}),
+):
+    try:
+        contract.dispatch(command, params, "invalid-selection")
+    except Exception:
+        assert probe.calls == calls_before_invalid, (command, params)
+    else:
+        raise AssertionError(("invalid editor selection reached the adapter", command, params))
 
 for command, params, presentation in (
     ("save_editor_query", {"domain": "resources", "limit": 0}, "hades2.saveEditor.error.invalidQuery"),

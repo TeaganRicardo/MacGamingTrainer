@@ -125,6 +125,8 @@ Core Save is generic infrastructure. Hades save bytes/schema/edit meaning remain
 6. verify the installed target set;
 7. on any post-mutation failure, restore and verify rollback before deleting the recovery copy.
 
+Actual temporary writes, replacements, deletions and rollback use the same captured physical directory descriptors. Rechecking a mutable pathname alone cannot establish mutation ownership. A directory rename/redirection cannot redirect a transaction into another save set; if the original namespace identity cannot be verified after recovery, retain the recovery copy and report an incomplete outcome. Content/inode replacement at a fixed selected file path remains allowed for a pinned Save Editor document.
+
 The last recoverable copy must never be destroyed merely to make an operation appear clean. If the backend dies while rollback itself is in progress and no JSON reply can be emitted, a later `CoreSaveService` instance must rediscover contained, non-symlink `transactions/.rollback-*` directories as recovery evidence. Recovery paths are user-visible evidence only: Core must not auto-restore or auto-delete them.
 
 ### Staged restore

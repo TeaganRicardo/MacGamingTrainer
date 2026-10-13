@@ -365,8 +365,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         }
     }
 
-    func makeSaveEditorModel() -> Hades2SaveEditorModel {
-        Hades2SaveEditorModel(session: backendSession)
+    func makeSaveEditorModel(snapshotID: String? = nil) -> Hades2SaveEditorModel {
+        Hades2SaveEditorModel(session: backendSession, snapshotID: snapshotID)
     }
 
     func toggleConnectionFromHost() {

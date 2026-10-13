@@ -1,8 +1,51 @@
 import struct
+import re
 from pathlib import Path
 
 from .localization import official_display_names
-from .save_document import HadesSaveError, read_hades2_save_header
+from .save_document import Hades2SaveDocument, HadesSaveError, read_hades2_save_header
+
+
+_PROFILE_FILE = re.compile(r'^(Profile[0-9]+)(?P<variant>(?:_[A-Za-z0-9_-]+|[.][A-Za-z0-9_-]+)?)\.sav$')
+
+
+def profile_file_identity(relative_path):
+    match = _PROFILE_FILE.fullmatch(Path(relative_path).name) if isinstance(relative_path, str) else None
+    if match is None or match['variant'] == '.v':
+        return None
+    return match[1], match['variant']
+
+
+def editor_files(files, *, sources):
+    """Hades owns which declared members contain editable save documents."""
+    rows = []
+    for file in files:
+        identity = profile_file_identity(file.relative_path)
+        if identity is None:
+            continue
+        profile, variant = identity
+        # Extra named variants have no assumed native role. Admit them only
+        # when the lossless Hades codec can parse their complete payload.
+        if sources:
+            try:
+                Hades2SaveDocument.load(file.source_path)
+            except (HadesSaveError, OSError, ValueError):
+                continue
+        rows.append({'rootId': file.root_id, 'relativePath': file.relative_path,
+            'profile': profile, 'variant': 'temp' if variant == '_Temp' else 'variant' if variant else 'profile'})
+    return rows
+
+
+def editor_default_source(files):
+    candidates = []
+    for root_id in sorted({row.root_id for row in files}):
+        members = tuple(row for row in files if row.root_id == root_id)
+        try:
+            _profile, relative = resolve_active_profile_save(members)
+        except ValueError:
+            continue
+        candidates.append({'rootId': root_id, 'relativePath': relative})
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _active_profile(path):

@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from .save_resolution import load_save_provider, resolve_save_files
+from .save_resolution import ResolvedSaveFile, SaveResolutionError, load_save_provider, resolve_save_files
 from .save_restore import (
     SaveBusyError,
     SaveRestorePreparationInterrupted,
@@ -101,7 +101,30 @@ class CoreSaveService:
         self._require_supported()
         return tuple(self._resolve())
 
-    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None):
+    def source_files(self, snapshot_id=None):
+        """Return declared live files or the members of one verified snapshot."""
+        self._require_supported()
+        if snapshot_id is None:
+            return self.resolved_files()
+        verified = self.store.load_verified_snapshot(snapshot_id)
+        return tuple(
+            ResolvedSaveFile(item['rootId'], item['relativePath'],
+                verified['root'] / 'files' / item['rootId'] / item['relativePath'])
+            for item in verified['manifest']['files']
+        )
+
+    def read_source_file(self, root_id, relative_path, snapshot_id=None):
+        """Read by contained identity; never accept a caller-supplied file path."""
+        self._require_supported()
+        if snapshot_id is not None:
+            return self.store.read_source_file(snapshot_id, root_id, relative_path)
+        matches = [row for row in self.resolved_files()
+            if (row.root_id, row.relative_path) == (root_id, relative_path)]
+        if len(matches) != 1:
+            raise SaveResolutionError('Save source is missing or ambiguous.')
+        return matches[0], matches[0].source_path.read_bytes()
+
+    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
         self._require_supported()
         if self._running():
             raise SaveBusyError('Game must be stopped before applying a save edit.')
@@ -109,6 +132,7 @@ class CoreSaveService:
             replacements,
             expected_hashes,
             post_install_verify=post_install_verify,
+            expected_paths=expected_paths,
         )
 
     def _staged_path(self):

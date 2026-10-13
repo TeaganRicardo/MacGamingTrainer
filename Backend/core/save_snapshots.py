@@ -415,6 +415,25 @@ class SaveSnapshotStore:
         root = self._path_for_id(snapshot_id).resolve()
         return {'root': root, 'manifest': self._read_manifest(root)}
 
+    def read_source_file(self, snapshot_id, root_id, relative_path):
+        verified = self.load_verified_snapshot(snapshot_id)
+        matches = [item for item in verified['manifest']['files']
+            if (item['rootId'], item['relativePath']) == (root_id, relative_path)]
+        if len(matches) != 1:
+            raise SaveSnapshotError('Snapshot source is missing or ambiguous.')
+        item = matches[0]
+        path = verified['root'] / 'files' / root_id / _safe_relative(relative_path)
+        if path.is_symlink() or not path.is_file():
+            raise SaveSnapshotError('Snapshot source is unsafe.')
+        try:
+            path.resolve().relative_to(verified['root'])
+        except ValueError as error:
+            raise SaveSnapshotError('Snapshot source escaped its contained storage.') from error
+        raw = path.read_bytes()
+        if len(raw) != item['size'] or hashlib.sha256(raw).hexdigest() != item['sha256']:
+            raise SaveSnapshotError('Snapshot source changed after verification.')
+        return ResolvedSaveFile(root_id, relative_path, path), raw
+
     def _row(self, root, manifest, valid, error=''):
         name = root.name
         created_at = ''

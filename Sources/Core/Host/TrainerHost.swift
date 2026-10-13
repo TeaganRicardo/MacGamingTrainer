@@ -120,7 +120,8 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             connectionPolicy.connectionChanged(connected: connected)
         }
         .sheet(isPresented: $saveManagerPresented) {
-            TrainerSaveManagerView(model: saveManager)
+            TrainerSaveManagerView(model: saveManager, managedBackupEditor:
+                Module.managedBackupEditor.map { factory in { snapshot in factory(model, snapshot) } })
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             targetMonitor.refresh()

@@ -34,6 +34,9 @@ enum Hades2Request {
     case advanceTraitLifecycle(CurrentRunTrait)
     case openSpecialChoice(source: String)
     case saveEditorOpen
+    case saveEditorInventory(snapshotID: String?)
+    case saveEditorOpenSelection(snapshotID: String?, source: [String: String], target: [String: String]?)
+    case saveEditorTarget([String: String])
     case saveEditorQuery(domain: String, search: String, offset: Int, limit: Int, path: [Any], language: String, stateFilter: String)
     case saveEditorDetail(entryID: String, language: String)
     case saveEditorStage(entryID: String, operation: String, value: Any?)
@@ -83,6 +86,9 @@ enum Hades2Request {
         case .advanceTraitLifecycle: return .advanceTraitLifecycle
         case .openSpecialChoice: return .openSpecialChoice
         case .saveEditorOpen: return .saveEditorOpen
+        case .saveEditorInventory: return .saveEditorInventory
+        case .saveEditorOpenSelection: return .saveEditorOpen
+        case .saveEditorTarget: return .saveEditorTarget
         case .saveEditorQuery: return .saveEditorQuery
         case .saveEditorDetail: return .saveEditorDetail
         case .saveEditorStage: return .saveEditorStage
@@ -184,6 +190,15 @@ enum Hades2Request {
             return Self.traitTargetParams(trait)
         case .openSpecialChoice(let source):
             return ["source": source]
+        case .saveEditorInventory(let snapshotID):
+            return snapshotID.map { ["snapshotId": $0] } ?? [:]
+        case .saveEditorOpenSelection(let snapshotID, let source, let target):
+            var params: [String: Any] = ["source": source]
+            if let snapshotID { params["snapshotId"] = snapshotID }
+            if let target { params["target"] = target }
+            return params
+        case .saveEditorTarget(let target):
+            return ["target": target]
         case .saveEditorQuery(let domain, let search, let offset, let limit, let path, let language, let stateFilter):
             return [
                 "domain": domain,
@@ -222,13 +237,16 @@ final class Hades2API {
         operation: String,
         operationArguments: [String] = [],
         announceSuccess: Bool = true,
+        saveWorkspaceID: String? = nil,
         started: (() -> Void)? = nil,
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
+        var params = request.params
+        if let saveWorkspaceID { params["workspaceId"] = saveWorkspaceID }
         session.send(
             request.command.rawValue,
-            params: request.params,
+            params: params,
             operation: operation,
             operationArguments: operationArguments,
             announceSuccess: announceSuccess,
