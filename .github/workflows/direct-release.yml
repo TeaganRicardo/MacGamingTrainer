@@ -2,15 +2,18 @@ name: Direct release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [Info.plist]
 
 permissions:
-  actions: read
+  actions: write
   contents: write
 
 jobs:
   release:
     runs-on: macos-26
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -53,6 +56,58 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
           echo "sha_short=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch convergence checks for release version push
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          remote_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          test "$remote_sha" = "$GITHUB_SHA"
+          for workflow in linux-contracts.yml build2-macos.yml module-build-matrix.yml; do
+            gh workflow run "$workflow" --ref main
+          done
+
+      - name: Await successful exact-SHA convergence
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 105); do
+            gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs" \
+              -f head_sha="$GITHUB_SHA" -f event=workflow_dispatch -f per_page=100 \
+              > "$RUNNER_TEMP/convergence-runs.json"
+            state=$(python3 - "$RUNNER_TEMP/convergence-runs.json" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          runs = json.load(open(sys.argv[1], encoding="utf-8")).get("workflow_runs", [])
+          sha = sys.argv[2]
+          required = {"Linux contracts", "Build 2 macOS", "Module build matrix"}
+          selected = {}
+          for run in runs:
+              name = run.get("name")
+              if run.get("head_sha") != sha or run.get("event") != "workflow_dispatch" or name not in required:
+                  continue
+              if name not in selected or int(run.get("run_number") or 0) > int(selected[name].get("run_number") or 0):
+                  selected[name] = run
+          if all(name in selected and selected[name].get("conclusion") == "success" for name in required):
+              print("success")
+          elif any(run.get("status") == "completed" and run.get("conclusion") != "success" for run in selected.values()):
+              print("failure")
+          else:
+              print("pending")
+          PY
+            )
+            case "$state" in
+              success) exit 0 ;;
+              failure) echo "A convergence run failed; refusing release." >&2; exit 1 ;;
+              pending) sleep 15 ;;
+              *) echo "Unknown convergence state: $state" >&2; exit 1 ;;
+            esac
+          done
+          echo "Timed out awaiting release convergence checks." >&2
+          exit 1
 
       - name: Require successful convergence dispatches on exact SHA
         id: convergence
