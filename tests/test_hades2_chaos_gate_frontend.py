@@ -56,13 +56,21 @@ func wait(_ predicate: () -> Bool) {
         }
         let host = NSHostingView(rootView: Hades2GameModule.makeContent(model: model).environmentObject(localization))
         host.frame = NSRect(x: 0, y: 0, width: 1100, height: 2400); host.layoutSubtreeIfNeeded()
-        model.setChaosGateProbability(custom: true, text: "0")
+
+        let generation = model.editGeneration
+        check(model.completeTextEdit(.chaosGate, text: "", changed: false, generation: generation).isEmpty,
+              "Native did not remain an empty optional value after focus/blur")
+        model.setChaosGateProbability(0)
         wait { !model.busy && model.chaosGateProbability == 0 }
-        model.setChaosGateProbability(custom: true, text: "25.5")
+        model.setChaosGateProbability(25.5)
         wait { !model.busy && model.chaosGateProbability == 25.5 }
-        model.setChaosGateProbability(custom: true, text: "100")
+        model.setChaosGateProbability(100)
         wait { !model.busy && model.chaosGateProbability == 100 }
-        for invalid in ["101", "-1", "nan", "inf", ""] { model.setChaosGateProbability(custom: true, text: invalid) }
+        for invalid in [101.0, -1.0, .nan, .infinity] { model.setChaosGateProbability(invalid) }
+        for invalid in ["101", "-1", "nan", "inf", ""] {
+            check(model.completeTextEdit(.chaosGate, text: invalid, generation: generation) == "100",
+                  "invalid edit did not restore the previous explicit override")
+        }
         model.refreshFromHost(); wait { !model.busy }
         check(model.chaosGateProbability == 100, "sparse status erased accepted setting")
         check(model.gatheringProbabilities[.mining] == 25, "Chaos setting erased Gathering state")
@@ -71,7 +79,7 @@ func wait(_ predicate: () -> Bool) {
         check(localization.string("hades2.chaosGate.title") == "Chaos Gate", "HealthGate English identity drift")
         let explanation = localization.string("hades2.chaosGate.explanation")
         check(explanation.contains("newly created") && explanation.contains("0%") && explanation.contains("100%"), "conditional/future-room bounds missing")
-        model.setChaosGateProbability(custom: false, text: "")
+        model.setChaosGateProbability(nil)
         wait { !model.busy && model.chaosGateProbability == nil }
         let trace = try String(contentsOf: worker.deletingPathExtension().appendingPathExtension("trace"), encoding: .utf8)
         let requests = trace.split(separator: "\n").map { try! JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }

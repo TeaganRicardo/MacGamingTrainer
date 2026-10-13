@@ -248,6 +248,29 @@ final class GenerateAction: NSObject {
   let oneShots=commands().filter { ["spawn_reward","generate_gathering","restore","save_editor_apply"].contains($0["command"] as? String ?? "") }
   check(oneShots.isEmpty, "numeric completion executed an explicit action")
 
+  // Native is an empty editable field, not a 100% draft. Editing survives a
+  // status observation; focus/blur without input must never set a preference.
+  let nativeLabel=Hades2GameModule.resolveText(key:"hades2.gathering.native",localization:localization)
+  guard let nativeField=fields(host).first(where:{$0.isEditable && $0.placeholderString==nativeLabel && $0.stringValue.isEmpty})
+  else { fatalError("Native gathering editor was not mounted as an empty field") }
+  let nativeCount=commands("set_gathering_desired").count
+  check(window.makeFirstResponder(nativeField), "Native probability field was not editable")
+  pump()
+  guard let nativeEditor=nativeField.currentEditor() as? NSTextView else { fatalError("Native editor failed to focus") }
+  model.refreshFromHost(); wait { !model.busy }
+  check(nativeEditor.string.isEmpty && nativeField.currentEditor() != nil,
+        "background observation replaced focused Native editing state")
+  window.makeFirstResponder(nil); pump()
+  check(nativeField.stringValue.isEmpty && commands("set_gathering_desired").count==nativeCount,
+        "unmodified Native focus/blur submitted an unintended 100% override")
+  _ = edit(nativeField,to:"100",in:window); pump(0.45)
+  check(commands("set_gathering_desired").count==nativeCount,
+        "Native numeric override was applied during typing")
+  window.makeFirstResponder(nil)
+  waitForCommand("set_gathering_desired",count:nativeCount+1)
+  check(model.gatheringProbabilities[.flora]==100,
+        "Native to explicit 100% was not distinguished from Native")
+
   // Each completed control action retains its accepted place in the queue.
   // A later lock cannot replace an earlier lock across the intervening unlock.
   let beforeLocks=commands("set_stat").count
