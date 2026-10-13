@@ -8048,18 +8048,6 @@ if __MacGamingTrainerV1 == nil then
     return rewardType, forceLoot
   end
 
-  local function markNextRoomRewardRoute(room)
-    if type(room) == "table" and M.nextRoomRewardToken ~= nil then
-      M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken
-    end
-  end
-
-  local function nextRoomRewardRouteMatches(room)
-    return type(room) == "table"
-      and M.nextRoomRewardToken ~= nil
-      and M.nextRoomRewardRoutedRooms[room] == M.nextRoomRewardToken
-  end
-
   local function patchOfferedNextRoomDoors()
     local wanted = M.nextRoomReward
     if wanted == nil or type(MapState) ~= "table" or type(MapState.OfferedExitDoors) ~= "table" then
@@ -8073,7 +8061,7 @@ if __MacGamingTrainerV1 == nil then
       if ordinaryDoorReward(room, native) then
         local rewardType, forceLoot = forceNextRoomReward(room, wanted)
         if rewardType ~= nil then
-          markNextRoomRewardRoute(room)
+          M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken
           patched = patched + 1
           if type(CurrentRun) == "table" and type(CurrentRun.CurrentRoom) == "table" then
             CurrentRun.CurrentRoom.OfferedRewards = CurrentRun.CurrentRoom.OfferedRewards or {}
@@ -8122,14 +8110,15 @@ if __MacGamingTrainerV1 == nil then
         if wanted == nil or type(args) ~= "table" or type(args.Door) ~= "table"
             or not ordinaryDoorReward(room, native) then return native end
         local rewardType = forceNextRoomReward(room, wanted)
-        if rewardType ~= nil then markNextRoomRewardRoute(room) end
+        if rewardType ~= nil then M.nextRoomRewardRoutedRooms[room] = M.nextRoomRewardToken end
         return rewardType or native
       end)
     end
     if not owns("StartRoom") then
       installHook("StartRoom", function(original, currentRun, currentRoom, ...)
         local result = original(currentRun, currentRoom, ...)
-        if M.nextRoomReward ~= nil and nextRoomRewardRouteMatches(currentRoom) then
+        if M.nextRoomReward ~= nil and type(currentRoom) == "table"
+            and M.nextRoomRewardRoutedRooms[currentRoom] == M.nextRoomRewardToken then
           M.lastConsumedNextRoomRewardToken = M.nextRoomRewardToken
           M.nextRoomReward = nil
           M.nextRoomRewardToken = nil
