@@ -31,7 +31,7 @@ struct Hades2GatheringPanel: View {
         return TrainerSection(title: text("hades2.gathering.title"), icon: "leaf") {
             VStack(spacing: 1) {
                 ForEach(Hades2GatheringFamily.allCases) { family in
-                    Hades2ProbabilityRow(
+                    Hades2OccurrenceSetting(
                         title: text(family.titleKey),
                         icon: icon(for: family),
                         input: Binding(

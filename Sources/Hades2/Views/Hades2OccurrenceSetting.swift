@@ -3,7 +3,7 @@ import SwiftUI
 /// Hades II's conditional occurrence setting: Native is absence of an override,
 /// while 0% and 100% are explicit desired values. A one-shot Generate action
 /// can share a row without sharing the preference's lifecycle.
-struct Hades2ProbabilityRow: View {
+struct Hades2OccurrenceSetting: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
     let icon: String
