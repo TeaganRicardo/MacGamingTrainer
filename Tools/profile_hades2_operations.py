@@ -330,6 +330,10 @@ def main():
             baseline = subprocess.run(command, env=environment, capture_output=True, text=True, check=True, timeout=600)
             report["baseline"] = json.loads(baseline.stdout)
             report["baseline"]["archive_sha256"] = hashlib.sha256(archive).hexdigest()
+    ending_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    ending_changes = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).splitlines()
+    if ending_sha != harness_sha or ending_changes != report["harness_working_tree_changes"]:
+        raise SystemExit("source/harness changed during measurement; freeze HEAD and rerun")
     report["summary"] = human_summary(report)
     encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:

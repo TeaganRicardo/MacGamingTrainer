@@ -111,15 +111,29 @@ def profile_save_queries(samples, scenes, summarize):
         for language in ('en', 'zh-CN'):
             text = root / ('sources/Text/' + language); text.mkdir(parents=True)
             (text / 'NPCData.sjson').write_text('{ Texts = [\n' + '\n'.join(
-                '{ Id = "Nemesis_%05d" DisplayName = "Chronos fixture %d" Event = "NemesisAboutChronos%05d" }' % (i, i, i)
+                '{ Id = %s DisplayName = %s Event = %s }' % (json.dumps('Nemesis_%05d' % i),
+                    json.dumps(('Chronos English profile ' if language == 'en' else '克罗诺斯 样本 ') + str(i), ensure_ascii=False),
+                    json.dumps('NemesisAboutChronos%05d' % i))
                 for i in range(scenes)) + '\n] }\n')
         def table(entries):
             return LuaTable(0, len(entries), entries)
-        state = table([('GameState', table([('TextLinesRecord', table([
-            ('NemesisAboutChronos%05d' % i, True) for i in range(scenes // 2)]))]))])
-        def query(owner):
-            result = owner.query(state, search='Chronos', offset=0, limit=50, language='zh-CN', permissions={})
-            assert result['total'] >= scenes and len(result['items']) == min(50, result['total'])
+        history_count = scenes * 5
+        records = [('NemesisAboutChronos%05d' % i, True) for i in range(scenes // 2)]
+        records += [('HistoryDialogue%05d' % i, True) for i in range(history_count)]
+        state = table([('GameState', table([('TextLinesRecord', table(records)),
+            ('RunHistory', LuaTable(history_count, 0, [(i + 1, table([('RunIndex', i)])) for i in range(history_count)]))]))])
+        queries = {
+            'warm_query': ('Chronos', 'zh-CN', 'all', scenes),
+            'warm_query_empty': ('', 'zh-CN', 'all', len(records)),
+            'warm_query_filtered': ('Chronos', 'zh-CN', 'recorded', scenes // 2),
+            'warm_query_text_en': ('English profile', 'en', 'all', scenes),
+            'warm_query_text_zh': ('克罗诺斯 样本', 'zh-CN', 'all', scenes),
+        }
+        def query(owner, definition=queries['warm_query']):
+            search, language, state_filter, expected = definition
+            result = owner.query(state, search=search, offset=0, limit=50, language=language,
+                                 permissions={}, state_filter=state_filter)
+            assert result['total'] >= expected and len(result['items']) == min(50, result['total'])
             return result
         for index in range(samples):
             # Every distinct source has the same scale and a new identity. The
@@ -128,15 +142,17 @@ def profile_save_queries(samples, scenes, summarize):
             started = time.perf_counter()
             owner = investigation.NativeDialogueInvestigation(root, expected_hash=expected)
             timings['cold_index'].append(time.perf_counter() - started)
-            started = time.perf_counter(); query(owner)
-            timings['warm_query'].append(time.perf_counter() - started)
+            for name, definition in queries.items():
+                started = time.perf_counter(); query(owner, definition)
+                timings[name].append(time.perf_counter() - started)
             with script.open('a') as stream: stream.write('-- refresh fixture %d\n' % index)
             started = time.perf_counter(); owner._refresh()
             timings['source_refresh'].append(time.perf_counter() - started)
             started = time.perf_counter(); query(owner)
             timings['warm_query_after_refresh'].append(time.perf_counter() - started)
     return {'workload': 'public NativeDialogueInvestigation with temporary bilingual scripts and static LuaTable',
-            'fixture': {'scenes': scenes, 'recorded_scenes': scenes // 2, 'query': 'Chronos', 'page_size': 50},
+            'fixture': {'scenes': scenes, 'recorded_scenes': scenes // 2, 'history_scenes': history_count,
+                        'known_scene_records': len(records), 'queries': {key: list(value[:3]) for key, value in queries.items()}, 'page_size': 50},
             'clock': 'perf_counter wall time; warm query includes owning public freshness check',
             'metrics': {name: summarize(values) for name, values in timings.items()}}
 
