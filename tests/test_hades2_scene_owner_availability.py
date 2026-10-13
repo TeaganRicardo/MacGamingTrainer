@@ -116,6 +116,74 @@ local function newTrainingRun(objectId, health, maxHealth, rerolls, fire)
   }
 end
 
+-- A durable next-room reward may arm its native routing hooks before a live
+-- Run room exists, but StartRoom itself is not proof that the reward routed.
+-- Consumption belongs to the specific room that actually received the forced
+-- reward, not to a Run-vs-Crossroads transition.
+ChooseRoomReward = function() return "RoomMoneyDrop" end
+StartRoom = function(_, room) return room end
+
+CurrentRun = nil
+CurrentHubRoom = {}
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "pre-run-token",
+  includeCatalogs = false,
+})
+StartRoom(nil, { Name = "HubTransition" })
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "pre-run StartRoom consumed an unrouted next-room reward")
+eq(M.nextRoomRewardToken, "pre-run-token",
+  "pre-run StartRoom cleared an unrouted next-room reward token")
+check(M.lastConsumedNextRoomRewardToken ~= "pre-run-token",
+  "pre-run StartRoom fabricated a next-room reward consumption receipt")
+M.dispatch("set_next_room_reward", { reward = nil, includeCatalogs = false })
+
+-- A retained CurrentRun.CurrentRoom is not the live room owner when a distinct
+-- Hub room exists. Entering that Hub room must not consume the pending reward.
+CurrentRun = newTrainingRun(90, 30, 50, 0, 0)
+local staleRunRoom = CurrentRun.CurrentRoom
+CurrentHubRoom = { Name = "CrossroadsHub" }
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "stale-run-token",
+  includeCatalogs = false,
+})
+StartRoom(CurrentRun, CurrentHubRoom)
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "distinct Hub room consumed reward armed against a stale Run room")
+eq(M.nextRoomRewardToken, "stale-run-token",
+  "distinct Hub room cleared the pending reward token")
+check(M.lastConsumedNextRoomRewardToken ~= "stale-run-token",
+  "distinct Hub room fabricated a next-room reward consumption receipt")
+eq(CurrentRun.CurrentRoom, staleRunRoom, "test fixture unexpectedly replaced stale Run room")
+M.dispatch("set_next_room_reward", { reward = nil, includeCatalogs = false })
+
+-- Once native reward routing actually forces a target room, unrelated room
+-- starts keep the one-shot pending; entering that exact target consumes it.
+CurrentHubRoom = nil
+CurrentRun = newTrainingRun(91, 30, 50, 0, 0)
+local forcedTargetRoom = { Name = "ForcedTarget" }
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "routed-token",
+  includeCatalogs = false,
+})
+local forcedReward = ChooseRoomReward(
+  CurrentRun, forcedTargetRoom, nil, nil, { Door = {} }
+)
+eq(forcedReward, "WeaponUpgrade", "native reward route did not force requested reward")
+StartRoom(CurrentRun, { Name = "DifferentRoom" })
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "unrelated StartRoom consumed a routed reward for another room")
+eq(M.nextRoomRewardToken, "routed-token",
+  "unrelated StartRoom cleared a routed reward token")
+StartRoom(CurrentRun, forcedTargetRoom)
+eq(M.nextRoomReward, nil, "forced target room did not consume next-room reward")
+eq(M.nextRoomRewardToken, nil, "forced target room did not clear next-room reward token")
+eq(M.lastConsumedNextRoomRewardToken, "routed-token",
+  "forced target room did not record the consumed token")
+
 -- GameState inventory editing in a Hero-less hub does not require native
 -- resource transaction functions. A lock records durable intent and uses the
 -- existing UpdateTimers owner until the AddResource/SpendResource hooks arrive.
