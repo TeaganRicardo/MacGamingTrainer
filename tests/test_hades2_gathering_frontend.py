@@ -116,6 +116,10 @@ func wait(_ predicate: () -> Bool) {
         check(model.errorText.key == "hades2.receipt.rerollOutcomeUnknown" && !model.canGenerateGathering(.flora), "uncertain generation lost restart instruction or stayed actionable")
         model.generateGathering(.mining)
         pump(0.1)
+        check(model.canEditDesired && !model.canGenerateGathering(.mining),
+              "missing room owner also blocked durable probability editing")
+        model.setGatheringProbability(.mining, probability: 70)
+        wait { !model.busy && model.gatheringProbabilities[.mining] == 70 }
         session.stop(suppressTerminationError: true)
         print("hades2_gathering_frontend_ok")
     }
