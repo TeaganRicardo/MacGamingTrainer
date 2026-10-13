@@ -141,4 +141,43 @@ with tempfile.TemporaryDirectory(prefix="mgt-directory-write-race-") as temporar
     assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
     assert prepared.read_bytes() == b"fixed edited source"
 
+with tempfile.TemporaryDirectory(prefix="mgt-directory-validation-race-") as temporary:
+    folder = Path(temporary)
+    saves = folder / "saves"
+    selected, other = saves / "selected", saves / "other"
+    selected.mkdir(parents=True)
+    other.mkdir()
+    target, unselected = selected / "slot.dat", other / "slot.dat"
+    target.write_bytes(b"latest pre-write baseline")
+    candidate = b"identical candidate bytes in different physical directories"
+    unselected.write_bytes(candidate)
+    prepared = folder / "prepared.dat"
+    prepared.write_bytes(candidate)
+    spec = SaveManagementSpec(roots=(SaveRootSpec("files", str(saves), ("selected/*.dat",)),),
+        provider=None, hot_backup=False, restore_policy="stoppedOnly", staged_restore=False)
+    service = CoreSaveService("validation-race", spec, folder / "data", lambda: False)
+    captured = target.resolve()
+    verified = False
+
+    def redirect_after_validating_installed_bytes():
+        global verified
+        assert target.read_bytes() == candidate
+        verified = True
+        selected.rename(saves / "departed")
+        selected.symlink_to(other, target_is_directory=True)
+
+    try:
+        service.replace_files((ResolvedSaveFile("files", "selected/slot.dat", prepared),),
+            expected_paths={('files', 'selected/slot.dat'): captured},
+            post_install_verify=redirect_after_validating_installed_bytes)
+    except SaveRollbackError as error:
+        recovery = Path(error.recovery_path)
+    else:
+        raise AssertionError("matching content hid a physical target change during validation")
+    assert verified
+    assert unselected.read_bytes() == candidate
+    assert (saves / "departed/slot.dat").read_bytes() == b"latest pre-write baseline"
+    assert (recovery / "files/files/selected/slot.dat").read_bytes() == b"latest pre-write baseline"
+    assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
+
 print("core_save_file_sources_ok")

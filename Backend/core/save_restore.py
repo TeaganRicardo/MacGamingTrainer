@@ -290,6 +290,7 @@ class SaveRestoreTransaction:
                 if not self._verify_state(target_hashes):
                     raise SaveRestoreError('Game rewrote save files immediately after hot restore.')
 
+            self._verify_destinations(destinations)
             return {
                 **success,
                 'previousSnapshotId': previous_snapshot_id,

@@ -126,7 +126,7 @@ assert names == [
     "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
-    "open_special_choice", "save_editor_open", "save_editor_query",
+    "open_special_choice", "save_editor_inventory", "save_editor_open", "save_editor_target", "save_editor_query",
     "save_editor_detail", "save_editor_stage", "save_editor_review", "save_editor_cancel",
     "save_editor_apply", "list_profiles", "save_profile", "load_profile",
     "delete_profile", "diagnostics", "export_diagnostics", "prepare", "restore",
