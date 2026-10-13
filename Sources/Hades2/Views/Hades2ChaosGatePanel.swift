@@ -25,7 +25,7 @@ struct Hades2ChaosGatePanel: View {
                 hasOverride: model.chaosGateProbability != nil,
                 enabled: model.canEditDesired,
                 probabilityLabel: text("hades2.gathering.percent"),
-                        nativeLabel: text("hades2.gathering.native"),
+                nativeLabel: text("hades2.gathering.native"),
                 resetLabel: text("hades2.gathering.restoreNative"),
                 probabilityHelp: text("hades2.chaosGate.explanation") + "\n"
                     + text("hades2.chaosGate.lifecycle"),
