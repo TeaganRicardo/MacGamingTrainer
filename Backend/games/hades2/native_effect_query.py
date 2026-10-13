@@ -9,7 +9,7 @@ from core.adapter import AdapterError
 @dataclass(frozen=True)
 class NativeQueryLibrary:
     installer: int
-    diagnostic: int
+    target_header_base: int
 
 
 def _image_uuid(path):
@@ -39,6 +39,12 @@ def prepare_native_query(transport, lldb):
         return None
     path = Path(__file__).with_name('native') / 'libMGTNativeEffectQuery.dylib'
     try:
+        game_module = transport.target.GetModuleAtIndex(0)
+        if not game_module.IsValid() or game_module.GetUUIDString() != transport.known_uuid:
+            raise ValueError('Native query game image no longer matches the verified target')
+        target_header_base = game_module.GetObjectFileHeaderAddress().GetLoadAddress(transport.target)
+        if target_header_base in (0, lldb.LLDB_INVALID_ADDRESS):
+            raise ValueError('Cannot locate the verified game image header')
         expected_uuid = _image_uuid(path)
         spec = lldb.SBFileSpec(str(path))
         module = transport.target.FindModule(spec)
@@ -67,7 +73,7 @@ def prepare_native_query(transport, lldb):
         abi = address('MGTNativeEffectQueryABI')
         library = NativeQueryLibrary(
             address('MGTNativeEffectQueryInstall'),
-            address('MGTNativeEffectQueryStatusMessage'),
+            target_header_base,
         )
         # This pure ABI query does not touch Lua or the game world. Actual
         # registration happens in execute()'s leased MainThread expression.
@@ -80,7 +86,7 @@ def prepare_native_query(transport, lldb):
         options.SetUnwindOnError(True)
         result = transport.process.GetSelectedThread().GetFrameAtIndex(0).EvaluateExpression(
             f'((unsigned int(*)()){abi})()', options)
-        if result.GetError().Fail() or result.GetValueAsUnsigned() != 2:
+        if result.GetError().Fail() or result.GetValueAsUnsigned() != 3:
             raise ValueError('Native query ABI is incompatible: ' + str(result.GetError()))
         # Never unload: Lua can retain C callbacks after detach or re-register.
         return library

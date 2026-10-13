@@ -27,8 +27,7 @@ class Options:
 class Module:
     valid = True
     uuid = UUID.hex()
-    addresses = {'MGTNativeEffectQueryABI': [100], 'MGTNativeEffectQueryInstall': [200],
-        'MGTNativeEffectQueryStatusMessage': [300]}
+    addresses = {'MGTNativeEffectQueryABI': [100], 'MGTNativeEffectQueryInstall': [200]}
     def IsValid(self): return self.valid
     def GetUUIDString(self): return self.uuid
     def FindSymbols(self, name, kind):
@@ -39,12 +38,18 @@ class Module:
 
 
 class Target:
-    def __init__(self, module): self.module = module
+    def __init__(self, module):
+        self.module = module
+        self.game_uuid, self.game_base = 'supported', 0x100000000
     def FindModule(self, spec): return self.module
+    def GetModuleAtIndex(self, index):
+        assert index == 0
+        return SimpleNamespace(IsValid=lambda: True, GetUUIDString=lambda: self.game_uuid,
+            GetObjectFileHeaderAddress=lambda: SimpleNamespace(GetLoadAddress=lambda target: self.game_base))
 
 
 class Process:
-    def __init__(self, target): self.target, self.loaded, self.options, self.abi = target, 0, None, 2
+    def __init__(self, target): self.target, self.loaded, self.options, self.abi = target, 0, None, 3
     def LoadImage(self, spec, error):
         self.loaded += 1
         self.target.module.valid = True
@@ -69,19 +74,29 @@ with tempfile.TemporaryDirectory(prefix='mgt-query-loading-') as temporary:
     target = Target(Module()); process = Process(target)
     transport = SimpleNamespace(runtime_uuid='supported', known_uuid='supported', target=target, process=process)
     with patch.object(query, '__file__', str(module_root / 'native_effect_query.py')):
-        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, 300)
+        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base)
         assert process.loaded == 0, 'Reconnect reloaded an already matched image'
         assert process.options.StopOthers is True and process.options.TryAllThreads is False
         target.module.valid = False
-        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, 300) and process.loaded == 1
-        process.abi = 1
-        try:
-            query.prepare_native_query(transport, lldb)
-        except AdapterError as error:
-            assert error.code == 'incompatible' and 'ABI' in error.diagnostic
-        else:
-            raise AssertionError('Old native library ABI was accepted')
-        process.abi = 2
+        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base) and process.loaded == 1
+        for process.abi in (1, 2):
+            try:
+                query.prepare_native_query(transport, lldb)
+            except AdapterError as error:
+                assert error.code == 'incompatible' and 'ABI' in error.diagnostic
+            else:
+                raise AssertionError('Old native library ABI was accepted')
+        process.abi = 3
+        for field, invalid in (('game_uuid', 'different-game'), ('game_base', 0), ('game_base', lldb.LLDB_INVALID_ADDRESS)):
+            original = getattr(target, field)
+            setattr(target, field, invalid)
+            try:
+                query.prepare_native_query(transport, lldb)
+            except AdapterError as error:
+                assert error.code == 'incompatible'
+            else:
+                raise AssertionError('Unverified game image authority was accepted')
+            setattr(target, field, original)
         target.module.uuid = 'wrong'
         try:
             query.prepare_native_query(transport, lldb)
