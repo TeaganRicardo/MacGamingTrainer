@@ -184,6 +184,10 @@ eq(M.nextRoomRewardToken, nil, "forced target room did not clear next-room rewar
 eq(M.lastConsumedNextRoomRewardToken, "routed-token",
   "forced target room did not record the consumed token")
 
+-- Restore the harness baseline before unrelated owner-family checks.
+CurrentRun = nil
+CurrentHubRoom = {}
+
 -- GameState inventory editing in a Hero-less hub does not require native
 -- resource transaction functions. A lock records durable intent and uses the
 -- existing UpdateTimers owner until the AddResource/SpendResource hooks arrive.
