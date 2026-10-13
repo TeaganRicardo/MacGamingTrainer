@@ -28,6 +28,7 @@ class FakeTransport:
             'attachProcess': 0.100,
             'identity': 0.020,
             'symbols': 0.030,
+            'nativeQuery': 0.400,
             'resume': 0.040,
             'total': 0.200,
         }
@@ -103,7 +104,7 @@ assert 'ConnectProfile outcome=ok' in log
 for field in (
     'total=', 'scan=', 'attachTotal=', 'createTarget=0.010s',
     'attachProcess=0.100s', 'identity=0.020s', 'symbols=0.030s',
-    'resume=0.040s', 'firstStatusTotal=', 'firstLuaBoundary=0.321s',
+    'nativeQuery=0.400s', 'resume=0.040s', 'firstStatusTotal=', 'firstLuaBoundary=0.321s',
     'jsonDecode=', 'catalogLocalization=',
 ):
     assert field in log, field
