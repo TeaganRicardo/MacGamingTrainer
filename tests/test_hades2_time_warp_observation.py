@@ -66,6 +66,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-observation-") as temporary:
     controller = ProcessTimeWarpController(driver, Path(temporary) / "helper", ["Hades II"])
     session = FakeResidentSession()
     session.payload.update(
+        capabilities={"setFeature": True},
         desiredFeatures={key: False for key in TOGGLES},
         boonRarity=store.defaults()['boonRarity'],
         **{key: store.defaults()[key] for key in MULTIPLIERS if key != 'gameSpeed'},

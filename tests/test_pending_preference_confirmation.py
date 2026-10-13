@@ -21,7 +21,8 @@ class PendingResidentSession(FakeResidentSession):
         state = {
             'status': 'ready',
             'scene': 'run',
-            'capabilities': {'setFeature': True},
+            'capabilities': {'setFeature': True, 'setStats': True},
+            'statAvailable': {'enemyHealth': True},
             'desiredFeatures': {key: False for key in TOGGLES},
             'activeFeatures': {key: False for key in TOGGLES},
             'dormantFeatures': {},

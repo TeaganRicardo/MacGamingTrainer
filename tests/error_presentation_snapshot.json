@@ -1400,9 +1400,9 @@
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
     },
-    "advance_trait_lifecycle::Trait mutation requires an active run room": {
+    "advance_trait_lifecycle::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "advance_trait_lifecycle::Trait selection belongs to a stale run": {
       "arguments": [],
@@ -1451,9 +1451,9 @@
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
     },
-    "expire_trait::Trait mutation requires an active run room": {
+    "expire_trait::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "expire_trait::Trait selection belongs to a stale run": {
       "arguments": [],
@@ -1529,9 +1529,9 @@
       "arguments": [],
       "key": "hades2.gathering.unavailable.tool"
     },
-    "open_sell_traits::Boon selling requires an active run room": {
+    "open_sell_traits::Boon selling requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.sellNeedsRunRoom"
+      "key": "hades2.error.sellNeedsTraitOwner"
     },
     "open_sell_traits::Cannot open boon sell screen while another screen is active": {
       "arguments": [],
@@ -1564,9 +1564,9 @@
       "arguments": [],
       "key": "hades2.error.choiceDataUnavailable"
     },
-    "open_special_choice::Special blessing choice requires an active run room": {
+    "open_special_choice::Special blessing choice requires a live Hero/run owner": {
       "arguments": [],
-      "key": "hades2.error.choiceNeedsRunRoom"
+      "key": "hades2.error.choiceNeedsHeroOwner"
     },
     "open_special_choice::Special blessing source data is unavailable": {
       "arguments": [],
@@ -1639,9 +1639,9 @@
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
     },
-    "remove_trait::Trait mutation requires an active run room": {
+    "remove_trait::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "remove_trait::Trait removal capability is unknown": {
       "arguments": [],
@@ -1725,9 +1725,9 @@
       "arguments": [],
       "key": "hades2.error.traitLevelNoEffect"
     },
-    "set_trait_level::Trait mutation requires an active run room": {
+    "set_trait_level::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "set_trait_level::Trait selection belongs to a stale run": {
       "arguments": [],
@@ -1776,9 +1776,9 @@
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
     },
-    "set_trait_rarity::Trait mutation requires an active run room": {
+    "set_trait_rarity::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "set_trait_rarity::Trait rarity editing is unavailable for the selected target": {
       "arguments": [],
@@ -1831,9 +1831,9 @@
       "arguments": [],
       "key": "hades2.error.traitTargetMissing"
     },
-    "set_trait_remaining_uses::Trait mutation requires an active run room": {
+    "set_trait_remaining_uses::Trait mutation requires a live trait owner": {
       "arguments": [],
-      "key": "hades2.error.traitMutationNeedsRun"
+      "key": "hades2.error.traitMutationNeedsOwner"
     },
     "set_trait_remaining_uses::Trait selection belongs to a stale run": {
       "arguments": [],

@@ -116,6 +116,78 @@ local function newTrainingRun(objectId, health, maxHealth, rerolls, fire)
   }
 end
 
+-- A durable next-room reward may arm its native routing hooks before a live
+-- Run room exists, but StartRoom itself is not proof that the reward routed.
+-- Consumption belongs to the specific room that actually received the forced
+-- reward, not to a Run-vs-Crossroads transition.
+ChooseRoomReward = function() return "RoomMoneyDrop" end
+StartRoom = function(_, room) return room end
+
+CurrentRun = nil
+CurrentHubRoom = {}
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "pre-run-token",
+  includeCatalogs = false,
+})
+StartRoom(nil, { Name = "HubTransition" })
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "pre-run StartRoom consumed an unrouted next-room reward")
+eq(M.nextRoomRewardToken, "pre-run-token",
+  "pre-run StartRoom cleared an unrouted next-room reward token")
+check(M.lastConsumedNextRoomRewardToken ~= "pre-run-token",
+  "pre-run StartRoom fabricated a next-room reward consumption receipt")
+M.dispatch("set_next_room_reward", { reward = nil, includeCatalogs = false })
+
+-- A retained CurrentRun.CurrentRoom is not the live room owner when a distinct
+-- Hub room exists. Entering that Hub room must not consume the pending reward.
+CurrentRun = newTrainingRun(90, 30, 50, 0, 0)
+local staleRunRoom = CurrentRun.CurrentRoom
+CurrentHubRoom = { Name = "CrossroadsHub" }
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "stale-run-token",
+  includeCatalogs = false,
+})
+StartRoom(CurrentRun, CurrentHubRoom)
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "distinct Hub room consumed reward armed against a stale Run room")
+eq(M.nextRoomRewardToken, "stale-run-token",
+  "distinct Hub room cleared the pending reward token")
+check(M.lastConsumedNextRoomRewardToken ~= "stale-run-token",
+  "distinct Hub room fabricated a next-room reward consumption receipt")
+eq(CurrentRun.CurrentRoom, staleRunRoom, "test fixture unexpectedly replaced stale Run room")
+M.dispatch("set_next_room_reward", { reward = nil, includeCatalogs = false })
+
+-- Once native reward routing actually forces a target room, unrelated room
+-- starts keep the one-shot pending; entering that exact target consumes it.
+CurrentHubRoom = nil
+CurrentRun = newTrainingRun(91, 30, 50, 0, 0)
+local forcedTargetRoom = { Name = "ForcedTarget" }
+M.dispatch("set_next_room_reward", {
+  reward = "WeaponUpgrade",
+  token = "routed-token",
+  includeCatalogs = false,
+})
+local forcedReward = ChooseRoomReward(
+  CurrentRun, forcedTargetRoom, nil, nil, { Door = {} }
+)
+eq(forcedReward, "WeaponUpgrade", "native reward route did not force requested reward")
+StartRoom(CurrentRun, { Name = "DifferentRoom" })
+eq(M.nextRoomReward, "WeaponUpgrade",
+  "unrelated StartRoom consumed a routed reward for another room")
+eq(M.nextRoomRewardToken, "routed-token",
+  "unrelated StartRoom cleared a routed reward token")
+StartRoom(CurrentRun, forcedTargetRoom)
+eq(M.nextRoomReward, nil, "forced target room did not consume next-room reward")
+eq(M.nextRoomRewardToken, nil, "forced target room did not clear next-room reward token")
+eq(M.lastConsumedNextRoomRewardToken, "routed-token",
+  "forced target room did not record the consumed token")
+
+-- Restore the harness baseline before unrelated owner-family checks.
+CurrentRun = nil
+CurrentHubRoom = {}
+
 -- GameState inventory editing in a Hero-less hub does not require native
 -- resource transaction functions. A lock records durable intent and uses the
 -- existing UpdateTimers owner until the AddResource/SpendResource hooks arrive.
@@ -157,9 +229,31 @@ do
     resource = "Money", locked = true, includeCatalogs = false,
   })
   check(relocked.moneyLocked, "missing Money UI prevented resource lock ownership")
+  M.dispatch("set_resource", {
+    resource = "Money", amount = 19, requestId = "resource-without-ui",
+    includeCatalogs = false,
+  })
+  eq(GameState.Resources.Money, 19,
+    "Money inventory mutation was incorrectly owned by its optional UI observer")
   M.dispatch("lock_resource", { resource = "Money", locked = false, includeCatalogs = false })
   UpdateMoneyUI = moneyDisplay
 end
+
+-- GameState tables alone do not prove that a save/profile owner is loaded.
+-- Main-menu presentation may retain containers, but without a Run or Hub scope
+-- there is no current resource inventory owner and mutation must fail closed.
+CurrentHubRoom = nil
+local menuResource = status()
+eq(menuResource.scene, "main_menu", "ownerless resource scene identity")
+check(not menuResource.capabilities.setResource,
+  "main menu fabricated a resource inventory owner from container tables alone")
+M.resourceLocks.Money = 19
+GameState.Resources.Money = 1
+UpdateTimers(0)
+eq(GameState.Resources.Money, 1,
+  "staged resource lock bypassed the missing inventory owner in main menu")
+M.resourceLocks.Money = nil
+CurrentHubRoom = {}
 
 -- Crossroads can expose global game functions while no run Hero exists.
 -- Durable global hooks should arm immediately instead of waiting for the
@@ -220,7 +314,7 @@ end
 
 -- A training Hero can own health/elements/rerolls/movement even while an
 -- unrelated mana field is absent. Each durable family must follow its actual
--- owner rather than the all-purpose ready() predicate.
+-- owner rather than any aggregate scene-readiness predicate.
 -- Replay-safe lock targets can be staged before any Hero exists. They must
 -- automatically remount on the future Hero without another Host round trip.
 local deferredLocks = M.dispatchBatch({
@@ -245,10 +339,47 @@ local training = status()
 eq(training.scene, "crossroads", "training scene identity")
 eq(training.status, "ready", "training owner must be operational")
 check(training.capabilities.setHealth, "health editor unavailable with valid Hero health")
+local healthDisplay = UpdateHealthUI
+UpdateHealthUI = nil
+local healthWithoutUI = status()
+check(healthWithoutUI.capabilities.setHealth,
+  "health owner was incorrectly coupled to its optional UI observer")
+M.dispatch("set_vital", {
+  vital = "health", field = "current", value = 39, includeCatalogs = false,
+})
+eq(CurrentRun.Hero.Health, 39, "health mutation failed without optional UI observer")
+M.dispatch("set_vital", {
+  vital = "health", field = "current", value = 40, includeCatalogs = false,
+})
+UpdateHealthUI = healthDisplay
 check(not training.capabilities.setMana, "missing Mana exposed a writable Mana control")
 check(training.capabilities.setRerolls, "run counter owner unavailable in training")
 check(training.capabilities.setSpellCharge, "Hero spell charge unavailable in training")
-check(not training.capabilities.activeRun, "incomplete Hero exposed active-run transactions")
+check(training.capabilities.traitInventory,
+  "Hero trait inventory owner was hidden by the Crossroads label")
+check(training.capabilities.traitMutation,
+  "Hero trait mutation owner was hidden by the Crossroads label")
+check(training.capabilities.acquireExactReward,
+  "exact Trait acquisition was incorrectly coupled to Room/Reward Context")
+check(not training.capabilities.spawnReward,
+  "room-backed reward spawning escaped without a current Room owner")
+check(training.capabilities.activeRun == nil,
+  "aggregate activeRun capability survived owner decomposition")
+check(training.currentRunTraitsReason ~= "noActiveRun",
+  "trait inventory still depends on an adventure-run partition")
+local trainingMenuOk, trainingMenuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
+check(not trainingMenuOk and tostring(trainingMenuError):find("missing OpenSellTraitMenu", 1, true) ~= nil,
+  "native sell menu was refused by scene partition instead of its own native prerequisites")
+
+-- A room is current by object identity, not by a Crossroads-vs-run label.
+-- If the hub pointer and CurrentRun.CurrentRoom identify the same room owner,
+-- room/reward operations can expose their own capability.
+CurrentHubRoom = CurrentRun.CurrentRoom
+local sharedRoomOwner = status()
+check(sharedRoomOwner.capabilities.roomContext,
+  "current room owner was hidden because CurrentHubRoom exists")
+check(sharedRoomOwner.capabilities.spawnReward,
+  "reward context was hidden despite a resolvable room/Hero/map owner")
 CurrentHubRoom = nil
 -- The resident applies targets on the lifecycle tick, before any UI edit.
 UpdateTimers(0)
@@ -295,9 +426,30 @@ local rerollState = M.dispatch("lock_rerolls", {
 })
 check(rerollState.rerollsLocked, "reroll lock was rejected by unrelated mana state")
 
--- A complete adventure owner enables native active-run transactions.
+-- A live adventure Run/Room/Hero is one owner even if an unrelated vital
+-- is momentarily absent. A native menu can then independently reject missing
+-- *native menu APIs*, not the entire live run because Mana is unavailable.
+local runWithoutMana = status()
+eq(runWithoutMana.scene, "run", "adventure owner scene identity")
+check(runWithoutMana.capabilities.traitInventory,
+  "trait inventory owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.traitMutation,
+  "trait mutation owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.roomContext,
+  "room owner was incorrectly gated on missing Mana")
+check(runWithoutMana.capabilities.activeRun == nil,
+  "aggregate activeRun capability survived owner decomposition")
+check(runWithoutMana.currentRunTraitsReason ~= "noActiveRun",
+  "trait inventory was incorrectly gated on missing Mana")
+local menuOk, menuError = pcall(M.dispatch, "open_sell_traits", { includeCatalogs = false })
+check(not menuOk and tostring(menuError):find("missing OpenSellTraitMenu", 1, true) ~= nil,
+  "native sell menu was refused by an unrelated vital rather than its own missing native API")
+
+-- Filling in Mana changes only Mana capability, not the already-live run owner.
 CurrentRun.Hero.Mana, CurrentRun.Hero.MaxMana = 20, 50
-check(status().capabilities.activeRun, "complete run owner hidden")
+local afterMana = status()
+check(afterMana.capabilities.traitInventory and afterMana.capabilities.roomContext,
+  "unrelated Mana owner changed existing trait/room owners")
 
 -- Losing the Hero must release Hero-owned runtime state without erasing durable
 -- intent. Global session hooks remain usable in the Crossroads.

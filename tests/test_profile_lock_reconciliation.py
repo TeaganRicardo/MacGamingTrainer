@@ -20,7 +20,17 @@ def default_runtime_state():
     state = {
         'status': 'ready',
         'scene': 'run',
-        'capabilities': {'setFeature': True},
+        'capabilities': {
+            'setFeature': True,
+            'setHealth': True,
+            'setMana': True,
+            'setArmor': True,
+            'setResource': True,
+            'setRerolls': True,
+            'setStats': True,
+            'setElements': True,
+        },
+        'statAvailable': {'grasp': True, 'enemyHealth': True},
         'desiredFeatures': {key: bool(defaults[key]) for key in TOGGLES},
         'activeFeatures': {key: False for key in TOGGLES},
         'dormantFeatures': {},
