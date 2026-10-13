@@ -47,9 +47,8 @@ struct Hades2ProbabilityRow: View {
                     Button(action: onReset) {
                         Image(systemName: "arrow.uturn.backward")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(theme.accent)
+                            .foregroundStyle(.secondary)
                             .frame(width: 26, height: 24)
-                            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: theme.compactCornerRadius))
                     }
                     .buttonStyle(.plain)
                     .disabled(!enabled)
