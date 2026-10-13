@@ -59,6 +59,9 @@ wait { !client.hasInFlightRequest && client.queuedRequestCount == 0 }
 precondition(applied >= count * 3 + 6)
 precondition((payload["currentRunTraits"] as? [Any])?.count == Int(ProcessInfo.processInfo.environment["MGT_PROFILE_TRAITS"]!))
 precondition((payload["resources"] as? [Any])?.count ?? 0 >= 2)
+let resources = payload["resources"] as! [[String: Any]]
+precondition(resources.allSatisfy { ($0["name"] as? String)?.hasPrefix("Synthetic ") == true },
+    "localization escaped the temporary source fixture")
 session.stop()
 // Drain diagnostic delivery already enqueued before termination.
 RunLoop.current.run(until: Date().addingTimeInterval(0.03))

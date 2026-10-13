@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Private offline worker: real owners, synthetic native functions/temp storage."""
-import collections
+from dataclasses import replace
 import importlib.util
 import json
 import logging
@@ -126,6 +126,21 @@ def backend():
     from core import server
     from hades2_resident_session_fakes import FakeTimeWarpController
     temporary = Path(os.environ['MGT_PROFILE_TEMP'])
+    # The production localization owner also reads installed content by
+    # default. Pin its input to a finite synthetic bilingual source tree.
+    from games.hades2 import localization
+    game = temporary / 'fixture-game.app'
+    identifiers = {'MetaCurrency', 'Money', 'ZeusUpgrade', 'Boon'}
+    identifiers.update('ProfileBoon%04d' % i for i in range(1, int(os.environ['MGT_PROFILE_CATALOG']) + 1))
+    identifiers.update('ProfileResource%04d' % i for i in range(1, int(os.environ['MGT_PROFILE_RESOURCES'])))
+    for language in ('en', 'zh-CN'):
+        text = game / ('Contents/Resources/Content/Game/Text/' + language)
+        text.mkdir(parents=True)
+        (text / ('profile.' + language + '.sjson')).write_text('{ Texts = [\n' + '\n'.join(
+            '{ Id = %s DisplayName = %s }' % (json.dumps(key), json.dumps('Synthetic ' + key))
+            for key in sorted(identifiers)) + '\n] }\n', encoding='utf-8')
+    localization.GAME_SPEC = replace(localization.GAME_SPEC, app_bundle_path=game,
+        executable_path=game / 'Contents/MacOS/OfflineFixture', save_path=temporary / 'unused-saves')
     preparation.DATA = temporary / 'preferences'
     preparation.DATA.mkdir()
     transport = Hades2LuaTransport()
