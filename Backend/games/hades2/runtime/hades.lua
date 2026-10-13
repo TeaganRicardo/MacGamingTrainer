@@ -9620,13 +9620,13 @@ if __MacGamingTrainerV1 == nil then
       return state(params.includeCatalogs)
     end
     if command == "set_resource" then
-      if not resourceReady() then error("Game scene does not expose resource editing") end
+      if not resourceReady() then error("Resource inventory owner is unavailable") end
       validateResource(params.resource)
       integer(params.amount, 0)
       return actionLedger.run(command, params, function() editResource(params.resource, params.amount) end)
     end
     if command == "set_rerolls" then
-      if not M.runtimeOwners.rerollsAvailable() then error("Game scene does not expose rerolls") end
+      if not M.runtimeOwners.rerollsAvailable() then error("Reroll owner is unavailable") end
       integer(params.amount, 0)
       requireFunctions("reroll editing", { "UpdateRerollUI", "ShowRerollUI" })
       if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
