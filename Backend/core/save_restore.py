@@ -186,11 +186,15 @@ class SaveRestoreTransaction:
 
     def _capture_destinations(self, keys, stack):
         destinations = {}
+        directories = {}
         for key in sorted(keys):
             destination = self._destination(*key).resolve()
             destination.parent.mkdir(parents=True, exist_ok=True)
-            descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-            stack.callback(os.close, descriptor)
+            descriptor = directories.get(destination.parent)
+            if descriptor is None:
+                descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                stack.callback(os.close, descriptor)
+                directories[destination.parent] = descriptor
             destinations[key] = (destination, descriptor)
         self._verify_destinations(destinations)
         return destinations
@@ -315,6 +319,7 @@ class SaveRestoreTransaction:
                 self._verify_destinations(destinations)
                 if not self._verify_state(baseline_hashes):
                     raise SaveRestoreError('Rollback verification failed.')
+                self._verify_destinations(destinations)
             except BaseException as rollback_error:
                 if not isinstance(rollback_error, Exception):
                     raise

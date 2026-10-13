@@ -115,6 +115,8 @@ Core Save is generic infrastructure. Hades save bytes/schema/edit meaning remain
 - hash before/after copy and verify manifest/file set;
 - corrupt snapshots remain visible as invalid inventory rows so users can reveal/delete them deliberately.
 
+Reading an editor source crosses the declared/verified file identity through a captured contained directory chain and a regular-file handle. A path checked earlier cannot authorize following a later symbolic link; managed-source bytes must still match the verified manifest after the read.
+
 ### Restore
 
 1. verify target snapshot;

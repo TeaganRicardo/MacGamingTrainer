@@ -7,7 +7,7 @@ import time
 import uuid
 from pathlib import Path
 
-from .save_resolution import ResolvedSaveFile, SaveResolutionError, load_save_provider, resolve_save_files
+from .save_resolution import ResolvedSaveFile, SaveResolutionError, load_save_provider, read_resolved_save_file, resolve_save_files
 from .save_restore import (
     SaveBusyError,
     SaveRestorePreparationInterrupted,
@@ -122,7 +122,8 @@ class CoreSaveService:
             if (row.root_id, row.relative_path) == (root_id, relative_path)]
         if len(matches) != 1:
             raise SaveResolutionError('Save source is missing or ambiguous.')
-        return matches[0], matches[0].source_path.read_bytes()
+        root = next(root for root in self.spec.roots if root.id == root_id)
+        return matches[0], read_resolved_save_file(root.path, matches[0])
 
     def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
         self._require_supported()

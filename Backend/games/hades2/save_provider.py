@@ -16,7 +16,7 @@ def profile_file_identity(relative_path):
     return match[1], match['variant']
 
 
-def editor_files(files, *, sources):
+def editor_files(files, *, source_bytes=None):
     """Hades owns which declared members contain editable save documents."""
     rows = []
     for file in files:
@@ -26,9 +26,9 @@ def editor_files(files, *, sources):
         profile, variant = identity
         # Extra named variants have no assumed native role. Admit them only
         # when the lossless Hades codec can parse their complete payload.
-        if sources:
+        if source_bytes is not None:
             try:
-                Hades2SaveDocument.load(file.source_path)
+                Hades2SaveDocument.from_bytes(source_bytes(file))
             except (HadesSaveError, OSError, ValueError):
                 continue
         rows.append({'rootId': file.root_id, 'relativePath': file.relative_path,

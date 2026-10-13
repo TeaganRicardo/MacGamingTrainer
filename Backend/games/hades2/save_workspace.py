@@ -159,8 +159,9 @@ class Hades2SaveWorkspace:
     @classmethod
     def inventory(cls, save_service, snapshot_id=None):
         files = save_service.source_files(snapshot_id)
-        sources = editor_files(files, sources=True)
-        targets = editor_files(save_service.resolved_files(), sources=False)
+        sources = editor_files(files, source_bytes=lambda file: save_service.read_source_file(
+            file.root_id, file.relative_path, snapshot_id)[1])
+        targets = editor_files(save_service.resolved_files())
         default = editor_default_source(files)
         if default not in [{"rootId": row["rootId"], "relativePath": row["relativePath"]} for row in sources]:
             default = None

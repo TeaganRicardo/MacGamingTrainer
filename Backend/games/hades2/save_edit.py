@@ -66,7 +66,7 @@ class Hades2SaveEditSession:
         if not isinstance(identity, dict) or set(identity) != {"rootId", "relativePath"}:
             raise ValueError("Save Editor target must identify a declared physical file.")
         files = save_service.resolved_files()
-        allowed = editor_files(files, sources=False)
+        allowed = editor_files(files)
         if identity not in [{"rootId": row["rootId"], "relativePath": row["relativePath"]} for row in allowed]:
             raise ValueError("Save Editor target is missing or unsupported.")
         row = next(row for row in files if (row.root_id, row.relative_path)
@@ -93,7 +93,7 @@ class Hades2SaveEditSession:
             source["snapshotId"] = snapshot_id
         source.update(identity)
         if target is None and default_target:
-            targets = editor_files(save_service.resolved_files(), sources=False)
+            targets = editor_files(save_service.resolved_files())
             available = [{"rootId": row["rootId"], "relativePath": row["relativePath"]} for row in targets]
             resolved_target = cls._resolve_target(save_service, identity) if identity in available else None
         elif target is not None:

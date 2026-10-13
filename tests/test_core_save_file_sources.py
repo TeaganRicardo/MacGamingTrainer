@@ -1,5 +1,6 @@
 """Generic verified file reads and captured physical replacement identities."""
 import os
+import resource
 import sys
 import tempfile
 from pathlib import Path
@@ -8,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
 from core.save_resolution import ResolvedSaveFile, SaveResolutionError
+import core.save_resolution as resolution_module
 from core.save_service import CoreSaveService
 from core.save_snapshots import SaveSnapshotError
 import core.save_restore as restore_module
@@ -178,6 +180,119 @@ with tempfile.TemporaryDirectory(prefix="mgt-directory-validation-race-") as tem
     assert unselected.read_bytes() == candidate
     assert (saves / "departed/slot.dat").read_bytes() == b"latest pre-write baseline"
     assert (recovery / "files/files/selected/slot.dat").read_bytes() == b"latest pre-write baseline"
+    assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
+
+with tempfile.TemporaryDirectory(prefix="mgt-save-directory-budget-") as temporary:
+    folder = Path(temporary)
+    saves = folder / "saves"
+    saves.mkdir()
+    for index in range(64):
+        (saves / f"slot-{index}.dat").write_bytes(f"original-{index}".encode())
+    spec = SaveManagementSpec(roots=(SaveRootSpec("files", str(saves), ("*.dat",)),),
+        provider=None, hot_backup=False, restore_policy="stoppedOnly", staged_restore=False)
+    service = CoreSaveService("many-files-one-directory", spec, folder / "data", lambda: False)
+    snapshot = service.backup()["id"]
+    for path in saves.iterdir():
+        path.write_bytes(b"newer contents")
+    limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (32, limits[1]))
+        result = service.restore(snapshot, preserve_current=False)
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, limits)
+    assert result["restored"] is True
+    assert all((saves / f"slot-{index}.dat").read_bytes() == f"original-{index}".encode() for index in range(64))
+
+with tempfile.TemporaryDirectory(prefix="mgt-source-read-identity-") as temporary:
+    folder = Path(temporary)
+    saves = folder / "saves"
+    saves.mkdir()
+    target = saves / "slot.dat"
+    target.write_bytes(b"authorized regular source")
+    other = folder / "unselected.dat"
+    other.write_bytes(b"unselected fixture bytes")
+    spec = SaveManagementSpec(roots=(SaveRootSpec("files", str(saves), ("*.dat",)),),
+        provider=None, hot_backup=False, restore_policy="stoppedOnly", staged_restore=False)
+    service = CoreSaveService("source-read-identity", spec, folder / "data", lambda: False)
+    snapshot = service.backup()["id"]
+    for snapshot_id in (None, snapshot):
+        source_path = target if snapshot_id is None else Path(service.folder(snapshot)) / "files/files/slot.dat"
+        real_open = resolution_module.os.open
+        changed = False
+
+        def redirect_source_before_open(path, flags, *args, **options):
+            global changed
+            if Path(path).name == "slot.dat" and not changed:
+                changed = True
+                source_path.unlink()
+                source_path.symlink_to(other)
+            return real_open(path, flags, *args, **options)
+
+        resolution_module.os.open = redirect_source_before_open
+        try:
+            try:
+                service.read_source_file("files", "slot.dat", snapshot_id)
+            except (SaveResolutionError, SaveSnapshotError):
+                pass
+            else:
+                raise AssertionError("source read followed a replacement symbolic link")
+        finally:
+            resolution_module.os.open = real_open
+            source_path.unlink()
+            source_path.write_bytes(b"authorized regular source")
+        assert changed, "source identity case did not reach its actual open boundary"
+        assert other.read_bytes() == b"unselected fixture bytes"
+
+with tempfile.TemporaryDirectory(prefix="mgt-rollback-final-directory-") as temporary:
+    folder = Path(temporary)
+    saves = folder / "saves"
+    selected, other = saves / "selected", saves / "other"
+    selected.mkdir(parents=True)
+    other.mkdir()
+    target, unselected = selected / "slot.dat", other / "slot.dat"
+    baseline = b"identical baseline bytes in distinct directories"
+    target.write_bytes(baseline)
+    unselected.write_bytes(baseline)
+    prepared = folder / "prepared.dat"
+    prepared.write_bytes(b"edited candidate")
+    spec = SaveManagementSpec(roots=(SaveRootSpec("files", str(saves), ("selected/*.dat",)),),
+        provider=None, hot_backup=False, restore_policy="stoppedOnly", staged_restore=False)
+    service = CoreSaveService("rollback-final-directory", spec, folder / "data", lambda: False)
+    captured = target.resolve()
+    real_hash = restore_module._sha256
+    rollback_requested = False
+    changed = False
+
+    def fail_after_install():
+        global rollback_requested
+        rollback_requested = True
+        raise OSError("fixture requested rollback after install")
+
+    def redirect_after_final_rollback_read(path):
+        global changed
+        digest = real_hash(path)
+        if rollback_requested and not changed and Path(path) == target:
+            assert target.read_bytes() == baseline
+            changed = True
+            selected.rename(saves / "departed")
+            selected.symlink_to(other, target_is_directory=True)
+        return digest
+
+    restore_module._sha256 = redirect_after_final_rollback_read
+    try:
+        try:
+            service.replace_files((ResolvedSaveFile("files", "selected/slot.dat", prepared),),
+                expected_paths={('files', 'selected/slot.dat'): captured}, post_install_verify=fail_after_install)
+        except SaveRollbackError as error:
+            recovery = Path(error.recovery_path)
+        else:
+            raise AssertionError("rollback cleanup proceeded after its directory identity changed")
+    finally:
+        restore_module._sha256 = real_hash
+    assert changed, "directory change did not reach the final rollback read"
+    assert unselected.read_bytes() == baseline
+    assert (saves / "departed/slot.dat").read_bytes() == baseline
+    assert (recovery / "files/files/selected/slot.dat").read_bytes() == baseline
     assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
 
 print("core_save_file_sources_ok")

@@ -9,7 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
-from .save_resolution import ResolvedSaveFile
+from .save_resolution import ResolvedSaveFile, SaveResolutionError, read_resolved_save_file
 
 _SCHEMA_VERSION = 1
 _STAGING_MIN_AGE_SECONDS = 24 * 60 * 60
@@ -429,10 +429,14 @@ class SaveSnapshotStore:
             path.resolve().relative_to(verified['root'])
         except ValueError as error:
             raise SaveSnapshotError('Snapshot source escaped its contained storage.') from error
-        raw = path.read_bytes()
+        source = ResolvedSaveFile(root_id, relative_path, path)
+        try:
+            raw = read_resolved_save_file(verified['root'], source)
+        except SaveResolutionError as error:
+            raise SaveSnapshotError('Snapshot source is missing or unsafe.') from error
         if len(raw) != item['size'] or hashlib.sha256(raw).hexdigest() != item['sha256']:
             raise SaveSnapshotError('Snapshot source changed after verification.')
-        return ResolvedSaveFile(root_id, relative_path, path), raw
+        return source, raw
 
     def _row(self, root, manifest, valid, error=''):
         name = root.name
