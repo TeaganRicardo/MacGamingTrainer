@@ -5,6 +5,23 @@ import Darwin
 import Glibc
 #endif
 
+/// Body-free opt-in records carried by the existing diagnostic callback.
+/// Local intervals can overlap; they do not measure view rendering or FPS.
+struct BackendOperationProfile {
+    static let enabled = ProcessInfo.processInfo.environment["MGT_PROFILE_OPERATIONS"] == "1"
+    static func now() -> TimeInterval { ProcessInfo.processInfo.systemUptime }
+    static func emit(_ phase: String, id: String, command: String = "", seconds: @autoclosure () -> TimeInterval,
+                     bytes: Int? = nil, log: ((String) -> Void)?) {
+        guard enabled, let log else { return }
+        var record: [String: Any] = ["schema": 1, "component": "host", "phase": phase,
+            "request_id": id, "command": command, "seconds": seconds()]
+        if let bytes { record["reply_bytes"] = bytes }
+        guard let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return }
+        log("OperationProfile " + text)
+    }
+}
+
 /// Game-agnostic JSONL worker process. It knows nothing about any specific game or
 /// trainer command schema; game modules own request semantics and state decode.
 final class BackendProcess {
@@ -14,6 +31,7 @@ final class BackendProcess {
     private var errorOutput: FileHandle?
     private let readQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-process")
     private var buffer = Data()
+    private var profileLog: ((String) -> Void)?
 
     private let executableURL: URL
     private let argumentsPrefix: [String]
@@ -59,9 +77,11 @@ final class BackendProcess {
         onMessage: @escaping ([String: Any]) -> Void,
         onProtocolError: @escaping (String) -> Void,
         onStderr: @escaping (String) -> Void,
-        onTermination: @escaping (Int32) -> Void
+        onTermination: @escaping (Int32) -> Void,
+        onProfile: ((String) -> Void)? = nil
     ) throws {
         guard process == nil else { return }
+        profileLog = onProfile
         readQueue.sync { buffer.removeAll(keepingCapacity: false) }
 
         let task = Process()
@@ -178,11 +198,22 @@ final class BackendProcess {
                 continue
             }
             do {
+                let decodeStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
                 guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any] else {
                     reportProtocolError("后端 stdout 包含非对象 JSON。", callback: onProtocolError)
                     continue
                 }
-                DispatchQueue.main.async { onMessage(object) }
+                let decodedAt = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
+                let log = profileLog
+                DispatchQueue.main.async {
+                    if BackendOperationProfile.enabled, let id = object["id"] as? String {
+                        BackendOperationProfile.emit("host.payload_decode", id: id,
+                            seconds: decodedAt - decodeStarted, bytes: line.count + 1, log: log)
+                        BackendOperationProfile.emit("host.reply_delivery_queue", id: id,
+                            seconds: BackendOperationProfile.now() - decodedAt, log: log)
+                    }
+                    onMessage(object)
+                }
             } catch {
                 reportProtocolError("后端 stdout 包含无效 JSON：\(error.localizedDescription)", callback: onProtocolError)
             }

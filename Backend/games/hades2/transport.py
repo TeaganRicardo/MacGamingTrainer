@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, subprocess.check_output(['/usr/bin/xcrun','lldb','-P'], text=True, shell=False).strip())
 import lldb
+from core.operation_profile import profiled
 from core.adapter import AdapterError as TransportError
 
 from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
@@ -144,6 +145,7 @@ class Hades2LuaTransport:
             if error.Fail() or actual!=expected:raise TransportError('incompatible','运行中的游戏函数校验失败：'+name)
         self.addresses[name]=address;return address
 
+    @profiled("debugger.drain")
     def drain(self):
         event=lldb.SBEvent()
         while self.listener.GetNextEvent(event): pass
@@ -162,6 +164,7 @@ class Hades2LuaTransport:
             time.sleep(.005)
         raise TransportError('process_timeout','游戏进程状态切换超时。')
 
+    @profiled("debugger.stop")
     def stop(self, deadline):
         self.drain()
         state=self.process.GetState()
@@ -181,6 +184,7 @@ class Hades2LuaTransport:
             raise TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=str(exc)) from exc
         return self.wait_state((lldb.eStateStopped,),deadline)
 
+    @profiled("debugger.resume")
     def resume(self, deadline, breakpoint_expected=False):
         self.drain()
         if self.process.GetState()==lldb.eStateRunning:return
@@ -208,6 +212,7 @@ class Hades2LuaTransport:
         if error.Fail() or actual!=self.focus_original:raise TransportError('restore_failed','后台暂停标志恢复校验失败。')
         self.focus_original=None
 
+    @profiled("debugger.boundary")
     def boundary(self, timeout=3):
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
@@ -248,6 +253,7 @@ class Hades2LuaTransport:
         finally:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 
+    @profiled("debugger.execute")
     def execute(self, source, *, expression_timeout_seconds=2.0):
         started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0
         try:

@@ -6,10 +6,12 @@ exposes a small JSONL RPC surface over stdio.
 """
 from __future__ import annotations
 
+import logging
 import sys
 import traceback
 from pathlib import Path
 
+from core.operation_profile import enabled
 from core.adapter import AdapterError
 from core.process_time_warp import ProcessTimeWarpController
 from core.sidecar import serve_jsonl_requests
@@ -162,6 +164,8 @@ def serve_requests(input_stream, output_stream, worker):
 
 
 def main():
+    if enabled():
+        logging.basicConfig(level=logging.INFO)
     worker = Hades2LLDBWorker()
     try:
         serve_requests(sys.stdin, sys.stdout, worker)

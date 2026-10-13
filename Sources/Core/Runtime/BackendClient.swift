@@ -60,6 +60,7 @@ struct BackendReply {
 final class BackendClient {
     private struct Request {
         let id: String
+        let admittedAt: TimeInterval
         let command: String
         let params: [String: Any]
         let operation: String
@@ -133,7 +134,8 @@ final class BackendClient {
             onMessage: { [weak self] message in self?.receive(message) },
             onProtocolError: { [weak self] message in self?.protocolViolation(message) },
             onStderr: { [weak self] message in self?.receiveStderr(message) },
-            onTermination: { [weak self] status in self?.terminated(status) }
+            onTermination: { [weak self] status in self?.terminated(status) },
+            onProfile: { [weak self] record in self?.onLog?(record) }
         )
     }
 
@@ -149,6 +151,7 @@ final class BackendClient {
         reply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
+        let admissionStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         guard process.isRunning && !terminalFailureReported else {
             onClientError?(BackendFailure(
                 code: "backend_unavailable",
@@ -162,6 +165,7 @@ final class BackendClient {
         }
         let request = Request(
             id: UUID().uuidString,
+            admittedAt: admissionStarted,
             command: command,
             params: params,
             operation: operation,
@@ -174,6 +178,8 @@ final class BackendClient {
             completion: completion
         )
 
+        BackendOperationProfile.emit("host.admission", id: request.id, command: command,
+            seconds: BackendOperationProfile.now() - admissionStarted, log: onLog)
         if current != nil || deliveringReply {
             enqueue(request)
             return
@@ -228,10 +234,15 @@ final class BackendClient {
             return
         }
         do {
+            BackendOperationProfile.emit("host.request_queue", id: request.id, command: request.command,
+                seconds: BackendOperationProfile.now() - request.admittedAt, log: onLog)
             current = request
             request.started?()
             onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
+            let sendStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
             try process.send(["id": request.id, "command": request.command, "params": request.params])
+            BackendOperationProfile.emit("host.request_encode_write", id: request.id, command: request.command,
+                seconds: BackendOperationProfile.now() - sendStarted, log: onLog)
             scheduleTimeout(for: request)
             onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
         } catch {
@@ -328,9 +339,14 @@ final class BackendClient {
         cancelCurrentTimeout()
         current = nil
         deliveringReply = true
+        let applyStarted = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
         onReply?(reply)
         request.reply?(reply)
         request.completion?(success)
+        BackendOperationProfile.emit("host.reply_callbacks", id: request.id, command: request.command,
+            seconds: BackendOperationProfile.now() - applyStarted, log: onLog)
+        BackendOperationProfile.emit("host.end_to_end", id: request.id, command: request.command,
+            seconds: BackendOperationProfile.now() - request.admittedAt, log: onLog)
         deliveringReply = false
         flushNext()
     }

@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'Backend'))
+from core.operation_profile import profiled
 from games.hades2.config import LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 
 transport_path = ROOT / 'Backend/games/hades2/transport.py'
@@ -140,6 +141,7 @@ fake_lldb = types.SimpleNamespace(
 )
 namespace = {
     'lldb': fake_lldb,
+    'profiled': profiled,
     'TransportError': FakeTransportError,
     'time': time,
     'LUA_TRANSPORT_SOURCE_LIMIT_BYTES': LUA_TRANSPORT_SOURCE_LIMIT_BYTES,
