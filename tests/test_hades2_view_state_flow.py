@@ -94,7 +94,6 @@ struct Main {
 
         model.connected = true
         model.capabilities = [
-            "setVitals": true,
             "setHealth": true,
             "setMana": true,
             "setArmor": true,
@@ -134,13 +133,28 @@ struct Main {
             fail("passive model projection emitted mutations: \(passiveMutations)")
         }
 
-        // A present health owner must not enable unrelated Mana, reroll or
-        // spell-charge editing. These controls depend on different native owners.
+        // A present health owner must not enable unrelated operation owners.
         model.status = "ready"
         model.scene = "run"
-        if model.canOpenNativeBoonScreen {
-            fail("native actions ignored a missing active-run owner")
+        if model.canMutateTraits || model.canOpenSellTraits
+            || model.canOpenSpecialChoice || model.canAcquireChaosPair {
+            fail("unrelated owner capabilities leaked from vital state")
         }
+        // Resident capabilities are Hades-owned operation owners. Host
+        // presentation status/scene must not re-derive that native policy, and
+        // one operation owner must not silently authorize another.
+        model.capabilities["traitMutation"] = true
+        model.status = "waiting"
+        model.scene = "crossroads"
+        if !model.canMutateTraits {
+            fail("trait UI re-derived ownership from presentation state")
+        }
+        if model.canOpenSellTraits || model.canOpenSpecialChoice || model.canAcquireChaosPair {
+            fail("trait owner leaked into unrelated native operations")
+        }
+        model.capabilities["traitMutation"] = false
+        model.status = "ready"
+        model.scene = "run"
         model.capabilities["setMana"] = false
         model.capabilities["setRerolls"] = false
         model.capabilities["setSpellCharge"] = false
@@ -456,7 +470,7 @@ struct Main {
             model.connected = true
             model.status = "ready"
             model.scene = "run"
-            model.capabilities["activeRun"] = true
+            model.capabilities["traitMutation"] = true
             body(model)
 
             let expectedTotal = before + expectedNewCommands
@@ -500,8 +514,9 @@ struct Main {
         requireTargetParams(sent[2])
         requireTargetParams(sent[3], expectedFamily: "chaos")
 
-        // Model capability guards and non-run state fail closed before the
-        // backend transport boundary.
+        // Trait-specific capability and row semantics fail closed before the
+        // backend transport boundary. Presentation scene is deliberately not
+        // an independent native-action gate.
         try withModel(expectedNewCommands: 0) { model in
             let blocked = makeTrait(
                 levelCapability: .none,
@@ -512,11 +527,13 @@ struct Main {
             model.setTraitRarity(blocked, rarity: "Epic")
             model.removeTrait(blocked)
             model.advanceTraitLifecycle(blocked)
+            model.capabilities["traitMutation"] = false
             model.scene = "loading"
             model.setTraitLevel(trait, targetLevel: "5")
             model.setTraitRarity(trait, rarity: "Heroic")
             model.removeTrait(trait)
             model.advanceTraitLifecycle(chaosTrait)
+            model.capabilities["traitMutation"] = true
             model.scene = "run"
             model.setTraitLevel(trait, targetLevel: "2")
             model.setTraitLevel(trait, targetLevel: "1")
@@ -535,7 +552,8 @@ struct Main {
         )
         let special = makeBoon(id: "TalentDrop", group: "special", kind: "consumable", sourceID: "Selene")
         try withModel(expectedNewCommands: 1) { model in
-            model.capabilities["spawnReward"] = true
+            model.capabilities["acquireExactReward"] = true
+            model.capabilities["spawnReward"] = false
             model.boons = [exact, special]
             check(model.exactBoonOptions.map(\.id) == [exact.id], "exact catalog projection is wrong")
             check(!model.specialRewardOptions.contains { $0.id == exact.id }, "exact trait leaked into Character Rewards")
@@ -567,7 +585,7 @@ struct Main {
             targetID: "ChaosDamageCurse"
         )
         try withModel(expectedNewCommands: 1) { model in
-            model.capabilities["spawnReward"] = true
+            model.capabilities["acquireChaosPair"] = true
             model.boons = [chaosBlessing, chaosCurse]
             model.acquireChaosPair(
                 blessingReward: chaosBlessing.id,

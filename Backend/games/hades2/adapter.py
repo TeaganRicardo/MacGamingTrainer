@@ -560,7 +560,7 @@ class Hades2Adapter(GameAdapter):
             return dict(self.state)
         self.preference_dirty=True
         # Lua-owned desired state remains editable while detached and replays
-        # when a compatible scene becomes available.
+        # when the required resident owner becomes available.
         if self.runtime.alive() and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
@@ -579,7 +579,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -594,7 +594,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_gathering_probabilities',{'probabilities':probabilities})
             self.preference_dirty=was_dirty
             return result
@@ -608,7 +608,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and self.state.get('status')=='ready':
+        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_chaos_gate_probability',{'probability':probability})
             self.preference_dirty=was_dirty
             return result
@@ -622,7 +622,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
+        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -634,7 +634,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('status')=='ready' or (self.state.get('capabilities') or {}).get('setFeature') is True):
+        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_next_occurrence',{'target':target,'token':self.preferences.get('nextOccurrenceToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -655,11 +655,10 @@ class Hades2Adapter(GameAdapter):
 
         if not isinstance(observed_state,dict):raise TypeError('reconciliation requires a runtime observation.')
         observed=observed_state
-        # A compatible resident can own session hooks before combat ready().
-        # The Hades reconciler selects executable actions by each native owner.
-        status=observed.get('status')
+        # The Hades reconciler selects executable actions by each resident
+        # owner. Presentation status/scene are observations, never permission.
         capabilities=observed.get('capabilities')
-        if status!='ready' and not (status=='waiting' and isinstance(capabilities,dict) and capabilities.get('setFeature') is True):
+        if not (isinstance(capabilities,dict) and capabilities.get('setFeature') is True):
             self._overlay_preferences()
             return dict(self.state)
 

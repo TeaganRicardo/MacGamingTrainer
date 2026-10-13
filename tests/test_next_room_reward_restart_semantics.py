@@ -94,7 +94,7 @@ def status_payload(*, reward=None, token=None, consumed_token=None):
     payload = {
         'status': 'ready',
         'scene': 'run',
-        'capabilities': {},
+        'capabilities': {'setFeature': True},
         'desiredFeatures': {key: bool(defaults[key]) for key in TOGGLES},
         'activeFeatures': {key: False for key in TOGGLES},
         'dormantFeatures': {},

@@ -18,7 +18,6 @@ def command_block(name):
 
 block = command_block("open_sell_traits")
 for token in (
-    'sceneName() ~= "run"',
     'AreScreensActive',
     'OpenSellTraitMenu',
     'DeepCopyTable(ScreenData.SellTraits)',

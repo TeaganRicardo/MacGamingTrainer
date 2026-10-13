@@ -289,12 +289,16 @@ do
   resetTraits()
   eligibleTarget = "ZeusCastBoon"
   replacementTarget = nil
+  -- Exact Trait acquisition belongs to Run/Hero, not to a room-backed reward
+  -- context. A distinct hub room must not invalidate the live Trait owner.
+  CurrentHubRoom = {}
   local beforeAdd = calls.add
   local result = M.dispatch("spawn_reward", {
     reward = "exact:ZeusUpgrade:ZeusCastBoon",
     requestId = "ordinary-add",
     includeCatalogs = false,
   })
+  CurrentHubRoom = nil
   eq(calls.add, beforeAdd + 1, "ordinary add count")
   local added = CurrentRun.Hero.Traits[1]
   eq(added.Name, "ZeusCastBoon", "ordinary target")

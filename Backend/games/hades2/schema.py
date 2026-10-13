@@ -140,8 +140,13 @@ STAT_RULES = {
 
 def disconnected_capabilities():
     return {
-        'setFeature':False,'setVitals':False,'setResource':False,
-        'spawnReward':False,'setStats':False,'setElements':False,
+        'setFeature':False,
+        'setHealth':False,'setMana':False,'setArmor':False,
+        'setRerolls':False,'setSpellCharge':False,'setResource':False,
+        'setStats':False,'setElements':False,
+        'traitInventory':False,'traitMutation':False,'roomContext':False,
+        'sellTraits':False,'specialChoice':False,'acquireExactReward':False,
+        'acquireChaosPair':False,'spawnReward':False,
         'hotBackup':True,'hotRestore':False,'diagnostics':True,
     }
 

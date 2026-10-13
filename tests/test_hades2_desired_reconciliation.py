@@ -8,13 +8,24 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from games.hades2.desired_reconciliation import Hades2DesiredStateReconciler
 from games.hades2.preferences import Hades2PreferenceStore
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
-from games.hades2.schema import MULTIPLIERS, TOGGLES
+from games.hades2.schema import MULTIPLIERS, STAT_RULES, TOGGLES
 
 
 def matching_observation(desired):
     observation = {
         "status": "ready",
         "scene": "run",
+        "capabilities": {
+            "setFeature": True,
+            "setHealth": True,
+            "setMana": True,
+            "setArmor": True,
+            "setResource": True,
+            "setRerolls": True,
+            "setStats": True,
+            "setElements": True,
+        },
+        "statAvailable": {key: True for key in STAT_RULES},
         "desiredFeatures": {key: bool(desired[key]) for key in TOGGLES},
         "activeFeatures": {},
         "dormantFeatures": {},
@@ -554,6 +565,29 @@ assert any(
     command == "set_next_room_reward"
     and params.get("token") == "reward-token"
     for command, params in token_session.calls[0]
+)
+
+
+# Missing owners from unrelated lock families do not force a complete lock
+# snapshot into resident staging. A desired stat lock that has its own live
+# stat owner is already confirmable even when vital/resource owners are absent.
+owner_specific_desired = Hades2PreferenceStore.defaults()
+owner_specific_desired["statLocks"] = {"enemyHealth": 175}
+owner_specific_observed = matching_observation(owner_specific_desired)
+for capability in (
+    "setHealth", "setMana", "setArmor", "setResource", "setRerolls", "setElements"
+):
+    owner_specific_observed["capabilities"][capability] = False
+owner_specific_observed["capabilities"]["setStats"] = True
+owner_specific_observed["statAvailable"]["enemyHealth"] = True
+owner_specific_session = ApplyingSession(owner_specific_observed)
+owner_specific = Hades2DesiredStateReconciler(
+    owner_specific_session, request_id_factory=deterministic_ids()
+).reconcile(owner_specific_desired, owner_specific_observed)
+assert owner_specific.confirmed is True
+assert owner_specific.mismatches == ()
+assert owner_specific_session.calls == [], (
+    "unrelated missing owners staged an already-confirmed stat lock"
 )
 
 print("hades2_desired_reconciliation_ok")

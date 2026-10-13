@@ -535,14 +535,14 @@ struct Hades2TrainerView: View {
     }
 
     private func canApplyTraitRemainingUses(_ trait: CurrentRunTrait) -> Bool {
-        guard model.canOpenNativeBoonScreen, trait.canSetRemainingUses,
+        guard model.canMutateTraits, trait.canSetRemainingUses,
               let target = Int(traitRemainingUsesInput.trimmingCharacters(in: .whitespacesAndNewlines)),
               (1...999_999).contains(target) else { return false }
         return trait.remainingUses != Double(target)
     }
 
     private func canApplyTraitLevel(_ trait: CurrentRunTrait) -> Bool {
-        guard model.canOpenNativeBoonScreen, trait.canIncreaseLevel,
+        guard model.canMutateTraits, trait.canIncreaseLevel,
               let target = Int(traitLevelInput(trait).wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines))
         else { return false }
         return target > trait.level && target <= 999_999
@@ -550,7 +550,7 @@ struct Hades2TrainerView: View {
 
     private func canApplyTraitRarity(_ trait: CurrentRunTrait) -> Bool {
         let target = traitRarityInput(trait).wrappedValue
-        return model.canOpenNativeBoonScreen
+        return model.canMutateTraits
             && trait.canSetRarity
             && trait.availableRarities.contains(target)
             && target != trait.rarity
@@ -626,7 +626,7 @@ struct Hades2TrainerView: View {
                     onEditingChanged: tracking(.traitRemainingUses)
                 )
                 .frame(width: 58)
-                .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRemainingUses)
+                .disabled(!model.canMutateTraits || !trait.canSetRemainingUses)
 
                 Button(text("hades2.traits.apply")) {
                     model.setTraitRemainingUses(
@@ -643,7 +643,7 @@ struct Hades2TrainerView: View {
                 }
                 .buttonStyle(.bordered)
                 .lineLimit(1)
-                .disabled(!model.canOpenNativeBoonScreen || !trait.canExpire)
+                .disabled(!model.canMutateTraits || !trait.canExpire)
             }
         } else if trait.canAdvanceLifecycle {
             Button(text("hades2.traits.chaos.advance")) {
@@ -651,7 +651,7 @@ struct Hades2TrainerView: View {
             }
             .buttonStyle(.bordered)
             .lineLimit(1)
-            .disabled(!model.canOpenNativeBoonScreen)
+            .disabled(!model.canMutateTraits)
         }
     }
 
@@ -683,7 +683,7 @@ struct Hades2TrainerView: View {
                     TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 58)
-                        .disabled(!model.canOpenNativeBoonScreen || !trait.canIncreaseLevel)
+                        .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
                     Button(text("hades2.traits.apply")) {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
@@ -728,7 +728,7 @@ struct Hades2TrainerView: View {
                     .labelsHidden()
                     .lineLimit(1)
                     .frame(width: 102)
-                    .disabled(!model.canOpenNativeBoonScreen || !trait.canSetRarity)
+                    .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
                     Button(text("hades2.traits.apply")) {
                         model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
@@ -766,7 +766,7 @@ struct Hades2TrainerView: View {
             }
             .buttonStyle(.bordered)
             .frame(width: TraitManagerLayout.removeControlWidth)
-            .disabled(trait == nil || !model.canOpenNativeBoonScreen || trait?.canRemove != true)
+            .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
         .frame(width: TraitManagerLayout.commonControlsWidth, alignment: .trailing)
     }
@@ -1154,7 +1154,7 @@ struct Hades2TrainerView: View {
         }
         editableAmountMetric(
             text("hades2.vital.armor"), icon: "shield.lefthalf.filled", text: $armorCurrent, focus: .armorCurrent,
-            color: theme.warning, locked: model.armorLocked, enabled: model.canSetVitals,
+            color: theme.warning, locked: model.armorLocked, enabled: model.canSetVital("armor"),
             edit: .vital("armor", field: "current")
         ) {
             model.lockVital("armor", locked: !model.armorLocked)
@@ -1427,7 +1427,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || chaosBlessingOptions.isEmpty)
+                        .disabled(!model.canAcquireChaosPair || chaosBlessingOptions.isEmpty)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1444,7 +1444,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || chaosCurseOptions.isEmpty)
+                        .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
                     Button(text("hades2.spawn.acquire")) {
@@ -1454,7 +1454,7 @@ struct Hades2TrainerView: View {
                         )
                     }
                     .disabled(
-                        !model.canSpawnReward
+                        !model.canAcquireChaosPair
                             || !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection })
                             || !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection })
                     )
@@ -1485,7 +1485,7 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(width: 240)
-                        .disabled(!model.canSpawnReward || exactBoonSourceGroups.isEmpty)
+                        .disabled(!model.canAcquireExactReward || exactBoonSourceGroups.isEmpty)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -1502,14 +1502,14 @@ struct Hades2TrainerView: View {
                         }
                         .labelsHidden()
                         .frame(maxWidth: .infinity)
-                        .disabled(!model.canSpawnReward || selectedExactItems.isEmpty)
+                        .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
                     Button(text("hades2.spawn.acquire")) {
                         model.acquireExactBoon(model.selectedExactBoon)
                     }
                     .disabled(
-                        !model.canSpawnReward
+                        !model.canAcquireExactReward
                             || !selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
                     )
                 }
@@ -1522,7 +1522,7 @@ struct Hades2TrainerView: View {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
                 Button(text("hades2.spawn.open")) { model.openSellTraits() }
-                    .disabled(!model.canOpenNativeBoonScreen)
+                    .disabled(!model.canOpenSellTraits)
             }
             if model.connected {
                 Divider()
