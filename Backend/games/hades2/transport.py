@@ -260,8 +260,9 @@ class Hades2LuaTransport:
             if self.process.WriteMemory(scratch,payload+b'\0',err)!=len(payload)+1 or err.Fail():raise TransportError('memory_error',str(err))
             out=scratch+len(payload)+1
             a=self.address
-            installer=getattr(self,'native_runtime_installer',None)
-            install=f'((int(*)(void*)){installer})(L)' if installer is not None else '0'
+            library=getattr(self,'native_runtime_installer',None)
+            install=f'((int(*)(void*)){library.installer})(L)' if library is not None else '0'
+            diagnostic=f'((const char*(*)(int)){library.diagnostic})(rc)' if library is not None else '(const char*)0'
             # One expression; preserve the stack even on a Lua error. Copy result
             # before popping it, so host-side reading cannot race the Lua GC.
             expression=f'''({{
@@ -272,7 +273,7 @@ class Hades2LuaTransport:
                 if(rc==0) rc=((int(*)(void*,int,int,int,int,void*)){a('lua_pcallk')})(L,0,1,0,0,(void*)0);
                 unsigned long n=0;
                 const char *s;
-                if(rc<0){{s="Native query registration rejected the target or Lua stack";n=sizeof("Native query registration rejected the target or Lua stack")-1;}}
+                if(rc<0){{s={diagnostic};if(s){{while(s[n] && n<{cap}-1)++n;}}}}
                 else s=((const char*(*)(void*,int,unsigned long*)){a('lua_tolstring')})(L,-1,&n);
                 char *o=(char*){out};
                 if(n>={cap}){{n={cap}-1;rc=100;}}
@@ -302,7 +303,13 @@ class Hades2LuaTransport:
             if err.Fail():
                 self.tainted=True
                 raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
-            if result.GetValueAsSigned()!=0:
+            status=result.GetValueAsSigned()
+            if status<0:
+                raise TransportError(
+                    'incompatible','hades2.error.nativeQueryUnavailable',
+                    diagnostic=f'Native query registration status={status}: '+text,
+                )
+            if status!=0:
                 marker='MGT_OUTCOME_UNKNOWN:'
                 if marker in text:
                     self.tainted=True

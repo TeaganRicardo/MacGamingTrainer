@@ -13,6 +13,7 @@
 #endif
 
 #define EXPORT __attribute__((visibility("default")))
+#define LIBRARY_ABI 2
 #define QUERY_ABI 1
 #define MAX_BLOCKS 256
 #define MAX_BUCKETS 4096
@@ -132,7 +133,8 @@ static int collect(const Layout *profile, ReadMemory read, void *context,
     X(int, pcallk, (lua_State *, int, int, int, int, lua_CFunction), 0x155b4, "ff4301d1f85f01a9f65702a9f44f03a9")
 
 #define DECLARE_API(result, name, arguments, rva, prefix) result (*name) arguments;
-static struct { LUA_APIS(DECLARE_API) } api;
+typedef struct { LUA_APIS(DECLARE_API) } LuaAPI;
+static LuaAPI api;
 #undef DECLARE_API
 
 static int queryError(lua_State *state, const char *message) {
@@ -198,10 +200,23 @@ static int registerQueries(lua_State *state) {
     return 0;
 }
 
-#ifdef __APPLE__
-static int prefixMatches(uintptr_t address, const char *hex) {
+/* Negative registration statuses are library ABI 2. The Lua namespace/query
+ * contract remains ABI 1; its callbacks and lifecycle are unchanged. */
+enum {
+    INSTALL_WRONG_THREAD = -1,
+    INSTALL_STACK_UNAVAILABLE = -2,
+    INSTALL_TARGET_HEADER = -3,
+    INSTALL_TARGET_UUID = -4,
+    INSTALL_UNIT_BINDING = -5,
+    INSTALL_UNIT_UNREADABLE = -6,
+    INSTALL_LUA_BINDING_BASE = -100,
+    INSTALL_LUA_UNREADABLE_BASE = -200,
+};
+
+/* Return 1 for a match, 0 for different code, -1 for unreadable code. */
+static int prefixMatches(uintptr_t address, const char *hex, ReadMemory read, void *context) {
     uint8_t bytes[16];
-    if (!readSelf(address, bytes, sizeof(bytes), NULL)) return 0;
+    if (!read(address, bytes, sizeof(bytes), context)) return -1;
     for (size_t index = 0; index < sizeof(bytes); ++index) {
         unsigned value = 0;
         for (size_t digit = 0; digit < 2; ++digit) {
@@ -213,47 +228,93 @@ static int prefixMatches(uintptr_t address, const char *hex) {
     return 1;
 }
 
-static int configure(void) {
-    const struct mach_header_64 *header = (const struct mach_header_64 *)_dyld_get_image_header(0);
-    if (!header || header->magic != MH_MAGIC_64 || header->filetype != MH_EXECUTE
-        || header->cputype != CPU_TYPE_ARM64 || header->sizeofcmds > 65536) return 0;
+/* Validate one loaded target image before publishing any callback bindings.
+ * The same memory-reader seam lets portable fixtures exercise all production
+ * profile predicates, without loading or launching the game. */
+static int configureImage(uintptr_t base, ReadMemory read, void *context) {
+    uint32_t header[8]; /* Little-endian Mach-O mach_header_64. */
+    if (!base || base > UINTPTR_MAX - 0x64b8630
+        || !read(base, header, sizeof(header), context)
+        || header[0] != 0xfeedfacf || header[1] != 0x100000c
+        || header[3] != 2 || header[5] > 65536) return INSTALL_TARGET_HEADER;
     static const uint8_t expected[16] = { 0x35,0xcd,0x2e,0x50,0x2d,0x78,0x3a,0x63,0x83,0x5b,0x3e,0xb1,0x22,0x4c,0x6d,0x65 };
-    const uint8_t *cursor = (const uint8_t *)(header + 1);
-    const uint8_t *end = cursor + header->sizeofcmds;
+    uintptr_t cursor = base + sizeof(header), end = cursor + header[5];
     int uuidMatches = 0;
-    for (uint32_t index = 0; index < header->ncmds; ++index) {
-        if ((size_t)(end - cursor) < sizeof(struct load_command)) return 0;
-        const struct load_command *command = (const struct load_command *)cursor;
-        if (command->cmdsize < sizeof(*command) || command->cmdsize > (size_t)(end - cursor)) return 0;
-        if (command->cmd == LC_UUID) {
-            if (command->cmdsize != sizeof(struct uuid_command)) return 0;
-            uuidMatches = memcmp(((const struct uuid_command *)command)->uuid, expected, 16) == 0;
+    for (uint32_t index = 0; index < header[4]; ++index) {
+        uint32_t command[2];
+        if (end - cursor < sizeof(command)
+            || !read(cursor, command, sizeof(command), context)
+            || command[1] < sizeof(command) || command[1] > end - cursor)
+            return INSTALL_TARGET_HEADER;
+        if (command[0] == 0x1b) { /* LC_UUID */
+            uint8_t uuid[16];
+            if (command[1] != sizeof(command) + sizeof(uuid)
+                || !read(cursor + sizeof(command), uuid, sizeof(uuid), context))
+                return INSTALL_TARGET_HEADER;
+            uuidMatches = memcmp(uuid, expected, sizeof(uuid)) == 0;
         }
-        cursor += command->cmdsize;
+        cursor += command[1];
     }
-    if (!uuidMatches) return 0;
-    uintptr_t base = (uintptr_t)header;
-    if (!prefixMatches(base + 0x258b70, "287c409309d041f9287d089b088548ca")) return 0;
+    if (!uuidMatches) return INSTALL_TARGET_UUID;
+    int matched = prefixMatches(base + 0x258b70, "287c409309d041f9287d089b088548ca", read, context);
+    if (matched < 0) return INSTALL_UNIT_UNREADABLE;
+    if (!matched) return INSTALL_UNIT_BINDING;
+    LuaAPI candidate;
+    int binding = 0;
 #define RESOLVE_API(result, name, arguments, rva, prefix) \
-    if (!prefixMatches(base + rva, prefix)) return 0; \
-    api.name = (result (*) arguments)(base + rva);
+    matched = prefixMatches(base + rva, prefix, read, context); \
+    if (matched < 0) return INSTALL_LUA_UNREADABLE_BASE - binding; \
+    if (!matched) return INSTALL_LUA_BINDING_BASE - binding; \
+    candidate.name = (result (*) arguments)(base + rva); \
+    ++binding;
     LUA_APIS(RESOLVE_API)
 #undef RESOLVE_API
+    api = candidate;
     layout = (Layout){ base + 0x511eaa8, base + 0x64b8630, base + 0x541f2a0,
         base + 0x601f2a0, (FindUnit)(base + 0x258b70) };
-    return 1;
+    return 0;
 }
-#else
-static int configure(void) { return 0; }
-#endif
 
-EXPORT uint32_t MGTNativeEffectQueryABI(void) { return QUERY_ABI; }
+static int configure(void) {
+#ifdef __APPLE__
+    return configureImage((uintptr_t)_dyld_get_image_header(0), readSelf, NULL);
+#else
+    return INSTALL_TARGET_HEADER;
+#endif
+}
+
+EXPORT uint32_t MGTNativeEffectQueryABI(void) { return LIBRARY_ABI; }
+
+/* Pure static text: no Lua access, allocation, target calls or shared last-error
+ * state. The caller copies the text within its existing leased expression. */
+EXPORT const char *MGTNativeEffectQueryStatusMessage(int status) {
+    switch (status) {
+        case INSTALL_WRONG_THREAD: return "Native query registration requires Darwin MainThread";
+        case INSTALL_STACK_UNAVAILABLE: return "Native query registration cannot reserve Lua stack space";
+        case INSTALL_TARGET_HEADER: return "Native query target header is unreadable or is not a supported arm64 executable";
+        case INSTALL_TARGET_UUID: return "Native query target UUID does not match Hades II 1.143476";
+        case INSTALL_UNIT_BINDING: return "Native query target binding mismatch: FindUnit";
+        case INSTALL_UNIT_UNREADABLE: return "Native query target binding is unreadable: FindUnit";
+    }
+#define MISMATCH_TEXT(result, name, arguments, rva, prefix) "Native query target binding mismatch: lua_" #name,
+    static const char *mismatches[] = { LUA_APIS(MISMATCH_TEXT) };
+#undef MISMATCH_TEXT
+#define UNREADABLE_TEXT(result, name, arguments, rva, prefix) "Native query target binding is unreadable: lua_" #name,
+    static const char *unreadable[] = { LUA_APIS(UNREADABLE_TEXT) };
+#undef UNREADABLE_TEXT
+    int count = (int)(sizeof(mismatches) / sizeof(mismatches[0]));
+    if (status <= INSTALL_LUA_BINDING_BASE && status > INSTALL_LUA_BINDING_BASE - count)
+        return mismatches[INSTALL_LUA_BINDING_BASE - status];
+    if (status <= INSTALL_LUA_UNREADABLE_BASE && status > INSTALL_LUA_UNREADABLE_BASE - count)
+        return unreadable[INSTALL_LUA_UNREADABLE_BASE - status];
+    return "Native query registration returned an unknown rejection status";
+}
 
 /* The image remains loaded for process lifetime. No scratch/JIT code is retained.
  * On success preserve the Lua stack; on protected Lua error leave its diagnostic
  * for the transport to copy and pop. Negative results never touched Lua. */
 static int installQueries(lua_State *state) {
-    if (!api.checkstack(state, 1)) return -2;
+    if (!api.checkstack(state, 1)) return INSTALL_STACK_UNAVAILABLE;
     int top = api.gettop(state);
     api.pushcclosure(state, registerQueries, 0); /* zero upvalues: no allocation */
     int result = api.pcallk(state, 0, 0, 0, 0, NULL);
@@ -262,6 +323,8 @@ static int installQueries(lua_State *state) {
 }
 
 EXPORT int MGTNativeEffectQueryInstall(lua_State *state) {
-    if (!callableThread() || !configure()) return -1;
+    if (!callableThread()) return INSTALL_WRONG_THREAD;
+    int status = configure();
+    if (status) return status;
     return installQueries(state);
 }

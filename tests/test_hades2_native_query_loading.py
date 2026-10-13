@@ -27,7 +27,8 @@ class Options:
 class Module:
     valid = True
     uuid = UUID.hex()
-    addresses = {'MGTNativeEffectQueryABI': [100], 'MGTNativeEffectQueryInstall': [200]}
+    addresses = {'MGTNativeEffectQueryABI': [100], 'MGTNativeEffectQueryInstall': [200],
+        'MGTNativeEffectQueryStatusMessage': [300]}
     def IsValid(self): return self.valid
     def GetUUIDString(self): return self.uuid
     def FindSymbols(self, name, kind):
@@ -43,7 +44,7 @@ class Target:
 
 
 class Process:
-    def __init__(self, target): self.target, self.loaded, self.options = target, 0, None
+    def __init__(self, target): self.target, self.loaded, self.options, self.abi = target, 0, None, 2
     def LoadImage(self, spec, error):
         self.loaded += 1
         self.target.module.valid = True
@@ -52,7 +53,7 @@ class Process:
         return SimpleNamespace(GetFrameAtIndex=lambda index: SimpleNamespace(EvaluateExpression=self.evaluate))
     def evaluate(self, expression, options):
         self.options = options
-        return SimpleNamespace(GetError=Error, GetValueAsUnsigned=lambda: 1)
+        return SimpleNamespace(GetError=Error, GetValueAsUnsigned=lambda: self.abi)
 
 
 lldb = SimpleNamespace(SBFileSpec=str, SBError=Error, SBExpressionOptions=Options,
@@ -68,11 +69,19 @@ with tempfile.TemporaryDirectory(prefix='mgt-query-loading-') as temporary:
     target = Target(Module()); process = Process(target)
     transport = SimpleNamespace(runtime_uuid='supported', known_uuid='supported', target=target, process=process)
     with patch.object(query, '__file__', str(module_root / 'native_effect_query.py')):
-        assert query.prepare_native_query(transport, lldb) == 200
+        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, 300)
         assert process.loaded == 0, 'Reconnect reloaded an already matched image'
         assert process.options.StopOthers is True and process.options.TryAllThreads is False
         target.module.valid = False
-        assert query.prepare_native_query(transport, lldb) == 200 and process.loaded == 1
+        assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, 300) and process.loaded == 1
+        process.abi = 1
+        try:
+            query.prepare_native_query(transport, lldb)
+        except AdapterError as error:
+            assert error.code == 'incompatible' and 'ABI' in error.diagnostic
+        else:
+            raise AssertionError('Old native library ABI was accepted')
+        process.abi = 2
         target.module.uuid = 'wrong'
         try:
             query.prepare_native_query(transport, lldb)

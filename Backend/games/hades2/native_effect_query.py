@@ -1,8 +1,15 @@
 """Load the persistent, exact-build Hades native query before Lua sampling."""
+from dataclasses import dataclass
 from pathlib import Path
 import struct
 
 from core.adapter import AdapterError
+
+
+@dataclass(frozen=True)
+class NativeQueryLibrary:
+    installer: int
+    diagnostic: int
 
 
 def _image_uuid(path):
@@ -57,7 +64,11 @@ def prepare_native_query(transport, lldb):
                 raise ValueError('Native query export is missing or ambiguous: ' + name)
             return addresses.pop()
 
-        abi, installer = address('MGTNativeEffectQueryABI'), address('MGTNativeEffectQueryInstall')
+        abi = address('MGTNativeEffectQueryABI')
+        library = NativeQueryLibrary(
+            address('MGTNativeEffectQueryInstall'),
+            address('MGTNativeEffectQueryStatusMessage'),
+        )
         # This pure ABI query does not touch Lua or the game world. Actual
         # registration happens in execute()'s leased MainThread expression.
         options = lldb.SBExpressionOptions()
@@ -69,9 +80,9 @@ def prepare_native_query(transport, lldb):
         options.SetUnwindOnError(True)
         result = transport.process.GetSelectedThread().GetFrameAtIndex(0).EvaluateExpression(
             f'((unsigned int(*)()){abi})()', options)
-        if result.GetError().Fail() or result.GetValueAsUnsigned() != 1:
+        if result.GetError().Fail() or result.GetValueAsUnsigned() != 2:
             raise ValueError('Native query ABI is incompatible: ' + str(result.GetError()))
         # Never unload: Lua can retain C callbacks after detach or re-register.
-        return installer
+        return library
     except (OSError, ValueError) as error:
         raise AdapterError('incompatible', 'hades2.error.nativeQueryUnavailable', diagnostic=str(error)) from error
