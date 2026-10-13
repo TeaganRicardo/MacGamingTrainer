@@ -552,8 +552,8 @@ if __MacGamingTrainerV1 == nil then
     -- Most combat hooks intentionally die with their Hero/run. Global-safe
     -- hooks installed while no Hero exists (Crossroads) are session-scoped;
     -- an explicit scope can opt into the same behavior. synchronize() still
-    -- releases/reconciles them on scene transitions, so no stale state crosses
-    -- sessions.
+    -- releases/reconciles them as their runtime owners change, so no stale
+    -- state crosses sessions.
     local sessionScoped = scope == "session" or type(ownerHero) ~= "table"
     hook.scope = sessionScoped and "session" or "run"
     hook.wrapper = function(...)
@@ -8464,7 +8464,7 @@ if __MacGamingTrainerV1 == nil then
       if onlyKey == nil or onlyKey == key then
         if desired and not featureAvailable(entry) then
           -- Desired state stays set, but the resident implementation is not
-          -- mounted until its scene/Hero dependency becomes available.
+          -- mounted until its required runtime owner becomes available.
           entry.release()
           M.featureErrors[key] = nil
         elseif not featureAttempt(key, desired, entry.install, entry.release, raiseOnError) then
@@ -9085,7 +9085,7 @@ if __MacGamingTrainerV1 == nil then
       requireFunctions("loot spawning", { "CreateLoot" })
       if type(MapState) ~= "table" or type(MapState.RoomRequiredObjects) ~= "table"
           or type(LootObjects) ~= "table" then
-        error("Unsupported loot spawning: scene loot tables unavailable")
+        error("Unsupported loot spawning: required room loot tables unavailable")
       end
       local lootData = LootData[rewardId]
       local packages, packageSeen = {}, {}
