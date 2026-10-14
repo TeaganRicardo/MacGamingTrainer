@@ -146,7 +146,7 @@ struct Hades2SaveEditorView: View {
                   !identifier.isEmpty, identifier != loadedSourceID else { return }
             // Clicking away can finish a text edit and start staging before
             // the picker receives the same click. Never re-read that draft.
-            if model.busy {
+            if model.busy || !model.sourceFiles.contains(where: { $0.id == identifier }) {
                 model.selectedSourceID = loadedSourceID
                 return
             }
@@ -200,7 +200,8 @@ struct Hades2SaveEditorView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
-            .disabled(model.busy || model.profile.isEmpty)
+            .disabled(model.busy || model.profile.isEmpty ||
+                !model.sourceFiles.contains(where: { $0.id == loadedSourceID }))
             .help(localization.localized("host.refresh"))
 
             Button(localization.localized("host.done")) {
@@ -221,6 +222,10 @@ struct Hades2SaveEditorView: View {
                 ForEach(model.sourceFiles) { file in
                     Text(file.relativePath).tag(file.id)
                 }
+                if !loadedSourceID.isEmpty &&
+                    !model.sourceFiles.contains(where: { $0.id == loadedSourceID }) {
+                    Text(model.sourceRelativePath).tag(loadedSourceID)
+                }
             }
             .labelsHidden()
             .frame(maxWidth: 315)
@@ -238,6 +243,10 @@ struct Hades2SaveEditorView: View {
                 Text(text("hades2.saveEditor.target.choose")).tag("")
                 ForEach(model.writeTargets) { file in
                     Text(file.relativePath).tag(file.id)
+                }
+                if !model.selectedTargetID.isEmpty &&
+                    !model.writeTargets.contains(where: { $0.id == model.selectedTargetID }) {
+                    Text(selectedTargetLabel).tag(model.selectedTargetID)
                 }
             }
             .labelsHidden()
@@ -673,10 +682,13 @@ struct Hades2SaveEditorView: View {
     }
 
     private var selectedTargetLabel: String {
-        guard let file = model.writeTargets.first(where: { $0.id == model.selectedTargetID }) else {
-            return model.selectedTargetID
+        if let file = model.writeTargets.first(where: { $0.id == model.selectedTargetID }) {
+            return file.relativePath
         }
-        return file.relativePath
+        let components = model.selectedTargetID.split(
+            separator: "/", maxSplits: 1, omittingEmptySubsequences: false
+        )
+        return components.count == 2 ? String(components[1]) : model.selectedTargetID
     }
 
     private var loadedSourceID: String {
