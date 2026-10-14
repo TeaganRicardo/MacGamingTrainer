@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import re
 import signal
 import subprocess
 import sys
@@ -22,48 +21,16 @@ class Hades2LuaTransport:
     def __init__(self):
         lldb.SBDebugger.Initialize()
         self.debugger=lldb.SBDebugger.Create(); self.debugger.SetAsync(True)
-        self._configure_debugger()
+        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','false'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
+            result=lldb.SBCommandReturnObject()
+            self.debugger.GetCommandInterpreter().HandleCommand('settings set '+setting+' '+value,result)
+            if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
         self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None
         self.native_install_observation=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
-
-    def _configure_debugger(self):
-        def command(text):
-            result=lldb.SBCommandReturnObject()
-            self.debugger.GetCommandInterpreter().HandleCommand(text,result)
-            return result
-
-        # This transport uses verified addresses, exported symbols and opaque C
-        # calls. Source-level DWARF/types and BoundsSafety reporting are debugger
-        # enrichment, not game checks. Their module discovery parses unrelated
-        # system debug maps while the entire target is suspended. Mach-O/symtab,
-        # ordinary exception stops and object-file unwind data stay available.
-        disabled=set()
-        for category,names in (
-            ('symbol-file',('dwarf','dwarf-debugmap')),
-            ('instrumentation-runtime',('BoundsSafety',)),
-        ):
-            listing=command('plugin list '+category)
-            # Older SDKs do not expose plugin control; retain their original
-            # lazy policy instead of imposing all-module DWARF preloading.
-            if not listing.Succeeded():continue
-            available={name:state for state,name in re.findall(r'^\s*\[([+-])\]\s+(\S+)',listing.GetOutput() or '',re.MULTILINE)}
-            for name in names:
-                if name not in available:continue
-                if available[name]=='+':
-                    result=command('plugin disable '+category+'.'+name)
-                    if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
-                disabled.add(category+'.'+name)
-
-        # Parallelize name indexes only after excluding expensive debug maps.
-        symbol_tables_only={'symbol-file.dwarf','symbol-file.dwarf-debugmap'}<=disabled
-        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','true' if symbol_tables_only else 'false'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
-            result=command('settings set '+setting+' '+value)
-            if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
-        logging.info('LLDBDebuggerPolicy symbolTablesOnly=%s disabledPlugins=%s',symbol_tables_only,','.join(sorted(disabled)) or 'none')
 
     def attach(self,pid):
         if self.process:

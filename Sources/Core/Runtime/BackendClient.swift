@@ -54,6 +54,37 @@ struct BackendReply {
     let failure: BackendFailure?
 }
 
+/// A bounded request activity. The client owns its lifetime; callers need no
+/// platform-specific power or scheduling policy.
+final class BackendRequestActivity {
+    private var onEnd: (() -> Void)?
+
+    init(end: @escaping () -> Void) {
+        onEnd = end
+    }
+
+    func end() {
+        let action = onEnd
+        onEnd = nil
+        action?()
+    }
+
+    deinit { end() }
+
+    static func begin() -> BackendRequestActivity {
+        #if os(macOS)
+        let info = ProcessInfo.processInfo
+        let token = info.beginActivity(
+            options: .userInitiatedAllowingIdleSystemSleep,
+            reason: "Completing a Trainer backend request"
+        )
+        return BackendRequestActivity { info.endActivity(token) }
+        #else
+        return BackendRequestActivity {}
+        #endif
+    }
+}
+
 /// Game-agnostic request lifecycle around BackendProcess. It owns JSONL request
 /// IDs, one-at-a-time ordering, queue coalescing, timeouts and host/module
 /// protocol verification. A game model only interprets the opaque result/state.
@@ -74,8 +105,10 @@ final class BackendClient {
 
     private let process: BackendProcess
     private let maxQueueDepth: Int
+    private let beginRequestActivity: () -> BackendRequestActivity
     private var expectation: BackendProtocolExpectation?
     private var current: Request?
+    private var currentActivity: BackendRequestActivity?
     private var queue: [Request] = []
     private var currentTimeoutWorkItem: DispatchWorkItem?
     private var deliveringReply = false
@@ -90,9 +123,14 @@ final class BackendClient {
     private var onTermination: ((Int32, String) -> Void)?
     private var onClientError: ((BackendFailure, Bool) -> Void)?
 
-    init(process: BackendProcess = BackendProcess(), maxQueueDepth: Int = 64) {
+    init(
+        process: BackendProcess = BackendProcess(),
+        maxQueueDepth: Int = 64,
+        beginRequestActivity: @escaping () -> BackendRequestActivity = BackendRequestActivity.begin
+    ) {
         self.process = process
         self.maxQueueDepth = max(1, maxQueueDepth)
+        self.beginRequestActivity = beginRequestActivity
     }
 
     var isRunning: Bool { process.isRunning }
@@ -123,8 +161,7 @@ final class BackendClient {
         stderrTail = ""
         deliveringReply = false
         terminalFailureReported = false
-        cancelCurrentTimeout()
-        current = nil
+        clearCurrentRequest()
         queue.removeAll()
 
         try process.start(
@@ -229,6 +266,7 @@ final class BackendClient {
         }
         do {
             current = request
+            currentActivity = beginRequestActivity()
             request.started?()
             onRequestStarted?(TrainerTextToken(key: request.operation, arguments: request.operationArguments), request.announceSuccess)
             try process.send(["id": request.id, "command": request.command, "params": request.params])
@@ -236,8 +274,7 @@ final class BackendClient {
             onLog?("请求 \(request.command) · \(request.id) · timeout=\(String(format: "%.1f", request.timeout))s")
         } catch {
             terminalFailureReported = true
-            cancelCurrentTimeout()
-            current = nil
+            clearCurrentRequest()
             let queued = takeQueuedRequests()
             onClientError?(BackendFailure(
                 code: "backend_send_failed",
@@ -278,8 +315,7 @@ final class BackendClient {
               moduleVersion == expectation.moduleProtocolVersion,
               gameID == expectation.gameID else {
             terminalFailureReported = true
-            cancelCurrentTimeout()
-            current = nil
+            clearCurrentRequest()
             let queued = takeQueuedRequests()
             process.stop()
             request.completion?(false)
@@ -325,9 +361,8 @@ final class BackendClient {
             failure: failure
         )
 
-        cancelCurrentTimeout()
-        current = nil
         deliveringReply = true
+        clearCurrentRequest()
         onReply?(reply)
         request.reply?(reply)
         request.completion?(success)
@@ -398,6 +433,14 @@ final class BackendClient {
         currentTimeoutWorkItem = nil
     }
 
+    private func clearCurrentRequest() {
+        cancelCurrentTimeout()
+        current = nil
+        let activity = currentActivity
+        currentActivity = nil
+        activity?.end()
+    }
+
     private func takeQueuedRequests() -> [Request] {
         let queued = queue
         queue.removeAll()
@@ -405,10 +448,9 @@ final class BackendClient {
     }
 
     private func takeOutstandingRequests() -> [Request] {
-        cancelCurrentTimeout()
         var requests: [Request] = []
         if let active = current { requests.append(active) }
-        current = nil
+        clearCurrentRequest()
         requests.append(contentsOf: takeQueuedRequests())
         deliveringReply = false
         return requests

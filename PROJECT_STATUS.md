@@ -1,6 +1,6 @@
 # MacGamingTrainer Project Status
 
-Updated: 2026-10-13
+Updated: 2026-10-14
 
 This file is the canonical **current operational handoff**. It is not a merge ledger or roadmap.
 
@@ -30,6 +30,7 @@ Always resolve current remote `main` before work; do not treat a SHA written in 
 - Core Save Management is optional cross-game infrastructure. Hades save schema/codec/provider semantics remain Hades-owned.
 - `ContractFixtures/reference_module` remains the executable proof that shared Core/build paths do not require Hades-shaped semantics, LLDB, Lua, or a sidecar.
 - Process Time Warp controller mechanics are Core-owned and debugger-agnostic; Hades owns its desired meaning/persistence/runtime integration and concrete LLDB driver.
+- The 0.3.0 connection gate (#473) includes background execution progress. A real-game single-request control showed the Host/backend/LLDB worker at scheduling priority 4 while the game was foreground; activating the existing Trainer restored backend/worker priority 31 and the same Attach completed without reconnecting. The early game-focus flag lease protects later Lua boundaries, not initial Attach. `BackendClient` owns a bounded user-initiated activity for each dispatched request and releases it on reply or terminal completion; queued and idle work hold none. Experimental symbol preloading/plugin changes have been withdrawn to the original transport settings. Actual background-worker scheduling and user-perceived connection freeze still require exact-artifact validation; an activity token or helper benchmark alone does not establish gameplay acceptance.
 - Application backend execution is pinned to bundled CPython 3.15.0rc3 (`Tools/python_runtime.json`, Astral standalone release 20261003). Core owns only generic optional-sidecar lifecycle, bounded JSONL request/reply mechanics and terminal trust semantics. Hades II owns the Xcode Python/LLDB sidecar launch, handshake/method vocabulary, risk/error mapping and Lua/debugger semantics; Xcode Python no longer hosts the main Backend worker.
 - Native build/release provenance (#437) now uses GitHub-hosted `macos-26` ARM64 and explicitly selected Xcode 26.6 (build `17F113`) via `DEVELOPER_DIR`. The hosted image is mutable: convergence provenance records its actual runner image/macOS, selected developer directory, SDK, Swift, Clang, LLDB/Xcode Python, producer workflow source, source/module inputs and artifact SHA-256. Critical Actions are pinned to reviewed commits with exact upstream tag breadcrumbs. Bundled CPython 3.15.0rc3 and existing Lua dependency checksums remain intact. PR #446 passed all three exact-head integrated task gates and is merged; a QA/release artifact for merged `main` requires a fresh exact-SHA convergence dispatch and does not imply game acceptance.
 - Runtime observation distinguishes durable desired state from observed active/dormant state. Outcome-unknown non-idempotent mutations are never blindly replayed.
