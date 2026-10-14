@@ -550,6 +550,18 @@ struct Main {
             fail("Save Editor coverage map was not decoded")
         }
 
+        // Primary Save editing must be possible directly from the first result.
+        // No category expansion, entity selection or inspector activation is needed.
+        func inlineValueField() -> NSTextField? {
+            NSApp.windows.compactMap(\\.contentView).flatMap(fields).first { field in
+                field.isEditable && field.isEnabled && field.stringValue == "123"
+            }
+        }
+        pumpUntil(timeout: 2.0) { inlineValueField() != nil }
+        if inlineValueField() == nil {
+            fail("The initial Save result requires an extra entity selection before editing")
+        }
+
         let sent = commands(at: commandLog)
         if sent.map({ $0["command"] as? String }) != ["save_editor_inventory", "save_editor_open", "save_editor_query"] {
             fail("unexpected command sequence: \(sent)")
