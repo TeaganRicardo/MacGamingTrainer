@@ -1,3 +1,4 @@
+test_trainer_text_field_appearance.py
 test_core_save_batch_delete_round20.py
 test_core_save_rename_completion_round24.py
 test_core_save_manager_lifecycle_u01_u02.py
@@ -8,7 +9,6 @@ test_shortcut_chord_semantics.py
 test_trainer_log_sink_shared_append.py
 test_hades2_view_state_flow.py
 test_runtime_text_edit_completion.py
-test_trainer_text_field_appearance.py
 test_viewport_feedback.py
 test_hades2_force_enable_rerolls_frontend.py
 test_hades2_gathering_frontend.py
