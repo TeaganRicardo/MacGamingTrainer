@@ -135,3 +135,9 @@
 "host.timeWarp.error.memoryWriteFailed" = "无法写入 Time Warp image allowlist。";
 
 "host.save.edit" = "编辑存档";
+
+// Trainer-owned feedback controls; paired in en/Host.strings.
+"host.feedback.details" = "查看详情";
+"host.feedback.collapse" = "收起提示";
+"host.feedback.currentIssues" = "当前问题";
+"host.feedback.closeDetails" = "关闭";

@@ -135,3 +135,9 @@
 "host.timeWarp.error.memoryWriteFailed" = "Unable to write the Time Warp image allowlist.";
 
 "host.save.edit" = "Edit Save";
+
+// Trainer-owned feedback controls; paired in zh-CN/Host.strings.
+"host.feedback.details" = "View Details";
+"host.feedback.collapse" = "Hide Notice";
+"host.feedback.currentIssues" = "Current Issues";
+"host.feedback.closeDetails" = "Close";

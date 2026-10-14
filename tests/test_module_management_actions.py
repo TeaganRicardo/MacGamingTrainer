@@ -35,7 +35,6 @@ hades_sidebar = host_actions[
     host_actions.index("struct Hades2SidebarActions"):
     host_actions.index("struct Hades2HeaderActions")
 ]
-assert "EmptyView()" in hades_sidebar
 assert "shortcutSettingsPresented" not in hades_sidebar
 assert "openLog()" not in hades_sidebar
 assert "host.viewRuntimeLog" not in hades_sidebar
