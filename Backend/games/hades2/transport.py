@@ -13,7 +13,8 @@ import lldb
 from core.adapter import AdapterError as TransportError
 
 from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
-from .native_effect_query import prepare_native_query
+from .attach_trace import attach_trace
+from .native_effect_query import log_lldb_phase, prepare_native_query
 
 
 class Hades2LuaTransport:
@@ -26,6 +27,7 @@ class Hades2LuaTransport:
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
         self.listener=self.debugger.GetListener()
         self.target=None; self.process=None; self.pid=None; self.addresses={}; self.native_runtime_installer=None
+        self.native_install_observation=None
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
@@ -44,9 +46,13 @@ class Hades2LuaTransport:
         profile['createTarget']=time.monotonic()-phase
 
         error=lldb.SBError()
-        phase=time.monotonic()
-        self.process=self.target.AttachToProcessWithID(self.listener,pid,error)
-        profile['attachProcess']=time.monotonic()-phase
+        with attach_trace(self.debugger,lldb,pid):
+            with log_lldb_phase('attach.AttachToProcessWithID'):
+                phase=time.monotonic()
+                try:
+                    self.process=self.target.AttachToProcessWithID(self.listener,pid,error)
+                finally:
+                    profile['attachProcess']=time.monotonic()-phase
         if error.Fail():
             self.process=None
             profile['total']=time.monotonic()-started
@@ -57,6 +63,7 @@ class Hades2LuaTransport:
             raise TransportError('attach_denied','连接被拒绝：'+str(error)+ '。退出游戏后使用“准备调试”，再重新启动。')
 
         self.pid=pid; self.addresses={}; self.tainted=False; self.focus_original=None; self.native_runtime_installer=None
+        self.native_install_observation=None
         try:
             phase=time.monotonic()
             try:
@@ -97,7 +104,8 @@ class Hades2LuaTransport:
 
         phase=time.monotonic()
         try:
-            self.resume(time.monotonic()+3)
+            with log_lldb_phase('attach.resume'):
+                self.resume(time.monotonic()+3)
         except Exception as exc:
             profile['resume']=time.monotonic()-phase
             profile['total']=time.monotonic()-started
@@ -152,17 +160,21 @@ class Hades2LuaTransport:
         self.drain()
         return self.process is not None and self.process.GetState() not in (lldb.eStateExited,lldb.eStateDetached,lldb.eStateInvalid)
 
-    def wait_state(self, states, deadline):
+    def wait_state(self, states, deadline, *, phase='transport.stop', primary_error_code=None):
+        last_observed_state=None
         while time.monotonic()<deadline:
             self.drain()
             state=self.process.GetState()
+            last_observed_state=state
             if state in states:return state
             if state in (lldb.eStateExited,lldb.eStateDetached):
                 raise TransportError('disconnected','游戏进程已结束。')
             time.sleep(.005)
-        raise TransportError('process_timeout','游戏进程状态切换超时。')
+        observation={'phase':phase,'expectedStates':list(states),'lastObservedState':last_observed_state}
+        if primary_error_code is not None:observation['primary_error_code']=primary_error_code
+        raise TransportError('process_timeout','游戏进程状态切换超时。',diagnostic=json.dumps(observation,separators=(',',':')))
 
-    def stop(self, deadline):
+    def stop(self, deadline, *, phase='transport.stop', primary_error_code=None):
         self.drain()
         state=self.process.GetState()
         if state==lldb.eStateStopped:return
@@ -170,16 +182,10 @@ class Hades2LuaTransport:
             raise TransportError('disconnected','游戏进程已结束。')
         if time.monotonic()>=deadline:
             raise TransportError('stop_failed','无法在时限内暂停游戏。')
-        # Request the target stop without LLDB's synchronous debugserver halt
-        # round trip. Signal delivery is not completion: LLDB must observe the
-        # stop before callers proceed, and retains resume/breakpoint ownership.
-        try:
-            os.kill(self.pid,signal.SIGSTOP)
-        except ProcessLookupError as exc:
-            raise TransportError('disconnected','游戏进程已结束。') from exc
-        except OSError as exc:
-            raise TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=str(exc)) from exc
-        return self.wait_state((lldb.eStateStopped,),deadline)
+        # LLDB owns the stop request and its process-state event. An asynchronous
+        # request is not completion: observe the stop within the original deadline.
+        self.process.SendAsyncInterrupt()
+        return self.wait_state((lldb.eStateStopped,),deadline,phase=phase,primary_error_code=primary_error_code)
 
     def resume(self, deadline, breakpoint_expected=False):
         self.drain()
@@ -212,7 +218,7 @@ class Hades2LuaTransport:
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
         deadline=time.monotonic()+timeout
-        self.stop(deadline)
+        self.stop(deadline,phase='boundary.initial_stop')
         self.restore_focus() # Never overwrite an outstanding recovery value.
         error=lldb.SBError()
         focus=self.address('_ZN3sgg13ConfigOptions20RequireFocusToUpdateE')
@@ -249,35 +255,43 @@ class Hades2LuaTransport:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 
     def execute(self, source, *, expression_timeout_seconds=2.0):
-        started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0
+        started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0; primary_error_code=None
         try:
             th,L,bp=self.boundary()
             payload=source.encode('utf-8')
             if len(payload)>LUA_TRANSPORT_SOURCE_LIMIT_BYTES:raise TransportError('invalid_request','功能代码过长。')
-            cap=LUA_TRANSPORT_RESULT_LIMIT_BYTES;size=len(payload)+1+cap
+            library=getattr(self,'native_runtime_installer',None)
+            observe_install=library is not None and getattr(self,'native_install_observation',None) is None
+            native_cap=2048 if observe_install else 0
+            cap=LUA_TRANSPORT_RESULT_LIMIT_BYTES;size=len(payload)+1+cap+native_cap
             err=lldb.SBError();scratch=self.process.AllocateMemory(size,lldb.ePermissionsReadable|lldb.ePermissionsWritable,err)
             if err.Fail():raise TransportError('memory_error',str(err))
             if self.process.WriteMemory(scratch,payload+b'\0',err)!=len(payload)+1 or err.Fail():raise TransportError('memory_error',str(err))
             out=scratch+len(payload)+1
             a=self.address
-            installer=getattr(self,'native_runtime_installer',None)
-            install=f'((int(*)(void*)){installer})(L)' if installer is not None else '0'
+            native_out=out+cap if observe_install else out
+            install_out=f'(char*){native_out}' if observe_install else 'o'
+            install_cap=native_cap if observe_install else cap
+            install=f'((int(*)(void*,unsigned long,char*,unsigned long)){library.installer})(L,{library.target_header_base},{install_out},{install_cap})' if library is not None else '0'
+            copy_rejection=f'if(rc<0){{const char *s=(const char*){native_out};unsigned long n=0;while(n<{native_cap}-1 && s[n]){{o[n]=s[n];++n;}}o[n]=0;}}' if observe_install else ''
             # One expression; preserve the stack even on a Lua error. Copy result
             # before popping it, so host-side reading cannot race the Lua GC.
             expression=f'''({{
                 void *L=(void*){L};
+                char *o=(char*){out};
+                o[0]=0;
                 int top=((int(*)(void*)){a('lua_gettop')})(L);
                 int rc={install};
+                {copy_rejection}
                 if(rc==0) rc=((int(*)(void*,const char*,unsigned long,const char*,const char*)){a('luaL_loadbufferx')})(L,(const char*){scratch},{len(payload)},"MacGamingTrainer",(const char*)0);
                 if(rc==0) rc=((int(*)(void*,int,int,int,int,void*)){a('lua_pcallk')})(L,0,1,0,0,(void*)0);
-                unsigned long n=0;
-                const char *s;
-                if(rc<0){{s="Native query registration rejected the target or Lua stack";n=sizeof("Native query registration rejected the target or Lua stack")-1;}}
-                else s=((const char*(*)(void*,int,unsigned long*)){a('lua_tolstring')})(L,-1,&n);
-                char *o=(char*){out};
-                if(n>={cap}){{n={cap}-1;rc=100;}}
-                if(s){{for(unsigned long i=0;i<n;++i)o[i]=s[i];}} else {{n=0;rc=101;}}
-                o[n]=0;
+                if(rc>=0){{
+                    unsigned long n=0;
+                    const char *s=((const char*(*)(void*,int,unsigned long*)){a('lua_tolstring')})(L,-1,&n);
+                    if(n>={cap}){{n={cap}-1;rc=100;}}
+                    if(s){{for(unsigned long i=0;i<n;++i)o[i]=s[i];}} else {{n=0;rc=101;}}
+                    o[n]=0;
+                }}
                 ((void(*)(void*,int)){a('lua_settop')})(L,top);
                 rc;
             }})'''
@@ -302,7 +316,22 @@ class Hades2LuaTransport:
             if err.Fail():
                 self.tainted=True
                 raise TransportError('outcome_unknown','无法读取操作结果；请检查游戏，不要重复资源操作。')
-            if result.GetValueAsSigned()!=0:
+            status=result.GetValueAsSigned()
+            if observe_install and status>=0:
+                observation_error=lldb.SBError()
+                observation=self.process.ReadCStringFromMemory(native_out,native_cap,observation_error)
+                if observation_error.Fail():
+                    self.native_install_observation=''
+                    logging.warning('NativeQueryInstallObservation unavailable: %s',observation_error)
+                elif observation.startswith('nativeStatus=0 '):
+                    self.native_install_observation=observation
+                    logging.info('NativeQueryInstallObservation %s',observation)
+            if status<0:
+                raise TransportError(
+                    'incompatible','hades2.error.nativeQueryUnavailable',
+                    diagnostic=f'Native query registration status={status}: '+text,
+                )
+            if status!=0:
                 marker='MGT_OUTCOME_UNKNOWN:'
                 if marker in text:
                     self.tainted=True
@@ -310,12 +339,15 @@ class Hades2LuaTransport:
                     raise TransportError('outcome_unknown',message or '游戏调用结果不明，未自动重试。')
                 raise TransportError('lua_error',text or 'Lua 执行失败')
             return text
+        except Exception as exc:
+            primary_error_code=getattr(exc,'code',None)
+            raise
         finally:
             if bp is not None and self.target:
                 self.target.BreakpointDelete(bp.GetID())
             if self.process and self.alive():
                 try:
-                    self.stop(time.monotonic()+3)
+                    self.stop(time.monotonic()+3,phase='execute.cleanup_stop',primary_error_code=primary_error_code)
                     self.restore_focus()
                     if scratch is not None:self.process.DeallocateMemory(scratch)
                     self.resume(time.monotonic()+3)
@@ -327,7 +359,7 @@ class Hades2LuaTransport:
     def detach(self):
         detached_pid=None
         if self.process and self.alive():
-            self.stop(time.monotonic()+3)
+            self.stop(time.monotonic()+3,phase='detach.stop')
             self.restore_focus()
             self.target.DeleteAllBreakpoints()
             error=self.process.Detach()
@@ -335,6 +367,7 @@ class Hades2LuaTransport:
             detached_pid=self.pid
             self.drain()
         self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None
+        self.native_install_observation=None
         if detached_pid is not None:
             # LLDB has released the target, but macOS may retain its BSD stop
             # signal. Complete the process handoff after debugger ownership ends.
