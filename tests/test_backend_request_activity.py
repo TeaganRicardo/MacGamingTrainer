@@ -77,6 +77,7 @@ final class Activities {
 
 final class Probe {
     let activities = Activities()
+    let process: BackendProcess
     let client: BackendClient
     var replies: [String] = []
     var errors: [String] = []
@@ -84,11 +85,12 @@ final class Probe {
 
     init(python: String, worker: String) throws {
         let tracker = activities
+        process = BackendProcess(
+            executableURL: URL(fileURLWithPath: python),
+            forceKillDelay: 0.1
+        )
         client = BackendClient(
-            process: BackendProcess(
-                executableURL: URL(fileURLWithPath: python),
-                forceKillDelay: 0.1
-            ),
+            process: process,
             beginRequestActivity: { tracker.begin() }
         )
         try client.start(
@@ -172,12 +174,13 @@ for (command, expectedError) in [("hang", "backend_timeout"), ("malformed", "bac
     require(p.activities.events == ["begin1", "end1"], "terminal activity leaked/duplicated: \(command)")
 }
 
-// JSON serialization fails after dispatch acquired activity, before the worker
-// receives a request. It must end exactly once even when the child then exits.
+// The backend closes its input after activity acquisition, before send. The
+// actual pipe write must throw and release activity once, even when the child
+// termination notification follows. This is a send race, not invalid JSON.
 do {
     let p = try Probe(python: args[1], worker: args[2])
     var failed = false
-    p.client.send("reply", params: ["invalid": NSObject()], operation: "send-failure", completion: { failed = !$0 })
+    p.client.send("reply", operation: "send-failure", started: { p.process.stop() }, completion: { failed = !$0 })
     require(failed && p.errors.contains("backend_send_failed"), "send failure not reached")
     require(p.activities.events == ["begin1", "end1"], "send failure retained activity")
     p.stopAndWait()
