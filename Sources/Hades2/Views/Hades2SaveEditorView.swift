@@ -19,6 +19,9 @@ extension View {
 enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all
     case story
+    case quests
+    case dialogue
+    case flags
     case people
     case resources
     case growth
@@ -32,6 +35,9 @@ enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
         switch self {
         case .all: return .discover
         case .story: return .investigate
+        case .quests: return .quests
+        case .dialogue: return .dialogue
+        case .flags: return .flags
         case .people: return .relationships
         case .resources: return .resources
         case .growth: return .arcana
@@ -41,16 +47,13 @@ enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
         }
     }
 
-    var icon: String {
+    var titleKey: String {
         switch self {
-        case .all: return "square.grid.2x2"
-        case .story: return "text.book.closed"
-        case .people: return "person.2"
-        case .resources: return "shippingbox"
-        case .growth: return "sparkles.rectangle.stack"
-        case .equipment: return "shield.lefthalf.filled"
-        case .records: return "chart.bar.xaxis"
-        case .advanced: return "chevron.left.forwardslash.chevron.right"
+        case .story: return "hades2.saveEditor.workbench.story.scenes"
+        case .quests: return "hades2.saveEditor.workbench.story.quests"
+        case .dialogue: return "hades2.saveEditor.workbench.story.dialogue"
+        case .flags: return "hades2.saveEditor.workbench.story.flags"
+        default: return "hades2.saveEditor.workbench.section." + rawValue
         }
     }
 }
@@ -62,10 +65,8 @@ struct Hades2SaveEditorView: View {
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     @State private var section: Hades2SaveWorkbenchSection = .all
-    @State private var selectedEntityID: String?
     @State private var drafts: [String: String] = [:]
     @State private var reviewExpanded = false
-    @State private var confirmingApply = false
     @State private var confirmingSource = false
 
     init(model: Hades2SaveEditorModel) {
@@ -80,10 +81,6 @@ struct Hades2SaveEditorView: View {
 
     private var entities: [Hades2SaveEditorEntity] {
         Hades2SaveEditorEntityGrouping.entities(from: model.items)
-    }
-
-    private var selectedEntity: Hades2SaveEditorEntity? {
-        entities.first(where: { $0.id == selectedEntityID })
     }
 
     var body: some View {
@@ -101,18 +98,17 @@ struct Hades2SaveEditorView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }
-
-            HSplitView {
-                navigation
-                    .frame(minWidth: 175, idealWidth: 200, maxWidth: 250)
-                resultList
-                    .frame(minWidth: 290, idealWidth: 390, maxWidth: 500)
-                inspector
-                    .frame(minWidth: 360, maxWidth: .infinity)
+            workbenchToolbar
+            Divider()
+            inlineResults
+                .id(model.workspaceID)
+                .frame(height: reviewExpanded ? 445 : 610)
+            if model.total > Hades2SaveEditorModel.pageSize {
+                Divider()
+                pagingControls
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
             }
-            .id(model.workspaceID)
-            .frame(height: reviewExpanded ? 430 : 620)
-
             if model.pendingCount > 0 {
                 Divider()
                 changesBar
@@ -123,23 +119,16 @@ struct Hades2SaveEditorView: View {
                 }
             }
         }
-        .frame(width: 1180)
+        .frame(width: 980)
         .trainerSurface(.canvas)
         .trainerDismissTextEditingOnClickAway()
         .confirmationDialog(
-            text("hades2.saveEditor.workbench.confirmTitle"),
-            isPresented: $confirmingApply,
-            titleVisibility: .visible
+            text("hades2.saveEditor.source.confirmTitle"),
+            isPresented: $confirmingSource
         ) {
-            Button(text("hades2.saveEditor.apply"), role: .destructive) {
-                model.apply()
+            Button(text("hades2.saveEditor.source.read"), role: .destructive) {
+                model.openSelection()
             }
-            Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
-        } message: {
-            Text(text("hades2.saveEditor.workbench.confirmBody", arguments: [model.selectedTargetID]))
-        }
-        .confirmationDialog(text("hades2.saveEditor.source.confirmTitle"), isPresented: $confirmingSource) {
-            Button(text("hades2.saveEditor.source.read"), role: .destructive) { model.openSelection() }
             Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
         } message: {
             Text(text("hades2.saveEditor.source.confirmBody"))
@@ -158,7 +147,6 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.workspaceID) { _, _ in
             drafts.removeAll()
-            selectedEntityID = nil
             section = .all
             reviewExpanded = false
         }
@@ -191,7 +179,6 @@ struct Hades2SaveEditorView: View {
             .help(text("hades2.saveEditor.workbench.sourceHint"))
 
             Button {
-                selectedEntityID = nil
                 model.query(offset: model.offset)
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -208,325 +195,209 @@ struct Hades2SaveEditorView: View {
     }
 
     private var documentSelection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Text(text("hades2.saveEditor.source.label")).frame(width: 90, alignment: .leading)
-                Picker(text("hades2.saveEditor.source.label"), selection: $model.selectedSourceID) {
-                    Text(text("hades2.saveEditor.source.choose")).tag("")
-                    ForEach(model.sourceFiles) { file in Text(file.id).tag(file.id) }
-                }.labelsHidden().frame(maxWidth: 380).disabled(model.busy)
-                Button(text("hades2.saveEditor.source.read")) {
-                    if model.pendingCount > 0 { confirmingSource = true }
-                    else { model.openSelection() }
-                }.disabled(model.busy || model.selectedSourceID.isEmpty)
-                Spacer()
-                Button(text("hades2.saveEditor.source.refreshFiles")) { model.refreshFiles() }
-                    .disabled(model.busy)
-            }
-            HStack(spacing: 10) {
-                Text(text("hades2.saveEditor.target.label")).frame(width: 90, alignment: .leading)
-                Picker(text("hades2.saveEditor.target.label"), selection: Binding(
-                    get: { model.selectedTargetID }, set: model.selectTarget)) {
-                    Text(text("hades2.saveEditor.target.choose")).tag("")
-                    ForEach(model.writeTargets) { file in Text(file.id).tag(file.id) }
-                }.labelsHidden().frame(maxWidth: 380).disabled(model.busy)
-                if !model.sourceRelativePath.isEmpty {
-                    Text(text("hades2.saveEditor.source.pinned", arguments: [
-                        text(model.snapshotID == nil ? "hades2.saveEditor.source.currentFile" : "hades2.saveEditor.source.backup"),
-                        model.sourceRootID + "/" + model.sourceRelativePath,
-                    ]))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(2).help(model.sourceSHA256)
+        HStack(spacing: 12) {
+            Text(text("hades2.saveEditor.source.label"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker(text("hades2.saveEditor.source.label"), selection: $model.selectedSourceID) {
+                Text(text("hades2.saveEditor.source.choose")).tag("")
+                ForEach(model.sourceFiles) { file in
+                    Text(file.profile + " · " + file.relativePath).tag(file.id)
                 }
-                Spacer()
             }
-        }.padding(.horizontal, 18).padding(.vertical, 10)
-    }
+            .labelsHidden()
+            .frame(maxWidth: 275)
+            .disabled(model.busy)
 
-    private var navigation: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(Hades2SaveWorkbenchSection.allCases.filter { $0 != .advanced }) { item in
-                navigationButton(item)
+            Button(text("hades2.saveEditor.source.read")) {
+                if model.pendingCount > 0 { confirmingSource = true }
+                else { model.openSelection() }
             }
-            Spacer(minLength: 8)
-            Divider().padding(.vertical, 8)
-            navigationButton(.advanced)
+            .disabled(model.busy || model.selectedSourceID.isEmpty)
+
+            Divider().frame(height: 20)
+
+            Text(text("hades2.saveEditor.target.label"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Picker(
+                text("hades2.saveEditor.target.label"),
+                selection: Binding(get: { model.selectedTargetID }, set: model.selectTarget)
+            ) {
+                Text(text("hades2.saveEditor.target.choose")).tag("")
+                ForEach(model.writeTargets) { file in
+                    Text(file.profile + " · " + file.relativePath).tag(file.id)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 275)
+            .disabled(model.busy)
+            Spacer(minLength: 0)
         }
-        .padding(10)
-        .trainerSurface(.sidebar)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
     }
 
-    private func navigationButton(_ item: Hades2SaveWorkbenchSection) -> some View {
-        Button {
-            guard section != item else { return }
-            section = item
-            selectedEntityID = nil
-            model.selectDomain(item.domain)
-        } label: {
-            Label(text("hades2.saveEditor.workbench.section." + item.rawValue), systemImage: item.icon)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 9)
-                .trainerSurface(section == item ? .selected : .clear,
-                                cornerRadius: theme.compactCornerRadius)
-        }
-        .buttonStyle(.plain)
-        .disabled(model.busy || model.profile.isEmpty)
-    }
-
-    private var resultList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(spacing: 10) {
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField(
-                        text("hades2.saveEditor.workbench.search"),
-                        text: $model.search
-                    )
+    private var workbenchToolbar: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField(text("hades2.saveEditor.workbench.search"), text: $model.search)
                     .textFieldStyle(.plain)
-                    .onSubmit {
-                        selectedEntityID = nil
+                    .onSubmit { model.submitSearch() }
+                if !model.search.isEmpty {
+                    Button {
+                        model.search = ""
                         model.submitSearch()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
                     }
-                    if !model.search.isEmpty {
-                        Button {
-                            model.search = ""
-                            selectedEntityID = nil
-                            model.submitSearch()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(10)
-                .trainerSurface(.subtle, cornerRadius: 8)
-
-                if section == .story {
-                    Picker(
-                        text("hades2.saveEditor.workbench.section.story"),
-                        selection: Binding(
-                            get: { model.selectedDomain },
-                            set: { newDomain in
-                                selectedEntityID = nil
-                                model.selectDomain(newDomain)
-                            }
-                        )
-                    ) {
-                        Text(text("hades2.saveEditor.workbench.story.scenes"))
-                            .tag(Hades2SaveEditorDomain.investigate)
-                        Text(text("hades2.saveEditor.workbench.story.quests"))
-                            .tag(Hades2SaveEditorDomain.quests)
-                        Text(text("hades2.saveEditor.workbench.story.flags"))
-                            .tag(Hades2SaveEditorDomain.flags)
-                        Text(text("hades2.saveEditor.workbench.story.dialogue"))
-                            .tag(Hades2SaveEditorDomain.dialogue)
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(14)
-            Divider()
+            .padding(10)
+            .trainerSurface(.subtle, cornerRadius: 8)
+            .disabled(model.busy || model.profile.isEmpty)
+
+            Picker(
+                text("hades2.saveEditor.workbench.section.all"),
+                selection: Binding(
+                    get: { section },
+                    set: { item in
+                        guard section != item else { return }
+                        section = item
+                        model.selectDomain(item.domain)
+                    }
+                )
+            ) {
+                ForEach(Hades2SaveWorkbenchSection.allCases) { item in
+                    Text(text(item.titleKey))
+                        .tag(item)
+                        .disabled(!model.availableDomains.contains(item.domain))
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: 190)
+            .disabled(model.busy || model.profile.isEmpty)
 
             if section == .advanced && !model.advancedPath.isEmpty {
                 Button {
-                    selectedEntityID = nil
                     model.leaveAdvanced()
                 } label: {
                     Label(text("hades2.saveEditor.up"), systemImage: "chevron.left")
-                        .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .padding(12)
+                .buttonStyle(.borderless)
             }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+    }
 
+    private var inlineResults: some View {
+        Group {
             if model.profile.isEmpty || (model.busy && model.items.isEmpty) {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.items.isEmpty {
                 TrainerEmptyState(text: text("hades2.saveEditor.empty"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(entities) { entity in
-                            Button {
-                                selectEntity(entity)
-                            } label: {
-                                HStack {
+                            VStack(alignment: .leading, spacing: 0) {
+                                if entity.entries.count > 1 {
                                     Text(entity.title)
-                                        .font(.subheadline)
-                                        .lineLimit(2)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    if selectedEntityID == entity.id {
-                                        Image(systemName: "chevron.right")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                        .font(.subheadline.weight(.semibold))
+                                        .padding(.horizontal, 18)
+                                        .padding(.top, 16)
+                                        .padding(.bottom, 6)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 11)
-                                .trainerSurface(
-                                    selectedEntityID == entity.id ? .selected : .clear,
-                                    cornerRadius: 8
-                                )
+                                ForEach(entity.entries) { entry in
+                                    inlineEntry(entry, in: entity)
+                                    Divider().padding(.leading, 18)
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .help(entity.entries.first?.rawID ?? entity.title)
                         }
                     }
-                    .padding(8)
                 }
-            }
-            Divider()
-            pagingControls
-                .padding(12)
-        }
-    }
-
-    private func selectEntity(_ entity: Hades2SaveEditorEntity) {
-        selectedEntityID = entity.id
-        if entity.entries.count == 1,
-           let entry = entity.entries.first,
-           entry.domain == "investigate" {
-            model.inspect(entry)
-        }
-    }
-
-    private var pagingControls: some View {
-        HStack(spacing: 7) {
-            Text(pageSummary)
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            Spacer()
-            Button {
-                selectedEntityID = nil
-                model.previousPage()
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(model.busy || model.offset == 0)
-            Button {
-                selectedEntityID = nil
-                model.nextPage()
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(model.busy || model.offset + Hades2SaveEditorModel.pageSize >= model.total)
-        }
-        .buttonStyle(.borderless)
-    }
-
-    private var pageSummary: String {
-        guard model.total > 0 else {
-            return text("hades2.saveEditor.pageSummary", arguments: ["0", "0", "0"])
-        }
-        return text(
-            "hades2.saveEditor.pageSummary",
-            arguments: [
-                String(model.offset + 1),
-                String(min(model.offset + model.items.count, model.total)),
-                String(model.total)
-            ]
-        )
-    }
-
-    private var inspector: some View {
-        ScrollView {
-            if let entity = selectedEntity {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(entity.title)
-                        .font(.title2.weight(.semibold))
-                        .textSelection(.enabled)
-                    ForEach(entity.entries.filter { $0.domain != "investigate" }) { entry in
-                        inspectorEntry(entry, entity: entity)
-                    }
-                    let scenes = entity.entries.filter { $0.domain == "investigate" }
-                    if scenes.count == 1, let scene = scenes.first {
-                        investigationEntry(scene)
-                    } else if !scenes.isEmpty {
-                        investigationCollection(scenes)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(22)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "cursorarrow.click.2")
-                        .font(.largeTitle)
-                        .foregroundStyle(.tertiary)
-                    Text(text("hades2.saveEditor.workbench.select"))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 320)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
-    private func inspectorEntry(
-        _ entry: Hades2SaveEditorEntry,
-        entity: Hades2SaveEditorEntity
+    private func inlineEntry(
+        _ entry: Hades2SaveEditorEntry, in entity: Hades2SaveEditorEntity
     ) -> some View {
         if entry.domain == "advanced" {
             advancedEntry(entry)
-        } else {
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+        } else if entry.domain == "investigate" {
             VStack(alignment: .leading, spacing: 10) {
-                Text(fieldTitle(entry, in: entity))
-                    .font(.subheadline.weight(.medium))
-                if entry.editable && !entry.mutationKinds.isEmpty {
-                    editorControl(entry)
-                    HStack {
-                        Button(text("hades2.saveEditor.workbench.addChange")) {
-                            stageDraft(for: entry)
-                        }
-                        .disabled(model.busy || parsedDraft(for: entry) == nil)
-                        if model.pendingChanges.contains(where: { $0.entryID == entry.id }) {
-                            Text(text("hades2.saveEditor.workbench.staged"))
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(fieldTitle(entry, in: entity))
+                            .font(.callout)
+                            .textSelection(.enabled)
+                        if let snippet = entry.investigationSnippet, !snippet.isEmpty {
+                            Text(snippet)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(2)
                         }
                     }
-                } else {
-                    if entry.valueType != "table" {
-                        Text(valueText(entry.value))
-                            .font(.callout.monospacedDigit())
-                            .textSelection(.enabled)
+                    Spacer(minLength: 8)
+                    Button(text("hades2.saveEditor.investigate.details")) {
+                        model.inspect(entry)
                     }
-                    if entry.discoveryReasonCode != nil || entry.discoveryReason != nil {
-                        DisclosureGroup(text("hades2.saveEditor.workbench.limitation")) {
-                            Text(discoveryReason(
-                                entry,
-                                fallback: entry.discoveryReason ?? text("hades2.saveEditor.discovery.reason.readOnly")
-                            ))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .font(.caption)
-                    }
+                    .buttonStyle(.borderless)
+                    .disabled(model.busy)
                 }
-                DisclosureGroup(text("hades2.saveEditor.workbench.technical")) {
-                    Text(entry.rawID)
-                        .font(.caption.monospaced())
+                if let detail = model.investigationDetail, detail.scene == entry.rawID {
+                    investigationDetailView(detail)
+                        .padding(.leading, 12)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+        } else {
+            HStack(spacing: 14) {
+                Text(fieldTitle(entry, in: entity))
+                    .font(.callout)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .help(entry.rawID)
+                if entry.editable && !entry.mutationKinds.isEmpty {
+                    editorControl(entry)
+                } else if entry.valueType != "table" {
+                    Text(valueText(entry.value))
+                        .font(.callout.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
-                .font(.caption)
+                if !entry.editable &&
+                    (entry.discoveryReasonCode != nil || entry.discoveryReason != nil) {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .help(discoveryReason(
+                            entry,
+                            fallback: entry.discoveryReason ??
+                                text("hades2.saveEditor.discovery.reason.readOnly")
+                        ))
+                }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .trainerSurface(.subtle, cornerRadius: 10)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
         }
     }
 
     private func fieldTitle(
-        _ entry: Hades2SaveEditorEntry,
-        in entity: Hades2SaveEditorEntity
+        _ entry: Hades2SaveEditorEntry, in entity: Hades2SaveEditorEntity
     ) -> String {
         if entry.displayName.hasPrefix(entity.title + " · ") {
             return String(entry.displayName.dropFirst((entity.title + " · ").count))
@@ -542,49 +413,63 @@ struct Hades2SaveEditorView: View {
         let workspaceID = model.workspaceID
         let draft = draftBinding(for: entry)
         if entry.valueType == "boolean" {
-            HStack {
-                Spacer()
-                TrainerToggleControl(
-                    isOn: draft.wrappedValue == "true",
-                    enabled: !model.busy,
-                    helpText: entry.displayName,
-                    onChange: { value in
-                        draft.wrappedValue = value ? "true" : "false"
-                    }
-                )
-            }
+            TrainerToggleControl(
+                isOn: draft.wrappedValue == "true",
+                enabled: !model.busy,
+                helpText: entry.displayName,
+                onChange: { value in
+                    guard model.workspaceID == workspaceID else { return }
+                    let proposed = value ? "true" : "false"
+                    draft.wrappedValue = proposed
+                    _ = model.completeTextEdit(entry, text: proposed)
+                }
+            )
         } else if entry.valueType == "enum" && !entry.choices.isEmpty {
             Picker(
                 text("hades2.saveEditor.value"),
-                selection: draft
+                selection: Binding(
+                    get: { draft.wrappedValue },
+                    set: { choice in
+                        guard !model.busy, model.workspaceID == workspaceID else { return }
+                        draft.wrappedValue = choice
+                        _ = model.completeTextEdit(entry, text: choice)
+                    }
+                )
             ) {
                 ForEach(entry.choices, id: \.self) { choice in
                     Text(entry.choiceNames[choice] ?? enumTitle(choice)).tag(choice)
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 240, alignment: .leading)
+            .frame(width: 230)
+            .disabled(model.busy)
         } else {
-            TrainerTextField(title: text("hades2.saveEditor.value"), text: draft, onCommit: { edit in
-                guard model.workspaceID == workspaceID else { return edit.text }
-                return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
-            })
+            TrainerTextField(
+                title: text("hades2.saveEditor.value"),
+                text: draft,
+                onCommit: { edit in
+                    guard model.workspaceID == workspaceID else { return edit.text }
+                    return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
+                }
+            )
             .id(entry.id)
             .disabled(model.busy)
-            .frame(maxWidth: 240, alignment: .leading)
+            .frame(width: 175)
         }
     }
 
     @ViewBuilder
     private func advancedEntry(_ entry: Hades2SaveEditorEntry) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(entry.rawID).font(.headline.monospaced()).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(entry.rawID)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
             if let count = entry.childCount {
                 Text(text("hades2.saveEditor.childCount", arguments: [String(count)]))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                 if !entry.pathAmbiguous {
                     Button(text("hades2.saveEditor.workbench.browse")) {
-                        selectedEntityID = nil
                         if model.selectedDomain == .discover {
                             section = .advanced
                             model.openDiscoveryEntry(entry)
@@ -592,6 +477,7 @@ struct Hades2SaveEditorView: View {
                             model.enterAdvanced(entry)
                         }
                     }
+                    .buttonStyle(.borderless)
                     .disabled(model.busy)
                 }
             } else {
@@ -601,71 +487,47 @@ struct Hades2SaveEditorView: View {
                 if model.selectedDomain == .discover && !entry.pathAmbiguous {
                     Button(text("hades2.saveEditor.workbench.browse")) {
                         section = .advanced
-                        selectedEntityID = nil
                         model.openDiscoveryEntry(entry)
                     }
+                    .buttonStyle(.borderless)
                     .disabled(model.busy)
                 }
             }
             if entry.pathAmbiguous {
                 Text(text("hades2.saveEditor.ambiguousPath"))
-                    .foregroundStyle(theme.warning)
                     .font(.caption)
+                    .foregroundStyle(theme.warning)
             }
         }
     }
 
-    private func investigationCollection(_ scenes: [Hades2SaveEditorEntry]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(text("hades2.saveEditor.workbench.story.scenes"))
-                .font(.headline)
-            ForEach(scenes) { scene in
-                Button {
-                    model.inspect(scene)
-                } label: {
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(scene.investigationSnippet.flatMap {
-                            $0.isEmpty ? nil : $0
-                        } ?? scene.rawID)
-                            .font(.callout)
-                            .lineLimit(2)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if model.selectedInvestigationID == scene.rawID {
-                            Image(systemName: "chevron.down")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(10)
-                    .trainerSurface(
-                        model.selectedInvestigationID == scene.rawID
-                            ? .selected : .subtle,
-                        cornerRadius: 8
-                    )
-                }
-                .buttonStyle(.plain)
-                .help(scene.rawID)
+    private var pagingControls: some View {
+        HStack(spacing: 8) {
+            Text(pageSummary)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { model.previousPage() } label: {
+                Image(systemName: "chevron.left")
             }
-            if let detail = model.investigationDetail,
-               scenes.contains(where: { $0.rawID == detail.scene }) {
-                Divider()
-                investigationDetailView(detail)
+            .disabled(model.busy || model.offset == 0)
+            Button { model.nextPage() } label: {
+                Image(systemName: "chevron.right")
             }
+            .disabled(model.busy || model.offset + Hades2SaveEditorModel.pageSize >= model.total)
         }
+        .buttonStyle(.borderless)
     }
 
-    @ViewBuilder
-    private func investigationEntry(_ entry: Hades2SaveEditorEntry) -> some View {
-        if let detail = model.investigationDetail, detail.scene == entry.rawID {
-            investigationDetailView(detail)
-        } else if model.busy {
-            ProgressView()
-        } else {
-            Button(text("hades2.saveEditor.investigate.details")) {
-                model.inspect(entry)
-            }
-        }
+    private var pageSummary: String {
+        text("hades2.saveEditor.pageSummary", arguments: [
+            String(model.offset + 1),
+            String(min(model.offset + model.items.count, model.total)),
+            String(model.total)
+        ])
     }
+
+
 
     private func investigationDetailView(_ detail: Hades2SaveInvestigationDetail) -> some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -738,28 +600,21 @@ struct Hades2SaveEditorView: View {
     }
 
     private var changesBar: some View {
-        HStack(spacing: 10) {
-            if model.pendingCount > 0 {
-                Button {
-                    reviewExpanded.toggle()
-                    if reviewExpanded { model.review() }
-                } label: {
-                    Label(
-                        text("hades2.saveEditor.workbench.changes", arguments: [String(model.pendingCount)]),
-                        systemImage: "square.stack.3d.up"
-                    )
-                }
-                .buttonStyle(.bordered)
-                Spacer()
-                Button(text("hades2.saveEditor.workbench.reviewApply")) {
-                    reviewExpanded = true
-                    model.review()
-                }
-                .disabled(model.busy)
+        HStack(spacing: 12) {
+            Text(text("hades2.saveEditor.workbench.changes", arguments: [
+                String(model.pendingCount)
+            ]))
+            .font(.callout)
+            Spacer()
+            Button(text("hades2.saveEditor.workbench.reviewApply")) {
+                reviewExpanded.toggle()
+                if reviewExpanded { model.review() }
             }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.busy)
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
     }
 
     private var reviewDrawer: some View {
@@ -768,19 +623,19 @@ struct Hades2SaveEditorView: View {
                 Text(text("hades2.saveEditor.review"))
                     .font(.headline)
                 Spacer()
-                Button(text("hades2.saveEditor.cancelChanges")) {
-                    model.cancel()
-                }
-                .disabled(model.busy)
-                Button(text("hades2.saveEditor.apply")) {
-                    confirmingApply = true
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.busy || !model.hasWriteTarget)
+                Button(text("hades2.saveEditor.cancelChanges")) { model.cancel() }
+                    .disabled(model.busy)
+                // Reviewing the full staged diff is the confirmation step.
+                // Applying from this panel is one explicit recoverable transaction.
+                Button(text("hades2.saveEditor.apply")) { model.apply() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.busy || !model.hasWriteTarget)
             }
-            Text(text("hades2.saveEditor.workbench.target", arguments: [model.hasWriteTarget ? model.selectedTargetID : text("hades2.saveEditor.target.choose")]))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(text("hades2.saveEditor.workbench.target", arguments: [
+                model.hasWriteTarget ? selectedTargetLabel : text("hades2.saveEditor.target.choose")
+            ]))
+            .font(.caption)
+            .foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(spacing: 7) {
                     ForEach(model.pendingChanges) { change in
@@ -807,6 +662,13 @@ struct Hades2SaveEditorView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .trainerSurface(.panel)
+    }
+
+    private var selectedTargetLabel: String {
+        guard let file = model.writeTargets.first(where: { $0.id == model.selectedTargetID }) else {
+            return model.selectedTargetID
+        }
+        return file.profile + " · " + file.relativePath
     }
 
     private func reviewValue(
@@ -843,14 +705,7 @@ struct Hades2SaveEditorView: View {
         }
     }
 
-    private func stageDraft(for entry: Hades2SaveEditorEntry) {
-        let draft = draftBinding(for: entry)
-        draft.wrappedValue = model.completeTextEdit(entry, text: draft.wrappedValue)
-    }
 
-    private func parsedDraft(for entry: Hades2SaveEditorEntry) -> Any? {
-        model.parsedTextDraft(for: entry, text: draftBinding(for: entry).wrappedValue)
-    }
 
     private func discoveryReason(_ entry: Hades2SaveEditorEntry, fallback: String) -> String {
         guard let code = entry.discoveryReasonCode else { return fallback }
