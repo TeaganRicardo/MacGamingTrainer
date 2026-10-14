@@ -136,10 +136,11 @@ struct TrainerTextField: NSViewRepresentable {
         field.font = font
         field.alignment = alignment
         field.isEnabled = enabled
+        // AppKit clears a bezel when isBordered is assigned, even false.
+        // The native rounded bezel draws its own background.
         field.isBezeled = style == .rounded
-        field.isBordered = false
         field.bezelStyle = .roundedBezel
-        field.drawsBackground = style == .rounded
+        field.drawsBackground = false
         field.textColor = .labelColor
     }
 
