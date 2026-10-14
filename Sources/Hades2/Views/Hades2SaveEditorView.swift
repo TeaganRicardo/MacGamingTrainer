@@ -129,7 +129,9 @@ struct Hades2SaveEditorView: View {
             Button(text("hades2.saveEditor.source.read"), role: .destructive) {
                 model.openSelection()
             }
-            Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
+            Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {
+                model.selectedSourceID = loadedSourceID
+            }
         } message: {
             Text(text("hades2.saveEditor.source.confirmBody"))
         }
@@ -138,6 +140,12 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: localization.language) { _, language in
             model.setLanguage(language)
+        }
+        .onChange(of: model.selectedSourceID) { _, identifier in
+            guard model.workspaceID != nil, !model.busy,
+                  !identifier.isEmpty, identifier != loadedSourceID else { return }
+            if model.pendingCount > 0 { confirmingSource = true }
+            else { model.openSelection() }
         }
         .onChange(of: model.pendingCount) { previous, current in
             if previous > 0 && current == 0 {
@@ -179,7 +187,9 @@ struct Hades2SaveEditorView: View {
             .help(text("hades2.saveEditor.workbench.sourceHint"))
 
             Button {
-                model.query(offset: model.offset)
+                model.selectedSourceID = loadedSourceID
+                if model.pendingCount > 0 { confirmingSource = true }
+                else { model.openSelection() }
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
@@ -202,18 +212,12 @@ struct Hades2SaveEditorView: View {
             Picker(text("hades2.saveEditor.source.label"), selection: $model.selectedSourceID) {
                 Text(text("hades2.saveEditor.source.choose")).tag("")
                 ForEach(model.sourceFiles) { file in
-                    Text(file.profile + " · " + file.relativePath).tag(file.id)
+                    Text(file.relativePath).tag(file.id)
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 275)
+            .frame(maxWidth: 315)
             .disabled(model.busy)
-
-            Button(text("hades2.saveEditor.source.read")) {
-                if model.pendingCount > 0 { confirmingSource = true }
-                else { model.openSelection() }
-            }
-            .disabled(model.busy || model.selectedSourceID.isEmpty)
 
             Divider().frame(height: 20)
 
@@ -226,7 +230,7 @@ struct Hades2SaveEditorView: View {
             ) {
                 Text(text("hades2.saveEditor.target.choose")).tag("")
                 ForEach(model.writeTargets) { file in
-                    Text(file.profile + " · " + file.relativePath).tag(file.id)
+                    Text(file.relativePath).tag(file.id)
                 }
             }
             .labelsHidden()
@@ -668,7 +672,12 @@ struct Hades2SaveEditorView: View {
         guard let file = model.writeTargets.first(where: { $0.id == model.selectedTargetID }) else {
             return model.selectedTargetID
         }
-        return file.profile + " · " + file.relativePath
+        return file.relativePath
+    }
+
+    private var loadedSourceID: String {
+        guard !model.sourceRelativePath.isEmpty else { return "" }
+        return model.sourceRootID + "/" + model.sourceRelativePath
     }
 
     private func reviewValue(
