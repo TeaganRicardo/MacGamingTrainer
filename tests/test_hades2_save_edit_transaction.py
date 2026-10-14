@@ -247,25 +247,25 @@ assert service.list_state()["snapshots"] == []
 service, save_path, original, _state, _spec, _data_root = make_environment("write-failure")
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
 session.document.lua_state["GameState"]["MetaPoints"] = 400.0
-real_replace = save_restore_module.os.replace
+real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 failed_target_write = False
 
 
-def fail_after_target_replace(source, destination):
+def fail_after_target_replace(self, source, destination, digest, **options):
     global failed_target_write
     destination = Path(destination)
-    if destination == save_path and not failed_target_write:
+    if destination == save_path.resolve() and not failed_target_write:
         failed_target_write = True
-        real_replace(source, destination)
+        real_replace(self, source, destination, digest, **options)
         raise OSError("simulated lost write acknowledgement")
-    return real_replace(source, destination)
+    return real_replace(self, source, destination, digest, **options)
 
 
-save_restore_module.os.replace = fail_after_target_replace
+save_restore_module.SaveRestoreTransaction._replace_file = fail_after_target_replace
 try:
     expect_error(SaveRestoreError, session.apply, "write failure")
 finally:
-    save_restore_module.os.replace = real_replace
+    save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 assert failed_target_write is True
 assert save_path.read_bytes() == original
 state_after_write_failure = service.list_state()
@@ -307,23 +307,23 @@ post_verify_race_rolled_back = save_path.read_bytes() == original
 service, save_path, original, _state, _spec, _data_root = make_environment("rollback-failure")
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
 session.document.lua_state["GameState"]["MetaPoints"] = 600.0
-real_replace = save_restore_module.os.replace
+real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 target_replace_calls = 0
 
 
-def fail_target_and_rollback(source, destination):
+def fail_target_and_rollback(self, source, destination, digest, **options):
     global target_replace_calls
     destination = Path(destination)
-    if destination == save_path:
+    if destination == save_path.resolve():
         target_replace_calls += 1
         if target_replace_calls == 1:
-            real_replace(source, destination)
+            real_replace(self, source, destination, digest, **options)
             raise OSError("simulated target write failure")
         raise OSError("simulated rollback write failure")
-    return real_replace(source, destination)
+    return real_replace(self, source, destination, digest, **options)
 
 
-save_restore_module.os.replace = fail_target_and_rollback
+save_restore_module.SaveRestoreTransaction._replace_file = fail_target_and_rollback
 try:
     rollback_error = expect_error(
         SaveRollbackError,
@@ -331,7 +331,7 @@ try:
         "rollback failure",
     )
 finally:
-    save_restore_module.os.replace = real_replace
+    save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 recovery_path = Path(rollback_error.recovery_path)
 assert recovery_path.is_dir()
 assert (recovery_path / "files/main/Profile1.sav").read_bytes() == original
@@ -343,27 +343,27 @@ assert str(recovery_path.resolve()) in service.list_state()["recoveryPaths"]
 service, save_path, original, _state, spec, data_root = make_environment("interrupted")
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
 session.document.lua_state["GameState"]["MetaPoints"] = 700.0
-real_replace = save_restore_module.os.replace
+real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 target_replace_calls = 0
 
 
-def interrupt_rollback(source, destination):
+def interrupt_rollback(self, source, destination, digest, **options):
     global target_replace_calls
     destination = Path(destination)
-    if destination == save_path:
+    if destination == save_path.resolve():
         target_replace_calls += 1
         if target_replace_calls == 1:
-            real_replace(source, destination)
+            real_replace(self, source, destination, digest, **options)
             raise OSError("simulated target failure before rollback")
         raise KeyboardInterrupt()
-    return real_replace(source, destination)
+    return real_replace(self, source, destination, digest, **options)
 
 
-save_restore_module.os.replace = interrupt_rollback
+save_restore_module.SaveRestoreTransaction._replace_file = interrupt_rollback
 try:
     expect_error(KeyboardInterrupt, session.apply, "interrupted rollback")
 finally:
-    save_restore_module.os.replace = real_replace
+    save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 bytes_before_reload = save_path.read_bytes()
 reloaded = CoreSaveService(
     "interrupted",

@@ -53,6 +53,11 @@ struct Hades2GameModule: TrainerGameModule {
     static func makeFeedback(model: Hades2TrainerModel) -> Hades2OperationFeedback {
         Hades2OperationFeedback(model: model)
     }
+    static var managedBackupEditor: ((Hades2TrainerModel, TrainerSaveSnapshot) -> AnyView)? {
+        { model, snapshot in
+            AnyView(Hades2SaveEditorView(model: model.makeSaveEditorModel(snapshotID: snapshot.id)))
+        }
+    }
     static func makeManagementCommands(
         model: Hades2TrainerModel,
         localization: TrainerLocalizationStore

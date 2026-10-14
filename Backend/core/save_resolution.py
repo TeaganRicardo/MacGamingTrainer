@@ -1,3 +1,6 @@
+import os
+import stat
+from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -15,6 +18,46 @@ class ResolvedSaveFile:
     root_id: str
     relative_path: str
     source_path: Path
+
+
+def read_resolved_save_file(root, row):
+    """Read one regular file through a contained, captured directory chain."""
+    root = Path(root).expanduser()
+    try:
+        if root.is_symlink() or row.source_path.is_symlink():
+            raise SaveResolutionError('Save source cannot be a symbolic link.')
+        canonical_root = root.resolve(strict=True)
+        canonical_file = row.source_path.resolve(strict=True)
+        relative = canonical_file.relative_to(canonical_root)
+        root_metadata = canonical_root.stat()
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        with ExitStack() as stack:
+            descriptor = os.open(canonical_root, flags)
+            stack.callback(os.close, descriptor)
+            captured = os.fstat(descriptor)
+            if (captured.st_dev, captured.st_ino) != (root_metadata.st_dev, root_metadata.st_ino):
+                raise SaveResolutionError('Save source directory changed while opening.')
+            directories = [(canonical_root, descriptor)]
+            parent = canonical_root
+            for component in relative.parts[:-1]:
+                descriptor = os.open(component, flags, dir_fd=descriptor)
+                stack.callback(os.close, descriptor)
+                parent /= component
+                directories.append((parent, descriptor))
+            file_descriptor = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
+            source = stack.enter_context(os.fdopen(file_descriptor, 'rb'))
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise SaveResolutionError('Save source is not a regular file.')
+            raw = source.read()
+            if root.is_symlink() or root.resolve() != canonical_root or row.source_path.is_symlink() or row.source_path.resolve() != canonical_file:
+                raise SaveResolutionError('Save source path changed while reading.')
+            for path, directory in directories:
+                captured, current = os.fstat(directory), path.stat()
+                if (captured.st_dev, captured.st_ino) != (current.st_dev, current.st_ino):
+                    raise SaveResolutionError('Save source directory changed while reading.')
+            return raw
+    except (OSError, ValueError) as error:
+        raise SaveResolutionError('Save source is missing or outside its declared directory.') from error
 
 
 def load_save_provider(target):

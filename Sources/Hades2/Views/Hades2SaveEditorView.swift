@@ -66,6 +66,7 @@ struct Hades2SaveEditorView: View {
     @State private var drafts: [String: String] = [:]
     @State private var reviewExpanded = false
     @State private var confirmingApply = false
+    @State private var confirmingSource = false
 
     init(model: Hades2SaveEditorModel) {
         _model = StateObject(wrappedValue: model)
@@ -89,6 +90,8 @@ struct Hades2SaveEditorView: View {
         VStack(spacing: 0) {
             windowHeader
             Divider()
+            documentSelection
+            Divider()
             if let failure = model.failure {
                 TrainerInlineNotice(color: theme.warning) {
                     Text(localization.string(failure))
@@ -107,6 +110,7 @@ struct Hades2SaveEditorView: View {
                 inspector
                     .frame(minWidth: 360, maxWidth: .infinity)
             }
+            .id(model.workspaceID)
             .frame(height: reviewExpanded ? 430 : 620)
 
             if model.pendingCount > 0 {
@@ -132,7 +136,13 @@ struct Hades2SaveEditorView: View {
             }
             Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
         } message: {
-            Text(text("hades2.saveEditor.workbench.confirmBody", arguments: [model.relativePath]))
+            Text(text("hades2.saveEditor.workbench.confirmBody", arguments: [model.selectedTargetID]))
+        }
+        .confirmationDialog(text("hades2.saveEditor.source.confirmTitle"), isPresented: $confirmingSource) {
+            Button(text("hades2.saveEditor.source.read"), role: .destructive) { model.openSelection() }
+            Button(text("hades2.saveEditor.workbench.cancel"), role: .cancel) {}
+        } message: {
+            Text(text("hades2.saveEditor.source.confirmBody"))
         }
         .onAppear {
             model.open(language: localization.language)
@@ -145,6 +155,12 @@ struct Hades2SaveEditorView: View {
                 drafts.removeAll()
                 reviewExpanded = false
             }
+        }
+        .onChange(of: model.workspaceID) { _, _ in
+            drafts.removeAll()
+            selectedEntityID = nil
+            section = .all
+            reviewExpanded = false
         }
     }
 
@@ -159,12 +175,14 @@ struct Hades2SaveEditorView: View {
                 Text(model.profile)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-            } else {
+            } else if model.busy {
                 ProgressView().controlSize(.small)
             }
             Spacer()
             Menu {
-                Text(model.relativePath)
+                Text(model.sourceRootID + "/" + model.sourceRelativePath)
+                if let snapshotID = model.snapshotID { Text(snapshotID) }
+                Text(model.sourceSHA256)
                 Text(text("hades2.saveEditor.workbench.sourceHint"))
             } label: {
                 Image(systemName: "info.circle")
@@ -187,6 +205,42 @@ struct Hades2SaveEditorView: View {
         }
         .padding(.horizontal, 19)
         .padding(.vertical, 15)
+    }
+
+    private var documentSelection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Text(text("hades2.saveEditor.source.label")).frame(width: 90, alignment: .leading)
+                Picker(text("hades2.saveEditor.source.label"), selection: $model.selectedSourceID) {
+                    Text(text("hades2.saveEditor.source.choose")).tag("")
+                    ForEach(model.sourceFiles) { file in Text(file.id).tag(file.id) }
+                }.labelsHidden().frame(maxWidth: 380).disabled(model.busy)
+                Button(text("hades2.saveEditor.source.read")) {
+                    if model.pendingCount > 0 { confirmingSource = true }
+                    else { model.openSelection() }
+                }.disabled(model.busy || model.selectedSourceID.isEmpty)
+                Spacer()
+                Button(text("hades2.saveEditor.source.refreshFiles")) { model.refreshFiles() }
+                    .disabled(model.busy)
+            }
+            HStack(spacing: 10) {
+                Text(text("hades2.saveEditor.target.label")).frame(width: 90, alignment: .leading)
+                Picker(text("hades2.saveEditor.target.label"), selection: Binding(
+                    get: { model.selectedTargetID }, set: model.selectTarget)) {
+                    Text(text("hades2.saveEditor.target.choose")).tag("")
+                    ForEach(model.writeTargets) { file in Text(file.id).tag(file.id) }
+                }.labelsHidden().frame(maxWidth: 380).disabled(model.busy)
+                if !model.sourceRelativePath.isEmpty {
+                    Text(text("hades2.saveEditor.source.pinned", arguments: [
+                        text(model.snapshotID == nil ? "hades2.saveEditor.source.currentFile" : "hades2.saveEditor.source.backup"),
+                        model.sourceRootID + "/" + model.sourceRelativePath,
+                    ]))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(2).help(model.sourceSHA256)
+                }
+                Spacer()
+            }
+        }.padding(.horizontal, 18).padding(.vertical, 10)
     }
 
     private var navigation: some View {
@@ -485,22 +539,24 @@ struct Hades2SaveEditorView: View {
 
     @ViewBuilder
     private func editorControl(_ entry: Hades2SaveEditorEntry) -> some View {
+        let workspaceID = model.workspaceID
+        let draft = draftBinding(for: entry)
         if entry.valueType == "boolean" {
             HStack {
                 Spacer()
                 TrainerToggleControl(
-                    isOn: draftBinding(for: entry).wrappedValue == "true",
+                    isOn: draft.wrappedValue == "true",
                     enabled: !model.busy,
                     helpText: entry.displayName,
                     onChange: { value in
-                        draftBinding(for: entry).wrappedValue = value ? "true" : "false"
+                        draft.wrappedValue = value ? "true" : "false"
                     }
                 )
             }
         } else if entry.valueType == "enum" && !entry.choices.isEmpty {
             Picker(
                 text("hades2.saveEditor.value"),
-                selection: draftBinding(for: entry)
+                selection: draft
             ) {
                 ForEach(entry.choices, id: \.self) { choice in
                     Text(entry.choiceNames[choice] ?? enumTitle(choice)).tag(choice)
@@ -509,8 +565,9 @@ struct Hades2SaveEditorView: View {
             .labelsHidden()
             .frame(maxWidth: 240, alignment: .leading)
         } else {
-            TrainerTextField(title: text("hades2.saveEditor.value"), text: draftBinding(for: entry), onCommit: { edit in
-                model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
+            TrainerTextField(title: text("hades2.saveEditor.value"), text: draft, onCommit: { edit in
+                guard model.workspaceID == workspaceID else { return edit.text }
+                return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
             })
             .id(entry.id)
             .disabled(model.busy)
@@ -719,9 +776,9 @@ struct Hades2SaveEditorView: View {
                     confirmingApply = true
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(model.busy)
+                .disabled(model.busy || !model.hasWriteTarget)
             }
-            Text(text("hades2.saveEditor.workbench.target", arguments: [model.relativePath]))
+            Text(text("hades2.saveEditor.workbench.target", arguments: [model.hasWriteTarget ? model.selectedTargetID : text("hades2.saveEditor.target.choose")]))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ScrollView {
@@ -770,9 +827,10 @@ struct Hades2SaveEditorView: View {
     }
 
     private func draftBinding(for entry: Hades2SaveEditorEntry) -> Binding<String> {
-        Binding(
+        let workspaceID = model.workspaceID
+        return Binding(
             get: { drafts[entry.id] ?? valueText(entry.value) },
-            set: { drafts[entry.id] = $0 }
+            set: { if model.workspaceID == workspaceID { drafts[entry.id] = $0 } }
         )
     }
 
