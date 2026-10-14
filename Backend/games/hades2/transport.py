@@ -13,6 +13,7 @@ import lldb
 from core.adapter import AdapterError as TransportError
 
 from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
+from .attach_trace import attach_trace
 from .native_effect_query import log_lldb_phase, prepare_native_query
 
 
@@ -45,10 +46,13 @@ class Hades2LuaTransport:
         profile['createTarget']=time.monotonic()-phase
 
         error=lldb.SBError()
-        phase=time.monotonic()
-        with log_lldb_phase('attach.AttachToProcessWithID'):
-            self.process=self.target.AttachToProcessWithID(self.listener,pid,error)
-        profile['attachProcess']=time.monotonic()-phase
+        with attach_trace(self.debugger,lldb,pid):
+            with log_lldb_phase('attach.AttachToProcessWithID'):
+                phase=time.monotonic()
+                try:
+                    self.process=self.target.AttachToProcessWithID(self.listener,pid,error)
+                finally:
+                    profile['attachProcess']=time.monotonic()-phase
         if error.Fail():
             self.process=None
             profile['total']=time.monotonic()-started
