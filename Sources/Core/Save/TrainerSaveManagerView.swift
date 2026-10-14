@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrainerSaveManagerView: View {
     @ObservedObject var model: TrainerSaveManagerModel
+    var managedBackupEditor: ((TrainerSaveSnapshot) -> AnyView)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
@@ -14,6 +15,7 @@ struct TrainerSaveManagerView: View {
     @State private var preserveCurrent = true
     @State private var deleteIDs: Set<String> = []
     @State private var confirmDelete = false
+    @State private var editorPresentation: TrainerManagedBackupEditorPresentation?
 
     var body: some View {
         TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: "externaldrive.fill", width: 780) {
@@ -105,6 +107,9 @@ struct TrainerSaveManagerView: View {
             }
         }
         .interactiveDismissDisabled(model.busy)
+        .sheet(item: $editorPresentation) { presentation in
+            presentation.content
+        }
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -224,6 +229,14 @@ struct TrainerSaveManagerView: View {
                 .disabled(model.busy || !snapshot.valid)
 
                 TrainerOverflowMenu(enabled: !model.busy) {
+                    if let managedBackupEditor {
+                        Button {
+                            editorPresentation = TrainerManagedBackupEditorPresentation(content: managedBackupEditor(snapshot))
+                        } label: {
+                            Label(localization.localized("host.save.edit"), systemImage: "square.and.pencil")
+                        }
+                        .disabled(!snapshot.valid)
+                    }
                     Button {
                         beginRename(snapshot)
                     } label: {
@@ -295,6 +308,11 @@ struct TrainerSaveManagerView: View {
         editingID = nil
         renameText = ""
     }
+}
+
+private struct TrainerManagedBackupEditorPresentation: Identifiable {
+    let id = UUID()
+    let content: AnyView
 }
 
 private struct TrainerSaveRestoreConfirmationView: View {

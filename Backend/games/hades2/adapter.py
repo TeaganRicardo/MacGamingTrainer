@@ -986,11 +986,25 @@ class Hades2Adapter(GameAdapter):
             raise ValueError("Save Editor workspace is not open.")
         return self.save_workspace
 
-    def open_save_editor(self):
+    def validate_save_workspace(self, identifier):
+        if self._require_save_workspace().identifier != identifier:
+            raise ValueError("Save Editor document is no longer selected; open it explicitly again.")
+
+    def save_editor_inventory(self, params):
         if self.save_service is None:
             raise ValueError("Save Editor save management is unavailable.")
-        self.save_workspace = Hades2SaveWorkspace.open(self.save_service)
+        return Hades2SaveWorkspace.inventory(self.save_service, params.get("snapshotId"))
+
+    def open_save_editor(self, params=None):
+        if self.save_service is None:
+            raise ValueError("Save Editor save management is unavailable.")
+        params = params or {}
+        self.save_workspace = Hades2SaveWorkspace.open(self.save_service,
+            snapshot_id=params.get("snapshotId"), source=params.get("source"), target=params.get("target"))
         return self.save_workspace.summary()
+
+    def set_save_editor_target(self, params):
+        return self._require_save_workspace().set_target(params["target"])
 
     def query_save_editor(self, params):
         return self._require_save_workspace().query(**params)

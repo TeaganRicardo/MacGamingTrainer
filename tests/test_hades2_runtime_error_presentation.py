@@ -1,7 +1,10 @@
+import io
+import json
 import logging
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -9,6 +12,10 @@ sys.path.insert(0, str(ROOT / "Backend"))
 from core.adapter import AdapterError, GameAdapter, GameAdapterContext
 from core.protocol import JsonlRequestRouter
 from games.hades2.command_contract import Hades2CommandContract
+from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
+from games.hades2.resident_session import Hades2ResidentSession
+from games.hades2.runtime_error_presentation import present_runtime_error
+from games.hades2.transport_client import _LLDBWorkerClient
 
 
 class RuntimeErrorHarnessAdapter(GameAdapter):
@@ -86,5 +93,65 @@ finally:
     logging.disable(logging.NOTSET)
     router.close()
     temporary_root.cleanup()
+
+# The stop observation must survive both subprocess and presentation boundaries.
+diagnostic = json.dumps({
+    "phase": "boundary.initial_stop", "expectedStates": [5], "lastObservedState": 6,
+}, separators=(",", ":"))
+
+
+class ObservedTransport:
+    pid = 4242
+    tainted = False
+    last_duration = 3.034
+    last_expression_duration = 0.0
+    last_attach_profile = {}
+
+    def execute(self, source):
+        raise AdapterError("process_timeout", "游戏进程状态切换超时。", diagnostic=diagnostic)
+
+
+worker = Hades2LLDBWorker(transport=ObservedTransport())
+output = io.StringIO()
+requests = [
+    {"id": "hello", "method": "hello", "params": {}},
+    {"id": "status", "method": "transport.execute", "params": {"source": "return '{}'"}},
+]
+serve_requests(io.StringIO("".join(json.dumps(row) + "\n" for row in requests)), output, worker)
+responses = [json.loads(line) for line in output.getvalue().splitlines()]
+assert responses[1]["error"]["diagnostic"] == diagnostic
+
+
+class ReplayedSidecar:
+    started = True
+    terminal = False
+
+    def request(self, *args, **kwargs):
+        return responses.pop(0)
+
+
+client = _LLDBWorkerClient(sidecar=ReplayedSidecar())
+facade = SimpleNamespace(
+    execute=lambda source: client.call("transport.execute", {"source": source})[0],
+    last_duration=3.034, last_expression_duration=0.0,
+)
+session = Hades2ResidentSession(facade, bootstrap="")
+try:
+    session._cross("status", "return '{}'", replay=False, read_only=False,
+                   expression_timeout_seconds=None)
+except AdapterError as error:
+    assert error.diagnostic == diagnostic
+    presented = Hades2CommandContract._as_presentation_key(present_runtime_error("connect", error))
+else:
+    raise AssertionError("Fixture stop timeout was not propagated")
+
+router = JsonlRequestRouter.__new__(JsonlRequestRouter)
+router.adapter = SimpleNamespace(game_id="hades2", module_protocol_version=14)
+reply = router.error_reply("status", presented.code, presented.presentation,
+                          diagnostic=presented.diagnostic, arguments=presented.arguments)
+assert reply["error"] == {
+    "code": "process_timeout", "presentation": "hades2.error.processTimeout", "diagnostic": diagnostic,
+}, reply["error"]
+assert not worker.transport.tainted and not client.terminal
 
 print("hades2_runtime_error_presentation_ok")

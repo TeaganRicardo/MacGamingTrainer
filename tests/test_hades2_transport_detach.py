@@ -41,7 +41,8 @@ def make_transport(**options):
     transport.drain = lambda: None
     transport.target = types.SimpleNamespace(DeleteAllBreakpoints=lambda: None)
 
-    def stop(deadline):
+    def stop(deadline, **observations):
+        assert observations == {'phase': 'detach.stop'}
         process.state = fake_lldb.eStateStopped
         process.os_paused = True
 

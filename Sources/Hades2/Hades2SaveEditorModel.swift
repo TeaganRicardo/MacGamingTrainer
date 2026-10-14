@@ -281,11 +281,42 @@ struct Hades2SaveInvestigationDetail {
     }
 }
 
+struct Hades2SaveEditorFile: Identifiable, Equatable {
+    let rootID: String
+    let relativePath: String
+    let profile: String
+    let variant: String
+    var id: String { rootID + "/" + relativePath }
+    var identity: [String: String] { ["rootId": rootID, "relativePath": relativePath] }
+
+    init?(_ row: [String: Any]) {
+        guard let rootID = row["rootId"] as? String, !rootID.isEmpty,
+              let relativePath = row["relativePath"] as? String, !relativePath.isEmpty,
+              let profile = row["profile"] as? String,
+              let variant = row["variant"] as? String else { return nil }
+        self.rootID = rootID
+        self.relativePath = relativePath
+        self.profile = profile
+        self.variant = variant
+    }
+}
+
 final class Hades2SaveEditorModel: ObservableObject {
     static let pageSize = 100
 
     @Published private(set) var profile = ""
     @Published private(set) var relativePath = ""
+    @Published private(set) var sourceFiles: [Hades2SaveEditorFile] = []
+    @Published private(set) var writeTargets: [Hades2SaveEditorFile] = []
+    @Published var selectedSourceID = ""
+    @Published private(set) var selectedTargetID = ""
+    @Published private(set) var sourceRelativePath = ""
+    @Published private(set) var sourceRootID = ""
+    @Published private(set) var sourceSHA256 = ""
+    @Published private(set) var hasWriteTarget = false
+    let snapshotID: String?
+    @Published private(set) var workspaceID: String?
+    private var selectedTargetIdentity: [String: String]?
     @Published private(set) var availableDomains: [Hades2SaveEditorDomain] = []
     @Published private(set) var coverage: [Hades2SaveEditorCoverage] = []
     @Published var selectedDomain: Hades2SaveEditorDomain = .discover
@@ -310,8 +341,9 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var pendingRequests = 0
     private var knownDisplayNames: [String: String] = [:]
 
-    init(session: TrainerBackendSession) {
+    init(session: TrainerBackendSession, snapshotID: String? = nil) {
         api = Hades2API(session: session)
+        self.snapshotID = snapshotID
     }
 
     func open(language: TrainerPresentationLanguage) {
@@ -319,14 +351,69 @@ final class Hades2SaveEditorModel: ObservableObject {
         failure = nil
         selectedInvestigationID = nil
         investigationDetail = nil
-        perform(.saveEditorOpen, operation: "hades2.saveEditor.operation.open") { [weak self] reply in
+        refreshFiles(openDefault: true)
+    }
+
+    func refreshFiles(openDefault: Bool = false) {
+        perform(.saveEditorInventory(snapshotID: snapshotID), operation: "hades2.saveEditor.operation.open",
+                announceSuccess: false) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard let sources = result["sources"] as? [[String: Any]],
+                  let targets = result["targets"] as? [[String: Any]] else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            let decodedSources = sources.compactMap(Hades2SaveEditorFile.init)
+            let decodedTargets = targets.compactMap(Hades2SaveEditorFile.init)
+            guard decodedSources.count == sources.count, decodedTargets.count == targets.count else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.sourceFiles = decodedSources
+            self.writeTargets = decodedTargets
+            if self.workspaceID == nil, let source = result["defaultSource"] as? [String: String],
+               let selected = decodedSources.first(where: { $0.identity == source }) {
+                self.selectedSourceID = selected.id
+                let target = decodedTargets.first(where: { $0.identity == source })
+                self.selectedTargetID = target?.id ?? ""
+                self.selectedTargetIdentity = target?.identity
+                if openDefault { self.openSelection() }
+            }
+        }
+    }
+
+    func openSelection() {
+        guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
+        perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
+                operation: "hades2.saveEditor.operation.open") { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
             guard self.applySummary(result) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
+            self.pendingChanges = []
+            self.items = []
+            self.knownDisplayNames = [:]
             self.selectedDomain = .discover
             self.query(offset: 0)
+        }
+    }
+
+    func selectTarget(_ identifier: String) {
+        guard let file = writeTargets.first(where: { $0.id == identifier }), !busy else { return }
+        if workspaceID == nil {
+            selectedTargetID = identifier
+            selectedTargetIdentity = file.identity
+            return
+        }
+        perform(.saveEditorTarget(file.identity), operation: "hades2.saveEditor.operation.target",
+                announceSuccess: false) { [weak self] reply in
+            guard let self, reply.success, let result = reply.result else { return }
+            guard self.applySummary(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.failure = nil
         }
     }
 
@@ -600,7 +687,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func apply() {
-        guard !pendingChanges.isEmpty else { return }
+        guard !pendingChanges.isEmpty, hasWriteTarget else { return }
         let appliedOffset = offset
         perform(
             .saveEditorApply,
@@ -620,11 +707,26 @@ final class Hades2SaveEditorModel: ObservableObject {
     private func applySummary(_ result: [String: Any]) -> Bool {
         guard let profile = result["profile"] as? String,
               let relativePath = result["relativePath"] as? String,
-              let rawDomains = result["domains"] as? [String]
+              let rawDomains = result["domains"] as? [String],
+              let identifier = result["workspaceId"] as? String, !identifier.isEmpty,
+              let source = result["source"] as? [String: String],
+              let sourceRoot = source["rootId"], let sourcePath = source["relativePath"],
+              source["kind"] == (snapshotID == nil ? "currentFile" : "managedBackup"),
+              source["snapshotId"] == snapshotID,
+              let sourceSHA256 = result["sourceSHA256"] as? String,
+              sourceSHA256.count == 64,
+              sourceSHA256.allSatisfy({ "0123456789abcdef".contains($0) })
         else { return false }
-        self.profile = profile
-        self.relativePath = relativePath
-        availableDomains = rawDomains.compactMap(Hades2SaveEditorDomain.init(rawValue:))
+        let targetID: String
+        let targetSelected: Bool
+        if let target = result["target"] as? [String: String],
+           let root = target["rootId"], let path = target["relativePath"] {
+            targetID = root + "/" + path
+            targetSelected = true
+        } else if result["target"] is NSNull {
+            targetID = ""
+            targetSelected = false
+        } else { return false }
 
         var decodedCoverage: [Hades2SaveEditorCoverage] = []
         if let rawCoverage = result["coverage"] as? [[String: Any]] {
@@ -646,6 +748,16 @@ final class Hades2SaveEditorModel: ObservableObject {
                 )
             }
         }
+        workspaceID = identifier
+        selectedTargetID = targetID
+        selectedTargetIdentity = result["target"] as? [String: String]
+        hasWriteTarget = targetSelected
+        sourceRootID = sourceRoot
+        sourceRelativePath = sourcePath
+        self.sourceSHA256 = sourceSHA256
+        self.profile = profile
+        self.relativePath = relativePath
+        availableDomains = rawDomains.compactMap(Hades2SaveEditorDomain.init(rawValue:))
         coverage = decodedCoverage
         return true
     }
@@ -692,6 +804,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             request,
             operation: operation,
             announceSuccess: announceSuccess,
+            saveWorkspaceID: (request.command == .saveEditorOpen || request.command == .saveEditorInventory) ? nil : workspaceID,
             reply: { [weak self] backendReply in
                 if !backendReply.success, let backendFailure = backendReply.failure {
                     self?.failure = TrainerTextToken(

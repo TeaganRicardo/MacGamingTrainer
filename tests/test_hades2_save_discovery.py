@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import tempfile
 from pathlib import Path
@@ -6,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
+from games.hades2.save_edit import Hades2SaveEditSession
 from games.hades2.save_workspace import Hades2SaveWorkspace
 
 
@@ -63,11 +65,11 @@ def document():
     return Hades2SaveDocument(header, [root])
 
 
-class Session:
-    relative_path = "Profile1.sav"
-
+class Session(Hades2SaveEditSession):
     def __init__(self):
-        self.document = document()
+        original = document()
+        super().__init__(None, None, hashlib.sha256(original.to_bytes()).hexdigest(), original,
+            source={"kind": "currentFile", "rootId": "fixture", "relativePath": "Profile1.sav"})
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:

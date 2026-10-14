@@ -165,7 +165,7 @@ def serve_requests(input_stream, output_stream, worker):
 
 def main():
     if enabled():
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stderr)])
     worker = Hades2LLDBWorker()
     try:
         serve_requests(sys.stdin, sys.stdout, worker)

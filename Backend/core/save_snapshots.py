@@ -9,7 +9,7 @@ import time
 import uuid
 from pathlib import Path
 
-from .save_resolution import ResolvedSaveFile
+from .save_resolution import ResolvedSaveFile, SaveResolutionError, read_resolved_save_file
 
 _SCHEMA_VERSION = 1
 _STAGING_MIN_AGE_SECONDS = 24 * 60 * 60
@@ -414,6 +414,29 @@ class SaveSnapshotStore:
     def load_verified_snapshot(self, snapshot_id):
         root = self._path_for_id(snapshot_id).resolve()
         return {'root': root, 'manifest': self._read_manifest(root)}
+
+    def read_source_file(self, snapshot_id, root_id, relative_path):
+        verified = self.load_verified_snapshot(snapshot_id)
+        matches = [item for item in verified['manifest']['files']
+            if (item['rootId'], item['relativePath']) == (root_id, relative_path)]
+        if len(matches) != 1:
+            raise SaveSnapshotError('Snapshot source is missing or ambiguous.')
+        item = matches[0]
+        path = verified['root'] / 'files' / root_id / _safe_relative(relative_path)
+        if path.is_symlink() or not path.is_file():
+            raise SaveSnapshotError('Snapshot source is unsafe.')
+        try:
+            path.resolve().relative_to(verified['root'])
+        except ValueError as error:
+            raise SaveSnapshotError('Snapshot source escaped its contained storage.') from error
+        source = ResolvedSaveFile(root_id, relative_path, path)
+        try:
+            raw = read_resolved_save_file(verified['root'], source)
+        except SaveResolutionError as error:
+            raise SaveSnapshotError('Snapshot source is missing or unsafe.') from error
+        if len(raw) != item['size'] or hashlib.sha256(raw).hexdigest() != item['sha256']:
+            raise SaveSnapshotError('Snapshot source changed after verification.')
+        return source, raw
 
     def _row(self, root, manifest, valid, error=''):
         name = root.name

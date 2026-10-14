@@ -94,9 +94,9 @@ assert (save_root / 'Profile1.sav').read_bytes() == b'race-changed'
 (save_root / 'Profile1.sav').write_bytes(b'continuity-current')
 real_replace = restore_module.os.replace
 root_gap = []
-def guarding_replace(source, destination):
+def guarding_replace(source, destination, **options):
     existed = save_root.exists()
-    result = real_replace(source, destination)
+    result = real_replace(source, destination, **options)
     if existed and not save_root.exists():
         root_gap.append((source, destination))
     return result
@@ -107,19 +107,21 @@ finally:
     restore_module.os.replace = real_replace
 assert root_gap == [] and save_root.is_dir()
 
+
+real_install = restore_module.SaveRestoreTransaction._replace_file
 (save_root / 'Profile1.sav').write_bytes(b'rollback-profile')
 (save_root / 'restored-only.sav').write_bytes(b'rollback-restored-only')
 (save_root / 'obsolete.sav').write_bytes(b'rollback-obsolete')
 replace_calls = 0
-def fail_second_target_replace(source, destination):
+def fail_second_target_replace(self, source, destination, digest, **options):
     global replace_calls
     destination = Path(destination)
-    if save_root in destination.parents:
+    if save_root.resolve() in destination.parents:
         replace_calls += 1
         if replace_calls == 2:
             raise OSError('forced target replace failure')
-    return real_replace(source, destination)
-restore_module.os.replace = fail_second_target_replace
+    return real_install(self, source, destination, digest, **options)
+restore_module.SaveRestoreTransaction._replace_file = fail_second_target_replace
 try:
     try:
         transaction.restore(target['id'], preserve_current=False, target_running=False)
@@ -128,7 +130,7 @@ try:
     else:
         raise AssertionError('partial target install unexpectedly succeeded')
 finally:
-    restore_module.os.replace = real_replace
+    restore_module.SaveRestoreTransaction._replace_file = real_install
 assert (save_root / 'Profile1.sav').read_bytes() == b'rollback-profile'
 assert (save_root / 'restored-only.sav').read_bytes() == b'rollback-restored-only'
 assert (save_root / 'obsolete.sav').read_bytes() == b'rollback-obsolete'
@@ -140,15 +142,15 @@ assert (save_root / 'obsolete.sav').read_bytes() == b'rollback-obsolete'
 (save_root / 'restored-only.sav').write_bytes(b'interrupt-restored-only')
 (save_root / 'obsolete.sav').write_bytes(b'interrupt-obsolete')
 replace_calls = 0
-def interrupt_second_target_replace(source, destination):
+def interrupt_second_target_replace(self, source, destination, digest, **options):
     global replace_calls
     destination = Path(destination)
-    if save_root in destination.parents:
+    if save_root.resolve() in destination.parents:
         replace_calls += 1
         if replace_calls == 2:
             raise KeyboardInterrupt()
-    return real_replace(source, destination)
-restore_module.os.replace = interrupt_second_target_replace
+    return real_install(self, source, destination, digest, **options)
+restore_module.SaveRestoreTransaction._replace_file = interrupt_second_target_replace
 try:
     try:
         transaction.restore(target['id'], preserve_current=False, target_running=False)
@@ -157,7 +159,7 @@ try:
     else:
         raise AssertionError('interrupted restore unexpectedly succeeded')
 finally:
-    restore_module.os.replace = real_replace
+    restore_module.SaveRestoreTransaction._replace_file = real_install
 assert (save_root / 'Profile1.sav').read_bytes() == b'interrupt-profile'
 assert (save_root / 'restored-only.sav').read_bytes() == b'interrupt-restored-only'
 assert (save_root / 'obsolete.sav').read_bytes() == b'interrupt-obsolete'
@@ -166,15 +168,15 @@ assert (save_root / 'obsolete.sav').read_bytes() == b'interrupt-obsolete'
 (save_root / 'restored-only.sav').write_bytes(b'preserve-me-too')
 (save_root / 'obsolete.sav').write_bytes(b'preserve-obsolete')
 replace_calls = 0
-def fail_target_then_rollback(source, destination):
+def fail_target_then_rollback(self, source, destination, digest, **options):
     global replace_calls
     destination = Path(destination)
-    if save_root in destination.parents:
+    if save_root.resolve() in destination.parents:
         replace_calls += 1
         if replace_calls >= 2:
             raise OSError('forced target/rollback failure')
-    return real_replace(source, destination)
-restore_module.os.replace = fail_target_then_rollback
+    return real_install(self, source, destination, digest, **options)
+restore_module.SaveRestoreTransaction._replace_file = fail_target_then_rollback
 try:
     try:
         transaction.restore(target['id'], preserve_current=False, target_running=False)
@@ -183,7 +185,7 @@ try:
     else:
         raise AssertionError('double failure unexpectedly succeeded')
 finally:
-    restore_module.os.replace = real_replace
+    restore_module.SaveRestoreTransaction._replace_file = real_install
 assert recovery_path.is_dir()
 assert (recovery_path / 'files/main/Profile1.sav').read_bytes() == b'preserve-me'
 assert (recovery_path / 'files/main/obsolete.sav').read_bytes() == b'preserve-obsolete'

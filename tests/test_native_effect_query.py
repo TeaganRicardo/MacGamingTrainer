@@ -1,5 +1,7 @@
 """Run the production C collector/registration against temporary Lua fixtures."""
 import shutil
+import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -26,3 +28,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-native-effect-query-') as temporary
         *lua_flags, '-lm', *(['-ldl'] if sys.platform.startswith('linux') else []),
         '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=15)
+    if sys.platform == 'darwin' and platform.machine() == 'arm64':
+        # A startup-inserted image precedes the executable in arm64 dyld's
+        # loaded-image inventory. The same native fixture must still validate
+        # its explicitly supplied main image and refuse the helper UUID.
+        source = Path(temporary) / 'startup_insertion.c'
+        source.write_text('int mgt_startup_insertion_fixture(void) { return 1; }\n')
+        insertion = Path(temporary) / 'libStartupInsertion.dylib'
+        subprocess.run([compiler, '-dynamiclib', str(source), '-o', str(insertion)], check=True)
+        environment = {**os.environ, 'DYLD_INSERT_LIBRARIES': str(insertion), 'MGT_EXPECT_STARTUP_IMAGE': '1'}
+        subprocess.run([str(executable)], check=True, timeout=15, env=environment)

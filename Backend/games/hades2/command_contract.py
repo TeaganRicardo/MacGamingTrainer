@@ -325,6 +325,33 @@ def _next_occurrence(raw):
     return {"target": target}
 
 
+def _save_editor_selection(raw):
+    params = _params(raw)
+    result = {}
+    if "snapshotId" in params:
+        snapshot = params["snapshotId"]
+        if not isinstance(snapshot, str) or not snapshot or len(snapshot) > 128:
+            raise ValueError("Save Editor snapshot identity is invalid.")
+        result["snapshotId"] = snapshot
+    for name in ("source", "target"):
+        if name not in params:
+            continue
+        value = params[name]
+        if not isinstance(value, dict) or set(value) != {"rootId", "relativePath"}:
+            raise ValueError("Save Editor file identity is invalid.")
+        if any(not isinstance(part, str) or not part or len(part) > 1024 for part in value.values()):
+            raise ValueError("Save Editor file identity is invalid.")
+        result[name] = value
+    return result
+
+
+def _save_editor_target(raw):
+    result = _save_editor_selection(raw)
+    if set(result) != {"target"}:
+        raise ValueError("Save Editor target selection requires one declared file identity.")
+    return result
+
+
 def _save_editor_query(raw):
     params = _params(raw)
     domain = params.get("domain")
@@ -596,7 +623,12 @@ _COMMAND_SPECS = (
         validate=_trait_mutation("advance_trait_lifecycle"),
     ),
     _spec("open_special_choice", request_id=True, validate=_special_choice),
-    _spec("save_editor_open", invoke=_direct("open_save_editor")),
+    _spec("save_editor_inventory", validate=_save_editor_selection,
+        invoke=lambda adapter, params: adapter.save_editor_inventory(params)),
+    _spec("save_editor_open", validate=_save_editor_selection,
+        invoke=lambda adapter, params: adapter.open_save_editor(params)),
+    _spec("save_editor_target", validate=_save_editor_target,
+        invoke=lambda adapter, params: adapter.set_save_editor_target(params)),
     _spec(
         "save_editor_query",
         timeout=30.0,
@@ -651,6 +683,11 @@ class Hades2CommandContract:
             if spec is None:
                 raise ValueError("未知命令。")
             validated = spec.validate(params)
+            if command.startswith("save_editor_") and isinstance(params, dict) and "workspaceId" in params:
+                identifier = params["workspaceId"]
+                if not isinstance(identifier, str) or not identifier or len(identifier) > 128:
+                    raise ValueError("Save Editor workspace identity is invalid.")
+                self.adapter.validate_save_workspace(identifier)
             if spec.requires_request_id:
                 validated = dict(validated, requestId=request_id)
             return spec.invoke(self.adapter, validated)
@@ -668,5 +705,5 @@ class Hades2CommandContract:
             getattr(error, "code", "invalid_request"),
             key,
             arguments,
-            diagnostic=str(error),
+            diagnostic=getattr(error, "diagnostic", None) or str(error),
         )
