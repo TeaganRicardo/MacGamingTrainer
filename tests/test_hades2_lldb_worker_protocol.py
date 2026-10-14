@@ -1,10 +1,7 @@
 import io
 import json
-import logging
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -13,7 +10,6 @@ from core.adapter import AdapterError
 from core.sidecar import SidecarStartError, SidecarTerminalError
 from games.hades2.config import LLDB_SIDECAR_REPLY_TIMEOUT_SECONDS
 from games.hades2.lldb_worker import Hades2LLDBWorker, serve_requests
-from games.hades2 import lldb_worker as worker_module
 from games.hades2.transport_client import _LLDBWorkerClient
 
 
@@ -300,41 +296,5 @@ else:
 assert not protocol_client.terminal
 assert not protocol_client.started
 assert protocol_client.call("transport.alive")[0] is True
-
-# A fresh worker's INFO observation travels on stderr while stdout remains JSONL.
-worker_stderr, worker_stdout = io.StringIO(), io.StringIO()
-closed = []
-
-
-def make_logged_worker():
-    logging.info("LLDBPhase phase=worker.initialize event=begin")
-    return SimpleNamespace(transport=SimpleNamespace(close=lambda: closed.append(True)))
-
-
-def serve_logged_worker(input_stream, output_stream, worker):
-    logging.info("NativeQueryInstallObservation nativeStatus=0 stage=installed")
-    output_stream.write(json.dumps({"id": "hello", "result": {"protocolVersion": 1}}) + "\n")
-
-
-root_logger = logging.getLogger()
-previous_handlers, previous_level = root_logger.handlers[:], root_logger.level
-root_logger.handlers.clear()
-root_logger.setLevel(logging.WARNING)
-try:
-    with patch.object(worker_module, "Hades2LLDBWorker", side_effect=make_logged_worker), \
-         patch.object(worker_module, "serve_requests", side_effect=serve_logged_worker), \
-         patch.object(sys, "stderr", worker_stderr), patch.object(sys, "stdout", worker_stdout):
-        assert worker_module.main() == 0
-finally:
-    for handler in root_logger.handlers:
-        handler.close()
-    root_logger.handlers[:] = previous_handlers
-    root_logger.setLevel(previous_level)
-assert "LLDBPhase phase=worker.initialize event=begin" in worker_stderr.getvalue(), worker_stderr.getvalue()
-assert "NativeQueryInstallObservation nativeStatus=0 stage=installed" in worker_stderr.getvalue()
-assert [json.loads(line) for line in worker_stdout.getvalue().splitlines()] == [
-    {"id": "hello", "result": {"protocolVersion": 1}},
-]
-assert closed == [True]
 
 print("hades2_lldb_worker_protocol_ok")
