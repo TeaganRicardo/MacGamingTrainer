@@ -5,12 +5,9 @@
 #include <math.h>
 #include <limits.h>
 #include <stdio.h>
-#include <inttypes.h>
 #ifdef __APPLE__
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
-#include <mach-o/dyld.h>
-#include <mach-o/loader.h>
 #include <pthread.h>
 #endif
 
@@ -40,57 +37,13 @@ typedef struct {
 
 static Layout layout;
 
-/* Private, invocation-owned observations. No report pointers survive install,
- * and no structure layout crosses the library ABI. */
-typedef struct {
-    uintptr_t targetHeaderBase, dyldHeaderBase, readAddress;
-    size_t requested;
-    uint64_t copied;
-    int kernelResult;
-    uint32_t targetBaseValid, dyldBaseObserved, headerValid;
-    uint32_t commandIndexValid, commandValid, commandIndex;
-    uint32_t readAddressValid, readAttempted, kernelValid, copiedValid;
-    uint32_t pathValid, pathTruncated;
-    uint32_t header[8], command[2];
-    const char *stage;
-    char dyldPath[256];
-} InstallReport;
-
-static void prepareRead(InstallReport *report, const char *stage, uintptr_t address, size_t size) {
-    report->stage = stage;
-    report->readAddress = address;
-    report->requested = size;
-    report->readAddressValid = 1;
-    report->readAttempted = report->kernelValid = report->copiedValid = 0;
-    report->kernelResult = 0;
-    report->copied = 0;
-}
-
-static int observedRead(uintptr_t address, void *destination, size_t size,
-                        ReadMemory read, void *context, InstallReport *report) {
-    report->readAttempted = 1;
-    return read(address, destination, size, context);
-}
-
-static int rejectedAt(InstallReport *report, const char *stage, int status) {
-    report->stage = stage;
-    return status;
-}
-
 static int readSelf(uintptr_t address, void *destination, size_t size, void *context) {
     (void)context;
     if (!address || address > UINTPTR_MAX - size) return 0;
 #ifdef __APPLE__
     mach_vm_size_t copied = 0;
-    kern_return_t result = mach_vm_read_overwrite(mach_task_self(), address, size,
-        (mach_vm_address_t)destination, &copied);
-    if (context) {
-        InstallReport *report = context;
-        report->kernelResult = result;
-        report->copied = copied;
-        report->kernelValid = report->copiedValid = 1;
-    }
-    return result == KERN_SUCCESS && copied == size;
+    return mach_vm_read_overwrite(mach_task_self(), address, size,
+        (mach_vm_address_t)destination, &copied) == KERN_SUCCESS && copied == size;
 #else
     (void)destination;
     return 0;
@@ -246,7 +199,7 @@ static int registerQueries(lua_State *state) {
     return 0;
 }
 
-/* Library ABI 3 owns both the verified image input and invocation report. The
+/* Library ABI 3 owns the verified image input and bounded failure output. The
  * Lua namespace/query contract remains ABI 1. */
 enum {
     INSTALL_WRONG_THREAD = -1,
@@ -259,12 +212,15 @@ enum {
     INSTALL_LUA_UNREADABLE_BASE = -200,
 };
 
+static int rejectedAt(const char **stage, const char *name, int status) {
+    if (stage) *stage = name;
+    return status;
+}
+
 /* Return 1 for a match, 0 for different code, -1 for unreadable code. */
-static int prefixMatches(uintptr_t address, const char *hex, ReadMemory read, void *context,
-                         InstallReport *report) {
+static int prefixMatches(uintptr_t address, const char *hex, ReadMemory read, void *context) {
     uint8_t bytes[16];
-    prepareRead(report, report->stage, address, sizeof(bytes));
-    if (!observedRead(address, bytes, sizeof(bytes), read, context, report)) return -1;
+    if (!read(address, bytes, sizeof(bytes), context)) return -1;
     for (size_t index = 0; index < sizeof(bytes); ++index) {
         unsigned value = 0;
         for (size_t digit = 0; digit < 2; ++digit) {
@@ -279,67 +235,41 @@ static int prefixMatches(uintptr_t address, const char *hex, ReadMemory read, vo
 /* Validate one loaded target image before publishing any callback bindings.
  * The same memory-reader seam lets portable fixtures exercise all production
  * profile predicates, without loading or launching the game. */
-static int configureImage(uintptr_t base, ReadMemory read, void *context, InstallReport *report) {
-    report->targetHeaderBase = base;
-    report->targetBaseValid = base != 0 && base != UINTPTR_MAX;
-    report->stage = "base";
-    report->headerValid = report->commandIndexValid = report->commandValid = 0;
-    report->readAddressValid = report->readAttempted = report->kernelValid = report->copiedValid = 0;
-    report->readAddress = report->requested = report->copied = report->kernelResult = 0;
-    report->commandIndex = 0;
-    memset(report->header, 0, sizeof(report->header));
-    memset(report->command, 0, sizeof(report->command));
+static int configureImage(uintptr_t base, ReadMemory read, void *context, const char **stage) {
     uint32_t header[8] = {0}; /* Little-endian Mach-O mach_header_64. */
-    if (!base || base > UINTPTR_MAX - 0x64b8630) return INSTALL_TARGET_HEADER;
-    prepareRead(report, "header_read", base, sizeof(header));
-    if (!observedRead(base, header, sizeof(header), read, context, report)) return INSTALL_TARGET_HEADER;
-    memcpy(report->header, header, sizeof(header));
-    report->headerValid = 1;
-    if (header[0] != 0xfeedfacf) return rejectedAt(report, "header_magic", INSTALL_TARGET_HEADER);
-    if (header[1] != 0x100000c) return rejectedAt(report, "header_cpu", INSTALL_TARGET_HEADER);
-    if (header[3] != 2) return rejectedAt(report, "header_filetype", INSTALL_TARGET_HEADER);
-    if (header[5] > 65536) return rejectedAt(report, "header_table_size", INSTALL_TARGET_HEADER);
+    if (!base || base > UINTPTR_MAX - 0x64b8630) return rejectedAt(stage, "base", INSTALL_TARGET_HEADER);
+    if (!read(base, header, sizeof(header), context)) return rejectedAt(stage, "header_read", INSTALL_TARGET_HEADER);
+    if (header[0] != 0xfeedfacf) return rejectedAt(stage, "header_magic", INSTALL_TARGET_HEADER);
+    if (header[1] != 0x100000c) return rejectedAt(stage, "header_cpu", INSTALL_TARGET_HEADER);
+    if (header[3] != 2) return rejectedAt(stage, "header_filetype", INSTALL_TARGET_HEADER);
+    if (header[5] > 65536) return rejectedAt(stage, "header_table_size", INSTALL_TARGET_HEADER);
     static const uint8_t expected[16] = { 0x35,0xcd,0x2e,0x50,0x2d,0x78,0x3a,0x63,0x83,0x5b,0x3e,0xb1,0x22,0x4c,0x6d,0x65 };
     uintptr_t cursor = base + sizeof(header), end = cursor + header[5];
     int uuidMatches = 0;
     for (uint32_t index = 0; index < header[4]; ++index) {
         uint32_t command[2] = {0};
-        report->commandIndexValid = 1;
-        report->commandIndex = index;
-        report->commandValid = 0;
-        memset(report->command, 0, sizeof(report->command));
-        prepareRead(report, "command_boundary", cursor, sizeof(command));
-        if (end - cursor < sizeof(command)) return INSTALL_TARGET_HEADER;
-        report->stage = "command_read";
-        if (!observedRead(cursor, command, sizeof(command), read, context, report)) return INSTALL_TARGET_HEADER;
-        memcpy(report->command, command, sizeof(command));
-        report->commandValid = 1;
-        if (command[1] < sizeof(command)) return rejectedAt(report, "command_length_small", INSTALL_TARGET_HEADER);
-        if (command[1] > end - cursor) return rejectedAt(report, "command_length_boundary", INSTALL_TARGET_HEADER);
+        if (end - cursor < sizeof(command)) return rejectedAt(stage, "command_boundary", INSTALL_TARGET_HEADER);
+        if (!read(cursor, command, sizeof(command), context)) return rejectedAt(stage, "command_read", INSTALL_TARGET_HEADER);
+        if (command[1] < sizeof(command)) return rejectedAt(stage, "command_length_small", INSTALL_TARGET_HEADER);
+        if (command[1] > end - cursor) return rejectedAt(stage, "command_length_boundary", INSTALL_TARGET_HEADER);
         if (command[0] == 0x1b) { /* LC_UUID */
             uint8_t uuid[16] = {0};
-            if (command[1] != sizeof(command) + sizeof(uuid)) return rejectedAt(report, "uuid_length", INSTALL_TARGET_HEADER);
-            prepareRead(report, "uuid_read", cursor + sizeof(command), sizeof(uuid));
-            if (!observedRead(cursor + sizeof(command), uuid, sizeof(uuid), read, context, report)) return INSTALL_TARGET_HEADER;
+            if (command[1] != sizeof(command) + sizeof(uuid)) return rejectedAt(stage, "uuid_length", INSTALL_TARGET_HEADER);
+            if (!read(cursor + sizeof(command), uuid, sizeof(uuid), context)) return rejectedAt(stage, "uuid_read", INSTALL_TARGET_HEADER);
             uuidMatches = memcmp(uuid, expected, sizeof(uuid)) == 0;
         }
         cursor += command[1];
     }
-    if (!uuidMatches) return rejectedAt(report, "uuid_mismatch", INSTALL_TARGET_UUID);
-    report->commandIndexValid = report->commandValid = 0;
-    report->commandIndex = 0;
-    memset(report->command, 0, sizeof(report->command));
-    report->stage = "findunit_read";
-    int matched = prefixMatches(base + 0x258b70, "287c409309d041f9287d089b088548ca", read, context, report);
-    if (matched < 0) return INSTALL_UNIT_UNREADABLE;
-    if (!matched) return rejectedAt(report, "findunit_prefix", INSTALL_UNIT_BINDING);
+    if (!uuidMatches) return rejectedAt(stage, "uuid_mismatch", INSTALL_TARGET_UUID);
+    int matched = prefixMatches(base + 0x258b70, "287c409309d041f9287d089b088548ca", read, context);
+    if (matched < 0) return rejectedAt(stage, "findunit_read", INSTALL_UNIT_UNREADABLE);
+    if (!matched) return rejectedAt(stage, "findunit_prefix", INSTALL_UNIT_BINDING);
     LuaAPI candidate;
     int binding = 0;
 #define RESOLVE_API(result, name, arguments, rva, prefix) \
-    report->stage = "lua_read"; \
-    matched = prefixMatches(base + rva, prefix, read, context, report); \
-    if (matched < 0) return INSTALL_LUA_UNREADABLE_BASE - binding; \
-    if (!matched) return rejectedAt(report, "lua_prefix", INSTALL_LUA_BINDING_BASE - binding); \
+    matched = prefixMatches(base + rva, prefix, read, context); \
+    if (matched < 0) return rejectedAt(stage, "lua_read", INSTALL_LUA_UNREADABLE_BASE - binding); \
+    if (!matched) return rejectedAt(stage, "lua_prefix", INSTALL_LUA_BINDING_BASE - binding); \
     candidate.name = (result (*) arguments)(base + rva); \
     ++binding;
     LUA_APIS(RESOLVE_API)
@@ -350,31 +280,20 @@ static int configureImage(uintptr_t base, ReadMemory read, void *context, Instal
     return 0;
 }
 
-static int configure(uintptr_t targetHeaderBase, InstallReport *report) {
+static int configure(uintptr_t targetHeaderBase, const char **stage) {
 #ifdef __APPLE__
-    report->dyldHeaderBase = (uintptr_t)_dyld_get_image_header(0);
-    report->dyldBaseObserved = 1;
-    const char *path = _dyld_get_image_name(0);
-    if (path) {
-        int length = snprintf(report->dyldPath, sizeof(report->dyldPath), "%s", path);
-        report->pathValid = 1;
-        report->pathTruncated = length < 0 || (size_t)length >= sizeof(report->dyldPath);
-        report->dyldPath[sizeof(report->dyldPath) - 1] = 0;
-    }
     /* Loaded index zero can be a startup-inserted dylib on arm64. Only the
      * transport's independently UUID-verified game module authorizes offsets. */
-    return configureImage(targetHeaderBase, readSelf, report, report);
+    return configureImage(targetHeaderBase, readSelf, NULL, stage);
 #else
     (void)targetHeaderBase;
-    report->stage = "unsupported_platform";
-    return INSTALL_TARGET_HEADER;
+    return rejectedAt(stage, "unsupported_platform", INSTALL_TARGET_HEADER);
 #endif
 }
 
 EXPORT uint32_t MGTNativeEffectQueryABI(void) { return LIBRARY_ABI; }
 
-/* Pure static text: no Lua access, allocation, target calls or shared last-error
- * state. The caller copies the text within its existing leased expression. */
+/* Pure static failure text copied within the existing leased expression. */
 EXPORT const char *MGTNativeEffectQueryStatusMessage(int status) {
     switch (status) {
         case 0: return "Native query registration accepted the verified game image";
@@ -399,25 +318,9 @@ EXPORT const char *MGTNativeEffectQueryStatusMessage(int status) {
     return "Native query registration returned an unknown rejection status";
 }
 
-static void formatReport(int status, const InstallReport *report, char *output, size_t capacity) {
+static void writeFailure(int status, const char *stage, char *output, size_t capacity) {
     if (!output || !capacity) return;
-    snprintf(output, capacity,
-        "nativeStatus=%d %s; stage=%s targetBaseValid=%u targetHeaderBase=0x%" PRIxPTR
-        " dyldBaseObserved=%u dyldHeaderBase=0x%" PRIxPTR
-        " headerValid=%u magic=0x%08x cpu=0x%08x subtype=0x%08x filetype=%u"
-        " ncmds=%u sizeofcmds=%u flags=0x%08x reserved=%u"
-        " commandIndexValid=%u commandIndex=%u commandValid=%u commandType=0x%x commandSize=%u"
-        " readAddressValid=%u readAddress=0x%" PRIxPTR " requested=%zu readAttempted=%u"
-        " kernValid=%u kern=%d copiedValid=%u copied=%" PRIu64
-        " dyldPathValid=%u dyldPathTruncated=%u dyldPath=\"%s\"",
-        status, MGTNativeEffectQueryStatusMessage(status), report->stage ? report->stage : "unobserved",
-        report->targetBaseValid, report->targetHeaderBase, report->dyldBaseObserved, report->dyldHeaderBase,
-        report->headerValid, report->header[0], report->header[1], report->header[2], report->header[3],
-        report->header[4], report->header[5], report->header[6], report->header[7],
-        report->commandIndexValid, report->commandIndex, report->commandValid, report->command[0], report->command[1],
-        report->readAddressValid, report->readAddress, report->requested, report->readAttempted,
-        report->kernelValid, report->kernelResult, report->copiedValid, report->copied,
-        report->pathValid, report->pathTruncated, report->dyldPath);
+    snprintf(output, capacity, "%s (%s)", MGTNativeEffectQueryStatusMessage(status), stage);
     output[capacity - 1] = 0;
 }
 
@@ -435,21 +338,17 @@ static int installQueries(lua_State *state) {
 
 EXPORT int MGTNativeEffectQueryInstall(lua_State *state, uintptr_t targetHeaderBase,
                                      char *diagnosticOut, size_t capacity) {
-    InstallReport report = {0};
-    report.targetHeaderBase = targetHeaderBase;
-    report.targetBaseValid = targetHeaderBase != 0 && targetHeaderBase != UINTPTR_MAX;
-    report.stage = "thread";
+    const char *stage = "thread";
     if (diagnosticOut && capacity) diagnosticOut[0] = 0;
     int status;
     if (!callableThread()) status = INSTALL_WRONG_THREAD;
     else {
-        status = configure(targetHeaderBase, &report);
+        status = configure(targetHeaderBase, &stage);
         if (!status) {
-            report.stage = "lua_stack";
+            stage = "lua_stack";
             status = installQueries(state);
-            if (!status) report.stage = "installed";
         }
     }
-    if (status <= 0) formatReport(status, &report, diagnosticOut, capacity);
+    if (status < 0) writeFailure(status, stage, diagnosticOut, capacity);
     return status;
 }
