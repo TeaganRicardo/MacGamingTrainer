@@ -178,15 +178,9 @@ class Hades2LuaTransport:
             raise TransportError('disconnected','游戏进程已结束。')
         if time.monotonic()>=deadline:
             raise TransportError('stop_failed','无法在时限内暂停游戏。')
-        # Request the target stop without LLDB's synchronous debugserver halt
-        # round trip. Signal delivery is not completion: LLDB must observe the
-        # stop before callers proceed, and retains resume/breakpoint ownership.
-        try:
-            os.kill(self.pid,signal.SIGSTOP)
-        except ProcessLookupError as exc:
-            raise TransportError('disconnected','游戏进程已结束。') from exc
-        except OSError as exc:
-            raise TransportError('stop_failed','无法在时限内暂停游戏。',diagnostic=str(exc)) from exc
+        # LLDB owns the stop request and its process-state event. An asynchronous
+        # request is not completion: observe the stop within the original deadline.
+        self.process.SendAsyncInterrupt()
         return self.wait_state((lldb.eStateStopped,),deadline,phase=phase,primary_error_code=primary_error_code)
 
     def resume(self, deadline, breakpoint_expected=False):

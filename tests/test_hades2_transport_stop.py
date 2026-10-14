@@ -1,5 +1,4 @@
 """Portable stop-boundary failures; real debugger lifecycles run on macOS."""
-import signal
 import json
 import sys
 import time
@@ -23,9 +22,15 @@ with patch.dict(sys.modules, {"lldb": fake_lldb}), patch(
 class Process:
     def __init__(self, state):
         self.state = state
+        self.interrupts = 0
+        self.interrupt_requested = False
 
     def GetState(self):
         return self.state
+
+    def SendAsyncInterrupt(self):
+        self.interrupts += 1
+        self.interrupt_requested = True
 
 
 def make_transport(state):
@@ -46,44 +51,66 @@ def expect_error(transport, deadline, code):
         raise AssertionError("stop unexpectedly succeeded")
 
 
-# A completed stop must be observed by LLDB, not inferred from signal delivery.
+# Only a debugger interrupt produces the observed stop event in this process.
+# An external signal may succeed without updating LLDB's process state.
+transport = make_transport(fake_lldb.eStateRunning)
+def observe_requested_stop():
+    if transport.process.interrupt_requested:
+        transport.process.state = fake_lldb.eStateStopped
+transport.drain = observe_requested_stop
+with patch("time.monotonic", side_effect=[0, 1, 4]), patch("time.sleep"), patch("os.kill") as send_signal:
+    transport.stop(3)
+    assert transport.process.interrupts == 1
+    assert transport.process.GetState() == fake_lldb.eStateStopped
+    send_signal.assert_not_called()
+
+
+# A completed stop must be observed by LLDB, not inferred from the request.
 transport = make_transport(fake_lldb.eStateRunning)
 observations = iter((fake_lldb.eStateRunning, fake_lldb.eStateRunning, fake_lldb.eStateStopped))
 transport.process.GetState = lambda: next(observations)
 with patch("os.kill") as send_signal:
     transport.stop(time.monotonic() + 1)
-    send_signal.assert_called_once_with(transport.pid, signal.SIGSTOP)
+    assert transport.process.interrupts == 1
+    send_signal.assert_not_called()
 
-# An already stopped process and a spent budget must have no new OS side effect.
+# An already stopped process and a spent budget must not request another stop.
 transport = make_transport(fake_lldb.eStateStopped)
 with patch("os.kill") as send_signal:
     transport.stop(time.monotonic() - 1)
+    assert transport.process.interrupts == 0
     send_signal.assert_not_called()
 
 transport = make_transport(fake_lldb.eStateRunning)
 with patch("os.kill") as send_signal:
     expect_error(transport, time.monotonic() - 1, "stop_failed")
+    assert transport.process.interrupts == 0
     send_signal.assert_not_called()
 
 for state in (fake_lldb.eStateInvalid, fake_lldb.eStateExited, fake_lldb.eStateDetached):
     transport = make_transport(state)
     with patch("os.kill") as send_signal:
         expect_error(transport, time.monotonic() + 1, "disconnected")
+        assert transport.process.interrupts == 0
         send_signal.assert_not_called()
 
-# Process disappearance and denied delivery remain known pre-call failures.
-for failure, code in ((ProcessLookupError(), "disconnected"), (PermissionError(), "stop_failed")):
+# A terminal event after the request remains a known pre-call failure.
+for state in (fake_lldb.eStateExited, fake_lldb.eStateDetached):
     transport = make_transport(fake_lldb.eStateRunning)
-    with patch("os.kill", side_effect=failure) as send_signal:
-        expect_error(transport, time.monotonic() + 1, code)
-        assert send_signal.call_count == 1, "failed stop was retried"
+    observations = iter((fake_lldb.eStateRunning, state))
+    transport.process.GetState = lambda: next(observations)
+    with patch("os.kill") as send_signal:
+        expect_error(transport, time.monotonic() + 1, "disconnected")
+        assert transport.process.interrupts == 1, "failed stop was retried"
+        send_signal.assert_not_called()
     assert not getattr(transport, "tainted", False), "pre-call stop failure invented an unknown mutation"
 
-# Successful delivery alone cannot open a boundary while LLDB still sees running.
+# An interrupt request cannot open a boundary while LLDB still sees running.
 transport = make_transport(fake_lldb.eStateRunning)
 with patch("os.kill") as send_signal:
     error = expect_error(transport, time.monotonic() + .015, "process_timeout")
-    assert send_signal.call_count == 1, "unobserved stop was blindly resent"
+    assert transport.process.interrupts == 1, "unobserved stop was blindly resent"
+    send_signal.assert_not_called()
 assert json.loads(error.diagnostic) == {'phase': 'transport.stop', 'expectedStates': [5], 'lastObservedState': 6}
 
 # An expired wait does not fabricate an observation or perform another GetState.
@@ -98,7 +125,7 @@ with patch.object(transport.process, 'GetState') as observe, patch('time.monoton
         raise AssertionError('Expired wait was accepted')
     observe.assert_not_called()
 
-# Initial boundary and detach stops keep their existing signal and error rules,
+# Initial boundary and detach stops keep their deadline and error rules,
 # while the diagnostic identifies which owning phase exhausted its budget.
 for phase, invoke in (
     ('boundary.initial_stop', lambda t: t.boundary()),
@@ -116,7 +143,8 @@ for phase, invoke in (
             assert json.loads(error.diagnostic) == {'phase': phase, 'expectedStates': [5], 'lastObservedState': 6}
         else:
             raise AssertionError('Unobserved owning stop was accepted')
-        assert observe.call_count == 2 and send_signal.call_count == 1
+        assert observe.call_count == 2 and transport.process.interrupts == 1
+        send_signal.assert_not_called()
     assert not transport.tainted
 
 # Cleanup's timeout still replaces the primary error and taints trust. It now
@@ -135,7 +163,8 @@ with patch('time.monotonic', side_effect=[0, 1, 2, 3, 5, 6]), patch('time.sleep'
         assert json.loads(error.diagnostic) == {'phase': 'execute.cleanup_stop', 'expectedStates': [5], 'lastObservedState': 6, 'primary_error_code': 'lua_error'}
     else:
         raise AssertionError('Cleanup timeout was hidden')
-    assert send_signal.call_count == 1
+    assert transport.process.interrupts == 1
+    send_signal.assert_not_called()
 assert transport.tainted
 
 print("hades2_transport_stop_ok")
