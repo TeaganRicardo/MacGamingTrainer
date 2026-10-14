@@ -6,7 +6,6 @@ exposes a small JSONL RPC surface over stdio.
 """
 from __future__ import annotations
 
-import logging
 import sys
 import traceback
 from pathlib import Path
@@ -163,7 +162,6 @@ def serve_requests(input_stream, output_stream, worker):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stderr)])
     worker = Hades2LLDBWorker()
     try:
         serve_requests(sys.stdin, sys.stdout, worker)

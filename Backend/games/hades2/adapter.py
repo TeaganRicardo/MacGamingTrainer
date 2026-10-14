@@ -785,11 +785,11 @@ class Hades2Adapter(GameAdapter):
             profile['total']=time.monotonic()-started
             logging.info(
                 'ConnectProfile outcome=%s total=%.3fs scan=%.3fs attachTotal=%.3fs '
-                'createTarget=%.3fs attachProcess=%.3fs identity=%.3fs symbols=%.3fs nativeQuery=%.3fs resume=%.3fs '
+                'createTarget=%.3fs attachProcess=%.3fs identity=%.3fs symbols=%.3fs resume=%.3fs '
                 'firstStatusTotal=%.3fs firstLuaBoundary=%.3fs jsonDecode=%.3fs catalogLocalization=%.3fs',
                 outcome,profile['total'],profile.get('scan',0.0),profile.get('attachTotal',0.0),
                 attach_profile.get('createTarget',0.0),attach_profile.get('attachProcess',0.0),attach_profile.get('identity',0.0),
-                attach_profile.get('symbols',0.0),attach_profile.get('nativeQuery',0.0),attach_profile.get('resume',0.0),profile.get('firstStatusTotal',0.0),
+                attach_profile.get('symbols',0.0),attach_profile.get('resume',0.0),profile.get('firstStatusTotal',0.0),
                 self._last_status_boundary_duration,self._last_status_json_duration,self._last_status_localize_duration,
             )
 

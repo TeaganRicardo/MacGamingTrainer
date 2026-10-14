@@ -38,7 +38,6 @@ def make_transport(**options):
     transport.addresses = {"focus": 123}
     transport.focus_original = b"\x01"
     transport.tainted = True
-    transport.native_install_observation = 'fixture accepted image'
     transport.drain = lambda: None
     transport.target = types.SimpleNamespace(DeleteAllBreakpoints=lambda: None)
 
@@ -72,7 +71,6 @@ with patch("os.kill", side_effect=resume_released_target) as send_signal:
     assert send_signal.call_count == 1, "release sent repeated OS resumes"
 assert transport.process is None and transport.pid is None
 assert transport.addresses == {} and not transport.tainted
-assert transport.native_install_observation is None
 
 for failure in (ProcessLookupError("target exited"), PermissionError("resume denied")):
     transport, process = make_transport()

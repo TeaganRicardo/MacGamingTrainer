@@ -1,6 +1,5 @@
 """Helper identity/loading uses an isolated module, never a real game process."""
 import struct
-import logging
 import sys
 import tempfile
 from pathlib import Path
@@ -13,12 +12,6 @@ from core.adapter import AdapterError
 from games.hades2 import native_effect_query as query
 
 UUID = bytes(range(16))
-phase_logs = []
-
-
-def phase_count(phase, event):
-    prefix = f'LLDBPhase phase={phase} event={event}'
-    return sum(message.startswith(prefix) for message in phase_logs)
 
 
 class Error:
@@ -58,14 +51,12 @@ class Target:
 class Process:
     def __init__(self, target): self.target, self.loaded, self.options, self.abi = target, 0, None, 3
     def LoadImage(self, spec, error):
-        assert phase_count('prepareNative.LoadImage', 'begin') == phase_count('prepareNative.LoadImage', 'end') + 1
         self.loaded += 1
         self.target.module.valid = True
         return 1
     def GetSelectedThread(self):
         return SimpleNamespace(GetFrameAtIndex=lambda index: SimpleNamespace(EvaluateExpression=self.evaluate))
     def evaluate(self, expression, options):
-        assert phase_count('prepareNative.ABI.EvaluateExpression', 'begin') == phase_count('prepareNative.ABI.EvaluateExpression', 'end') + 1
         self.options = options
         return SimpleNamespace(GetError=Error, GetValueAsUnsigned=lambda: self.abi)
 
@@ -82,8 +73,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-query-loading-') as temporary:
     assert query._image_uuid(image) == UUID.hex().upper()
     target = Target(Module()); process = Process(target)
     transport = SimpleNamespace(runtime_uuid='supported', known_uuid='supported', target=target, process=process)
-    with patch.object(query, '__file__', str(module_root / 'native_effect_query.py')), \
-         patch.object(logging, 'info', side_effect=lambda message, *args: phase_logs.append(message % args)):
+    with patch.object(query, '__file__', str(module_root / 'native_effect_query.py')):
         assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base)
         assert process.loaded == 0, 'Reconnect reloaded an already matched image'
         assert process.options.StopOthers is True and process.options.TryAllThreads is False
@@ -132,9 +122,6 @@ with tempfile.TemporaryDirectory(prefix='mgt-query-loading-') as temporary:
             assert error.presentation == 'hades2.error.nativeQueryUnavailable'
         else:
             raise AssertionError('Missing package helper was accepted')
-    for phase in ('prepareNative.LoadImage', 'prepareNative.ABI.EvaluateExpression'):
-        assert phase_count(phase, 'begin') > 0
-        assert phase_count(phase, 'begin') == phase_count(phase, 'end'), phase_logs
     image.write_bytes(b'not Mach-O')
     try:
         query._image_uuid(image)

@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#endif
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
@@ -62,32 +66,32 @@ static void setupImage(void) {
 
 static void testTargetProfile(void) {
     setupImage();
-    InstallReport report = {0};
-    assert(configureImage(imageBase, readImage, NULL, &report) == 0);
+    const char *stage = NULL;
+    assert(configureImage(imageBase, readImage, NULL, &stage) == 0);
     LuaAPI acceptedAPI = api;
     Layout acceptedLayout = layout;
     imageHeader[0] ^= 1;
-    assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
     imageHeader[0] ^= 1;
     imageHeader[40] ^= 1;
-    assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_UUID);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_UUID);
     imageHeader[40] ^= 1;
     uint32_t malformed = 4;
     memcpy(imageHeader + 36, &malformed, sizeof(malformed));
-    assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
     malformed = 24; memcpy(imageHeader + 36, &malformed, sizeof(malformed));
-    assert(configureImage(0, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
-    assert(configureImage(UINTPTR_MAX, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
+    assert(configureImage(0, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
+    assert(configureImage(UINTPTR_MAX, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
     for (size_t index = 0; index < sizeof(imagePrefixes)/sizeof(imagePrefixes[0]); ++index) {
         brokenPrefix = (int)index;
         int expected = index ? INSTALL_LUA_BINDING_BASE - (int)index + 1 : INSTALL_UNIT_BINDING;
-        assert(configureImage(imageBase, readImage, NULL, &report) == expected);
+        assert(configureImage(imageBase, readImage, NULL, &stage) == expected);
         assert(strstr(MGTNativeEffectQueryStatusMessage(expected), "binding mismatch"));
         assert(!memcmp(&api, &acceptedAPI, sizeof(api)) && !memcmp(&layout, &acceptedLayout, sizeof(layout)));
         brokenPrefix = -1;
         unreadablePrefix = (int)index;
         expected = index ? INSTALL_LUA_UNREADABLE_BASE - (int)index + 1 : INSTALL_UNIT_UNREADABLE;
-        assert(configureImage(imageBase, readImage, NULL, &report) == expected);
+        assert(configureImage(imageBase, readImage, NULL, &stage) == expected);
         assert(strstr(MGTNativeEffectQueryStatusMessage(expected), "unreadable"));
         assert(!memcmp(&api, &acceptedAPI, sizeof(api)) && !memcmp(&layout, &acceptedLayout, sizeof(layout)));
         unreadablePrefix = -1;
@@ -97,13 +101,13 @@ static void testTargetProfile(void) {
 
 static void imageWord(size_t offset, uint32_t value) { memcpy(imageHeader + offset, &value, sizeof(value)); }
 
-static void testProfileReport(void) {
+static void testProfileValidation(void) {
     const char *stages[] = { "header_read", "header_magic", "header_cpu", "header_filetype",
         "header_table_size", "command_boundary", "command_read", "command_length_small",
         "command_length_boundary", "uuid_length", "uuid_read" };
     setupImage();
-    InstallReport report = {0};
-    assert(configureImage(imageBase, readImage, NULL, &report) == 0);
+    const char *stage = NULL;
+    assert(configureImage(imageBase, readImage, NULL, &stage) == 0);
     LuaAPI acceptedAPI = api;
     Layout acceptedLayout = layout;
     for (size_t index = 0; index < sizeof(stages)/sizeof(stages[0]); ++index) {
@@ -121,49 +125,31 @@ static void testProfileReport(void) {
             case 9: imageWord(36, 16); break;
             case 10: unreadableAddress = imageBase + 40; break;
         }
-        assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
-        assert(!strcmp(report.stage, stages[index]));
-        assert(report.headerValid == (index != 0));
-        assert(report.commandIndexValid == (index >= 5));
-        assert(report.commandValid == (index >= 7));
-        assert(report.readAddressValid && report.readAttempted == (index != 5));
-        assert(!report.kernelValid && !report.copiedValid && report.kernelResult == 0 && report.copied == 0);
-        if (!report.headerValid) for (size_t word = 0; word < 8; ++word) assert(report.header[word] == 0);
-        if (!report.commandValid) assert(report.command[0] == 0 && report.command[1] == 0);
+        assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
+        assert(!strcmp(stage, stages[index]));
         assert(!memcmp(&api, &acceptedAPI, sizeof(api)) && !memcmp(&layout, &acceptedLayout, sizeof(layout)));
-        char text[2048];
-        formatReport(INSTALL_TARGET_HEADER, &report, text, sizeof(text));
-        assert(strstr(text, stages[index]) && strstr(text, "kernValid=0") && strstr(text, "copiedValid=0"));
-        char bounded[] = {'x','x','x','x','!'};
-        formatReport(INSTALL_TARGET_HEADER, &report, bounded, 4);
-        assert(bounded[3] == 0 && bounded[4] == '!');
-        formatReport(INSTALL_TARGET_HEADER, &report, bounded, 0);
-        assert(bounded[4] == '!');
     }
-    /* A later command's failed read must not publish the preceding command's
-     * successfully read values. This table has a segment before LC_UUID. */
+    /* Traverse a real-sized segment before LC_UUID, and preserve the accepted
+     * callback bindings if a later command or UUID cannot be read. */
     setupImage();
     memmove(imageHeader + 104, imageHeader + 32, 24);
     memset(imageHeader + 32, 0, 72);
     imageWord(16, 2); imageWord(20, 96);
     imageWord(32, 0x19); imageWord(36, 72);
-    assert(configureImage(imageBase, readImage, NULL, &report) == 0);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == 0);
     unreadableAddress = imageBase + 104;
-    assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
-    assert(!strcmp(report.stage, "command_read") && report.commandIndexValid && report.commandIndex == 1);
-    assert(!report.commandValid && report.command[0] == 0 && report.command[1] == 0);
-    assert(report.readAddress == imageBase + 104 && report.requested == 8);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
+    assert(!strcmp(stage, "command_read"));
+    assert(!memcmp(&api, &acceptedAPI, sizeof(api)) && !memcmp(&layout, &acceptedLayout, sizeof(layout)));
     unreadableAddress = imageBase + 112;
-    assert(configureImage(imageBase, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
-    assert(!strcmp(report.stage, "uuid_read") && report.commandValid && report.command[0] == 0x1b && report.command[1] == 24);
-    assert(report.readAddress == imageBase + 112 && report.requested == 16);
-    assert(configureImage(0, readImage, NULL, &report) == INSTALL_TARGET_HEADER);
-    assert(!strcmp(report.stage, "base") && !report.headerValid && !report.commandIndexValid && !report.commandValid);
-    assert(!report.readAddressValid && !report.readAttempted && !report.kernelValid && !report.copiedValid);
+    assert(configureImage(imageBase, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
+    assert(!strcmp(stage, "uuid_read"));
+    assert(!memcmp(&api, &acceptedAPI, sizeof(api)) && !memcmp(&layout, &acceptedLayout, sizeof(layout)));
+    assert(configureImage(0, readImage, NULL, &stage) == INSTALL_TARGET_HEADER);
+    assert(!strcmp(stage, "base"));
 #ifdef __APPLE__
-    assert(configureImage(1, readSelf, &report, &report) == INSTALL_TARGET_HEADER);
-    assert(!strcmp(report.stage, "header_read") && !report.headerValid && report.kernelValid && report.copiedValid);
-    assert(report.readAddress == 1 && report.requested == 32 && (report.kernelResult != KERN_SUCCESS || report.copied != 32));
+    assert(configureImage(1, readSelf, NULL, &stage) == INSTALL_TARGET_HEADER);
+    assert(!strcmp(stage, "header_read"));
 #endif
 }
 
@@ -217,7 +203,7 @@ static void setup(void) {
 }
 int main(void) {
     testTargetProfile();
-    testProfileReport();
+    testProfileValidation();
     setup();
     Snapshot snapshot;
     assert(collect(&layout, readFixture, NULL, 7, &snapshot) == 1 && snapshot.count == 0);
@@ -266,18 +252,18 @@ int main(void) {
         assert(_dyld_get_image_header(0)->filetype == MH_DYLIB);
     }
 #endif
-    char diagnostic[2048];
+    char diagnostic[256];
     int rejected = MGTNativeEffectQueryInstall(L, mainBase, diagnostic, sizeof(diagnostic));
     assert(rejected < 0 && lua_gettop(L) == 0);
 #if defined(__APPLE__) && defined(__arm64__)
     assert(rejected == INSTALL_TARGET_UUID); /* Header selection reaches the correct helper main; it is not Hades. */
-    assert(strstr(diagnostic, "stage=uuid_mismatch") && strstr(diagnostic, "filetype=2") && strstr(diagnostic, "kernValid=1 kern=0 copiedValid=1"));
+    assert(strstr(diagnostic, "UUID") && strstr(diagnostic, "uuid_mismatch"));
     if (getenv("MGT_EXPECT_STARTUP_IMAGE")) printf("native_image_selection_ok: status=%d %s\n", rejected, diagnostic);
     char tiny[] = {'x','!'};
     assert(MGTNativeEffectQueryInstall(L, mainBase, tiny, 1) == rejected && tiny[0] == 0 && tiny[1] == '!');
     assert(MGTNativeEffectQueryInstall(L, mainBase, NULL, 0) == rejected);
     assert(MGTNativeEffectQueryInstall(L, 0, diagnostic, sizeof(diagnostic)) == INSTALL_TARGET_HEADER);
-    assert(strstr(diagnostic, "stage=base") && strstr(diagnostic, "headerValid=0") && strstr(diagnostic, "kernValid=0") && strstr(diagnostic, "copiedValid=0"));
+    assert(strstr(diagnostic, "header") && strstr(diagnostic, "(base)"));
 #endif
     assert(strcmp(MGTNativeEffectQueryStatusMessage(rejected),
         "Native query registration returned an unknown rejection status") != 0);
@@ -316,6 +302,6 @@ int main(void) {
     }
     lua_pushliteral(L, "7"); assert(!objectId(L, &parsed));
     lua_close(L);
-    puts("native_effect_query_ok: verified image authority, invocation report, full profile, set, identity, bounds, stack, OOM, retained callback");
+    puts("native_effect_query_ok: verified image authority, bounded failure, full profile, set, identity, bounds, stack, OOM, retained callback");
     return 0;
 }

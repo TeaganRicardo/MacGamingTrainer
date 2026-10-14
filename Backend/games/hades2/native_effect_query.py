@@ -1,10 +1,7 @@
 """Load the persistent, exact-build Hades native query before Lua sampling."""
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-import logging
 import struct
-import time
 
 from core.adapter import AdapterError
 
@@ -13,17 +10,6 @@ from core.adapter import AdapterError
 class NativeQueryLibrary:
     installer: int
     target_header_base: int
-
-
-@contextmanager
-def log_lldb_phase(phase):
-    """Keep the last entered blocking API observable if the worker is terminated."""
-    started = time.monotonic()
-    logging.info('LLDBPhase phase=%s event=begin', phase)
-    try:
-        yield
-    finally:
-        logging.info('LLDBPhase phase=%s event=end duration=%.3fs', phase, time.monotonic() - started)
 
 
 def _image_uuid(path):
@@ -64,8 +50,7 @@ def prepare_native_query(transport, lldb):
         module = transport.target.FindModule(spec)
         if not module.IsValid():
             error = lldb.SBError()
-            with log_lldb_phase('prepareNative.LoadImage'):
-                token = transport.process.LoadImage(spec, error)
+            token = transport.process.LoadImage(spec, error)
             if error.Fail() or token == lldb.LLDB_INVALID_IMAGE_TOKEN:
                 raise ValueError('Cannot load native query: ' + str(error))
             module = transport.target.FindModule(spec)
@@ -99,9 +84,8 @@ def prepare_native_query(transport, lldb):
         options.SetTimeoutInMicroSeconds(2_000_000)
         options.SetIgnoreBreakpoints(True)
         options.SetUnwindOnError(True)
-        with log_lldb_phase('prepareNative.ABI.EvaluateExpression'):
-            result = transport.process.GetSelectedThread().GetFrameAtIndex(0).EvaluateExpression(
-                f'((unsigned int(*)()){abi})()', options)
+        result = transport.process.GetSelectedThread().GetFrameAtIndex(0).EvaluateExpression(
+            f'((unsigned int(*)()){abi})()', options)
         if result.GetError().Fail() or result.GetValueAsUnsigned() != 3:
             raise ValueError('Native query ABI is incompatible: ' + str(result.GetError()))
         # Never unload: Lua can retain C callbacks after detach or re-register.

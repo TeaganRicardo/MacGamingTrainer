@@ -1,12 +1,7 @@
-"""Replay a rejected native registration through the actual leased transport.
-
-The original incident did not retain the C rejection code. This fixture proves
-diagnostic/trust behavior, not which guard rejected the user's running game.
-"""
+"""Exercise native registration results through the leased transport and worker."""
 import io
 import json
 import runpy
-import logging
 import re
 import shutil
 import subprocess
@@ -14,7 +9,6 @@ import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 from lua_runtime_support import require_lua52
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +20,6 @@ from games.hades2.transport_client import _LLDBWorkerClient
 
 fixture = runpy.run_path(str(ROOT / 'tests/test_hades2_transport_outcome_unknown_taint.py'))
 fixture['namespace']['TransportError'] = AdapterError
-fixture['namespace']['logging'] = logging
 Transport = fixture['Transport']
 
 
@@ -42,7 +35,7 @@ class RejectedProcess(fixture['SuccessfulProcess']):
 for status, reason in (
     (-1, 'Native query registration requires Darwin MainThread'),
     (-2, 'Native query registration cannot reserve Lua stack space'),
-    (-3, 'nativeStatus=-3; stage=header_read targetHeaderBase=0x100000000 kernValid=1 kern=1 copiedValid=1 copied=0'),
+    (-3, 'Native query target Mach-O header or load commands are unreadable or invalid (header_read)'),
     (-4, 'Native query target UUID does not match Hades II 1.143476'),
     (-100, 'Native query target binding mismatch: lua_gettop'),
     (-200, 'Native query target binding is unreadable: lua_gettop'),
@@ -110,25 +103,29 @@ for status, reason in (
     assert sidecar.calls == ['hello', 'transport.execute'], 'Native rejection was replayed'
     assert not client.terminal, 'Known native rejection terminalized sidecar trust'
 
-# The first successful install report has its own region inside the same leased
-# allocation. Retaining/logging it once must not overwrite the resident reply.
+# Installation shares the existing result buffer. A successful resident reply
+# is read once, without an additional diagnostic allocation or read.
 payload = "residentRuns = (residentRuns or 0) + 1; return '{}'"
-observation = 'nativeStatus=0 accepted; stage=installed targetHeaderBase=0x100000000 dyldHeaderBase=0x100800000'
-class ObservedProcess(fixture['SuccessfulProcess']):
+class ResultProcess(fixture['SuccessfulProcess']):
+    def __init__(self):
+        super().__init__()
+        self.reads = 0
+
     def ReadCStringFromMemory(self, address, capacity, error):
-        return '{}' if address == 0x1000 + len(payload.encode()) + 1 else observation
+        assert address == 0x1000 + len(payload.encode()) + 1
+        assert capacity == fixture['namespace']['LUA_TRANSPORT_RESULT_LIMIT_BYTES']
+        self.reads += 1
+        return '{}'
 transport = Transport.__new__(Transport)
 transport.native_runtime_installer = NativeQueryLibrary(200, 0x100000000)
-transport.process = ObservedProcess(); transport.target = fixture['FakeTarget']()
+transport.process = ResultProcess(); transport.target = fixture['FakeTarget']()
 transport.boundary = lambda: (fixture['FakeThread'](0), 0x2000, fixture['FakeBreakpoint']())
 transport.address = lambda name: 0x3000
 transport.alive = lambda: False; transport.tainted = False
-with patch('logging.info') as log:
+for _ in range(2):
     assert transport.execute(payload) == '{}'
-    first_size = transport.process.allocated_size
-    assert transport.native_install_observation == observation
-    assert transport.execute(payload) == '{}'
-    assert first_size - transport.process.allocated_size == 2048 and log.call_count == 1
+    assert transport.process.allocated_size == len(payload.encode()) + 1 + fixture['namespace']['LUA_TRANSPORT_RESULT_LIMIT_BYTES']
+assert transport.process.reads == 2
 
 # Compile the actual generated expression against real Lua 5.2. Only its fixture
 # addresses are substituted; the expression's control flow/copy/stack code is
@@ -152,7 +149,6 @@ except AdapterError as error:
     assert error.code == 'incompatible'
 out_offset = len(payload.encode()) + 1
 replacements = {0x1000: '(uintptr_t)scratch', 0x1000 + out_offset: '(uintptr_t)(scratch+PAYLOADSIZE+1)',
-    0x1000 + out_offset + fixture['namespace']['LUA_TRANSPORT_RESULT_LIMIT_BYTES']: '(uintptr_t)(scratch+PAYLOADSIZE+1+CAP)',
     0x2000: '(uintptr_t)state', 0x400000: '(uintptr_t)installStub'}
 replacements.update({address: '(uintptr_t)' + name for name, address in addresses.items()})
 expression = re.sub(r'\b\d+\b', lambda match: replacements.get(int(match.group()), match.group()), expressions[0])
@@ -168,36 +164,39 @@ extern "C" {
 #include "lualib.h"
 }
 static int mode;
-static char *nativeOutput;
+static char *outputBuffer;
 static int installStub(void *p, unsigned long base, char *output, unsigned long capacity) {
-    assert(base==0x500000 && output==nativeOutput && capacity==2048);
+    assert(base==0x500000 && output==outputBuffer && capacity==CAP);
     output[0]=0;
-    if(mode<0) snprintf(output,capacity,"nativeStatus=%d rejected; stage=header_read base=0x%lx",mode,base);
+    if(mode<0) snprintf(output,capacity,"Native query rejected (%d)",mode);
     else if(mode>0) {
         assert(luaL_loadstring((lua_State*)p,"error('protected-install-error')")==0);
         return lua_pcall((lua_State*)p,0,0,0);
-    } else snprintf(output,capacity,"nativeStatus=0 accepted; stage=installed base=0x%lx",base);
+    }
     return mode;
 }
 int main() {
     lua_State *state=luaL_newstate();assert(state);luaL_openlibs(state);
     lua_pushinteger(state,42);
-    char scratch[CAP+PAYLOADSIZE+1+2048]={};
+    char scratch[CAP+PAYLOADSIZE+1]={};
     memcpy(scratch,PAYLOAD,PAYLOADSIZE);
-    nativeOutput=scratch+CAP+PAYLOADSIZE+1;
+    outputBuffer=scratch+PAYLOADSIZE+1;
     for(int status: {-1,-2,-3,-4,-100,-200,2,0}) {
         mode=status;
         int rc=EXPRESSION;
         assert(rc==status && lua_gettop(state)==1 && lua_tointeger(state,1)==42);
         const char *text=scratch+PAYLOADSIZE+1;
-        if(status<0)assert(strcmp(text,nativeOutput)==0);
+        if(status<0) {
+            char expected[64];snprintf(expected,sizeof(expected),"Native query rejected (%d)",status);
+            assert(strcmp(text,expected)==0);
+        }
         if(status==2)assert(strstr(text,"protected-install-error"));
-        if(!status)assert(strcmp(text,"{}")==0 && strstr(nativeOutput,"nativeStatus=0"));
+        if(!status)assert(strcmp(text,"{}")==0);
         lua_getglobal(state,"residentRuns");
         assert(lua_tointeger(state,-1)==(status==0 ? 1 : 0));lua_pop(state,1);
     }
     lua_close(state);
-    puts("native_query_generated_expression_ok: ABI3 args, rejection report, protected Lua error, resident result, success report, stack restore");
+    puts("native_query_generated_expression_ok: ABI3 args, bounded failure, protected Lua error, resident result, stack restore");
 }
 '''
 program = program.replace('EXPRESSION', expression).replace('CAP', str(fixture['namespace']['LUA_TRANSPORT_RESULT_LIMIT_BYTES']))
