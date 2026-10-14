@@ -34,7 +34,7 @@ for raw in sys.stdin:
         sources = [
             {'rootId': 'main', 'relativePath': path, 'profile': 'Profile2' if backup else 'Profile1', 'variant': variant}
             for path, variant in ([('Profile2_Temp.sav', 'temp'), ('Profile2_Archive.sav', 'variant')]
-                if backup else [('Profile1.sav', 'profile')])
+                if backup else [('Profile1.sav', 'profile'), ('Profile3.sav', 'profile')])
         ]
         result = {
             'sources': sources,
@@ -874,8 +874,29 @@ struct Main {
             fail("All-content discovery could not inspect narrative evidence")
         }
 
+        // The visible source picker loads a new source in one selection when
+        // no changes are staged. The pinned target remains independent.
+        pumpUntil { !model.busy }
+        let oldWorkspace = model.workspaceID
+        model.selectedSourceID = "main/Profile3.sav"
+        pumpUntil(timeout: 2.0) {
+            model.workspaceID != oldWorkspace && model.sourceRelativePath == "Profile3.sav"
+        }
+        guard model.workspaceID != oldWorkspace,
+              model.sourceRelativePath == "Profile3.sav",
+              model.selectedTargetID == "main/Profile1.sav",
+              let sourceRead = commands(at: commandLog).last(where: {
+                  $0["command"] as? String == "save_editor_open"
+              }),
+              let readParams = sourceRead["params"] as? [String: Any],
+              let readSource = readParams["source"] as? [String: String],
+              readSource["relativePath"] == "Profile3.sav" else {
+            fail("A source selection did not load the pinned document in one action")
+        }
+
         // A managed backup uses the same session and semantic model. Source
-        // selection is a proposal until an explicit read; targets are separate.
+        // selection remains an explicit proposal in an unmounted model; targets
+        // are independent.
         let backupModel = Hades2SaveEditorModel(session: session, snapshotID: "verified-backup")
         let beforeBackup = commands(at: commandLog).count
         backupModel.open(language: .en)
