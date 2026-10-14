@@ -2,7 +2,6 @@ import SwiftUI
 
 struct Hades2FeedbackDetails: View {
     @ObservedObject var model: Hades2TrainerModel
-    @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
     var body: some View {
@@ -30,6 +29,6 @@ struct Hades2FeedbackDetails: View {
         }
         .padding(20)
         .frame(width: 360)
-        .background(theme.background)
+        .trainerSurface(.canvas)
     }
 }
