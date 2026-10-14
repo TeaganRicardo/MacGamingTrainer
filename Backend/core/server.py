@@ -6,12 +6,14 @@ import logging
 import os
 import signal
 import sys
+import time
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from core.operation_profile import correlation, operation, record
 from core.log_paths import trainer_log_path
 from core.protocol import JsonlRequestRouter
 from core.registry import available_games, create_adapter
@@ -87,6 +89,26 @@ def encode_reply(router, reply):
         return json.dumps(fallback, ensure_ascii=False, allow_nan=False)
 
 
+def process_line(router, line):
+    """One ordinary JSONL record, shared by the server and offline probes."""
+    started = time.perf_counter()
+    request = json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError('非有限 JSON 数值：' + value)))
+    decode = time.perf_counter() - started
+    identity = request.get('id') if isinstance(request, dict) else None
+    command = request.get('command', '') if isinstance(request, dict) else ''
+    with operation(identity, command):
+        if correlation() is not None:
+            record('backend.request_decode', decode,
+                   request_bytes=len(line.encode('utf-8')) if isinstance(line, str) else len(line))
+        reply = router.handle(request)
+        started = time.perf_counter()
+        encoded = encode_reply(router, reply)
+        if correlation() is not None:
+            record('backend.stdout_serialize', time.perf_counter() - started,
+                   reply_bytes=len(encoded.encode('utf-8')) + 1)
+        return encoded
+
+
 def main(argv=None):
     args = parse_args(argv)
     games = available_games()
@@ -128,11 +150,11 @@ def main(argv=None):
                     line_bytes = len(line.encode('utf-8')) if isinstance(line, str) else len(line)
                     if line_bytes > 65536:
                         raise ValueError('请求过长。')
-                    request = json.loads(line, parse_constant=lambda value: (_ for _ in ()).throw(ValueError('非有限 JSON 数值：' + value)))
-                    reply = router.handle(request)
+                    encoded = process_line(router, line)
                 except Exception as error:
                     reply = router.core_error_reply(None, 'invalid_request', str(error))
-                print(encode_reply(router, reply), flush=True)
+                    encoded = encode_reply(router, reply)
+                print(encoded, flush=True)
                 if line_bytes > 65536:
                     # Stay in sync with the next JSONL record without holding
                     # the rest of this untrusted line in memory.

@@ -37,6 +37,7 @@ def _product_version():
 APP_BACKEND_VERSION = _product_version()
 
 
+from core.operation_profile import operation, phase
 from core.adapter import GameAdapter
 from core.save_restore import SaveBusyError
 from core.save_service import CoreSaveService
@@ -188,6 +189,12 @@ class JsonlRequestRouter:
         raise ValueError('未知 Core 存档命令。')
 
     def handle(self, request):
+        identity = request.get("id") if isinstance(request, dict) else None
+        command = request.get("command", "") if isinstance(request, dict) else ""
+        with operation(identity, command), phase("backend.routing"):
+            return self._handle(request)
+
+    def _handle(self, request):
         request_id = request.get('id') if isinstance(request, dict) else None
         if not isinstance(request_id, str) or not request_id or len(request_id) > 128:
             return self.core_error_reply(
@@ -195,7 +202,8 @@ class JsonlRequestRouter:
                 'request id must be a non-empty string of at most 128 characters',
             )
         try:
-            fingerprint = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False)
+            with phase("backend.request_fingerprint"):
+                fingerprint = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError):
             return self.core_error_reply(
                 request_id, 'invalid_request',
@@ -231,10 +239,12 @@ class JsonlRequestRouter:
             elif command.startswith(_CORE_SAVE_PREFIX):
                 result = self._dispatch_core_save(command, params)
             else:
-                result = self.adapter.dispatch(command, params, request_id)
+                with phase("backend.adapter_dispatch"):
+                    result = self.adapter.dispatch(command, params, request_id)
                 if not isinstance(result, dict):
                     raise TypeError('Game adapter dispatch() must return a JSON object.')
-            self._require_json_safe(result, 'Backend returned a non-JSON-safe result.')
+            with phase("backend.result_validation"):
+                self._require_json_safe(result, 'Backend returned a non-JSON-safe result.')
             reply = self._envelope(request_id, True)
             reply['result'] = result
             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
@@ -259,11 +269,13 @@ class JsonlRequestRouter:
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path
-        reply_json = json.dumps(reply, ensure_ascii=False, allow_nan=False)
+        with phase("backend.cache_serialize"):
+            reply_json = json.dumps(reply, ensure_ascii=False, allow_nan=False)
         self.cache[request_id] = (fingerprint, reply_json)
         while len(self.cache) > 256:
             self.cache.popitem(last=False)
-        return json.loads(reply_json)
+        with phase("backend.cache_materialize"):
+            return json.loads(reply_json)
 
     def close(self):
         self.adapter.close()

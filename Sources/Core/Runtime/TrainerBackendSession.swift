@@ -216,12 +216,18 @@ final class TrainerBackendSession {
                     $0.protocolCompatible = true
                     $0.busy = false
                 }
+                func apply(_ payload: [String: Any]) {
+                    let started = BackendOperationProfile.enabled ? BackendOperationProfile.now() : 0
+                    configuration.applyPayload(payload)
+                    BackendOperationProfile.emit("host.payload_apply", id: reply.requestID, command: reply.command,
+                        seconds: BackendOperationProfile.now() - started, log: configuration.log)
+                }
                 let coreOwned = reply.command.hasPrefix("core.")
                 if reply.success {
-                    if !coreOwned, let result = reply.result { configuration.applyPayload(result) }
+                    if !coreOwned, let result = reply.result { apply(result) }
                     if reply.announceSuccess { self.updateStatus { $0.notice = "host.backend.notice.completed" } }
                 } else {
-                    if !coreOwned, let state = reply.state { configuration.applyPayload(state) }
+                    if !coreOwned, let state = reply.state { apply(state) }
                     let failure = reply.failure ?? BackendFailure(
                         code: "operation_failed",
                         presentation: "host.backend.error.operationFailed",

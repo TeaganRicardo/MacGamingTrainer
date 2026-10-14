@@ -9,6 +9,8 @@ import json
 import logging
 import math
 import time
+
+from core.operation_profile import correlation, record
 from pathlib import Path
 
 from core.adapter import AdapterError
@@ -382,9 +384,12 @@ class Hades2ResidentSession:
             if not isinstance(payload, dict):
                 raise TypeError("resident observation must be a JSON object")
             json_duration = time.monotonic() - phase
+            if correlation() is not None:
+                record("resident.json_decode", json_duration, reply_bytes=len(raw.encode("utf-8")))
             phase = time.monotonic()
             payload = localize_catalog(payload)
             localize_duration = time.monotonic() - phase
+            record("resident.localization", localize_duration, response_kind="marker" if _TRAIT_TRAY_HANDOFF_KEY in payload else "full")
         except Exception as error:
             boundary_duration = getattr(self._transport, "last_duration", 0.0)
             if type(boundary_duration) not in (int, float) or boundary_duration <= 0:
