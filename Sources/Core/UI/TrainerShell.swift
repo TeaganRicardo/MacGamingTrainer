@@ -17,16 +17,13 @@ struct TrainerShell<Sidebar: View, Content: View, Feedback: View>: View {
         HStack(spacing: 0) {
             sidebar
             Divider().overlay(theme.separator)
-            VStack(spacing: 0) {
-                ScrollView {
-                    content
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(theme.pagePadding)
-                }
-                // An optional module slot remains outside the scroll viewport.
-                // Its stable height keeps a notice from covering an editor or
-                // changing the content position when it appears or fades.
-                feedback
+            ScrollView {
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(theme.pagePadding)
+            }
+            .overlay(alignment: .bottom) {
+                feedback.padding(16)
             }
         }
         .background(theme.background.ignoresSafeArea())
