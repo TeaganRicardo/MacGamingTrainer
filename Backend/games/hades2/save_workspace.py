@@ -7,6 +7,7 @@ to receive the complete Lua tree just to browse or search it.
 
 import json
 import math
+import uuid
 
 from . import save_equipment, save_long_term, save_narrative
 from .save_investigation import NativeDialogueInvestigation
@@ -14,7 +15,7 @@ from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
-from .save_provider import resolve_active_profile_save
+from .save_provider import editor_default_source, editor_files, profile_file_identity
 from .schema import MAX_AMOUNT
 
 
@@ -135,9 +136,9 @@ def _json_scalar(value):
 
 
 class Hades2SaveWorkspace:
-    """One editor workspace pinned to the active Hades profile save."""
+    """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "profile")
+    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "profile", "identifier")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
@@ -145,6 +146,7 @@ class Hades2SaveWorkspace:
         self._pending = {}
         self._investigation = None
         self.profile = profile
+        self.identifier = uuid.uuid4().hex
 
     @property
     def relative_path(self):
@@ -155,21 +157,45 @@ class Hades2SaveWorkspace:
         return self._session.document
 
     @classmethod
-    def open(cls, save_service):
-        files = tuple(save_service.resolved_files())
-        profile, relative_path = resolve_active_profile_save(files)
+    def inventory(cls, save_service, snapshot_id=None):
+        files = save_service.source_files(snapshot_id)
+        sources = editor_files(files, source_bytes=lambda file: save_service.read_source_file(
+            file.root_id, file.relative_path, snapshot_id)[1])
+        targets = editor_files(save_service.resolved_files())
+        default = editor_default_source(files)
+        if default not in [{"rootId": row["rootId"], "relativePath": row["relativePath"]} for row in sources]:
+            default = None
+        return {"sources": sources, "targets": targets, "defaultSource": default}
 
+    @classmethod
+    def open(cls, save_service, *, snapshot_id=None, source=None, target=None):
+        default_target = source is None
+        if source is None:
+            source = editor_default_source(save_service.source_files(snapshot_id))
+        if not isinstance(source, dict) or set(source) != {"rootId", "relativePath"}:
+            raise ValueError("Save Editor requires an explicit supported source file.")
+        identity = profile_file_identity(source["relativePath"])
+        if identity is None:
+            raise ValueError("Save Editor source is not a supported profile document.")
         provider = getattr(save_service, "provider", None)
         game_path = getattr(provider, "game_path", None)
         return cls(
             Hades2SaveEditSession.open(
                 save_service,
-                relative_path,
+                source["relativePath"],
+                root_id=source["rootId"],
+                snapshot_id=snapshot_id,
+                target=target,
+                default_target=default_target,
                 version_pinned=True,
             ),
-            profile,
+            identity[0],
             game_path=game_path,
         )
+
+    def set_target(self, identity):
+        self._session.set_target(identity)
+        return self.summary()
 
     def _game_state(self):
         try:
@@ -897,7 +923,11 @@ class Hades2SaveWorkspace:
     def summary(self):
         return {
             "profile": self.profile,
+            "workspaceId": self.identifier,
             "relativePath": self.relative_path,
+            "source": dict(self._session.source),
+            "sourceSHA256": self._session.source_sha256,
+            "target": self._session.target,
             "domains": list(SAVE_EDITOR_DOMAINS),
             "pendingCount": len(self._pending),
             "coverage": [

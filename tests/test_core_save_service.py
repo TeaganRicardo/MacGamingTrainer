@@ -69,19 +69,19 @@ interrupted_service = CoreSaveService('interrupted-rollback', interrupted_spec, 
 interrupted_target = interrupted_service.backup()
 (interrupted_saves / 'Profile1.sav').write_bytes(b'current-one')
 (interrupted_saves / 'Profile2.sav').write_bytes(b'current-two')
-real_replace = save_restore_module.os.replace
+real_replace = save_restore_module.SaveRestoreTransaction._replace_file
 save_replace_count = 0
-def interrupt_rollback_replace(source, destination):
+def interrupt_rollback_replace(self, source, destination, digest, **options):
     global save_replace_count
     destination = Path(destination)
-    if interrupted_saves in destination.parents:
+    if interrupted_saves.resolve() in destination.parents:
         save_replace_count += 1
         if save_replace_count == 2:
             raise OSError('simulated target install failure')
         if save_replace_count == 3:
             raise KeyboardInterrupt()
-    return real_replace(source, destination)
-save_restore_module.os.replace = interrupt_rollback_replace
+    return real_replace(self, source, destination, digest, **options)
+save_restore_module.SaveRestoreTransaction._replace_file = interrupt_rollback_replace
 try:
     try:
         interrupted_service.restore(interrupted_target['id'], preserve_current=False)
@@ -90,7 +90,7 @@ try:
     else:
         raise AssertionError('rollback interruption unexpectedly succeeded')
 finally:
-    save_restore_module.os.replace = real_replace
+    save_restore_module.SaveRestoreTransaction._replace_file = real_replace
 interrupted_state = CoreSaveService('interrupted-rollback', interrupted_spec, data, lambda: False).list_state()
 assert len(interrupted_state['recoveryPaths']) == 1
 interrupted_recovery = Path(interrupted_state['recoveryPaths'][0])

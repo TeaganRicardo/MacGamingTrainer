@@ -21,15 +21,46 @@ p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
 resource_value = 123
 pending_value = None
+opened_summary = None
+workspace_number = 0
+omit_first_target = False
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
         handle.write(json.dumps(req, sort_keys=True) + '\\n')
     command = req['command']
-    if command == 'save_editor_open':
+    if command == 'save_editor_inventory':
+        backup = req['params'].get('snapshotId') is not None
+        sources = [
+            {'rootId': 'main', 'relativePath': path, 'profile': 'Profile2' if backup else 'Profile1', 'variant': variant}
+            for path, variant in ([('Profile2_Temp.sav', 'temp'), ('Profile2_Archive.sav', 'variant')]
+                if backup else [('Profile1.sav', 'profile')])
+        ]
         result = {
-            'profile': 'Profile1',
-            'relativePath': 'Profile1.sav',
+            'sources': sources,
+            'targets': [
+                {'rootId': 'main', 'relativePath': path, 'profile': profile, 'variant': 'profile'}
+                for path, profile in [('Profile1.sav', 'Profile1'), ('Profile2.sav', 'Profile2')]
+                if not (omit_first_target and path == 'Profile1.sav')
+            ],
+            'defaultSource': {key: sources[0][key] for key in ('rootId', 'relativePath')},
+        }
+    elif command == 'save_editor_open':
+        workspace_number += 1
+        snapshot = req['params'].get('snapshotId')
+        source = dict(req['params']['source'])
+        source['kind'] = 'managedBackup' if snapshot else 'currentFile'
+        if snapshot:
+            source['snapshotId'] = snapshot
+            resource_value = 901 if source['relativePath'].endswith('_Temp.sav') else 902
+        pending_value = None
+        result = {
+            'profile': 'Profile2' if snapshot else 'Profile1',
+            'workspaceId': 'fixture-workspace' if workspace_number == 1 else 'fixture-workspace-' + str(workspace_number),
+            'relativePath': req['params'].get('target', source)['relativePath'],
+            'source': source,
+            'sourceSHA256': ('a' if source['relativePath'].endswith('_Temp.sav') else 'b') * 64 if snapshot else '0' * 64,
+            'target': req['params'].get('target'),
             'domains': [
                 'overview', 'discover', 'resources', 'playerStats', 'progression',
                 'quests', 'arcana', 'investigate', 'dialogue',
@@ -46,6 +77,13 @@ for raw in sys.stdin:
                 {'id': 'unknown', 'discoverability': 'supported', 'understanding': 'readOnly', 'write': 'readOnly', 'reasonCode': 'unknownReadOnly'},
             ],
         }
+        opened_summary = result
+    elif command == 'save_editor_target':
+        opened_summary['target'] = req['params']['target']
+        opened_summary['relativePath'] = req['params']['target']['relativePath']
+        opened_summary['pendingCount'] = int(pending_value is not None)
+        result = opened_summary
+        omit_first_target = True
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
@@ -304,8 +342,8 @@ for raw in sys.stdin:
                 'domain': 'resources',
                 'rawId': 'MetaCurrency',
                 'operation': 'set',
-                'before': 123,
-                'after': 500,
+                'before': resource_value,
+                'after': pending_value,
             }],
         }
     elif command == 'save_editor_cancel':
@@ -513,10 +551,13 @@ struct Main {
         }
 
         let sent = commands(at: commandLog)
-        if sent.map({ $0["command"] as? String }) != ["save_editor_open", "save_editor_query"] {
+        if sent.map({ $0["command"] as? String }) != ["save_editor_inventory", "save_editor_open", "save_editor_query"] {
             fail("unexpected command sequence: \(sent)")
         }
         guard let params = sent.last?["params"] as? [String: Any] else { fail("missing query params") }
+        if params["workspaceId"] as? String != "fixture-workspace" {
+            fail("query was not bound to the opened document")
+        }
         if params["domain"] as? String != "discover" || params["language"] as? String != "en" {
             fail("query did not use initial unified discovery domain / live language")
         }
@@ -574,7 +615,7 @@ struct Main {
 
         let stagedCommands = commands(at: commandLog)
         if stagedCommands.map({ $0["command"] as? String }) != [
-            "save_editor_open", "save_editor_query", "save_editor_stage"
+            "save_editor_inventory", "save_editor_open", "save_editor_query", "save_editor_stage"
         ] {
             fail("unexpected stage command sequence: \(stagedCommands)")
         }
@@ -800,6 +841,66 @@ struct Main {
         pump(0.30)
         if model.investigationDetail?.scene != "NemesisPostTrueEnding01" {
             fail("All-content discovery could not inspect narrative evidence")
+        }
+
+        // A managed backup uses the same session and semantic model. Source
+        // selection is a proposal until an explicit read; targets are separate.
+        let backupModel = Hades2SaveEditorModel(session: session, snapshotID: "verified-backup")
+        let beforeBackup = commands(at: commandLog).count
+        backupModel.open(language: .en)
+        pumpUntil { !backupModel.busy && backupModel.items.count == 1 }
+        guard let backupWorkspace = backupModel.workspaceID else { fail("backup workbench did not open") }
+        if backupModel.sourceRootID != "main" || backupModel.sourceRelativePath != "Profile2_Temp.sav"
+            || backupModel.sourceSHA256 != String(repeating: "a", count: 64)
+            || backupModel.items.first?.value != AnyHashable(901)
+            || backupModel.hasWriteTarget {
+            fail("backup source identity, supported Temp bytes or independent target was lost")
+        }
+        let backupCommands = Array(commands(at: commandLog).dropFirst(beforeBackup))
+        if backupCommands.compactMap({ $0["command"] as? String }) != [
+            "save_editor_inventory", "save_editor_open", "save_editor_query"
+        ] || (backupCommands[1]["params"] as? [String: Any])?["snapshotId"] as? String != "verified-backup" {
+            fail("backup entry bypassed the shared backend session/workbench")
+        }
+        backupModel.stage(entryID: "resource:MetaCurrency", operation: "set", value: 800)
+        pumpUntil { !backupModel.busy && backupModel.pendingCount == 1 }
+        let beforeNoTarget = commands(at: commandLog).count
+        backupModel.apply()
+        pump(0.05)
+        if commands(at: commandLog).count != beforeNoTarget { fail("Apply ran without a selected target") }
+        backupModel.selectTarget("main/Profile1.sav")
+        pumpUntil { !backupModel.busy && backupModel.hasWriteTarget }
+        if backupModel.workspaceID != backupWorkspace || backupModel.selectedTargetID != "main/Profile1.sav"
+            || backupModel.sourceRelativePath != "Profile2_Temp.sav" || backupModel.pendingCount != 1
+            || backupModel.items.first?.value != AnyHashable(901) {
+            fail("target selection replaced the source document or cleared staging")
+        }
+        backupModel.refreshFiles()
+        pumpUntil { !backupModel.busy }
+        if backupModel.writeTargets.contains(where: { $0.id == "main/Profile1.sav" })
+            || backupModel.selectedTargetID != "main/Profile1.sav"
+            || backupModel.workspaceID != backupWorkspace || backupModel.pendingCount != 1 {
+            fail("inventory refresh changed the captured source/target owner")
+        }
+        let beforeSourceProposal = commands(at: commandLog).count
+        backupModel.selectedSourceID = "main/Profile2_Archive.sav"
+        pump(0.05)
+        if commands(at: commandLog).count != beforeSourceProposal
+            || backupModel.sourceRelativePath != "Profile2_Temp.sav" || backupModel.pendingCount != 1 {
+            fail("choosing a source silently read/rebased the loaded document")
+        }
+        backupModel.openSelection()
+        pumpUntil { !backupModel.busy && backupModel.workspaceID != backupWorkspace }
+        guard let reRead = commands(at: commandLog).last(where: { $0["command"] as? String == "save_editor_open" }),
+              let reReadParams = reRead["params"] as? [String: Any],
+              let reReadTarget = reReadParams["target"] as? [String: String],
+              reReadTarget == ["rootId": "main", "relativePath": "Profile1.sav"] else {
+            fail("missing inventory target silently fell back to the source path")
+        }
+        if backupModel.pendingCount != 0 || backupModel.sourceRelativePath != "Profile2_Archive.sav"
+            || backupModel.sourceSHA256 != String(repeating: "b", count: 64)
+            || backupModel.items.first?.value != AnyHashable(902) {
+            fail("explicit read did not replace the document and reset its staged batch")
         }
 
         session.stop()

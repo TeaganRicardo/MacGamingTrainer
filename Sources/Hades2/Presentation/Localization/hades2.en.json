@@ -192,8 +192,8 @@
     "hades2.gameSpeed.a11y": "Game Speed",
     "hades2.gameSpeed.hint": "Adjust Hades II game speed; the current value is shown as a multiplier.",
     "hades2.saveEditor.invalidDraft": "Invalid value. This draft has not been staged.",
-  "hades2.saveEditor.unavailableDraft": "The editor is busy. This draft has not been staged.",
-  "hades2.input.invalid": "Invalid value. The current value has been restored.",
+    "hades2.saveEditor.unavailableDraft": "The editor is busy. This draft has not been staged.",
+    "hades2.input.invalid": "Invalid value. The current value has been restored.",
     "hades2.input.unavailable": "This edit cannot be applied now. The current value has been restored.",
     "hades2.gameSpeed.title": "Game Speed",
     "hades2.manage.diagnostics": "Run Diagnostics",
@@ -629,7 +629,19 @@
     "hades2.saveEditor.discovery.reason.rewardClaimed": "The quest reward was already claimed; rolling back only the status would leave granted rewards and linked records inconsistent.",
     "hades2.saveEditor.discovery.reason.starterWeapon": "The starter weapon is native baseline ownership and cannot be revoked as an independent unlock.",
     "hades2.saveEditor.discovery.reason.baseWeaponRequired": "The base weapon must be owned before its default aspect progression can be edited safely.",
-    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "Gift counts are linked to gift order, dialogue and outcome history and cannot be edited safely as standalone counters."
+    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "Gift counts are linked to gift order, dialogue and outcome history and cannot be edited safely as standalone counters.",
+    "hades2.saveEditor.source.label": "Read Source",
+    "hades2.saveEditor.source.choose": "Choose a source file",
+    "hades2.saveEditor.source.read": "Read Source",
+    "hades2.saveEditor.source.refreshFiles": "Refresh Files",
+    "hades2.saveEditor.source.confirmTitle": "Read another source?",
+    "hades2.saveEditor.source.confirmBody": "Current staged changes will be discarded. The write target remains the explicitly selected file.",
+    "hades2.saveEditor.source.pinned": "Originally read: {0} · {1}",
+    "hades2.saveEditor.source.currentFile": "Original File Version",
+    "hades2.saveEditor.source.backup": "Managed Backup Version",
+    "hades2.saveEditor.target.label": "Write Target",
+    "hades2.saveEditor.target.choose": "Choose a physical file",
+    "hades2.saveEditor.operation.target": "Selecting save write target"
   },
   "language": "en"
 }

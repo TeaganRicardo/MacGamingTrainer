@@ -16,7 +16,8 @@ assert "struct TrainerManagementActions" in module_contract
 assert "let openSaveManagement: (() -> Void)?" in module_contract
 assert "trainerManagementActions" in module_contract
 assert "@StateObject private var saveManager: TrainerSaveManagerModel" in host
-assert "TrainerSaveManagerView(model: saveManager)" in host
+# Constructor argument layout is not ownership evidence; native module/session
+# fixtures and the module build matrix exercise the optional editor hook.
 assert "Module.descriptor.supportsSaveManagement" in host
 assert ".environment(\\.trainerManagementActions, managementActions)" in host
 

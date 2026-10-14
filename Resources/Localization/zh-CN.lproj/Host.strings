@@ -133,3 +133,5 @@
 "host.timeWarp.error.callFailed" = "Time Warp helper 调用失败：{0}";
 "host.timeWarp.error.memoryAllocationFailed" = "无法为 Time Warp image allowlist 分配目标内存。";
 "host.timeWarp.error.memoryWriteFailed" = "无法写入 Time Warp image allowlist。";
+
+"host.save.edit" = "编辑存档";

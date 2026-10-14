@@ -192,8 +192,8 @@
     "hades2.gameSpeed.a11y": "游戏速度",
     "hades2.gameSpeed.hint": "调整 Hades II 游戏速度；当前速度以倍数显示。",
     "hades2.saveEditor.invalidDraft": "输入值无效，此草稿尚未暂存。",
-  "hades2.saveEditor.unavailableDraft": "编辑器正忙，此草稿尚未暂存。",
-  "hades2.input.invalid": "输入值无效，已恢复当前值。",
+    "hades2.saveEditor.unavailableDraft": "编辑器正忙，此草稿尚未暂存。",
+    "hades2.input.invalid": "输入值无效，已恢复当前值。",
     "hades2.input.unavailable": "当前无法应用此修改，已恢复当前值。",
     "hades2.gameSpeed.title": "游戏速度",
     "hades2.manage.diagnostics": "运行自检",
@@ -629,7 +629,19 @@
     "hades2.saveEditor.discovery.reason.rewardClaimed": "任务奖励已领取；只回退任务状态会使已发放奖励和关联记录不一致。",
     "hades2.saveEditor.discovery.reason.starterWeapon": "初始武器属于原生基础所有权，不能作为独立解锁项撤销。",
     "hades2.saveEditor.discovery.reason.baseWeaponRequired": "需要先拥有对应基础武器，才能安全修改默认形态进度。",
-    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "赠礼计数与赠礼顺序、对话和奖励结果相互关联，不能作为独立计数安全修改。"
+    "hades2.saveEditor.discovery.reason.giftHistoryLinked": "赠礼计数与赠礼顺序、对话和奖励结果相互关联，不能作为独立计数安全修改。",
+    "hades2.saveEditor.source.label": "读取来源",
+    "hades2.saveEditor.source.choose": "选择来源文件",
+    "hades2.saveEditor.source.read": "读取来源",
+    "hades2.saveEditor.source.refreshFiles": "刷新文件列表",
+    "hades2.saveEditor.source.confirmTitle": "读取另一个来源？",
+    "hades2.saveEditor.source.confirmBody": "当前暂存修改将被放弃。写入目标会继续使用明确选定的文件。",
+    "hades2.saveEditor.source.pinned": "已读取：{0} · {1}",
+    "hades2.saveEditor.source.currentFile": "原始文件版本",
+    "hades2.saveEditor.source.backup": "托管备份版本",
+    "hades2.saveEditor.target.label": "写入目标",
+    "hades2.saveEditor.target.choose": "选择物理写入文件",
+    "hades2.saveEditor.operation.target": "选择存档写入目标"
   },
   "language": "zh-CN"
 }
