@@ -332,7 +332,6 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private var statusAndSessionSection: some View {
-        messageSlot
         TrainerSectionHeader(title: text("hades2.section.runData"), icon: "gauge.with.dots.needle.67percent") {
             Button { withAnimation(.easeInOut(duration: 0.18)) { statsExpanded.toggle() } } label: {
                 HStack(spacing: 5) {
@@ -1643,45 +1642,6 @@ struct Hades2TrainerView: View {
             shortcutText: shortcut.map { model.shortcutText($0) },
             action: action
         )
-    }
-
-    private var messageSlot: some View {
-        ZStack(alignment: .leading) {
-            Color.clear
-            // A Hades-owned message is a token, so it re-renders on a language
-            // switch. A Core-owned message arrives as a key/plain string and the
-            // Host resolves it through the shared banner. Hades wins when both
-            // are present because it is the more specific failure.
-            if !model.errorText.key.isEmpty {
-                TrainerMessageBanner(text: resolved(model.errorText), icon: "exclamationmark.triangle.fill", color: theme.warning)
-            } else if !model.error.isEmpty {
-                // The backend error envelope already carries the stable key and
-                // arguments. Resolve by namespace here instead of dropping Host
-                // arguments or treating a Host key as literal copy.
-                TrainerMessageBanner(
-                    text: resolved(model.backendErrorText),
-                    icon: "exclamationmark.triangle.fill",
-                    color: theme.warning
-                )
-            } else if !model.runtimeIssuePresentations.isEmpty {
-                let issues = model.runtimeIssuePresentations.map {
-                    "\($0.featureID): \(resolved($0.token))"
-                }.joined(separator: "; ")
-                TrainerMessageBanner(
-                    text: text("hades2.status.runtimeInactive", arguments: [issues]),
-                    icon: "exclamationmark.triangle.fill",
-                    color: theme.warning
-                )
-            } else if !model.runtimeIssueText.key.isEmpty {
-                TrainerMessageBanner(text: resolved(model.runtimeIssueText), icon: "exclamationmark.triangle.fill", color: theme.warning)
-            } else if !model.runtimeIssue.isEmpty {
-                TrainerMessageBanner(text: model.runtimeIssue, icon: "exclamationmark.triangle.fill", color: theme.warning)
-            } else if !model.warning.isEmpty {
-                TrainerMessageBanner(text: model.warning, icon: "exclamationmark.shield", color: theme.warning)
-            } else if model.status == "incompatible" {
-                TrainerMessageBanner(text: text("hades2.status.unverifiedBanner"), icon: "exclamationmark.shield", color: theme.warning)
-            }
-        }.frame(height: 52)
     }
 
     private func editableVitalMetric(_ title: String, icon: String, current: Binding<String>, maximum: Binding<String>,

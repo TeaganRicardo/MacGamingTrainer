@@ -84,6 +84,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         didSet { if let errorToken { presentFeedback(errorToken, tone: .warning) } }
     }
     @Published private(set) var feedbackNotice: TrainerFeedbackNotice?
+    @Published private(set) var feedbackDetailsPresented = false
+    @Published private(set) var feedbackDetailsNoticeID: UUID?
     private var receiptPresentedDuringReply = false
     @Published private var runtimeIssueToken: TrainerTextToken?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
@@ -838,6 +840,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func dismissFeedback(_ id: UUID) {
         guard feedbackNotice?.id == id else { return }
         feedbackNotice = nil
+    }
+
+    func showFeedbackDetails(for noticeID: UUID? = nil) {
+        guard !currentIssues.isEmpty else { return }
+        if let noticeID, feedbackNotice?.id != noticeID { return }
+        feedbackDetailsNoticeID = noticeID ?? feedbackNotice?.id
+        feedbackDetailsPresented = true
+    }
+
+    func closeFeedbackDetails() {
+        feedbackDetailsPresented = false
+        feedbackDetailsNoticeID = nil
     }
 
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {

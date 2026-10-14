@@ -26,6 +26,9 @@ for raw in sys.stdin:
     req = json.loads(raw)
     payload = {'connected': True, 'status': 'ready', 'scene': 'run',
                'capabilities': {'sellTraits': True}}
+    issues_path = pathlib.Path(__file__).with_name('issues.json')
+    if issues_path.exists():
+        payload.update(json.loads(issues_path.read_text()))
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
              'moduleProtocolVersion': 14, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
@@ -41,7 +44,7 @@ for raw in sys.stdin:
                 payload['status'] = 'restart_required'
     elif req['command'] == 'status':
         status_count += 1
-        if status_count == 1:
+        if status_count == 1 and not issues_path.exists():
             reply['ok'] = False
             reply['error'] = {'code': 'unrelated_failure', 'presentation': 'hades2.error.exactNotEligible'}
     reply['result' if reply['ok'] else 'state'] = payload
@@ -106,6 +109,9 @@ struct Main {
         )
         wait { model.backendAvailable && !model.busy && model.feedbackNotice != nil }
         model.dismissFeedback(model.feedbackNotice!.id)
+        check(model.currentIssues.isEmpty, "routine success became a retained issue")
+        model.showFeedbackDetails()
+        check(!model.feedbackDetailsPresented, "details opened with no unresolved owner state")
 
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
         localization.registerModulePresentation(prefix: Hades2GameModule.presentationKeyPrefix) {
@@ -113,7 +119,11 @@ struct Main {
         }
         let editor = NSTextField(string: "draft remains focused")
         let host = NSHostingView(rootView: TrainerShell {
-            Color.clear.frame(width: 160)
+            VStack {
+                Color.clear.frame(width: 160, height: 1)
+                Spacer()
+                Hades2SidebarActions(model: model)
+            }.frame(width: 160)
         } content: {
             VStack {
                 EditorProbe(field: editor).frame(height: 24)
@@ -143,6 +153,14 @@ struct Main {
             return stableFrames >= 3
         }
         let viewport = host.convert(scroll.contentView.bounds, from: scroll.contentView)
+        let defaultHost = NSHostingView(rootView: TrainerShell {
+            Color.clear.frame(width: 160)
+        } content: { Color.clear.frame(height: 1800) })
+        defaultHost.frame = host.frame
+        defaultHost.layoutSubtreeIfNeeded()
+        guard let defaultScroll = findScroll(defaultHost) else { fatalError("default shell has no viewport") }
+        check(defaultScroll.frame == scroll.frame,
+              "idle Hades feedback reserves viewport space: default=\(defaultScroll.frame) Hades=\(scroll.frame)")
         let editorCenter = NSPoint(x: editor.bounds.midX, y: editor.bounds.midY)
         check(viewport.contains(host.convert(editorCenter, from: editor)),
               "click fixture editor was outside the scroll viewport")
@@ -154,6 +172,12 @@ struct Main {
         check(originalHit === editor || originalHit?.isDescendant(of: editor) == true,
               "click fixture did not reach the underlying editor: point=\(editorPoint) editor=\(editor.frame) visible=\(editor.visibleRect) host=\(host.bounds) scroll=\(scroll.frame) hit=\(String(describing: originalHit)) ancestry=\(String(describing: originalHit?.superview))")
         FileHandle.standardOutput.write(Data("viewport_feedback_click_target=\(String(describing: originalHit))\n".utf8))
+        // The noninteractive text/background portion of the card must also
+        // leave the underlying viewport available for clicks.
+        let noticeTextPoint = parent.convert(
+            NSPoint(x: viewport.midX - 100, y: viewport.maxY - 36), from: host
+        )
+        let underlyingNoticeHit = host.hitTest(noticeTextPoint)
         var feedbackEvents: [UUID] = []
         let observation = model.$feedbackNotice.compactMap { $0 }.sink { feedbackEvents.append($0.id) }
 
@@ -175,6 +199,8 @@ struct Main {
 
         let accepted = nextNotice("hades2.receipt.accepted")
         check(host.hitTest(editorPoint) === originalHit, "feedback intercepted unrelated editor clicks")
+        check(host.hitTest(noticeTextPoint) === underlyingNoticeHit,
+              "noninteractive feedback text/background intercepted the viewport")
         let chinese = localization.string(accepted.text)
         localization.language = .en
         check(localization.string(accepted.text) != chinese, "visible receipt did not re-resolve language")
@@ -190,21 +216,32 @@ struct Main {
         let repeated = nextNotice("hades2.receipt.completed")
         check(repeated.id != completed.id, "identical completion text reused notice identity")
 
-        // The slot remains outside the viewport at each scroll position.
+        // The overlay remains attached to the viewport at each scroll position.
         for offset in [0.0, 500.0, 1200.0] {
             scroll.contentView.scroll(to: NSPoint(x: 0, y: offset))
             scroll.reflectScrolledClipView(scroll.contentView)
             host.layoutSubtreeIfNeeded()
             check(host.convert(scroll.contentView.bounds, from: scroll.contentView) == viewport,
-                  "feedback slot scrolled with game content")
+                  "feedback overlay scrolled with game content")
         }
 
         let failed = nextNotice("hades2.receipt.failed")
         model.dismissFeedback(failed.id)
         check(model.feedbackNotice == nil && !model.errorText.key.isEmpty,
               "dismissing overlay erased retained failure")
-        _ = nextNotice("hades2.receipt.outcomeUnknown")
-        wait(6) { model.feedbackNotice == nil }
+        check(!model.currentIssues.isEmpty, "collapsed failure lost its details entry")
+        model.showFeedbackDetails(for: failed.id)
+        check(!model.feedbackDetailsPresented, "stale notice opened details after collapse")
+        let unknown = nextNotice("hades2.receipt.outcomeUnknown")
+        check(model.currentIssues.contains { $0.id == "recovery" },
+              "outcome-unknown omitted the retained restart requirement")
+        pump(6)
+        model.showFeedbackDetails(for: unknown.id)
+        pump(3)
+        check(model.feedbackNotice?.id == unknown.id && model.feedbackDetailsPresented,
+              "details interaction did not pause the eight-second error summary")
+        model.closeFeedbackDetails()
+        wait(4, message: "error summary did not resume after closing details") { model.feedbackNotice == nil }
         check(!model.errorText.key.isEmpty && model.status == "restart_required",
               "automatic fade erased outcome-unknown recovery state")
         pump(0.1)
@@ -218,14 +255,47 @@ struct Main {
         wait { !model.busy && model.feedbackNotice?.id != routine.id }
         check(model.feedbackNotice != nil, "identical routine feedback was not a new event")
 
-        let defaultHost = NSHostingView(rootView: TrainerShell {
-            Color.clear.frame(width: 160)
-        } content: { Color.clear.frame(height: 1800) })
-        defaultHost.frame = host.frame
-        defaultHost.layoutSubtreeIfNeeded()
-        guard let defaultScroll = findScroll(defaultHost) else { fatalError("default shell has no viewport") }
-        check(defaultScroll.frame.height > scroll.frame.height + 60,
-              "default empty feedback slot reserved a blank footer")
+        check(defaultScroll.frame == scroll.frame,
+              "visible Hades feedback changed the viewport geometry")
+
+        // Current issues are a projection of owner state, not a notification
+        // history. Structured Host arguments and feature identities survive;
+        // resolved states remove the entry and close its details.
+        let issues = temporary.appendingPathComponent("issues.json")
+        try JSONSerialization.data(withJSONObject: [
+            "warnings": ["host.backend.error.unavailable"],
+            "featureErrors": ["invincibility": "runtime refusal"],
+            "featureErrorPresentations": [
+                "gameSpeed": ["presentation": "host.timeWarp.error.setFailed", "arguments": [-7]],
+            ],
+        ]).write(to: issues)
+        // Explicit worker restart is the existing owner transition that clears
+        // the earlier retained outcome-unknown error. An unrelated successful
+        // read must not be treated as resolving that one-shot operation.
+        model.restartBackendFromHost()
+        wait { model.backendAvailable && !model.busy }
+        model.refreshFromHost()
+        wait(message: "structured runtime issues did not reach the current-issues projection") {
+            !model.busy && model.currentIssues.contains { $0.id == "runtime.gameSpeed" }
+        }
+        let speedIssue = model.currentIssues.first { $0.id == "runtime.gameSpeed" }
+        check(speedIssue?.text.arguments == ["-7"], "details flattened Host error arguments")
+        check(speedIssue?.title != nil, "known runtime feature lost its readable title")
+        check(model.currentIssues.contains { $0.id == "warning" }, "details omitted current warnings")
+        model.showFeedbackDetails()
+        try JSONSerialization.data(withJSONObject: [
+            "warnings": [String](), "featureErrors": [String: String](),
+            "featureErrorPresentations": [String: Any](),
+        ]).write(to: issues)
+        model.refreshFromHost()
+        wait(message: "resolved current issues did not clear details: \(model.currentIssues)") {
+            !model.busy && model.currentIssues.isEmpty && !model.feedbackDetailsPresented
+        }
+        model.status = "incompatible"
+        check(model.currentIssues.map(\.id) == ["compatibility"],
+              "details omitted the current incompatible target")
+        model.status = "ready"
+        check(model.currentIssues.isEmpty, "resolved compatibility remained as issue history")
 
         // A transport failure arriving after an accepted reply belongs to a
         // different event; receipt suppression must end with that reply.
@@ -277,4 +347,4 @@ with tempfile.TemporaryDirectory(prefix="mgt-viewport-feedback-") as td:
                     str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
                     str(generated), str(main), "-o", str(binary)], check=True, cwd=ROOT)
     env = dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home))
-    subprocess.run([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, timeout=30)
+    subprocess.run([str(binary), PYTHON, str(stub)], check=True, cwd=ROOT, env=env, timeout=45)

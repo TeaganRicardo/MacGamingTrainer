@@ -24,7 +24,7 @@ for component in (
     'TrainerFeatureToggleRow(', 'TrainerFeatureMultiplierRow(', 'TrainerCompactMultiplierRow(',
     'TrainerInlineStatEditor(', 'TrainerResourceEditor(', 'TrainerGroupedOptionPicker(',
 'TrainerVitalMetricCard(', 'TrainerAmountMetricCard(',
-    'TrainerCounterMetricCard(', 'TrainerStatMetricCard(', 'TrainerMessageBanner(',
+    'TrainerCounterMetricCard(', 'TrainerStatMetricCard(',
 ):
     assert component in all_hades, component
 

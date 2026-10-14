@@ -2,9 +2,26 @@ import SwiftUI
 
 struct Hades2SidebarActions: View {
     @ObservedObject var model: Hades2TrainerModel
+    @EnvironmentObject private var localization: TrainerLocalizationStore
 
     var body: some View {
-        EmptyView()
+        Group {
+            if !model.currentIssues.isEmpty {
+                Button { model.showFeedbackDetails() } label: {
+                    Label(localization.localized("host.feedback.currentIssues"), systemImage: "exclamationmark.circle")
+                        .font(.callout)
+                }
+                .popover(isPresented: Binding(
+                    get: { model.feedbackDetailsPresented },
+                    set: { if !$0 { model.closeFeedbackDetails() } }
+                )) {
+                    Hades2FeedbackDetails(model: model)
+                }
+            }
+        }
+        .onChange(of: model.currentIssues) { _, issues in
+            if issues.isEmpty { model.closeFeedbackDetails() }
+        }
     }
 }
 
