@@ -418,24 +418,21 @@ struct Hades2SaveEditorView: View {
         let draft = draftBinding(for: entry)
         if entry.valueType == "boolean" {
             TrainerToggleControl(
-                isOn: draft.wrappedValue == "true",
+                isOn: stagedValue(for: entry)?.base as? Bool ?? false,
                 enabled: !model.busy,
                 helpText: entry.displayName,
                 onChange: { value in
-                    guard model.workspaceID == workspaceID else { return }
-                    let proposed = value ? "true" : "false"
-                    draft.wrappedValue = proposed
-                    _ = model.completeTextEdit(entry, text: proposed)
+                    guard !model.busy, model.workspaceID == workspaceID else { return }
+                    _ = model.completeTextEdit(entry, text: value ? "true" : "false")
                 }
             )
         } else if entry.valueType == "enum" && !entry.choices.isEmpty {
             Picker(
                 text("hades2.saveEditor.value"),
-                selection: Binding(
-                    get: { draft.wrappedValue },
+                selection: Binding<String>(
+                    get: { stagedValue(for: entry)?.base as? String ?? "" },
                     set: { choice in
                         guard !model.busy, model.workspaceID == workspaceID else { return }
-                        draft.wrappedValue = choice
                         _ = model.completeTextEdit(entry, text: choice)
                     }
                 )
@@ -695,6 +692,12 @@ struct Hades2SaveEditorView: View {
                         : "hades2.saveEditor.workbench.no")
         }
         return valueText(value)
+    }
+
+    // Non-text controls project the acknowledged pending batch. A failed
+    // stage must never leave a selected value that the backend rejected.
+    private func stagedValue(for entry: Hades2SaveEditorEntry) -> AnyHashable? {
+        model.pendingChanges.first(where: { $0.entryID == entry.id })?.after ?? entry.value
     }
 
     private func draftBinding(for entry: Hades2SaveEditorEntry) -> Binding<String> {
