@@ -5,11 +5,22 @@ import json
 import os
 import selectors
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 
 DEFAULT_MAX_LINE_BYTES = 8 * 1024 * 1024
+
+
+def prepare_worker_execution():
+    """Request normal execution for this sidecar worker's own lifetime.
+
+    Darwin's public process background selector is 4; who=0 and priority=0
+    request normal execution for self. OS errors abort startup unchanged.
+    """
+    if sys.platform == "darwin":
+        os.setpriority(4, 0, 0)  # PRIO_DARWIN_PROCESS, self, normal execution
 
 
 class SidecarError(RuntimeError):

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from core.adapter import AdapterError
 from core.process_time_warp import ProcessTimeWarpController
-from core.sidecar import serve_jsonl_requests
+from core.sidecar import prepare_worker_execution, serve_jsonl_requests
 
 from .lldb_time_warp import LLDBProcessTimeWarpDriver
 
@@ -163,6 +163,7 @@ def serve_requests(input_stream, output_stream, worker):
 
 
 def main():
+    prepare_worker_execution()
     logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stderr)])
     worker = Hades2LLDBWorker()
     try:
