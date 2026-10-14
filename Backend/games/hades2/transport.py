@@ -21,7 +21,9 @@ class Hades2LuaTransport:
     def __init__(self):
         lldb.SBDebugger.Initialize()
         self.debugger=lldb.SBDebugger.Create(); self.debugger.SetAsync(True)
-        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','false'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
+        # Preload symbol indexes with parallel module loading. Otherwise LLDB's
+        # instrumentation-runtime discovery builds them serially while attached.
+        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','true'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
             result=lldb.SBCommandReturnObject()
             self.debugger.GetCommandInterpreter().HandleCommand('settings set '+setting+' '+value,result)
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
