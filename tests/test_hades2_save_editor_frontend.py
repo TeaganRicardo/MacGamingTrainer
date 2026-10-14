@@ -659,6 +659,25 @@ struct Main {
             fail("cancel did not cross the Save Editor Host command seam")
         }
 
+        // Edit the actual initially rendered Save result, not a detached
+        // field harness. Blur alone must stage the change; no entity selection
+        // or additional per-field button is involved.
+        guard let inPlace = inlineValueField(), let sheet = inPlace.window,
+              sheet.makeFirstResponder(inPlace),
+              let editor = inPlace.currentEditor() as? NSTextView else {
+            fail("Could not directly edit the first Save result in its sheet")
+        }
+        editor.selectAll(nil)
+        editor.insertText("430", replacementRange: editor.selectedRange())
+        sheet.makeFirstResponder(nil)
+        pumpUntil { model.pendingChanges.first?.after == AnyHashable(430) && !model.busy }
+        if model.pendingChanges.first?.after != AnyHashable(430) ||
+            commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
+            fail("Direct Save result editing did not stage on blur")
+        }
+        model.cancel()
+        pumpUntil { model.pendingCount == 0 && !model.busy }
+
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
         pump(0.20)
         model.apply()
