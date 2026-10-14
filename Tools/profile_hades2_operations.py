@@ -3,7 +3,8 @@
 
 The transport fixture runs the production LLDB boundary with fake Lua functions.
 The resident fixture runs production Lua 5.2 against explicit native stubs. Their
-measurements are separate, not an estimate of end-to-end game/UI latency.
+end-to-end harness also runs the real Host/Core/Hades protocol with temporary
+storage and synthetic natives. None of these workloads estimates game FPS.
 """
 from __future__ import annotations
 
@@ -19,11 +20,14 @@ import statistics
 import subprocess
 import sys
 import tempfile
+import tarfile
+import io
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "Backend"), str(ROOT / "tests")]
+SOURCE_ROOT = Path(os.environ.get("MGT_PROFILE_SOURCE_ROOT", ROOT))
+sys.path[:0] = [str(SOURCE_ROOT / "Backend"), str(ROOT / "tests")]
 
 from hades2_lldb_worker_support import run_lldb_worker
 
@@ -34,6 +38,7 @@ def summarize(samples):
         "count": len(samples),
         "median_ms": statistics.median(samples) * 1000,
         "p95_ms": ordered[math.ceil(len(samples) * .95) - 1] * 1000,
+        "p99_ms": ordered[math.ceil(len(samples) * .99) - 1] * 1000,
         "samples_seconds": samples,
     }
 
@@ -137,14 +142,14 @@ def profile_transport(samples, tick_interval_us):
     }
 
 
-def profile_resident(samples, trait_count=0, catalog_trait_count=0):
+def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_count=32):
     from lua_runtime_support import require_lua52
 
     lua = require_lua52("offline Hades operation profiling")
     fixture = ROOT / "Tools/fixtures/hades2_operation_profile.lua"
-    runtime = ROOT / "Backend/games/hades2/runtime/hades.lua"
+    runtime = SOURCE_ROOT / "Backend/games/hades2/runtime/hades.lua"
     completed = subprocess.run(
-        [lua, str(fixture), str(runtime), str(samples), str(trait_count), str(catalog_trait_count)],
+        [lua, str(fixture), str(runtime), str(samples), str(trait_count), str(catalog_trait_count), str(resource_count)],
         check=True, capture_output=True, text=True, timeout=60,
     )
     timings = collections.defaultdict(list)
@@ -172,8 +177,8 @@ def profile_resident(samples, trait_count=0, catalog_trait_count=0):
 
 def positive_integer(value):
     result = int(value)
-    if result < 1:
-        raise argparse.ArgumentTypeError("must be positive")
+    if not 1 <= result <= 1000:
+        raise argparse.ArgumentTypeError("must be between 1 and 1000")
     return result
 
 
@@ -184,32 +189,90 @@ def non_negative_integer(value):
     return result
 
 
+def tool_version(command):
+    try:
+        return subprocess.check_output(command, stderr=subprocess.STDOUT, text=True, timeout=10).strip()
+    except (OSError, subprocess.SubprocessError) as error:
+        return "unobserved: " + type(error).__name__
+
+
+def human_summary(report):
+    lines = ["Source " + report["source_sha"] + "; harness " + report["harness_sha"],
+             "Synthetic/offline evidence; nested phases overlap; engine/render/FPS unobserved. Clean exact HEAD: " + str(report["exact_head_evidence"])]
+    for index, trial in enumerate(report.get("end_to_end", []), 1):
+        if not trial["observed"]:
+            lines.append("Host: " + trial["reason"]); continue
+        lines.append("Trial %d sidecar calls %s; bytes %s" % (index, trial["sidecar_calls"], trial["bytes"]))
+        for name in ("host.request_queue", "host.payload_decode", "host.payload_apply", "harness.host_round_trip",
+                     "backend.routing", "backend.cache_serialize", "backend.cache_materialize", "backend.stdout_serialize",
+                     "sidecar.rpc", "resident.materialize_dispatch", "resident.json_serialize", "resident.localization"):
+            metric = trial["paths"]["warm"]["phases"].get(name)
+            if metric: lines.append("  %s median/p95 %.3f/%.3f ms (%d)" % (name, metric["median_ms"], metric["p95_ms"], metric["count"]))
+    for section in ("resident", "save_query", "time_warp", "transport"):
+        for name, metric in report.get(section, {}).get("metrics", {}).items():
+            lines.append("%s.%s median/p95 %.6f/%.6f ms (%d)" % (section, name, metric["median_ms"], metric["p95_ms"], metric["count"]))
+    if "baseline" in report:
+        lines.append("Baseline source " + report["baseline"]["source_sha"] + "; pre-probe phases remain unobserved where absent.")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("all", "transport", "resident"), default="all")
+    parser.add_argument("--mode", choices=("all", "offline", "transport", "resident", "end-to-end", "save", "time-warp"), default="all")
     parser.add_argument("--samples", type=positive_integer, default=30)
-    parser.add_argument("--resident-traits", type=non_negative_integer, default=0,
+    parser.add_argument("--resident-traits", type=non_negative_integer, default=32,
                         help="synthetic mounted ordinary God traits; resident mode only")
-    parser.add_argument("--resident-catalog-traits", type=non_negative_integer, default=0,
+    parser.add_argument("--resident-catalog-traits", type=non_negative_integer, default=96,
                         help="synthetic exact-acquisition catalog entries; resident mode only")
+    parser.add_argument("--resident-resources", type=positive_integer, default=32)
+    parser.add_argument("--save-scenes", type=positive_integer, default=1000)
+    parser.add_argument("--trials", type=positive_integer, default=3, help="independent offline Host processes")
+    parser.add_argument("--probe-control", action="store_true", help="also run matched end-to-end processes with opt-in probes disabled")
+    parser.add_argument("--baseline-ref", help="also measure an immutable git archive of this commit using this harness")
     parser.add_argument("--tick-microseconds", type=int, default=16667,
                         help="temporary helper update cadence; not a game frame rate measurement")
     parser.add_argument("--output", type=Path, help="write full JSON evidence; otherwise print it")
     args = parser.parse_args()
+    if args.resident_resources < 2 or args.resident_traits > 512 or args.resident_catalog_traits > 1000 or args.trials > 10:
+        parser.error("resources >= 2, traits <= 512, catalog <= 1000 and trials <= 10 are required")
     if args.tick_microseconds < 0:
         parser.error("--tick-microseconds must be non-negative (0 means a busy loop)")
 
+    harness_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    selected_sha = os.environ.get("MGT_PROFILE_SOURCE_SHA", harness_sha)
+    from hades2_profile_workloads import profile_end_to_end, profile_save_queries, profile_time_warp
     report = {
-        "sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        "working_tree_changes": subprocess.check_output(
+        "schema_version": 1,
+        "source_sha": selected_sha,
+        "harness_sha": harness_sha,
+        "source_origin": "git archive" if SOURCE_ROOT != ROOT else "checkout",
+        "evidence_thresholds": {
+            "low_blast_materiality": "repeated owning-phase sum >= 1 ms and >= 10% of queue-excluded warm operation in every trial; duplicated counts alone remain non-actionable latency evidence",
+            "comparison": "same environment/fixtures; at least 3 independent processes and 30 warm samples; baseline/candidate/baseline",
+            "cold": "at least 5 fresh processes before a cold-only promotion",
+            "interactive_materiality": "phase p95 >= 5 ms and >= 10% of queue-excluded total in all trials; or saving >= 2 ms and >= 10% repeatably",
+            "serialization": "canonical serialization changes also require reference-fixture neutrality; bytes/count findings alone motivate investigation, not a speedup claim",
+            "steady_state": "measured CPU delta >= 0.1 ms/frame and >= 10% with real target frame/native-call frequency; synthetic CPU alone cannot pass this gate",
+            "tail": "p99 is exploratory below 100 samples; timer-floor values do not justify work",
+            "safety": "preserve disconnect/outcome-unknown/replay/Save semantics; exact-head behavior checks and independent review",
+        },
+        "environment": {"python": sys.version, "executable": sys.executable, "machine": platform.machine(), "processor": platform.processor(),
+                        "swift": tool_version(["swiftc", "--version"]), "cc": tool_version(["cc", "--version"]),
+                        "developer_dir": os.environ.get("DEVELOPER_DIR"),
+                        "xcode": tool_version(["/usr/bin/xcodebuild", "-version"]) if sys.platform == "darwin" else None},
+        "sha": selected_sha,
+        "harness_working_tree_changes": subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=ROOT, text=True,
         ).splitlines(),
         "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "platform": platform.platform(),
         "source_sha256": {
-            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-            for name in ("Backend/games/hades2/transport.py", "Backend/games/hades2/runtime/hades.lua",
-                         "Tools/profile_hades2_operations.py", "Tools/fixtures/hades2_operation_profile.lua")
+            name: hashlib.sha256((SOURCE_ROOT / name).read_bytes()).hexdigest()
+            for name in ("Backend/core/protocol.py", "Backend/core/server.py", "Backend/core/sidecar.py",
+                         "Backend/games/hades2/transport.py", "Backend/games/hades2/runtime/hades.lua",
+                         "Backend/games/hades2/resident_session.py", "Backend/games/hades2/save_investigation.py",
+                         "Sources/Core/Runtime/BackendClient.swift", "Sources/Core/Runtime/BackendProcess.swift",
+                         "Sources/Core/Runtime/TrainerBackendSession.swift", "Native/ProcessTimeWarp/ProcessTimeWarp.c")
         },
     }
     if args.mode in ("all", "transport"):
@@ -228,12 +291,56 @@ def main():
             environment, 30 + (args.samples + 6) * 4,
         )
         report["transport"] = json.loads(raw)
-    if args.mode in ("all", "resident"):
-        report["resident"] = profile_resident(args.samples, args.resident_traits, args.resident_catalog_traits)
+    report["working_tree_changes"] = report["harness_working_tree_changes"] if SOURCE_ROOT == ROOT else []
+    report["source_clean"] = not report["working_tree_changes"]
+    report["exact_head_evidence"] = report["source_clean"] and not report["harness_working_tree_changes"]
+    report["harness_sha256"] = {
+        name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+        for name in ("Tools/profile_hades2_operations.py", "Tools/hades2_profile_workloads.py",
+                     "Tools/fixtures/hades2_operation_profile.lua", "Tools/fixtures/hades2_profile_backend.py",
+                     "Tools/fixtures/hades2_profile_host.swift", "Tools/fixtures/hades2_time_warp_profile.c",
+                     "Backend/core/operation_profile.py", "tests/test_process_time_warp_install_contract.py",
+                     "tests/hades2_lldb_fixture.py", "tests/hades2_lldb_worker_support.py",
+                     "tests/hades2_resident_session_fakes.py", "tests/lua_runtime_support.py")}
+    if args.mode in ("all", "offline", "resident"):
+        report["resident"] = profile_resident(args.samples, args.resident_traits, args.resident_catalog_traits, args.resident_resources)
+    if args.mode in ("all", "offline", "end-to-end"):
+        report["end_to_end"] = [profile_end_to_end(args.samples, args.resident_traits, args.resident_catalog_traits,
+            args.resident_resources, summarize, SOURCE_ROOT) for _ in range(args.trials)]
+    if args.probe_control and args.mode in ("all", "offline", "end-to-end"):
+        report["end_to_end_control"] = [profile_end_to_end(args.samples, args.resident_traits, args.resident_catalog_traits,
+            args.resident_resources, summarize, SOURCE_ROOT, probes=False) for _ in range(args.trials)]
+    if args.mode in ("all", "offline", "save"):
+        report["save_query"] = profile_save_queries(args.samples, args.save_scenes, summarize)
+    if args.mode in ("all", "offline", "time-warp"):
+        report["time_warp"] = profile_time_warp(args.samples, summarize, SOURCE_ROOT)
+    if args.baseline_ref:
+        if SOURCE_ROOT != ROOT: parser.error("nested baseline archives are not supported")
+        baseline_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref + "^{commit}"], cwd=ROOT, text=True).strip()
+        archive = subprocess.check_output(["git", "archive", baseline_sha], cwd=ROOT)
+        with tempfile.TemporaryDirectory(prefix="mgt-profile-baseline-") as temporary:
+            with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+                source.extractall(temporary, filter="data")
+            environment = dict(os.environ, MGT_PROFILE_SOURCE_ROOT=temporary, MGT_PROFILE_SOURCE_SHA=baseline_sha)
+            command = [sys.executable, str(Path(__file__).resolve()), "--mode", args.mode, "--samples", str(args.samples),
+                       "--resident-traits", str(args.resident_traits), "--resident-catalog-traits", str(args.resident_catalog_traits),
+                       "--resident-resources", str(args.resident_resources), "--save-scenes", str(args.save_scenes),
+                       "--trials", str(args.trials), "--tick-microseconds", str(args.tick_microseconds)]
+            if args.probe_control: command.append("--probe-control")
+            baseline = subprocess.run(command, env=environment, capture_output=True, text=True, check=True, timeout=600)
+            report["baseline"] = json.loads(baseline.stdout)
+            report["baseline"]["archive_sha256"] = hashlib.sha256(archive).hexdigest()
+    ending_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    ending_changes = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).splitlines()
+    if ending_sha != harness_sha or ending_changes != report["harness_working_tree_changes"]:
+        raise SystemExit("source/harness changed during measurement; freeze HEAD and rerun")
+    report["summary"] = human_summary(report)
     encoded = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.write_text(encoded, encoding="utf-8")
         print(str(args.output.resolve()))
+        print(report["summary"])
+        args.output.with_suffix(".summary.txt").write_text(report["summary"] + "\n", encoding="utf-8")
     else:
         print(encoded, end="")
 

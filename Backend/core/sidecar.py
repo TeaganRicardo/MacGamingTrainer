@@ -6,6 +6,7 @@ import os
 import selectors
 import subprocess
 import time
+from core.operation_profile import correlation, operation, phase, record
 from pathlib import Path
 
 
@@ -165,13 +166,27 @@ class JsonLineSidecarClient:
             selector.close()
         return b"".join(chunks)
 
-    def request(
+    def request(self, method, params=None, *, outcome_unknown_on_loss=False, allow_start=True):
+        if correlation() is None:
+            return self._request(method, params, outcome_unknown_on_loss=outcome_unknown_on_loss, allow_start=allow_start)
+        started = time.perf_counter()
+        metrics = {"method": method, "request_bytes": 0, "reply_bytes": 0, "count": 1, "outcome": "failed"}
+        try:
+            response = self._request(method, params, outcome_unknown_on_loss=outcome_unknown_on_loss,
+                                     allow_start=allow_start, profile_metrics=metrics)
+            metrics["outcome"] = "error" if "error" in response else "ok"
+            return response
+        finally:
+            record("sidecar.rpc", time.perf_counter() - started, **metrics)
+
+    def _request(
         self,
         method,
         params=None,
         *,
         outcome_unknown_on_loss=False,
         allow_start=True,
+        profile_metrics=None,
     ):
         if self._terminal_error is not None:
             raise self._terminal_error
@@ -200,15 +215,21 @@ class JsonLineSidecarClient:
 
         request_id = str(self._next_id)
         self._next_id += 1
+        profile = correlation()
+        envelope = {"id": request_id, "method": method, "params": params}
+        if profile is not None:
+            envelope["profile"] = profile
         encoded = (
             json.dumps(
-                {"id": request_id, "method": method, "params": params},
+                envelope,
                 ensure_ascii=False,
                 allow_nan=False,
                 separators=(",", ":"),
             ).encode("utf-8")
             + b"\n"
         )
+        if profile_metrics is not None:
+            profile_metrics["request_bytes"] = len(encoded)
         if len(encoded) > self.max_line_bytes:
             raise ValueError("sidecar request exceeded the configured line limit")
 
@@ -216,6 +237,8 @@ class JsonLineSidecarClient:
             process.stdin.write(encoded)
             process.stdin.flush()
             raw = self._readline(process.stdout)
+            if profile_metrics is not None:
+                profile_metrics["reply_bytes"] = len(raw.encode("utf-8")) if isinstance(raw, str) else len(raw)
         except (KeyboardInterrupt, SystemExit):
             self._terminate_process()
             raise
@@ -309,6 +332,7 @@ def serve_jsonl_requests(
         if not raw:
             break
         request_id = None
+        profile = {}
         try:
             if _line_size(raw) > max_line_bytes:
                 while raw and not _line_ended(raw):
@@ -333,11 +357,12 @@ def serve_jsonl_requests(
                 raise ValueError("sidecar method must be a non-empty string")
             if not isinstance(params, dict):
                 raise ValueError("sidecar params must be an object")
-            response = {
-                "id": request_id,
-                "result": dispatch(method, params),
-                "state": state(),
-            }
+            profile = request.get("profile")
+            profile = profile if isinstance(profile, dict) else {}
+            with operation(profile.get("request_id"), profile.get("command", "")):
+                with phase("sidecar.dispatch", method=method):
+                    result = dispatch(method, params)
+                response = {"id": request_id, "result": result, "state": state()}
         except Exception as error:
             response = {
                 "id": request_id,
@@ -347,4 +372,5 @@ def serve_jsonl_requests(
         # A post-dispatch serialization/size failure must terminate the worker
         # rather than invent an ordinary error reply: the caller alone knows
         # whether a lost mutation acknowledgement means outcome_unknown.
-        _write_json_line(output_stream, response, max_line_bytes)
+        with operation(profile.get("request_id"), profile.get("command", "")), phase("sidecar.reply_serialize_write"):
+            _write_json_line(output_stream, response, max_line_bytes)
