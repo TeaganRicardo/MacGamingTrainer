@@ -386,9 +386,14 @@ final class Hades2SaveEditorModel: ObservableObject {
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
                 operation: "hades2.saveEditor.operation.open") { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self else { return }
+            guard reply.success, let result = reply.result else {
+                self.restoreLoadedSourceSelection()
+                return
+            }
             guard self.applySummary(result) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.restoreLoadedSourceSelection()
                 return
             }
             self.pendingChanges = []
@@ -397,6 +402,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.selectedDomain = .discover
             self.query(offset: 0)
         }
+    }
+
+    private func restoreLoadedSourceSelection() {
+        guard !sourceRelativePath.isEmpty else { return }
+        selectedSourceID = sourceRootID + "/" + sourceRelativePath
     }
 
     func selectTarget(_ identifier: String) {
