@@ -668,5 +668,5 @@ class Hades2CommandContract:
             getattr(error, "code", "invalid_request"),
             key,
             arguments,
-            diagnostic=str(error),
+            diagnostic=getattr(error, "diagnostic", None) or str(error),
         )

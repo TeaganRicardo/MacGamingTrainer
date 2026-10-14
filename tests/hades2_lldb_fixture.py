@@ -135,16 +135,13 @@ def symbol_address(module, target, name):
 def attach_helper(executable, delay, *, tick_interval_us=0, diagnostics=False):
     child = subprocess.Popen([str(executable), str(delay), str(tick_interval_us)])
     debugger = None
-    transport = Hades2LuaTransport.__new__(Hades2LuaTransport)
-    transport.process = None
+    transport = None
     try:
         time.sleep(0.05)
-        with phase('debugger.initialize', enabled=diagnostics):
-            lldb.SBDebugger.Initialize()
         with phase('debugger.create', enabled=diagnostics):
-            debugger = lldb.SBDebugger.Create()
-        debugger.SetAsync(True)
-        listener = debugger.GetListener()
+            transport = Hades2LuaTransport()
+            debugger = transport.debugger
+        listener = transport.listener
         with phase('target.create', enabled=diagnostics):
             target = debugger.CreateTarget("")
         error = lldb.SBError()
@@ -165,11 +162,6 @@ def attach_helper(executable, delay, *, tick_interval_us=0, diagnostics=False):
         transport.process = process
         transport.pid = child.pid
         transport.addresses = {}
-        transport.last_duration = 0
-        transport.last_expression_duration = 0
-        transport.last_attach_profile = {}
-        transport.focus_original = None
-        transport.tainted = False
         transport.address = lambda name: addresses[name]
         return child, debugger, transport, addresses
     except BaseException:
