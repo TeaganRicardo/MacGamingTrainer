@@ -18,7 +18,7 @@ import AppKit
 import SwiftUI
 
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
-    if !condition { fatalError(message) }
+    if !condition() { fatalError(message) }
 }
 
 func fields(in view: NSView) -> [NSTextField] {
