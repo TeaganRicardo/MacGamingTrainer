@@ -142,8 +142,14 @@ struct Hades2SaveEditorView: View {
             model.setLanguage(language)
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
-            guard model.workspaceID != nil, !model.busy,
+            guard model.workspaceID != nil,
                   !identifier.isEmpty, identifier != loadedSourceID else { return }
+            // Clicking away can finish a text edit and start staging before
+            // the picker receives the same click. Never re-read that draft.
+            if model.busy {
+                model.selectedSourceID = loadedSourceID
+                return
+            }
             if model.pendingCount > 0 { confirmingSource = true }
             else { model.openSelection() }
         }
@@ -187,6 +193,7 @@ struct Hades2SaveEditorView: View {
             .help(text("hades2.saveEditor.workbench.sourceHint"))
 
             Button {
+                guard !model.busy else { return }
                 model.selectedSourceID = loadedSourceID
                 if model.pendingCount > 0 { confirmingSource = true }
                 else { model.openSelection() }
