@@ -553,7 +553,7 @@ struct Main {
         // Primary Save editing must be possible directly from the first result.
         // No category expansion, entity selection or inspector activation is needed.
         func inlineValueField() -> NSTextField? {
-            NSApp.windows.compactMap(\\.contentView).flatMap(fields).first { field in
+            NSApp.windows.compactMap(\.contentView).flatMap(fields).first { field in
                 field.isEditable && field.isEnabled && field.stringValue == "123"
             }
         }
