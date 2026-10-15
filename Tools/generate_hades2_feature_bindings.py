@@ -10,8 +10,8 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
 
-LUA_BEGIN = "  -- BEGIN GENERATED DURABLE FEATURE SCHEMA"
-LUA_END = "  -- END GENERATED DURABLE FEATURE SCHEMA"
+LUA_BEGIN = "    -- BEGIN GENERATED DURABLE FEATURE SCHEMA"
+LUA_END = "    -- END GENERATED DURABLE FEATURE SCHEMA"
 
 
 def _swift_identifier(name):
@@ -113,27 +113,26 @@ def render_lua_schema():
     rows = _validated_multipliers()
     lines = [
         LUA_BEGIN,
-        "  local durableFeatureSchema = {",
-        "    toggles = {",
+        "    durableFeatureSchema = {",
+        "      toggles = {",
     ]
     for key in TOGGLES:
-        lines.append(f'      "{key}",')
+        lines.append(f'        "{key}",')
     lines.extend([
-        "    },",
-        "    multipliers = {",
+        "      },",
+        "      multipliers = {",
     ])
     for key, default, minimum, maximum, owner in rows:
         lines.append(
-            f'      {key} = {{ default = {_lua_number(default)}, min = {_lua_number(minimum)}, '
+            f'        {key} = {{ default = {_lua_number(default)}, min = {_lua_number(minimum)}, '
             f'max = {_lua_number(maximum)}, runtime = "{owner}" }},'
         )
     lines.extend([
+        "      },",
         "    },",
-        "  }",
         LUA_END,
     ])
     return "\n".join(lines)
-
 
 def replace_lua_schema(source):
     start = source.index(LUA_BEGIN)
