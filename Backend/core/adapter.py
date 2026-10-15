@@ -65,6 +65,15 @@ class GameAdapter(ABC):
         """Bind the Host-owned generic Save service for optional game semantics."""
         self.save_service = save_service
 
+    def reply_replayed(self):
+        """Observe delivery of a historical cached reply without re-execution.
+
+        Adapters retaining a public projection baseline must invalidate it:
+        the receiver may now hold the historical observation instead. Stateless
+        reply producers need no action and keep this default implementation.
+        """
+        pass
+
     @property
     def game_id(self):
         return self.context.game_id

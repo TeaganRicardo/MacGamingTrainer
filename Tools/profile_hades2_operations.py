@@ -204,7 +204,7 @@ def human_summary(report):
             lines.append("Host: " + trial["reason"]); continue
         lines.append("Trial %d sidecar calls %s; bytes %s" % (index, trial["sidecar_calls"], trial["bytes"]))
         for name in ("host.request_queue", "host.payload_decode", "host.payload_apply", "harness.host_round_trip",
-                     "backend.routing", "backend.reply_serialize", "backend.reply_ready",
+                     "backend.routing", "backend.public_projection", "backend.reply_serialize", "backend.reply_ready",
                      "backend.cache_serialize", "backend.cache_materialize", "backend.stdout_serialize",
                      "sidecar.rpc", "resident.materialize_dispatch", "resident.json_serialize", "resident.localization"):
             metric = trial["paths"]["warm"]["phases"].get(name)

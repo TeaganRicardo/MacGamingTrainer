@@ -63,6 +63,25 @@ with tempfile.TemporaryDirectory(prefix='mgt-module-contract-') as td:
     }
     assert 'saveManagement' not in normalized
 
+    # Modules that return full observations need no replay callback override.
+    # Cached delivery must remain byte-identical and must not execute a prior
+    # action again, even after a newer command changed the live module state.
+    subprocess.run(['python3', '-c', '''
+import sys
+sys.path.insert(0, 'Backend')
+from core.registry import create_adapter
+from core.protocol import JsonlRequestRouter
+adapter = create_adapter('reference_fixture')
+router = JsonlRequestRouter(adapter)
+request = {'id': 'enable', 'command': 'set_enabled', 'params': {'value': True}}
+first = router.handle_encoded(request)
+router.handle({'id': 'disable', 'command': 'set_enabled', 'params': {'value': False}})
+assert router.handle_encoded(request) == first
+assert adapter.enabled is False
+assert router.handle({'id': 'observe', 'command': 'status', 'params': {}})['result']['enabled'] is False
+router.close()
+'''], check=True, cwd=project, env=env)
+
     # Native code is an optional selected-module build input. Validate real
     # declarations in this isolated module; Core/reference need no Hades code.
     manifest = backend_module / 'module.json'

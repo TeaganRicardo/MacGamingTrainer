@@ -24,7 +24,7 @@ end
 ScreenData = { InventoryScreen = { ItemCategories = {} } }
 TraitElementData = { Fire = {}, Water = {} }; EnemyData = {}; PresetEventArgs = {}
 MapState = { RoomRequiredObjects = {}, EquippedWeapons = {} }
-LootObjects = {}; ConsumableData = {}; RewardStoreData = {}
+LootObjects = {}; ConsumableData = { MetaCurrencyDrop = {} }; RewardStoreData = {}
 TraitData = {}; LootData = {}; UnitSetData = {}
 CodexOrdering = { OlympianGods = {}, Order = {} }
 CurrentRun = {
@@ -53,6 +53,9 @@ SpendResource = function(id, amount)
   GameState.Resources[id] = (GameState.Resources[id] or 0) - amount
 end
 HeroHasTrait = function() return false end
+local spawnedObject = 1000
+SpawnObstacle = function() spawnedObject = spawnedObject + 1; return spawnedObject end
+CreateConsumableItem = function(id) return { ObjectId = id } end
 OpenUpgradeChoiceMenu = noop; CreateBoonLootButtons = noop
 AttemptPanelReroll = noop; RerollBoonLoot = noop; DestroyBoonLootButtons = noop
 
@@ -77,7 +80,11 @@ if traitCount > 0 or catalogTraitCount > 0 then
     for _, trait in ipairs(CurrentRun.Hero.Traits) do eligible[trait.Name] = true end
     return eligible
   end
-  IncreaseTraitLevel = noop; AddRarityToTraits = noop
+  IncreaseTraitLevel = function(trait, amount)
+    trait.StackNum = trait.StackNum + amount
+    return trait
+  end
+  AddRarityToTraits = noop
   GetTraitTooltipTitle = function(trait) return trait.Name end
 end
 
