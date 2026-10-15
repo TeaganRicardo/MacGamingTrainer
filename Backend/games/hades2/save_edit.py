@@ -155,6 +155,10 @@ class Hades2SaveEditSession:
                 expected_hashes,
                 post_install_verify=verify_installed,
                 expected_paths={key: target_path},
+                # Save Editor is an explicitly selected static-document write.
+                # Core still owns the running-state transaction mechanics; this
+                # opt-in does not broaden ordinary restore/staged-restore policy.
+                allow_running=True,
             )
 
         # Successful Core verification means the exact edited bytes are now the
@@ -163,5 +167,8 @@ class Hades2SaveEditSession:
         return {
             "applied": True,
             "relativePath": self._target.relative_path,
+            # Hot overwrite only proves the disk transaction. The running game
+            # is free to keep its in-memory state and later save over these bytes.
+            "runtimeReloaded": False,
             **result,
         }
