@@ -26,7 +26,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let max: Double
         let integer: Bool
     }
-    static let gameSpeedInputRange = 0.0...10.0
+    static let gameSpeedInputRange = Hades2MultiplierKey.gameSpeed.range
     private static let statRules: [String: StatRule] = [
         "grasp": .init(min: 0, max: 999, integer: true),
         "dodge": .init(min: 0, max: 100, integer: false),
@@ -152,8 +152,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var boonRarityEnabled = false
     @Published var forceEnableRerolls = false
     @Published var damageEnabled = false
-    @Published var damageMultiplier = 2.0
-    @Published var gameSpeed = 1.0
+    @Published var damageMultiplier = Hades2MultiplierKey.damageMultiplier.defaultValue
+    @Published var gameSpeed = Hades2MultiplierKey.gameSpeed.defaultValue
     @Published var boonRarityTarget = "Epic"
     @Published var boonRarityMultiplier = 100.0
     // These wire keys now mean force one currently eligible special boon
@@ -178,9 +178,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var warning = ""
     @Published var runtimeIssue = ""
     @Published var moneyLocked = false
-    @Published var moneyMultiplier = 2.0
+    @Published var moneyMultiplier = Hades2MultiplierKey.moneyMultiplier.defaultValue
     @Published var moneyMultiplierEnabled = false
-    @Published var resourceMultiplier = 2.0
+    @Published var resourceMultiplier = Hades2MultiplierKey.resourceMultiplier.defaultValue
     @Published var resourceMultiplierEnabled = false
     @Published var rerolls: Double?
     @Published var rerollsLocked = false
@@ -973,7 +973,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard Self.gameSpeedInputRange.contains(value), abs(gameSpeed - value) >= 0.0001 else { return }
         gameSpeed = value
         send(
-            .setDesired(feature: "gameSpeed", value: value),
+            .setDesired(feature: Hades2MultiplierKey.gameSpeed.rawValue, value: value),
             title: "hades2.op.updateGameSpeed",
             allowsFollowingAction: true,
             announceSuccess: false,
@@ -1037,7 +1037,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case let .multiplier(id):
             let values = ["damageMultiplier": damageMultiplier, "moneyMultiplier": moneyMultiplier,
                 "resourceMultiplier": resourceMultiplier]
-            current = values[id]; range = 1...100; available = canEditDesired && current != nil
+            let feature = Hades2MultiplierKey(rawValue: id)
+            current = values[id]
+            range = feature?.range ?? 0...0
+            available = canEditDesired && current != nil && feature?.runtimeOwner == .resident
             apply = { self.setMultiplier(id, text: $0) }
         case .gameSpeed:
             current = gameSpeed; range = Self.gameSpeedInputRange; available = canEditDesired
@@ -1354,22 +1357,27 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func setMultiplier(_ key: String, text: String) {
-        guard canEditDesired, let value = Double(text), value.isFinite, (1...100).contains(value) else { return }
+        guard canEditDesired,
+              let feature = Hades2MultiplierKey(rawValue: key),
+              feature.runtimeOwner == .resident,
+              let value = Double(text),
+              value.isFinite,
+              feature.range.contains(value) else { return }
         let current: Double
-        switch key {
-        case "damageMultiplier": current = damageMultiplier
-        case "moneyMultiplier": current = moneyMultiplier
-        case "resourceMultiplier": current = resourceMultiplier
-        default: return
+        switch feature {
+        case .damageMultiplier: current = damageMultiplier
+        case .moneyMultiplier: current = moneyMultiplier
+        case .resourceMultiplier: current = resourceMultiplier
+        case .gameSpeed: return
         }
         if abs(current - value) < 0.0001 { return }
-        switch key {
-        case "damageMultiplier": damageMultiplier = value
-        case "moneyMultiplier": moneyMultiplier = value
-        case "resourceMultiplier": resourceMultiplier = value
-        default: break
+        switch feature {
+        case .damageMultiplier: damageMultiplier = value
+        case .moneyMultiplier: moneyMultiplier = value
+        case .resourceMultiplier: resourceMultiplier = value
+        case .gameSpeed: return
         }
-        sendEdit(request: .setDesired(feature: key, value: value), title: "hades2.op.updateMultiplier")
+        sendEdit(request: .setDesired(feature: feature.rawValue, value: value), title: "hades2.op.updateMultiplier")
     }
 
     func setCounter(_ counter: String, text: String) {
