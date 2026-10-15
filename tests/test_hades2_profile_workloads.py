@@ -27,7 +27,7 @@ if shutil.which('swiftc'):
     assert end['observed']
     assert end['sidecar_calls']['transport.execute'] > 0 and all(value > 0 for value in end['bytes'].values())
     assert {'host.admission', 'host.request_queue', 'host.payload_decode', 'host.payload_apply',
-        'backend.routing', 'backend.cache_serialize', 'backend.cache_materialize', 'backend.stdout_serialize',
+        'backend.routing', 'backend.reply_serialize', 'backend.reply_ready',
         'sidecar.dispatch', 'sidecar.reply_serialize_write', 'resident.materialize_dispatch',
         'resident.json_serialize', 'resident.json_decode', 'resident.localization'} <= end['phases'].keys()
     for rows in end['requests'].values():

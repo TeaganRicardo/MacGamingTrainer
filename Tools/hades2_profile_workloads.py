@@ -25,7 +25,7 @@ def phase_summary(records, summarize):
             calls[record['method']] += 1
             byte_counts['sidecar_request'] += record['request_bytes']
             byte_counts['sidecar_reply'] += record['reply_bytes']
-        if record['phase'] == 'backend.stdout_serialize':
+        if record['phase'] in ('backend.stdout_serialize', 'backend.reply_ready'):
             byte_counts['backend_reply'] += record['reply_bytes']
     return {'phases': {key: summarize(value) for key, value in phases.items()},
             'sidecar_calls': dict(calls), 'bytes': dict(byte_counts)}
