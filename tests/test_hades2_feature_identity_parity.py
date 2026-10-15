@@ -38,10 +38,14 @@ lua = LUA_SOURCE.read_text(encoding="utf-8")
 assert GENERATED_SWIFT.read_text(encoding="utf-8") == generator.render_swift(), (
     "checked-in Swift durable-feature binding drifted from schema.py"
 )
-start = lua.index(generator.LUA_BEGIN)
-end = lua.index(generator.LUA_END, start) + len(generator.LUA_END)
-assert lua[start:end] == generator.render_lua_schema(), (
-    "resident durable-feature schema block drifted from schema.py"
+for begin, end, expected in generator.lua_projection_blocks():
+    start = lua.index(begin)
+    finish = lua.index(end, start) + len(end)
+    assert lua[start:finish] == expected, (
+        f"resident generated projection drifted from schema.py: {begin}"
+    )
+assert "durableFeatureSchema" not in lua, (
+    "schema projection must stay build-time-only, not become a resident config object"
 )
 
 resident_multipliers = {
@@ -51,27 +55,34 @@ core_multipliers = {
     key for key, rule in MULTIPLIER_RULES.items() if rule["runtime"] == "core"
 }
 assert core_multipliers == {"gameSpeed"}, "gameSpeed must remain the sole Core-owned multiplier"
+assert '"gameSpeed"' not in generator.render_lua_multiplier_dispatch(), (
+    "Core-owned gameSpeed must not enter resident multiplier dispatch"
+)
 
-# The resident owns behavior callbacks, not another authored feature list. The
-# generated toggle order selects whichever durable toggles have resident runtime
-# callbacks; economy toggles keep their shared economy owner.
+# Runtime behavior ownership remains authored next to the actual callbacks.
+# Validate that owner-specific featureOrder/featureRegistry projections still
+# cover the schema identities without turning them into another generated config.
 registry_start = lua.index("  featureRegistry = {")
-registry_end = lua.index("  featureOrder = {}", registry_start)
+registry_end = lua.index("  featureOrder = {", registry_start)
 registry_block = lua[registry_start:registry_end]
 registry_keys = set(re.findall(r"(?m)^    ([A-Za-z_][A-Za-z0-9_]*) = \{$", registry_block))
-economy_toggles = {key for key in TOGGLES if key.endswith("MultiplierEnabled")}
-assert registry_keys == set(TOGGLES) - economy_toggles, (
+economy_toggles = {
+    f"{key}Enabled"
+    for key in resident_multipliers
+    if f"{key}Enabled" in TOGGLES
+}
+expected_registry_order = [key for key in TOGGLES if key not in economy_toggles]
+assert registry_keys == set(expected_registry_order), (
     f"resident feature registry lost a durable behavior route: "
-    f"missing={sorted(set(TOGGLES) - economy_toggles - registry_keys)}, "
-    f"extra={sorted(registry_keys - set(TOGGLES))}"
+    f"missing={sorted(set(expected_registry_order) - registry_keys)}, "
+    f"extra={sorted(registry_keys - set(expected_registry_order))}"
 )
-assert """  featureOrder = {}
-  for _, key in ipairs(M.durableFeatureSchema.toggles) do
-    if featureRegistry[key] ~= nil then featureOrder[#featureOrder + 1] = key end
-  end""" in lua
-assert "desiredFeatures = desiredFeatureState," in lua
-assert "local multiplierRule = M.durableFeatureSchema.multipliers[feature]" in lua
-assert 'feature == "damageMultiplier" or feature == "moneyMultiplier"' not in lua
+order_start = lua.index("  featureOrder = {", registry_end)
+order_end = lua.index("  statOrder = {", order_start)
+feature_order = re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"', lua[order_start:order_end])
+assert feature_order == expected_registry_order, (
+    "resident feature reconciliation order drifted from schema identity order"
+)
 
 # Compile the generated Swift facts and compare them to values assembled from
 # the Python schema at test time. This is not another maintained identity list.
