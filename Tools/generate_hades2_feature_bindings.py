@@ -64,7 +64,7 @@ def render_swift():
     lines.extend([
         "}",
         "",
-        "enum Hades2MultiplierRuntimeOwner {",
+        "enum Hades2MultiplierRuntimeOwner: Equatable {",
         "    case resident",
         "    case core",
         "}",
