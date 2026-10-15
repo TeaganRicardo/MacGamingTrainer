@@ -70,6 +70,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             # rewrite the private localized baseline used on the next call.
             first["resources"][0]["count"] = 99999
             first["currentRunTraits"][0]["level"] = 99999
+            first["currentRunTraits"][0]["availableRarities"].append("consumer-only")
             next_reply = session.mutate("set_vital", {"vital": "health", "field": "current", "value": 75}).payload
             assert next_reply["resources"] == expected["resources"]
             assert next_reply["currentRunTraits"] == expected["currentRunTraits"]

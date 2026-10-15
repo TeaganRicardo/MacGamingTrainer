@@ -5,7 +5,6 @@ state, debugger budgets, transaction ledger, Trait Tray handoff, decode trust an
 resident-generation recovery stay behind this interface.
 """
 from dataclasses import dataclass
-import copy
 import json
 import logging
 import math
@@ -28,6 +27,17 @@ _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
 _TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
 _REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
 _OBSERVATION_COLLECTIONS = frozenset(("resources", "elements", "currentRunTraits"))
+
+
+def _copy_json_collection(value):
+    """Isolate decoded JSON containers; immutable scalar values can be shared."""
+    if isinstance(value, dict):
+        result = value.copy()
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                result[key] = _copy_json_collection(item)
+        return result
+    return [_copy_json_collection(item) if isinstance(item, (dict, list)) else item for item in value]
 
 
 @dataclass(frozen=True)
@@ -387,11 +397,11 @@ class Hades2ResidentSession:
         for key in _OBSERVATION_COLLECTIONS:
             if key in retained:
                 current[key] = previous[key]
-                payload[key] = copy.deepcopy(previous[key])
+                payload[key] = _copy_json_collection(previous[key])
             elif key in payload:
                 # Neither the returned reply nor the Adapter may mutate the
                 # private localized baseline used by a later observation.
-                current[key] = copy.deepcopy(payload[key])
+                current[key] = _copy_json_collection(payload[key])
         self._observation_generation, self._observation_collections = generation, current
         return payload, generation_reset
 
