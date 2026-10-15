@@ -142,11 +142,17 @@ struct Hades2SaveEditorView: View {
             model.setLanguage(language)
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
-            guard model.workspaceID != nil,
-                  !identifier.isEmpty, identifier != loadedSourceID else { return }
+            guard !identifier.isEmpty, identifier != loadedSourceID else { return }
+            // The initial inventory owns automatic default opening. An idle
+            // source change with no workspace is the user's first manual open.
+            // Ignore default selection changes while that opening is in flight.
+            if model.busy {
+                if model.workspaceID != nil { model.selectedSourceID = loadedSourceID }
+                return
+            }
             // Clicking away can finish a text edit and start staging before
             // the picker receives the same click. Never re-read that draft.
-            if model.busy || !model.sourceFiles.contains(where: { $0.id == identifier }) {
+            guard model.sourceFiles.contains(where: { $0.id == identifier }) else {
                 model.selectedSourceID = loadedSourceID
                 return
             }
@@ -202,7 +208,8 @@ struct Hades2SaveEditorView: View {
             }
             .disabled(model.busy || model.profile.isEmpty ||
                 !model.sourceFiles.contains(where: { $0.id == loadedSourceID }))
-            .help(localization.localized("host.refresh"))
+            .help(text("hades2.saveEditor.source.read"))
+            .accessibilityLabel(text("hades2.saveEditor.source.read"))
 
             Button(localization.localized("host.done")) {
                 dismiss()
@@ -230,6 +237,16 @@ struct Hades2SaveEditorView: View {
             .labelsHidden()
             .frame(maxWidth: 315)
             .disabled(model.busy)
+
+            Button {
+                model.refreshFiles()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.busy)
+            .help(text("hades2.saveEditor.source.refreshFiles"))
+            .accessibilityLabel(text("hades2.saveEditor.source.refreshFiles"))
 
             Divider().frame(height: 20)
 
@@ -318,7 +335,10 @@ struct Hades2SaveEditorView: View {
 
     private var inlineResults: some View {
         Group {
-            if model.profile.isEmpty || (model.busy && model.items.isEmpty) {
+            if model.profile.isEmpty && !model.busy {
+                TrainerEmptyState(text: text("hades2.saveEditor.source.choose"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.profile.isEmpty || (model.busy && model.items.isEmpty) {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.items.isEmpty {
