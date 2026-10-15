@@ -7,12 +7,15 @@ TOGGLES = (
 )
 
 MULTIPLIER_RULES = {
-    'damageMultiplier': {'default':2.0,'min':1.0,'max':100.0},
-    'moneyMultiplier': {'default':2.0,'min':1.0,'max':100.0},
-    'resourceMultiplier': {'default':2.0,'min':1.0,'max':100.0},
-    'gameSpeed': {'default':1.0,'min':0.0,'max':10.0},
+    'damageMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
+    'moneyMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
+    'resourceMultiplier': {'default':2.0,'min':1.0,'max':100.0,'runtime':'resident'},
+    'gameSpeed': {'default':1.0,'min':0.0,'max':10.0,'runtime':'core'},
 }
 MULTIPLIERS = tuple(MULTIPLIER_RULES)
+RESIDENT_MULTIPLIERS = tuple(
+    key for key, rule in MULTIPLIER_RULES.items() if rule['runtime'] == 'resident'
+)
 
 
 def desired_feature_defaults():
