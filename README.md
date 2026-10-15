@@ -38,7 +38,7 @@ xcrun lldb -P
 ## Development references
 
 - [AGENTS.md](AGENTS.md) — coding-agent entrypoint and verification routing.
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) — current operational state.
+- [PROJECT_STATUS.md](PROJECT_STATUS.md) — compatibility, operating limits and manual-acceptance evidence.
 - [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md) — stable ownership, lifecycle, replay, and Save-safety rules.
 - [GAME_MODULES.md](GAME_MODULES.md) — Core/game-module contract.
 - [VERSIONING.md](VERSIONING.md) — release and versioning policy.

@@ -69,13 +69,7 @@ The App/Host supplies the common shell, sidebar, header, connection status, back
 
 ## Architecture evolution
 
-Module isolation is an ownership rule, not a prohibition on root-cause refactoring.
-
-- A defect that is demonstrably owned inside one game module should be fixed by deepening that game-owned module/interface rather than moving game semantics into Core.
-- A defect may legitimately cross the Core/game seam when the root cause proves that the current ownership is wrong or that a genuinely game-agnostic contract already exists. Such a change must update the reference fixture and module-build evidence for the affected seam.
-- Repeated Hades-only fixes do not by themselves justify a Core abstraction. Two real adapters or independently proven game-agnostic behavior are the evidence for a shared seam.
-- Conversely, do not preserve duplicated Host/Core policy inside a game merely to keep a patch small. When Core is the demonstrated owner, migrate the coherent responsibility and verify both Hades and the reference module.
-- Cross-seam refactors still have one causal purpose. They must not absorb unrelated game features or speculative future-game abstractions.
+Apply the causal scope and review process in `AGENTS.md`. Module isolation protects ownership while allowing corrections across Core/game interfaces. Two real adapters or independently demonstrated game-agnostic behavior justify a shared contract; Hades-only repetition belongs in the Hades owner. When responsibility moves, migrate its callers and verify both Hades and the reference fixture. A shared contract preserves each adapter's native execution lifecycle.
 
 ## Protocol and timeout rules
 
@@ -87,4 +81,4 @@ Core enforces request ordering and timeout mechanics but does not decide game-sp
 
 Target-process lifecycle coordination is Host-owned and event-driven. Game views must not add process polling or foreground-stealing connection helpers.
 
-Current protocol revisions are operational state and belong in `PROJECT_STATUS.md`, not in this contract.
+Read current protocol revisions from the owning production declarations; `PROJECT_STATUS.md` records compatibility/acceptance constraints rather than a second version table.

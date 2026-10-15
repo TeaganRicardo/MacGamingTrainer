@@ -2,7 +2,7 @@
 
 Stable architecture and failure-semantics contract for MacGamingTrainer.
 
-This document describes rules that should remain true across feature work. `PROJECT_STATUS.md` owns current product status and planning issue #124 owns sequencing. Current code, Git history and executed tests remain the ultimate implementation evidence.
+Consult the sections relevant to the changed responsibility. `AGENTS.md` owns the development/verification process, `PROJECT_STATUS.md` owns operating limits and acceptance evidence, and #124 owns current sequencing. These contracts protect accepted behavior; current code/tests may need correction to implement it.
 
 ## 1. Ownership map
 
@@ -103,7 +103,9 @@ Classify an operation before adding retry/recovery behavior.
 | next-room reward | durable one-shot with identity token | only while consumption is unproven | resident consumption receipt prevents resurrection after backend restart |
 | disable/cleanup on app exit | durable reset + best-effort runtime cleanup | not a blind retry loop | persistence failure must not prevent best-effort resident teardown; failure still surfaces |
 
-Global transport rule: an `outcome_unknown` non-idempotent result terminates trust in that transport/session. Hades LLDB transport is tainted after an unknown Lua result; later Lua mutation requires restart/reconnect rather than guessing whether the operation ran.
+An `outcome_unknown` non-idempotent result terminates trust in that transport/session. Hades LLDB transport is tainted after an unknown Lua result; the user must inspect the game and restart it before reconnecting for further Lua mutation. Receipts, session status and recovery details must give compatible steps and discourage repeating the uncertain action.
+
+Native execution lifetime is part of mutation correctness. Keep yielding game coroutines and native modal presentation under their native owners; classify Trainer-owned callbacks at the actual mutation seam. A shared result contract must preserve these execution differences, including captured owner identity, native spend, unwind and draw-group lifetime.
 
 ## 5. Core Save safety model
 
@@ -159,24 +161,15 @@ pending staged-restore.json
 - indeterminate state is surfaced and blocks automatic replay/deletion assumptions.
 - tests use temporary save roots only. Never point automated tests at real Hades/user saves.
 
-## 6. Root-cause correction, module depth, and file boundaries
+## 6. Module and interaction contracts
 
-A demonstrated correctness defect starts RED-first. Before choosing implementation scope, identify the root cause, the owning module, and the seam through which callers should exercise it.
+Ownership is a responsibility, not a permanent assignment to a filename. An extraction earns its interface by removing duplicated policy or knowledge from callers; file size alone establishes neither a defect nor a useful module. Core/module evolution follows `GAME_MODULES.md`.
 
-- “Smallest coherent fix” means the smallest coherent fix of the demonstrated root cause, not the smallest textual diff.
-- If a defect exposes a shallow module, duplicated policy, a misplaced seam, or a responsibility split, the fix may expand across that owning seam. Keep unrelated cleanup and unrelated product work out of the change.
-- Defensive guards, fallbacks, retries, fail-closed branches and compatibility aliases are complete solutions only when the failure mode is intrinsically unavoidable at the owning seam. Containment that merely masks a structural cause is explicitly incomplete.
-- Repeated fixes that make several callers or tests know the same implementation detail are evidence that the interface is too shallow. Deepen the module so the implementation absorbs that knowledge and callers gain leverage.
-- The interface is the preferred test surface. When a deeper interface supersedes caller-side policy or implementation-shape checks, migrate the owning behavior tests and delete the superseded checks instead of accumulating both mechanisms.
-- A focused change has one causal purpose; it does not require an artificially small file count. Review judges root-cause removal, ownership, locality and verification coverage rather than diff size.
+Resident packaging currently loads one Lua source. Internal ownership may change within that contract; a multi-file loading route requires proof in the real Hades II runtime before adoption. Preserve native lifecycle distinctions described in section 4.
 
-File size alone is not a refactor reason, and splitting a file is not the same as deepening a module.
+UI drafts are owned through edit completion: background observation preserves a focused/in-progress draft, refreshes an unfocused displayed value and cannot redirect a captured edit to a replacement target. Query/loading/error state belongs to its operation; stronger locks apply only where an authority-changing operation requires them. A rejected edit preserves acknowledged pending work and leaves an actionable next step.
 
-- `runtime/hades.lua` remains one resident source file until a multi-file loader is proven in the real Hades II runtime. Within that constraint, proven native owners/lifecycles may and should become deeper internal modules when repeated changes leak the same policy across dispatch branches. Any source change still requires a resident revision bump and real-game verification.
-- `Hades2Model.swift` may continue to co-locate Hades observable projection, lifecycle response, command scheduling and exit cleanup while those responsibilities genuinely share one owner. When repeated fixes establish an independent owner and smaller interface, extract/deepen that responsibility even if several call sites must migrate; do not create pass-through stores merely to reduce line count.
-- `Hades2View.swift` may be sliced when presentation responsibility is genuinely independent or repeated fixes demonstrate that product presentation policy is leaking through one giant view. Reusable visual language belongs in Core/UI while Hades meaning stays in Hades.
-- `Hades2Adapter` is currently the synchronization owner between persistence, transport and resident state. Do not fragment it into pass-through helpers, but if repeated defects show transaction/reconciliation knowledge leaking across callers, introduce a deeper owning interface and migrate the whole coherent seam rather than adding another special case.
-- Core Save snapshot/service/restore files are separate transaction responsibilities and should remain game-agnostic. A root-cause refactor may still cross those files when one Save transaction invariant is demonstrably split across them; verify the full affected transaction seam.
+User-visible success and recovery are part of the contract. An individual model update, build or descriptor count does not prove that a player can find the target, edit it, inspect consequences and complete the intended action. Verify that affected journey through existing owning interfaces/native-control harnesses; record the separate rendered/gameplay acceptance boundary.
 
 ## 7. Executable architecture contracts
 
@@ -194,61 +187,13 @@ Prefer these protections over prose or implementation-shape tests:
 
 Source-text contracts remain acceptable where they enforce a structural boundary that cannot reasonably be compiled/observed without the real game. Prefer compile/type/behavior tests whenever the same invariant can be expressed there. Mutation testing verifies that selected high-value tests are sensitive to known defect classes; it is a periodic/convergence audit, not evidence that must be regenerated for every ordinary feature PR.
 
-## 8. Verification matrix
+## 8. Terminology ownership
 
-Verification depth is selected by risk and changed seam; evidence identity is always exact.
+The game module's terminology registry owns classifications, bilingual values, provenance and allowed surfaces. For Hades, consult `Backend/games/hades2/terminology.py` and its declared reference resource; prose contains no mirrored inventory.
 
-1. **Task verification** proves the focused change on the actual final PR head. PR workflows are the recurring gate. If a root-cause fix widens the changed seam, task verification widens to every affected owning interface rather than forcing the implementation back into a smaller diff.
-2. **Integration verification** reruns task gates after a PR-head rewrite/rebase and adds only affected gates when an overlapping dependency changes the relevant seam.
-3. **Convergence/release verification** is an explicit `workflow_dispatch` on the selected SHA. Missing diff scope intentionally fails closed, so Linux, macOS and reference-module behavior/build lanes execute. Diff-only gates such as resident revision comparison remain PR-owned; mutation testing and retained RC/reference artifacts with provenance/checksums run here.
+- Native Game Terms resolve `zh-CN` and English from the same supported-build localization ID; re-verify provenance when compatibility changes.
+- Trainer Product Terms declare an explicit bilingual pair and why the Trainer owns it; they are not native titles.
+- Internal Domain Terms stay implementation vocabulary until deliberately mapped to a user-facing native/product label.
+- Compatibility Aliases are limited to declared migration/import/input boundaries and targeted diagnostics, not new canonical UI, protocol or storage identities. Trainer Invincibility uses `invincibility`; legacy `godMode` is confined to versioned migration/import boundaries and reserved for a possible native God Mode implementation.
 
-There is no automatic post-merge `push(main)` rerun. A merged PR's head evidence remains evidence for that head; when exact current-main convergence evidence is required, dispatch it deliberately.
-
-| Change | PR task gate | Additional requirement |
-| --- | --- | --- |
-| Backend/Core Python | `Tools/run_linux_checks.sh` | macOS only if packaging/platform behavior touched |
-| Host/Swift lifecycle or AppKit UI | Linux portable contracts where applicable | `Build 2 macOS`: macOS contracts + Hades build/package/sign verification |
-| module/Core boundary/build graph | Linux contracts | reference-fixture build/isolation + macOS build |
-| Core Save transaction semantics | full Linux portable Save behavior suite | macOS for Swift Save UI/model integration |
-| Hades transport/adapter only | Linux contracts | real game only when target-runtime semantics cannot be simulated |
-| `runtime/hades.lua` | Linux contracts + runtime revision gate | real Hades II acceptance; automated tests are not final verification |
-| convergence/release/manual QA artifact | explicit dispatch of all relevant workflows | mutation audit + exact tested SHA + retained artifact/provenance/SHA256 |
-
-A passing ancestor commit is historical evidence only. Claims of “fixed/passed” must name the exact SHA whose source was executed or built. Evidence from an old head is never re-attributed to a rewritten/rebased head.
-
-### Verification/governance budget
-
-The verification system must stay shallower than the product system it protects.
-
-- The default is an owning behavior test, not a new global gate.
-- A new always-on workflow/check, global source-text/parity scan or mutation class requires a concrete escaped defect or a real cross-cutting seam that local behavior tests cannot protect.
-- Do not build a test-to-source routing database for ordinary Linux tests; broad portable execution is simpler and cheap enough.
-- Release packaging/provenance and mutation sensitivity are convergence concerns unless a task directly changes those mechanisms.
-- When a new mechanism subsumes an older one, remove the older mechanism rather than preserving both “for safety.” The same rule applies to tests that only encode the superseded implementation shape.
-- Status documentation is operational state, not a merge ledger. Ordinary feature merges do not require a dedicated reconciliation PR unless they materially change the operational gate/version/acceptance baseline.
-
-## 9. Terminology governance
-
-Terminology is part of the product contract. Classify a term before introducing it; provenance and ownership determine where it may appear. The governance model applies to UI, user-visible errors, logs, protocol payloads, files, tests and current documentation. Existing terms are not bulk-renamed solely to satisfy this model; new or touched surfaces must follow it.
-
-| Class | Ownership / provenance | Lifecycle | Allowed use | Forbidden use |
-| --- | --- | --- | --- | --- |
-| **Native Game Term** | Game-owned; sourced from the supported target build's official localization/catalog/reference, identified by its localization ID where available | Changes with the target build; re-verify when the supported build changes | Game-facing UI, game-facing errors, terminology-sensitive tests/docs, and protocol fields when they represent the native concept | Inventing a replacement label, silently mixing a different build's localization, or presenting an internal ID as the official name |
-| **Trainer Product Term** | Trainer-owned; an explicit label for a Trainer aggregation or state with no single native equivalent | Stable while the Trainer contract needs it; change deliberately and document the bilingual pair | Trainer UI, Trainer status/errors, product docs and tests | Presenting it as a native game title, using it to overwrite a native term, or changing only one language |
-| **Internal Domain Term** | Implementation-owned; stable identifier/model vocabulary chosen for code and contracts | Controlled by the implementation contract; may outlive a game-facing label | Code, protocol internals, fixtures and implementation-focused tests/docs | Exposing it as a native user-facing term without an explicit mapping |
-| **Compatibility Alias** | Transitional Trainer-owned mapping from a legacy/shorthand term to a canonical term; alias source must be identifiable | Temporary; remove after migration or when compatibility is no longer required | Input compatibility, migration, targeted compatibility tests and explicit diagnostics | New user-facing copy, canonical storage, protocol naming, or silently preserving an obsolete alias as the preferred term |
-
-### Bilingual and pairing rule
-
-For a Native Game Term, Chinese and English must resolve from the **same target-build localization ID**. Do not hand-pair translations from different entries or substitute a remembered/third-party translation. For a Trainer Product Term, declare an explicit `zh-CN`/English pair and record why the Trainer owns the label; it must never masquerade as native terminology. Internal Domain Terms and Compatibility Aliases do not become bilingual product labels unless they are deliberately exposed, in which case they must resolve through one of the two user-facing classes above.
-
-### Current Hades II examples
-
-The target-build terminology reference used by #112 is the evidence source for these classifications:
-
-- **Native Game Terms:** `祝福` / `Boon`, `奥林匹斯的祝福` / `Boon of Olympus`, `重塑命运` / `Change of Fate`, `净化之池` / `Pool of Purging`, `巫咒` / `Hex`, `生命值` / `Life`, `魔力值` / `Magick`, and `卡戎之井` / `Well of Charon`. Character/source names and native choice titles are also native terms when resolved from their target-build localization IDs.
-- **Trainer Product Terms:** `角色奖励` / `Character Rewards`, `奖励选择界面` / `Reward Choice`, `奥林匹斯诸神` / `Olympians`, `资源与常规掉落` / `Resources & Standard Drops`, `局外资源奖励` / `Meta Resources`, `元素奖励` / `Element Rewards`, `其他房间奖励` / `Other Room Rewards`, `商店商品` / `Shop Items`, and `资源` / `Resources`. These are Trainer-owned aggregations, not native screen titles.
-- **Internal Domain Terms:** identifiers such as `TalentDrop`, `SpellDrop`, `MetaCurrencyDrop`, `group = special`, and `group = olympian` remain implementation vocabulary. They may map to native or Trainer Product Terms, but they are not themselves player-facing terminology.
-- **Compatibility Aliases:** the authoritative registry currently contains these legacy/shorthand values: `特殊祝福`, `特殊祝福三选一`, `特殊祝福选择`, `诸神祝福`, `神祇祝福`, `重骰`, `阿耳忒弥斯`, `狄俄尼索斯`, `祝福出售界面`, `出售祝福`, `原生三选一`, `卡俄斯祝福`. This human-readable list must stay equal to the registry, which remains the source of truth. They may be recognized only where a compatibility boundary explicitly requires them; canonical UI/docs must use the classified term instead.
-
-Game-specific classifications remain owned by the game module. In particular, Hades concepts must not be moved into Core merely because a label or grouping looks reusable; a cross-game abstraction requires an independently proven, game-agnostic contract.
+Apply this contract to new/touched UI, errors, logs, protocol, storage, tests and current docs. Existing terms need no unrelated bulk rename. Hades classifications remain Hades-owned.
