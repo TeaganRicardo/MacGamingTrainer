@@ -11,12 +11,8 @@ if not swiftc:
 harness = r'''
 import Foundation
 
-let expected = Set([
-    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
-    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
-    "forceEnableRerolls", "moneyMultiplierEnabled", "resourceMultiplierEnabled",
-])
-precondition(Set(Hades2FeatureKey.allCases.map(\.rawValue)) == expected)
+let durableShortcutFeatures = Set(ShortcutAction.allCases.compactMap(\.featureKey))
+precondition(durableShortcutFeatures == Set(Hades2FeatureKey.allCases))
 
 precondition(ShortcutAction.invincibility.featureKey == .invincibility)
 precondition(ShortcutAction.infiniteHealth.featureKey == .infiniteHealth)
@@ -69,6 +65,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-feature-identity-") as td:
     binary = Path(td) / "feature-identity-test"
     subprocess.run([
         swiftc,
+        str(ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift"),
         str(ROOT / "Sources/Hades2/Hades2Types.swift"),
         str(ROOT / "Sources/Hades2/Hades2BackendState.swift"),
         str(main),
