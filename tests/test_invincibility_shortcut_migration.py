@@ -41,6 +41,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-invincibility-shortcut-") as td:
     subprocess.run([
         swiftc,
         str(ROOT / "Sources/Core/Input/HotkeyChord.swift"),
+        str(ROOT / "Sources/Hades2/Generated/Hades2Feature.generated.swift"),
         str(ROOT / "Sources/Hades2/Hades2Types.swift"),
         str(ROOT / "Sources/Hades2/Services/Hades2ShortcutStore.swift"),
         str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
