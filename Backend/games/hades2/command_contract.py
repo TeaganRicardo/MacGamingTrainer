@@ -532,6 +532,7 @@ class CommandSpec:
     requires_request_id: bool
     validate: object
     invoke: object
+    reply_kind: str
 
 
 def _spec(
@@ -541,6 +542,7 @@ def _spec(
     request_id=False,
     validate=_identity,
     invoke=None,
+    reply_kind=None,
 ):
     return CommandSpec(
         name=name,
@@ -548,19 +550,20 @@ def _spec(
         requires_request_id=bool(request_id),
         validate=validate,
         invoke=invoke or _runtime(name),
+        reply_kind=reply_kind or ("patch" if invoke is None else "independent"),
     )
 
 
 _COMMAND_SPECS = (
-    _spec("scan", timeout=15.0, invoke=_direct("scan")),
-    _spec("status", timeout=15.0),
-    _spec("connect", timeout=90.0, validate=_connect, invoke=_connect_invoke),
-    _spec("disconnect", timeout=12.0, invoke=_direct("disconnect")),
+    _spec("scan", timeout=15.0, invoke=_direct("scan"), reply_kind="snapshot"),
+    _spec("status", timeout=15.0, reply_kind="snapshot"),
+    _spec("connect", timeout=90.0, validate=_connect, invoke=_connect_invoke, reply_kind="snapshot"),
+    _spec("disconnect", timeout=12.0, invoke=_direct("disconnect"), reply_kind="snapshot"),
     _spec("launch", timeout=10.0, invoke=_launch),
-    _spec("disable_all"),
-    _spec("runtime_reset", invoke=_direct("runtime_reset")),
-    _spec("reset_desired", invoke=_direct("reset_desired")),
-    _spec("set_desired", validate=_set_desired, invoke=_set_desired_invoke),
+    _spec("disable_all", reply_kind="snapshot"),
+    _spec("runtime_reset", invoke=_direct("runtime_reset"), reply_kind="snapshot"),
+    _spec("reset_desired", invoke=_direct("reset_desired"), reply_kind="snapshot"),
+    _spec("set_desired", validate=_set_desired, invoke=_set_desired_invoke, reply_kind="patch"),
     _spec("set_vital", validate=_set_vital),
     _spec("set_counter", validate=_set_counter),
     _spec("lock_vital", validate=_lock_vital),
@@ -572,11 +575,13 @@ _COMMAND_SPECS = (
         "set_gathering_desired",
         validate=_set_gathering_desired,
         invoke=_gathering_invoke,
+        reply_kind="patch",
     ),
     _spec(
         "set_chaos_gate_desired",
         validate=_set_chaos_gate_desired,
         invoke=_chaos_gate_invoke,
+        reply_kind="patch",
     ),
     _spec("generate_gathering", request_id=True, validate=_generate_gathering),
     _spec("set_stat", validate=_set_stat),
@@ -586,16 +591,19 @@ _COMMAND_SPECS = (
         "set_boon_rarity_desired",
         validate=_boon_rarity,
         invoke=_boon_rarity_invoke,
+        reply_kind="patch",
     ),
     _spec(
         "set_next_room_reward_desired",
         validate=_next_room_reward,
         invoke=_next_room_invoke,
+        reply_kind="patch",
     ),
     _spec(
         "set_next_occurrence_desired",
         validate=_next_occurrence,
         invoke=_next_occurrence_invoke,
+        reply_kind="patch",
     ),
     _spec("spawn_reward", request_id=True, validate=_spawn_reward),
     _spec("acquire_chaos_pair", request_id=True, validate=_chaos_pair),
@@ -676,6 +684,10 @@ def command_metadata():
 class Hades2CommandContract:
     def __init__(self, adapter):
         self.adapter = adapter
+
+    @staticmethod
+    def reply_kind(command):
+        return COMMAND_SPECS[command].reply_kind
 
     def dispatch(self, command, params, request_id):
         try:
