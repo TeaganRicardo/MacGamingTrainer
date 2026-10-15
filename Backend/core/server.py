@@ -78,7 +78,7 @@ def parse_args(argv=None):
 def encode_reply(router, reply):
     """Serialize one response without allowing a bad module result to kill the host."""
     try:
-        return json.dumps(reply, ensure_ascii=False, allow_nan=False)
+        return router.encode_reply(reply)
     except Exception:
         logging.exception('Backend reply serialization failed')
         fallback = router.core_error_reply(
@@ -86,7 +86,7 @@ def encode_reply(router, reply):
             'protocol_error',
             'backend reply could not be serialized as strict JSON',
         )
-        return json.dumps(fallback, ensure_ascii=False, allow_nan=False)
+        return router.encode_reply(fallback)
 
 
 def process_line(router, line):
@@ -100,11 +100,9 @@ def process_line(router, line):
         if correlation() is not None:
             record('backend.request_decode', decode,
                    request_bytes=len(line.encode('utf-8')) if isinstance(line, str) else len(line))
-        reply = router.handle(request)
-        started = time.perf_counter()
-        encoded = encode_reply(router, reply)
+        encoded = router.handle_encoded(request)
         if correlation() is not None:
-            record('backend.stdout_serialize', time.perf_counter() - started,
+            record('backend.reply_ready', 0.0,
                    reply_bytes=len(encoded.encode('utf-8')) + 1)
         return encoded
 
