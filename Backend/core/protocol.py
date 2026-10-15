@@ -216,7 +216,10 @@ class JsonlRequestRouter:
             ))
         if request_id in self.cache:
             old, reply_json = self.cache[request_id]
-            return reply_json if old == fingerprint else self.encode_reply(self.core_error_reply(
+            if old == fingerprint:
+                self.adapter.reply_replayed()
+                return reply_json
+            return self.encode_reply(self.core_error_reply(
                 request_id, 'duplicate_conflict',
                 'request id was reused with different content',
             ))

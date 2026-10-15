@@ -1,5 +1,6 @@
 """Runtime wire replies preserve all changes while omitting untouched domains."""
 import copy
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -115,5 +116,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-public-mutations-") as temporary, p
     send("list_profiles")
     after_independent = send("set_vital", {"vital": "health", "field": "current", "value": 81})["result"]
     assert "boons" in after_independent and after_independent["health"] == 81
+
+    # A cached historical reply is delivered without dispatching the action.
+    # After it changes the Host's observation, the next live reply must restore
+    # a complete baseline rather than diffing against the later resident state.
+    historical = {"id": "historical-vital", "command": "set_vital", "params": {
+        "vital": "health", "field": "current", "value": 90,
+    }}
+    encoded = router.handle_encoded(historical)
+    host.update(json.loads(encoded)["result"])
+    send("set_vital", {"vital": "health", "field": "current", "value": 80})
+    calls_before_replay = len(resident.calls)
+    replayed = router.handle_encoded(historical)
+    assert replayed == encoded and len(resident.calls) == calls_before_replay
+    host.update(json.loads(replayed)["result"])
+    assert host["health"] == 90 and adapter.state["health"] == 80
+    repaired = send("set_resource", {"resource": "MetaCurrency", "amount": 60})["result"]
+    assert repaired["health"] == 80 and host["health"] == adapter.state["health"]
+    assert "boons" in repaired
 
 print("hades2_public_mutation_patches_ok")

@@ -1033,6 +1033,9 @@ class Hades2Adapter(GameAdapter):
         })
         return metadata
 
+    def reply_replayed(self):
+        self.reply_projection.invalidate()
+
     def dispatch(self, command, params, request_id):
         try:
             reply=self.command_contract.dispatch(command, params, request_id)
