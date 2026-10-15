@@ -11,10 +11,14 @@ management = read('Sources/Hades2/Views/Hades2ManagementViews.swift')
 badge = read('Sources/Core/UI/Primitives/TrainerBadge.swift')
 lua = read('Backend/games/hades2/runtime/hades.lua')
 
-# Dynamic spawn/resource lists render a bilingual item label whenever English is
-# available, and the static next-room choices use the same Chinese · English form.
+# Dynamic spawn lists remain bilingual. Resource rows put the active Host
+# language first and suppress a duplicated secondary label when one installed
+# game language had to fall back to the other.
 assert '"\\(option.name) · \\(option.englishName)"' in view
-assert '"\\(resource.name) · \\(resource.englishName)"' in view
+assert 'let primaryName = localization.language == .en && !resource.englishName.isEmpty' in view
+assert 'let secondaryName = localization.language == .en ? resource.name : resource.englishName' in view
+assert 'secondaryName.isEmpty || secondaryName == primaryName' in view
+assert '"\\(primaryName) · \\(secondaryName)"' in view
 # Next-room reward labels resolve through the shipped bilingual table, so the
 # view names a key per reward id instead of embedding either language.
 for reward in (
