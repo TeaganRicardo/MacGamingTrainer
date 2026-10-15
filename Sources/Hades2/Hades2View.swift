@@ -47,14 +47,14 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var materialAmount = ""
     @ViewState<String> private var selectedMaterial = ""
     @ViewState<String> private var search = ""
-    @ViewState<String> private var multiplier = "2"
+    @ViewState<String> private var multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
     @ViewState<Bool> private var statsExpanded = false
     @ViewState<Bool> private var profileManager = false
     @ViewState<Hades2SaveEditorPresentation?> private var saveEditorPresentation = nil
     @ViewState<Bool> private var diagnosticSheet = false
-    @ViewState<String> private var moneyFactor = "2"
-    @ViewState<String> private var materialFactor = "2"
-    @ViewState<String> private var gameSpeedInput = "1.0"
+    @ViewState<String> private var moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
+    @ViewState<String> private var materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
+    @ViewState<String> private var gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
     @ViewState<String?> private var gameSpeedPreview = nil
     @ViewState<String> private var rerollAmount = ""
     @ViewState<Bool> private var rerollsInitialized = false
@@ -832,7 +832,7 @@ struct Hades2TrainerView: View {
                 Spacer(minLength: 12)
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
-                    placeholder: "1.0",
+                    placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
                     width: 62,
                     enabled: model.canEditDesired,
                     onEditingChanged: tracking(.gameSpeed),
@@ -1100,10 +1100,10 @@ struct Hades2TrainerView: View {
         armorCurrent = ""
         spellCharge = ""
         gameSpeedPreview = nil
-        gameSpeedInput = "1.0"
-        multiplier = "2"
-        moneyFactor = "2"
-        materialFactor = "2"
+        gameSpeedInput = String(Hades2MultiplierKey.gameSpeed.defaultValue)
+        multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
+        moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
+        materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
         boonRarityFactor = "100"
         boonConfigInitialized = false
         graspLimit = ""
