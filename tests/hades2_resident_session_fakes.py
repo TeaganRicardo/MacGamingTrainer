@@ -34,6 +34,10 @@ class FakeResidentSession:
     def alive(self):
         return self.live
 
+    @property
+    def has_attachment(self):
+        return self.live and self.pid is not None
+
     def allows_process_time_warp(self):
         return self.process_time_warp_allowed
 

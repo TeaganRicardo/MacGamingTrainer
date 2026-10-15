@@ -73,6 +73,11 @@ class _LLDBWorkerClient:
     def terminal(self):
         return self._terminal_error is not None or self._sidecar.terminal
 
+    @property
+    def available(self):
+        """Local worker eligibility, without observing the debugger/target."""
+        return self._hello_complete and self._sidecar.started and not self.terminal
+
     def _raise_sidecar_failure(self, error):
         if self._terminal_error is not None:
             raise self._terminal_error
@@ -151,9 +156,11 @@ class _LLDBWorkerClient:
         except SidecarTerminalError as error:
             self._raise_sidecar_failure(error)
 
-    def call(self, method, params=None):
+    def call(self, method, params=None, *, allow_start=True):
         if self._terminal_error is not None:
             raise self._terminal_error
+        if not allow_start and not self.available:
+            raise AdapterError("disconnected", "请先连接游戏。")
         self._start()
         response = self._request(method, params)
         error = response.get("error")
@@ -254,8 +261,8 @@ class Hades2LuaTransport:
         profile = state.get("lastAttachProfile")
         self.last_attach_profile = dict(profile) if isinstance(profile, dict) else {}
 
-    def _call(self, method, params=None):
-        result, _ = self._worker.call(method, params)
+    def _call(self, method, params=None, *, allow_start=True):
+        result, _ = self._worker.call(method, params, allow_start=allow_start)
         return result
 
     @property
@@ -295,6 +302,7 @@ class Hades2LuaTransport:
                 "source": source,
                 "expressionTimeoutSeconds": expression_timeout_seconds,
             },
+            allow_start=False,
         )
 
     def create_time_warp_controller(self, helper_path, image_names):
@@ -326,22 +334,23 @@ class RemoteProcessTimeWarpController:
                 "helperPath": self._helper_path,
                 "imageNames": self._image_names,
             },
+            allow_start=False,
         )
 
     def _call(self, method, params=None):
         self._configure()
-        return self._transport._call(method, params or {})
+        return self._transport._call(method, params or {}, allow_start=False)
 
     def set_speed(self, value):
         return self._call("time_warp.set_speed", {"value": value})
 
     def current_speed(self):
-        if not self._transport.alive():
+        if self._transport.pid is None or not self._transport._worker.available:
             return 1.0
         return self._call("time_warp.current_speed")
 
     def reset(self):
-        if not self._transport.alive():
+        if self._transport.pid is None or not self._transport._worker.available:
             return 1.0
         return self._call("time_warp.reset")
 
