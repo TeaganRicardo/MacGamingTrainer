@@ -1364,7 +1364,12 @@ struct Hades2TrainerView: View {
                 enabled: model.canSetResource,
                 locked: material?.locked ?? false,
                 itemLabel: { resource in
-                    (resource.englishName.isEmpty ? resource.name : "\(resource.name) · \(resource.englishName)")
+                    let primaryName = localization.language == .en && !resource.englishName.isEmpty
+                        ? resource.englishName : resource.name
+                    let secondaryName = localization.language == .en ? resource.name : resource.englishName
+                    let displayName = secondaryName.isEmpty || secondaryName == primaryName
+                        ? primaryName : "\(primaryName) · \(secondaryName)"
+                    return displayName
                         + " · \(number(resource.count))"
                         + (resource.locked ? " · " + text("hades2.vital.lockedSuffix") : "")
                 },
