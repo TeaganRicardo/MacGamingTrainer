@@ -131,6 +131,14 @@ Actual temporary writes, replacements, deletions and rollback use the same captu
 
 The last recoverable copy must never be destroyed merely to make an operation appear clean. If the backend dies while rollback itself is in progress and no JSON reply can be emitted, a later `CoreSaveService` instance must rediscover contained, non-symlink `transactions/.rollback-*` directories as recovery evidence. Recovery paths are user-visible evidence only: Core must not auto-restore or auto-delete them.
 
+### Static editor replacement
+
+- Core file replacement is **cold by default**. Running-target replacement is available only through an explicit caller opt-in on the generic transaction seam; ordinary restore/staged-restore policy is unchanged.
+- A game-owned structured Save Editor may opt into that running replacement for a deliberately selected pinned document/physical target. The transaction still captures recoverable pre-write bytes, verifies path identity, atomically replaces, validates the installed bytes and rolls back on any proven post-mutation failure.
+- The observed process state is fixed for the transaction attempt. A replacement that began as cold does not silently promote itself to hot if the game launches during preparation; it fails closed.
+- For an intentionally version-pinned editor, target bytes written **before** the transaction baseline is captured are deliberate overwrite input. A target change during capture or after mutation begins is a transaction race: it cannot be reported as confirmed success, and failed/uncertain rollback retains recovery evidence.
+- `hot=true` proves only that the disk replacement completed and survived the transaction's immediate verification window while the target process was running. It does not mean the game reloaded in-memory state, and it does not promise that a later game-authored save will preserve the edited bytes.
+
 ### Staged restore
 
 ```text

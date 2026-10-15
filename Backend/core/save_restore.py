@@ -269,7 +269,7 @@ class SaveRestoreTransaction:
                 if self.busy_probe(tuple(current)):
                     raise SaveBusyError('Save files are currently busy.')
                 if not self._verify_state(baseline_hashes):
-                    self._raise_race(False, 'Save changed before mutation could begin.')
+                    self._raise_race(target_running, 'Save changed before mutation could begin.')
                 self._ensure_cold_target_still_stopped(target_running)
 
             self._verify_target_paths(expected_paths)
@@ -363,7 +363,17 @@ class SaveRestoreTransaction:
             if self._destination(root_id, relative).resolve() != expected:
                 raise SaveRestoreError('Save replacement physical target changed.')
 
-    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
+    def replace_files(
+        self,
+        replacements,
+        expected_hashes=None,
+        post_install_verify=None,
+        *,
+        expected_paths=None,
+        target_running=False,
+    ):
+        if type(target_running) is not bool:
+            raise ValueError('Save replacement target_running must be boolean.')
         if post_install_verify is not None and not callable(post_install_verify):
             raise ValueError('Save replacement verifier must be callable.')
         entries = self._replacement_entries(replacements)
@@ -382,7 +392,7 @@ class SaveRestoreTransaction:
             self._verify_target_paths(expected_paths)
 
         rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
-            False,
+            target_running,
             require_idle=True,
         )
         try:
@@ -408,7 +418,7 @@ class SaveRestoreTransaction:
             entries,
             target_hashes,
             preserve_current=True,
-            target_running=False,
+            target_running=target_running,
             success={'replaced': True},
             operation_name='Save replacement',
             post_install_verify=post_install_verify,
