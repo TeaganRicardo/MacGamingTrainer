@@ -12,7 +12,9 @@ LUA = require_lua52("scene owner availability runtime tests")
 HARNESS = r'''
 local runtimePath = assert(arg[1], "runtime path required")
 
-SessionState = {}
+-- Native RoomLogic.lua increments MapLoads in OnPreThingCreation and
+-- RunStateInit clears the prior Hero.ObjectId on that same map-load path.
+SessionState = { MapLoads = 1 }
 GameState = {
   Resources = {},
   LifetimeResourcesGained = {},
@@ -476,14 +478,35 @@ CurrentRun.Hero.IsDead = true
 local deadRun = status()
 check(not deadRun.capabilities.setMana and not deadRun.activeFeatures.infiniteMana,
   "dead adventure Hero was incorrectly resolved before Hub adoption")
-CurrentRun.Hero.ObjectId = nil
+
+-- Regression for #495 P1: a Hub pointer may become visible without proof that
+-- native RunStateInit/SetupHeroObject has rebound the playable Hero. The old
+-- adventure ObjectId is still 101. Neither capability nor a run-owned Hook
+-- body may become effective merely because CurrentHubRoom is a table.
 CurrentHubRoom = { Name = "Hub_Main" }
+local staleHub = status()
+check(not staleHub.capabilities.setHealth and not staleHub.capabilities.setMana,
+  "stale pre-adoption Hub Hero was accepted with previous-map ObjectId")
+check(not staleHub.activeFeatures.infiniteMana,
+  "stale pre-adoption Hero silently rearmed infinite mana")
+ManaDelta(-8)
+eq(CurrentRun.Hero.Mana, 42,
+  "pre-adoption ManaDelta hook mutated a dead Hero in the old map generation")
+lastAmmoDelta = nil
+UpdateWeaponAmmo("WeaponSkull", -2)
+eq(lastAmmoDelta, -2,
+  "pre-adoption run-owned ammo hook bypassed the dead-Hero safety boundary")
+
+-- Native OnPreThingCreation increments MapLoads and invokes RunStateInit,
+-- which clears the old ObjectId before the new Hub unit can be attached.
+SessionState.MapLoads = SessionState.MapLoads + 1
+CurrentRun.Hero.ObjectId = nil
 local beforeHubAttach = status()
 check(not beforeHubAttach.capabilities.setMana,
   "Hub transition fabricated a Hero before SetupHeroObject reattached it")
 
--- SetupHeroObject establishes a current ObjectId, resets native flags, and
--- equips the playable actor. The prior run's IsDead marker is NOT cleared.
+-- SetupHeroObject attaches the new Hub player; IDs may be recycled (101).
+-- Historical IsDead persists, but this is now a live unit from a newer map.
 CurrentRun.Hero.ObjectId = 101
 CurrentRun.Hero.InvulnerableFlags = {}
 CurrentRun.Hero.ImmuneToForceFlags = {}
