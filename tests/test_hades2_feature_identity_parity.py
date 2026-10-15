@@ -6,6 +6,7 @@ exercise the Host command and Adapter runtime-owner routes.
 """
 import importlib
 import importlib.util
+import re
 import shutil
 import subprocess
 import sys
@@ -57,8 +58,7 @@ assert core_multipliers == {"gameSpeed"}, "gameSpeed must remain the sole Core-o
 registry_start = lua.index("  featureRegistry = {")
 registry_end = lua.index("  featureOrder = {}", registry_start)
 registry_block = lua[registry_start:registry_end]
-import re
-registry_keys = set(re.findall(r"(?m)^    ([A-Za-z_][A-Za-z0-9_]*) = \\{$", registry_block))
+registry_keys = set(re.findall(r"(?m)^    ([A-Za-z_][A-Za-z0-9_]*) = \{$", registry_block))
 economy_toggles = {key for key in TOGGLES if key.endswith("MultiplierEnabled")}
 assert registry_keys == set(TOGGLES) - economy_toggles, (
     f"resident feature registry lost a durable behavior route: "
