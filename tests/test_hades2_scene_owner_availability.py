@@ -462,6 +462,7 @@ ManaDelta = function(delta)
   CurrentRun.Hero.Mana = CurrentRun.Hero.Mana + delta
 end
 GetHeroMaxAvailableMana = function() return CurrentRun.Hero.MaxMana end
+UpdateWeaponMana = function() end
 UpdateManaMeterUI = function() end
 local runMana = setFeature("infiniteMana", true)
 check(runMana.activeFeatures.infiniteMana, "in-run infinite mana setup failed")
