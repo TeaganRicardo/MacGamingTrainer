@@ -128,5 +128,6 @@ assert "sectionKind =" in lua
 
 view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text(encoding="utf-8")
 assert "localization.language == .en ? item.englishSectionTitle : item.sectionTitle" in view
+assert "secondaryName.isEmpty || secondaryName == primaryName" in view
 
 print("hades2_resource_presentation_authority_ok")
