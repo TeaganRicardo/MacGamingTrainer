@@ -509,11 +509,32 @@ if __MacGamingTrainerV1 == nil then
     local run = M.runtimeOwners.run()
     if run == nil or type(run.Hero) ~= "table" then return nil end
     local hero = run.Hero
-    -- KillHero keeps the prior run's IsDead marker. SetupHeroObject later
-    -- reattaches that same Hero table to the playable Hub unit without clearing
-    -- the historical death flag. Require the reattached ObjectId and live Hub
-    -- owner before treating such a Hero as usable again.
-    if hero.ObjectId == nil or (hero.IsDead and type(CurrentHubRoom) ~= "table") then return nil end
+    if hero.ObjectId == nil then return nil end
+    local mapLoads = type(SessionState) == "table" and SessionState.MapLoads or nil
+    if hero.IsDead then
+      if type(CurrentHubRoom) ~= "table" or not finite(mapLoads) then return nil end
+      -- The supported game's OnPreThingCreation increments MapLoads and calls
+      -- RunStateInit (clears Hero.ObjectId) before DeathAreaRoomTransition
+      -- publishes CurrentHubRoom. SetupHeroObject then binds the playable
+      -- _PlayerUnit, possibly recycling the previous ObjectId. An earlier,
+      -- observed living Hero cannot become usable merely because a Hub pointer
+      -- appears in that same map generation.
+      local live = M.lastLiveHeroOwner
+      if live ~= nil and live.session == SessionState and live.run == run and live.hero == hero
+          and (not finite(live.mapLoads) or mapLoads <= live.mapLoads) then
+        return nil
+      end
+    elseif finite(mapLoads) then
+      -- Capture once per identity/map generation, not on every guard tick.
+      -- This is a runtime observation only; it is never stored in the save.
+      local live = M.lastLiveHeroOwner
+      if live == nil or live.session ~= SessionState or live.run ~= run
+          or live.hero ~= hero or live.mapLoads ~= mapLoads then
+        M.lastLiveHeroOwner = {
+          session = SessionState, run = run, hero = hero, mapLoads = mapLoads,
+        }
+      end
+    end
     return hero
   end
   function M.runtimeOwners.heroAvailable()
