@@ -104,8 +104,14 @@ class SaveRestoreTransaction:
                 raise SaveRestorePreparationInterrupted() from error
             raise
 
-    def _verify_state(self, expected_hashes):
+    def _current_files(self, owned_keys=None):
         current = list(self.resolver())
+        if owned_keys is not None:
+            current = [row for row in current if self._key(row) in owned_keys]
+        return current
+
+    def _verify_state(self, expected_hashes, owned_keys=None):
+        current = self._current_files(owned_keys)
         if [self._key(row) for row in current] != sorted(expected_hashes):
             return False
         for row in current:
@@ -245,7 +251,16 @@ class SaveRestoreTransaction:
         post_install_verify=None,
         require_idle=False,
         expected_paths=None,
+        owned_keys=None,
     ):
+        # Recovery evidence can preserve the whole save set. Mutation authority
+        # is narrower for a selected replacement: unrelated live files must not
+        # participate in its validation, deletion, or rollback.
+        snapshot_rows = rollback_rows
+        if owned_keys is not None:
+            rollback_rows = [row for row in rollback_rows if self._key(row) in owned_keys]
+            baseline_hashes = {key: digest for key, digest in baseline_hashes.items() if key in owned_keys}
+            target_hashes = {key: digest for key, digest in target_hashes.items() if key in owned_keys}
         previous_snapshot_id = None
         mutation_started = False
         cleanup_rollback = True
@@ -253,23 +268,23 @@ class SaveRestoreTransaction:
 
         try:
             destinations = self._capture_destinations(set(baseline_hashes) | set(target_hashes), destination_stack)
-            if preserve_current and rollback_rows:
+            if preserve_current and snapshot_rows:
                 previous = self.store.create_snapshot(
-                    lambda: list(rollback_rows),
+                    lambda: list(snapshot_rows),
                     hot=target_running,
                     describe=self.snapshot_describer,
                 )
                 previous_snapshot_id = previous['id']
 
-            if not self._verify_state(baseline_hashes):
+            if not self._verify_state(baseline_hashes, owned_keys):
                 self._raise_race(target_running, 'Save changed before mutation could begin.')
             self._ensure_cold_target_still_stopped(target_running)
             if require_idle and self.busy_probe is not None:
                 current = list(self.resolver())
                 if self.busy_probe(tuple(current)):
                     raise SaveBusyError('Save files are currently busy.')
-                if not self._verify_state(baseline_hashes):
-                    self._raise_race(False, 'Save changed before mutation could begin.')
+                if not self._verify_state(baseline_hashes, owned_keys):
+                    self._raise_race(target_running, 'Save changed before mutation could begin.')
                 self._ensure_cold_target_still_stopped(target_running)
 
             self._verify_target_paths(expected_paths)
@@ -279,11 +294,11 @@ class SaveRestoreTransaction:
             self._delete_keys(set(baseline_hashes) - set(target_hashes), destinations)
             self._verify_destinations(destinations)
 
-            if not self._verify_state(target_hashes):
+            if not self._verify_state(target_hashes, owned_keys):
                 raise SaveRestoreError('{} save set failed verification.'.format(operation_name))
             if post_install_verify is not None:
                 post_install_verify()
-                if not self._verify_state(target_hashes):
+                if not self._verify_state(target_hashes, owned_keys):
                     raise SaveRestoreError(
                         '{} save set changed during post-install validation.'.format(
                             operation_name
@@ -291,7 +306,7 @@ class SaveRestoreTransaction:
                     )
             if target_running:
                 time.sleep(0.05)
-                if not self._verify_state(target_hashes):
+                if not self._verify_state(target_hashes, owned_keys):
                     raise SaveRestoreError('Game rewrote save files immediately after hot restore.')
 
             self._verify_destinations(destinations)
@@ -317,7 +332,7 @@ class SaveRestoreTransaction:
                 self._install_entries(self._rollback_entries(rollback_rows, baseline_hashes), destinations)
                 self._delete_keys(set(target_hashes) - set(baseline_hashes), destinations)
                 self._verify_destinations(destinations)
-                if not self._verify_state(baseline_hashes):
+                if not self._verify_state(baseline_hashes, owned_keys):
                     raise SaveRestoreError('Rollback verification failed.')
                 self._verify_destinations(destinations)
             except BaseException as rollback_error:
@@ -363,7 +378,17 @@ class SaveRestoreTransaction:
             if self._destination(root_id, relative).resolve() != expected:
                 raise SaveRestoreError('Save replacement physical target changed.')
 
-    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
+    def replace_files(
+        self,
+        replacements,
+        expected_hashes=None,
+        post_install_verify=None,
+        *,
+        expected_paths=None,
+        target_running=False,
+    ):
+        if type(target_running) is not bool:
+            raise ValueError('Save replacement target_running must be boolean.')
         if post_install_verify is not None and not callable(post_install_verify):
             raise ValueError('Save replacement verifier must be callable.')
         entries = self._replacement_entries(replacements)
@@ -382,7 +407,7 @@ class SaveRestoreTransaction:
             self._verify_target_paths(expected_paths)
 
         rollback_root, rollback_rows, baseline_hashes = self._capture_rollback(
-            False,
+            target_running,
             require_idle=True,
         )
         try:
@@ -408,12 +433,13 @@ class SaveRestoreTransaction:
             entries,
             target_hashes,
             preserve_current=True,
-            target_running=False,
+            target_running=target_running,
             success={'replaced': True},
             operation_name='Save replacement',
             post_install_verify=post_install_verify,
             require_idle=True,
             expected_paths=expected_paths,
+            owned_keys=replacement_keys,
         )
 
     def restore(self, snapshot_id, preserve_current=False, target_running=False):

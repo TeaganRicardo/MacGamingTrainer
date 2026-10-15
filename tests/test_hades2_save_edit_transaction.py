@@ -197,15 +197,22 @@ try:
 except TypeError:
     raw_surface_rejected = True
 
-# A running target is refused before recovery capture or file mutation.
+# Save Editor explicitly opts into a running disk replacement. Success proves
+# the recoverable filesystem transaction only; it does not claim that Hades
+# reloaded its in-memory state.
 service, save_path, original, state, _spec, _data_root = make_environment("running", running=True)
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
 session.document.lua_state["GameState"]["MetaPoints"] = 200.0
-expect_error(SaveBusyError, session.apply, "running-target edit")
-assert save_path.read_bytes() == original
-assert service.list_state()["snapshots"] == []
+running_result = session.apply()
+assert running_result["applied"] is True
+assert running_result["replaced"] is True
+assert running_result["hot"] is True
+assert running_result["runtimeReloaded"] is False
+assert Hades2SaveDocument.load(save_path).lua_state["GameState"]["MetaPoints"] == 200.0
+running_previous = service.store.load_verified_snapshot(running_result["previousSnapshotId"])
+assert (running_previous["root"] / "files/main/Profile1.sav").read_bytes() == original
 
-# Provider-declared save busy must also veto the cold destructive editor path.
+# Provider-declared save busy must still veto the explicit running editor path.
 class BusyProvider:
     def resolve(self, roots, declared):
         del roots
@@ -219,6 +226,7 @@ class BusyProvider:
 busy_provider = BusyProvider()
 service, save_path, original, _state, _spec, _data_root = make_environment(
     "provider-busy",
+    running=True,
     provider=busy_provider,
 )
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
@@ -276,7 +284,10 @@ assert state_after_write_failure["recoveryPaths"] == []
 # changes the profile immediately after the validator reads it, the final Core
 # state verification must notice the race and roll back instead of reporting
 # success.
-service, save_path, original, _state, _spec, _data_root = make_environment("post-verify-race")
+service, save_path, original, _state, _spec, _data_root = make_environment(
+    "post-verify-race",
+    running=True,
+)
 session = Hades2SaveEditSession.open(service, "Profile1.sav")
 session.document.lua_state["GameState"]["MetaPoints"] = 500.0
 foreign_after_verify = build_save(501)
