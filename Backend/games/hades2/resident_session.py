@@ -117,6 +117,11 @@ class Hades2ResidentSession:
     def alive(self):
         return self._transport.alive()
 
+    @property
+    def has_attachment(self):
+        """Last acknowledged attachment; execution must still verify liveness."""
+        return self.pid is not None
+
     def allows_process_time_warp(self):
         """Whether the current resident generation makes Host Time Warp safe.
 
@@ -204,7 +209,7 @@ class Hades2ResidentSession:
                 )
 
     def _execute(self, command, params, *, replay, read_only, batch):
-        if not self.alive():
+        if not self.has_attachment:
             raise TransportError("disconnected", "请先连接游戏。")
 
         runtime_params = dict(params)
