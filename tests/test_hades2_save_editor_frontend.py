@@ -92,7 +92,8 @@ for raw in sys.stdin:
         opened_summary['relativePath'] = req['params']['target']['relativePath']
         opened_summary['pendingCount'] = int(pending_value is not None)
         result = opened_summary
-        omit_first_target = True
+        if opened_summary['source'].get('snapshotId') != 'manual-selection':
+            omit_first_target = True
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
