@@ -41,7 +41,9 @@ for raw in sys.stdin:
         if manual_selection:
             manual_inventory_count += 1
             if manual_inventory_count > 1:
-                sources = sources[:1]
+                sources = sources[:1] + [
+                    {'rootId': 'main', 'relativePath': 'Profile2_New.sav', 'profile': 'Profile2', 'variant': 'profile'},
+                ]
         result = {
             'sources': sources,
             'targets': [
@@ -957,6 +959,7 @@ struct Main {
             || manualModel.selectedSourceID != "main/Profile2_Archive.sav"
             || manualModel.selectedTargetID != "main/Profile1.sav"
             || manualModel.sourceFiles.contains(where: { $0.id == manualModel.selectedSourceID })
+            || !manualModel.sourceFiles.contains(where: { $0.id == "main/Profile2_New.sav" })
             || manualModel.writeTargets.contains(where: { $0.id == manualModel.selectedTargetID }) {
             fail("Inventory refresh re-opened the document or lost missing pinned identities")
         }
