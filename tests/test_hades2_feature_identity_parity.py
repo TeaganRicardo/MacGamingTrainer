@@ -66,11 +66,11 @@ assert registry_keys == set(TOGGLES) - economy_toggles, (
     f"extra={sorted(registry_keys - set(TOGGLES))}"
 )
 assert """  featureOrder = {}
-  for _, key in ipairs(durableFeatureSchema.toggles) do
+  for _, key in ipairs(M.durableFeatureSchema.toggles) do
     if featureRegistry[key] ~= nil then featureOrder[#featureOrder + 1] = key end
   end""" in lua
-assert "desiredFeatures = desiredFeatureSnapshot()," in lua
-assert "local multiplierRule = durableFeatureSchema.multipliers[feature]" in lua
+assert "desiredFeatures = desiredFeatureState," in lua
+assert "local multiplierRule = M.durableFeatureSchema.multipliers[feature]" in lua
 assert 'feature == "damageMultiplier" or feature == "moneyMultiplier"' not in lua
 
 # Compile the generated Swift facts and compare them to values assembled from
