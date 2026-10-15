@@ -371,13 +371,14 @@ final class Hades2SaveEditorModel: ObservableObject {
             }
             self.sourceFiles = decodedSources
             self.writeTargets = decodedTargets
-            if self.workspaceID == nil, let source = result["defaultSource"] as? [String: String],
+            if openDefault, self.workspaceID == nil,
+               let source = result["defaultSource"] as? [String: String],
                let selected = decodedSources.first(where: { $0.identity == source }) {
                 self.selectedSourceID = selected.id
                 let target = decodedTargets.first(where: { $0.identity == source })
                 self.selectedTargetID = target?.id ?? ""
                 self.selectedTargetIdentity = target?.identity
-                if openDefault { self.openSelection() }
+                self.openSelection()
             }
         }
     }
@@ -405,8 +406,8 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     private func restoreLoadedSourceSelection() {
-        guard !sourceRelativePath.isEmpty else { return }
-        selectedSourceID = sourceRootID + "/" + sourceRelativePath
+        selectedSourceID = sourceRelativePath.isEmpty
+            ? "" : sourceRootID + "/" + sourceRelativePath
     }
 
     func selectTarget(_ identifier: String) {
