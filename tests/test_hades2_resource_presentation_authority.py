@@ -1,10 +1,13 @@
 import sys
+import tempfile
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2 import catalog, localization
+from games.hades2 import catalog, localization, preparation
 
 
 def localized(payload, zh, en):
@@ -115,6 +118,62 @@ assert row["sectionTitle"] == "鱼类"
 assert row["englishSectionTitle"] == "Fish"
 assert row["sectionTitleSource"] == "trainer_product_zh"
 assert row["englishSectionTitleSource"] == "trainer_product_en"
+
+# Exercise the real installed-text parser with an isolated supported-build
+# fixture. Only English is installed here: Chinese must deliberately fall back
+# to the same current-build localization identity, while an unknown future id
+# remains a Trainer-owned bilingual diagnostic fallback.
+assert preparation.VERSION == "143476"
+assert preparation.STEAM_BUILD == "25481925"
+localization._OFFICIAL_TEXT_CACHE.clear()
+with tempfile.TemporaryDirectory(
+    prefix=f"mgt-hades2-{preparation.VERSION}-{preparation.STEAM_BUILD}-"
+) as temporary:
+    game = Path(temporary) / "Hades II.app"
+    text = game / "Contents/Resources/Content/Game/Text/en/HelpText.en.sjson"
+    text.parent.mkdir(parents=True)
+    text.write_text(
+        """
+Resource = { Id = "MetaCurrency" DisplayName = "Bones (fixture)" }
+Section = { Id = "InventoryScreen_ResourcesTab" DisplayName = "Resources (fixture)" }
+""",
+        encoding="utf-8",
+    )
+    with patch.object(
+        localization,
+        "GAME_SPEC",
+        replace(localization.GAME_SPEC, app_bundle_path=game),
+    ):
+        parsed = catalog.localize_catalog({
+            "resources": [
+                {
+                    "id": "MetaCurrency",
+                    "displayId": "MetaCurrency",
+                    "sectionId": "InventoryScreen_ResourcesTab",
+                    "sectionKind": "resources",
+                },
+                {
+                    "id": "FutureResource",
+                    "displayId": "FutureResource",
+                    "sectionKind": "resources",
+                },
+            ]
+        })
+
+known, future = parsed["resources"]
+assert known["name"] == "Bones (fixture)"
+assert known["englishName"] == "Bones (fixture)"
+assert known["nameSource"] == "official_en_fallback"
+assert known["englishNameSource"] == "official_en"
+assert known["sectionTitle"] == "资源"
+assert known["englishSectionTitle"] == "Resources (fixture)"
+assert known["sectionTitleSource"] == "trainer_product_zh"
+assert known["englishSectionTitleSource"] == "official_en"
+assert future["name"] == "未知资源 · FutureResource"
+assert future["englishName"] == "Unknown Resource · FutureResource"
+assert future["nameSource"] == "trainer_generic_zh"
+assert future["englishNameSource"] == "trainer_generic_en"
+localization._OFFICIAL_TEXT_CACHE.clear()
 
 # The resident source must not remain a second resource-name catalog. It emits
 # stable presentation identities, while the Swift view selects the localized
