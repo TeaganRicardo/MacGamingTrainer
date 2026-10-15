@@ -174,7 +174,6 @@ def registry_values(groups: tuple[str, ...]) -> set[str]:
 
 
 HADES_FORBIDDEN_HOST_TERMS = registry_values(HADES_FORBIDDEN_HOST_GROUPS)
-REGISTRY_COMPATIBILITY_ALIASES = registry_values(("compatibilityAliases",))
 
 
 def governed_term_occurs(term: str, text: str) -> bool:
@@ -306,22 +305,6 @@ assert not find_hades_vocabulary_leaks(neutral_probe), (
 
 actual_leaks = find_hades_vocabulary_leaks(shared_resource_texts)
 assert not actual_leaks, f"Hades terminology leaked into shared Host resources: {actual_leaks}"
-
-# ENGINEERING_INVARIANTS.md mirrors the compatibility aliases for readers, but
-# the registry remains authoritative. Keep the prose mirror exact so a newly
-# added alias cannot be omitted from governance documentation again.
-invariants = (ROOT / "ENGINEERING_INVARIANTS.md").read_text(encoding="utf-8")
-alias_line = next(
-    (line for line in invariants.splitlines() if line.startswith("- **Compatibility Aliases:**")),
-    None,
-)
-assert alias_line is not None, "ENGINEERING_INVARIANTS.md is missing the Compatibility Aliases line"
-documented_aliases = set(re.findall(r"`([^`]+)`", alias_line))
-assert documented_aliases == REGISTRY_COMPATIBILITY_ALIASES, (
-    "ENGINEERING_INVARIANTS.md compatibility aliases drifted from registry: "
-    f"doc-only={sorted(documented_aliases - REGISTRY_COMPATIBILITY_ALIASES)}, "
-    f"registry-only={sorted(REGISTRY_COMPATIBILITY_ALIASES - documented_aliases)}"
-)
 
 localization = (ROOT / "Sources/Core/Host/TrainerLocalization.swift").read_text(encoding="utf-8")
 assert "func presentation(" in localization, "shared presentation values need one Host resolver"

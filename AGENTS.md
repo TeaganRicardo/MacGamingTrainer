@@ -1,94 +1,56 @@
 # Development entrypoint
 
-This file is the entrypoint for coding agents. It is intentionally short and does not duplicate project history.
+## Establish the task
 
-## Source-of-truth order
+1. Resolve current remote `main`, inspect local changes and overlapping open PRs, and work on a branch. A historical branch being ahead is not evidence that its code should return.
+2. State the user outcome and the accepted product contract. Current user instructions govern the task; still-binding decisions and sequencing live in [planning issue #124](https://github.com/TeaganRicardo/MacGamingTrainer/issues/124). Code and executable tests establish current behavior, which may contain defects; they do not override an accepted requirement.
+3. Read [PROJECT_STATUS.md](PROJECT_STATUS.md) for compatibility, operational limitations and manual-acceptance state. Read the relevant sections of [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md), then the owning production files and nearest behavior tests.
 
-Use this order when facts conflict:
+For Core/game/build changes, also read [GAME_MODULES.md](GAME_MODULES.md); for release metadata, read [VERSIONING.md](VERSIONING.md). Historical audits, closed PRs and Git history are evidence to consult when explaining a current defect or invariant, not a default task queue. When documents conflict, resolve against the accepted contract and current evidence, and correct the stale instruction in the owning change.
 
-1. current GitHub `main`, production code and executable tests;
-2. `PROJECT_STATUS.md` for current operational state and active gate;
-3. `ENGINEERING_INVARIANTS.md` for stable ownership, lifecycle, replay and Save-safety rules;
-4. `GAME_MODULES.md` when a task crosses the Core/game-module boundary;
-5. planning issue #124 for planned work and sequencing only.
+## Choose the owner
 
-`docs/audits/**`, closed PRs, Git history, old branches and prior conversations are historical evidence, not execution authority. Do not read them by default. Open them only when investigating why a current invariant exists or when current code contradicts current authority.
+| Responsibility | Owner |
+| --- | --- |
+| Host/process/backend lifecycle | `Sources/Core/Host/**`, `Sources/Core/Runtime/**` |
+| Shared visual language and generic input | `Sources/Core/UI/**`, `Sources/Core/Input/**` |
+| Generic optional Save transactions | `Backend/core/save_*`, `Sources/Core/Save/**` |
+| Hades commands, state, transport, persistence, save semantics and game UI | `Backend/games/hades2/**`, `Sources/Hades2/**` |
+| Build/module metadata interpretation | `Tools/**` and module manifests |
 
-## Minimal reading path
+Keep game meaning in the game module. A shared abstraction needs a demonstrated game-agnostic contract; repeated Hades-only changes are evidence to improve the Hades owner first.
 
-For an ordinary task, read only:
+## Implement and prove the outcome
 
-1. this file;
-2. `PROJECT_STATUS.md`;
-3. `ENGINEERING_INVARIANTS.md`;
-4. the production files and nearest tests for the requested subsystem.
+- For a demonstrated defect, reproduce the failing behavior before the production fix. Identify how the invalid state arises and which owner should prevent it. If real-game reproduction is unavailable, record the observed report and the limits of the fixture; source inspection alone is not RED evidence.
+- Make the smallest coherent correction of that cause, including affected callers and tests. Judge scope by causal purpose and ownership. A new module or interface is useful only if it removes knowledge from callers; migrate them and remove the superseded policy/checks.
+- Identify authoritative state, durable desired intent, runtime observation and one-shot intent where relevant. Classify replay safety before changing recovery. Preserve the original session/run/hero/room ownership of asynchronous work.
+- Preserve native execution semantics when introducing shared handling: synchronous calls, yielding game coroutines, deferred callbacks, native menu lifetime and draw ownership may require different execution paths. Verify an existing successful path as well as the reproduced failure. A uniform result type does not authorize wrapping every native call in the same transaction/protected call.
+- A guard or fail-closed result is a complete fix only for an unavoidable failure at its owner. When it merely contains a structural defect, label the remaining cause and retain a focused successor. Preserve recovery evidence and keep outcome-unknown non-idempotent actions from automatic replay.
+- For user-facing changes, exercise the affected journey through input, commit, observation refresh, feedback and applicable recovery. Use actual native controls in the existing harness where practical; preserve focused drafts, refresh unfocused values and give compatible recovery steps. Distinguish these checks from rendered/game acceptance.
+- Use supported-build official bilingual identity for native game terms, and explicit bilingual pairs for Trainer-owned labels. Consult the module's terminology registry rather than creating a parallel vocabulary or a prose mirror.
 
-Read `GAME_MODULES.md` only for module/Core/build-boundary work. Read `VERSIONING.md` for release/version changes.
+## Verification and completion
 
-## Pick the owner before editing
+Evidence belongs to the exact SHA that executed it. Choose verification by the changed responsibility, then rerun its task gates after a head rewrite/rebase or an overlapping semantic change.
 
-- Host/process/backend lifecycle: `Sources/Core/Host/**`, `Sources/Core/Runtime/**`.
-- Shared visual/interaction language and generic input: `Sources/Core/UI/**`, `Sources/Core/Input/**`.
-- Generic optional Save infrastructure: `Backend/core/save_*`, `Sources/Core/Save/**`.
-- Hades II commands, state meaning, transport, persistence, save codec/provider semantics and game UI: `Backend/games/hades2/**`, `Sources/Hades2/**`.
-- Build/module metadata interpretation: `Tools/**` and module manifests.
+| Changed responsibility | Task verification |
+| --- | --- |
+| Portable backend/contracts | `bash Tools/run_linux_checks.sh` (broad portable discovery) |
+| Swift/AppKit/build/package | `Build 2 macOS`: macOS contracts and actual Hades build/package/signing, plus applicable portable contracts |
+| Core/module/build contract | Also the module build matrix/reference fixture |
+| Core Save transactions | Full portable Save behavior coverage; macOS for Swift integration |
+| `Backend/games/hades2/runtime/hades.lua` | Portable behavior and PR-only resident revision increase; real Hades II acceptance for changed runtime semantics |
 
-A shared-looking Hades behavior does not move to Core merely because another game might someday need it. Prove a game-agnostic contract first.
+The three existing checks remain `Linux contracts`, `Build 2 macOS` and `Module build matrix`; their change-scope classifier selects execution. Mutation audits, retained QA/release artifacts, provenance and checksums belong to explicit convergence/release dispatch on one selected SHA. Merged `main` does not automatically repeat PR checks. A manual handoff uses one fixed source/artifact/checksum, with unexecuted checks explicitly pending.
 
-## Before changing behavior
+Tests use temporary fixtures, never the real user/game save tree. New test files use descriptive `test_<subject>.py` names; existing historical names need no bulk rename.
 
-- Confirm current remote `main` HEAD and work on a branch.
-- Identify authoritative state, durable desired state, observable runtime state and one-shot intent involved in the change.
-- Decide whether an operation is replay-safe before adding retry/recovery behavior.
-- For a demonstrated correctness defect: reproduce RED first, then identify the root cause and owning seam before choosing implementation scope. Make the smallest coherent fix of the demonstrated root cause, not the smallest diff. If the defect exposes a shallow module, duplicated policy, a wrong seam, or a responsibility split, expand the fix across that owning seam while keeping unrelated cleanup out of scope.
-- Treat defensive guards, fallbacks, retries, fail-closed branches, compatibility aliases and implementation-shape tests as complete fixes only when the failure mode is intrinsically unavoidable at the owning seam. If they merely contain a structural defect, mark the containment incomplete and retain a root-cause successor.
-- Repeated fixes that make several callers or tests understand the same implementation detail are architecture evidence. Prefer deepening the owning module so callers and tests cross one smaller interface instead of adding another caller-side special case.
-- Treat user shorthand as intent, not canonical product terminology. For game-facing names, prefer the supported target build's official localization or catalog/reference terminology; when no official name exists, choose a neutral formal product term and use it consistently across UI, errors, tests and current docs. When both Chinese and English are exposed, an official game term must resolve both `zh-CN` and `en` from the same localization ID; Trainer-only product labels must declare an explicit bilingual pair and must not masquerade as native game terminology.
-- Do not restore code merely because a historical branch is ahead/divergent; squash-merged and superseded branches are common in this repository.
+A task is ready for its authorized handoff when the cause/user journey is addressed, owning checks and independent final-head review pass, and any real-game limitations are stated. Automated-green development and user acceptance are distinct; follow the current authorization in `PROJECT_STATUS.md` without requesting approval again for already-authorized work.
 
-## Verification routing
+## Keep the control plane current
 
-Verification **scope** and evidence **identity** are separate. Every check claimed as evidence must have run against the exact SHA named by the claim; exact-head evidence does not mean every task runs the full release matrix.
-
-- **Task verification:** pull requests run the minimum gates owned by every changed seam on the actual final PR head. A root-cause refactor that legitimately widens the changed seam widens verification with it.
-- **Integration verification:** any PR-head rewrite/rebase requires the task gates again so evidence binds to the new SHA. If overlapping work or a dependency changes inputs/semantics at the changed seam, also rerun those affected integration gates.
-- **Convergence/release verification:** explicitly dispatch the existing workflows on one selected SHA. This is where mutation testing, retained release/reference artifacts, provenance and checksums belong.
-
-The three standing workflow names are stable required checks. They run on `pull_request` plus explicit `workflow_dispatch`; merged `main` does not automatically repeat the same task verification.
-
-Routing by changed seam:
-
-- Linux-portable backend/contract work: `bash Tools/run_linux_checks.sh`. This remains the broad portable behavior suite; do not create a per-file test routing database.
-- The resident-runtime revision gate is diff-based and therefore PR-only. Explicit convergence dispatch has no semantic base ref; it reruns behavior/build evidence rather than inventing a revision comparison.
-- Swift/AppKit/build/package changes: also require `Build 2 macOS`, which runs macOS contracts plus an actual Hades build/package/signing verification in PR task mode.
-- Module/Core boundary changes: require the module build matrix/reference fixture.
-- Mutation testing is a convergence/release audit of test sensitivity, not an always-on correctness gate for ordinary PRs.
-- RC ZIP/provenance/checksum creation and retained QA artifacts are convergence/release outputs, not ordinary PR requirements.
-- `Backend/games/hades2/runtime/hades.lua` changes: resident revision must increase; automated tests are not final validation. Record real Hades II acceptance for changed runtime semantics.
-- Tests must use temporary fixtures and must never read/write the real user/game save tree.
-- New test files use descriptive subject names (`test_<subject>.py`), not historical epoch tokens such as `roundNN` or `v0xxx`. Existing epoch-named tests are grandfathered and should not be bulk-renamed.
-- Manual QA handoff, when required, is one exact HEAD plus one prebuilt artifact and checksum produced by explicit convergence/QA dispatch.
-
-## Review and scope discipline
-
-- A focused task has one causal purpose, not an artificially small file count. A coherent root-cause fix may cross several files or existing subsystem seams when those edits are required to restore locality at the owning interface.
-- Review evaluates whether the demonstrated root cause is removed, ownership is improved, and unrelated work stayed out of the change. Do not request scope reduction solely because the correct fix is larger than the originating defect.
-- When a deeper module/interface replaces duplicated caller policy, migrate callers and tests to that interface and remove superseded implementation-shape checks instead of retaining both designs “for safety.”
-
-## Governance budget
-
-- Do not add another always-on workflow, required check, global mutation class, parity scan or source-text gate merely because a new invariant can be written down.
-- New recurring gates need a concrete defect that escaped the existing owning behavior tests, or an independently proven cross-cutting seam that cannot be protected locally.
-- Prefer one behavior test at the owning interface over several implementation-shape/parity tests across callers.
-- A new cross-cutting gate should normally replace or subsume an older mechanism instead of accumulating beside it.
-- Current readiness belongs in planning issue #124. Task issues own stable scope, dependencies and acceptance criteria; do not copy transient frontier/status prose into every issue.
-- Do not open a status-reconciliation PR after every ordinary merge. Update `PROJECT_STATUS.md` only when the operational baseline, active gate, protocol/version state, compatibility target or manual-acceptance baseline materially changes; include that update in the owning PR when practical.
-
-## Product versioning
-
-- `Info.plist` is the only source of the current app product version.
-- `CFBundleShortVersionString` is the three-part product SemVer; `CFBundleVersion` is the monotonic positive-integer bundle build number.
-- Host/module protocol and schema/runtime revisions are independent compatibility versions, not product SemVer.
-- See `VERSIONING.md` for release increment rules.
-
-See `ENGINEERING_INVARIANTS.md` for the durable engineering rules behind these instructions.
+- Prefer one behavior test at the owning interface. A new recurring global gate needs an escaped defect or a proven cross-cutting responsibility that local behavior tests cannot protect; replace subsumed mechanisms.
+- Maintain one source for each fact. Reference registries, manifests and `Info.plist` instead of duplicating their current values into prose and testing the copies.
+- #124 contains current priority, real dependencies and still-binding decisions. Task issues own detailed scope/acceptance; PRs own implementation evidence. Delete completed dispatch tables, superseded blockers and old handoff/status prose from the live index rather than appending a correction beside them. An unfinished requirement remains linked to its active task or explicit deferred disposition.
+- Update `PROJECT_STATUS.md` when compatibility, operational policy or the manual-acceptance baseline materially changes. Include the update in the owning PR; ordinary merges need no separate status-reconciliation PR.
