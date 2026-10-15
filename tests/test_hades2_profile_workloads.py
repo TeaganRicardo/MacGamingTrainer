@@ -14,6 +14,15 @@ assert resident['fixture']['mounted_traits'] == 8 and resident['fixture']['catal
 assert resident['fixture']['resources'] == 8 and resident['fixture']['stats']
 assert resident['fixture']['native_upgrade_queries_per_status'] == 1
 assert {'frame_with_desired', 'frame_without_desired', 'status_json', 'status_dispatch'} <= resident['metrics'].keys()
+scenarios = {row['scenario']: row for row in resident['maintenance']}
+assert scenarios.keys() == {'features', 'locks', 'missing_hero', 'owner_transition'}
+for name, row in scenarios.items():
+    assert row['frames'] == (2 if name == 'owner_transition' else 200)
+    assert row['phases']['synchronize']['calls'] == row['frames']
+    assert row['phases']['reconcileDesired']['calls'] == row['frames']
+    assert row['phases']['enforceLocks']['calls'] == row['frames']
+assert scenarios['locks']['native_calls']['UpdateHealthUI'] > 0
+assert scenarios['missing_hero']['native_calls'].get('UpdateHealthUI', 0) == 0
 query = profile_save_queries(2, 50, summarize)
 assert {'cold_index', 'source_refresh', 'warm_query', 'warm_query_after_refresh', 'warm_query_empty',
         'warm_query_filtered', 'warm_query_text_en', 'warm_query_text_zh'} == query['metrics'].keys()
