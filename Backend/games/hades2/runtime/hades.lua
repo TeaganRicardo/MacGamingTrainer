@@ -196,7 +196,16 @@ if __MacGamingTrainerV1 == nil then
   -- Every dispatch still observes all live values; only equal wire collections
   -- are omitted. Capabilities, desired/active state and receipts always travel.
   do
-    local previous, owners, catalogsReady = {}, nil, false
+    local previous, owners, catalogsReady, generation = {}, nil, false, nil
+    local function identify(nonce)
+      if generation == nil then
+        if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
+        -- The client supplies a fresh UUID on every boundary. A new resident
+        -- adopts one once; table addresses can be recycled after Lua GC.
+        generation = nonce
+        M.traitInventoryGeneration = generation
+      end
+    end
     local function copy(value)
       if type(value) ~= "table" or value == jsonNull then return value end
       local result = setmetatable({}, getmetatable(value))
@@ -236,17 +245,19 @@ if __MacGamingTrainerV1 == nil then
       end
       owners = current
       if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
-      result.__trainerObservation = { generation = M.traitInventoryGeneration, retained = retained }
+      result.__trainerObservation = { generation = generation, retained = retained }
       return result
     end
-    function M.observe(command, params)
+    function M.observe(command, params, nonce)
+      identify(nonce)
       params = params or {}
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
       return M.projectObservation(M.dispatch(command, params), command == "status" or params.includeCatalogs == true)
     end
-    function M.observeBatch(calls, includeCatalogs)
+    function M.observeBatch(calls, includeCatalogs, nonce)
+      identify(nonce)
       return M.projectObservation(M.dispatchBatch(calls, includeCatalogs or not catalogsReady), true)
     end
   end

@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import time
+import uuid
 
 from core.operation_profile import correlation, record
 from pathlib import Path
@@ -334,13 +335,14 @@ class Hades2ResidentSession:
         return reply
 
     def _dispatch_source(self, command, params, batch):
+        install_nonce = lua_value(uuid.uuid4().hex)
         if batch is None:
             dispatch_value = (
                 "__MacGamingTrainerV1.observe("
                 + lua_value(command)
                 + ","
                 + lua_value(params)
-                + ")"
+                + "," + install_nonce + ")"
             )
         else:
             calls = []
@@ -355,7 +357,7 @@ class Hades2ResidentSession:
                     + "}"
                 )
             dispatch_value = ("__MacGamingTrainerV1.observeBatch({" + ",".join(calls) + "},"
-                              + lua_value(params.get("includeCatalogs") is True) + ")")
+                              + lua_value(params.get("includeCatalogs") is True) + "," + install_nonce + ")")
         return "return __MacGamingTrainerV1.json(" + dispatch_value + ")"
 
     def _localize_observation(self, payload):

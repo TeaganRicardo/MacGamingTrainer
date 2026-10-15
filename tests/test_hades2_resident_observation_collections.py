@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,15 +49,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
                 % (key, language, key, version) for key in sorted(identifiers)))
 
     text_generation(1)
+    issued = []
+
+    def install_nonce():
+        value = "%032x" % (len(issued) + 1)
+        issued.append(value)
+        return SimpleNamespace(hex=value)
 
     transport = RecordingTransport()
     session = Hades2ResidentSession(transport)
     try:
         with patch.object(resident_session, "localize_catalog", side_effect=localize), patch.object(
             localization, "GAME_SPEC", replace(localization.GAME_SPEC, app_bundle_path=game),
-        ):
+        ), patch.object(resident_session.uuid, "uuid4", side_effect=install_nonce):
             first = session.status().payload
             assert transport.wire["__trainerObservation"]["retained"] == []
+            assert transport.wire["__trainerObservation"]["generation"] == issued[0]
             expected = copy.deepcopy(first)
             # Public replies may be mutated by their consumer; that cannot
             # rewrite the private localized baseline used on the next call.
@@ -66,6 +74,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             assert next_reply["resources"] == expected["resources"]
             assert next_reply["currentRunTraits"] == expected["currentRunTraits"]
             assert next_reply["health"] == 75
+            assert transport.wire["__trainerObservation"]["generation"] == issued[0] != issued[-1]
             assert set(transport.wire["__trainerObservation"]["retained"]) == {
                 "resources", "elements", "currentRunTraits",
             }
@@ -112,6 +121,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             assert fresh["currentRunTraits"][0]["englishName"].endswith("v2")
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert transport.wire["__trainerObservation"]["generation"] != old_generation
+            # Force the allocator to reuse temporary addresses across repeated
+            # installs. Each actual observed incarnation still owns a new UUID,
+            # which is also the stale-selection identity of its returned rows.
+            seen = {transport.wire["__trainerObservation"]["generation"]}
+            for _ in range(30):
+                transport.execute("__MacGamingTrainerV1.dispatch('cleanup'); __MacGamingTrainerV1=nil; "
+                                  + "collectgarbage('collect'); dofile(" + runtime + "); return '{}'")
+                replacement = session.status()
+                token = transport.wire["__trainerObservation"]["generation"]
+                assert replacement.generation_reset and token not in seen and token == issued[-1]
+                assert replacement.payload["currentRunTraits"][0]["generationId"] == token
+                seen.add(token)
     finally:
         session.close()
 
