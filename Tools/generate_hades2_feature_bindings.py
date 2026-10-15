@@ -10,8 +10,14 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from games.hades2.schema import MULTIPLIER_RULES, TOGGLES
 
-LUA_BEGIN = "    -- BEGIN GENERATED DURABLE FEATURE SCHEMA"
-LUA_END = "    -- END GENERATED DURABLE FEATURE SCHEMA"
+LUA_STATE_BEGIN = "    -- BEGIN GENERATED DURABLE FEATURE STATE"
+LUA_STATE_END = "    -- END GENERATED DURABLE FEATURE STATE"
+LUA_DESIRED_BEGIN = "    -- BEGIN GENERATED DURABLE DESIRED FEATURES"
+LUA_DESIRED_END = "    -- END GENERATED DURABLE DESIRED FEATURES"
+LUA_PROJECTION_BEGIN = "      -- BEGIN GENERATED DURABLE FEATURE PROJECTION"
+LUA_PROJECTION_END = "      -- END GENERATED DURABLE FEATURE PROJECTION"
+LUA_MULTIPLIER_BEGIN = "      -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH"
+LUA_MULTIPLIER_END = "      -- END GENERATED DURABLE MULTIPLIER DISPATCH"
 
 
 def _swift_identifier(name):
@@ -109,35 +115,86 @@ def render_swift():
     return "\n".join(lines)
 
 
-def render_lua_schema():
-    rows = _validated_multipliers()
+def _resident_multiplier_rows():
+    return [
+        row for row in _validated_multipliers()
+        if row[4] == "resident"
+    ]
+
+
+def render_lua_state():
+    lines = [LUA_STATE_BEGIN]
+    for key in TOGGLES:
+        lines.append(f"    {key} = false,")
+    for key, default, _, _, _ in _resident_multiplier_rows():
+        lines.append(f"    {key} = {_lua_number(default)},")
+    lines.append(LUA_STATE_END)
+    return "\n".join(lines)
+
+
+def render_lua_desired_defaults():
     lines = [
-        LUA_BEGIN,
-        "    durableFeatureSchema = {",
-        "      toggles = {",
+        LUA_DESIRED_BEGIN,
+        "    desiredFeatures = {",
     ]
     for key in TOGGLES:
-        lines.append(f'        "{key}",')
+        lines.append(f"      {key} = false,")
     lines.extend([
-        "      },",
-        "      multipliers = {",
-    ])
-    for key, default, minimum, maximum, owner in rows:
-        lines.append(
-            f'        {key} = {{ default = {_lua_number(default)}, min = {_lua_number(minimum)}, '
-            f'max = {_lua_number(maximum)}, runtime = "{owner}" }},'
-        )
-    lines.extend([
-        "      },",
         "    },",
-        LUA_END,
+        LUA_DESIRED_END,
     ])
     return "\n".join(lines)
 
-def replace_lua_schema(source):
-    start = source.index(LUA_BEGIN)
-    end = source.index(LUA_END, start) + len(LUA_END)
-    return source[:start] + render_lua_schema() + source[end:]
+
+def render_lua_state_projection():
+    lines = [
+        LUA_PROJECTION_BEGIN,
+        "      desiredFeatures = {",
+    ]
+    for key in TOGGLES:
+        lines.append(f"        {key} = M.desiredFeatures.{key},")
+    lines.extend([
+        "      },",
+        LUA_PROJECTION_END,
+    ])
+    return "\n".join(lines)
+
+
+def render_lua_multiplier_dispatch():
+    lines = [LUA_MULTIPLIER_BEGIN]
+    for key, _, minimum, maximum, _ in _resident_multiplier_rows():
+        lo = _lua_number(minimum)
+        hi = _lua_number(maximum)
+        lines.extend([
+            f'      if feature == "{key}" then',
+            f'        if not finite(value) or value < {lo} or value > {hi} then error("Multiplier must be {lo}..{hi}") end',
+            f"        M.{key} = value",
+            "        return state(params.includeCatalogs)",
+            "      end",
+        ])
+    lines.append(LUA_MULTIPLIER_END)
+    return "\n".join(lines)
+
+
+def lua_projection_blocks():
+    return [
+        (LUA_STATE_BEGIN, LUA_STATE_END, render_lua_state()),
+        (LUA_DESIRED_BEGIN, LUA_DESIRED_END, render_lua_desired_defaults()),
+        (LUA_PROJECTION_BEGIN, LUA_PROJECTION_END, render_lua_state_projection()),
+        (LUA_MULTIPLIER_BEGIN, LUA_MULTIPLIER_END, render_lua_multiplier_dispatch()),
+    ]
+
+
+def _replace_block(source, begin, end, replacement):
+    start = source.index(begin)
+    finish = source.index(end, start) + len(end)
+    return source[:start] + replacement + source[finish:]
+
+
+def replace_lua_projections(source):
+    for begin, end, replacement in lua_projection_blocks():
+        source = _replace_block(source, begin, end, replacement)
+    return source
 
 
 def main(argv=None):
@@ -153,7 +210,10 @@ def main(argv=None):
         path.write_text(render_swift(), encoding="utf-8")
     if args.lua_source:
         path = Path(args.lua_source)
-        path.write_text(replace_lua_schema(path.read_text(encoding="utf-8")), encoding="utf-8")
+        path.write_text(
+            replace_lua_projections(path.read_text(encoding="utf-8")),
+            encoding="utf-8",
+        )
     return 0
 
 
