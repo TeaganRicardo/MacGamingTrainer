@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.sidecar import JsonLineSidecarClient
+from core.adapter import AdapterError
 from games.hades2.transport_client import Hades2LuaTransport, _LLDBWorkerClient
 
 CHILD = '''
@@ -45,6 +46,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-speed-sidecar-") as temporary:
             old_child = sidecar._process
             old_child.terminate()
             old_child.wait(timeout=5)
+            for observe in (facade.current_speed, facade.reset):
+                try:
+                    observe()
+                except AdapterError as error:
+                    assert error.code == "disconnected"
+                else:
+                    raise AssertionError("idle worker loss was reported as confirmed 1x speed")
+                assert sidecar._process is old_child, "ordinary work restarted an un-attached worker"
             transport.attach(4242)
             assert sidecar._process is not old_child and transport.alive()
             if first_method == "set_speed":

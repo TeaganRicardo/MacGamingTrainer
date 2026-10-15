@@ -41,9 +41,10 @@ class FakeTransport:
 
     def detach(self):
         self.is_alive = False
+        self.pid = None
 
     def close(self):
-        self.is_alive = False
+        self.detach()
 
 
 base = Path(tempfile.mkdtemp(prefix='mgt-boundary-ledger-v0180-'))
@@ -106,7 +107,7 @@ try:
     stream.truncate(0)
     transport.fail = None
     transport.raw_result = None
-    transport.is_alive = False
+    transport.detach()
     before = transport.calls
     try:
         adapter.execute('status', {})
