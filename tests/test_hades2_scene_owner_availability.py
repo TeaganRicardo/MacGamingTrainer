@@ -51,8 +51,10 @@ SetUnitProperty = function(args)
 end
 
 local ammoCalls = 0
-UpdateWeaponAmmo = function()
+local lastAmmoDelta
+UpdateWeaponAmmo = function(_, delta)
   ammoCalls = ammoCalls + 1
+  lastAmmoDelta = delta
 end
 GetMaxAmmo = function() return 5 end
 
@@ -450,6 +452,58 @@ CurrentRun.Hero.Mana, CurrentRun.Hero.MaxMana = 20, 50
 local afterMana = status()
 check(afterMana.capabilities.traitInventory and afterMana.capabilities.roomContext,
   "unrelated Mana owner changed existing trait/room owners")
+
+-- Native KillHero leaves CurrentRun.Hero.IsDead=true after the next Hub map
+-- reattaches that SAME Hero table to its live _PlayerUnit in SetupHeroObject.
+-- The original tests used fresh training Heroes without a death record, which
+-- hid both resident owner rejection and run-scoped hooks silently bypassing
+-- their body even when reported active.
+ManaDelta = function(delta)
+  CurrentRun.Hero.Mana = CurrentRun.Hero.Mana + delta
+end
+GetHeroMaxAvailableMana = function() return CurrentRun.Hero.MaxMana end
+UpdateManaMeterUI = function() end
+local runMana = setFeature("infiniteMana", true)
+check(runMana.activeFeatures.infiniteMana, "in-run infinite mana setup failed")
+setFeature("infiniteAmmo", false)
+local runAmmo = setFeature("infiniteAmmo", true)
+check(runAmmo.activeFeatures.infiniteAmmo, "run-owned infinite ammo setup failed")
+check(M.hooks.UpdateWeaponAmmo ~= nil and M.hooks.UpdateWeaponAmmo.scope == "run",
+  "fixture did not arm a run-captured hook")
+
+CurrentRun.Hero.IsDead = true
+local deadRun = status()
+check(not deadRun.capabilities.setMana and not deadRun.activeFeatures.infiniteMana,
+  "dead adventure Hero was incorrectly resolved before Hub adoption")
+CurrentRun.Hero.ObjectId = nil
+CurrentHubRoom = { Name = "Hub_Main" }
+local beforeHubAttach = status()
+check(not beforeHubAttach.capabilities.setMana,
+  "Hub transition fabricated a Hero before SetupHeroObject reattached it")
+
+-- SetupHeroObject establishes a current ObjectId, resets native flags, and
+-- equips the playable actor. The prior run's IsDead marker is NOT cleared.
+CurrentRun.Hero.ObjectId = 101
+CurrentRun.Hero.InvulnerableFlags = {}
+CurrentRun.Hero.ImmuneToForceFlags = {}
+local resumedHub = status()
+check(resumedHub.capabilities.setHealth and resumedHub.capabilities.setMana,
+  "post-death reattached Hub Hero lost Health/Mana owners")
+check(resumedHub.capabilities.traitMutation and resumedHub.capabilities.setElements,
+  "post-death reattached Hub Hero lost independent Trait/Element owners")
+check(resumedHub.activeFeatures.infiniteMana,
+  "post-death Hub Hero kept infinite mana dormant despite native reattachment")
+eq(CurrentRun.Hero.Mana, 50, "reattached infinite mana did not replenish the live Hero")
+ManaDelta(-8)
+eq(CurrentRun.Hero.Mana, 50,
+  "post-death Hub infinite-mana hook silently called native without refilling")
+lastAmmoDelta = nil
+UpdateWeaponAmmo("WeaponSkull", -2)
+eq(lastAmmoDelta, 0,
+  "run-captured global ammo hook reported active but bypassed in playable Hub")
+
+CurrentRun.Hero.IsDead = nil
+CurrentHubRoom = nil
 
 -- Losing the Hero must release Hero-owned runtime state without erasing durable
 -- intent. Global session hooks remain usable in the Crossroads.
