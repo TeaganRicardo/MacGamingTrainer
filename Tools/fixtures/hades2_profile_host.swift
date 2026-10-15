@@ -21,7 +21,8 @@ func log(_ text: String) {
 }
 try session.start(descriptor: GameModuleDescriptor(backendGameID: "hades2", expectedHostProtocolVersion: 6,
     expectedModuleProtocolVersion: Int(args[4])!), backendScriptURL: URL(fileURLWithPath: args[1]),
-    applyPayload: { value in payload = value; applied += 1 }, resetGameState: {}, log: log, onStatusChange: { _ in })
+    applyPayload: { value in payload.merge(value) { _, new in new }; applied += 1 },
+    resetGameState: {}, log: log, onStatusChange: { _ in })
 func wait(_ done: @escaping () -> Bool) {
     let deadline = Date().addingTimeInterval(20)
     while !done() && Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.001)) }
@@ -50,6 +51,30 @@ operation("status", path: "cold_catalog") // cold materialization/catalogs
 for _ in 0..<3 { operation("status", path: "warmup") }
 for _ in 0..<count { operation("status", path: "warm_status") }
 for index in 0..<count { operation("set_resource", ["resource": "MetaCurrency", "amount": 100 + index], path: "resource_edit") }
+for index in 0..<count {
+    operation("set_vital", ["vital": "health", "field": "current", "value": 50 + index % 30], path: "vital_edit")
+}
+for index in 0..<count {
+    operation("set_desired", ["feature": "moneyMultiplierEnabled", "value": index % 2 == 0], path: "feature_edit")
+}
+if Int(ProcessInfo.processInfo.environment["MGT_PROFILE_TRAITS"]!)! > 0 {
+    for _ in 0..<count {
+        let trait = (payload["currentRunTraits"] as! [[String: Any]])[0]
+        let level = trait["level"] as! Int
+        operation("set_trait_level", [
+            "generationId": trait["generationId"]!, "runId": trait["runId"]!,
+            "instanceId": trait["instanceId"]!, "trait": trait["name"]!, "family": trait["family"]!,
+            "expectedLevel": level, "expectedRarity": trait["rarity"]!,
+            "expectedSameNameCount": trait["sameNameCount"]!, "targetLevel": level + 1,
+        ], path: "trait_edit")
+        precondition(((payload["currentRunTraits"] as! [[String: Any]])[0]["level"] as! Int) == level + 1)
+        precondition((payload["lastAction"] as! [String: Any])["outcome"] as! String == "completed")
+    }
+}
+for _ in 0..<count {
+    operation("spawn_reward", ["reward": "MetaCurrencyDrop"], path: "reward_spawn")
+    precondition(payload["applied"] as? Bool == true)
+}
 operation("set_desired", ["feature": "infiniteHealth", "value": true])
 operation("lock_resource", ["resource": "MetaCurrency", "locked": true])
 for _ in 0..<3 { operation("status", path: "warmup") }

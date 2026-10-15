@@ -60,6 +60,8 @@ Core/Host does not own Hades command names, Hades desired/active/dormant semanti
 
 Sparse payloads must preserve **absent vs explicit null** semantics. `Hades2FieldPatch` exists so an omitted field cannot accidentally erase observable state.
 
+Hades public mutation patches compare complete observations at one reply-projection owner; the Adapter retains complete internal state. Status/lifecycle snapshots remain full, and action receipts stay on each actual reply. Errors, independent reply shapes and delivery of a historical Core-cached reply invalidate the public baseline so the next live runtime reply reconstructs the receiver without replaying an action.
+
 ## 3. Lifecycle transition matrix
 
 | Event | Required owner/action | Allowed | Forbidden |

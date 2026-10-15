@@ -81,6 +81,8 @@ Module isolation is an ownership rule, not a prohibition on root-cause refactori
 
 The generic Host transports JSON-compatible dictionaries. Each game isolates that untyped edge immediately behind a typed request encoder and state decoder.
 
+Core owns byte-identical cached reply delivery without re-executing the action. It notifies the adapter through the optional `reply_replayed()` lifecycle callback. A module retaining a change-aware public projection invalidates its delivery baseline there so its next live reply can reconstruct the receiver; modules producing full observations inherit the no-op default.
+
 Core enforces request ordering and timeout mechanics but does not decide game-specific timeout budgets. A timed-out backend request is terminal for that backend instance when execution outcome may be unknown. Recovery may restart the backend, but must never automatically replay an outcome-unknown non-idempotent request.
 
 Target-process lifecycle coordination is Host-owned and event-driven. Game views must not add process polling or foreground-stealing connection helpers.

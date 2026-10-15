@@ -98,7 +98,8 @@ assert observed["activeFeatures"]["gameSpeed"] is True
 adapter._apply_game_speed(1.0)
 transport.sources.clear()
 
-state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze")
+state = {}
+state.update(adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 0.0}, "speed-freeze"))
 assert state["gameSpeed"] == 0.0
 assert state["activeFeatures"]["gameSpeed"] is True
 assert adapter.time_warp.speed == 0.0
@@ -112,7 +113,7 @@ except Hades2PresentationError as error:
 else:
     raise AssertionError("gameSpeed > 10 was accepted")
 
-state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 1.0}, "speed-reset")
+state.update(adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 1.0}, "speed-reset"))
 assert state["gameSpeed"] == 1.0
 assert state["activeFeatures"]["gameSpeed"] is False
 assert adapter.time_warp.speed == 1.0
@@ -121,7 +122,7 @@ assert adapter.time_warp.speed == 1.0
 # layering Time Warp over a possible resident r40 Lua speed implementation.
 adapter.runtime.invalidate_generation()
 adapter.preference_dirty = False
-state = adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 2.0}, "speed-pending")
+state.update(adapter.dispatch("set_desired", {"feature": "gameSpeed", "value": 2.0}, "speed-pending"))
 assert state["gameSpeed"] == 2.0
 assert adapter.time_warp.speed == 1.0
 assert state["activeFeatures"]["gameSpeed"] is False

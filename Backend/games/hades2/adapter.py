@@ -17,6 +17,7 @@ from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed, next_occurrence_consumed
 from .profile_service import Hades2ProfileService
+from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
 from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
 from .save_workspace import Hades2SaveWorkspace
 from .schema import (
@@ -48,9 +49,6 @@ __all__ = [
 ]
 
 TransportError = AdapterError
-_TRANSIENT_ACTION_RESULT_FIELDS = (
-    'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',
-)
 
 def clear_active(state,preserve_desired=False):
     """Clear verified runtime state; optionally retain the user's desired feature profile."""
@@ -144,6 +142,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
         self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
         self.command_contract=Hades2CommandContract(self)
+        self.reply_projection=Hades2ReplyProjection()
         self.save_workspace=None
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
@@ -845,7 +844,7 @@ class Hades2Adapter(GameAdapter):
         capabilities=dict(capabilities)
         capabilities['hotBackup']=True;capabilities['hotRestore']=False
         decoded['capabilities']=capabilities
-        for key in _TRANSIENT_ACTION_RESULT_FIELDS:
+        for key in ACTION_RESULT_FIELDS:
             self.state.pop(key,None)
         self.state.update(decoded,connected=True,pid=self.runtime.pid)
         self.state.pop('error',None)
@@ -1034,8 +1033,18 @@ class Hades2Adapter(GameAdapter):
         })
         return metadata
 
+    def reply_replayed(self):
+        self.reply_projection.invalidate()
+
     def dispatch(self, command, params, request_id):
-        return self.command_contract.dispatch(command, params, request_id)
+        try:
+            reply=self.command_contract.dispatch(command, params, request_id)
+        except Exception:
+            # Core may publish the complete error state. A later success must
+            # reconstruct the Host rather than diff against an older reply.
+            self.reply_projection.invalidate()
+            raise
+        return self.reply_projection.publish(reply,self.command_contract.reply_kind(command))
 
     def close(self):
         try:
