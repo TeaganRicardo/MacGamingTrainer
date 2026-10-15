@@ -94,7 +94,7 @@ class OfflineLuaTransport:
         self.lua.stdin.flush()
         result = self.lua.stdout.readline()
         if not result:
-            raise RuntimeError('offline resident exited')
+            raise RuntimeError('offline resident exited: ' + Path(self.events.name).read_text()[-4000:])
         self.last_duration = time.perf_counter() - started
         return result.strip()
 

@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 109 then
+if previousModule and previousModule.revision ~= 110 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 109 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 109, damageMultiplier = 2, damageEnabled = false,
+    version = 1, revision = 110, damageMultiplier = 2, damageEnabled = false,
     invincibility = false, infiniteHealth = false, infiniteMana = false,
     instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
     forceEnableRerolls = false,
@@ -190,6 +190,76 @@ if __MacGamingTrainerV1 == nil then
       return "{" .. table.concat(out, ",") .. "}"
     end
     return encode(value)
+  end
+
+  -- The transport can retain expensive collection domains between replies.
+  -- Every dispatch still observes all live values; only equal wire collections
+  -- are omitted. Capabilities, desired/active state and receipts always travel.
+  do
+    local previous, owners, catalogsReady, generation = {}, nil, false, nil
+    local function identify(nonce)
+      if generation == nil then
+        if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
+        -- The client supplies a fresh UUID on every boundary. A new resident
+        -- adopts one once; table addresses can be recycled after Lua GC.
+        generation = nonce
+        M.traitInventoryGeneration = generation
+      end
+    end
+    local function copy(value)
+      if type(value) ~= "table" or value == jsonNull then return value end
+      local result = setmetatable({}, getmetatable(value))
+      for key, item in pairs(value) do result[key] = copy(item) end
+      return result
+    end
+    local function equal(left, right)
+      if left == right then return true end
+      if type(left) ~= "table" or type(right) ~= "table"
+          or left == jsonNull or right == jsonNull then return false end
+      for key, value in pairs(left) do if not equal(value, right[key]) then return false end end
+      for key in pairs(right) do if left[key] == nil then return false end end
+      return true
+    end
+    function M.projectObservation(result, snapshot)
+      local current = {
+        session = SessionState or false, game = GameState or false, run = CurrentRun or false,
+        hero = type(CurrentRun) == "table" and CurrentRun.Hero or false,
+        room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or false,
+        resources = type(GameState) == "table" and GameState.Resources or false,
+        traits = TraitData or false, resourceData = ResourceData or false,
+      }
+      if owners == nil then snapshot = true else
+        for key, value in pairs(current) do
+          if owners[key] ~= value then snapshot = true; break end
+        end
+      end
+      local retained = setmetatable({}, arrayMeta)
+      for _, key in ipairs({ "resources", "elements", "currentRunTraits" }) do
+        local value = result[key]
+        if not snapshot and value ~= nil and equal(previous[key], value) then
+          retained[#retained + 1] = key
+          result[key] = nil
+        else
+          previous[key] = copy(value)
+        end
+      end
+      owners = current
+      if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
+      result.__trainerObservation = { generation = generation, retained = retained }
+      return result
+    end
+    function M.observe(command, params, nonce)
+      identify(nonce)
+      params = params or {}
+      -- A newly replaced resident owns a new catalog generation, even when
+      -- the Python caller last observed catalogs from its predecessor.
+      if not catalogsReady then params.includeCatalogs = true end
+      return M.projectObservation(M.dispatch(command, params), command == "status" or params.includeCatalogs == true)
+    end
+    function M.observeBatch(calls, includeCatalogs, nonce)
+      identify(nonce)
+      return M.projectObservation(M.dispatchBatch(calls, includeCatalogs or not catalogsReady), true)
+    end
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
@@ -9801,7 +9871,7 @@ if __MacGamingTrainerV1 == nil then
     set_next_room_reward = true,
     set_next_occurrence = true,
   }
-  function M.dispatchBatch(calls)
+  function M.dispatchBatch(calls, includeCatalogs)
     if type(calls) ~= "table" then error("Preference replay batch must be a table") end
     if preferenceReplayDepth ~= 0 then error("Nested preference replay is unsupported") end
     if M.terminalActionUnknown then
@@ -9823,6 +9893,6 @@ if __MacGamingTrainerV1 == nil then
     preferenceReplayDepth = 0
     if not ok then error(message) end
     synchronize()
-    return state(false)
+    return state(includeCatalogs == true)
   end
 end

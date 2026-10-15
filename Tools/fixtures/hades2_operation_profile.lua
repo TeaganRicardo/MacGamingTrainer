@@ -117,23 +117,27 @@ if serve then
   -- this private pipe. All phase wrappers live in the fixture, not the resident.
   local identity, command
   local originalJSON = M.json
-  local function phase(name, seconds, bytes)
+  local function phase(name, seconds, bytes, kind)
     local record = { schema = 1, component = "resident", request_id = identity,
-      command = command, phase = name, seconds = seconds, response_kind = "full" }
+      command = command, phase = name, seconds = seconds, response_kind = kind or "full" }
     if bytes then record.reply_bytes = bytes end
     io.stderr:write("OperationProfile " .. originalJSON(record) .. "\n")
     io.stderr:flush()
   end
   local function installProbes()
-    for _, name in ipairs({ "dispatch", "dispatchBatch", "json" }) do
+    for _, name in ipairs({ "dispatch", "dispatchBatch", "projectObservation", "json" }) do
       local original = M[name]
-      M[name] = function(...)
+      if type(original) == "function" then M[name] = function(...)
+        local input = ...
         local started = os.clock()
         local result = original(...)
-        phase(name == "json" and "resident.json_serialize" or "resident.materialize_dispatch",
-          os.clock() - started, name == "json" and #result or nil)
+        local metadata = type(input) == "table" and input.__trainerObservation
+        local kind = metadata and #metadata.retained > 0 and "patch" or "full"
+        phase(name == "json" and "resident.json_serialize"
+          or (name == "projectObservation" and "resident.collection_projection" or "resident.materialize_dispatch"),
+          os.clock() - started, name == "json" and #result or nil, kind)
         return result
-      end
+      end end
     end
   end
   if os.getenv("MGT_PROFILE_OPERATIONS") == "1" then installProbes() end
