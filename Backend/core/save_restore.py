@@ -280,7 +280,7 @@ class SaveRestoreTransaction:
                 self._raise_race(target_running, 'Save changed before mutation could begin.')
             self._ensure_cold_target_still_stopped(target_running)
             if require_idle and self.busy_probe is not None:
-                current = self._current_files(owned_keys)
+                current = list(self.resolver())
                 if self.busy_probe(tuple(current)):
                     raise SaveBusyError('Save files are currently busy.')
                 if not self._verify_state(baseline_hashes, owned_keys):
