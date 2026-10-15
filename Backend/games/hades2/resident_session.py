@@ -37,7 +37,9 @@ def _copy_json_collection(value):
             if isinstance(item, (dict, list)):
                 result[key] = _copy_json_collection(item)
         return result
-    return [_copy_json_collection(item) if isinstance(item, (dict, list)) else item for item in value]
+    if isinstance(value, list):
+        return [_copy_json_collection(item) if isinstance(item, (dict, list)) else item for item in value]
+    return value
 
 
 @dataclass(frozen=True)
