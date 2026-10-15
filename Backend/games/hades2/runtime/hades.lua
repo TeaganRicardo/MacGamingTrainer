@@ -16,37 +16,46 @@ end
 if __MacGamingTrainerV1 == nil then
   local M = {
     version = 1, revision = 111,
-    -- BEGIN GENERATED DURABLE FEATURE SCHEMA
-    durableFeatureSchema = {
-      toggles = {
-        "invincibility",
-        "infiniteHealth",
-        "infiniteMana",
-        "damageEnabled",
-        "instantCastCooldown",
-        "hexAlwaysReady",
-        "infiniteAmmo",
-        "autoMiniGames",
-        "gardenQoL",
-        "boonRarityEnabled",
-        "forceEnableRerolls",
-        "moneyMultiplierEnabled",
-        "resourceMultiplierEnabled",
-      },
-      multipliers = {
-        damageMultiplier = { default = 2, min = 1, max = 100, runtime = "resident" },
-        moneyMultiplier = { default = 2, min = 1, max = 100, runtime = "resident" },
-        resourceMultiplier = { default = 2, min = 1, max = 100, runtime = "resident" },
-        gameSpeed = { default = 1, min = 0, max = 10, runtime = "core" },
-      },
-    },
-    -- END GENERATED DURABLE FEATURE SCHEMA
+    -- BEGIN GENERATED DURABLE FEATURE STATE
+    invincibility = false,
+    infiniteHealth = false,
+    infiniteMana = false,
+    damageEnabled = false,
+    instantCastCooldown = false,
+    hexAlwaysReady = false,
+    infiniteAmmo = false,
+    autoMiniGames = false,
+    gardenQoL = false,
+    boonRarityEnabled = false,
+    forceEnableRerolls = false,
+    moneyMultiplierEnabled = false,
+    resourceMultiplierEnabled = false,
+    damageMultiplier = 2,
+    moneyMultiplier = 2,
+    resourceMultiplier = 2,
+    -- END GENERATED DURABLE FEATURE STATE
     -- true means force one currently eligible special boon into the native pool.
     boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
     nextRoomRewardRoutedRooms = {}, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
-    desiredFeatures = {},
+    -- BEGIN GENERATED DURABLE DESIRED FEATURES
+    desiredFeatures = {
+      invincibility = false,
+      infiniteHealth = false,
+      infiniteMana = false,
+      damageEnabled = false,
+      instantCastCooldown = false,
+      hexAlwaysReady = false,
+      infiniteAmmo = false,
+      autoMiniGames = false,
+      gardenQoL = false,
+      boonRarityEnabled = false,
+      forceEnableRerolls = false,
+      moneyMultiplierEnabled = false,
+      resourceMultiplierEnabled = false,
+    },
+    -- END GENERATED DURABLE DESIRED FEATURES
     resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {}, gatheringProbabilities = {},
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
@@ -57,13 +66,6 @@ if __MacGamingTrainerV1 == nil then
     -- intentionally neither saved nor carried across a resident replacement.
     traitInventoryGeneration = tostring({}),
   }
-  for _, key in ipairs(M.durableFeatureSchema.toggles) do
-    M[key] = false
-    M.desiredFeatures[key] = false
-  end
-  for key, rule in pairs(M.durableFeatureSchema.multipliers) do
-    if rule.runtime == "resident" then M[key] = rule.default end
-  end
   __MacGamingTrainerV1 = M
   local forceRerolls, roomGeneration
   local preferenceReplayDepth = 0
@@ -7030,10 +7032,6 @@ if __MacGamingTrainerV1 == nil then
       if ok and finite(value) then availableMana = value end
     end
     local featureSupportMap, activeFeatureMap, dormantFeatureMap = featureRuntimeMaps(hero)
-    local desiredFeatureState = {}
-    for _, key in ipairs(M.durableFeatureSchema.toggles) do
-      desiredFeatureState[key] = M.desiredFeatures[key]
-    end
     local spellChargeCost = nil
     if type(currentSpellRuntime) == "function" then
       local ok, _, _, _, cost = pcall(currentSpellRuntime)
@@ -7117,7 +7115,23 @@ if __MacGamingTrainerV1 == nil then
         setElements = M.runtimeOwners.elementsAvailable(), hotBackup = true, hotRestore = false,
       },
       featureSupport = featureSupportMap,
-      desiredFeatures = desiredFeatureState,
+      -- BEGIN GENERATED DURABLE FEATURE PROJECTION
+      desiredFeatures = {
+        invincibility = M.desiredFeatures.invincibility,
+        infiniteHealth = M.desiredFeatures.infiniteHealth,
+        infiniteMana = M.desiredFeatures.infiniteMana,
+        damageEnabled = M.desiredFeatures.damageEnabled,
+        instantCastCooldown = M.desiredFeatures.instantCastCooldown,
+        hexAlwaysReady = M.desiredFeatures.hexAlwaysReady,
+        infiniteAmmo = M.desiredFeatures.infiniteAmmo,
+        autoMiniGames = M.desiredFeatures.autoMiniGames,
+        gardenQoL = M.desiredFeatures.gardenQoL,
+        boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
+        forceEnableRerolls = M.desiredFeatures.forceEnableRerolls,
+        moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
+        resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
+      },
+      -- END GENERATED DURABLE FEATURE PROJECTION
       activeFeatures = activeFeatureMap,
       dormantFeatures = dormantFeatureMap,
       invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
@@ -8429,10 +8443,11 @@ if __MacGamingTrainerV1 == nil then
       active = function() return M.forceEnableRerolls and forceRerolls.active() end,
     },
   }
-  featureOrder = {}
-  for _, key in ipairs(M.durableFeatureSchema.toggles) do
-    if featureRegistry[key] ~= nil then featureOrder[#featureOrder + 1] = key end
-  end
+  featureOrder = {
+    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
+    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
+    "forceEnableRerolls",
+  }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
   statRegistry = {
     grasp = {
@@ -9632,15 +9647,23 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_feature" then
       local feature, value = params.feature, params.value
-      local multiplierRule = M.durableFeatureSchema.multipliers[feature]
-      if multiplierRule ~= nil then
-        if multiplierRule.runtime ~= "resident" then error("Unknown feature") end
-        if not finite(value) or value < multiplierRule.min or value > multiplierRule.max then
-          error("Multiplier must be " .. tostring(multiplierRule.min) .. ".." .. tostring(multiplierRule.max))
-        end
-        M[feature] = value
+      -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH
+      if feature == "damageMultiplier" then
+        if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        M.damageMultiplier = value
         return state(params.includeCatalogs)
       end
+      if feature == "moneyMultiplier" then
+        if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        M.moneyMultiplier = value
+        return state(params.includeCatalogs)
+      end
+      if feature == "resourceMultiplier" then
+        if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        M.resourceMultiplier = value
+        return state(params.includeCatalogs)
+      end
+      -- END GENERATED DURABLE MULTIPLIER DISPATCH
       if type(value) ~= "boolean" then error("Feature value must be boolean") end
       if M.desiredFeatures[feature] == nil then error("Unknown feature") end
       local previous = M.desiredFeatures[feature]
