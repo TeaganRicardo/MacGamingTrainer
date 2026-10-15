@@ -24,6 +24,7 @@ pending_value = None
 opened_summary = None
 workspace_number = 0
 omit_first_target = False
+manual_inventory_count = 0
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -36,14 +37,20 @@ for raw in sys.stdin:
             for path, variant in ([('Profile2_Temp.sav', 'temp'), ('Profile2_Archive.sav', 'variant')]
                 if backup else [('Profile1.sav', 'profile'), ('Profile3.sav', 'profile')])
         ]
+        manual_selection = req['params'].get('snapshotId') == 'manual-selection'
+        if manual_selection:
+            manual_inventory_count += 1
+            if manual_inventory_count > 1:
+                sources = sources[:1]
         result = {
             'sources': sources,
             'targets': [
                 {'rootId': 'main', 'relativePath': path, 'profile': profile, 'variant': 'profile'}
                 for path, profile in [('Profile1.sav', 'Profile1'), ('Profile2.sav', 'Profile2')]
-                if not (omit_first_target and path == 'Profile1.sav')
+                if not ((omit_first_target or (manual_selection and manual_inventory_count > 1))
+                        and path == 'Profile1.sav')
             ],
-            'defaultSource': {key: sources[0][key] for key in ('rootId', 'relativePath')},
+            'defaultSource': None if manual_selection else {key: sources[0][key] for key in ('rootId', 'relativePath')},
         }
     elif command == 'save_editor_open':
         workspace_number += 1
@@ -893,6 +900,67 @@ struct Main {
               readSource["relativePath"] == "Profile3.sav" else {
             fail("A source selection did not load the pinned document in one action")
         }
+
+        // An inventory can offer selectable files without a default profile.
+        // This must open through the mounted workbench's first source change,
+        // while the ordinary default above still opens exactly once.
+        let manualModel = Hades2SaveEditorModel(session: session, snapshotID: "manual-selection")
+        let beforeManual = commands(at: commandLog).count
+        let manualWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        manualWindow.contentView = NSHostingView(
+            rootView: SaveEditorPresentationHarness(model: manualModel)
+                .environmentObject(localization)
+        )
+        manualWindow.orderFront(nil)
+        pumpUntil {
+            !manualModel.busy && manualModel.sourceFiles.count == 2
+        }
+        if manualModel.workspaceID != nil || manualModel.selectedSourceID != ""
+            || manualModel.sourceFiles.count != 2 {
+            fail("No-default inventory implicitly opened or selected a source")
+        }
+        let initialManualCommands = Array(commands(at: commandLog).dropFirst(beforeManual))
+        if initialManualCommands.compactMap({ $0["command"] as? String }) != ["save_editor_inventory"] {
+            fail("No-default inventory issued an unexpected open: \(initialManualCommands)")
+        }
+
+        manualModel.selectedSourceID = "main/Profile2_Archive.sav"
+        pumpUntil {
+            manualModel.workspaceID != nil && !manualModel.busy && manualModel.items.count == 1
+        }
+        guard let manualWorkspace = manualModel.workspaceID,
+              manualModel.sourceRelativePath == "Profile2_Archive.sav",
+              commands(at: commandLog).dropFirst(beforeManual).filter({
+                  $0["command"] as? String == "save_editor_open"
+              }).count == 1 else {
+            fail("First visible source selection did not open the selected file exactly once")
+        }
+
+        // Inventory refresh must leave the loaded bytes and selected write
+        // destination pinned, even when neither is returned by the new list.
+        manualModel.selectTarget("main/Profile1.sav")
+        pumpUntil { !manualModel.busy && manualModel.hasWriteTarget }
+        let beforeInventoryRefresh = commands(at: commandLog).count
+        manualModel.refreshFiles()
+        pumpUntil {
+            !manualModel.busy && commands(at: commandLog).count > beforeInventoryRefresh
+        }
+        let refreshCommands = Array(commands(at: commandLog).dropFirst(beforeInventoryRefresh))
+        if refreshCommands.compactMap({ $0["command"] as? String }) != ["save_editor_inventory"]
+            || manualModel.workspaceID != manualWorkspace
+            || manualModel.sourceRelativePath != "Profile2_Archive.sav"
+            || manualModel.selectedSourceID != "main/Profile2_Archive.sav"
+            || manualModel.selectedTargetID != "main/Profile1.sav"
+            || manualModel.sourceFiles.contains(where: { $0.id == manualModel.selectedSourceID })
+            || manualModel.writeTargets.contains(where: { $0.id == manualModel.selectedTargetID }) {
+            fail("Inventory refresh re-opened the document or lost missing pinned identities")
+        }
+        manualWindow.close()
 
         // A managed backup uses the same session and semantic model. Source
         // selection remains an explicit proposal in an unmounted model; targets
