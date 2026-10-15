@@ -45,10 +45,10 @@ try:
         assert reply == profiled_reply and fixture.calls == 1, 'profiling broke cached one-shot replay'
         rows = [json.loads(line.split('OperationProfile ', 1)[1]) for line in stream.getvalue().splitlines()
                 if 'OperationProfile ' in line]
-        assert {'backend.request_decode', 'backend.routing', 'backend.stdout_serialize'} <= {r['phase'] for r in rows}
+        assert {'backend.request_decode', 'backend.routing', 'backend.reply_ready'} <= {r['phase'] for r in rows}
         assert all(r['request_id'] == 'request-1' for r in rows)
         assert 'PRIVATE-BODY' not in stream.getvalue()
-        assert next(r for r in rows if r['phase'] == 'backend.stdout_serialize')['reply_bytes'] == len(reply.encode()) + 1
+        assert next(r for r in rows if r['phase'] == 'backend.reply_ready')['reply_bytes'] == len(reply.encode()) + 1
 
     class Process:
         def __init__(self, reply):
