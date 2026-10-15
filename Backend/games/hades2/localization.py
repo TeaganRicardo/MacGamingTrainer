@@ -10,6 +10,11 @@ from .config import GAME_SPEC
 
 _OFFICIAL_TEXT_CACHE = {}
 
+
+def invalidate_display_names():
+    """A new resident/source generation must resolve installed text afresh."""
+    _OFFICIAL_TEXT_CACHE.clear()
+
 def _sjson_unescape(value):
     return (value.replace(r'\\"', '"').replace(r'\\n', '\n')
                  .replace(r'\\r', '\r').replace(r'\\t', '\t').replace(r'\\\\', '\\'))

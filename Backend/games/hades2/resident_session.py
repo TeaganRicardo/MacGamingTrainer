@@ -5,6 +5,7 @@ state, debugger budgets, transaction ledger, Trait Tray handoff, decode trust an
 resident-generation recovery stay behind this interface.
 """
 from dataclasses import dataclass
+import copy
 import json
 import logging
 import math
@@ -16,6 +17,7 @@ from pathlib import Path
 from core.adapter import AdapterError
 
 from .catalog import localize_catalog
+from .localization import invalidate_display_names
 
 
 TransportError = AdapterError
@@ -24,6 +26,7 @@ _TRAIT_TRAY_HANDOFF_KEY = "__trainerTraitTrayHandoff"
 _TRAIT_TRAY_HANDOFF_TIMEOUT_SECONDS = 0.75
 _TRAIT_TRAY_HANDOFF_POLL_SECONDS = 0.05
 _REPLAY_EXPRESSION_TIMEOUT_SECONDS = 5.0
+_OBSERVATION_COLLECTIONS = frozenset(("resources", "elements", "currentRunTraits"))
 
 
 @dataclass(frozen=True)
@@ -105,6 +108,8 @@ class Hades2ResidentSession:
         self._bootstrap = bootstrap
         self._generation_ready = False
         self._catalog_ready = False
+        self._observation_generation = None
+        self._observation_collections = {}
 
     @property
     def pid(self):
@@ -147,6 +152,9 @@ class Hades2ResidentSession:
     def invalidate_generation(self):
         self._generation_ready = False
         self._catalog_ready = False
+        self._observation_generation = None
+        self._observation_collections = {}
+        invalidate_display_names()
 
     def status(self, params=None):
         return self._execute_status(params or {}, read_only=False)
@@ -320,6 +328,7 @@ class Hades2ResidentSession:
             return ResidentReply(
                 payload=reply.payload,
                 metrics=reply.metrics,
+                generation_reset=reply.generation_reset,
                 outcome_unknown=True,
             )
         return reply
@@ -327,7 +336,7 @@ class Hades2ResidentSession:
     def _dispatch_source(self, command, params, batch):
         if batch is None:
             dispatch_value = (
-                "__MacGamingTrainerV1.dispatch("
+                "__MacGamingTrainerV1.observe("
                 + lua_value(command)
                 + ","
                 + lua_value(params)
@@ -345,8 +354,44 @@ class Hades2ResidentSession:
                     + lua_value(item_params)
                     + "}"
                 )
-            dispatch_value = "__MacGamingTrainerV1.dispatchBatch({" + ",".join(calls) + "})"
+            dispatch_value = ("__MacGamingTrainerV1.observeBatch({" + ",".join(calls) + "},"
+                              + lua_value(params.get("includeCatalogs") is True) + ")")
         return "return __MacGamingTrainerV1.json(" + dispatch_value + ")"
+
+    def _localize_observation(self, payload):
+        # The Trait Tray handoff is a control marker, not an observation.
+        if _TRAIT_TRAY_HANDOFF_KEY in payload:
+            return payload, False
+        metadata = payload.pop("__trainerObservation", None)
+        if metadata is None:
+            # An uncompressed full reply needs no retained-domain state.
+            self._observation_generation = None
+            self._observation_collections = {}
+            return localize_catalog(payload), False
+        generation, retained = metadata.get("generation"), metadata.get("retained")
+        if not isinstance(generation, str) or not generation or not isinstance(retained, list):
+            raise ValueError("Invalid resident observation identity")
+        if any(not isinstance(key, str) or key not in _OBSERVATION_COLLECTIONS
+               or key in payload for key in retained):
+            raise ValueError("Invalid retained resident collection")
+        previous = self._observation_collections if generation == self._observation_generation else {}
+        if any(key not in previous for key in retained):
+            raise ValueError("Resident collection baseline is unavailable")
+        generation_reset = self._observation_generation is not None and generation != self._observation_generation
+        if generation != self._observation_generation:
+            invalidate_display_names()
+        payload = localize_catalog(payload)
+        current = {}
+        for key in _OBSERVATION_COLLECTIONS:
+            if key in retained:
+                current[key] = previous[key]
+                payload[key] = copy.deepcopy(previous[key])
+            elif key in payload:
+                # Neither the returned reply nor the Adapter may mutate the
+                # private localized baseline used by a later observation.
+                current[key] = copy.deepcopy(payload[key])
+        self._observation_generation, self._observation_collections = generation, current
+        return payload, generation_reset
 
     @staticmethod
     def _mutation_handoff_source(dispatch):
@@ -371,6 +416,7 @@ class Hades2ResidentSession:
         crossed = False
         json_duration = 0.0
         localize_duration = 0.0
+        generation_reset = False
         try:
             if expression_timeout_seconds is None:
                 raw = self._transport.execute(source)
@@ -392,7 +438,7 @@ class Hades2ResidentSession:
             if correlation() is not None:
                 record("resident.json_decode", json_duration, reply_bytes=len(raw.encode("utf-8")))
             phase = time.monotonic()
-            payload = localize_catalog(payload)
+            payload, generation_reset = self._localize_observation(payload)
             localize_duration = time.monotonic() - phase
             record("resident.localization", localize_duration, response_kind="marker" if _TRAIT_TRAY_HANDOFF_KEY in payload else "full")
         except Exception as error:
@@ -446,4 +492,4 @@ class Hades2ResidentSession:
             bool(read_only),
             metrics.expression_duration,
         )
-        return ResidentReply(payload=payload, metrics=metrics)
+        return ResidentReply(payload=payload, metrics=metrics, generation_reset=generation_reset)
