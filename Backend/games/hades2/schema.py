@@ -13,10 +13,6 @@ MULTIPLIER_RULES = {
     'gameSpeed': {'default':1.0,'min':0.0,'max':10.0,'runtime':'core'},
 }
 MULTIPLIERS = tuple(MULTIPLIER_RULES)
-RESIDENT_MULTIPLIERS = tuple(
-    key for key, rule in MULTIPLIER_RULES.items() if rule['runtime'] == 'resident'
-)
-
 
 def desired_feature_defaults():
     values={key:False for key in TOGGLES}
