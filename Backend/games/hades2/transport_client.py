@@ -345,12 +345,12 @@ class RemoteProcessTimeWarpController:
         return self._call("time_warp.set_speed", {"value": value})
 
     def current_speed(self):
-        if self._transport.pid is None or not self._transport._worker.available:
+        if self._transport.pid is None:
             return 1.0
         return self._call("time_warp.current_speed")
 
     def reset(self):
-        if self._transport.pid is None or not self._transport._worker.available:
+        if self._transport.pid is None:
             return 1.0
         return self._call("time_warp.reset")
 
