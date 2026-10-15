@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 111 then
+if previousModule and previousModule.revision ~= 112 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 111 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 111,
+    version = 1, revision = 112,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -509,7 +509,11 @@ if __MacGamingTrainerV1 == nil then
     local run = M.runtimeOwners.run()
     if run == nil or type(run.Hero) ~= "table" then return nil end
     local hero = run.Hero
-    if hero.ObjectId == nil or hero.IsDead then return nil end
+    -- KillHero keeps the prior run's IsDead marker. SetupHeroObject later
+    -- reattaches that same Hero table to the playable Hub unit without clearing
+    -- the historical death flag. Require the reattached ObjectId and live Hub
+    -- owner before treating such a Hero as usable again.
+    if hero.ObjectId == nil or (hero.IsDead and type(CurrentHubRoom) ~= "table") then return nil end
     return hero
   end
   function M.runtimeOwners.heroAvailable()
@@ -644,18 +648,18 @@ if __MacGamingTrainerV1 == nil then
     local ownerHero = type(ownerRun) == "table" and ownerRun.Hero or nil
     local ownerSession = SessionState
     hook.ownerSession = ownerSession
-    -- Most combat hooks intentionally die with their Hero/run. Global-safe
-    -- hooks installed while no Hero exists (Crossroads) are session-scoped;
-    -- an explicit scope can opt into the same behavior. synchronize() still
-    -- releases/reconciles them as their runtime owners change, so no stale
-    -- state crosses sessions.
+    -- Run-bound hooks follow the captured Hero and its *live owner*, including
+    -- a native Hub reattachment after death. A dead Hero that has not been
+    -- rebound to a live unit still fails the owner guard. Global-safe hooks
+    -- installed with no Hero are session-scoped. synchronize() releases and
+    -- reconciles hooks when their actual owners change.
     local sessionScoped = scope == "session" or type(ownerHero) ~= "table"
     hook.scope = sessionScoped and "session" or "run"
     hook.wrapper = function(...)
       local active = M.hooks[name] == hook and SessionState == ownerSession
       if active and not sessionScoped then
         active = CurrentRun == ownerRun and type(CurrentRun) == "table"
-          and CurrentRun.Hero == ownerHero and not ownerHero.IsDead
+          and CurrentRun.Hero == ownerHero and M.runtimeOwners.hero() == ownerHero
       end
       if active then return body(original, ...) end
       return original(...)
