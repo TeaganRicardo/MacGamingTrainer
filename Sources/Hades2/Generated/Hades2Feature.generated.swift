@@ -17,7 +17,7 @@ enum Hades2FeatureKey: String, CaseIterable, Hashable {
     case resourceMultiplierEnabled
 }
 
-enum Hades2MultiplierRuntimeOwner {
+enum Hades2MultiplierRuntimeOwner: Equatable {
     case resident
     case core
 }
