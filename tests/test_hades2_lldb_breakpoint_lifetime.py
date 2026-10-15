@@ -29,30 +29,35 @@ if os.environ.get("MGT_LLDB_EMBEDDED_TEST") != "1":
         if not existing_pythonpath
         else lldb_python_path + os.pathsep + existing_pythonpath
     )
-    try:
-        with phase('worker.run'):
-            stdout = run_lldb_worker(
-                ["/usr/bin/xcrun", "python3", path],
-                environment,
-                timeout=30,
-                diagnostics=True,
+    # These contracts use independent targets and do not share native state.
+    # Give each its own bounded worker instead of making a later contract
+    # inherit compilation, debugger startup and earlier scenarios' elapsed time.
+    for scenario in ("expressions", "detach", "unknown"):
+        environment["MGT_LLDB_LIFECYCLE_SCENARIO"] = scenario
+        try:
+            with phase('worker.run.' + scenario):
+                stdout = run_lldb_worker(
+                    ["/usr/bin/xcrun", "python3", path],
+                    environment,
+                    timeout=30,
+                    diagnostics=True,
+                )
+        except subprocess.TimeoutExpired as error:
+            raise AssertionError(
+                f"Xcode-Python LLDB {scenario} regression exceeded 30 seconds:\n"
+                + worker_failure_output(error)
+            ) from error
+        except subprocess.CalledProcessError as error:
+            raise AssertionError(
+                f"Xcode-Python LLDB {scenario} regression failed:\n"
+                + worker_failure_output(error)
+            ) from error
+        if f"hades2_lldb_breakpoint_lifetime_{scenario}_ok" not in stdout:
+            raise AssertionError(
+                f"Xcode-Python LLDB {scenario} regression failed:\n" + stdout
             )
-    except subprocess.TimeoutExpired as error:
-        raise AssertionError(
-            "Xcode-Python LLDB breakpoint-lifetime regression exceeded 30 seconds:\n"
-            + worker_failure_output(error)
-        ) from error
-    except subprocess.CalledProcessError as error:
-        raise AssertionError(
-            "Xcode-Python LLDB regression failed:\n"
-            + worker_failure_output(error)
-        ) from error
-    if "hades2_lldb_breakpoint_lifetime_ok" not in stdout:
-        raise AssertionError(
-            "Xcode-Python LLDB regression failed:\n"
-            + stdout
-        )
-    print(stdout, end='')
+        print(stdout, end='')
+    print("hades2_lldb_breakpoint_lifetime_ok")
     raise SystemExit(0)
 
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -101,24 +106,7 @@ def assert_progress(counter):
         previous = current
 
 
-with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temporary:
-    temporary = Path(temporary)
-    source = temporary / "helper.c"
-    executable = temporary / "helper"
-    source.write_text(HELPER_SOURCE + PROGRESS_SOURCE, encoding="utf-8")
-    with phase('fixture.compile'):
-        subprocess.run(
-            ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-    progress_path = temporary / "progress"
-    progress_path.write_bytes(bytes(8))
-    os.environ["MGT_LLDB_FIXTURE_PROGRESS"] = str(progress_path)
-    progress_file = progress_path.open("r+b")
-    progress = mmap.mmap(progress_file.fileno(), 8)
+def check_expressions(executable, progress):
     child, debugger, transport, addresses = attach_helper(executable, 0, diagnostics=True)
     try:
         # Repeated operations must leave no pending stop signal, breakpoint or
@@ -168,6 +156,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
     finally:
         cleanup(child, debugger, transport, diagnostics=True)
 
+
+def check_detach(executable, progress):
     # Repeated fresh targets cover detach from both running and already stopped
     # sessions without using reattach itself as the liveness observer.
     for index in range(8):
@@ -185,8 +175,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
         finally:
             cleanup(child, debugger, transport, diagnostics=True)
 
-    progress.close()
-    progress_file.close()
+
+def check_unknown(executable, _progress):
+    # This case has no independent progress thread, matching its original
+    # single-threaded held-native-call fixture.
     del os.environ["MGT_LLDB_FIXTURE_PROGRESS"]
 
     # Before the transport fix, this production execute() path failed with
@@ -229,4 +221,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temp
     finally:
         cleanup(child, debugger, transport, diagnostics=True)
 
-print("hades2_lldb_breakpoint_lifetime_ok")
+scenario = os.environ["MGT_LLDB_LIFECYCLE_SCENARIO"]
+check = {"expressions": check_expressions, "detach": check_detach, "unknown": check_unknown}[scenario]
+
+with tempfile.TemporaryDirectory(prefix="mgt-lldb-breakpoint-lifetime-") as temporary:
+    temporary = Path(temporary)
+    source = temporary / "helper.c"
+    executable = temporary / "helper"
+    source.write_text(HELPER_SOURCE + PROGRESS_SOURCE, encoding="utf-8")
+    with phase('fixture.compile'):
+        subprocess.run(
+            ["/usr/bin/clang", "-g", "-O0", "-pthread", str(source), "-o", str(executable)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    progress_path = temporary / "progress"
+    progress_path.write_bytes(bytes(8))
+    os.environ["MGT_LLDB_FIXTURE_PROGRESS"] = str(progress_path)
+    with progress_path.open("r+b") as progress_file, mmap.mmap(progress_file.fileno(), 8) as progress:
+        check(executable, progress)
+
+print(f"hades2_lldb_breakpoint_lifetime_{scenario}_ok")
