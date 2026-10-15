@@ -45,6 +45,20 @@ product_pairs = {
 for chinese, english in catalog._PRODUCT_LABEL_EN_BY_ZH.items():
     assert product_pairs[chinese] == english
 
+resource_section_terms = {
+    "resources": "resources",
+    "plants": "resourcePlants",
+    "gifts": "resourceGifts",
+    "fish": "resourceFish",
+    "ores": "resourceMinerals",
+    "boss": "resourceBossMaterials",
+}
+for kind, term_key in resource_section_terms.items():
+    row = reference["productTerms"][term_key]
+    assert catalog._RESOURCE_SECTION_PRODUCT_LABELS[kind] == (
+        row["value"], row["englishValue"]
+    )
+
 # Current Hades product surfaces must not reintroduce known ad-hoc aliases.
 surface_paths = sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
 surface_paths += sorted((ROOT / "Backend/games/hades2").glob("*.py"))
