@@ -119,4 +119,38 @@ with tempfile.TemporaryDirectory(prefix="mgt-core-hot-write-race-") as temporary
     assert len(service.list_state()["snapshots"]) == 1
 
 
+# A replacement owns only its selected files. A different live profile may
+# continue saving, including when a target failure requires rollback. The full
+# pre-write snapshot remains available for deliberate whole-set restoration.
+for target_race in (True, False):
+    with tempfile.TemporaryDirectory(prefix="mgt-core-hot-selected-target-") as temporary:
+        folder = Path(temporary)
+        service, selected = make_service(folder, lambda: True)
+        active = selected.with_name("Profile2.sav")
+        active.write_bytes(b"active-before")
+        row = replacement(folder)
+
+        def concurrent_game_write():
+            active.write_bytes(b"active-new-progress")
+            if target_race:
+                selected.write_bytes(b"selected-race")
+
+        try:
+            result = service.replace_files(
+                (row,),
+                post_install_verify=concurrent_game_write,
+                expected_paths={("main", "Profile1.sav"): selected.resolve()},
+                allow_running=True,
+            )
+        except SaveRestoreError:
+            assert target_race, "an unrelated profile write aborted the selected replacement"
+        else:
+            assert not target_race and result["replaced"]
+        assert active.read_bytes() == b"active-new-progress", "rollback overwrote an unselected profile"
+        assert selected.read_bytes() == (b"current" if target_race else b"edited")
+        snapshot = service.store.load_verified_snapshot(service.list_state()["snapshots"][0]["id"])
+        assert (snapshot["root"] / "files/main/Profile1.sav").read_bytes() == b"current"
+        assert (snapshot["root"] / "files/main/Profile2.sav").read_bytes() == b"active-before"
+
+
 print("core_save_hot_replace_ok")
