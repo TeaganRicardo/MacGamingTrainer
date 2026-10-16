@@ -568,6 +568,46 @@ do {
     }
 }
 
+// Unknown future session schemas are preserved rather than being rewritten by
+// an older Trainer build.
+do {
+    let futureHome = home.appendingPathComponent("future-schema", isDirectory: true)
+    let (bundle, _) = try writeRecoveryFixture(
+        home: futureHome,
+        id: "future-session",
+        state: "active",
+        pid: 9900
+    )
+    guard var futureManifest = readJSON(bundle.appendingPathComponent("manifest.json")) else {
+        fail("future-schema fixture manifest missing")
+    }
+    futureManifest["schemaVersion"] = 999
+    try JSONSerialization.data(
+        withJSONObject: futureManifest,
+        options: [.prettyPrinted, .sortedKeys]
+    ).write(to: bundle.appendingPathComponent("manifest.json"), options: .atomic)
+
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: futureHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 9901
+        )
+    )
+    sink.flush()
+
+    guard let preserved = readJSON(bundle.appendingPathComponent("manifest.json")),
+          preserved["schemaVersion"] as? Int == 999 else {
+        fail("unknown future session schema was overwritten")
+    }
+    guard let current = sink.currentSessionURL(),
+          current.lastPathComponent != "future-session" else {
+        fail("future-schema bundle was incorrectly adopted as the current session")
+    }
+}
+
 print("trainer_log_session_lifecycle_ok")
 """
 
