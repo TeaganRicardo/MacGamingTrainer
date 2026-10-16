@@ -25,9 +25,97 @@ func fileSize(_ url: URL) -> Int {
     return size.intValue
 }
 
-func completedLogs(_ url: URL) -> [URL] {
-    ((try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
-        .filter { $0.pathExtension == "log" }
+func directorySize(_ url: URL) -> Int {
+    guard let enumerator = FileManager.default.enumerator(
+        at: url,
+        includingPropertiesForKeys: [.fileSizeKey],
+        options: [.skipsHiddenFiles]
+    ) else {
+        return 0
+    }
+    var total = 0
+    for case let fileURL as URL in enumerator {
+        total += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+    }
+    return total
+}
+
+func sessionBundles(_ history: URL) -> [(URL, [String: Any])] {
+    let entries = (try? FileManager.default.contentsOfDirectory(
+        at: history,
+        includingPropertiesForKeys: nil,
+        options: [.skipsHiddenFiles]
+    )) ?? []
+    return entries.compactMap { bundle in
+        var isDirectory = false
+        guard FileManager.default.fileExists(atPath: bundle.path, isDirectory: &isDirectory),
+              isDirectory,
+              let data = try? Data(contentsOf: bundle.appendingPathComponent("manifest.json")),
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return (bundle, manifest)
+    }
+}
+
+func readJSON(_ url: URL) -> [String: Any]? {
+    guard let data = try? Data(contentsOf: url) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+}
+
+func streamText(_ bundle: URL, _ name: String) -> String {
+    (try? String(contentsOf: bundle.appendingPathComponent(name), encoding: .utf8)) ?? ""
+}
+
+func writeRecoveryFixture(home: URL, id: String, state: String, pid: Int) throws -> (URL, URL) {
+    let gameDirectory = home
+        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+        .appendingPathComponent("hades2", isDirectory: true)
+    let history = gameDirectory.appendingPathComponent("sessions", isDirectory: true)
+    let bundle = history.appendingPathComponent(id, isDirectory: true)
+    try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+
+    let manifest: [String: Any] = [
+        "schemaVersion": 1,
+        "id": id,
+        "startedAt": "2026-10-16T10:00:00Z",
+        "endedAt": state == "active" ? NSNull() : "2026-10-16T10:05:00Z",
+        "targetProcessName": "Hades II",
+        "targetBundleIdentifier": "com.supergiantgames.hades2",
+        "targetPID": pid,
+        "appVersion": "0.3.0",
+        "appBuild": "6",
+        "gameVersion": "1.143476",
+        "runtimeRevision": 109,
+        "state": state,
+        "endReason": state == "active" ? NSNull() : "target-exited",
+        "streams": [
+            "HOST": "host.log",
+            "BACKEND": "backend.log",
+            "RUNTIME": "runtime.log"
+        ],
+        "legacy": false,
+    ]
+    try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
+        .write(to: bundle.appendingPathComponent("manifest.json"), options: .atomic)
+    try Data("ORIGINAL \(state)\n".utf8).write(
+        to: bundle.appendingPathComponent("host.log"),
+        options: .atomic
+    )
+    try Data("backend evidence\n".utf8).write(
+        to: bundle.appendingPathComponent("backend.log"),
+        options: .atomic
+    )
+    try Data("runtime evidence\n".utf8).write(
+        to: bundle.appendingPathComponent("runtime.log"),
+        options: .atomic
+    )
+    let pointer = gameDirectory.appendingPathComponent("current-session.json")
+    try JSONSerialization.data(
+        withJSONObject: ["id": id],
+        options: [.prettyPrinted, .sortedKeys]
+    ).write(to: pointer, options: .atomic)
+    return (bundle, pointer)
 }
 
 guard CommandLine.arguments.count == 2 else { fail("temporary home required") }
@@ -35,16 +123,21 @@ let home = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let gameDirectory = home
     .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
     .appendingPathComponent("hades2", isDirectory: true)
-let current = gameDirectory.appendingPathComponent("trainer.log")
+let legacyCurrent = gameDirectory.appendingPathComponent("trainer.log")
 let host = gameDirectory.appendingPathComponent("trainer-host.log")
 let history = gameDirectory.appendingPathComponent("sessions", isDirectory: true)
 let metadata = gameDirectory.appendingPathComponent("current-session.json")
-let nativeLog = home.appendingPathComponent("Library/Application Support/Supergiant Games/Hades II/Hades II.log")
-try FileManager.default.createDirectory(at: nativeLog.deletingLastPathComponent(), withIntermediateDirectories: true)
+let nativeLog = home.appendingPathComponent(
+    "Library/Application Support/Supergiant Games/Hades II/Hades II.log"
+)
+try FileManager.default.createDirectory(
+    at: nativeLog.deletingLastPathComponent(),
+    withIntermediateDirectories: true
+)
 try Data("native game log must survive\n".utf8).write(to: nativeLog)
 
-guard TrainerLogSink.moduleLogURL(gameID: "hades2", homeDirectory: home) == current else {
-    fail("module log path lost per-game scoping")
+guard TrainerLogSink.moduleLogURL(gameID: "hades2", homeDirectory: home) == legacyCurrent else {
+    fail("legacy module log path compatibility changed")
 }
 
 // Before a target lifetime exists, diagnostics belong to bounded Host context.
@@ -53,77 +146,162 @@ do {
     sink.append("host-before-target")
     sink.append(String(repeating: "h", count: 1_200_000))
     sink.flush()
+
     if sink.currentLogURL() != host { fail("pre-target log did not resolve to Host context") }
-    if fileSize(host) > TrainerLogSink.maximumHostFileSize { fail("Host context exceeded its cap") }
-    if FileManager.default.fileExists(atPath: current.path) { fail("Host context created a fake target session") }
+    if sink.currentSessionURL() != nil { fail("pre-target context exposed a fake session bundle") }
+    if fileSize(host) > TrainerLogSink.maximumHostFileSize {
+        fail("Host context exceeded its cap")
+    }
+    if FileManager.default.fileExists(atPath: legacyCurrent.path) {
+        fail("Host context created the legacy trainer.log")
+    }
 }
 
-// First app instance begins the target lifetime.
+// A target lifetime is one self-contained bundle with independent source streams.
 do {
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
     sink.targetLifetimeChanged(
         running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 1001)
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 1001
+        )
     )
     sink.updateCurrentSessionRuntimeIdentity(gameVersion: "1.143476", runtimeRevision: 112)
     sink.append("host-in-session", source: "HOST")
     sink.append("backend-in-session", source: "BACKEND")
+    sink.append("runtime-in-session", source: "RUNTIME")
     sink.flush()
-    if sink.currentLogURL() != current { fail("active target did not own current session log") }
-    let text = (try? String(contentsOf: current, encoding: .utf8)) ?? ""
-    if !text.contains("HOST host-in-session") || !text.contains("BACKEND backend-in-session") {
-        fail("source-tagged records missing from current session")
+
+    guard let bundle = sink.currentSessionURL() else { fail("active session bundle missing") }
+    if sink.currentLogURL() != bundle.appendingPathComponent("host.log") {
+        fail("currentLogURL did not resolve to the active Host stream")
     }
-    if !FileManager.default.fileExists(atPath: metadata.path) { fail("current session metadata missing") }
-    let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as? [String: Any]
-    if identity?["targetProcessName"] as? String != "Hades II" { fail("target process identity missing") }
-    if identity?["targetBundleIdentifier"] as? String != "com.supergiantgames.hades2" { fail("target bundle identity missing") }
-    if identity?["gameVersion"] as? String != "1.143476" { fail("game version identity missing") }
-    if identity?["runtimeRevision"] as? Int != 112 { fail("resident revision identity missing") }
-    if identity?["appVersion"] == nil || identity?["appBuild"] == nil { fail("Host build identity missing") }
+    if FileManager.default.fileExists(atPath: legacyCurrent.path) {
+        fail("new sessions still write the legacy trainer.log")
+    }
+
+    guard let pointer = readJSON(metadata),
+          let id = pointer["id"] as? String else {
+        fail("current session pointer missing")
+    }
+    if bundle.lastPathComponent != id {
+        fail("current session pointer does not identify the active bundle")
+    }
+
+    guard let manifest = readJSON(bundle.appendingPathComponent("manifest.json")) else {
+        fail("session manifest missing")
+    }
+    if manifest["schemaVersion"] as? Int != 1 { fail("unexpected manifest schema") }
+    if manifest["state"] as? String != "active" { fail("active session state missing") }
+    if manifest["targetProcessName"] as? String != "Hades II" { fail("target identity missing") }
+    if manifest["targetBundleIdentifier"] as? String != "com.supergiantgames.hades2" {
+        fail("target bundle identity missing")
+    }
+    if manifest["gameVersion"] as? String != "1.143476" { fail("game version identity missing") }
+    if manifest["runtimeRevision"] as? Int != 112 { fail("resident revision identity missing") }
+
+    guard let streams = manifest["streams"] as? [String: String] else {
+        fail("manifest stream map missing")
+    }
+    if streams != [
+        "HOST": "host.log",
+        "BACKEND": "backend.log",
+        "RUNTIME": "runtime.log"
+    ] {
+        fail("manifest stream map is not the declared Session Bundle layout")
+    }
+
+    if !streamText(bundle, "host.log").contains("HOST host-in-session") {
+        fail("Host stream missing Host record")
+    }
+    if !streamText(bundle, "host.log").contains("RUNTIME") {
+        fail("Host stream missing runtime identity routing guard")
+    }
+    if !streamText(bundle, "backend.log").contains("BACKEND backend-in-session") {
+        fail("Backend stream missing Backend record")
+    }
+    if !streamText(bundle, "runtime.log").contains("RUNTIME runtime-in-session") {
+        fail("Runtime stream missing Runtime record")
+    }
+    if !streamText(bundle, "runtime.log").contains("session runtime gameVersion=1.143476") {
+        fail("runtime identity enrichment did not use Runtime stream")
+    }
 }
 
-// A Trainer restart while the same target PID lives resumes, rather than
-// manufacturing a second game session.
+// Trainer restart with the same target PID resumes the same bundle. A large
+// Backend burst is bounded independently from Host and Runtime.
 do {
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
     sink.targetLifetimeChanged(
         running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 1001)
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 1001
+        )
     )
+    guard let resumed = sink.currentSessionURL() else { fail("same-PID session was not resumed") }
     sink.append("after-host-restart", source: "HOST")
     sink.append(String(repeating: "b", count: 4_800_000), source: "BACKEND")
     sink.flush()
-    if completedLogs(history).count != 0 { fail("same target PID was split into multiple sessions") }
-    if fileSize(current) > TrainerLogSink.maximumSessionFileSize {
-        fail("backend-originated traffic escaped the per-session cap")
+
+    let bundles = sessionBundles(history)
+    if bundles.filter({ ($0.1["state"] as? String) == "completed" }).count != 0 {
+        fail("same target PID was split into multiple completed sessions")
     }
-    let boundedText = (try? String(contentsOf: current, encoding: .utf8)) ?? ""
-    if !boundedText.contains("BACKEND ") {
+    if fileSize(resumed.appendingPathComponent("backend.log")) > 2 * 1_048_576 {
+        fail("Backend stream escaped its 2 MiB per-session allocation")
+    }
+    if directorySize(resumed) > TrainerLogSink.maximumSessionFileSize + 16_384 {
+        fail("session bundle escaped its bounded size")
+    }
+    if !streamText(resumed, "backend.log").contains("BACKEND ") {
         fail("bounded backend record lost its source tag")
     }
+}
 
-    // A definitive replacement PID closes the old target lifetime even if the
-    // termination notification was hidden by rapid replacement.
+// A replacement PID closes the previous lifetime and creates a new bundle.
+do {
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
     sink.targetLifetimeChanged(
         running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 1002)
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 1002
+        )
     )
+    guard let replacement = sink.currentSessionURL() else { fail("replacement session missing") }
     sink.append("replacement-process", source: "HOST")
     sink.flush()
-    if completedLogs(history).count != 1 { fail("replacement PID did not close the previous session") }
-    let metadataObject = try JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as? [String: Any]
-    if metadataObject?["targetPID"] as? Int != 1002 { fail("current session metadata lost target PID") }
+
+    let completed = sessionBundles(history).filter { ($0.1["state"] as? String) == "completed" }
+    if completed.count != 1 { fail("replacement PID did not close the previous session") }
+    guard let previous = completed.first else { fail("completed session missing") }
+    if previous.1["endReason"] as? String != "target-replaced" {
+        fail("replacement session did not record its close reason")
+    }
+    if replacement.lastPathComponent == previous.1["id"] as? String {
+        fail("replacement PID reused the completed session ID")
+    }
 
     sink.targetLifetimeChanged(
         running: false,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: nil)
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: nil
+        )
     )
+    if FileManager.default.fileExists(atPath: metadata.path) {
+        fail("ended target session pointer remained current")
+    }
 }
-if FileManager.default.fileExists(atPath: metadata.path) { fail("ended session metadata remained current") }
 
-// Produce enough completed sessions to exercise both count and hard total
-// retention. Each target lifetime remains independently bounded.
+// Retention is session-oriented. Completed bundles are bounded by count and
+// by the hard per-game total; active bundles are never evicted.
 do {
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
     for index in 0..<10 {
@@ -135,191 +313,252 @@ do {
                 processIdentifier: Int32(2000 + index)
             )
         )
-        sink.append("bulk-\(index) " + String(repeating: "x", count: 3_900_000), source: "BACKEND")
+        sink.append(
+            "bulk-\(index) " + String(repeating: "x", count: 3_900_000),
+            source: "BACKEND"
+        )
         sink.flush()
         sink.targetLifetimeChanged(
             running: false,
-            identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: nil)
+            identity: .init(
+                processName: "Hades II",
+                bundleIdentifier: "com.supergiantgames.hades2",
+                processIdentifier: nil
+            )
         )
     }
-    let retained = completedLogs(history)
-    if retained.count > TrainerLogSink.maximumCompletedSessions {
+
+    let bundles = sessionBundles(history)
+    let completed = bundles.filter { ($0.1["state"] as? String) == "completed" }
+    if completed.count > TrainerLogSink.maximumCompletedSessions {
         fail("retained more than eight completed target sessions")
     }
-    let total = retained.reduce(fileSize(host) + fileSize(current)) { $0 + fileSize($1) }
+    let total = fileSize(host) + bundles.reduce(0) { $0 + directorySize($1.0) }
     if total > TrainerLogSink.maximumTotalBytes {
         fail("per-game Trainer log retention exceeded 32 MiB")
     }
-
-    // User cleanup removes completed Trainer sessions only. The active session
-    // and native Hades log are outside that deletion set.
-    sink.targetLifetimeChanged(
-        running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 4001)
-    )
-    sink.append("active-survives-cleanup", source: "HOST")
-    sink.flush()
-    if !sink.clearCompletedSessions() { fail("completed session cleanup reported failure") }
-    if !completedLogs(history).isEmpty { fail("completed session cleanup left history behind") }
-    let active = (try? String(contentsOf: current, encoding: .utf8)) ?? ""
-    if !active.contains("active-survives-cleanup") { fail("cleanup removed the active session") }
-    if !FileManager.default.fileExists(atPath: nativeLog.path) { fail("cleanup touched native Hades II.log") }
 }
 
-// Sustained backend output cannot turn the Host writer queue into an
-// unbounded in-memory backlog. Dropped diagnostics remain explicit.
-let queueHome = home.appendingPathComponent("queue-home", isDirectory: true)
+// Cleanup only removes completed Trainer session bundles. The active bundle and
+// native Hades log remain untouched.
 do {
-    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: queueHome)
-    sink.targetLifetimeChanged(
-        running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 4501)
-    )
-    let payload = String(repeating: "q", count: 65_536)
-    for index in 0..<128 {
-        sink.append("queue-\(index) " + payload, source: "BACKEND")
-    }
-    // Guarantee the overflow path even on an unusually fast filesystem.
-    sink.append(String(repeating: "z", count: TrainerLogSink.maximumPendingBytes + 1), source: "BACKEND")
-    sink.flush()
-    let text = (try? String(contentsOf: sink.url, encoding: .utf8)) ?? ""
-    if !text.contains("LOGGER log queue overflow droppedBytes=") {
-        fail("Host log queue did not make burst truncation explicit")
-    }
-    if fileSize(sink.url) > TrainerLogSink.maximumSessionFileSize {
-        fail("bounded Host queue escaped the per-session file cap")
-    }
-}
-
-// Recovery fixtures model the three durable boundaries in finalization. Each
-// fixture is the exact on-disk state a terminated Trainer can leave behind;
-// the next Trainer instance must preserve the completed evidence and continue
-// with a fresh active session.
-func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, String) {
-    let directory = home
-        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
-        .appendingPathComponent("hades2", isDirectory: true)
-    let current = directory.appendingPathComponent("trainer.log")
-    let history = directory.appendingPathComponent("sessions", isDirectory: true)
-    let metadata = directory.appendingPathComponent("current-session.json")
-    try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
-
-    let id = "interrupted-\(phase)"
-    let record: [String: Any] = [
-        "id": id,
-        "startedAt": "2026-10-16T10:00:00Z",
-        "endedAt": "2026-10-16T10:05:00Z",
-        "targetProcessName": "Hades II",
-        "targetBundleIdentifier": "com.supergiantgames.hades2",
-        "targetPID": 9000,
-        "appVersion": "0.3.0",
-        "appBuild": "6",
-        "gameVersion": "1.143476",
-        "runtimeRevision": 109,
-        "legacy": false,
-        "finalizing": true,
-    ]
-    let currentMetadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
-    var completedRecord = record
-    completedRecord.removeValue(forKey: "finalizing")
-    let completedMetadataData = try JSONSerialization.data(withJSONObject: completedRecord, options: [.prettyPrinted, .sortedKeys])
-    let completedMetadata = history.appendingPathComponent(id).appendingPathExtension("json")
-    let completedLog = history.appendingPathComponent(id).appendingPathExtension("log")
-
-    switch phase {
-    case "after-finalizing-marker":
-        try currentMetadataData.write(to: metadata, options: .atomic)
-        try Data("ORIGINAL after-finalizing-marker\n".utf8).write(to: current, options: .atomic)
-    case "after-completed-metadata":
-        try completedMetadataData.write(to: completedMetadata, options: .atomic)
-        try currentMetadataData.write(to: metadata, options: .atomic)
-        try Data("ORIGINAL after-completed-metadata\n".utf8).write(to: current, options: .atomic)
-    case "after-log-move":
-        try completedMetadataData.write(to: completedMetadata, options: .atomic)
-        try currentMetadataData.write(to: metadata, options: .atomic)
-        try Data("ORIGINAL after-log-move\n".utf8).write(to: completedLog, options: .atomic)
-    case "after-current-metadata-removal":
-        try completedMetadataData.write(to: completedMetadata, options: .atomic)
-        try Data("ORIGINAL after-current-metadata-removal\n".utf8).write(to: completedLog, options: .atomic)
-    default:
-        fail("unknown finalization fixture")
-    }
-    return (directory, current, history, id)
-}
-
-for phase in ["after-finalizing-marker", "after-completed-metadata", "after-log-move", "after-current-metadata-removal"] {
-    let fixtureHome = home.appendingPathComponent("finalization-\(phase)", isDirectory: true)
-    let (directory, current, history, interruptedID) = try writeSessionFixture(home: fixtureHome, phase: phase)
-    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: fixtureHome)
-    let host = directory.appendingPathComponent("trainer-host.log")
-    if sink.currentLogURL() != host {
-        fail("finalization recovery \(phase) exposed stale target log before target lifetime")
-    }
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
     sink.targetLifetimeChanged(
         running: true,
         identity: .init(
             processName: "Hades II",
             bundleIdentifier: "com.supergiantgames.hades2",
-            processIdentifier: phase == "after-finalizing-marker" ? 9000 : 9001
+            processIdentifier: 4001
+        )
+    )
+    guard let active = sink.currentSessionURL() else { fail("active cleanup session missing") }
+    sink.append("active-survives-cleanup", source: "HOST")
+    sink.flush()
+    if !sink.clearCompletedSessions() { fail("completed session cleanup reported failure") }
+    if !sessionBundles(history).filter({ ($0.1["state"] as? String) == "completed" }).isEmpty {
+        fail("completed session cleanup left history behind")
+    }
+    if !FileManager.default.fileExists(atPath: active.path) {
+        fail("cleanup removed the active session bundle")
+    }
+    if !streamText(active, "host.log").contains("active-survives-cleanup") {
+        fail("cleanup removed active session evidence")
+    }
+    if !FileManager.default.fileExists(atPath: nativeLog.path) {
+        fail("cleanup touched native Hades II.log")
+    }
+}
+
+// Queue overflow remains explicit and is recorded in the Host stream.
+do {
+    let queueHome = home.appendingPathComponent("queue-home", isDirectory: true)
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: queueHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 4501
+        )
+    )
+    let payload = String(repeating: "q", count: 65_536)
+    for index in 0..<128 {
+        sink.append("queue-\(index) " + payload, source: "BACKEND")
+    }
+    sink.append(
+        String(repeating: "z", count: TrainerLogSink.maximumPendingBytes + 1),
+        source: "BACKEND"
+    )
+    sink.flush()
+    guard let active = sink.currentSessionURL() else { fail("queue session missing") }
+    if !streamText(active, "host.log").contains("LOGGER log queue overflow droppedBytes=") {
+        fail("Host log queue did not make burst truncation explicit")
+    }
+    if fileSize(active.appendingPathComponent("host.log")) > 1 * 1_048_576 {
+        fail("Host stream escaped its bound")
+    }
+}
+
+// Finalization recovery is in-place: no log file is moved or overwritten.
+// A finalizing bundle can resume when the same target identity returns;
+// a stale active bundle is sealed as interrupted before a replacement starts.
+do {
+    let recoveryHome = home.appendingPathComponent("recovery-same-pid", isDirectory: true)
+    let (bundle, pointer) = try writeRecoveryFixture(
+        home: recoveryHome,
+        id: "interrupted-finalizing",
+        state: "finalizing",
+        pid: 9000
+    )
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: recoveryHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 9000
+        )
+    )
+    sink.flush()
+    guard let resumed = sink.currentSessionURL(),
+          resumed.lastPathComponent == "interrupted-finalizing" else {
+        fail("finalizing session was not resumed for the same target identity")
+    }
+    if !streamText(bundle, "host.log").contains("ORIGINAL finalizing") {
+        fail("finalization recovery overwrote the existing Host stream")
+    }
+    guard let resumedManifest = readJSON(bundle.appendingPathComponent("manifest.json")),
+          resumedManifest["state"] as? String == "active",
+          resumedManifest["endedAt"] == nil else {
+        fail("same-PID finalization recovery did not reopen the bundle as active")
+    }
+    sink.targetLifetimeChanged(
+        running: false,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: nil
+        )
+    )
+    if FileManager.default.fileExists(atPath: pointer.path) {
+        fail("completed recovered session pointer remained current")
+    }
+}
+
+do {
+    let recoveryHome = home.appendingPathComponent("recovery-replacement", isDirectory: true)
+    let (oldBundle, _) = try writeRecoveryFixture(
+        home: recoveryHome,
+        id: "interrupted-active",
+        state: "active",
+        pid: 9100
+    )
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: recoveryHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 9101
         )
     )
     sink.flush()
 
-    let retained = completedLogs(history)
-    guard retained.count == 1 else {
-        fail("finalization recovery \(phase) did not retain exactly one completed log")
+    guard let oldManifest = readJSON(oldBundle.appendingPathComponent("manifest.json")),
+          oldManifest["state"] as? String == "completed",
+          oldManifest["endReason"] as? String == "target-replaced" else {
+        fail("stale active session was not sealed before replacement")
     }
-    let retainedLog = history.appendingPathComponent(interruptedID).appendingPathExtension("log")
-    let retainedText = (try? String(contentsOf: retainedLog, encoding: .utf8)) ?? ""
-    if !retainedText.contains("ORIGINAL \(phase)") {
-        fail("finalization recovery \(phase) overwrote the completed log")
+    if !streamText(oldBundle, "host.log").contains("ORIGINAL active") {
+        fail("stale active session evidence was overwritten")
     }
-    let completedMetadata = history.appendingPathComponent(interruptedID).appendingPathExtension("json")
-    if let completedData = try? Data(contentsOf: completedMetadata),
-       let completedObject = try? JSONSerialization.jsonObject(with: completedData) as? [String: Any],
-       completedObject["finalizing"] as? Bool == true {
-        fail("finalization recovery \(phase) leaked the transient finalizing marker")
-    }
-    guard let newMetadata = try? JSONSerialization.jsonObject(
-        with: Data(contentsOf: fixtureHome
-            .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
-            .appendingPathComponent("hades2", isDirectory: true)
-            .appendingPathComponent("current-session.json"))
-    ) as? [String: Any] else {
-        fail("finalization recovery \(phase) did not establish a new active session")
-    }
-    let expectedPID = phase == "after-finalizing-marker" ? 9000 : 9001
-    if newMetadata["id"] as? String == interruptedID
-        || newMetadata["targetPID"] as? Int != expectedPID
-        || newMetadata["finalizing"] as? Bool == true {
-        fail("finalization recovery \(phase) reused the interrupted session identity")
-    }
-    if !FileManager.default.fileExists(atPath: current.path) {
-        fail("finalization recovery (phase) did not create a new current log")
+    guard let current = sink.currentSessionURL(),
+          current.lastPathComponent != "interrupted-active" else {
+        fail("replacement reused stale session bundle")
     }
 }
 
-// Legacy trainer.log(.1-.3) is migrated into history instead of silently lost.
-let legacyHome = home.appendingPathComponent("legacy-home", isDirectory: true)
-let legacyDirectory = legacyHome
-    .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
-    .appendingPathComponent("hades2", isDirectory: true)
-try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
-let legacyCurrent = legacyDirectory.appendingPathComponent("trainer.log")
-try Data("legacy-current\n".utf8).write(to: legacyCurrent)
-try Data("legacy-older\n".utf8).write(to: legacyCurrent.appendingPathExtension("1"))
+// Legacy root trainer.log(.1-.3) is migrated into a completed Session Bundle.
 do {
+    let legacyHome = home.appendingPathComponent("legacy-root", isDirectory: true)
+    let directory = legacyHome
+        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+        .appendingPathComponent("hades2", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let current = directory.appendingPathComponent("trainer.log")
+    try Data("legacy-current\n".utf8).write(to: current)
+    try Data("legacy-older\n".utf8).write(to: current.appendingPathExtension("1"))
+
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: legacyHome)
     sink.targetLifetimeChanged(
         running: true,
-        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 5001)
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 5001
+        )
     )
     sink.flush()
-    let migrated = completedLogs(sink.historyURL)
-    if migrated.count != 1 { fail("legacy trainer.log history was not migrated") }
-    let text = (try? String(contentsOf: migrated[0], encoding: .utf8)) ?? ""
-    if !text.contains("legacy-older") || !text.contains("legacy-current") {
+
+    let bundles = sessionBundles(sink.historyURL)
+    let migrated = bundles.filter { ($0.1["legacy"] as? Bool) == true }
+    if migrated.count != 1 { fail("legacy trainer.log was not migrated to a bundle") }
+    guard let legacyBundle = migrated.first else { fail("legacy bundle missing") }
+    let legacyText = streamText(legacyBundle.0, "legacy.log")
+    if !legacyText.contains("legacy-older") || !legacyText.contains("legacy-current") {
         fail("legacy migration lost retained records")
+    }
+    if !FileManager.default.fileExists(atPath: sink.currentSessionURL()!.path) {
+        fail("new target session was not created after legacy migration")
+    }
+}
+
+// Legacy flat completed session artifacts are migrated into legacy bundles.
+do {
+    let legacyHome = home.appendingPathComponent("legacy-history", isDirectory: true)
+    let directory = legacyHome
+        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+        .appendingPathComponent("hades2", isDirectory: true)
+    let history = directory.appendingPathComponent("sessions", isDirectory: true)
+    try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+    let legacyLog = history.appendingPathComponent("old-session.log")
+    try Data("flat legacy history\n".utf8).write(to: legacyLog, options: .atomic)
+    let legacyMetadata: [String: Any] = [
+        "id": "old-session",
+        "startedAt": "2026-10-15T10:00:00Z",
+        "endedAt": "2026-10-15T10:05:00Z",
+        "targetProcessName": "Hades II",
+        "targetBundleIdentifier": "com.supergiantgames.hades2",
+        "targetPID": 8000,
+        "appVersion": "0.3.0",
+        "appBuild": "6",
+        "gameVersion": "1.143476",
+        "runtimeRevision": 109,
+        "legacy": false,
+        "finalizing": false,
+    ]
+    try JSONSerialization.data(withJSONObject: legacyMetadata, options: [.prettyPrinted, .sortedKeys])
+        .write(to: history.appendingPathComponent("old-session.json"), options: .atomic)
+
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: legacyHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 8001
+        )
+    )
+    sink.flush()
+
+    let migratedBundle = history.appendingPathComponent("old-session", isDirectory: true)
+    if !FileManager.default.fileExists(atPath: migratedBundle.appendingPathComponent("legacy.log").path) {
+        fail("flat legacy history log was not moved into a bundle")
+    }
+    guard let manifest = readJSON(migratedBundle.appendingPathComponent("manifest.json")),
+          manifest["state"] as? String == "completed",
+          manifest["legacy"] as? Bool == true else {
+        fail("flat legacy history metadata was not migrated")
     }
 }
 
@@ -339,7 +578,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-log-session-") as td:
         str(main),
         "-o", str(binary),
     ], check=True, cwd=ROOT)
-    proc = subprocess.run([str(binary), str(home)], cwd=ROOT, text=True, capture_output=True, timeout=30)
+    proc = subprocess.run(
+        [str(binary), str(home)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)
