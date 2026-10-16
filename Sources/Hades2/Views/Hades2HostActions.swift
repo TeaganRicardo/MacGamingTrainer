@@ -57,6 +57,8 @@ struct Hades2ManagementCommands: Commands {
             Divider()
             Button(localization.localized("host.shortcutSettings")) { model.shortcutSettingsPresented = true }
             Button(localization.localized("host.viewLog")) { model.openLog() }
+            Button(localization.localized("host.viewLogHistory")) { model.openLogHistory() }
+            Button(localization.localized("host.clearCompletedLogs")) { model.clearCompletedLogs() }
         }
     }
 }
