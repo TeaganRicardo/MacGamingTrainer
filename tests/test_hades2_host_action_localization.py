@@ -109,6 +109,15 @@ for token in (
 ):
     assert token in management, token
 
+# The user-facing log action must expose the whole active Session Bundle.
+# Opening only host.log hides the Backend and Runtime source streams; no
+# running target must continue to fall back to the Host context log.
+open_log_action = model.split("    func openLog() {", 1)[1].split("    func openLogHistory()", 1)[0]
+assert "logSink.flush()" in open_log_action
+assert "NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())" in open_log_action, (
+    "View Log opens only the Host stream instead of the full active Session Bundle"
+)
+
 assert "TrainerHotkeyRegistrationFailure" in global_hotkeys
 assert "case listenerInitialization(status: Int32)" in global_hotkeys
 assert "case registrationConflicts([TrainerHotkeyRegistrationConflict])" in global_hotkeys
