@@ -295,6 +295,15 @@ do {
             processIdentifier: nil
         )
     )
+    guard let completedManifest = readJSON(replacement.appendingPathComponent("manifest.json")),
+          completedManifest["state"] as? String == "completed" else {
+        fail("normal finalization did not commit the completed bundle manifest")
+    }
+    for stream in ["host.log", "backend.log", "runtime.log"] {
+        if !FileManager.default.fileExists(atPath: replacement.appendingPathComponent(stream).path) {
+            fail("normal finalization moved or removed (stream)")
+        }
+    }
     if FileManager.default.fileExists(atPath: metadata.path) {
         fail("ended target session pointer remained current")
     }
