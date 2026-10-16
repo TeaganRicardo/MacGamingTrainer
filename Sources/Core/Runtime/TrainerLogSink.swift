@@ -11,6 +11,7 @@ final class TrainerLogSink {
     static let maximumHostFileSize = 1_048_576
     static let maximumCompletedSessions = 8
     static let maximumTotalBytes = 32 * 1_048_576
+    static let maximumPendingBytes = 1_048_576
     // Compatibility for unmanaged/test callers that referenced the old limit.
     static let maximumFileSize = maximumHostFileSize
 
@@ -39,7 +40,11 @@ final class TrainerLogSink {
     private let metadataURL: URL
     private let managedSessions: Bool
     private let queue = DispatchQueue(label: "com.gao.macgamingtrainer.log", qos: .utility)
+    private let pendingLock = NSLock()
     private let formatter = ISO8601DateFormatter()
+    private var pendingBytes = 0
+    private var droppedPendingBytes = 0
+    private var overflowMarkerScheduled = false
     private var handle: FileHandle?
     private var handleURL: URL?
     private var activeSession: SessionRecord?
@@ -88,14 +93,38 @@ final class TrainerLogSink {
 
     func append(_ line: String, source: String = "HOST") {
         guard !line.isEmpty else { return }
-        queue.async { [weak self] in
-            guard let self else { return }
-            do {
-                try self.appendLocked(line, source: source)
-            } catch {
-                // Diagnostics must never interfere with Trainer/game operation,
-                // and a log failure cannot recursively log itself.
+        let bytes = min(Int.max - 128, line.utf8.count) + 128
+        var accepted = false
+        var scheduleOverflowMarker = false
+
+        pendingLock.lock()
+        if bytes <= Self.maximumPendingBytes,
+           pendingBytes <= Self.maximumPendingBytes - bytes {
+            pendingBytes += bytes
+            accepted = true
+        } else {
+            droppedPendingBytes = min(Int.max - bytes, droppedPendingBytes) + bytes
+            if !overflowMarkerScheduled {
+                overflowMarkerScheduled = true
+                scheduleOverflowMarker = true
             }
+        }
+        pendingLock.unlock()
+
+        if accepted {
+            queue.async { [weak self] in
+                guard let self else { return }
+                defer { self.releasePendingBytes(bytes) }
+                do {
+                    try self.appendLocked(line, source: source)
+                } catch {
+                    // Diagnostics must never interfere with Trainer/game operation,
+                    // and a log failure cannot recursively log itself.
+                }
+            }
+        }
+        if scheduleOverflowMarker {
+            queue.async { [weak self] in self?.writeOverflowMarkerLocked() }
         }
     }
 
@@ -149,12 +178,30 @@ final class TrainerLogSink {
         }
     }
 
+    private func releasePendingBytes(_ bytes: Int) {
+        pendingLock.lock()
+        pendingBytes = max(0, pendingBytes - bytes)
+        pendingLock.unlock()
+    }
+
+    private func writeOverflowMarkerLocked() {
+        let dropped: Int
+        pendingLock.lock()
+        dropped = droppedPendingBytes
+        droppedPendingBytes = 0
+        overflowMarkerScheduled = false
+        pendingLock.unlock()
+        guard dropped > 0 else { return }
+        try? appendLocked("log queue overflow droppedBytes=\(dropped)", source: "LOGGER")
+    }
+
     private func appendLocked(_ line: String, source: String) throws {
         let destination = writeURLLocked()
         let limit = activeSession == nil ? Self.maximumHostFileSize : Self.maximumSessionFileSize
         let prefix = "\(formatter.string(from: Date())) \(source) "
+        let taggedLine = line.replacingOccurrences(of: "\n", with: "\n" + prefix)
         guard let prefixData = prefix.data(using: .utf8),
-              var messageData = line.data(using: .utf8) else { return }
+              var messageData = taggedLine.data(using: .utf8) else { return }
         let suffix = Data("\n".utf8)
         let maximumMessageBytes = max(0, limit - prefixData.count - suffix.count)
         if messageData.count > maximumMessageBytes {
