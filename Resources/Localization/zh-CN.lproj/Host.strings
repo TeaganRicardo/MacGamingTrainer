@@ -106,6 +106,8 @@
 "host.viewLog" = "查看当前日志";
 "host.viewLogHistory" = "查看历史日志";
 "host.clearCompletedLogs" = "清除已结束会话日志";
+"host.logs.cleared" = "已清除已结束会话日志。";
+"host.logs.clearFailed" = "无法清除已结束会话日志。";
 "host.launchGame" = "启动游戏";
 "host.refreshStatus" = "刷新状态";
 "host.disableAll" = "全部关闭";
