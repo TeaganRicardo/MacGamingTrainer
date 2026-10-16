@@ -157,6 +157,81 @@ do {
     }
 }
 
+// Reuse one sink across Host -> game -> Host -> next game. An open Host
+// descriptor must not redirect session records back into trainer-host.log.
+do {
+    let transitionHome = home.appendingPathComponent("same-sink-transition", isDirectory: true)
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: transitionHome)
+    let hostContext = sink.hostURL
+    let target = TrainerLogSink.TargetIdentity(
+        processName: "Hades II",
+        bundleIdentifier: "com.supergiantgames.hades2",
+        processIdentifier: 7701
+    )
+    sink.append("before-target-only", source: "HOST")
+    sink.flush()
+    if !streamText(hostContext.deletingLastPathComponent(), "trainer-host.log").contains("HOST before-target-only") {
+        fail("Host context was not created before target launch")
+    }
+
+    sink.targetLifetimeChanged(running: true, identity: target)
+    guard let first = sink.currentSessionURL() else {
+        fail("same-sink transition did not create a session")
+    }
+    sink.append("first-target-only", source: "HOST")
+    sink.append("first-backend-only", source: "BACKEND")
+    sink.flush()
+    if !streamText(first, "host.log").contains("HOST first-target-only") ||
+       !streamText(first, "host.log").contains("session start id=") {
+        fail("Host descriptor kept writing Host context after session creation")
+    }
+    if !streamText(first, "backend.log").contains("BACKEND first-backend-only") {
+        fail("Backend stream was lost during same-sink transition")
+    }
+    if streamText(first, "host.log").contains("before-target-only") ||
+       streamText(hostContext.deletingLastPathComponent(), "trainer-host.log").contains("first-target-only") {
+        fail("Host context and first target stream were mixed")
+    }
+
+    sink.targetLifetimeChanged(
+        running: false,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: nil
+        )
+    )
+    sink.append("between-targets-only", source: "HOST")
+    sink.flush()
+    if !streamText(hostContext.deletingLastPathComponent(), "trainer-host.log").contains("HOST between-targets-only") ||
+       streamText(first, "host.log").contains("between-targets-only") {
+        fail("finished target descriptor leaked into Host context")
+    }
+    if !streamText(first, "host.log").contains("session end id=") {
+        fail("same-sink finalization lost the first target end marker")
+    }
+
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 7702
+        )
+    )
+    guard let second = sink.currentSessionURL(), second != first else {
+        fail("new target lifetime was not assigned a new bundle")
+    }
+    sink.append("second-target-only", source: "HOST")
+    sink.flush()
+    if !streamText(second, "host.log").contains("HOST second-target-only") ||
+       !streamText(second, "host.log").contains("session start id=") ||
+       streamText(first, "host.log").contains("second-target-only") ||
+       streamText(hostContext.deletingLastPathComponent(), "trainer-host.log").contains("second-target-only") {
+        fail("reopened Host descriptor targeted an earlier lifecycle")
+    }
+}
+
 // A target lifetime is one self-contained bundle with independent source streams.
 do {
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: home)
