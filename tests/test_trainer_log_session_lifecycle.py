@@ -65,6 +65,7 @@ do {
         running: true,
         identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 1001)
     )
+    sink.updateCurrentSessionRuntimeIdentity(gameVersion: "1.143476", runtimeRevision: 112)
     sink.append("host-in-session", source: "HOST")
     sink.append("backend-in-session", source: "BACKEND")
     sink.flush()
@@ -74,6 +75,12 @@ do {
         fail("source-tagged records missing from current session")
     }
     if !FileManager.default.fileExists(atPath: metadata.path) { fail("current session metadata missing") }
+    let identity = try JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as? [String: Any]
+    if identity?["targetProcessName"] as? String != "Hades II" { fail("target process identity missing") }
+    if identity?["targetBundleIdentifier"] as? String != "com.supergiantgames.hades2" { fail("target bundle identity missing") }
+    if identity?["gameVersion"] as? String != "1.143476" { fail("game version identity missing") }
+    if identity?["runtimeRevision"] as? Int != 112 { fail("resident revision identity missing") }
+    if identity?["appVersion"] == nil || identity?["appBuild"] == nil { fail("Host build identity missing") }
 }
 
 // A Trainer restart while the same target PID lives resumes, rather than
