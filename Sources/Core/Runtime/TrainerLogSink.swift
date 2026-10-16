@@ -598,6 +598,7 @@ final class TrainerLogSink {
             }
 
             let now = formatter.string(from: Date())
+            let isLegacyBundle = streams.count == 1 && streams["LEGACY"] == "legacy.log"
             let recovered = SessionRecord(
                 id: id,
                 startedAt: now,
@@ -612,7 +613,7 @@ final class TrainerLogSink {
                 state: .completed,
                 endReason: "orphan-recovery",
                 streams: streams,
-                legacy: false
+                legacy: isLegacyBundle
             )
             try writeSessionRecord(recovered, to: manifestURL)
         }
