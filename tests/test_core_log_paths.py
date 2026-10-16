@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from core.log_paths import trainer_log_path
+from core.log_paths import trainer_log_directory, trainer_log_path
 
 
 def test_valid_game_id_is_scoped_under_configured_home():
@@ -90,6 +90,34 @@ def test_log_file_symlink_cannot_escape_log_root():
             raise AssertionError("symlinked trainer.log escaped its root")
 
 
+def test_session_log_directory_ignores_only_the_obsolete_flat_log_leaf():
+    with tempfile.TemporaryDirectory(prefix="mgt-session-directory-") as directory:
+        home = Path(directory)
+        game_dir = home / "Library/Application Support/MacGamingTrainer/hades2"
+        game_dir.mkdir(parents=True)
+        outside = home / "unrelated.log"
+        outside.write_text("unrelated", encoding="utf-8")
+        (game_dir / "trainer.log").symlink_to(outside)
+
+        assert trainer_log_directory("hades2", home=home) == game_dir.resolve()
+        try:
+            trainer_log_path("hades2", home=home)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("legacy path unexpectedly accepted a symlink")
+
+        # The new directory resolver must retain the shared containment check.
+        game_dir.rename(game_dir.with_name("original"))
+        game_dir.symlink_to(outside.parent, target_is_directory=True)
+        try:
+            trainer_log_directory("hades2", home=home)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("session root accepted a symlinked game directory")
+
+
 if __name__ == "__main__":
     test_valid_game_id_is_scoped_under_configured_home()
     test_game_id_rejects_empty_and_absolute_paths()
@@ -97,4 +125,5 @@ if __name__ == "__main__":
     test_game_directory_symlink_cannot_escape_log_root()
     test_log_root_symlink_cannot_redirect_logs_outside_home()
     test_log_file_symlink_cannot_escape_log_root()
+    test_session_log_directory_ignores_only_the_obsolete_flat_log_leaf()
     print("core_log_paths_ok")
