@@ -107,27 +107,65 @@ def export_diagnostics(adapter):
     }
     log_path=trainer_log_path(adapter.game_id)
     log_directory=log_path.parent
-    session_metadata_path=log_directory/'current-session.json'
+    session_pointer_path=log_directory/'current-session.json'
     host_log_path=log_directory/'trainer-host.log'
     session_metadata=None
-    if session_metadata_path.is_file():
+    session_directory=None
+
+    if session_pointer_path.is_file():
         try:
-            session_metadata=json.loads(session_metadata_path.read_text(encoding='utf-8'))
+            pointer=json.loads(session_pointer_path.read_text(encoding='utf-8'))
+            session_id=pointer.get('id') if isinstance(pointer,dict) else None
+            if isinstance(session_id,str) and session_id and '/' not in session_id and '\\\\' not in session_id and session_id not in ('.','..'):
+                candidate=log_directory/'sessions'/session_id
+                resolved_directory=candidate.resolve()
+                resolved_root=(log_directory/'sessions').resolve()
+                if resolved_directory.parent == resolved_root:
+                    manifest_path=candidate/'manifest.json'
+                    if manifest_path.is_file():
+                        session_metadata=json.loads(manifest_path.read_text(encoding='utf-8'))
+                        if isinstance(session_metadata,dict):
+                            session_directory=candidate
         except Exception:
             session_metadata=None
-    report['trainerLogScope']='current_target_session' if session_metadata and log_path.is_file() else 'host_context'
+            session_directory=None
+
+    report['trainerLogScope']='current_target_session' if session_metadata and session_directory else 'host_context'
     report['trainerSession']=session_metadata
+    if session_metadata and isinstance(session_metadata.get('streams'),dict):
+        report['trainerLogStreams']=sorted(
+            str(source) for source in session_metadata['streams']
+            if isinstance(source,str)
+        )
+    else:
+        report['trainerLogStreams']=[]
+
     symbols=Path(__file__).with_name('symbols.json')
     with zipfile.ZipFile(zip_path,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('report.json',json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2,default=str)+'\n')
-        if session_metadata and log_path.is_file():
-            with log_path.open('rb') as stream:
-                stream.seek(0,2);size=stream.tell();stream.seek(max(0,size-(4*1024*1024)))
-                archive.writestr('trainer-session.log',stream.read())
+        if session_metadata and session_directory:
             archive.writestr(
-                'trainer-session.json',
+                'trainer-session/manifest.json',
                 json.dumps(session_metadata,ensure_ascii=False,sort_keys=True,indent=2,default=str)+'\n'
             )
+            streams=session_metadata.get('streams',{})
+            if isinstance(streams,dict):
+                resolved_directory=session_directory.resolve()
+                for relative_name in sorted(
+                    (value for value in streams.values() if isinstance(value,str)),
+                    key=str,
+                ):
+                    relative=Path(relative_name)
+                    if (
+                        relative.is_absolute()
+                        or len(relative.parts) != 1
+                        or relative.parts[0] in ('.','..')
+                    ):
+                        continue
+                    stream_path=(session_directory/relative).resolve()
+                    if stream_path.parent != resolved_directory or not stream_path.is_file():
+                        continue
+                    archive.write(stream_path, f'trainer-session/{relative_name}')
         elif host_log_path.is_file():
             with host_log_path.open('rb') as stream:
                 stream.seek(0,2);size=stream.tell();stream.seek(max(0,size-262144))
