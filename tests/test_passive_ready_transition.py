@@ -193,7 +193,9 @@ for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [
 # executing one doomed status request first.
 assert 'case runtimeReset = "runtime_reset"' in command_binding
 assert 'send(.runtimeReset' in event_block
-assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
+event_switch_start = event_block.index('        switch event {')
+event_switch = event_block[event_switch_start:]
+assert event_switch.index('send(.runtimeReset') < event_switch.index('case .runtimeReady')
 
 # If runtimeReady wins the race against background attach completion, retain the
 # signal while disconnected; the post-connect completion consumes it exactly
