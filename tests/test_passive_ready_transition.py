@@ -200,7 +200,7 @@ assert event_switch.index('send(.runtimeReset') < event_switch.index('case .runt
 # If runtimeReady wins the race against background attach completion, retain the
 # signal while disconnected; the post-connect completion consumes it exactly
 # once instead of leaving the deferred connection stuck in waiting.
-ready_block = event_block[event_block.index('case .runtimeReady'):]
+ready_block = event_switch[event_switch.index('case .runtimeReady'):]
 assert ready_block.index('pendingRunReadySignal = true') < ready_block.index('guard connected else { return }')
 
 backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]
