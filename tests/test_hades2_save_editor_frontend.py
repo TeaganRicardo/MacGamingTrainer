@@ -378,10 +378,10 @@ for raw in sys.stdin:
                 'moduleProtocolVersion': 14,
                 'gameID': args.game,
                 'ok': False,
-                'failure': {
+                'error': {
                     'code': 'rollback_failed',
                     'presentation': 'host.save.error.rollbackFailed',
-                    'presentationArguments': ['/tmp/mgt-recovery/save-600'],
+                    'arguments': ['/tmp/mgt-recovery/save-600'],
                     'recoveryPath': '/tmp/mgt-recovery/save-600',
                 },
             }), flush=True)
