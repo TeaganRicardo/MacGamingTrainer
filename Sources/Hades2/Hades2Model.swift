@@ -408,7 +408,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
         )
         hostTargetLifetimeChanged(running: observation.isRunning)
-        runLogWatcher.start()
+        if observation.isRunning {
+            runLogWatcher.start()
+        } else {
+            runLogWatcher.stop()
+        }
         startBackend()
     }
 
