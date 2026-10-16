@@ -123,7 +123,11 @@ final class TrainerLogSink {
     private var pendingBytes = 0
     private var droppedPendingBytes = 0
     private var overflowMarkerScheduled = false
-    private var handles: [Stream: FileHandle] = [:]
+    private struct StreamHandle {
+        let destination: URL
+        let handle: FileHandle
+    }
+    private var handles: [Stream: StreamHandle] = [:]
     private var activeSession: SessionRecord?
 
     init(url: URL) {
@@ -161,9 +165,9 @@ final class TrainerLogSink {
     }
 
     deinit {
-        for handle in handles.values {
-            try? handle.synchronize()
-            try? handle.close()
+        for opened in handles.values {
+            try? opened.handle.synchronize()
+            try? opened.handle.close()
         }
         handles.removeAll()
     }
@@ -209,8 +213,8 @@ final class TrainerLogSink {
 
     func flush() {
         queue.sync {
-            for handle in handles.values {
-                try? handle.synchronize()
+            for opened in handles.values {
+                try? opened.handle.synchronize()
             }
         }
     }
@@ -624,10 +628,10 @@ final class TrainerLogSink {
         let candidates = [3, 2, 1].map { url.appendingPathExtension(String($0)) } + [url]
         var combined = Data()
         for candidate in candidates where FileManager.default.fileExists(atPath: candidate.path) {
-            let tail = try tailData(candidate, maximumBytes: Self.maximumSessionFileSize)
+            let tail = try tailData(candidate, maximumBytes: Self.maximumSessionBytes)
             combined.append(tail)
-            if combined.count > Self.maximumSessionFileSize {
-                combined = Data(combined.suffix(Self.maximumSessionFileSize))
+            if combined.count > Self.maximumSessionBytes {
+                combined = Data(combined.suffix(Self.maximumSessionBytes))
             }
         }
 
@@ -762,8 +766,11 @@ final class TrainerLogSink {
     }
 
     private func ensureHandle(for stream: Stream, destination: URL) throws -> FileHandle {
-        if let handle = handles[stream] {
-            return handle
+        if let opened = handles[stream] {
+            if opened.destination == destination { return opened.handle }
+            // One source can switch from Host context to a target session
+            // without recreating the sink. Never reuse its old file descriptor.
+            try closeHandleLocked(for: stream)
         }
 
         try FileManager.default.createDirectory(
@@ -784,14 +791,14 @@ final class TrainerLogSink {
         }
 
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-        handles[stream] = handle
+        handles[stream] = StreamHandle(destination: destination, handle: handle)
         return handle
     }
 
     private func closeHandleLocked(for stream: Stream) throws {
-        guard let handle = handles.removeValue(forKey: stream) else { return }
-        try handle.synchronize()
-        try handle.close()
+        guard let opened = handles.removeValue(forKey: stream) else { return }
+        try opened.handle.synchronize()
+        try opened.handle.close()
     }
 
     private func closeAllHandlesLocked() throws {
