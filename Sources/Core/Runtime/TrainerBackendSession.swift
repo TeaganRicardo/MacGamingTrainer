@@ -261,7 +261,7 @@ final class TrainerBackendSession {
             },
             onStderr: { clean in configuration.backendLog(clean) },
             onLog: configuration.log,
-            onTermination: { [weak self] exitStatus in
+            onTermination: { [weak self] exitStatus, _ in
                 self?.handleTermination(status: exitStatus)
             },
             onClientError: { [weak self] failure, terminal in
