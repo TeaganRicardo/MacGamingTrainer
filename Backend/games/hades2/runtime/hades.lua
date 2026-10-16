@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 112 then
+if previousModule and previousModule.revision ~= 113 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 112 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 112,
+    version = 1, revision = 113,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -70,107 +70,6 @@ if __MacGamingTrainerV1 == nil then
   local forceRerolls, roomGeneration
   local preferenceReplayDepth = 0
 
-  -- Resource DisplayName values from build 1.139672 Game/Text/zh-CN/HelpText.zh-CN.sjson.
-  local names = {
-    Money = "金币",
-    CosmeticsPoints = "声望",
-    DreamPoints = "闪亮星星",
-    TrashPoints = "垃圾",
-    MetaCardPointsCommon = "尘灰",
-    MemPointsCommon = "魂魄",
-    MetaCurrency = "骨骸",
-    SeedMystery = "神秘种子",
-    PlantFMoly = "摩吕草",
-    PlantFNightshadeSeed = "颠茄种子",
-    PlantFNightshade = "颠茄",
-    OreFSilver = "银矿",
-    FishFCommon = "怨艾鱼",
-    FishFRare = "残像鱼",
-    FishFLegendary = "魂腹鱼",
-    MetaFabric = "命运丝线",
-    GiftPoints = "蜜露",
-    GiftPointsRare = "浴盐",
-    GiftPointsEpic = "双份鱼饵",
-    SuperGiftPoints = "仙酒",
-    MixerFBoss = "余烬",
-    PlantNMoss = "青苔",
-    PlantNGarlicSeed = "蒜瓣",
-    PlantNGarlic = "大蒜",
-    OreNBronze = "青铜",
-    FishNCommon = "肋眼鱼",
-    FishNRare = "丧鳗",
-    FishNLegendary = "噬颈鲨",
-    MixerNBoss = "羊毛",
-    PlantGLotus = "莲花",
-    PlantGCattailSeed = "香蒲种子",
-    PlantGCattail = "香蒲",
-    OreGLime = "石灰岩",
-    FishGCommon = "石鳖",
-    FishGRare = "渠鼻鱼",
-    FishGLegendary = "潜鳍鱼",
-    MixerGBoss = "珍珠",
-    PlantHMyrtle = "香桃木",
-    PlantHWheatSeed = "小麦种子",
-    PlantHWheat = "小麦",
-    OreHGlassrock = "曜石",
-    FishHCommon = "抽泣鱼",
-    FishHRare = "煎熬鱼",
-    FishHLegendary = "泪海马",
-    MixerHBoss = "泪珠",
-    PlantODriftwood = "浮木",
-    PlantOMandrakeSeed = "曼德拉草种子",
-    PlantOMandrake = "曼德拉草",
-    OreOIron = "铁矿",
-    FishOCommon = "虾",
-    FishORare = "寄居蟹",
-    FishOLegendary = "鱿鱼",
-    MixerOBoss = "金苹果",
-    PlantPIris = "鸢尾花",
-    PlantPOliveSeed = "橄榄枝",
-    PlantPOlive = "橄榄",
-    OrePAdamant = "精金",
-    FishPCommon = "柱头蟹",
-    FishPRare = "冠顶龟",
-    FishPLegendary = "星航鱼",
-    MixerPBoss = "羽毛",
-    PlantIShaderot = "糜影草",
-    PlantIPoppySeed = "罂粟种子",
-    PlantIPoppy = "罂粟",
-    OreIMarble = "大理石",
-    FishICommon = "瞬息鱼",
-    FishIRare = "金鱼",
-    FishILegendary = "冥古鱼",
-    MixerIBoss = "玄象砂",
-    PlantQFang = "尖牙",
-    PlantQSnakereedSeed = "浮游植物",
-    PlantQSnakereed = "蛇苇",
-    OreQScales = "蛇鳞",
-    FishQCommon = "七鳃鳗",
-    FishQRare = "风暴喉",
-    FishQLegendary = "奇美鱼",
-    MixerQBoss = "虚空之眼",
-    OreChaosProtoplasm = "混沌质",
-    PlantChaosThalamusSeed = "原初种子",
-    PlantChaosThalamus = "混沌苞蕾",
-    FishChaosCommon = "马蒂鱼",
-    FishChaosRare = "源祖水母",
-    FishChaosLegendary = "虚空鳐",
-    CharonPoints = "奥波勒斯信用点",
-    FamiliarPoints = "女巫之宝",
-    CardUpgradePoints = "月尘",
-    Mixer5Common = "星尘",
-    Mixer6Common = "黑暗",
-    IcarusPoints = "灵质秘药",
-    MedeaPoints = "泪珠蒸汽",
-    HypnosPoints = "梦雾",
-    DeathAreaPoints = "冥府煤灰",
-    MixerShadow = "暗影",
-    WeaponPointsRare = "梦魇",
-    GemPoints = "宝石",
-    HadesSpearPoints = "吉加罗斯",
-    MixerMythic = "熵",
-    MysteryResource = "？？？",
-  }
   local arrayMeta = { __trainerJSONArray = true }
   local jsonNull = {}
   local function finite(n)
@@ -1703,19 +1602,19 @@ if __MacGamingTrainerV1 == nil then
     M.originalUpdateTimers, M.guardWrapper = original, wrapper
     UpdateTimers = wrapper
   end
-  local function resourceSectionTitle(id)
-    if string.find(id, "Gift", 1, true) then return "赠礼资源" end
-    if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "植物与种子" end
-    if string.find(id, "Ore", 1, true) then return "矿物" end
-    if string.find(id, "Fish", 1, true) then return "鱼类" end
-    if string.find(id, "Boss", 1, true) then return "首领素材" end
-    return "通用与制作资源"
+  local function resourceSectionKind(id)
+    if string.find(id, "Gift", 1, true) then return "gifts" end
+    if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "plants" end
+    if string.find(id, "Ore", 1, true) then return "ores" end
+    if string.find(id, "Fish", 1, true) then return "fish" end
+    if string.find(id, "Boss", 1, true) then return "boss" end
+    return "resources"
   end
-  local resourceInventorySectionTitles = {
-    InventoryScreen_ResourcesTab = "资源",
-    InventoryScreen_GardenTab = "植物与种子",
-    InventoryScreen_GiftsTab = "赠礼",
-    InventoryScreen_FishTab = "鱼类",
+  local resourceInventorySectionKinds = {
+    InventoryScreen_ResourcesTab = "resources",
+    InventoryScreen_GardenTab = "plants",
+    InventoryScreen_GiftsTab = "gifts",
+    InventoryScreen_FishTab = "fish",
   }
   local function inventoryResourceLayout()
     local order, metadata, seen = {}, {}, {}
@@ -1723,8 +1622,9 @@ if __MacGamingTrainerV1 == nil then
       and ScreenData.InventoryScreen.ItemCategories or nil
     if type(categories) == "table" then
       for categoryIndex, category in ipairs(categories) do
-        local sectionTitle = type(category) == "table" and resourceInventorySectionTitles[category.Name] or nil
-        if sectionTitle ~= nil then
+        local sectionId = type(category) == "table" and category.Name or nil
+        local sectionKind = type(sectionId) == "string" and resourceInventorySectionKinds[sectionId] or nil
+        if sectionKind ~= nil then
           local itemOrder = 0
           for _, id in ipairs(category) do
             if type(id) == "string" and id ~= "Money" and not seen[id]
@@ -1732,7 +1632,10 @@ if __MacGamingTrainerV1 == nil then
               itemOrder = itemOrder + 1
               seen[id] = true
               order[#order + 1] = id
-              metadata[id] = { sectionTitle = sectionTitle, sectionOrder = categoryIndex, itemOrder = itemOrder }
+              metadata[id] = {
+                sectionId = sectionId, sectionKind = sectionKind,
+                sectionOrder = categoryIndex, itemOrder = itemOrder,
+              }
             end
           end
         end
@@ -1745,7 +1648,10 @@ if __MacGamingTrainerV1 == nil then
         if type(id) == "string" and id ~= "Money" and not seen[id] and type(ResourceData[id]) == "table" then
           seen[id] = true
           order[#order + 1] = id
-          metadata[id] = { sectionTitle = resourceSectionTitle(id), sectionOrder = 999, itemOrder = #order }
+          metadata[id] = {
+            sectionId = "", sectionKind = resourceSectionKind(id),
+            sectionOrder = 999, itemOrder = #order,
+          }
         end
       end
     end
@@ -1781,10 +1687,12 @@ if __MacGamingTrainerV1 == nil then
       if allowed[id] then
         local presentation = metadata[id] or {}
         result[#result + 1] = {
-          id = id, name = names[id] or id,
+          id = id,
+          displayId = type(ResourceData[id].DisplayName) == "string" and ResourceData[id].DisplayName or id,
           count = number(GameState.Resources and GameState.Resources[id]),
           locked = M.resourceLocks[id] ~= nil, sortOrder = index,
-          sectionTitle = presentation.sectionTitle or resourceSectionTitle(id),
+          sectionId = presentation.sectionId or "",
+          sectionKind = presentation.sectionKind or resourceSectionKind(id),
         }
       end
     end

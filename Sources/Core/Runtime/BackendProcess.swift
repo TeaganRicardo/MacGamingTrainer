@@ -30,17 +30,12 @@ final class BackendProcess {
     private var output: FileHandle?
     private var errorOutput: FileHandle?
     private let readQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-process")
-    private let stderrQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-process.stderr")
     private var buffer = Data()
-    private var stderrBuffer = Data()
-    private var stderrDroppedBytes = 0
-    private var stderrDeliveryScheduled = false
     private var profileLog: ((String) -> Void)?
 
     private let executableURL: URL
     private let argumentsPrefix: [String]
     private let maxStdoutBufferBytes: Int
-    private let maxStderrBufferBytes: Int
     private let forceKillDelay: TimeInterval
 
     private static var bundledPythonExecutableURL: URL {
@@ -65,13 +60,11 @@ final class BackendProcess {
         executableURL: URL? = nil,
         argumentsPrefix: [String] = ["-u"],
         maxStdoutBufferBytes: Int = 1_048_576,
-        maxStderrBufferBytes: Int = 262_144,
         forceKillDelay: TimeInterval = 1.5
     ) {
         self.executableURL = executableURL ?? Self.bundledPythonExecutableURL
         self.argumentsPrefix = argumentsPrefix
         self.maxStdoutBufferBytes = max(4_096, maxStdoutBufferBytes)
-        self.maxStderrBufferBytes = max(4_096, maxStderrBufferBytes)
         self.forceKillDelay = max(0.1, forceKillDelay)
     }
 
@@ -90,11 +83,6 @@ final class BackendProcess {
         guard process == nil else { return }
         profileLog = onProfile
         readQueue.sync { buffer.removeAll(keepingCapacity: false) }
-        stderrQueue.sync {
-            stderrBuffer.removeAll(keepingCapacity: false)
-            stderrDroppedBytes = 0
-            stderrDeliveryScheduled = false
-        }
 
         let task = Process()
         let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
@@ -120,10 +108,10 @@ final class BackendProcess {
                 self?.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
             }
         }
-        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        stderr.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
-            self?.enqueueStderr(data, onStderr: onStderr)
+            guard let message = String(data: data, encoding: .utf8), !message.isEmpty else { return }
+            DispatchQueue.main.async { onStderr(message) }
         }
         task.terminationHandler = { [weak self] task in
             let status = task.terminationStatus
@@ -134,7 +122,6 @@ final class BackendProcess {
             DispatchQueue.main.async {
                 owner.output?.readabilityHandler = nil
                 owner.errorOutput?.readabilityHandler = nil
-                owner.deliverPendingStderr(onStderr: onStderr)
                 owner.input = nil
                 owner.output = nil
                 owner.errorOutput = nil
@@ -171,13 +158,6 @@ final class BackendProcess {
     /// Gracefully terminates the worker and escalates to SIGKILL if it ignores
     /// termination. The Process instance remains owned until terminationHandler
     /// runs, preventing a new backend from racing the old one.
-    /// Synchronously deliver stderr already drained from the pipe. This is
-    /// used immediately before diagnostics export so a pending main-thread
-    /// delivery cannot make the bundle stale.
-    func flushStderr(onStderr: @escaping (String) -> Void) {
-        deliverPendingStderr(onStderr: onStderr)
-    }
-
     func stop() {
         let task = process
         try? input?.close()
@@ -194,45 +174,6 @@ final class BackendProcess {
             _ = kill(pid, SIGKILL)
             #endif
         }
-    }
-
-    private func enqueueStderr(_ data: Data, onStderr: @escaping (String) -> Void) {
-        stderrQueue.async { [weak self] in
-            guard let self else { return }
-            self.stderrBuffer.append(data)
-            if self.stderrBuffer.count > self.maxStderrBufferBytes {
-                let overflow = self.stderrBuffer.count - self.maxStderrBufferBytes
-                self.stderrDroppedBytes += overflow
-                self.stderrBuffer = Data(self.stderrBuffer.suffix(self.maxStderrBufferBytes))
-            }
-            guard !self.stderrDeliveryScheduled else { return }
-            self.stderrDeliveryScheduled = true
-            DispatchQueue.main.async { [weak self] in
-                self?.deliverPendingStderr(onStderr: onStderr)
-            }
-        }
-    }
-
-    /// Collapse any producer burst into at most one bounded main-thread
-    /// delivery. The pipe remains drained off-main while the UI is busy, but
-    /// pending diagnostics can never create an unbounded closure/string queue.
-    private func deliverPendingStderr(onStderr: @escaping (String) -> Void) {
-        let snapshot: (data: Data, droppedBytes: Int) = stderrQueue.sync {
-            let snapshot = (stderrBuffer, stderrDroppedBytes)
-            stderrBuffer.removeAll(keepingCapacity: true)
-            stderrDroppedBytes = 0
-            stderrDeliveryScheduled = false
-            return snapshot
-        }
-        guard !snapshot.data.isEmpty || snapshot.droppedBytes > 0 else { return }
-
-        var message = ""
-        if snapshot.droppedBytes > 0 {
-            message += "stderr overflow droppedBytes=\(snapshot.droppedBytes)\n"
-        }
-        message += String(decoding: snapshot.data, as: UTF8.self)
-        guard !message.isEmpty else { return }
-        onStderr(message)
     }
 
     private func consume(
