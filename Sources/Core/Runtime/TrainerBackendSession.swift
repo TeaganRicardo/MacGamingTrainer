@@ -250,7 +250,7 @@ final class TrainerBackendSession {
                         $0.errorArguments = coreOwned ? [] : failure.presentationArguments
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
-                    configuration.log("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
             onProtocolMismatch: { [weak self] failure in
@@ -263,7 +263,7 @@ final class TrainerBackendSession {
                     $0.error = "host.backend.error.protocolMismatch"
                 }
                 let diagnostic = failure.diagnostic ?? failure.presentation
-                configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
+                configuration.backendLog("协议不兼容 [\(failure.code)]：\(diagnostic)")
             },
             onStderr: { clean in configuration.backendLog(clean) },
             onLog: configuration.log,
@@ -274,7 +274,7 @@ final class TrainerBackendSession {
                 guard let self else { return }
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
-                    configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     let recoveryOwned = self.client.isStarted
                         || self.recoveryWorkItem != nil
                         || self.restartPending
@@ -299,7 +299,7 @@ final class TrainerBackendSession {
                         }
                     }
                 } else {
-                    configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = self.client.hasInFlightRequest
                         $0.errorCode = failure.code
