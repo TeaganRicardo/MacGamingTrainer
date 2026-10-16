@@ -30,6 +30,8 @@ final class TrainerLogSink {
         let targetPID: Int32?
         let appVersion: String
         let appBuild: String
+        var gameVersion: String?
+        var runtimeRevision: Int?
         let legacy: Bool
     }
 
@@ -145,6 +147,34 @@ final class TrainerLogSink {
                 }
             } catch {
                 // Session bookkeeping is diagnostics-only and fail-open.
+            }
+        }
+    }
+
+    /// Add runtime identity once the game-owned resident has reported it.
+    /// This enriches the same OS target session; it never creates a new one.
+    func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: Int?) {
+        guard managedSessions, gameVersion != nil || runtimeRevision != nil else { return }
+        queue.async { [weak self] in
+            guard let self, var record = self.activeSession ?? self.loadCurrentSessionLocked() else { return }
+            let resolvedGameVersion = gameVersion ?? record.gameVersion
+            let resolvedRuntimeRevision = runtimeRevision ?? record.runtimeRevision
+            guard resolvedGameVersion != record.gameVersion ||
+                    resolvedRuntimeRevision != record.runtimeRevision else { return }
+
+            record.gameVersion = resolvedGameVersion
+            record.runtimeRevision = resolvedRuntimeRevision
+            self.activeSession = record
+            do {
+                try self.writeSessionRecord(record, to: self.metadataURL)
+                let game = record.gameVersion ?? "unknown"
+                let revision = record.runtimeRevision.map { String($0) } ?? "unknown"
+                try self.appendLocked(
+                    "session runtime gameVersion=\(game) residentRevision=\(revision)",
+                    source: "HOST"
+                )
+            } catch {
+                // Runtime identity enrichment is diagnostics-only and fail-open.
             }
         }
     }
@@ -268,6 +298,8 @@ final class TrainerLogSink {
             targetPID: identity.processIdentifier,
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
             appBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            gameVersion: nil,
+            runtimeRevision: nil,
             legacy: false
         )
         activeSession = record
@@ -338,6 +370,8 @@ final class TrainerLogSink {
                 targetPID: nil,
                 appVersion: "unknown",
                 appBuild: "unknown",
+                gameVersion: nil,
+                runtimeRevision: nil,
                 legacy: true
             )
             try writeSessionRecord(
