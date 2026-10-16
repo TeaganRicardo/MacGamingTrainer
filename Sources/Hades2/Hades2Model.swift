@@ -1255,7 +1255,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func runDiagnostics() { send(.diagnostics, title: "hades2.op.runDiagnostics") }
     func exportDiagnostics() {
         // Export reads the Host-owned log files in the Backend process. Drain
-        // accepted Host log work first so the bundle represents this moment.
+        // both the Backend stderr transport and Host log queue first so the
+        // bundle represents this moment.
+        backendSession.flushDiagnostics()
         logSink.flush()
         send(.exportDiagnostics, title: "hades2.op.exportDiagnostics")
     }
