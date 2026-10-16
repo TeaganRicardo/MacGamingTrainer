@@ -191,6 +191,93 @@ do {
     }
 }
 
+// Recovery fixtures model the three durable boundaries in finalization. Each
+// fixture is the exact on-disk state a terminated Trainer can leave behind;
+// the next Trainer instance must preserve the completed evidence and continue
+// with a fresh active session.
+func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, String) {
+    let directory = home
+        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+        .appendingPathComponent("hades2", isDirectory: true)
+    let current = directory.appendingPathComponent("trainer.log")
+    let history = directory.appendingPathComponent("sessions", isDirectory: true)
+    let metadata = directory.appendingPathComponent("current-session.json")
+    try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+
+    let id = "interrupted-\(phase)"
+    let record: [String: Any] = [
+        "id": id,
+        "startedAt": "2026-10-16T10:00:00Z",
+        "endedAt": "2026-10-16T10:05:00Z",
+        "targetProcessName": "Hades II",
+        "targetBundleIdentifier": "com.supergiantgames.hades2",
+        "targetPID": 9000,
+        "appVersion": "0.3.0",
+        "appBuild": "6",
+        "gameVersion": "1.143476",
+        "runtimeRevision": 109,
+        "legacy": false,
+    ]
+    let metadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+    let completedMetadata = history.appendingPathComponent(id).appendingPathExtension("json")
+    let completedLog = history.appendingPathComponent(id).appendingPathExtension("log")
+    try metadataData.write(to: completedMetadata, options: .atomic)
+
+    switch phase {
+    case "after-completed-metadata":
+        try metadataData.write(to: metadata, options: .atomic)
+        try Data("ORIGINAL after-completed-metadata\n".utf8).write(to: current, options: .atomic)
+    case "after-log-move":
+        try metadataData.write(to: metadata, options: .atomic)
+        try Data("ORIGINAL after-log-move\n".utf8).write(to: completedLog, options: .atomic)
+    case "after-current-metadata-removal":
+        try Data("ORIGINAL after-current-metadata-removal\n".utf8).write(to: completedLog, options: .atomic)
+    default:
+        fail("unknown finalization fixture")
+    }
+    return (directory, current, history, id)
+}
+
+for phase in ["after-completed-metadata", "after-log-move", "after-current-metadata-removal"] {
+    let fixtureHome = home.appendingPathComponent("finalization-\(phase)", isDirectory: true)
+    let (_, current, history, interruptedID) = try writeSessionFixture(home: fixtureHome, phase: phase)
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: fixtureHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 9001
+        )
+    )
+    sink.flush()
+
+    let retained = completedLogs(history)
+    guard retained.count == 1 else {
+        fail("finalization recovery (phase) did not retain exactly one completed log")
+    }
+    let retainedLog = history.appendingPathComponent(interruptedID).appendingPathExtension("log")
+    let retainedText = (try? String(contentsOf: retainedLog, encoding: .utf8)) ?? ""
+    if !retainedText.contains("ORIGINAL \(phase)") {
+        fail("finalization recovery (phase) overwrote the completed log")
+    }
+    guard let newMetadata = try? JSONSerialization.jsonObject(
+        with: Data(contentsOf: fixtureHome
+            .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+            .appendingPathComponent("hades2", isDirectory: true)
+            .appendingPathComponent("current-session.json"))
+    ) as? [String: Any] else {
+        fail("finalization recovery (phase) did not establish a new active session")
+    }
+    if newMetadata["id"] as? String == interruptedID
+        || newMetadata["targetPID"] as? Int != 9001 {
+        fail("finalization recovery (phase) reused the interrupted session identity")
+    }
+    if !FileManager.default.fileExists(atPath: current.path) {
+        fail("finalization recovery (phase) did not create a new current log")
+    }
+}
+
 // Legacy trainer.log(.1-.3) is migrated into history instead of silently lost.
 let legacyHome = home.appendingPathComponent("legacy-home", isDirectory: true)
 let legacyDirectory = legacyHome
