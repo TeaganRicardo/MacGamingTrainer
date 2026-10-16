@@ -217,6 +217,7 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
         "gameVersion": "1.143476",
         "runtimeRevision": 109,
         "legacy": false,
+        "finalizing": true,
     ]
     let metadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
     let completedMetadata = history.appendingPathComponent(id).appendingPathExtension("json")
@@ -224,6 +225,9 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
     try metadataData.write(to: completedMetadata, options: .atomic)
 
     switch phase {
+    case "after-finalizing-marker":
+        try metadataData.write(to: metadata, options: .atomic)
+        try Data("ORIGINAL after-finalizing-marker\n".utf8).write(to: current, options: .atomic)
     case "after-completed-metadata":
         try metadataData.write(to: metadata, options: .atomic)
         try Data("ORIGINAL after-completed-metadata\n".utf8).write(to: current, options: .atomic)
@@ -238,7 +242,7 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
     return (directory, current, history, id)
 }
 
-for phase in ["after-completed-metadata", "after-log-move", "after-current-metadata-removal"] {
+for phase in ["after-finalizing-marker", "after-completed-metadata", "after-log-move", "after-current-metadata-removal"] {
     let fixtureHome = home.appendingPathComponent("finalization-\(phase)", isDirectory: true)
     let (_, current, history, interruptedID) = try writeSessionFixture(home: fixtureHome, phase: phase)
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: fixtureHome)
@@ -247,19 +251,19 @@ for phase in ["after-completed-metadata", "after-log-move", "after-current-metad
         identity: .init(
             processName: "Hades II",
             bundleIdentifier: "com.supergiantgames.hades2",
-            processIdentifier: 9001
+            processIdentifier: phase == "after-finalizing-marker" ? 9000 : 9001
         )
     )
     sink.flush()
 
     let retained = completedLogs(history)
     guard retained.count == 1 else {
-        fail("finalization recovery (phase) did not retain exactly one completed log")
+        fail("finalization recovery \(phase) did not retain exactly one completed log")
     }
     let retainedLog = history.appendingPathComponent(interruptedID).appendingPathExtension("log")
     let retainedText = (try? String(contentsOf: retainedLog, encoding: .utf8)) ?? ""
     if !retainedText.contains("ORIGINAL \(phase)") {
-        fail("finalization recovery (phase) overwrote the completed log")
+        fail("finalization recovery \(phase) overwrote the completed log")
     }
     guard let newMetadata = try? JSONSerialization.jsonObject(
         with: Data(contentsOf: fixtureHome
@@ -267,11 +271,13 @@ for phase in ["after-completed-metadata", "after-log-move", "after-current-metad
             .appendingPathComponent("hades2", isDirectory: true)
             .appendingPathComponent("current-session.json"))
     ) as? [String: Any] else {
-        fail("finalization recovery (phase) did not establish a new active session")
+        fail("finalization recovery \(phase) did not establish a new active session")
     }
+    let expectedPID = phase == "after-finalizing-marker" ? 9000 : 9001
     if newMetadata["id"] as? String == interruptedID
-        || newMetadata["targetPID"] as? Int != 9001 {
-        fail("finalization recovery (phase) reused the interrupted session identity")
+        || newMetadata["targetPID"] as? Int != expectedPID
+        || newMetadata["finalizing"] as? Bool == true {
+        fail("finalization recovery \(phase) reused the interrupted session identity")
     }
     if !FileManager.default.fileExists(atPath: current.path) {
         fail("finalization recovery (phase) did not create a new current log")
