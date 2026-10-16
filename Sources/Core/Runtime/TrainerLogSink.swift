@@ -130,17 +130,21 @@ final class TrainerLogSink {
         }
     }
 
-    func clearCompletedSessions() {
-        guard managedSessions else { return }
-        queue.sync {
+    @discardableResult
+    func clearCompletedSessions() -> Bool {
+        guard managedSessions else { return false }
+        return queue.sync {
             do {
                 if FileManager.default.fileExists(atPath: historyURL.path) {
                     try FileManager.default.removeItem(at: historyURL)
                 }
                 try FileManager.default.createDirectory(at: historyURL, withIntermediateDirectories: true)
                 completedBytes = 0
+                return true
             } catch {
-                // Cleanup is best effort and must not affect the active session.
+                // Cleanup failure is reported to the caller, but diagnostics
+                // storage must never interfere with the active Trainer session.
+                return false
             }
         }
     }
