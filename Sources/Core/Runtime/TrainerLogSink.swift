@@ -123,7 +123,7 @@ final class TrainerLogSink {
     /// Current target session when one exists; otherwise Host/app context.
     func currentLogURL() -> URL {
         queue.sync {
-            if managedSessions, activeSession == nil, loadCurrentSessionLocked() != nil {
+            if managedSessions, activeSession == nil {
                 activeSession = loadCurrentSessionLocked()
             }
             return managedSessions && activeSession == nil ? hostURL : url
@@ -152,16 +152,23 @@ final class TrainerLogSink {
     private func appendLocked(_ line: String, source: String) throws {
         let destination = writeURLLocked()
         let limit = activeSession == nil ? Self.maximumHostFileSize : Self.maximumSessionFileSize
-        let text = "\(formatter.string(from: Date())) \(source) \(line)\n"
-        guard var data = text.data(using: .utf8) else { return }
-
-        if data.count >= limit {
-            var start = data.count - (limit - 1)
-            while start < data.count && (data[start] & 0xC0) == 0x80 {
+        let prefix = "\(formatter.string(from: Date())) \(source) "
+        guard let prefixData = prefix.data(using: .utf8),
+              var messageData = line.data(using: .utf8) else { return }
+        let suffix = Data("\n".utf8)
+        let maximumMessageBytes = max(0, limit - prefixData.count - suffix.count)
+        if messageData.count > maximumMessageBytes {
+            var start = messageData.count - maximumMessageBytes
+            while start < messageData.count && (messageData[start] & 0xC0) == 0x80 {
                 start += 1
             }
-            data = Data(data[start...])
+            messageData = Data(messageData[start...])
         }
+        var data = Data()
+        data.reserveCapacity(prefixData.count + messageData.count + suffix.count)
+        data.append(prefixData)
+        data.append(messageData)
+        data.append(suffix)
 
         var destinationHandle = try ensureHandle(for: destination)
         let currentSize = try fileSize(destination)
@@ -220,7 +227,7 @@ final class TrainerLogSink {
         try writeSessionRecord(record, to: metadataURL)
         try switchHandleLocked(to: url)
         try appendLocked(
-            "session start id=\(record.id) target=\(record.targetProcessName) bundle=\(record.targetBundleIdentifier) targetPID=\(record.targetPID.map(String.init) ?? "unknown") app=\(record.appVersion) build=\(record.appBuild)",
+            "session start id=\(record.id) target=\(record.targetProcessName) bundle=\(record.targetBundleIdentifier) targetPID=\(record.targetPID.map { String($0) } ?? "unknown") app=\(record.appVersion) build=\(record.appBuild)",
             source: "HOST"
         )
     }
