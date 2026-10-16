@@ -8,15 +8,11 @@ import Foundation
 /// manifest.json plus separate Host, Backend and Runtime text streams. The Host
 /// remains the only writer/rotation/retention owner.
 final class TrainerLogSink {
-    /// Compatibility name retained for callers/tests that used the previous
-    /// single-file session bound. This is now the hard byte bound for one
-    /// session bundle across all source streams.
-    static let maximumSessionFileSize = 4 * 1_048_576
+    static let maximumSessionBytes = 4 * 1_048_576
     static let maximumHostFileSize = 1_048_576
     static let maximumCompletedSessions = 8
     static let maximumTotalBytes = 32 * 1_048_576
     static let maximumPendingBytes = 1_048_576
-    static let maximumFileSize = maximumHostFileSize
 
     struct TargetIdentity: Equatable {
         let processName: String
