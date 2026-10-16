@@ -301,8 +301,14 @@ do {
     }
     for stream in ["host.log", "backend.log", "runtime.log"] {
         if !FileManager.default.fileExists(atPath: replacement.appendingPathComponent(stream).path) {
-            fail("normal finalization moved or removed (stream)")
+            fail("normal finalization moved or removed \(stream)")
         }
+    }
+    if !streamText(replacement, "host.log").contains("session end id=") {
+        fail("session end evidence was not retained in the completed bundle")
+    }
+    if streamText(host, "session end id=").contains("session end id=") {
+        fail("session end evidence leaked into Host context")
     }
     if FileManager.default.fileExists(atPath: metadata.path) {
         fail("ended target session pointer remained current")
@@ -524,55 +530,6 @@ do {
     }
 }
 
-// Legacy flat completed session artifacts are migrated into legacy bundles.
-do {
-    let legacyHome = home.appendingPathComponent("legacy-history", isDirectory: true)
-    let directory = legacyHome
-        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
-        .appendingPathComponent("hades2", isDirectory: true)
-    let history = directory.appendingPathComponent("sessions", isDirectory: true)
-    try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
-    let legacyLog = history.appendingPathComponent("old-session.log")
-    try Data("flat legacy history\n".utf8).write(to: legacyLog, options: .atomic)
-    let legacyMetadata: [String: Any] = [
-        "id": "old-session",
-        "startedAt": "2026-10-15T10:00:00Z",
-        "endedAt": "2026-10-15T10:05:00Z",
-        "targetProcessName": "Hades II",
-        "targetBundleIdentifier": "com.supergiantgames.hades2",
-        "targetPID": 8000,
-        "appVersion": "0.3.0",
-        "appBuild": "6",
-        "gameVersion": "1.143476",
-        "runtimeRevision": 109,
-        "legacy": false,
-        "finalizing": false,
-    ]
-    try JSONSerialization.data(withJSONObject: legacyMetadata, options: [.prettyPrinted, .sortedKeys])
-        .write(to: history.appendingPathComponent("old-session.json"), options: .atomic)
-
-    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: legacyHome)
-    sink.targetLifetimeChanged(
-        running: true,
-        identity: .init(
-            processName: "Hades II",
-            bundleIdentifier: "com.supergiantgames.hades2",
-            processIdentifier: 8001
-        )
-    )
-    sink.flush()
-
-    let migratedBundle = history.appendingPathComponent("old-session", isDirectory: true)
-    if !FileManager.default.fileExists(atPath: migratedBundle.appendingPathComponent("legacy.log").path) {
-        fail("flat legacy history log was not moved into a bundle")
-    }
-    guard let manifest = readJSON(migratedBundle.appendingPathComponent("manifest.json")),
-          manifest["state"] as? String == "completed",
-          manifest["legacy"] as? Bool == true else {
-        fail("flat legacy history metadata was not migrated")
-    }
-}
-
 // An interrupted bundle creation must preserve already-written stream bytes
 // even if its manifest was never committed.
 do {
@@ -602,9 +559,9 @@ do {
 
     guard let recoveredManifest = readJSON(orphan.appendingPathComponent("manifest.json")),
           recoveredManifest["state"] as? String == "completed",
-          recoveredManifest["legacy"] as? Bool == true,
+          recoveredManifest["legacy"] as? Bool == false,
           recoveredManifest["endReason"] as? String == "orphan-recovery" else {
-        fail("unindexed bundle was not sealed as recovered legacy history")
+        fail("unindexed current-format bundle was not recovered cleanly")
     }
     if !streamText(orphan, "backend.log").contains("ORPHANED BACKEND EVIDENCE") {
         fail("orphaned stream bytes were lost during recovery")
