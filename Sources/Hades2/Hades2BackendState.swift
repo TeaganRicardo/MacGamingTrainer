@@ -389,7 +389,7 @@ struct Hades2StatePatch {
             id: id, name: name, englishName: row["englishName"] as? String ?? "",
             count: number(row["count"]) ?? 0, locked: row["locked"] as? Bool ?? false,
             sectionTitle: row["sectionTitle"] as? String ?? "",
-            englishSectionTitle: row["englishSectionTitle"] as? String ?? "Resources",
+            englishSectionTitle: row["englishSectionTitle"] as? String ?? "",
             sortOrder: row["sortOrder"] as? Int ?? Int.max
         )
     }
