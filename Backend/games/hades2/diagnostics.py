@@ -105,11 +105,32 @@ def export_diagnostics(adapter):
         'python':sys.version,'platform':platform.platform(),'passed':result['passed'],'total':result['total'],
         'checks':result['checks'],'state':result['state'],
     }
-    log_path=trainer_log_path(adapter.game_id);symbols=Path(__file__).with_name('symbols.json')
+    log_path=trainer_log_path(adapter.game_id)
+    log_directory=log_path.parent
+    session_metadata_path=log_directory/'current-session.json'
+    host_log_path=log_directory/'trainer-host.log'
+    session_metadata=None
+    if session_metadata_path.is_file():
+        try:
+            session_metadata=json.loads(session_metadata_path.read_text(encoding='utf-8'))
+        except Exception:
+            session_metadata=None
+    report['trainerLogScope']='current_target_session' if session_metadata and log_path.is_file() else 'host_context'
+    report['trainerSession']=session_metadata
+    symbols=Path(__file__).with_name('symbols.json')
     with zipfile.ZipFile(zip_path,'w',compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('report.json',json.dumps(report,ensure_ascii=False,sort_keys=True,indent=2,default=str)+'\n')
-        if log_path.is_file():
+        if session_metadata and log_path.is_file():
             with log_path.open('rb') as stream:
-                stream.seek(0,2);size=stream.tell();stream.seek(max(0,size-262144));archive.writestr('trainer.log.tail',stream.read())
+                stream.seek(0,2);size=stream.tell();stream.seek(max(0,size-(4*1024*1024)))
+                archive.writestr('trainer-session.log',stream.read())
+            archive.writestr(
+                'trainer-session.json',
+                json.dumps(session_metadata,ensure_ascii=False,sort_keys=True,indent=2,default=str)+'\n'
+            )
+        elif host_log_path.is_file():
+            with host_log_path.open('rb') as stream:
+                stream.seek(0,2);size=stream.tell();stream.seek(max(0,size-262144))
+                archive.writestr('trainer-host.log.tail',stream.read())
         if symbols.is_file():archive.write(symbols,'symbols.json')
     return {'diagnosticBundle':str(zip_path),'passed':result['passed'],'total':result['total'],'checks':result['checks']}
