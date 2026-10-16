@@ -31,6 +31,7 @@ final class TrainerBackendSession {
         let applyPayload: ([String: Any]) -> Void
         let resetGameState: () -> Void
         let log: (String) -> Void
+        let backendLog: (String) -> Void
         let onStatusChange: (TrainerBackendStatus) -> Void
     }
 
@@ -58,7 +59,8 @@ final class TrainerBackendSession {
         applyPayload: @escaping ([String: Any]) -> Void,
         resetGameState: @escaping () -> Void,
         log: @escaping (String) -> Void,
-        onStatusChange: @escaping (TrainerBackendStatus) -> Void
+        onStatusChange: @escaping (TrainerBackendStatus) -> Void,
+        backendLog: ((String) -> Void)? = nil
     ) throws {
         guard !client.isStarted else { return }
         lifecycleID = UUID()
@@ -75,6 +77,7 @@ final class TrainerBackendSession {
             applyPayload: applyPayload,
             resetGameState: resetGameState,
             log: log,
+            backendLog: backendLog ?? log,
             onStatusChange: onStatusChange
         )
         automaticRecoveryAttempts = 0
@@ -256,7 +259,7 @@ final class TrainerBackendSession {
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
             },
-            onStderr: { clean in configuration.log("BACKEND: \(clean)") },
+            onStderr: { clean in configuration.backendLog(clean) },
             onLog: configuration.log,
             onTermination: { [weak self] exitStatus, stderrTail in
                 self?.handleTermination(status: exitStatus, stderrTail: stderrTail)
