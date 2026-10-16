@@ -761,10 +761,6 @@ final class TrainerLogSink {
         return total
     }
 
-    private func removeCompletedSessionLocked(_ bundle: URL) throws {
-        try FileManager.default.removeItem(at: bundle)
-    }
-
     private func trimLogLocked(_ file: URL, stream: Stream, keepingBytes: Int) throws {
         try closeHandleLocked(for: stream)
         let tail = keepingBytes > 0
