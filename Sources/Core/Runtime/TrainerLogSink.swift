@@ -569,7 +569,9 @@ final class TrainerLogSink {
                   isDirectory.boolValue else { continue }
 
             let manifestURL = bundle.appendingPathComponent("manifest.json")
-            if loadSessionRecordLocked(at: manifestURL) != nil {
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                // Atomic manifests are either valid/current or intentionally
+                // left untouched for a future/unknown schema.
                 continue
             }
 
@@ -700,7 +702,9 @@ final class TrainerLogSink {
             guard FileManager.default.fileExists(atPath: entry.path, isDirectory: &isDirectory),
                   isDirectory.boolValue else { return nil }
             let manifest = entry.appendingPathComponent("manifest.json")
-            guard let record = loadSessionRecordLocked(at: manifest) else { return nil }
+            guard let record = loadSessionRecordLocked(at: manifest),
+                  Self.isSafePathComponent(record.id),
+                  record.id == entry.lastPathComponent else { return nil }
             return (entry, record)
         }
         .sorted {
@@ -810,6 +814,13 @@ final class TrainerLogSink {
     }
 
     private func writeSessionRecord(_ record: SessionRecord, to destination: URL) throws {
+        guard Self.isSafePathComponent(record.id) else {
+            throw NSError(
+                domain: "TrainerLogSink",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "非法日志 session ID。"]
+            )
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(record)
@@ -851,7 +862,8 @@ final class TrainerLogSink {
 
     private func loadSessionRecordLocked(at manifest: URL) -> SessionRecord? {
         guard let data = try? Data(contentsOf: manifest),
-              let record = try? JSONDecoder().decode(SessionRecord.self, from: data) else { return nil }
+              let record = try? JSONDecoder().decode(SessionRecord.self, from: data),
+              record.schemaVersion == SessionRecord.currentSchemaVersion else { return nil }
         return record
     }
 
