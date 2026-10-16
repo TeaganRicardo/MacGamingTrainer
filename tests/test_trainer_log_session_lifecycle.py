@@ -216,8 +216,8 @@ do {
     if !streamText(bundle, "host.log").contains("HOST host-in-session") {
         fail("Host stream missing Host record")
     }
-    if !streamText(bundle, "host.log").contains("RUNTIME") {
-        fail("Host stream missing runtime identity routing guard")
+    if streamText(bundle, "host.log").contains("session runtime gameVersion=") {
+        fail("Runtime identity enrichment leaked into the Host stream")
     }
     if !streamText(bundle, "backend.log").contains("BACKEND backend-in-session") {
         fail("Backend stream missing Backend record")
@@ -283,7 +283,7 @@ do {
     if previous.1["endReason"] as? String != "target-replaced" {
         fail("replacement session did not record its close reason")
     }
-    if replacement.lastPathComponent == previous.1["id"] as? String {
+    if replacement.lastPathComponent == (previous.1["id"] as? String ?? "") {
         fail("replacement PID reused the completed session ID")
     }
 
@@ -428,9 +428,11 @@ do {
         fail("finalization recovery overwrote the existing Host stream")
     }
     guard let resumedManifest = readJSON(bundle.appendingPathComponent("manifest.json")),
-          resumedManifest["state"] as? String == "active",
-          resumedManifest["endedAt"] == nil else {
+          resumedManifest["state"] as? String == "active" else {
         fail("same-PID finalization recovery did not reopen the bundle as active")
+    }
+    if !(resumedManifest["endedAt"] is NSNull) && resumedManifest["endedAt"] != nil {
+        fail("same-PID finalization recovery retained a terminal end time")
     }
     sink.targetLifetimeChanged(
         running: false,
