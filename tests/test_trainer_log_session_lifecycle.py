@@ -221,7 +221,7 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
     ]
     let currentMetadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
     var completedRecord = record
-    completedRecord.finalizing = nil
+    completedRecord.removeValue(forKey: "finalizing")
     let completedMetadataData = try JSONSerialization.data(withJSONObject: completedRecord, options: [.prettyPrinted, .sortedKeys])
     let completedMetadata = history.appendingPathComponent(id).appendingPathExtension("json")
     let completedLog = history.appendingPathComponent(id).appendingPathExtension("log")
