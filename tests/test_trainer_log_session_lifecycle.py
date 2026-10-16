@@ -573,6 +573,45 @@ do {
     }
 }
 
+// An interrupted bundle creation must preserve already-written stream bytes
+// even if its manifest was never committed.
+do {
+    let orphanHome = home.appendingPathComponent("orphan-bundle", isDirectory: true)
+    let directory = orphanHome
+        .appendingPathComponent("Library/Application Support/MacGamingTrainer", isDirectory: true)
+        .appendingPathComponent("hades2", isDirectory: true)
+    let orphan = directory
+        .appendingPathComponent("sessions", isDirectory: true)
+        .appendingPathComponent("orphaned-session", isDirectory: true)
+    try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+    try Data("ORPHANED BACKEND EVIDENCE
+".utf8).write(
+        to: orphan.appendingPathComponent("backend.log"),
+        options: .atomic
+    )
+
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: orphanHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(
+            processName: "Hades II",
+            bundleIdentifier: "com.supergiantgames.hades2",
+            processIdentifier: 8801
+        )
+    )
+    sink.flush()
+
+    guard let recoveredManifest = readJSON(orphan.appendingPathComponent("manifest.json")),
+          recoveredManifest["state"] as? String == "completed",
+          recoveredManifest["legacy"] as? Bool == true,
+          recoveredManifest["endReason"] as? String == "orphan-recovery" else {
+        fail("unindexed bundle was not sealed as recovered legacy history")
+    }
+    if !streamText(orphan, "backend.log").contains("ORPHANED BACKEND EVIDENCE") {
+        fail("orphaned stream bytes were lost during recovery")
+    }
+}
+
 print("trainer_log_session_lifecycle_ok")
 """
 
