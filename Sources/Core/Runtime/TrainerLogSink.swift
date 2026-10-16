@@ -63,7 +63,7 @@ final class TrainerLogSink {
     }
 
     private struct SessionRecord: Codable, Equatable {
-        static let schemaVersion = 1
+        static let currentSchemaVersion = 1
 
         let schemaVersion: Int
         let id: String
@@ -97,7 +97,7 @@ final class TrainerLogSink {
             streams: [String: String],
             legacy: Bool
         ) {
-            self.schemaVersion = Self.schemaVersion
+            self.schemaVersion = Self.currentSchemaVersion
             self.id = id
             self.startedAt = startedAt
             self.endedAt = endedAt
