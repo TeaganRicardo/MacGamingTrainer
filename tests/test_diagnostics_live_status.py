@@ -49,7 +49,7 @@ def build(adapter, identity, command="diagnostics"):
             patch.object(diagnostics.preparation, "compatibility", return_value=identity),
             patch.object(diagnostics.localization, "official_display_names", return_value={"WeaponUpgrade": "测试"}),
             patch.object(diagnostics.subprocess, "run", return_value=completed),
-            patch.object(diagnostics, "trainer_log_path", return_value=root / "trainer.log"),
+            patch.object(diagnostics, "trainer_log_directory", return_value=root),
         ):
             return adapter.dispatch(command, {}, "diagnostics-test")
 
