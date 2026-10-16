@@ -140,6 +140,12 @@ final class TrainerBackendSession {
         }
     }
 
+    /// Drain backend stderr already buffered by the process before exporting
+    /// diagnostics. Backend restart/reconnect state is otherwise unchanged.
+    func flushDiagnostics() {
+        client.flushStderr()
+    }
+
     func stop(suppressTerminationError: Bool = true) {
         cancelRecovery()
         restartPending = false
