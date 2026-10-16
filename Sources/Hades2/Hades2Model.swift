@@ -361,7 +361,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self.runLogDirectoryURL = runLogDirectoryURL
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.runLogWatcher.start()
             self.installHotkeys()
         }
     }
@@ -409,6 +408,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
         )
         hostTargetLifetimeChanged(running: observation.isRunning)
+        runLogWatcher.start()
         startBackend()
     }
 
