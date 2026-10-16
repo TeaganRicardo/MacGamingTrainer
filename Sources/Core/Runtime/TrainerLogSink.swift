@@ -538,7 +538,7 @@ final class TrainerLogSink {
 
     private func recoverOrphanedSessionsLocked() throws {
         let currentID = loadCurrentSessionPointerIDLocked()
-        for (bundle, record) in try sessionBundlesLocked() {
+        for (_, record) in try sessionBundlesLocked() {
             guard record.state != .completed, record.id != currentID else { continue }
             try completeSessionLocked(record, reason: "interrupted")
         }
@@ -552,9 +552,9 @@ final class TrainerLogSink {
         )
 
         for bundle in entries {
-            var isDirectory = false
+            var isDirectory = ObjCBool(false)
             guard FileManager.default.fileExists(atPath: bundle.path, isDirectory: &isDirectory),
-                  isDirectory else { continue }
+                  isDirectory.boolValue else { continue }
 
             let manifestURL = bundle.appendingPathComponent("manifest.json")
             if loadSessionRecordLocked(at: manifestURL) != nil {
@@ -788,9 +788,9 @@ final class TrainerLogSink {
         )
 
         return entries.compactMap { entry in
-            var isDirectory = false
+            var isDirectory = ObjCBool(false)
             guard FileManager.default.fileExists(atPath: entry.path, isDirectory: &isDirectory),
-                  isDirectory else { return nil }
+                  isDirectory.boolValue else { return nil }
             let manifest = entry.appendingPathComponent("manifest.json")
             guard let record = loadSessionRecordLocked(at: manifest) else { return nil }
             return (entry, record)
