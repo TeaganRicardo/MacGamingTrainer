@@ -584,8 +584,7 @@ do {
         .appendingPathComponent("sessions", isDirectory: true)
         .appendingPathComponent("orphaned-session", isDirectory: true)
     try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
-    try Data("ORPHANED BACKEND EVIDENCE
-".utf8).write(
+    try Data("ORPHANED BACKEND EVIDENCE\n".utf8).write(
         to: orphan.appendingPathComponent("backend.log"),
         options: .atomic
     )
