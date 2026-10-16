@@ -159,7 +159,7 @@ do {
     )
     sink.append("active-survives-cleanup", source: "HOST")
     sink.flush()
-    sink.clearCompletedSessions()
+    if !sink.clearCompletedSessions() { fail("completed session cleanup reported failure") }
     if !completedLogs(history).isEmpty { fail("completed session cleanup left history behind") }
     let active = (try? String(contentsOf: current, encoding: .utf8)) ?? ""
     if !active.contains("active-survives-cleanup") { fail("cleanup removed the active session") }
@@ -179,6 +179,8 @@ do {
     for index in 0..<128 {
         sink.append("queue-\(index) " + payload, source: "BACKEND")
     }
+    // Guarantee the overflow path even on an unusually fast filesystem.
+    sink.append(String(repeating: "z", count: TrainerLogSink.maximumPendingBytes + 1), source: "BACKEND")
     sink.flush()
     let text = (try? String(contentsOf: sink.url, encoding: .utf8)) ?? ""
     if !text.contains("LOGGER log queue overflow droppedBytes=") {
