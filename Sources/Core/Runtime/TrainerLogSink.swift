@@ -33,6 +33,7 @@ final class TrainerLogSink {
         var gameVersion: String?
         var runtimeRevision: Int?
         let legacy: Bool
+        var finalizing: Bool?
     }
 
     let url: URL
@@ -271,7 +272,7 @@ final class TrainerLogSink {
     private func beginTargetSessionLocked(identity: TargetIdentity) throws {
         try ensureDirectoriesLocked()
         if let existing = loadCurrentSessionLocked() {
-            if hasCompletedSessionArtifactsLocked(existing) {
+            if existing.finalizing == true || hasCompletedSessionArtifactsLocked(existing) {
                 try recoverInterruptedFinalizationLocked(existing)
             } else if let pid = identity.processIdentifier,
                       existing.targetPID == pid,
@@ -323,11 +324,16 @@ final class TrainerLogSink {
             return
         }
 
+        record.endedAt = formatter.string(from: Date())
+        record.finalizing = true
         activeSession = record
+
+        // Persist the intent to finalize before touching the log. If the
+        // process dies at any later boundary, the next Trainer instance will
+        // recover this session instead of resuming or overwriting it.
+        try writeSessionRecord(record, to: metadataURL)
         try appendLocked("session end id=\(record.id)", source: "HOST")
         try closeHandleLocked()
-
-        record.endedAt = formatter.string(from: Date())
         try finalizeSessionArtifactsLocked(record)
     }
 
@@ -341,8 +347,10 @@ final class TrainerLogSink {
         let completedLog = historyURL.appendingPathComponent(record.id).appendingPathExtension("log")
         let completedMetadata = historyURL.appendingPathComponent(record.id).appendingPathExtension("json")
 
+        var completedRecord = record
+        completedRecord.finalizing = nil
         if !FileManager.default.fileExists(atPath: completedMetadata.path) {
-            try writeSessionRecord(record, to: completedMetadata)
+            try writeSessionRecord(completedRecord, to: completedMetadata)
         }
 
         if !FileManager.default.fileExists(atPath: completedLog.path) {
@@ -378,6 +386,7 @@ final class TrainerLogSink {
         if completedRecord.endedAt == nil {
             completedRecord.endedAt = formatter.string(from: Date())
         }
+        completedRecord.finalizing = true
         activeSession = completedRecord
         try closeHandleLocked()
         try finalizeSessionArtifactsLocked(completedRecord)
