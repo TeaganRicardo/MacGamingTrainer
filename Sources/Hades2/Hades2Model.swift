@@ -400,6 +400,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         pendingRunReadySignal = false
     }
 
+    func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+        logSink.targetLifetimeChanged(
+            running: observation.isRunning,
+            identity: TrainerLogSink.TargetIdentity(
+                processName: Hades2GameModule.descriptor.targetProcessName,
+                bundleIdentifier: Hades2GameModule.descriptor.targetBundleIdentifier,
+                processIdentifier: observation.processIdentifier
+            )
+        )
+        hostTargetLifetimeChanged(running: observation.isRunning)
+    }
+
     func refreshFromHost() {
         send(connected ? .status : .scan, title: "host.refreshStatus")
     }
@@ -527,7 +539,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                         self?.consumeDeferredLaunchAttachIfPossible()
                         self?.consumeRunLogReadySignalIfPossible()
                     }
-                }
+                },
+                backendLog: { [weak self] line in self?.appendLog(line, source: "BACKEND") }
             )
             send(.scan, title: "hades2.op.detectGame")
         } catch {
@@ -1512,11 +1525,21 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // records the stable operation key rather than resolved wording.
         appendLog(presentation("hades2.op.logCreated").key)
         logSink.flush()
-        NSWorkspace.shared.open(logSink.url)
+        NSWorkspace.shared.open(logSink.currentLogURL())
     }
 
-    private func appendLog(_ line: String) {
-        logSink.append(line)
+    func openLogHistory() {
+        logSink.flush()
+        try? FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(logSink.historyURL)
+    }
+
+    func clearCompletedLogs() {
+        logSink.clearCompletedSessions()
+    }
+
+    private func appendLog(_ line: String, source: String = "HOST") {
+        logSink.append(line, source: source)
     }
 
     private func detachForTermination(completion: @escaping (Bool) -> Void) {
