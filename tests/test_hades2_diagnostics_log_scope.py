@@ -81,6 +81,24 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         assert report["trainerLogScope"] == "current_target_session"
         assert report["trainerSession"]["id"] == "session-1"
 
+    # With no target session, export the Host context explicitly rather than
+    # selecting completed history or inventing a game session.
+    scoped_log.unlink()
+    (scoped_log.parent / "current-session.json").unlink()
+    host_result = diagnostics.export_diagnostics(FakeAdapter())
+    host_archive_path = Path(host_result["diagnosticBundle"])
+    with zipfile.ZipFile(host_archive_path) as archive:
+        names = set(archive.namelist())
+        assert "trainer-host.log.tail" in names
+        assert "trainer-session.log" not in names
+        assert "trainer-session.json" not in names
+        host_tail = archive.read("trainer-host.log.tail").decode("utf-8")
+        assert "HOST CONTEXT MUST NOT REPLACE SESSION" in host_tail
+        assert "OLD SESSION MUST NOT EXPORT" not in host_tail
+        host_report = json.loads(archive.read("report.json"))
+        assert host_report["trainerLogScope"] == "host_context"
+        assert host_report["trainerSession"] is None
+
 if original_home is None:
     os.environ.pop("HOME", None)
 else:
