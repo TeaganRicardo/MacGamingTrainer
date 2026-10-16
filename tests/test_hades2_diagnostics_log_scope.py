@@ -44,7 +44,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         / "trainer.log"
     )
     scoped_log.parent.mkdir(parents=True)
-    scoped_log.write_text("SCOPED LOG\n", encoding="utf-8")
+    scoped_log.write_text("CURRENT SESSION LOG\n", encoding="utf-8")
+    (scoped_log.parent / "trainer-host.log").write_text("HOST CONTEXT MUST NOT REPLACE SESSION\n", encoding="utf-8")
+    (scoped_log.parent / "current-session.json").write_text(json.dumps({
+        "id": "session-1",
+        "startedAt": "2026-10-16T00:00:00Z",
+        "endedAt": None,
+        "targetProcessName": "Hades II",
+        "targetBundleIdentifier": "com.supergiantgames.hades2",
+        "targetPID": 1234,
+        "appVersion": "0.3.0",
+        "appBuild": "6",
+        "legacy": False,
+    }), encoding="utf-8")
+    history = scoped_log.parent / "sessions"
+    history.mkdir()
+    (history / "old.log").write_text("OLD SESSION MUST NOT EXPORT\n", encoding="utf-8")
     (legacy_data / "trainer.log").write_text("LEGACY LOG MUST NOT EXPORT\n", encoding="utf-8")
 
     result = diagnostics.export_diagnostics(FakeAdapter())
@@ -53,12 +68,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
 
     with zipfile.ZipFile(archive_path) as archive:
         names = set(archive.namelist())
-        assert "trainer.log.tail" in names
-        tail = archive.read("trainer.log.tail").decode("utf-8")
-        assert "SCOPED LOG" in tail
+        assert "trainer-session.log" in names
+        assert "trainer-session.json" in names
+        assert "trainer-host.log.tail" not in names
+        tail = archive.read("trainer-session.log").decode("utf-8")
+        assert "CURRENT SESSION LOG" in tail
+        assert "HOST CONTEXT MUST NOT REPLACE SESSION" not in tail
+        assert "OLD SESSION MUST NOT EXPORT" not in tail
         assert "LEGACY LOG MUST NOT EXPORT" not in tail
         report = json.loads(archive.read("report.json"))
         assert report["protocolVersion"] == 6
+        assert report["trainerLogScope"] == "current_target_session"
+        assert report["trainerSession"]["id"] == "session-1"
 
 if original_home is None:
     os.environ.pop("HOME", None)
