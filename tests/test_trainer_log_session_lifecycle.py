@@ -254,7 +254,7 @@ do {
     if fileSize(resumed.appendingPathComponent("backend.log")) > 2 * 1_048_576 {
         fail("Backend stream escaped its 2 MiB per-session allocation")
     }
-    if directorySize(resumed) > TrainerLogSink.maximumSessionFileSize + 16_384 {
+    if directorySize(resumed) > TrainerLogSink.maximumSessionBytes + 16_384 {
         fail("session bundle escaped its bounded size")
     }
     if !streamText(resumed, "backend.log").contains("BACKEND ") {
