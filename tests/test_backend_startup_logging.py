@@ -110,8 +110,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     assert root_logger.level == logging.WARNING, "worker logging must restore the embedder root level"
     assert unrelated_output.getvalue().count("startup fixture constructor warning") == 1
 
-    # A clean startup with no constructor diagnostics must still establish the
-    # worker-owned file before later INFO records are emitted.
+    # A clean startup with no constructor diagnostics must still forward later
+    # INFO records through stderr without creating a persistent worker-owned file.
     clean_data_dir = temp_root / "clean-data"
     clean_data_dir.mkdir()
     clean_created = []
