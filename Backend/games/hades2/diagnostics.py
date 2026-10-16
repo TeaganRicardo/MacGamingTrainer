@@ -116,7 +116,7 @@ def export_diagnostics(adapter):
         try:
             pointer=json.loads(session_pointer_path.read_text(encoding='utf-8'))
             session_id=pointer.get('id') if isinstance(pointer,dict) else None
-            if isinstance(session_id,str) and session_id and '/' not in session_id and '\\\\' not in session_id and session_id not in ('.','..'):
+            if isinstance(session_id,str) and session_id and not any(char in session_id for char in '/\\') and session_id not in ('.','..'):
                 candidate=log_directory/'sessions'/session_id
                 resolved_directory=candidate.resolve()
                 resolved_root=(log_directory/'sessions').resolve()
