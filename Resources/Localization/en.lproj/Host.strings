@@ -103,7 +103,9 @@
 "host.trainerMenu" = "Trainer";
 "host.shortcutSettings" = "Shortcut Settings";
 "host.viewRuntimeLog" = "View Runtime Log";
-"host.viewLog" = "View Log";
+"host.viewLog" = "View Current Log";
+"host.viewLogHistory" = "View Log History";
+"host.clearCompletedLogs" = "Clear Completed Log History";
 "host.launchGame" = "Launch Game";
 "host.refreshStatus" = "Refresh Status";
 "host.disableAll" = "Disable All";
