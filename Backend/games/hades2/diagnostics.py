@@ -6,7 +6,7 @@ import time
 import zipfile
 from pathlib import Path
 
-from core.log_paths import trainer_log_path
+from core.log_paths import trainer_log_directory
 from core.protocol import APP_BACKEND_VERSION, HOST_PROTOCOL_VERSION
 
 from . import localization, preparation, schema
@@ -105,8 +105,7 @@ def export_diagnostics(adapter):
         'python':sys.version,'platform':platform.platform(),'passed':result['passed'],'total':result['total'],
         'checks':result['checks'],'state':result['state'],
     }
-    log_path=trainer_log_path(adapter.game_id)
-    log_directory=log_path.parent
+    log_directory=trainer_log_directory(adapter.game_id)
     session_pointer_path=log_directory/'current-session.json'
     host_log_path=log_directory/'trainer-host.log'
     session_metadata=None
