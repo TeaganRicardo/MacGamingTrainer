@@ -165,6 +165,22 @@ with tempfile.TemporaryDirectory(prefix="mgt-hades-diagnostics-log-") as td:
         )
         assert exported_manifest == manifest
 
+    # The old flat file is no longer an export source. Its filesystem state
+    # must not prevent reading a valid Session Bundle.
+    legacy_flat = log_directory / "trainer.log"
+    legacy_flat.unlink()
+    legacy_flat.symlink_to(legacy_data / "trainer.log")
+    symlinked_result = diagnostics.export_diagnostics(FakeAdapter())
+    with zipfile.ZipFile(symlinked_result["diagnosticBundle"]) as archive:
+        assert "trainer-session/backend.log" in archive.namelist()
+        assert "BACKEND SESSION BACKEND STREAM" in archive.read(
+            "trainer-session/backend.log"
+        ).decode("utf-8")
+        assert "LEGACY LOG MUST NOT EXPORT" not in "\n".join(
+            archive.read(name).decode("utf-8")
+            for name in archive.namelist() if name.endswith(".log")
+        )
+
     # With no target session pointer, export the Host context explicitly rather
     # than selecting completed history or the legacy trainer.log path.
     (log_directory / "current-session.json").unlink()
