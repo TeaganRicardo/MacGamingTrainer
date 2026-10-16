@@ -159,6 +159,29 @@ do {
     if !FileManager.default.fileExists(atPath: nativeLog.path) { fail("cleanup touched native Hades II.log") }
 }
 
+// Sustained backend output cannot turn the Host writer queue into an
+// unbounded in-memory backlog. Dropped diagnostics remain explicit.
+let queueHome = home.appendingPathComponent("queue-home", isDirectory: true)
+do {
+    let sink = TrainerLogSink(gameID: "hades2", homeDirectory: queueHome)
+    sink.targetLifetimeChanged(
+        running: true,
+        identity: .init(processName: "Hades II", bundleIdentifier: "com.supergiantgames.hades2", processIdentifier: 4501)
+    )
+    let payload = String(repeating: "q", count: 65_536)
+    for index in 0..<128 {
+        sink.append("queue-\(index) " + payload, source: "BACKEND")
+    }
+    sink.flush()
+    let text = (try? String(contentsOf: sink.url, encoding: .utf8)) ?? ""
+    if !text.contains("LOGGER log queue overflow droppedBytes=") {
+        fail("Host log queue did not make burst truncation explicit")
+    }
+    if fileSize(sink.url) > TrainerLogSink.maximumSessionFileSize {
+        fail("bounded Host queue escaped the per-session file cap")
+    }
+}
+
 // Legacy trainer.log(.1-.3) is migrated into history instead of silently lost.
 let legacyHome = home.appendingPathComponent("legacy-home", isDirectory: true)
 let legacyDirectory = legacyHome
