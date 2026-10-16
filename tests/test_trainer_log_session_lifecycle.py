@@ -244,8 +244,12 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
 
 for phase in ["after-finalizing-marker", "after-completed-metadata", "after-log-move", "after-current-metadata-removal"] {
     let fixtureHome = home.appendingPathComponent("finalization-\(phase)", isDirectory: true)
-    let (_, current, history, interruptedID) = try writeSessionFixture(home: fixtureHome, phase: phase)
+    let (directory, current, history, interruptedID) = try writeSessionFixture(home: fixtureHome, phase: phase)
     let sink = TrainerLogSink(gameID: "hades2", homeDirectory: fixtureHome)
+    let host = directory.appendingPathComponent("trainer-host.log")
+    if sink.currentLogURL() != host {
+        fail("finalization recovery \(phase) exposed stale target log before target lifetime")
+    }
     sink.targetLifetimeChanged(
         running: true,
         identity: .init(
