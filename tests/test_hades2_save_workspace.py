@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
-from core.save_restore import SaveBusyError
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
@@ -244,9 +243,10 @@ for entry_id, operation, value in (
     else:
         raise AssertionError("unsupported Save Editor mutation was accepted")
 
-# Version-pinned sessions may be prepared while Hades is running, but Apply
-# is cold-only. A newer game-authored save is intentionally preserved as the
-# recovery snapshot, then replaced by the edited originally-read document.
+# Version-pinned sessions can Apply while Hades is running. A newer
+# game-authored target written after opening is deliberate overwrite input:
+# preserve it as recovery evidence, then install the edited originally-read
+# document without claiming that the running game reloaded those bytes.
 _base, pinned_saves, pinned_service = _environment(
     "pinned",
     running=True,
@@ -256,13 +256,6 @@ _base, pinned_saves, pinned_service = _environment(
 pinned = Hades2SaveWorkspace.open(pinned_service)
 pinned.stage("resource:MetaCurrency", "set", 500)
 pinned.stage("playerStat:GameplayTime", "set", 900.5)
-try:
-    pinned.apply()
-except SaveBusyError:
-    pass
-else:
-    raise AssertionError("running Save Editor apply was not refused")
-assert pinned.review()["count"] == 2
 
 newer = _save_bytes(
     300,
@@ -272,9 +265,10 @@ newer = _save_bytes(
 )
 pinned_path = pinned_saves / "Profile1.sav"
 pinned_path.write_bytes(newer)
-pinned_service.target_running_probe = lambda: False
 applied = pinned.apply()
 assert applied["applied"] is True
+assert applied["hot"] is True
+assert applied["runtimeReloaded"] is False
 assert applied["previousSnapshotId"]
 assert pinned.review() == {"count": 0, "changes": []}
 

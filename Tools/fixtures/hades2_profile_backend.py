@@ -94,7 +94,7 @@ class OfflineLuaTransport:
         self.lua.stdin.flush()
         result = self.lua.stdout.readline()
         if not result:
-            raise RuntimeError('offline resident exited')
+            raise RuntimeError('offline resident exited: ' + Path(self.events.name).read_text()[-4000:])
         self.last_duration = time.perf_counter() - started
         return result.strip()
 
@@ -130,7 +130,7 @@ def backend():
     # default. Pin its input to a finite synthetic bilingual source tree.
     from games.hades2 import localization
     game = temporary / 'fixture-game.app'
-    identifiers = {'MetaCurrency', 'Money', 'ZeusUpgrade', 'Boon'}
+    identifiers = {'MetaCurrency', 'Money', 'ZeusUpgrade', 'Boon', 'MetaCurrencyDrop'}
     identifiers.update('ProfileBoon%04d' % i for i in range(1, int(os.environ['MGT_PROFILE_CATALOG']) + 1))
     identifiers.update('ProfileResource%04d' % i for i in range(1, int(os.environ['MGT_PROFILE_RESOURCES'])))
     for language in ('en', 'zh-CN'):

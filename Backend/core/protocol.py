@@ -132,11 +132,6 @@ class JsonlRequestRouter:
         except (TypeError, ValueError):
             return False
 
-    @classmethod
-    def _require_json_safe(cls, value, message):
-        if not cls._json_safe(value):
-            raise TypeError(message)
-
     @staticmethod
     def _require_empty(params):
         if params:
@@ -189,47 +184,60 @@ class JsonlRequestRouter:
         raise ValueError('未知 Core 存档命令。')
 
     def handle(self, request):
+        """Return an isolated JSON value to in-process consumers."""
+        return json.loads(self.handle_encoded(request))
+
+    @staticmethod
+    def encode_reply(reply):
+        with phase("backend.reply_serialize"):
+            return json.dumps(reply, ensure_ascii=False, allow_nan=False)
+
+    def handle_encoded(self, request):
+        """Return the canonical JSONL reply shared by delivery and deduplication."""
         identity = request.get("id") if isinstance(request, dict) else None
         command = request.get("command", "") if isinstance(request, dict) else ""
         with operation(identity, command), phase("backend.routing"):
-            return self._handle(request)
+            return self._handle_encoded(request)
 
-    def _handle(self, request):
+    def _handle_encoded(self, request):
         request_id = request.get('id') if isinstance(request, dict) else None
         if not isinstance(request_id, str) or not request_id or len(request_id) > 128:
-            return self.core_error_reply(
+            return self.encode_reply(self.core_error_reply(
                 None, 'invalid_request',
                 'request id must be a non-empty string of at most 128 characters',
-            )
+            ))
         try:
             with phase("backend.request_fingerprint"):
                 fingerprint = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False)
         except (TypeError, ValueError):
-            return self.core_error_reply(
+            return self.encode_reply(self.core_error_reply(
                 request_id, 'invalid_request',
                 'request contains a value that cannot be serialized as strict JSON',
-            )
+            ))
         if request_id in self.cache:
             old, reply_json = self.cache[request_id]
-            return json.loads(reply_json) if old == fingerprint else self.core_error_reply(
+            if old == fingerprint:
+                self.adapter.reply_replayed()
+                return reply_json
+            return self.encode_reply(self.core_error_reply(
                 request_id, 'duplicate_conflict',
                 'request id was reused with different content',
-            )
+            ))
         try:
             command = request.get('command')
             params = request.get('params', {})
             if not isinstance(command, str) or not command or len(command) > 128:
-                return self.core_error_reply(
+                return self.encode_reply(self.core_error_reply(
                     request_id, 'invalid_request',
                     'command must be a non-empty string of at most 128 characters',
                     getattr(self.adapter, 'state', None),
-                )
+                ))
             if not isinstance(params, dict):
-                return self.core_error_reply(
+                return self.encode_reply(self.core_error_reply(
                     request_id, 'invalid_request',
                     'params must be a JSON object',
                     getattr(self.adapter, 'state', None),
-                )
+                ))
             if command == 'hello':
                 result = {
                     'backendVersion': APP_BACKEND_VERSION,
@@ -243,10 +251,12 @@ class JsonlRequestRouter:
                     result = self.adapter.dispatch(command, params, request_id)
                 if not isinstance(result, dict):
                     raise TypeError('Game adapter dispatch() must return a JSON object.')
-            with phase("backend.result_validation"):
-                self._require_json_safe(result, 'Backend returned a non-JSON-safe result.')
             reply = self._envelope(request_id, True)
             reply['result'] = result
+            try:
+                reply_json = self.encode_reply(reply)
+            except (TypeError, ValueError) as error:
+                raise TypeError('Backend returned a non-JSON-safe result.') from error
             logging.info('request %s %s success game=%s', request_id, command, self.adapter.game_id)
         except Exception as error:
             logging.exception('request %s failed game=%s', request_id, self.adapter.game_id)
@@ -269,13 +279,11 @@ class JsonlRequestRouter:
             recovery_path = getattr(error, 'recovery_path', None)
             if code == 'rollback_failed' and isinstance(recovery_path, str) and recovery_path:
                 reply['error']['recoveryPath'] = recovery_path
-        with phase("backend.cache_serialize"):
-            reply_json = json.dumps(reply, ensure_ascii=False, allow_nan=False)
+            reply_json = self.encode_reply(reply)
         self.cache[request_id] = (fingerprint, reply_json)
         while len(self.cache) > 256:
             self.cache.popitem(last=False)
-        with phase("backend.cache_materialize"):
-            return json.loads(reply_json)
+        return reply_json
 
     def close(self):
         self.adapter.close()

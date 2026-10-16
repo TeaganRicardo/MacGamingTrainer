@@ -155,12 +155,15 @@ def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_c
     timings = collections.defaultdict(list)
     features = None
     fixture_info = None
+    maintenance = []
     for line in completed.stdout.splitlines():
         name, value = line.split("\t", 1)
         if name == "features":
             features = json.loads(value)
         elif name == "fixture":
             fixture_info = json.loads(value)
+        elif name == "maintenance":
+            maintenance.append(json.loads(value))
         else:
             timings[name].append(float(value))
     if features is None or fixture_info is None:
@@ -171,6 +174,8 @@ def profile_resident(samples, trait_count=32, catalog_trait_count=96, resource_c
         "lua": subprocess.check_output([lua, "-v"], stderr=subprocess.STDOUT, text=True).strip(),
         "active_features": features,
         "fixture": fixture_info,
+        "maintenance": maintenance,
+        "maintenance_boundary": "unmodified frame controls versus instrumented overlapping CPU phases; UI stubs report calls only; owner-transition includes synthetic owner construction",
         "metrics": {name: summarize(values) for name, values in timings.items()},
     }
 
@@ -204,7 +209,8 @@ def human_summary(report):
             lines.append("Host: " + trial["reason"]); continue
         lines.append("Trial %d sidecar calls %s; bytes %s" % (index, trial["sidecar_calls"], trial["bytes"]))
         for name in ("host.request_queue", "host.payload_decode", "host.payload_apply", "harness.host_round_trip",
-                     "backend.routing", "backend.cache_serialize", "backend.cache_materialize", "backend.stdout_serialize",
+                     "backend.routing", "backend.public_projection", "backend.reply_serialize", "backend.reply_ready",
+                     "backend.cache_serialize", "backend.cache_materialize", "backend.stdout_serialize",
                      "sidecar.rpc", "resident.materialize_dispatch", "resident.json_serialize", "resident.localization"):
             metric = trial["paths"]["warm"]["phases"].get(name)
             if metric: lines.append("  %s median/p95 %.3f/%.3f ms (%d)" % (name, metric["median_ms"], metric["p95_ms"], metric["count"]))

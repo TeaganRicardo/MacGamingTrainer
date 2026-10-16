@@ -24,7 +24,7 @@ end
 ScreenData = { InventoryScreen = { ItemCategories = {} } }
 TraitElementData = { Fire = {}, Water = {} }; EnemyData = {}; PresetEventArgs = {}
 MapState = { RoomRequiredObjects = {}, EquippedWeapons = {} }
-LootObjects = {}; ConsumableData = {}; RewardStoreData = {}
+LootObjects = {}; ConsumableData = { MetaCurrencyDrop = {} }; RewardStoreData = {}
 TraitData = {}; LootData = {}; UnitSetData = {}
 CodexOrdering = { OlympianGods = {}, Order = {} }
 CurrentRun = {
@@ -53,6 +53,9 @@ SpendResource = function(id, amount)
   GameState.Resources[id] = (GameState.Resources[id] or 0) - amount
 end
 HeroHasTrait = function() return false end
+local spawnedObject = 1000
+SpawnObstacle = function() spawnedObject = spawnedObject + 1; return spawnedObject end
+CreateConsumableItem = function(id) return { ObjectId = id } end
 OpenUpgradeChoiceMenu = noop; CreateBoonLootButtons = noop
 AttemptPanelReroll = noop; RerollBoonLoot = noop; DestroyBoonLootButtons = noop
 
@@ -77,7 +80,11 @@ if traitCount > 0 or catalogTraitCount > 0 then
     for _, trait in ipairs(CurrentRun.Hero.Traits) do eligible[trait.Name] = true end
     return eligible
   end
-  IncreaseTraitLevel = noop; AddRarityToTraits = noop
+  IncreaseTraitLevel = function(trait, amount)
+    trait.StackNum = trait.StackNum + amount
+    return trait
+  end
+  AddRarityToTraits = noop
   GetTraitTooltipTitle = function(trait) return trait.Name end
 end
 
@@ -110,23 +117,27 @@ if serve then
   -- this private pipe. All phase wrappers live in the fixture, not the resident.
   local identity, command
   local originalJSON = M.json
-  local function phase(name, seconds, bytes)
+  local function phase(name, seconds, bytes, kind)
     local record = { schema = 1, component = "resident", request_id = identity,
-      command = command, phase = name, seconds = seconds, response_kind = "full" }
+      command = command, phase = name, seconds = seconds, response_kind = kind or "full" }
     if bytes then record.reply_bytes = bytes end
     io.stderr:write("OperationProfile " .. originalJSON(record) .. "\n")
     io.stderr:flush()
   end
   local function installProbes()
-    for _, name in ipairs({ "dispatch", "dispatchBatch", "json" }) do
+    for _, name in ipairs({ "dispatch", "dispatchBatch", "projectObservation", "json" }) do
       local original = M[name]
-      M[name] = function(...)
+      if type(original) == "function" then M[name] = function(...)
+        local input = ...
         local started = os.clock()
         local result = original(...)
-        phase(name == "json" and "resident.json_serialize" or "resident.materialize_dispatch",
-          os.clock() - started, name == "json" and #result or nil)
+        local metadata = type(input) == "table" and input.__trainerObservation
+        local kind = metadata and #metadata.retained > 0 and "patch" or "full"
+        phase(name == "json" and "resident.json_serialize"
+          or (name == "projectObservation" and "resident.collection_projection" or "resident.materialize_dispatch"),
+          os.clock() - started, name == "json" and #result or nil, kind)
         return result
-      end
+      end end
     end
   end
   if os.getenv("MGT_PROFILE_OPERATIONS") == "1" then installProbes() end
@@ -173,6 +184,79 @@ measure("frame_without_desired", function() UpdateTimers(1 / 60) end, 100)
 
 local enabled = { "infiniteHealth", "infiniteMana", "damageEnabled",
   "moneyMultiplierEnabled", "resourceMultiplierEnabled", "forceEnableRerolls" }
+local featureCalls = {
+  { command = "set_feature", params = { feature = "damageMultiplier", value = 3 } },
+  { command = "set_feature", params = { feature = "moneyMultiplier", value = 3 } },
+  { command = "set_feature", params = { feature = "resourceMultiplier", value = 3 } },
+}
+for _, feature in ipairs(enabled) do
+  featureCalls[#featureCalls + 1] = { command = "set_feature", params = { feature = feature, value = true } }
+end
+
+-- Probe private maintenance closures only in this offline fixture. The
+-- unmodified UpdateTimers control runs first; instrumented phases overlap and
+-- include timer/wrapper overhead. UI stubs count calls, not real native cost.
+local function maintenance(name, setup, iterations)
+  iterations = iterations or 100
+  local function frame()
+    if setup then setup() end
+    UpdateTimers(1 / 60)
+  end
+  measure("frame_" .. name .. "_control", frame, iterations)
+  local phases, nativeCalls, restores = {}, {}, {}
+  local function wrap(work, key)
+    return function(...)
+      local started = os.clock()
+      local result = table.pack(work(...))
+      local row = phases[key] or { calls = 0, seconds = 0 }
+      row.calls, row.seconds = row.calls + 1, row.seconds + os.clock() - started
+      phases[key] = row
+      return table.unpack(result, 1, result.n)
+    end
+  end
+  local function upvalue(owner, key)
+    for index = 1, math.huge do
+      local found, value = debug.getupvalue(owner, index)
+      if found == nil then break end
+      if found == key then
+        debug.setupvalue(owner, index, wrap(value, key))
+        restores[#restores + 1] = function() debug.setupvalue(owner, index, value) end
+        return value
+      end
+    end
+    error("Maintenance fixture cannot attribute " .. key)
+  end
+  local sync = upvalue(assert(M.guardWrapper), "synchronize")
+  upvalue(sync, "reconcileDesired")
+  upvalue(M.guardWrapper, "enforceLocks")
+  for _, key in ipairs({ "UpdateHealthUI", "UpdateWeaponMana", "UpdateManaMeterUI", "UpdateRerollUI", "UpdateMoneyUI" }) do
+    local original = _G[key]
+    _G[key] = function(...)
+      nativeCalls[key] = (nativeCalls[key] or 0) + 1
+      return original(...)
+    end
+    restores[#restores + 1] = function() _G[key] = original end
+  end
+  -- Warm-up is outside both the sample counters and the attribution records.
+  for _ = 1, 3 do frame() end
+  phases, nativeCalls = {}, {}
+  for _ = 1, samples do
+    local before = {}
+    for key, value in pairs(phases) do before[key] = value.seconds end
+    local started = os.clock()
+    for _ = 1, iterations do frame() end
+    emit("frame_" .. name .. "_profiled", (os.clock() - started) / iterations)
+    for key, value in pairs(phases) do
+      emit("maintenance_" .. name .. "_" .. key, (value.seconds - (before[key] or 0)) / iterations)
+    end
+  end
+  for index = #restores, 1, -1 do restores[index]() end
+  print("maintenance\t" .. M.json({ scenario = name, frames = samples * iterations,
+    phases = phases, native_calls = nativeCalls }))
+end
+
+M.dispatchBatch(featureCalls)
+maintenance("features")
 local calls = {
   { command = "set_feature", params = { feature = "damageMultiplier", value = 3 } },
   { command = "set_feature", params = { feature = "moneyMultiplier", value = 3 } },
@@ -201,10 +285,36 @@ end
 verify(M.dispatchBatch(calls))
 print("features\t" .. M.json(M.dispatch("status", { includeCatalogs = false }).activeFeatures))
 measure("frame_with_desired", function() UpdateTimers(1 / 60) end, 100)
+maintenance("locks")
 verify(M.dispatch("status", { includeCatalogs = false }))
 measure("active_status_dispatch_json", function()
   M.json(M.dispatch("status", { includeCatalogs = false }))
 end)
+
+-- Replacing an actual owner forces remount; an absent hero retains independent
+-- save/resource ownership and dormant hero intent. Setup is deliberately part
+-- of this synthetic transition workload, not claimed as native engine cost.
+local run, hero = CurrentRun, CurrentRun.Hero
+CurrentRun.Hero = nil
+UpdateTimers(1 / 60)
+local absent = M.dispatch("status", { includeCatalogs = false })
+assert(not absent.activeFeatures.infiniteMana and #absent.resources == resourceCount,
+  M.json({ active = absent.activeFeatures, resources = #absent.resources, expected = resourceCount }))
+maintenance("missing_hero")
+CurrentRun.Hero = hero
+UpdateTimers(1 / 60)
+local ownerSequence = 10
+maintenance("owner_transition", function()
+  ownerSequence = ownerSequence + 1
+  local replacement = {}
+  for key, value in pairs(hero) do replacement[key] = value end
+  replacement.ObjectId = ownerSequence
+  CurrentRun = {}
+  for key, value in pairs(run) do CurrentRun[key] = value end
+  CurrentRun.Hero, CurrentRun.CurrentRoom = replacement, {}
+  SessionState = {}
+end, 1)
+verify(M.dispatch("status", { includeCatalogs = false }))
 
 -- Existing durable features are torn down before every timed replay. The
 -- cleanup itself is outside the sample; batch installs and observation are in it.

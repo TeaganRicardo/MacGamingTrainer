@@ -1,5 +1,6 @@
 import copy
 
+from core.adapter import AdapterError
 from games.hades2.resident_session import ResidentMetrics, ResidentReply
 
 
@@ -34,6 +35,10 @@ class FakeResidentSession:
     def alive(self):
         return self.live
 
+    @property
+    def has_attachment(self):
+        return self.pid is not None
+
     def allows_process_time_warp(self):
         return self.process_time_warp_allowed
 
@@ -45,9 +50,10 @@ class FakeResidentSession:
 
     def detach(self):
         self.live = False
+        self.pid = None
 
     def close(self):
-        self.live = False
+        self.detach()
 
     def invalidate_generation(self):
         self.invalidations += 1
@@ -66,6 +72,8 @@ class FakeResidentSession:
         return self._reply("reconcile", "replay_preferences", {}, list(calls))
 
     def _reply(self, kind, command, params, batch):
+        if not self.live:
+            raise AdapterError("disconnected", "test resident is disconnected")
         record = {
             "kind": kind,
             "command": command,

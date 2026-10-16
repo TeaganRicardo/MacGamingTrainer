@@ -17,6 +17,7 @@ if not SWIFTC or not PYTHON:
 harness = r'''
 import Darwin
 import Foundation
+import Combine
 
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     guard condition() else {
@@ -33,6 +34,33 @@ struct Main {
             session: session,
             logSink: TrainerLogSink(url: URL(fileURLWithPath: "/dev/null"))
         )
+
+        // Full snapshots publish their collections. An unrelated scalar
+        // mutation patch must preserve them without another publication or
+        // typed collection decode; a changed resource domain publishes once.
+        var resourcePublications = 0
+        var traitPublications = 0
+        var boonPublications = 0
+        var elementPublications = 0
+        let publications = [
+            model.$resources.dropFirst().sink { _ in resourcePublications += 1 },
+            model.$currentRunTraits.dropFirst().sink { _ in traitPublications += 1 },
+            model.$boons.dropFirst().sink { _ in boonPublications += 1 },
+            model.$elements.dropFirst().sink { _ in elementPublications += 1 },
+        ]
+        model.apply(["resources": [], "currentRunTraits": [], "boons": [], "elements": []])
+        check(resourcePublications == 1 && traitPublications == 1
+                && boonPublications == 1 && elementPublications == 1,
+              "full snapshot omitted a collection publication")
+        model.apply(["health": 88.0])
+        check(model.health == 88 && resourcePublications == 1 && traitPublications == 1
+                && boonPublications == 1 && elementPublications == 1,
+              "scalar mutation patch rebuilt an unchanged collection")
+        model.apply(["resources": [["id": "MetaCurrency", "name": "Synthetic Resource", "count": 42]]])
+        check(resourcePublications == 2 && traitPublications == 1
+                && boonPublications == 1 && elementPublications == 1,
+              "resource patch published an unrelated collection")
+        withExtendedLifetime(publications) {}
 
         let setOccurrence = Hades2Request.setNextOccurrence("npc:Nemesis")
         check(setOccurrence.command == .setNextOccurrenceDesired,

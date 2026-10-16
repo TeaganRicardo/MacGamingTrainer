@@ -128,7 +128,7 @@ base_directory.cleanup()
 import json
 import os
 import core.save_restore as restore_module
-from core.save_restore import SaveBusyError, SaveRestoreError, SaveRollbackError
+from core.save_restore import SaveRestoreError, SaveRollbackError
 from core.save_snapshots import SaveSnapshotError
 from games.hades2 import preparation
 from games.hades2.adapter import Hades2Adapter
@@ -264,17 +264,26 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:
     workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
         source=identity("Profile2.sav"), target=identity("Profile3.sav"))
     workspace.stage("resource:MetaCurrency", "set", 91)
-    latest = _save_bytes(700, 700, "latest-rollback")
+    latest = _save_bytes(700, 700, "latest-before-hot-write")
     (saves / "Profile3.sav").write_bytes(latest)
     state["running"] = True
-    try:
-        workspace.apply()
-    except SaveBusyError:
-        pass
-    else:
-        raise AssertionError("#434 silently enabled #435 hot writing")
+    hot_result = workspace.apply()
+    assert hot_result["hot"] is True
+    assert hot_result["runtimeReloaded"] is False
+    assert resource(saves / "Profile3.sav") == 91
+    installed_hot = Hades2SaveDocument.load(saves / "Profile3.sav")
+    assert installed_hot.lua_state["GameState"]["UnknownFutureField"]["Marker"] == "source-2"
+    hot_previous = service.store.load_verified_snapshot(hot_result["previousSnapshotId"])
+    assert (hot_previous["root"] / "files/main/Profile3.sav").read_bytes() == latest
+    assert workspace.review()["count"] == 0
     state["running"] = False
-    assert workspace.review()["count"] == 1 and (saves / "Profile3.sav").read_bytes() == latest
+
+    # Recovery behavior remains identical after the successful hot write. Open a
+    # fresh pinned workspace so the failure cases below start from known intent.
+    workspace = Hades2SaveWorkspace.open(service, snapshot_id=snapshot,
+        source=identity("Profile2.sav"), target=identity("Profile3.sav"))
+    workspace.stage("resource:MetaCurrency", "set", 92)
+    post_hot = (saves / "Profile3.sav").read_bytes()
 
     original_install = restore_module.SaveRestoreTransaction._replace_file
     calls = [0]
@@ -293,7 +302,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:
             raise AssertionError("failed install reported success")
     finally:
         restore_module.SaveRestoreTransaction._replace_file = original_install
-    assert (saves / "Profile3.sav").read_bytes() == latest
+    assert (saves / "Profile3.sav").read_bytes() == post_hot
     assert workspace.review()["count"] == 1
     assert workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] == 20
     assert contents(Path(service.folder(snapshot))) == original_backup
@@ -314,7 +323,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:
             raise AssertionError("rollback failure reported success")
     finally:
         restore_module.SaveRestoreTransaction._replace_file = original_install
-    assert recovery.is_dir() and (recovery / "files/main/Profile3.sav").read_bytes() == latest
+    assert recovery.is_dir() and (recovery / "files/main/Profile3.sav").read_bytes() == post_hot
     assert str(recovery.resolve()) in service.list_state()["recoveryPaths"]
     assert workspace.review()["count"] == 1 and contents(Path(service.folder(snapshot))) == original_backup
 

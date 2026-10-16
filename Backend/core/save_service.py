@@ -125,15 +125,27 @@ class CoreSaveService:
         root = next(root for root in self.spec.roots if root.id == root_id)
         return matches[0], read_resolved_save_file(root.path, matches[0])
 
-    def replace_files(self, replacements, expected_hashes=None, post_install_verify=None, *, expected_paths=None):
+    def replace_files(
+        self,
+        replacements,
+        expected_hashes=None,
+        post_install_verify=None,
+        *,
+        expected_paths=None,
+        allow_running=False,
+    ):
         self._require_supported()
-        if self._running():
+        if type(allow_running) is not bool:
+            raise ValueError('allow_running must be boolean.')
+        running = self._running()
+        if running and not allow_running:
             raise SaveBusyError('Game must be stopped before applying a save edit.')
         return self._transaction().replace_files(
             replacements,
             expected_hashes,
             post_install_verify=post_install_verify,
             expected_paths=expected_paths,
+            target_running=running,
         )
 
     def _staged_path(self):

@@ -25,7 +25,7 @@ def phase_summary(records, summarize):
             calls[record['method']] += 1
             byte_counts['sidecar_request'] += record['request_bytes']
             byte_counts['sidecar_reply'] += record['reply_bytes']
-        if record['phase'] == 'backend.stdout_serialize':
+        if record['phase'] in ('backend.stdout_serialize', 'backend.reply_ready'):
             byte_counts['backend_reply'] += record['reply_bytes']
     return {'phases': {key: summarize(value) for key, value in phases.items()},
             'sidecar_calls': dict(calls), 'bytes': dict(byte_counts)}
@@ -80,7 +80,8 @@ def profile_end_to_end(samples, traits, catalog_traits, resources, summarize, so
     paths = {'cold': phase_summary(groups[cold_id], summarize),
              'warm': phase_summary([row for row in records if row['request_id'] in workload_by_id
                                     and row['request_id'] != cold_id], summarize)}
-    for path in ('cold_catalog', 'warm_status', 'resource_edit', 'active_status', 'queued_status'):
+    for path in ('cold_catalog', 'warm_status', 'resource_edit', 'vital_edit', 'feature_edit',
+                 'trait_edit', 'reward_spawn', 'active_status', 'queued_status'):
         identities = {row['request_id'] for row in records if row.get('path') == path}
         paths[path] = phase_summary([row for row in records if row['request_id'] in identities], summarize)
     return {'observed': True, 'probes_enabled': probes, 'workload': 'production Host/Core/Hades adapter/session/RPC/Lua; synthetic natives; temp stores',

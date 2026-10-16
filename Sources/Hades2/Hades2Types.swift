@@ -48,12 +48,6 @@ struct BoonOption: Identifiable {
     let sortOrder: Int
 }
 
-enum Hades2FeatureKey: String, CaseIterable, Hashable {
-    case invincibility, infiniteHealth, infiniteMana, damageEnabled, instantCastCooldown
-    case hexAlwaysReady, infiniteAmmo, autoMiniGames, gardenQoL, boonRarityEnabled
-    case forceEnableRerolls, moneyMultiplierEnabled, resourceMultiplierEnabled
-}
-
 enum ShortcutAction: String, CaseIterable, Identifiable {
     case invincibility, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
     case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL

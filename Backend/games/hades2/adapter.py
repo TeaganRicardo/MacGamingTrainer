@@ -17,6 +17,7 @@ from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed, next_occurrence_consumed
 from .profile_service import Hades2ProfileService
+from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
 from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
 from .save_workspace import Hades2SaveWorkspace
 from .schema import (
@@ -48,9 +49,6 @@ __all__ = [
 ]
 
 TransportError = AdapterError
-_TRANSIENT_ACTION_RESULT_FIELDS = (
-    'requestId','duplicate','applied','actionOutcome','actionError','lootObjectId',
-)
 
 def clear_active(state,preserve_desired=False):
     """Clear verified runtime state; optionally retain the user's desired feature profile."""
@@ -144,6 +142,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_write_blocked=self.preference_store.write_blocked_error is not None
         self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
         self.command_contract=Hades2CommandContract(self)
+        self.reply_projection=Hades2ReplyProjection()
         self.save_workspace=None
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
@@ -207,13 +206,13 @@ class Hades2Adapter(GameAdapter):
         if preferences.get('nextOccurrenceTarget') is not None:
             preferences['nextOccurrenceToken']='profile-occurrence-'+str(time.time_ns())
         observed_state=None
-        if self.runtime.alive() and self.state.get('connected'):
+        if self.runtime.has_attachment and self.state.get('connected'):
             observed_state=copy.deepcopy(self.observe_runtime())
         self._persist_preferences_candidate(preferences)
         self.preferences=preferences
         self.preference_initialized=True;self.preference_dirty=True
         self._overlay_preferences()
-        if self.runtime.alive() and isinstance(observed_state,dict):
+        if self.runtime.has_attachment and isinstance(observed_state,dict):
             self._replay_preferences(observed_state,force_full=True)
         result=dict(self.state);result.update(loadedProfile=profile['name'],shortcuts=profile['shortcuts'],profiles=self.list_profiles())
         return result
@@ -548,7 +547,7 @@ class Hades2Adapter(GameAdapter):
         self._overlay_preferences()
         if feature=='gameSpeed':
             self.preference_dirty=True
-            if self.runtime.alive() and self.runtime.allows_process_time_warp():
+            if self.runtime.has_attachment and self.runtime.allows_process_time_warp():
                 try:
                     self._apply_game_speed(value)
                     self.preference_dirty=was_dirty
@@ -561,7 +560,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_dirty=True
         # Lua-owned desired state remains editable while detached and replays
         # when the required resident owner becomes available.
-        if self.runtime.alive() and self.state.get('capabilities',{}).get('setFeature'):
+        if self.runtime.has_attachment and self.state.get('capabilities',{}).get('setFeature'):
             try:
                 result=self.execute('set_feature',{'feature':feature,'value':value})
                 self.preference_dirty=was_dirty
@@ -579,7 +578,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
+        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_boon_rarity',dict(normalized));self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -594,7 +593,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
+        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_gathering_probabilities',{'probabilities':probabilities})
             self.preference_dirty=was_dirty
             return result
@@ -608,7 +607,7 @@ class Hades2Adapter(GameAdapter):
         self.preferences=preferences;self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
+        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_chaos_gate_probability',{'probability':probability})
             self.preference_dirty=was_dirty
             return result
@@ -622,7 +621,7 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
+        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_next_room_reward',{'reward':reward,'token':self.preferences.get('nextRoomRewardToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
@@ -634,12 +633,12 @@ class Hades2Adapter(GameAdapter):
         self.preference_initialized=True
         was_dirty=self.preference_dirty
         self.preference_dirty=True;self._overlay_preferences()
-        if self.runtime.alive() and (self.state.get('capabilities') or {}).get('setFeature') is True:
+        if self.runtime.has_attachment and (self.state.get('capabilities') or {}).get('setFeature') is True:
             result=self.execute('set_next_occurrence',{'target':target,'token':self.preferences.get('nextOccurrenceToken')});self.preference_dirty=was_dirty;return result
         return dict(self.state)
 
     def _replay_preferences(self,observed_state,force_full=False):
-        if not self.runtime.alive():return dict(self.state)
+        if not self.runtime.has_attachment:return dict(self.state)
         if self._preference_persistence_dirty:
             # Current in-memory desired is authoritative. Retry its failed
             # durable write before crossing another runtime mutation boundary.
@@ -845,7 +844,7 @@ class Hades2Adapter(GameAdapter):
         capabilities=dict(capabilities)
         capabilities['hotBackup']=True;capabilities['hotRestore']=False
         decoded['capabilities']=capabilities
-        for key in _TRANSIENT_ACTION_RESULT_FIELDS:
+        for key in ACTION_RESULT_FIELDS:
             self.state.pop(key,None)
         self.state.update(decoded,connected=True,pid=self.runtime.pid)
         self.state.pop('error',None)
@@ -884,10 +883,6 @@ class Hades2Adapter(GameAdapter):
                 if teardown_persistence_error is not None:raise teardown_persistence_error
                 return dict(self.state)
             self._attach_runtime(self.state['pid']);self.state['connected']=True
-        if not self.runtime.alive():
-            error=TransportError('disconnected','请先连接游戏。')
-            self._project_runtime_error(error,project_desired)
-            raise error
         teardown_speed_error=None
         if teardown:
             try:self._apply_game_speed(1.0)
@@ -1038,8 +1033,18 @@ class Hades2Adapter(GameAdapter):
         })
         return metadata
 
+    def reply_replayed(self):
+        self.reply_projection.invalidate()
+
     def dispatch(self, command, params, request_id):
-        return self.command_contract.dispatch(command, params, request_id)
+        try:
+            reply=self.command_contract.dispatch(command, params, request_id)
+        except Exception:
+            # Core may publish the complete error state. A later success must
+            # reconstruct the Host rather than diff against an older reply.
+            self.reply_projection.invalidate()
+            raise
+        return self.reply_projection.publish(reply,self.command_contract.reply_kind(command))
 
     def close(self):
         try:

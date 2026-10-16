@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 109 then
+if previousModule and previousModule.revision ~= 113 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,22 +15,47 @@ if previousModule and previousModule.revision ~= 109 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 109, damageMultiplier = 2, damageEnabled = false,
-    invincibility = false, infiniteHealth = false, infiniteMana = false,
-    instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
+    version = 1, revision = 113,
+    -- BEGIN GENERATED DURABLE FEATURE STATE
+    invincibility = false,
+    infiniteHealth = false,
+    infiniteMana = false,
+    damageEnabled = false,
+    instantCastCooldown = false,
+    hexAlwaysReady = false,
+    infiniteAmmo = false,
+    autoMiniGames = false,
+    gardenQoL = false,
+    boonRarityEnabled = false,
     forceEnableRerolls = false,
-    moneyMultiplier = 2, moneyMultiplierEnabled = false,
-    resourceMultiplier = 2, resourceMultiplierEnabled = false,
+    moneyMultiplierEnabled = false,
+    resourceMultiplierEnabled = false,
+    damageMultiplier = 2,
+    moneyMultiplier = 2,
+    resourceMultiplier = 2,
+    -- END GENERATED DURABLE FEATURE STATE
     -- true means force one currently eligible special boon into the native pool.
     boonRarityTarget = "Epic", boonRarityMultiplier = 1, boonForceLegendary = false, boonForceDuo = false,
     nextRoomReward = nil, nextRoomRewardToken = nil, lastConsumedNextRoomRewardToken = nil,
     nextRoomRewardRoutedRooms = {}, nextRoomRewardPatchedDoors = 0, nextRoomRewardPatchedValue = nil, nextRoomRewardPatchRoom = nil,
     nextOccurrenceTarget = nil, nextOccurrenceToken = nil, lastConsumedNextOccurrenceToken = nil,
+    -- BEGIN GENERATED DURABLE DESIRED FEATURES
     desiredFeatures = {
-      invincibility = false, infiniteHealth = false, infiniteMana = false, damageEnabled = false,
-      instantCastCooldown = false, hexAlwaysReady = false, infiniteAmmo = false, autoMiniGames = false, gardenQoL = false, boonRarityEnabled = false,
-      forceEnableRerolls = false, moneyMultiplierEnabled = false, resourceMultiplierEnabled = false,
+      invincibility = false,
+      infiniteHealth = false,
+      infiniteMana = false,
+      damageEnabled = false,
+      instantCastCooldown = false,
+      hexAlwaysReady = false,
+      infiniteAmmo = false,
+      autoMiniGames = false,
+      gardenQoL = false,
+      boonRarityEnabled = false,
+      forceEnableRerolls = false,
+      moneyMultiplierEnabled = false,
+      resourceMultiplierEnabled = false,
     },
+    -- END GENERATED DURABLE DESIRED FEATURES
     resourceLocks = {}, vitalLocks = {}, elementLocks = {}, statTargets = {}, statRuntime = {}, hooks = {}, featureErrors = {}, gatheringProbabilities = {},
     catalogCache = {}, specialChoiceOpens = {}, specialChoiceRun = nil,
     requests = previousModule and previousModule.requests or {},
@@ -45,107 +70,6 @@ if __MacGamingTrainerV1 == nil then
   local forceRerolls, roomGeneration
   local preferenceReplayDepth = 0
 
-  -- Resource DisplayName values from build 1.139672 Game/Text/zh-CN/HelpText.zh-CN.sjson.
-  local names = {
-    Money = "金币",
-    CosmeticsPoints = "声望",
-    DreamPoints = "闪亮星星",
-    TrashPoints = "垃圾",
-    MetaCardPointsCommon = "尘灰",
-    MemPointsCommon = "魂魄",
-    MetaCurrency = "骨骸",
-    SeedMystery = "神秘种子",
-    PlantFMoly = "摩吕草",
-    PlantFNightshadeSeed = "颠茄种子",
-    PlantFNightshade = "颠茄",
-    OreFSilver = "银矿",
-    FishFCommon = "怨艾鱼",
-    FishFRare = "残像鱼",
-    FishFLegendary = "魂腹鱼",
-    MetaFabric = "命运丝线",
-    GiftPoints = "蜜露",
-    GiftPointsRare = "浴盐",
-    GiftPointsEpic = "双份鱼饵",
-    SuperGiftPoints = "仙酒",
-    MixerFBoss = "余烬",
-    PlantNMoss = "青苔",
-    PlantNGarlicSeed = "蒜瓣",
-    PlantNGarlic = "大蒜",
-    OreNBronze = "青铜",
-    FishNCommon = "肋眼鱼",
-    FishNRare = "丧鳗",
-    FishNLegendary = "噬颈鲨",
-    MixerNBoss = "羊毛",
-    PlantGLotus = "莲花",
-    PlantGCattailSeed = "香蒲种子",
-    PlantGCattail = "香蒲",
-    OreGLime = "石灰岩",
-    FishGCommon = "石鳖",
-    FishGRare = "渠鼻鱼",
-    FishGLegendary = "潜鳍鱼",
-    MixerGBoss = "珍珠",
-    PlantHMyrtle = "香桃木",
-    PlantHWheatSeed = "小麦种子",
-    PlantHWheat = "小麦",
-    OreHGlassrock = "曜石",
-    FishHCommon = "抽泣鱼",
-    FishHRare = "煎熬鱼",
-    FishHLegendary = "泪海马",
-    MixerHBoss = "泪珠",
-    PlantODriftwood = "浮木",
-    PlantOMandrakeSeed = "曼德拉草种子",
-    PlantOMandrake = "曼德拉草",
-    OreOIron = "铁矿",
-    FishOCommon = "虾",
-    FishORare = "寄居蟹",
-    FishOLegendary = "鱿鱼",
-    MixerOBoss = "金苹果",
-    PlantPIris = "鸢尾花",
-    PlantPOliveSeed = "橄榄枝",
-    PlantPOlive = "橄榄",
-    OrePAdamant = "精金",
-    FishPCommon = "柱头蟹",
-    FishPRare = "冠顶龟",
-    FishPLegendary = "星航鱼",
-    MixerPBoss = "羽毛",
-    PlantIShaderot = "糜影草",
-    PlantIPoppySeed = "罂粟种子",
-    PlantIPoppy = "罂粟",
-    OreIMarble = "大理石",
-    FishICommon = "瞬息鱼",
-    FishIRare = "金鱼",
-    FishILegendary = "冥古鱼",
-    MixerIBoss = "玄象砂",
-    PlantQFang = "尖牙",
-    PlantQSnakereedSeed = "浮游植物",
-    PlantQSnakereed = "蛇苇",
-    OreQScales = "蛇鳞",
-    FishQCommon = "七鳃鳗",
-    FishQRare = "风暴喉",
-    FishQLegendary = "奇美鱼",
-    MixerQBoss = "虚空之眼",
-    OreChaosProtoplasm = "混沌质",
-    PlantChaosThalamusSeed = "原初种子",
-    PlantChaosThalamus = "混沌苞蕾",
-    FishChaosCommon = "马蒂鱼",
-    FishChaosRare = "源祖水母",
-    FishChaosLegendary = "虚空鳐",
-    CharonPoints = "奥波勒斯信用点",
-    FamiliarPoints = "女巫之宝",
-    CardUpgradePoints = "月尘",
-    Mixer5Common = "星尘",
-    Mixer6Common = "黑暗",
-    IcarusPoints = "灵质秘药",
-    MedeaPoints = "泪珠蒸汽",
-    HypnosPoints = "梦雾",
-    DeathAreaPoints = "冥府煤灰",
-    MixerShadow = "暗影",
-    WeaponPointsRare = "梦魇",
-    GemPoints = "宝石",
-    HadesSpearPoints = "吉加罗斯",
-    MixerMythic = "熵",
-    MysteryResource = "？？？",
-  }
   local arrayMeta = { __trainerJSONArray = true }
   local jsonNull = {}
   local function finite(n)
@@ -190,6 +114,76 @@ if __MacGamingTrainerV1 == nil then
       return "{" .. table.concat(out, ",") .. "}"
     end
     return encode(value)
+  end
+
+  -- The transport can retain expensive collection domains between replies.
+  -- Every dispatch still observes all live values; only equal wire collections
+  -- are omitted. Capabilities, desired/active state and receipts always travel.
+  do
+    local previous, owners, catalogsReady, generation = {}, nil, false, nil
+    local function identify(nonce)
+      if generation == nil then
+        if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
+        -- The client supplies a fresh UUID on every boundary. A new resident
+        -- adopts one once; table addresses can be recycled after Lua GC.
+        generation = nonce
+        M.traitInventoryGeneration = generation
+      end
+    end
+    local function copy(value)
+      if type(value) ~= "table" or value == jsonNull then return value end
+      local result = setmetatable({}, getmetatable(value))
+      for key, item in pairs(value) do result[key] = copy(item) end
+      return result
+    end
+    local function equal(left, right)
+      if left == right then return true end
+      if type(left) ~= "table" or type(right) ~= "table"
+          or left == jsonNull or right == jsonNull then return false end
+      for key, value in pairs(left) do if not equal(value, right[key]) then return false end end
+      for key in pairs(right) do if left[key] == nil then return false end end
+      return true
+    end
+    function M.projectObservation(result, snapshot)
+      local current = {
+        session = SessionState or false, game = GameState or false, run = CurrentRun or false,
+        hero = type(CurrentRun) == "table" and CurrentRun.Hero or false,
+        room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or false,
+        resources = type(GameState) == "table" and GameState.Resources or false,
+        traits = TraitData or false, resourceData = ResourceData or false,
+      }
+      if owners == nil then snapshot = true else
+        for key, value in pairs(current) do
+          if owners[key] ~= value then snapshot = true; break end
+        end
+      end
+      local retained = setmetatable({}, arrayMeta)
+      for _, key in ipairs({ "resources", "elements", "currentRunTraits" }) do
+        local value = result[key]
+        if not snapshot and value ~= nil and equal(previous[key], value) then
+          retained[#retained + 1] = key
+          result[key] = nil
+        else
+          previous[key] = copy(value)
+        end
+      end
+      owners = current
+      if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
+      result.__trainerObservation = { generation = generation, retained = retained }
+      return result
+    end
+    function M.observe(command, params, nonce)
+      identify(nonce)
+      params = params or {}
+      -- A newly replaced resident owns a new catalog generation, even when
+      -- the Python caller last observed catalogs from its predecessor.
+      if not catalogsReady then params.includeCatalogs = true end
+      return M.projectObservation(M.dispatch(command, params), command == "status" or params.includeCatalogs == true)
+    end
+    function M.observeBatch(calls, includeCatalogs, nonce)
+      identify(nonce)
+      return M.projectObservation(M.dispatchBatch(calls, includeCatalogs or not catalogsReady), true)
+    end
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
@@ -414,7 +408,32 @@ if __MacGamingTrainerV1 == nil then
     local run = M.runtimeOwners.run()
     if run == nil or type(run.Hero) ~= "table" then return nil end
     local hero = run.Hero
-    if hero.ObjectId == nil or hero.IsDead then return nil end
+    if hero.ObjectId == nil then return nil end
+    local mapLoads = type(SessionState) == "table" and SessionState.MapLoads or nil
+    if hero.IsDead then
+      if type(CurrentHubRoom) ~= "table" or not finite(mapLoads) then return nil end
+      -- The supported game's OnPreThingCreation increments MapLoads and calls
+      -- RunStateInit (clears Hero.ObjectId) before DeathAreaRoomTransition
+      -- publishes CurrentHubRoom. SetupHeroObject then binds the playable
+      -- _PlayerUnit, possibly recycling the previous ObjectId. An earlier,
+      -- observed living Hero cannot become usable merely because a Hub pointer
+      -- appears in that same map generation.
+      local live = M.lastLiveHeroOwner
+      if live ~= nil and live.session == SessionState and live.run == run and live.hero == hero
+          and (not finite(live.mapLoads) or mapLoads <= live.mapLoads) then
+        return nil
+      end
+    elseif finite(mapLoads) then
+      -- Capture once per identity/map generation, not on every guard tick.
+      -- This is a runtime observation only; it is never stored in the save.
+      local live = M.lastLiveHeroOwner
+      if live == nil or live.session ~= SessionState or live.run ~= run
+          or live.hero ~= hero or live.mapLoads ~= mapLoads then
+        M.lastLiveHeroOwner = {
+          session = SessionState, run = run, hero = hero, mapLoads = mapLoads,
+        }
+      end
+    end
     return hero
   end
   function M.runtimeOwners.heroAvailable()
@@ -549,18 +568,18 @@ if __MacGamingTrainerV1 == nil then
     local ownerHero = type(ownerRun) == "table" and ownerRun.Hero or nil
     local ownerSession = SessionState
     hook.ownerSession = ownerSession
-    -- Most combat hooks intentionally die with their Hero/run. Global-safe
-    -- hooks installed while no Hero exists (Crossroads) are session-scoped;
-    -- an explicit scope can opt into the same behavior. synchronize() still
-    -- releases/reconciles them as their runtime owners change, so no stale
-    -- state crosses sessions.
+    -- Run-bound hooks follow the captured Hero and its *live owner*, including
+    -- a native Hub reattachment after death. A dead Hero that has not been
+    -- rebound to a live unit still fails the owner guard. Global-safe hooks
+    -- installed with no Hero are session-scoped. synchronize() releases and
+    -- reconciles hooks when their actual owners change.
     local sessionScoped = scope == "session" or type(ownerHero) ~= "table"
     hook.scope = sessionScoped and "session" or "run"
     hook.wrapper = function(...)
       local active = M.hooks[name] == hook and SessionState == ownerSession
       if active and not sessionScoped then
         active = CurrentRun == ownerRun and type(CurrentRun) == "table"
-          and CurrentRun.Hero == ownerHero and not ownerHero.IsDead
+          and CurrentRun.Hero == ownerHero and M.runtimeOwners.hero() == ownerHero
       end
       if active then return body(original, ...) end
       return original(...)
@@ -1583,19 +1602,19 @@ if __MacGamingTrainerV1 == nil then
     M.originalUpdateTimers, M.guardWrapper = original, wrapper
     UpdateTimers = wrapper
   end
-  local function resourceSectionTitle(id)
-    if string.find(id, "Gift", 1, true) then return "赠礼资源" end
-    if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "植物与种子" end
-    if string.find(id, "Ore", 1, true) then return "矿物" end
-    if string.find(id, "Fish", 1, true) then return "鱼类" end
-    if string.find(id, "Boss", 1, true) then return "首领素材" end
-    return "通用与制作资源"
+  local function resourceSectionKind(id)
+    if string.find(id, "Gift", 1, true) then return "gifts" end
+    if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "plants" end
+    if string.find(id, "Ore", 1, true) then return "ores" end
+    if string.find(id, "Fish", 1, true) then return "fish" end
+    if string.find(id, "Boss", 1, true) then return "boss" end
+    return "resources"
   end
-  local resourceInventorySectionTitles = {
-    InventoryScreen_ResourcesTab = "资源",
-    InventoryScreen_GardenTab = "植物与种子",
-    InventoryScreen_GiftsTab = "赠礼",
-    InventoryScreen_FishTab = "鱼类",
+  local resourceInventorySectionKinds = {
+    InventoryScreen_ResourcesTab = "resources",
+    InventoryScreen_GardenTab = "plants",
+    InventoryScreen_GiftsTab = "gifts",
+    InventoryScreen_FishTab = "fish",
   }
   local function inventoryResourceLayout()
     local order, metadata, seen = {}, {}, {}
@@ -1603,8 +1622,9 @@ if __MacGamingTrainerV1 == nil then
       and ScreenData.InventoryScreen.ItemCategories or nil
     if type(categories) == "table" then
       for categoryIndex, category in ipairs(categories) do
-        local sectionTitle = type(category) == "table" and resourceInventorySectionTitles[category.Name] or nil
-        if sectionTitle ~= nil then
+        local sectionId = type(category) == "table" and category.Name or nil
+        local sectionKind = type(sectionId) == "string" and resourceInventorySectionKinds[sectionId] or nil
+        if sectionKind ~= nil then
           local itemOrder = 0
           for _, id in ipairs(category) do
             if type(id) == "string" and id ~= "Money" and not seen[id]
@@ -1612,7 +1632,10 @@ if __MacGamingTrainerV1 == nil then
               itemOrder = itemOrder + 1
               seen[id] = true
               order[#order + 1] = id
-              metadata[id] = { sectionTitle = sectionTitle, sectionOrder = categoryIndex, itemOrder = itemOrder }
+              metadata[id] = {
+                sectionId = sectionId, sectionKind = sectionKind,
+                sectionOrder = categoryIndex, itemOrder = itemOrder,
+              }
             end
           end
         end
@@ -1625,7 +1648,10 @@ if __MacGamingTrainerV1 == nil then
         if type(id) == "string" and id ~= "Money" and not seen[id] and type(ResourceData[id]) == "table" then
           seen[id] = true
           order[#order + 1] = id
-          metadata[id] = { sectionTitle = resourceSectionTitle(id), sectionOrder = 999, itemOrder = #order }
+          metadata[id] = {
+            sectionId = "", sectionKind = resourceSectionKind(id),
+            sectionOrder = 999, itemOrder = #order,
+          }
         end
       end
     end
@@ -1661,10 +1687,12 @@ if __MacGamingTrainerV1 == nil then
       if allowed[id] then
         local presentation = metadata[id] or {}
         result[#result + 1] = {
-          id = id, name = names[id] or id,
+          id = id,
+          displayId = type(ResourceData[id].DisplayName) == "string" and ResourceData[id].DisplayName or id,
           count = number(GameState.Resources and GameState.Resources[id]),
           locked = M.resourceLocks[id] ~= nil, sortOrder = index,
-          sectionTitle = presentation.sectionTitle or resourceSectionTitle(id),
+          sectionId = presentation.sectionId or "",
+          sectionKind = presentation.sectionKind or resourceSectionKind(id),
         }
       end
     end
@@ -7020,17 +7048,23 @@ if __MacGamingTrainerV1 == nil then
         setElements = M.runtimeOwners.elementsAvailable(), hotBackup = true, hotRestore = false,
       },
       featureSupport = featureSupportMap,
+      -- BEGIN GENERATED DURABLE FEATURE PROJECTION
       desiredFeatures = {
-        invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
-        infiniteMana = M.desiredFeatures.infiniteMana, damageEnabled = M.desiredFeatures.damageEnabled,
+        invincibility = M.desiredFeatures.invincibility,
+        infiniteHealth = M.desiredFeatures.infiniteHealth,
+        infiniteMana = M.desiredFeatures.infiniteMana,
+        damageEnabled = M.desiredFeatures.damageEnabled,
         instantCastCooldown = M.desiredFeatures.instantCastCooldown,
-        hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
-        autoMiniGames = M.desiredFeatures.autoMiniGames, gardenQoL = M.desiredFeatures.gardenQoL,
+        hexAlwaysReady = M.desiredFeatures.hexAlwaysReady,
+        infiniteAmmo = M.desiredFeatures.infiniteAmmo,
+        autoMiniGames = M.desiredFeatures.autoMiniGames,
+        gardenQoL = M.desiredFeatures.gardenQoL,
         boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
         forceEnableRerolls = M.desiredFeatures.forceEnableRerolls,
         moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
         resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled,
       },
+      -- END GENERATED DURABLE FEATURE PROJECTION
       activeFeatures = activeFeatureMap,
       dormantFeatures = dormantFeatureMap,
       invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
@@ -8279,11 +8313,6 @@ if __MacGamingTrainerV1 == nil then
     M.forceEnableRerolls = false
   end
 
-  featureOrder = {
-    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
-    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
-    "forceEnableRerolls",
-  }
   featureRegistry = {
     invincibility = {
       install = installInvincibility, release = releaseInvincibility,
@@ -8346,6 +8375,11 @@ if __MacGamingTrainerV1 == nil then
       support = forceRerolls.supported,
       active = function() return M.forceEnableRerolls and forceRerolls.active() end,
     },
+  }
+  featureOrder = {
+    "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
+    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
+    "forceEnableRerolls",
   }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
   statRegistry = {
@@ -9546,11 +9580,23 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_feature" then
       local feature, value = params.feature, params.value
-      if feature == "damageMultiplier" or feature == "moneyMultiplier" or feature == "resourceMultiplier" then
+      -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH
+      if feature == "damageMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
-        M[feature] = value
+        M.damageMultiplier = value
         return state(params.includeCatalogs)
       end
+      if feature == "moneyMultiplier" then
+        if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        M.moneyMultiplier = value
+        return state(params.includeCatalogs)
+      end
+      if feature == "resourceMultiplier" then
+        if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        M.resourceMultiplier = value
+        return state(params.includeCatalogs)
+      end
+      -- END GENERATED DURABLE MULTIPLIER DISPATCH
       if type(value) ~= "boolean" then error("Feature value must be boolean") end
       if M.desiredFeatures[feature] == nil then error("Unknown feature") end
       local previous = M.desiredFeatures[feature]
@@ -9801,7 +9847,7 @@ if __MacGamingTrainerV1 == nil then
     set_next_room_reward = true,
     set_next_occurrence = true,
   }
-  function M.dispatchBatch(calls)
+  function M.dispatchBatch(calls, includeCatalogs)
     if type(calls) ~= "table" then error("Preference replay batch must be a table") end
     if preferenceReplayDepth ~= 0 then error("Nested preference replay is unsupported") end
     if M.terminalActionUnknown then
@@ -9823,6 +9869,6 @@ if __MacGamingTrainerV1 == nil then
     preferenceReplayDepth = 0
     if not ok then error(message) end
     synchronize()
-    return state(false)
+    return state(includeCatalogs == true)
   end
 end
