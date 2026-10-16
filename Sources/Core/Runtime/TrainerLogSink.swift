@@ -271,9 +271,11 @@ final class TrainerLogSink {
     private func beginTargetSessionLocked(identity: TargetIdentity) throws {
         try ensureDirectoriesLocked()
         if let existing = loadCurrentSessionLocked() {
-            if let pid = identity.processIdentifier,
-               existing.targetPID == pid,
-               FileManager.default.fileExists(atPath: url.path) {
+            if hasCompletedSessionArtifactsLocked(existing) {
+                try recoverInterruptedFinalizationLocked(existing)
+            } else if let pid = identity.processIdentifier,
+                      existing.targetPID == pid,
+                      FileManager.default.fileExists(atPath: url.path) {
                 activeSession = existing
                 try switchHandleLocked(to: url)
                 try appendLocked(
@@ -281,9 +283,10 @@ final class TrainerLogSink {
                     source: "HOST"
                 )
                 return
+            } else {
+                activeSession = existing
+                try finishTargetSessionLocked()
             }
-            activeSession = existing
-            try finishTargetSessionLocked()
         } else if hasLegacyCurrentLogsLocked() {
             try archiveLegacyLogsLocked()
         }
@@ -325,16 +328,34 @@ final class TrainerLogSink {
         try closeHandleLocked()
 
         record.endedAt = formatter.string(from: Date())
+        try finalizeSessionArtifactsLocked(record)
+    }
+
+    /// The completed metadata is the durable finalization marker. It is written
+    /// before the live log is moved, so every interruption point is recoverable:
+    /// a restart either finishes the move or observes an already-completed log
+    /// and only removes the stale current-session marker. Completed evidence is
+    /// never overwritten during recovery.
+    private func finalizeSessionArtifactsLocked(_ record: SessionRecord) throws {
         try ensureDirectoriesLocked()
         let completedLog = historyURL.appendingPathComponent(record.id).appendingPathExtension("log")
         let completedMetadata = historyURL.appendingPathComponent(record.id).appendingPathExtension("json")
-        if FileManager.default.fileExists(atPath: completedLog.path) {
-            try FileManager.default.removeItem(at: completedLog)
+
+        if !FileManager.default.fileExists(atPath: completedMetadata.path) {
+            try writeSessionRecord(record, to: completedMetadata)
         }
-        if FileManager.default.fileExists(atPath: url.path) {
-            try FileManager.default.moveItem(at: url, to: completedLog)
+
+        if !FileManager.default.fileExists(atPath: completedLog.path) {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.moveItem(at: url, to: completedLog)
+            }
+        } else if FileManager.default.fileExists(atPath: url.path) {
+            // The completed log is the committed evidence. A simultaneous
+            // current file can only be a pre-recovery duplicate; never replace
+            // the authoritative completed bytes with it.
+            try FileManager.default.removeItem(at: url)
         }
-        try writeSessionRecord(record, to: completedMetadata)
+
         if FileManager.default.fileExists(atPath: metadataURL.path) {
             try FileManager.default.removeItem(at: metadataURL)
         }
@@ -343,6 +364,23 @@ final class TrainerLogSink {
         try pruneCompletedCountLocked()
         try pruneRetentionForTotalCapLocked()
         try switchHandleLocked(to: hostURL)
+    }
+
+    private func hasCompletedSessionArtifactsLocked(_ record: SessionRecord) -> Bool {
+        let completedLog = historyURL.appendingPathComponent(record.id).appendingPathExtension("log")
+        let completedMetadata = historyURL.appendingPathComponent(record.id).appendingPathExtension("json")
+        return FileManager.default.fileExists(atPath: completedLog.path)
+            || FileManager.default.fileExists(atPath: completedMetadata.path)
+    }
+
+    private func recoverInterruptedFinalizationLocked(_ record: SessionRecord) throws {
+        var completedRecord = record
+        if completedRecord.endedAt == nil {
+            completedRecord.endedAt = formatter.string(from: Date())
+        }
+        activeSession = completedRecord
+        try closeHandleLocked()
+        try finalizeSessionArtifactsLocked(completedRecord)
     }
 
     private func archiveLegacyLogsLocked() throws {
