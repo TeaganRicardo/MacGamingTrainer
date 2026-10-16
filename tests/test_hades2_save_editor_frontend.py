@@ -25,6 +25,7 @@ opened_summary = None
 workspace_number = 0
 omit_first_target = False
 manual_inventory_count = 0
+apply_count = 0
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -360,9 +361,34 @@ for raw in sys.stdin:
         pending_value = None
         result = {'count': 0, 'changes': []}
     elif command == 'save_editor_apply':
+        apply_count += 1
+        if pending_value == 600:
+            print(json.dumps({
+                'type': 'result',
+                'id': req['id'],
+                'protocolVersion': 6,
+                'moduleProtocolVersion': 14,
+                'gameID': args.game,
+                'ok': False,
+                'failure': {
+                    'code': 'rollback_failed',
+                    'presentation': 'host.save.error.rollbackFailed',
+                    'presentationArguments': ['/tmp/mgt-recovery/save-600'],
+                    'recoveryPath': '/tmp/mgt-recovery/save-600',
+                },
+            }), flush=True)
+            continue
         resource_value = pending_value
         pending_value = None
-        result = {'applied': True, 'changeCount': 1, 'previousSnapshotId': 'snapshot-1'}
+        result = {
+            'applied': True,
+            'changeCount': 1,
+            'fileCount': 1,
+            'relativePath': 'Profile1.sav',
+            'hot': apply_count == 1,
+            'runtimeReloaded': False,
+            'previousSnapshotId': 'snapshot-hot' if apply_count == 1 else 'snapshot-cold',
+        }
     else:
         result = {}
     print(json.dumps({
@@ -698,12 +724,53 @@ struct Main {
         if model.items.first?.value != AnyHashable(500) {
             fail("successful Apply did not reload the installed page")
         }
+        guard let hotReceipt = model.lastApplyReceipt else {
+            fail("hot Apply did not expose its backend receipt")
+        }
+        if hotReceipt.source != "main/Profile1.sav"
+            || hotReceipt.target != "main/Profile1.sav"
+            || !hotReceipt.hot
+            || hotReceipt.runtimeReloaded
+            || hotReceipt.previousSnapshotID != "snapshot-hot"
+            || hotReceipt.fileCount != 1 {
+            fail("hot Apply receipt was not decoded faithfully: \(hotReceipt)")
+        }
         let appliedCommands = commands(at: commandLog)
         if appliedCommands.suffix(2).compactMap({ $0["command"] as? String }) != [
             "save_editor_apply", "save_editor_query"
         ] {
             fail("Apply did not verify by re-querying the installed workspace: \(appliedCommands)")
         }
+
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 550)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        model.apply()
+        pump(0.35)
+        guard let coldReceipt = model.lastApplyReceipt else {
+            fail("cold Apply did not expose its backend receipt")
+        }
+        if coldReceipt.hot
+            || coldReceipt.runtimeReloaded
+            || coldReceipt.previousSnapshotID != "snapshot-cold"
+            || coldReceipt.source != "main/Profile1.sav"
+            || coldReceipt.target != "main/Profile1.sav" {
+            fail("cold Apply receipt was not decoded faithfully: \(coldReceipt)")
+        }
+        if model.items.first?.value != AnyHashable(550) {
+            fail("cold Apply did not reload the installed page")
+        }
+
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 600)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        model.apply()
+        pump(0.20)
+        if model.pendingCount != 1
+            || model.failure?.key != "host.save.error.rollbackFailed"
+            || model.failure?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            fail("Save Editor lost rollback failure/recovery context")
+        }
+        model.cancel()
+        pumpUntil { model.pendingCount == 0 && !model.busy }
 
         model.search = "ash"
         model.submitSearch()
