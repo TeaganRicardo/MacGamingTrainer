@@ -65,6 +65,17 @@ try process.start(
 // enqueueing one unbounded main-thread closure per pipe read.
 Thread.sleep(forTimeInterval: 1.0)
 
+// Diagnostics export runs on the main thread. An explicit flush must be able
+// to drain the stderr queue before the normal scheduled main-thread delivery.
+process.flushStderr { message in
+    callbackCount += 1
+    deliveredBytes += message.utf8.count
+    if message.contains("stderr overflow droppedBytes=") {
+        sawOverflowMarker = true
+    }
+}
+if callbackCount != 1 { fail("explicit stderr flush did not deliver exactly once") }
+
 let deadline = Date().addingTimeInterval(3.0)
 while Date() < deadline && !terminated {
     RunLoop.current.run(until: Date().addingTimeInterval(0.01))
