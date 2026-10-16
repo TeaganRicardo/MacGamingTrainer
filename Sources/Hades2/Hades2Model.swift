@@ -363,7 +363,6 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard let self else { return }
             self.runLogWatcher.start()
             self.installHotkeys()
-            self.startBackend()
         }
     }
 
@@ -410,6 +409,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             )
         )
         hostTargetLifetimeChanged(running: observation.isRunning)
+        startBackend()
     }
 
     func refreshFromHost() {
