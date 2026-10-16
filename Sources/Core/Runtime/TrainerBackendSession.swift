@@ -337,8 +337,9 @@ final class TrainerBackendSession {
             }
         }
         configuration.resetGameState()
-        let terminationDiagnostic = stderrTail.isEmpty ? "none" : stderrTail
-        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover) stderr=\(terminationDiagnostic)")
+        configuration.log(
+            "后端退出 status=\(exitStatus) recovery=\(willRecover) stderrTailBytes=\(stderrTail.utf8.count)"
+        )
 
         suppressTerminationError = false
         if willRecover {
