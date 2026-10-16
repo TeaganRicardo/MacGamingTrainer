@@ -532,6 +532,7 @@ final class TrainerLogSink {
             withIntermediateDirectories: true
         )
         try migrateLegacyHistoryLocked()
+        try recoverUnindexedSessionBundlesLocked()
         try recoverOrphanedSessionsLocked()
     }
 
@@ -540,6 +541,64 @@ final class TrainerLogSink {
         for (bundle, record) in try sessionBundlesLocked() {
             guard record.state != .completed, record.id != currentID else { continue }
             try completeSessionLocked(record, reason: "interrupted")
+        }
+    }
+
+    private func recoverUnindexedSessionBundlesLocked() throws {
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: historyURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+
+        for bundle in entries {
+            var isDirectory = false
+            guard FileManager.default.fileExists(atPath: bundle.path, isDirectory: &isDirectory),
+                  isDirectory else { continue }
+
+            let manifestURL = bundle.appendingPathComponent("manifest.json")
+            if loadSessionRecordLocked(at: manifestURL) != nil {
+                continue
+            }
+
+            let id = bundle.lastPathComponent
+            guard Self.isSafePathComponent(id) else { continue }
+
+            var streams: [String: String] = [:]
+            for stream in Stream.allCases {
+                if FileManager.default.fileExists(
+                    atPath: bundle.appendingPathComponent(stream.filename).path
+                ) {
+                    streams[stream.rawValue] = stream.filename
+                }
+            }
+            if FileManager.default.fileExists(atPath: bundle.appendingPathComponent("legacy.log").path) {
+                streams["LEGACY"] = "legacy.log"
+            }
+
+            if streams.isEmpty {
+                try FileManager.default.removeItem(at: bundle)
+                continue
+            }
+
+            let now = formatter.string(from: Date())
+            let recovered = SessionRecord(
+                id: id,
+                startedAt: now,
+                endedAt: now,
+                targetProcessName: "",
+                targetBundleIdentifier: "",
+                targetPID: nil,
+                appVersion: "unknown",
+                appBuild: "unknown",
+                gameVersion: nil,
+                runtimeRevision: nil,
+                state: .completed,
+                endReason: "orphan-recovery",
+                streams: streams,
+                legacy: true
+            )
+            try writeSessionRecord(recovered, to: manifestURL)
         }
     }
 
@@ -560,17 +619,22 @@ final class TrainerLogSink {
             let legacyLog = bundle.appendingPathComponent("legacy.log")
             try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
 
-            if !FileManager.default.fileExists(atPath: legacyLog.path) {
-                try FileManager.default.moveItem(at: logFile, to: legacyLog)
-            }
-
             let oldMetadata = historyURL.appendingPathComponent(id).appendingPathExtension("json")
             let migrated = migrateLegacyRecordLocked(
                 oldMetadata: oldMetadata,
                 id: id,
                 fallbackEndedAt: formatter.string(from: Date())
             )
+
+            // Write the recovery manifest before moving the legacy bytes. If
+            // the move is interrupted, the next migration pass can safely
+            // finish it without losing the source file.
             try writeSessionRecord(migrated, to: bundle.appendingPathComponent("manifest.json"))
+            if !FileManager.default.fileExists(atPath: legacyLog.path) {
+                try FileManager.default.moveItem(at: logFile, to: legacyLog)
+            } else {
+                try? FileManager.default.removeItem(at: logFile)
+            }
             if FileManager.default.fileExists(atPath: oldMetadata.path) {
                 try FileManager.default.removeItem(at: oldMetadata)
             }
