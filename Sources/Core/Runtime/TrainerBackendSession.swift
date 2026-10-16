@@ -261,8 +261,8 @@ final class TrainerBackendSession {
             },
             onStderr: { clean in configuration.backendLog(clean) },
             onLog: configuration.log,
-            onTermination: { [weak self] exitStatus, stderrTail in
-                self?.handleTermination(status: exitStatus, stderrTail: stderrTail)
+            onTermination: { [weak self] exitStatus in
+                self?.handleTermination(status: exitStatus)
             },
             onClientError: { [weak self] failure, terminal in
                 guard let self else { return }
@@ -313,7 +313,7 @@ final class TrainerBackendSession {
         }
     }
 
-    private func handleTermination(status exitStatus: Int32, stderrTail: String) {
+    private func handleTermination(status exitStatus: Int32) {
         guard let configuration else { return }
         let mismatch = !status.protocolCompatible
         let manualRestart = restartPending
@@ -338,7 +338,7 @@ final class TrainerBackendSession {
         }
         configuration.resetGameState()
         configuration.log(
-            "后端退出 status=\(exitStatus) recovery=\(willRecover) stderrTailBytes=\(stderrTail.utf8.count)"
+            "后端退出 status=\(exitStatus) recovery=\(willRecover)"
         )
 
         suppressTerminationError = false
