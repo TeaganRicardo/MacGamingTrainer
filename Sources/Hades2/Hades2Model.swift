@@ -427,6 +427,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
         guard !exiting else { return }
+        let runtimeEventName: String
+        switch event {
+        case .mainMenu:
+            runtimeEventName = "main_menu"
+        case .runtimeReset:
+            runtimeEventName = "runtime_reset"
+        case .runtimeReady:
+            runtimeEventName = "runtime_ready"
+        }
+        appendLog("runtime event=\(runtimeEventName)", source: "RUNTIME")
         switch event {
         case .mainMenu, .runtimeReset:
             // The native log watcher still owns generation evidence while
