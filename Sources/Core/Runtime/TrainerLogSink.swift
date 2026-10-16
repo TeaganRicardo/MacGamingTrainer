@@ -325,8 +325,9 @@ final class TrainerLogSink {
 
     private func appendLocked(_ line: String, source: String) throws {
         let stream = managedSessions ? streamForSource(source) : .host
-        let destination = writeURLLocked(for: stream)
-        let limit = managedSessions && activeSession != nil
+        let destinationInfo = writeDestinationLocked(for: stream)
+        let destination = destinationInfo.url
+        let limit = destinationInfo.inSession
             ? stream.maximumBytes
             : Self.maximumHostFileSize
 
@@ -370,10 +371,21 @@ final class TrainerLogSink {
         Stream(rawValue: source.uppercased()) ?? .host
     }
 
-    private func writeURLLocked(for stream: Stream) -> URL {
-        guard managedSessions else { return url }
-        guard let record = activeSessionRecordLocked() else { return hostURL }
-        return streamURL(for: stream, record: record)
+    private func writeDestinationLocked(for stream: Stream) -> (url: URL, inSession: Bool) {
+        guard managedSessions else { return (url, false) }
+        guard let record = sessionRecordForWritingLocked() else { return (hostURL, false) }
+        return (streamURL(for: stream, record: record), true)
+    }
+
+    private func sessionRecordForWritingLocked() -> SessionRecord? {
+        if let activeSession, activeSession.state != .completed {
+            return activeSession
+        }
+        guard let existing = loadCurrentSessionLocked(), existing.state != .completed else {
+            return nil
+        }
+        activeSession = existing
+        return existing
     }
 
     private func beginTargetSessionLocked(identity: TargetIdentity) throws {
@@ -490,17 +502,22 @@ final class TrainerLogSink {
     private func completeSessionLocked(_ record: SessionRecord, reason: String) throws {
         var recovered = record
         recovered.endedAt = recovered.endedAt ?? formatter.string(from: Date())
-        recovered.state = .completed
+        recovered.state = .finalizing
         recovered.endReason = recovered.endReason ?? reason
         activeSession = recovered
 
+        // Persist finalization intent before adding recovery evidence. The bundle
+        // remains the same filesystem object throughout recovery.
+        try writeSessionRecord(recovered)
         if !recovered.legacy {
             try? appendLocked(
-                "session recovered state=\(record.state.rawValue) reason=\(reason)",
+                "session recovered state=(record.state.rawValue) reason=(reason)",
                 source: Stream.host.rawValue
             )
         }
         try closeAllHandlesLocked()
+        recovered.state = .completed
+        activeSession = recovered
         try writeSessionRecord(recovered)
         if loadCurrentSessionPointerIDLocked() == recovered.id {
             try clearCurrentSessionPointerLocked()
@@ -531,7 +548,6 @@ final class TrainerLogSink {
             at: historyURL,
             withIntermediateDirectories: true
         )
-        try migrateLegacyHistoryLocked()
         try recoverUnindexedSessionBundlesLocked()
         try recoverOrphanedSessionsLocked()
     }
@@ -596,97 +612,15 @@ final class TrainerLogSink {
                 state: .completed,
                 endReason: "orphan-recovery",
                 streams: streams,
-                legacy: true
+                legacy: false
             )
             try writeSessionRecord(recovered, to: manifestURL)
         }
     }
 
-    private func migrateLegacyHistoryLocked() throws {
-        guard FileManager.default.fileExists(atPath: historyURL.path) else { return }
-
-        let entries = try FileManager.default.contentsOfDirectory(
-            at: historyURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
-
-        for logFile in entries where logFile.pathExtension == "log" {
-            let id = logFile.deletingPathExtension().lastPathComponent
-            guard Self.isSafePathComponent(id) else { continue }
-
-            let bundle = historyURL.appendingPathComponent(id, isDirectory: true)
-            let legacyLog = bundle.appendingPathComponent("legacy.log")
-            try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
-
-            let oldMetadata = historyURL.appendingPathComponent(id).appendingPathExtension("json")
-            let migrated = migrateLegacyRecordLocked(
-                oldMetadata: oldMetadata,
-                id: id,
-                fallbackEndedAt: formatter.string(from: Date())
-            )
-
-            // Write the recovery manifest before moving the legacy bytes. If
-            // the move is interrupted, the next migration pass can safely
-            // finish it without losing the source file.
-            try writeSessionRecord(migrated, to: bundle.appendingPathComponent("manifest.json"))
-            if !FileManager.default.fileExists(atPath: legacyLog.path) {
-                try FileManager.default.moveItem(at: logFile, to: legacyLog)
-            } else {
-                try? FileManager.default.removeItem(at: logFile)
-            }
-            if FileManager.default.fileExists(atPath: oldMetadata.path) {
-                try FileManager.default.removeItem(at: oldMetadata)
-            }
-        }
-    }
-
-    private func migrateLegacyRecordLocked(
-        oldMetadata: URL,
-        id: String,
-        fallbackEndedAt: String
-    ) -> SessionRecord {
-        if let data = try? Data(contentsOf: oldMetadata),
-           let old = try? JSONDecoder().decode(LegacySessionRecord.self, from: data) {
-            return SessionRecord(
-                id: id,
-                startedAt: old.startedAt,
-                endedAt: old.endedAt ?? fallbackEndedAt,
-                targetProcessName: old.targetProcessName,
-                targetBundleIdentifier: old.targetBundleIdentifier,
-                targetPID: old.targetPID,
-                appVersion: old.appVersion,
-                appBuild: old.appBuild,
-                gameVersion: old.gameVersion,
-                runtimeRevision: old.runtimeRevision,
-                state: .completed,
-                endReason: "legacy-migration",
-                streams: ["LEGACY": "legacy.log"],
-                legacy: true
-            )
-        }
-
-        return SessionRecord(
-            id: id,
-            startedAt: fallbackEndedAt,
-            endedAt: fallbackEndedAt,
-            targetProcessName: "",
-            targetBundleIdentifier: "",
-            targetPID: nil,
-            appVersion: "unknown",
-            appBuild: "unknown",
-            gameVersion: nil,
-            runtimeRevision: nil,
-            state: .completed,
-            endReason: "legacy-migration",
-            streams: ["LEGACY": "legacy.log"],
-            legacy: true
-        )
-    }
-
     private func archiveLegacyLogsLocked() throws {
         try closeAllHandlesLocked()
-        try ensureDirectoriesForLegacyMigrationLocked()
+        try FileManager.default.createDirectory(at: historyURL, withIntermediateDirectories: true)
 
         let candidates = [3, 2, 1].map { url.appendingPathExtension(String($0)) } + [url]
         var combined = Data()
@@ -728,29 +662,6 @@ final class TrainerLogSink {
 
         try pruneCompletedCountLocked()
         try pruneRetentionForTotalCapLocked()
-    }
-
-    private struct LegacySessionRecord: Codable {
-        let id: String
-        let startedAt: String
-        let endedAt: String?
-        let targetProcessName: String
-        let targetBundleIdentifier: String
-        let targetPID: Int32?
-        let appVersion: String
-        let appBuild: String
-        let gameVersion: String?
-        let runtimeRevision: Int?
-        let legacy: Bool
-        let finalizing: Bool?
-    }
-
-    private func ensureDirectoriesForLegacyMigrationLocked() throws {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try FileManager.default.createDirectory(at: historyURL, withIntermediateDirectories: true)
     }
 
     private func pruneCompletedCountLocked() throws {
