@@ -11,8 +11,8 @@ final class TrainerLogSink {
     static let maximumHostFileSize = 1_048_576
     static let maximumCompletedSessions = 8
     static let maximumTotalBytes = 32 * 1_048_576
-    // Compatibility for existing callers/tests that referenced the old limit.
-    static let maximumFileSize = maximumSessionFileSize
+    // Compatibility for unmanaged/test callers that referenced the old limit.
+    static let maximumFileSize = maximumHostFileSize
 
     struct TargetIdentity: Equatable {
         let processName: String
@@ -318,9 +318,14 @@ final class TrainerLogSink {
     private func pruneRetentionForTotalCapLocked() throws {
         let hostBytes = try fileSize(hostURL)
         let currentBytes = try fileSize(url)
-        var retained = completedBytes ?? (try completedLogFilesLocked().reduce(UInt64(0)) {
-            $0 + (try fileSize($1))
-        })
+        var retained: UInt64
+        if let completedBytes {
+            retained = completedBytes
+        } else {
+            retained = try completedLogFilesLocked().reduce(UInt64(0)) { partial, file in
+                partial + (try fileSize(file))
+            }
+        }
         completedBytes = retained
         var total = hostBytes + currentBytes + retained
         guard total > UInt64(Self.maximumTotalBytes) else { return }
