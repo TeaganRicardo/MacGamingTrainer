@@ -628,6 +628,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func apply(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
+        let runtimeDiagnostics = payload["runtimeDiagnostics"] as? [String: Any]
+        logSink.updateCurrentSessionRuntimeIdentity(
+            gameVersion: patch.version,
+            runtimeRevision: (runtimeDiagnostics?["revision"] as? NSNumber)?.intValue
+        )
         let wasConnected = connected
         let oldPID = pid
         let desiredBeforeApply = Dictionary(uniqueKeysWithValues: Hades2FeatureKey.allCases.map { ($0, desiredFeatureEnabled($0)) })
