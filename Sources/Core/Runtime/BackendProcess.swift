@@ -171,6 +171,13 @@ final class BackendProcess {
     /// Gracefully terminates the worker and escalates to SIGKILL if it ignores
     /// termination. The Process instance remains owned until terminationHandler
     /// runs, preventing a new backend from racing the old one.
+    /// Synchronously deliver stderr already drained from the pipe. This is
+    /// used immediately before diagnostics export so a pending main-thread
+    /// delivery cannot make the bundle stale.
+    func flushStderr(onStderr: @escaping (String) -> Void) {
+        deliverPendingStderr(onStderr: onStderr)
+    }
+
     func stop() {
         let task = process
         try? input?.close()
