@@ -155,7 +155,7 @@ final class TrainerLogSink {
     /// This enriches the same OS target session; it never creates a new one.
     func updateCurrentSessionRuntimeIdentity(gameVersion: String?, runtimeRevision: Int?) {
         guard managedSessions, gameVersion != nil || runtimeRevision != nil else { return }
-        queue.async { [weak self] in
+        queue.sync {
             guard let self, var record = self.activeSession ?? self.loadCurrentSessionLocked() else { return }
             let resolvedGameVersion = gameVersion ?? record.gameVersion
             let resolvedRuntimeRevision = runtimeRevision ?? record.runtimeRevision
