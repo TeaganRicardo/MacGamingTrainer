@@ -91,6 +91,10 @@ do {
     if fileSize(current) > TrainerLogSink.maximumSessionFileSize {
         fail("backend-originated traffic escaped the per-session cap")
     }
+    let boundedText = (try? String(contentsOf: current, encoding: .utf8)) ?? ""
+    if !boundedText.contains("BACKEND ") {
+        fail("bounded backend record lost its source tag")
+    }
 
     // A definitive replacement PID closes the old target lifetime even if the
     // termination notification was hidden by rapid replacement.
