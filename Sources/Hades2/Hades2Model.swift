@@ -1253,7 +1253,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func listProfiles() { send(.listProfiles, title: "hades2.op.listProfiles") }
     func runDiagnostics() { send(.diagnostics, title: "hades2.op.runDiagnostics") }
-    func exportDiagnostics() { send(.exportDiagnostics, title: "hades2.op.exportDiagnostics") }
+    func exportDiagnostics() {
+        // Export reads the Host-owned log files in the Backend process. Drain
+        // accepted Host log work first so the bundle represents this moment.
+        logSink.flush()
+        send(.exportDiagnostics, title: "hades2.op.exportDiagnostics")
+    }
 
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
