@@ -404,6 +404,9 @@ final class TrainerLogSink {
                     source: Stream.host.rawValue
                 )
                 return
+            } else if existing.state == .completed {
+                try clearCurrentSessionPointerLocked()
+                activeSession = nil
             } else {
                 try completeSessionLocked(existing, reason: "target-replaced")
             }
