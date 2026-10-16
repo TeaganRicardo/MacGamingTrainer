@@ -820,7 +820,8 @@ final class TrainerLogSink {
     }
 
     private func closeAllHandlesLocked() throws {
-        for stream in handles.keys {
+        let streams = Array(handles.keys)
+        for stream in streams {
             try closeHandleLocked(for: stream)
         }
     }
