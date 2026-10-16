@@ -15,6 +15,14 @@ PYTHON = sys.executable
 if not SWIFTC:
     raise SystemExit("swiftc required")
 
+view_source = (ROOT / "Sources/Hades2/Views/Hades2SaveEditorView.swift").read_text(encoding="utf-8")
+if "coldApplyNotice" in view_source:
+    raise SystemExit("Save Editor still exposes the stopped-only apply notice")
+for locale in ("hades2.en.json", "hades2.zh-CN.json"):
+    localization = (ROOT / "Sources/Hades2/Presentation/Localization" / locale).read_text(encoding="utf-8")
+    if '"hades2.saveEditor.applyOutcome.title"' not in localization:
+        raise SystemExit(f"missing Save Editor apply outcome localization: {locale}")
+
 worker = r'''
 import argparse, json, pathlib, sys
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
