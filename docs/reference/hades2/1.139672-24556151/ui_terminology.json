@@ -394,6 +394,36 @@
       "status": "trainer_product_label",
       "reason": "Generic Trainer grouping for material resources."
     },
+    "resourcePlants": {
+      "value": "植物与种子",
+      "englishValue": "Plants & Seeds",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory resource section when its current installed native title cannot be resolved."
+    },
+    "resourceGifts": {
+      "value": "赠礼",
+      "englishValue": "Gifts",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory gift-resource section when its current installed native title cannot be resolved."
+    },
+    "resourceFish": {
+      "value": "鱼类",
+      "englishValue": "Fish",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory fish-resource section when its current installed native title cannot be resolved."
+    },
+    "resourceMinerals": {
+      "value": "矿物",
+      "englishValue": "Minerals",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for resource rows classified by their stable runtime resource family when no native Inventory section owns them."
+    },
+    "resourceBossMaterials": {
+      "value": "首领素材",
+      "englishValue": "Boss Materials",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for resource rows classified as boss materials when no native Inventory section owns them."
+    },
     "chaosPair": {
       "value": "卡俄斯配对",
       "englishValue": "Chaos Pair",

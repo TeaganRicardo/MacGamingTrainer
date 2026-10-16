@@ -59,6 +59,18 @@ _PRODUCT_LABEL_EN_BY_ZH = {
     '无敌模式': 'Invincibility',
 }
 
+# Resource grouping identity originates in the live game/runtime. These pairs are
+# Trainer-owned presentation fallbacks only when the current installed game does
+# not provide a localized title for the native section identity.
+_RESOURCE_SECTION_PRODUCT_LABELS = {
+    'resources': ('资源', 'Resources'),
+    'plants': ('植物与种子', 'Plants & Seeds'),
+    'gifts': ('赠礼', 'Gifts'),
+    'fish': ('鱼类', 'Fish'),
+    'ores': ('矿物', 'Minerals'),
+    'boss': ('首领素材', 'Boss Materials'),
+}
+
 _CURRENT_RUN_FAMILY_LABELS = {
     'arcana': ('阿卡那牌', 'Arcana'),
     'biomeState': ('环境状态', 'Biome States'),
@@ -284,7 +296,13 @@ def localize_catalog(decoded):
         if isinstance(source_id,str) and source_id:
             lookup.append(_SPECIAL_SOURCE_LOCALIZATION_IDS.get(source_id,source_id))
     for item in resources:
-        if isinstance(item,dict) and isinstance(item.get('id'),str):lookup.append(item['id'])
+        if not isinstance(item,dict):continue
+        identifier=item.get('id')
+        display_id=item.get('displayId')
+        section_id=item.get('sectionId')
+        if isinstance(identifier,str) and identifier:lookup.append(identifier)
+        if isinstance(display_id,str) and display_id:lookup.append(display_id)
+        if isinstance(section_id,str) and section_id:lookup.append(section_id)
     for item in current_run_traits:
         if not isinstance(item,dict):continue
         trait_id=item.get('name')
@@ -401,22 +419,62 @@ def localize_catalog(decoded):
     for item in resources:
         if not isinstance(item,dict) or not isinstance(item.get('id'),str):continue
         identifier=item['id']
-        for key in ('name','englishName','sectionTitle','englishSectionTitle'):
-            if isinstance(item.get(key),str):item[key]=_clean(item[key])
-        section_title=item.get('sectionTitle')
-        item['englishSectionTitle']=_english_group_label(section_title,en)
-        official_zh=_clean(zh.get(identifier)) if identifier in zh else None
-        official_en=_clean(en.get(identifier)) if identifier in en else None
+        display_id=item.get('displayId')
+        if not isinstance(display_id,str) or not display_id:
+            display_id=identifier
+        item['displayId']=display_id
+
+        # A resource has one current-build native presentation identity. Resolve
+        # both languages from that same identity. If one language is absent, the
+        # other installed official language is a more truthful fallback than a
+        # historical Trainer-authored name. If neither exists, keep the stable
+        # runtime id visible inside an explicit Trainer-owned bilingual fallback.
+        official_zh=_clean(zh.get(display_id)) if display_id in zh else None
+        official_en=_clean(en.get(display_id)) if display_id in en else None
+        if isinstance(official_zh,str) and official_zh:
+            item['name']=official_zh
+            item['nameSource']='official_zh'
+        elif isinstance(official_en,str) and official_en:
+            item['name']=official_en
+            item['nameSource']='official_en_fallback'
+        else:
+            item['name']=f'未知资源 · {identifier}'
+            item['nameSource']='trainer_generic_zh'
+
         if isinstance(official_en,str) and official_en:
             item['englishName']=official_en
             item['englishNameSource']='official_en'
-        if isinstance(official_zh,str) and official_zh:
-            item['name']=official_zh;item['officialName']=True;item['nameSource']='official_zh'
-            if not item.get('englishName'):
-                item['englishName']=identifier;item['englishNameSource']='identifier'
+        elif isinstance(official_zh,str) and official_zh:
+            item['englishName']=official_zh
+            item['englishNameSource']='official_zh_fallback'
         else:
-            item['officialName']=False
-            item['name'],item['nameSource'],item['englishName'],item['englishNameSource']=_fallback_names(item,identifier,official_en,zh,en)
+            item['englishName']=f'Unknown Resource · {identifier}'
+            item['englishNameSource']='trainer_generic_en'
+        item['officialName']=bool(official_zh or official_en)
+
+        section_id=item.get('sectionId')
+        if not isinstance(section_id,str):
+            section_id=''
+        section_kind=item.get('sectionKind')
+        if not isinstance(section_kind,str) or section_kind not in _RESOURCE_SECTION_PRODUCT_LABELS:
+            section_kind='resources'
+        item['sectionId']=section_id
+        item['sectionKind']=section_kind
+        section_zh=_clean(zh.get(section_id)) if section_id and section_id in zh else None
+        section_en=_clean(en.get(section_id)) if section_id and section_id in en else None
+        fallback_zh,fallback_en=_RESOURCE_SECTION_PRODUCT_LABELS[section_kind]
+        if isinstance(section_zh,str) and section_zh:
+            item['sectionTitle']=section_zh
+            item['sectionTitleSource']='official_zh'
+        else:
+            item['sectionTitle']=fallback_zh
+            item['sectionTitleSource']='trainer_product_zh'
+        if isinstance(section_en,str) and section_en:
+            item['englishSectionTitle']=section_en
+            item['englishSectionTitleSource']='official_en'
+        else:
+            item['englishSectionTitle']=fallback_en
+            item['englishSectionTitleSource']='trainer_product_en'
 
     # Live trait rows keep runtime routing identity in `name`, but every row
     # presented to Boon Management needs a player-recognizable label. Resolve

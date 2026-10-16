@@ -190,7 +190,10 @@ assert rows['MaxManaDropSmall']['name'] == '小型灵魂之水'
 assert rows['MaxManaDropSmall']['englishName'] == 'Small Soul Tonic'
 assert rows['MaxManaDropSmall']['officialName'] is False
 assert rows['MaxManaDropSmall']['nameSource'] == 'provisional_zh'
-assert result['resources'][0]['name'] == '已有中文兜底'
+assert result['resources'][0]['name'] == '未知资源 · UnknownResource'
+assert result['resources'][0]['englishName'] == 'Unknown Resource · UnknownResource'
 assert result['resources'][0]['officialName'] is False
+assert result['resources'][0]['nameSource'] == 'trainer_generic_zh'
+assert result['resources'][0]['englishNameSource'] == 'trainer_generic_en'
 assert any('已保留并使用官方英文名或内部名称' in warning for warning in result.get('warnings', []))
 print('catalog_naming_ok')

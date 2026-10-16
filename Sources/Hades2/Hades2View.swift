@@ -140,7 +140,8 @@ struct Hades2TrainerView: View {
         var titles: [String] = []
         var buckets: [String: [MaterialResource]] = [:]
         for item in options.sorted(by: { $0.sortOrder < $1.sortOrder }) {
-            let title = item.sectionTitle.isEmpty ? text("hades2.resource.sectionDefault") : item.sectionTitle
+            let localizedSection = localization.language == .en ? item.englishSectionTitle : item.sectionTitle
+            let title = localizedSection.isEmpty ? text("hades2.resource.sectionDefault") : localizedSection
             if buckets[title] == nil { titles.append(title); buckets[title] = [] }
             buckets[title, default: []].append(item)
         }
@@ -1363,7 +1364,12 @@ struct Hades2TrainerView: View {
                 enabled: model.canSetResource,
                 locked: material?.locked ?? false,
                 itemLabel: { resource in
-                    (resource.englishName.isEmpty ? resource.name : "\(resource.name) · \(resource.englishName)")
+                    let primaryName = localization.language == .en && !resource.englishName.isEmpty
+                        ? resource.englishName : resource.name
+                    let secondaryName = localization.language == .en ? resource.name : resource.englishName
+                    let displayName = secondaryName.isEmpty || secondaryName == primaryName
+                        ? primaryName : "\(primaryName) · \(secondaryName)"
+                    return displayName
                         + " · \(number(resource.count))"
                         + (resource.locked ? " · " + text("hades2.vital.lockedSuffix") : "")
                 },
