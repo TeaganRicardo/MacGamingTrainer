@@ -18,10 +18,11 @@ func fail(_ message: String) -> Never {
 }
 
 func fileSize(_ url: URL) -> Int {
-    guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue else {
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+          let size = attributes[.size] as? NSNumber else {
         return 0
     }
-    return size
+    return size.intValue
 }
 
 func completedLogs(_ url: URL) -> [URL] {
