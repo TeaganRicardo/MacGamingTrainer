@@ -118,6 +118,10 @@ struct Hades2SaveEditorView: View {
                         .frame(height: 190)
                 }
             }
+            if let receipt = model.lastApplyReceipt {
+                Divider()
+                applyReceipt(receipt)
+            }
         }
         .frame(width: 980)
         .trainerSurface(.canvas)
@@ -691,11 +695,50 @@ struct Hades2SaveEditorView: View {
                     }
                 }
             }
-            Text(text("hades2.saveEditor.coldApplyNotice"))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .trainerSurface(.panel)
+    }
+
+    private func applyReceipt(_ receipt: Hades2SaveEditorApplyReceipt) -> some View {
+        let mode = text(
+            receipt.hot
+                ? "hades2.saveEditor.applyOutcome.mode.hot"
+                : "hades2.saveEditor.applyOutcome.mode.cold"
+        )
+        let memory = text(
+            receipt.runtimeReloaded
+                ? "hades2.saveEditor.applyOutcome.memory.reloaded"
+                : "hades2.saveEditor.applyOutcome.memory.notReloaded"
+        )
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(theme.accent)
+                Text(text("hades2.saveEditor.applyOutcome.title"))
+                    .font(.callout.weight(.semibold))
+            }
+            Text(text("hades2.saveEditor.applyOutcome.sourceTarget", arguments: [
+                receipt.source,
+                receipt.target
+            ]))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Text(text("hades2.saveEditor.applyOutcome.disk", arguments: [mode, memory]))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(text("hades2.saveEditor.applyOutcome.recovery", arguments: [
+                receipt.previousSnapshotID
+            ]))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Text(text("hades2.saveEditor.applyOutcome.laterSave"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .trainerSurface(.panel)
