@@ -47,9 +47,9 @@ func sessionBundles(_ history: URL) -> [(URL, [String: Any])] {
         options: [.skipsHiddenFiles]
     )) ?? []
     return entries.compactMap { bundle in
-        var isDirectory = false
+        var isDirectory = ObjCBool(false)
         guard FileManager.default.fileExists(atPath: bundle.path, isDirectory: &isDirectory),
-              isDirectory,
+              isDirectory.boolValue,
               let data = try? Data(contentsOf: bundle.appendingPathComponent("manifest.json")),
               let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
