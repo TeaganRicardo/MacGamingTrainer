@@ -75,6 +75,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .onAppear {
             registerModulePresentation(localization)
             targetMonitor.refresh()
+            model.hostTargetLifetimeChanged(observation: targetMonitor.targetObservation)
             connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
             reconcileAutomaticConnection()
         }
@@ -84,7 +85,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             // game-owned readiness from an earlier process cannot be reused.
             if observed.launchGeneration != previous.launchGeneration ||
                (previous.isRunning && !observed.isRunning) {
-                model.hostTargetLifetimeChanged(running: observed.isRunning)
+                model.hostTargetLifetimeChanged(observation: observed)
             }
             connectionPolicy.observeTarget(
                 running: observed.isRunning,
