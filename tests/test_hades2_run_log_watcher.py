@@ -5,6 +5,10 @@ import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+model_source = (ROOT / "Sources/Hades2/Hades2Model.swift").read_text(encoding="utf-8")
+assert 'appendLog("runtime event=\\(runtimeEventName)", source: "RUNTIME")' in model_source
+assert 'hostTargetLifetimeChanged(running: observation.isRunning)\\n        runLogWatcher.start()\\n        startBackend()' in model_source
+assert 'self.runLogWatcher.start()\\n            self.installHotkeys()' not in model_source
 SWIFTC = shutil.which("swiftc")
 if not SWIFTC:
     raise SystemExit("swiftc required for Hades2RunLogWatcher test")
