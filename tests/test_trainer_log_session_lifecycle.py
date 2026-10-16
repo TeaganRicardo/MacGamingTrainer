@@ -219,22 +219,27 @@ func writeSessionFixture(home: URL, phase: String) throws -> (URL, URL, URL, Str
         "legacy": false,
         "finalizing": true,
     ]
-    let metadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+    let currentMetadataData = try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+    var completedRecord = record
+    completedRecord.finalizing = nil
+    let completedMetadataData = try JSONSerialization.data(withJSONObject: completedRecord, options: [.prettyPrinted, .sortedKeys])
     let completedMetadata = history.appendingPathComponent(id).appendingPathExtension("json")
     let completedLog = history.appendingPathComponent(id).appendingPathExtension("log")
-    try metadataData.write(to: completedMetadata, options: .atomic)
 
     switch phase {
     case "after-finalizing-marker":
-        try metadataData.write(to: metadata, options: .atomic)
+        try currentMetadataData.write(to: metadata, options: .atomic)
         try Data("ORIGINAL after-finalizing-marker\n".utf8).write(to: current, options: .atomic)
     case "after-completed-metadata":
-        try metadataData.write(to: metadata, options: .atomic)
+        try completedMetadataData.write(to: completedMetadata, options: .atomic)
+        try currentMetadataData.write(to: metadata, options: .atomic)
         try Data("ORIGINAL after-completed-metadata\n".utf8).write(to: current, options: .atomic)
     case "after-log-move":
-        try metadataData.write(to: metadata, options: .atomic)
+        try completedMetadataData.write(to: completedMetadata, options: .atomic)
+        try currentMetadataData.write(to: metadata, options: .atomic)
         try Data("ORIGINAL after-log-move\n".utf8).write(to: completedLog, options: .atomic)
     case "after-current-metadata-removal":
+        try completedMetadataData.write(to: completedMetadata, options: .atomic)
         try Data("ORIGINAL after-current-metadata-removal\n".utf8).write(to: completedLog, options: .atomic)
     default:
         fail("unknown finalization fixture")
@@ -268,6 +273,12 @@ for phase in ["after-finalizing-marker", "after-completed-metadata", "after-log-
     let retainedText = (try? String(contentsOf: retainedLog, encoding: .utf8)) ?? ""
     if !retainedText.contains("ORIGINAL \(phase)") {
         fail("finalization recovery \(phase) overwrote the completed log")
+    }
+    let completedMetadata = history.appendingPathComponent(interruptedID).appendingPathExtension("json")
+    if let completedData = try? Data(contentsOf: completedMetadata),
+       let completedObject = try? JSONSerialization.jsonObject(with: completedData) as? [String: Any],
+       completedObject["finalizing"] as? Bool == true {
+        fail("finalization recovery \(phase) leaked the transient finalizing marker")
     }
     guard let newMetadata = try? JSONSerialization.jsonObject(
         with: Data(contentsOf: fixtureHome
