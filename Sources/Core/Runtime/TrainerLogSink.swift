@@ -455,6 +455,12 @@ final class TrainerLogSink {
             at: sessionDirectoryURL(for: record),
             withIntermediateDirectories: true
         )
+        // Every stream named by the manifest exists for this lifetime, even
+        // when a source emits no records. Recovery/export can rely on the
+        // bundle schema without inferring stream presence from append timing.
+        for stream in Stream.allCases {
+            try Data().write(to: streamURL(for: stream, record: record), options: .atomic)
+        }
         try writeSessionRecord(record)
         try writeCurrentSessionPointerLocked(id: record.id)
         try appendLocked(
