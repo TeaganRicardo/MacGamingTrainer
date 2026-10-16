@@ -343,7 +343,7 @@ final class TrainerBackendSession {
             }
         }
         configuration.resetGameState()
-        configuration.log(
+        configuration.backendLog(
             "后端退出 status=\(exitStatus) recovery=\(willRecover)"
         )
 
