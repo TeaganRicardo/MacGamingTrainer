@@ -85,6 +85,8 @@ let backendProcess = BackendProcess(
 let session = TrainerBackendSession(client: BackendClient(process: backendProcess, maxQueueDepth: 1))
 var states: [TrainerBackendStatus] = []
 var payloadCommands: [String] = []
+var hostLogs: [String] = []
+var backendLogs: [String] = []
 
 try session.start(
     descriptor: descriptor,
@@ -93,8 +95,9 @@ try session.start(
         if let command = payload["command"] as? String { payloadCommands.append(command) }
     },
     resetGameState: {},
-    log: { _ in },
-    onStatusChange: { states.append($0) }
+    log: { hostLogs.append($0) },
+    onStatusChange: { states.append($0) },
+    backendLog: { backendLogs.append($0) }
 )
 if !session.currentStatus.backendAvailable { fail("backend not available after start") }
 
@@ -138,6 +141,12 @@ do {
     session.send("crash", operation: "crash", timeout: requestTimeout, completion: { crashCompletion = $0 })
     waitForRecovery(after: startIndex, notice: "host.backend.notice.recovered")
     if crashCompletion != false { fail("crash request completion must fail") }
+    if hostLogs.contains(where: { $0.contains("后端退出 status=") }) {
+        fail("backend termination evidence leaked into the Host stream")
+    }
+    if !backendLogs.contains(where: { $0.contains("后端退出 status=") }) {
+        fail("backend termination evidence did not reach the Backend stream")
+    }
     var ping: Bool? = nil
     session.send("ping-after-crash", operation: "ping", timeout: requestTimeout, completion: { ping = $0 })
     if !waitUntil(waitBudget, { ping != nil }) || ping != true { fail("recovered backend cannot accept request") }
