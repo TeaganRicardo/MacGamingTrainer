@@ -1551,7 +1551,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // records the stable operation key rather than resolved wording.
         appendLog(presentation("hades2.op.logCreated").key)
         logSink.flush()
-        NSWorkspace.shared.open(logSink.currentLogURL())
+        NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())
     }
 
     func openLogHistory() {
