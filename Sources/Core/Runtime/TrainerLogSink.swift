@@ -183,10 +183,11 @@ final class TrainerLogSink {
     /// Current target session when one exists; otherwise Host/app context.
     func currentLogURL() -> URL {
         queue.sync {
-            if managedSessions, activeSession == nil {
-                activeSession = loadCurrentSessionLocked()
+            guard managedSessions else { return url }
+            if activeSession == nil, !restoreActiveSessionLocked() {
+                return hostURL
             }
-            return managedSessions && activeSession == nil ? hostURL : url
+            return activeSession == nil ? hostURL : url
         }
     }
 
@@ -263,8 +264,8 @@ final class TrainerLogSink {
 
     private func writeURLLocked() -> URL {
         guard managedSessions else { return url }
-        if activeSession == nil {
-            activeSession = loadCurrentSessionLocked()
+        if activeSession == nil, !restoreActiveSessionLocked() {
+            return hostURL
         }
         return activeSession == nil ? hostURL : url
     }
@@ -337,11 +338,27 @@ final class TrainerLogSink {
         try finalizeSessionArtifactsLocked(record)
     }
 
-    /// The completed metadata is the durable finalization marker. It is written
-    /// before the live log is moved, so every interruption point is recoverable:
-    /// a restart either finishes the move or observes an already-completed log
-    /// and only removes the stale current-session marker. Completed evidence is
-    /// never overwritten during recovery.
+    /// The current-session finalizing flag records intent before log mutation;
+    /// the completed metadata then commits the finished session before the live
+    /// log is moved. Recovery accepts either marker and never overwrites
+    /// completed evidence.
+    private func restoreActiveSessionLocked() -> Bool {
+        guard activeSession == nil, let existing = loadCurrentSessionLocked() else {
+            return true
+        }
+        guard existing.finalizing == true || hasCompletedSessionArtifactsLocked(existing) else {
+            activeSession = existing
+            return true
+        }
+        do {
+            try recoverInterruptedFinalizationLocked(existing)
+            return true
+        } catch {
+            activeSession = nil
+            return false
+        }
+    }
+
     private func finalizeSessionArtifactsLocked(_ record: SessionRecord) throws {
         try ensureDirectoriesLocked()
         let completedLog = historyURL.appendingPathComponent(record.id).appendingPathExtension("log")
