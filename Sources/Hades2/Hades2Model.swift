@@ -1535,7 +1535,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func clearCompletedLogs() {
-        logSink.clearCompletedSessions()
+        if logSink.clearCompletedSessions() {
+            notice = "host.logs.cleared"
+        } else {
+            error = "host.logs.clearFailed"
+        }
     }
 
     private func appendLog(_ line: String, source: String = "HOST") {
