@@ -511,7 +511,7 @@ final class TrainerLogSink {
         try writeSessionRecord(recovered)
         if !recovered.legacy {
             try? appendLocked(
-                "session recovered state=(record.state.rawValue) reason=(reason)",
+                "session recovered state=" + record.state.rawValue + " reason=" + reason,
                 source: Stream.host.rawValue
             )
         }
