@@ -23,6 +23,7 @@ typedef struct {
     uint32_t magic, abi;
     uint64_t generation_hi, generation_lo;
     _Atomic uint32_t phase;
+    _Atomic uint32_t receipt_read;
     uint32_t input_len, output_len, outcome;
     uint64_t request_id, last_accepted_id;
     unsigned char input[MGT_INPUT_LIMIT];
@@ -51,6 +52,7 @@ MGT_EXPORT int MGTMailboxInit(void *buffer, size_t bytes, uint64_t hi, uint64_t 
     slot->generation_hi = hi;
     slot->generation_lo = lo;
     atomic_init(&slot->phase, MGT_IDLE);
+    atomic_init(&slot->receipt_read, 0);
     slot->abi = MGT_MAILBOX_ABI;
     slot->magic = MGT_MAILBOX_MAGIC;
     return 0;
@@ -77,6 +79,7 @@ MGT_EXPORT int MGTMailboxSubmit(void *buffer, uint64_t hi, uint64_t lo,
     }
     memcpy(slot->input, input, length);
     slot->input_len = length;
+    atomic_store_explicit(&slot->receipt_read, 0, memory_order_relaxed);
     slot->output_len = 0;
     slot->outcome = MGT_OUTCOME_UNKNOWN;
     slot->request_id = id;
@@ -126,12 +129,22 @@ MGT_EXPORT int MGTMailboxRead(void *buffer, uint64_t hi, uint64_t lo,
     memcpy(output, slot->output, slot->output_len);
     *length = slot->output_len;
     *outcome = slot->outcome;
+    /* Ack requires that the full receipt has crossed into the producer. */
+    atomic_store_explicit(&slot->receipt_read, 1, memory_order_release);
     return 0;
 }
 MGT_EXPORT int MGTMailboxAck(void *buffer, uint64_t hi, uint64_t lo,
                              uint64_t id) {
     MGTMailboxSlot *slot = (MGTMailboxSlot *)buffer;
-    if (!valid(slot, hi, lo) || !id || slot->request_id != id) return -1;
+    if (!valid(slot, hi, lo) || !id) return -1;
+    if (atomic_load_explicit(&slot->phase, memory_order_acquire) != MGT_COMPLETE)
+        return -2;
+    if (slot->request_id != id) return -1;
+    /* An unknown native outcome poisons this entire generation. It cannot
+     * be cleared by a normal acknowledgment or automatic route fallback. */
+    if (slot->outcome == MGT_OUTCOME_UNKNOWN
+        || atomic_load_explicit(&slot->receipt_read, memory_order_acquire) != 1)
+        return -3;
     uint32_t expected = MGT_COMPLETE;
     if (!atomic_compare_exchange_strong_explicit(
             &slot->phase, &expected, MGT_IDLE,
