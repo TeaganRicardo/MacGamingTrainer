@@ -102,7 +102,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             # A mutation that owns one retained collection must publish that
             # collection fresh while retaining only the unrelated domains.
             resource_edit = session.mutate(
-                "set_resource", {"resource": "MetaCurrency", "amount": 101}
+                "set_resource", {"resource": "MetaCurrency", "amount": 101,
+                                 "requestId": "resource-retention-boundary"}
             ).payload
             assert next(row for row in resource_edit["resources"]
                         if row["id"] == "MetaCurrency")["count"] == 101
