@@ -122,6 +122,7 @@ class Hades2ResidentSession:
         self._generation_ready = False
         self._catalog_ready = False
         self._observation_generation = None
+        self._observation_revision = None
         self._observation_collections = {}
 
     @property
@@ -166,6 +167,7 @@ class Hades2ResidentSession:
         self._generation_ready = False
         self._catalog_ready = False
         self._observation_generation = None
+        self._observation_revision = None
         self._observation_collections = {}
         invalidate_display_names()
 
@@ -348,13 +350,14 @@ class Hades2ResidentSession:
 
     def _dispatch_source(self, command, params, batch):
         install_nonce = lua_value(uuid.uuid4().hex)
+        acknowledged_revision = lua_value(self._observation_revision)
         if batch is None:
             dispatch_value = (
                 "__MacGamingTrainerV1.observe("
                 + lua_value(command)
                 + ","
                 + lua_value(params)
-                + "," + install_nonce + ")"
+                + "," + install_nonce + "," + acknowledged_revision + ")"
             )
         else:
             calls = []
@@ -369,7 +372,8 @@ class Hades2ResidentSession:
                     + "}"
                 )
             dispatch_value = ("__MacGamingTrainerV1.observeBatch({" + ",".join(calls) + "},"
-                              + lua_value(params.get("includeCatalogs") is True) + "," + install_nonce + ")")
+                              + lua_value(params.get("includeCatalogs") is True) + "," + install_nonce
+                              + "," + acknowledged_revision + ")")
         return "return __MacGamingTrainerV1.json(" + dispatch_value + ")"
 
     def _localize_observation(self, payload):
@@ -380,19 +384,28 @@ class Hades2ResidentSession:
         if metadata is None:
             # An uncompressed full reply needs no retained-domain state.
             self._observation_generation = None
+            self._observation_revision = None
             self._observation_collections = {}
             return localize_catalog(payload), False
-        generation, retained = metadata.get("generation"), metadata.get("retained")
-        if not isinstance(generation, str) or not generation or not isinstance(retained, list):
+        generation = metadata.get("generation")
+        revision = metadata.get("revision")
+        retained = metadata.get("retained")
+        if (not isinstance(generation, str) or not generation
+                or type(revision) is not int or revision <= 0
+                or not isinstance(retained, list)):
             raise ValueError("Invalid resident observation identity")
         if any(not isinstance(key, str) or key not in _OBSERVATION_COLLECTIONS
                or key in payload for key in retained):
             raise ValueError("Invalid retained resident collection")
-        previous = self._observation_collections if generation == self._observation_generation else {}
+        same_generation = generation == self._observation_generation
+        previous = self._observation_collections if same_generation else {}
         if any(key not in previous for key in retained):
             raise ValueError("Resident collection baseline is unavailable")
-        generation_reset = self._observation_generation is not None and generation != self._observation_generation
-        if generation != self._observation_generation:
+        if (same_generation and self._observation_revision is not None
+                and revision <= self._observation_revision):
+            raise ValueError("Resident observation revision did not advance")
+        generation_reset = self._observation_generation is not None and not same_generation
+        if not same_generation:
             invalidate_display_names()
         payload = localize_catalog(payload)
         current = {}
@@ -404,7 +417,9 @@ class Hades2ResidentSession:
                 # Neither the returned reply nor the Adapter may mutate the
                 # private localized baseline used by a later observation.
                 current[key] = _copy_json_collection(payload[key])
-        self._observation_generation, self._observation_collections = generation, current
+        self._observation_generation = generation
+        self._observation_revision = revision
+        self._observation_collections = current
         return payload, generation_reset
 
     @staticmethod
