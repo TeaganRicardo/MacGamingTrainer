@@ -7158,10 +7158,46 @@ if __MacGamingTrainerV1 == nil then
 
   local occurrenceTargets, occurrenceTargetOrder
 
+  local elementObservation = (function()
+    local order = { "Fire", "Water", "Earth", "Air", "Aether" }
+    local function fingerprint(hero)
+      local result = {}
+      observation.append(result, hero)
+      observation.append(result, type(hero) == "table" and hero.Elements or nil)
+      observation.append(result, TraitElementData)
+      observation.append(result, M.elementLocks)
+      for _, element in ipairs(order) do
+        local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or nil
+        observation.append(result, element)
+        observation.append(result, values and values[element] or nil)
+        observation.append(result, type(TraitElementData) == "table" and TraitElementData[element] or nil)
+        observation.append(result, M.elementLocks[element])
+      end
+      return result
+    end
+    local function build(hero)
+      local result = setmetatable({}, arrayMeta)
+      local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or {}
+      for _, element in ipairs(order) do
+        if values[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
+          result[#result + 1] = {
+            id = element, name = elementNames[element] or element,
+            count = number(values[element]), locked = M.elementLocks[element] ~= nil,
+          }
+        end
+      end
+      return result
+    end
+    return { fingerprint = fingerprint, build = build }
+  end)()
+
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
-    local list = resources()
+    local resourceFingerprint = observationCandidates ~= nil and resourceObservationFingerprint() or nil
+    local retainResources = resourceFingerprint ~= nil
+      and observation.retain("resources", resourceFingerprint)
+    local list = retainResources and nil or resources()
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
       boonList, rewardList = boons(), rewards()
@@ -7227,16 +7263,23 @@ if __MacGamingTrainerV1 == nil then
     local canAcquireChaosPair = runHeroOwner ~= nil and M.nativeFunctionsAvailable(chaosPairFunctions)
       and type(chaosSource) == "table" and not not chaosSource.TransformingTraits
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
-    -- and never desired state.
-    local traitList, traitListReason = traitManagement.currentRunTraits()
-    local elementList = setmetatable({}, arrayMeta)
-    local heroElements = type(hero.Elements) == "table" and hero.Elements or {}
-    local orderedElements = { "Fire", "Water", "Earth", "Air", "Aether" }
-    for _, element in ipairs(orderedElements) do
-      if heroElements[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
-        elementList[#elementList + 1] = { id = element, name = elementNames[element] or element, count = number(heroElements[element]), locked = M.elementLocks[element] ~= nil }
-      end
+    -- and never desired state. Fingerprints inspect only native inputs; the
+    -- expensive capability/presentation projection runs only when that domain
+    -- actually changed or the current boundary requires a full snapshot.
+    local retainTraits = observation.retain(
+      "currentRunTraits", traitManagement.observationFingerprint()
+    )
+    local traitList, traitListReason
+    if retainTraits then
+      traitList = nil
+      traitListReason = traitOwner == nil and "noTraitOwner" or nil
+    else
+      traitList, traitListReason = traitManagement.currentRunTraits()
     end
+    local retainElements = observation.retain(
+      "elements", elementObservation.fingerprint(hero)
+    )
+    local elementList = retainElements and nil or elementObservation.build(hero)
     local runCount = 0
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}
