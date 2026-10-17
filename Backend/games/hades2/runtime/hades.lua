@@ -1748,7 +1748,7 @@ if __MacGamingTrainerV1 == nil then
     M.observationRetention.append(result, type(GameState) == "table" and GameState.Resources or nil)
     M.observationRetention.append(result, ResourceData)
     M.observationRetention.append(result, M.resourceLocks)
-    local order, metadata, allowed = resourceCatalog()
+    local order, _, allowed = resourceCatalog()
     -- resourceCatalog may publish its stable native layout on first use. Record
     -- the post-discovery owner so the next warm request does not invalidate
     -- solely because this observation itself initialized the cache.
