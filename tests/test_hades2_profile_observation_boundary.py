@@ -27,7 +27,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-470-red-") as temporary, patch.dict
         for _ in range(3):
             session.status()
         edited = session.mutate(
-            "set_resource", {"resource": "MetaCurrency", "amount": 101}
+            "set_resource", {"resource": "MetaCurrency", "amount": 101,
+                             "requestId": "resource-retention-boundary"}
         ).payload
         assert next(row for row in edited["resources"]
                     if row["id"] == "MetaCurrency")["count"] == 101
