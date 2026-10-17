@@ -4186,6 +4186,8 @@ if __MacGamingTrainerV1 == nil then
       append(type(GameState) == "table" and GameState.MetaUpgradeState or nil)
       append(MetaUpgradeCardData)
       append(FamiliarData)
+      append(PersistentKeepsakeKeys)
+      append(TraitRarityData)
       append(MapState)
       append(type(MapState) == "table" and MapState.FamiliarUnit or nil)
       append(type(MapState) == "table" and type(MapState.FamiliarUnit) == "table"
@@ -4199,8 +4201,9 @@ if __MacGamingTrainerV1 == nil then
         "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "GetTraitTooltipTitle",
         "GetLootSourceName", "UpdateTalentPointInvestedCache", "UpdateTraitNumber",
         "UnequipKeepsake", "EquipKeepsake", "UnequipWeapon", "RemoveTrait", "RemoveLastStand",
-        "Destroy", "SetupCostume", "CallFunctionName", "ValidateMaxHealth", "ValidateMaxMana",
-        "HandleWeaponAnimSwaps", "GetEquippedWeapon",
+        "RemoveWeaponTrait", "UpdateLifePips", "Destroy", "SetupCostume", "CallFunctionName",
+        "ValidateMaxHealth", "ValidateMaxMana", "HandleWeaponAnimSwaps", "GetEquippedWeapon",
+        "HeroHasTrait", "ExtractValues",
       }) do append(_G[name]) end
 
       local hero = owner and owner.hero or nil
@@ -4260,8 +4263,21 @@ if __MacGamingTrainerV1 == nil then
           append(trait.BiomeStateTrait); append(trait.LootDataName); append(trait.SourceId)
           append(trait.CustomTitle); append(trait.IsHammerTrait); append(trait.IsWeaponEnchantment)
           append(trait.RequiredWeapon); append(trait.BlockStacking); append(trait.CurrentArmor)
+          append(trait.RarityMultiplier); append(trait.BlockInRunRarify)
+          append(trait.AcquireFunctionName); append(trait.AcquireFunction)
+          append(trait.OnExpireFunctionName); append(trait.CurrentRoom); append(trait.RoomsPerUpgrade)
+          append(trait.UseFunctionName); appendSequence(trait.UseFunctionNames)
+          append(trait.AddMetaUpgradeLastStands); append(trait.OnLevelOrRarityChangeFunctionName)
           appendSequence(trait.InheritFrom)
           appendMap(trait.PreEquipWeapons)
+          local traitSetup = trait.SetupFunction
+          append(traitSetup); append(type(traitSetup) == "table" and traitSetup.Name or nil)
+          append(trait.SetupFunctions)
+          if type(trait.SetupFunctions) == "table" then
+            for _, setup in pairs(trait.SetupFunctions) do
+              append(setup); append(type(setup) == "table" and setup.Name or nil)
+            end
+          end
 
           local onExpire = trait.OnExpire
           append(onExpire)
@@ -4280,10 +4296,30 @@ if __MacGamingTrainerV1 == nil then
             append(type(rarities) == "table" and rarities[rarity] or nil)
           end
           append(type(definition) == "table" and definition.AcquireFunctionName or nil)
+          append(type(definition) == "table" and definition.AcquireFunction or nil)
+          append(type(definition) == "table" and definition.BlockStacking or nil)
+          append(type(definition) == "table" and definition.BlockInRunRarify or nil)
+          append(type(definition) == "table" and definition.OnExpire or nil)
+          append(type(definition) == "table" and definition.OnExpireFunctionName or nil)
+          append(type(definition) == "table" and definition.CurrentRoom or nil)
+          append(type(definition) == "table" and definition.RoomsPerUpgrade or nil)
+          append(type(definition) == "table" and definition.UseFunctionName or nil)
+          appendSequence(type(definition) == "table" and definition.UseFunctionNames or nil)
+          append(type(definition) == "table" and definition.AddMetaUpgradeLastStands or nil)
+          append(type(definition) == "table" and definition.OnLevelOrRarityChangeFunctionName or nil)
           append(type(definition) == "table" and definition.FamiliarDataModifiers or nil)
           append(type(definition) == "table" and definition.CodexWeapon or nil)
-          append(type(definition) == "table" and definition.SetupFunction or nil)
-          append(type(definition) == "table" and definition.SetupFunctions or nil)
+          local definitionSetup = type(definition) == "table" and definition.SetupFunction or nil
+          append(definitionSetup)
+          append(type(definitionSetup) == "table" and definitionSetup.Name or nil)
+          local definitionSetups = type(definition) == "table" and definition.SetupFunctions or nil
+          append(definitionSetups)
+          if type(definitionSetups) == "table" then
+            for _, setup in pairs(definitionSetups) do
+              append(setup); append(type(setup) == "table" and setup.Name or nil)
+            end
+          end
+          appendMap(type(definition) == "table" and definition.PreEquipWeapons or nil)
         end
       end
       return result
