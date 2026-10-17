@@ -144,7 +144,7 @@ if __MacGamingTrainerV1 == nil then
       set_element = { elements = true },
       lock_element = { elements = true },
     }
-    local catalogsReady, generation = false, nil
+    local catalogsReady, generation, publishedRevision = false, nil, 0
 
     local function append(result, value)
       if value == nil then
@@ -180,9 +180,9 @@ if __MacGamingTrainerV1 == nil then
       retained[name] = true
       return true
     end
-    local function begin(command, snapshot)
+    local function begin(command, snapshot, acknowledgedRevision)
       candidates, retained = {}, {}
-      if not snapshot and retainCommands[command] then
+      if not snapshot and acknowledgedRevision == publishedRevision and retainCommands[command] then
         plan = { dirty = dirtyDomains[command] or {} }
       else
         -- Unknown/actions/lifecycle boundaries fail fresh. This deliberately
@@ -213,24 +213,27 @@ if __MacGamingTrainerV1 == nil then
         if retainedDomains[name] then retainedList[#retainedList + 1] = name end
       end
       if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
-      result.__trainerObservation = { generation = generation, retained = retainedList }
+      publishedRevision = publishedRevision + 1
+      result.__trainerObservation = {
+        generation = generation, revision = publishedRevision, retained = retainedList,
+      }
       return result
     end
-    local function run(command, params, nonce)
+    local function run(command, params, nonce, acknowledgedRevision)
       identify(nonce)
       params = params or {}
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
-      begin(command, command == "status" or params.includeCatalogs == true)
+      begin(command, command == "status" or params.includeCatalogs == true, acknowledgedRevision)
       local ok, result = pcall(M.dispatch, command, params)
       local retainedDomains = finish(ok)
       if not ok then error(result) end
       return project(result, retainedDomains)
     end
-    local function runBatch(calls, includeCatalogs, nonce)
+    local function runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
       identify(nonce)
-      begin("batch", true)
+      begin("batch", true, acknowledgedRevision)
       local ok, result = pcall(M.dispatchBatch, calls, includeCatalogs or not catalogsReady)
       local retainedDomains = finish(ok)
       if not ok then error(result) end
@@ -238,9 +241,11 @@ if __MacGamingTrainerV1 == nil then
     end
     return { append = append, retain = retainDomain, run = run, runBatch = runBatch }
   end)()
-  function M.observe(command, params, nonce) return observation.run(command, params, nonce) end
-  function M.observeBatch(calls, includeCatalogs, nonce)
-    return observation.runBatch(calls, includeCatalogs, nonce)
+  function M.observe(command, params, nonce, acknowledgedRevision)
+    return observation.run(command, params, nonce, acknowledgedRevision)
+  end
+  function M.observeBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
+    return observation.runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
