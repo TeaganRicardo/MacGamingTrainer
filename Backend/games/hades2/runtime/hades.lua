@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 113 then
+if previousModule and previousModule.revision ~= 114 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 113 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 113,
+    version = 1, revision = 114,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -116,11 +116,73 @@ if __MacGamingTrainerV1 == nil then
     return encode(value)
   end
 
-  -- The transport can retain expensive collection domains between replies.
-  -- Every dispatch still observes all live values; only equal wire collections
-  -- are omitted. Capabilities, desired/active state and receipts always travel.
-  do
-    local previous, owners, catalogsReady, generation = {}, nil, false, nil
+  -- Cross-reply retention is driven by small native input fingerprints, not by
+  -- materializing a full collection and comparing/copying it afterwards.
+  -- Python remains the single owner of complete localized retained collections.
+  M.observationRetention = (function()
+    local missing = {}
+    -- Weak native-reference identities let fingerprints notice owner/function
+    -- replacement without pinning dead Run/Hero/Trait objects in the resident.
+    -- The retained token is Trainer-owned; a GC-reused native address receives
+    -- a new token instead of colliding with its predecessor.
+    local identities = setmetatable({}, { __mode = "k" })
+    local fingerprints = {}
+    local plan, retained, candidates = nil, nil, nil
+    local domainOrder = { "resources", "elements", "currentRunTraits" }
+    local catalogsReady, generation, publishedRevision = false, nil, 0
+
+    local function append(result, value)
+      if value == nil then
+        result[#result + 1] = missing
+        return
+      end
+      local kind = type(value)
+      if kind == "table" or kind == "function" or kind == "userdata" or kind == "thread" then
+        local token = identities[value]
+        if token == nil then
+          token = {}
+          identities[value] = token
+        end
+        result[#result + 1] = token
+        return
+      end
+      result[#result + 1] = value
+    end
+    local function sameFingerprint(left, right)
+      if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+      for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+      end
+      return true
+    end
+    local function retainDomain(name, fingerprint)
+      if candidates == nil then return false end
+      candidates[name] = fingerprint
+      if plan == nil or not sameFingerprint(fingerprints[name], fingerprint) then
+        return false
+      end
+      retained[name] = true
+      return true
+    end
+    local function begin(snapshot, acknowledgedRevision)
+      candidates, retained = {}, {}
+      if not snapshot and acknowledgedRevision == publishedRevision then
+        -- Mutation/action names do not own invalidation. Each collection's
+        -- post-dispatch fingerprint decides whether its native inputs changed.
+        plan = true
+      else
+        -- Full snapshots and unacknowledged/lost replies fail fresh.
+        plan = nil
+      end
+    end
+    local function finish(succeeded)
+      local result = retained or {}
+      if succeeded then
+        for name, fingerprint in pairs(candidates or {}) do fingerprints[name] = fingerprint end
+      end
+      plan, retained, candidates = nil, nil, nil
+      return result
+    end
     local function identify(nonce)
       if generation == nil then
         if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
@@ -130,60 +192,45 @@ if __MacGamingTrainerV1 == nil then
         M.traitInventoryGeneration = generation
       end
     end
-    local function copy(value)
-      if type(value) ~= "table" or value == jsonNull then return value end
-      local result = setmetatable({}, getmetatable(value))
-      for key, item in pairs(value) do result[key] = copy(item) end
-      return result
-    end
-    local function equal(left, right)
-      if left == right then return true end
-      if type(left) ~= "table" or type(right) ~= "table"
-          or left == jsonNull or right == jsonNull then return false end
-      for key, value in pairs(left) do if not equal(value, right[key]) then return false end end
-      for key in pairs(right) do if left[key] == nil then return false end end
-      return true
-    end
-    function M.projectObservation(result, snapshot)
-      local current = {
-        session = SessionState or false, game = GameState or false, run = CurrentRun or false,
-        hero = type(CurrentRun) == "table" and CurrentRun.Hero or false,
-        room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or false,
-        resources = type(GameState) == "table" and GameState.Resources or false,
-        traits = TraitData or false, resourceData = ResourceData or false,
-      }
-      if owners == nil then snapshot = true else
-        for key, value in pairs(current) do
-          if owners[key] ~= value then snapshot = true; break end
-        end
+    local function project(result, retainedDomains)
+      local retainedList = setmetatable({}, arrayMeta)
+      for _, name in ipairs(domainOrder) do
+        if retainedDomains[name] then retainedList[#retainedList + 1] = name end
       end
-      local retained = setmetatable({}, arrayMeta)
-      for _, key in ipairs({ "resources", "elements", "currentRunTraits" }) do
-        local value = result[key]
-        if not snapshot and value ~= nil and equal(previous[key], value) then
-          retained[#retained + 1] = key
-          result[key] = nil
-        else
-          previous[key] = copy(value)
-        end
-      end
-      owners = current
       if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
-      result.__trainerObservation = { generation = generation, retained = retained }
+      publishedRevision = publishedRevision + 1
+      result.__trainerObservation = {
+        generation = generation, revision = publishedRevision, retained = retainedList,
+      }
       return result
     end
-    function M.observe(command, params, nonce)
+    local function run(command, params, nonce, acknowledgedRevision)
       identify(nonce)
       params = params or {}
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
-      return M.projectObservation(M.dispatch(command, params), command == "status" or params.includeCatalogs == true)
+      begin(command == "status" or params.includeCatalogs == true, acknowledgedRevision)
+      local ok, result = pcall(M.dispatch, command, params)
+      local retainedDomains = finish(ok)
+      if not ok then error(result) end
+      return project(result, retainedDomains)
     end
-    function M.observeBatch(calls, includeCatalogs, nonce)
+    local function runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
       identify(nonce)
-      return M.projectObservation(M.dispatchBatch(calls, includeCatalogs or not catalogsReady), true)
+      begin(true, acknowledgedRevision)
+      local ok, result = pcall(M.dispatchBatch, calls, includeCatalogs or not catalogsReady)
+      local retainedDomains = finish(ok)
+      if not ok then error(result) end
+      return project(result, retainedDomains)
     end
+    return { append = append, retain = retainDomain, run = run, runBatch = runBatch }
+  end)()
+  function M.observe(command, params, nonce, acknowledgedRevision)
+    return M.observationRetention.run(command, params, nonce, acknowledgedRevision)
+  end
+  function M.observeBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
+    return M.observationRetention.runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
@@ -1679,6 +1726,30 @@ if __MacGamingTrainerV1 == nil then
       M.catalogCache.resources = cached
     end
     return order, metadata, allowed
+  end
+  function M.observationRetention.resourceFingerprint()
+    local result = {}
+    M.observationRetention.append(result, GameState)
+    M.observationRetention.append(result, type(GameState) == "table" and GameState.Resources or nil)
+    M.observationRetention.append(result, ResourceData)
+    M.observationRetention.append(result, M.resourceLocks)
+    local order, _, allowed = resourceCatalog()
+    -- resourceCatalog may publish its stable native layout on first use. Record
+    -- the post-discovery owner so the next warm request does not invalidate
+    -- solely because this observation itself initialized the cache.
+    M.observationRetention.append(result, M.catalogCache.resources)
+    -- order/metadata/allowed are immutable catalog presentation for this
+    -- resident source generation. Warm freshness tracks only mutable values;
+    -- replacing ResourceData/catalog owners above invalidates the whole domain.
+    for _, id in ipairs(order) do
+      if allowed[id] then
+        M.observationRetention.append(result, id)
+        M.observationRetention.append(result, type(GameState) == "table"
+          and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
+        M.observationRetention.append(result, M.resourceLocks[id])
+      end
+    end
+    return result
   end
   local function resources()
     local result = setmetatable({}, arrayMeta)
@@ -4068,6 +4139,155 @@ if __MacGamingTrainerV1 == nil then
         removalCapability, removalReason
     end
 
+    local function observationFingerprint()
+      local result = {}
+      local owner = M.runtimeOwners.traitInventory()
+      local function append(value) M.observationRetention.append(result, value) end
+      local function appendSequence(value)
+        append(value)
+        if type(value) == "table" then
+          for _, item in ipairs(value) do append(item) end
+        end
+      end
+      local function appendMap(value)
+        append(value)
+        if type(value) ~= "table" then return end
+        -- The same native table has stable traversal while untouched. Any
+        -- insertion/removal may reorder pairs and conservatively invalidates
+        -- the domain, which is safe and cheaper than sorting every request.
+        for key, item in pairs(value) do append(key); append(item) end
+      end
+
+      append(M.traitInventoryGeneration)
+      append(SessionState)
+      append(CurrentRun)
+      append(type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil)
+      append(owner and owner.hero or nil)
+      append(owner and owner.traits or nil)
+      append(TraitData)
+      append(LootData)
+      append(GameState)
+      append(type(GameState) == "table" and GameState.LastAwardTrait or nil)
+      append(type(GameState) == "table" and GameState.EquippedFamiliar or nil)
+      append(type(GameState) == "table" and GameState.MetaUpgradeState or nil)
+      append(MetaUpgradeCardData)
+      append(FamiliarData)
+      append(PersistentKeepsakeKeys)
+      append(TraitRarityData)
+      append(MapState)
+      append(type(MapState) == "table" and MapState.FamiliarUnit or nil)
+      append(type(MapState) == "table" and type(MapState.FamiliarUnit) == "table"
+        and MapState.FamiliarUnit.ObjectId or nil)
+
+      -- Capability projection depends on function ownership as well as trait
+      -- values. Function replacement is rare, but must invalidate a retained
+      -- domain rather than preserve stale edit affordances.
+      for _, name in ipairs({
+        "IsGodTrait", "GetAllUpgradeableGodTraits", "IncreaseTraitLevel", "AddRarityToTraits",
+        "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "GetTraitTooltipTitle",
+        "GetLootSourceName", "UpdateTalentPointInvestedCache", "UpdateTraitNumber",
+        "UnequipKeepsake", "EquipKeepsake", "UnequipWeapon", "RemoveTrait", "RemoveLastStand",
+        "RemoveWeaponTrait", "UpdateLifePips", "Destroy", "SetupCostume", "CallFunctionName",
+        "ValidateMaxHealth", "ValidateMaxMana", "HandleWeaponAnimSwaps", "GetEquippedWeapon",
+        "HeroHasTrait", "ExtractValues",
+      }) do append(_G[name]) end
+
+      local hero = owner and owner.hero or nil
+      append(type(hero) == "table" and hero.Weapons or nil)
+      if type(hero) == "table" and type(hero.Weapons) == "table" then appendMap(hero.Weapons) end
+      local aspect = type(GameState) == "table" and GameState.LastWeaponUpgradeName or nil
+      if type(aspect) == "table" then appendMap(aspect) else append(aspect) end
+
+      local slotted = type(hero) == "table" and hero.SlottedSpell or nil
+      append(slotted)
+      append(type(slotted) == "table" and slotted.TraitName or nil)
+      append(type(slotted) == "table" and slotted.ObtainedDuoTalent or nil)
+      local talents = type(slotted) == "table" and slotted.Talents or nil
+      append(talents)
+      if type(talents) == "table" then
+        for depth, column in ipairs(talents) do
+          append(depth); append(column)
+          if type(column) == "table" then
+            for slot, node in pairs(column) do
+              append(slot); append(node)
+              append(type(node) == "table" and node.Name or nil)
+              append(type(node) == "table" and node.Invested or nil)
+              append(type(node) == "table" and node.QueuedInvested or nil)
+            end
+          end
+        end
+      end
+
+      local meta = type(GameState) == "table" and GameState.MetaUpgradeState or nil
+      if type(meta) == "table" then
+        for name, state in pairs(meta) do
+          append(name); append(state)
+          append(type(state) == "table" and state.Unlocked or nil)
+          append(type(state) == "table" and state.Equipped or nil)
+          append(type(state) == "table" and state.Level or nil)
+          local adjacency = type(state) == "table" and state.AdjacencyBonuses or nil
+          append(adjacency)
+          append(type(adjacency) == "table" and adjacency.CustomMultiplier or nil)
+          local card = type(MetaUpgradeCardData) == "table" and MetaUpgradeCardData[name] or nil
+          append(card)
+          append(type(card) == "table" and card.TraitName or nil)
+          append(type(card) == "table" and card.OnGrantedFunctionName or nil)
+          append(type(card) == "table" and card.OnUpgradedFunctionName or nil)
+        end
+      end
+
+      local familiarName = type(GameState) == "table" and GameState.EquippedFamiliar or nil
+      local familiar = type(FamiliarData) == "table" and FamiliarData[familiarName] or nil
+      append(familiar)
+      appendSequence(type(familiar) == "table" and familiar.TraitNames or nil)
+
+      for index, trait in ipairs(owner and owner.traits or {}) do
+        append(index); append(trait)
+        if type(trait) == "table" then
+          append(trait.Name); append(trait.Id); append(trait.StackNum); append(trait.Rarity)
+          append(trait.RemainingUses); append(trait.Uses); append(trait.Slot)
+          append(trait.BiomeStateTrait); append(trait.LootDataName); append(trait.SourceId)
+          append(trait.CustomTitle); append(trait.IsHammerTrait); append(trait.IsWeaponEnchantment)
+          append(trait.RequiredWeapon); append(trait.BlockStacking); append(trait.CurrentArmor)
+          append(trait.RarityMultiplier); append(trait.BlockInRunRarify)
+          append(trait.AcquireFunctionName); append(trait.AcquireFunction)
+          append(trait.OnExpireFunctionName); append(trait.CurrentRoom); append(trait.RoomsPerUpgrade)
+          append(trait.UseFunctionName); appendSequence(trait.UseFunctionNames)
+          append(trait.AddMetaUpgradeLastStands); append(trait.OnLevelOrRarityChangeFunctionName)
+          appendSequence(trait.InheritFrom)
+          appendMap(trait.PreEquipWeapons)
+          local traitSetup = trait.SetupFunction
+          append(traitSetup); append(type(traitSetup) == "table" and traitSetup.Name or nil)
+          append(trait.SetupFunctions)
+          if type(trait.SetupFunctions) == "table" then
+            for _, setup in pairs(trait.SetupFunctions) do
+              append(setup); append(type(setup) == "table" and setup.Name or nil)
+            end
+          end
+
+          local onExpire = trait.OnExpire
+          append(onExpire)
+          local linked = type(onExpire) == "table" and onExpire.TraitData or nil
+          append(linked)
+          append(type(linked) == "table" and linked.Name or nil)
+          append(type(linked) == "table" and linked.RarityLevels or nil)
+
+          -- TraitData is static source truth for one resident generation.
+          -- Its table identity is sufficient; mutable mounted-instance state is
+          -- tracked explicitly above. A replaced definition invalidates safely.
+          local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+          append(definition)
+          append(trait.RarityLevels)
+          if type(trait.RarityLevels) == "table" then
+            for _, rarity in ipairs({ "Common", "Rare", "Epic", "Heroic", "Legendary" }) do
+              append(trait.RarityLevels[rarity])
+            end
+          end
+        end
+      end
+      return result
+    end
+
     local currentRunTraits = function()
       local result = setmetatable({}, arrayMeta)
       local owner = M.runtimeOwners.traitInventory()
@@ -4552,6 +4772,7 @@ if __MacGamingTrainerV1 == nil then
 
     return {
       currentRunTraits = currentRunTraits,
+      observationFingerprint = observationFingerprint,
       mutate = mutate,
       isArachneCostumeChoice = isArachneCostumeChoice,
       applyCostume = applyCostume,
@@ -6935,10 +7156,43 @@ if __MacGamingTrainerV1 == nil then
 
   local occurrenceTargets, occurrenceTargetOrder
 
+  M.observationRetention.elementOrder = { "Fire", "Water", "Earth", "Air", "Aether" }
+  function M.observationRetention.elementFingerprint(hero)
+    local result = {}
+    M.observationRetention.append(result, hero)
+    M.observationRetention.append(result, type(hero) == "table" and hero.Elements or nil)
+    M.observationRetention.append(result, TraitElementData)
+    M.observationRetention.append(result, M.elementLocks)
+    for _, element in ipairs(M.observationRetention.elementOrder) do
+      local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or nil
+      M.observationRetention.append(result, element)
+      M.observationRetention.append(result, values and values[element] or nil)
+      M.observationRetention.append(result, type(TraitElementData) == "table" and TraitElementData[element] or nil)
+      M.observationRetention.append(result, M.elementLocks[element])
+    end
+    return result
+  end
+  function M.observationRetention.buildElements(hero)
+    local result = setmetatable({}, arrayMeta)
+    local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or {}
+    for _, element in ipairs(M.observationRetention.elementOrder) do
+      if values[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
+        result[#result + 1] = {
+          id = element, name = elementNames[element] or element,
+          count = number(values[element]), locked = M.elementLocks[element] ~= nil,
+        }
+      end
+    end
+    return result
+  end
+
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
-    local list = resources()
+    local resourceFingerprint = M.observationRetention.resourceFingerprint()
+    local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
+    local list
+    if not retainResources then list = resources() end
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
       boonList, rewardList = boons(), rewards()
@@ -7004,16 +7258,24 @@ if __MacGamingTrainerV1 == nil then
     local canAcquireChaosPair = runHeroOwner ~= nil and M.nativeFunctionsAvailable(chaosPairFunctions)
       and type(chaosSource) == "table" and not not chaosSource.TransformingTraits
     -- Current-run trait/buff inventory: live runtime truth, never the catalog
-    -- and never desired state.
-    local traitList, traitListReason = traitManagement.currentRunTraits()
-    local elementList = setmetatable({}, arrayMeta)
-    local heroElements = type(hero.Elements) == "table" and hero.Elements or {}
-    local orderedElements = { "Fire", "Water", "Earth", "Air", "Aether" }
-    for _, element in ipairs(orderedElements) do
-      if heroElements[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
-        elementList[#elementList + 1] = { id = element, name = elementNames[element] or element, count = number(heroElements[element]), locked = M.elementLocks[element] ~= nil }
-      end
+    -- and never desired state. Fingerprints inspect only native inputs; the
+    -- expensive capability/presentation projection runs only when that domain
+    -- actually changed or the current boundary requires a full snapshot.
+    local retainTraits = M.observationRetention.retain(
+      "currentRunTraits", traitManagement.observationFingerprint()
+    )
+    local traitList, traitListReason
+    if retainTraits then
+      traitList = nil
+      traitListReason = traitOwner == nil and "noTraitOwner" or nil
+    else
+      traitList, traitListReason = traitManagement.currentRunTraits()
     end
+    local retainElements = M.observationRetention.retain(
+      "elements", M.observationRetention.elementFingerprint(hero)
+    )
+    local elementList
+    if not retainElements then elementList = M.observationRetention.buildElements(hero) end
     local runCount = 0
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}

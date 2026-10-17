@@ -62,10 +62,23 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
         with patch.object(resident_session, "localize_catalog", side_effect=localize), patch.object(
             localization, "GAME_SPEC", replace(localization.GAME_SPEC, app_bundle_path=game),
         ), patch.object(resident_session.uuid, "uuid4", side_effect=install_nonce):
+            # Count the expensive whole-inventory eligibility pass without
+            # replacing its native owner after the retained-domain baseline.
+            transport.execute("""
+            __mgtUpgradeQueries = 0
+            __mgtUpgradeable = GetAllUpgradeableGodTraits
+            GetAllUpgradeableGodTraits = function(...)
+              __mgtUpgradeQueries = __mgtUpgradeQueries + 1
+              return __mgtUpgradeable(...)
+            end
+            return '{}'
+            """)
             first = session.status().payload
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert transport.wire["__trainerObservation"]["generation"] == issued[0]
+            assert transport.wire["__trainerObservation"]["revision"] == 1
             expected = copy.deepcopy(first)
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
             # Public replies may be mutated by their consumer; that cannot
             # rewrite the private localized baseline used on the next call.
             first["resources"][0]["count"] = 99999
@@ -81,17 +94,93 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             }
             assert not {"resources", "elements", "currentRunTraits"} & inputs[-1]
             assert "__trainerObservation" not in next_reply
+            assert transport.wire["__trainerObservation"]["revision"] == 2
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 0
+
+            # A mutation that owns one retained collection must publish that
+            # collection fresh while retaining only the unrelated domains.
+            resource_edit = session.mutate(
+                "set_resource", {"resource": "MetaCurrency", "amount": 101,
+                                 "requestId": "resource-retention-boundary"}
+            ).payload
+            assert next(row for row in resource_edit["resources"]
+                        if row["id"] == "MetaCurrency")["count"] == 101
+            assert set(transport.wire["__trainerObservation"]["retained"]) == {
+                "elements", "currentRunTraits",
+            }
+            assert transport.wire["__trainerObservation"]["revision"] == 3
+            assert not transport.tainted
+
+            # Action commands use the same domain contract. A trait edit must
+            # republish the changed trait domain without rebuilding unrelated
+            # resources/elements; an unrelated reward spawn may retain all three.
+            trait = resource_edit["currentRunTraits"][0]
+            level = trait["level"]
+            trait_edit = session.mutate("set_trait_level", {
+                "generationId": trait["generationId"], "runId": trait["runId"],
+                "instanceId": trait["instanceId"], "trait": trait["name"],
+                "family": trait["family"], "expectedLevel": level,
+                "expectedRarity": trait["rarity"],
+                "expectedSameNameCount": trait["sameNameCount"],
+                "targetLevel": level + 1, "requestId": "trait-retention-boundary",
+            }).payload
+            assert trait_edit["currentRunTraits"][0]["level"] == level + 1
+            assert transport.wire["__trainerObservation"]["retained"] == ["resources", "elements"]
+            assert "currentRunTraits" in transport.wire
+            assert "resources" not in transport.wire and "elements" not in transport.wire
+            assert transport.wire["__trainerObservation"]["revision"] == 4
+
+            reward = session.mutate("spawn_reward", {
+                "reward": "MetaCurrencyDrop", "requestId": "reward-retention-boundary",
+            }).payload
+            assert reward["applied"] and reward["lastAction"]["outcome"] == "completed"
+            assert set(transport.wire["__trainerObservation"]["retained"]) == {
+                "resources", "elements", "currentRunTraits",
+            }
+            assert not {"resources", "elements", "currentRunTraits"} & transport.wire.keys()
+            assert transport.wire["__trainerObservation"]["revision"] == 5
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
+
+            # A Lua observation can complete after Python loses its reply. The
+            # next acknowledged request must notice the revision gap and send a
+            # fresh collection baseline instead of retaining unseen state.
+            discarded = json.loads(transport.execute(
+                "return __MacGamingTrainerV1.json(__MacGamingTrainerV1.observe("
+                "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
+                "'discarded',5))"
+            ))
+            assert discarded["__trainerObservation"]["revision"] == 6
+            assert set(discarded["__trainerObservation"]["retained"]) == {
+                "resources", "elements", "currentRunTraits",
+            }
+            recovered = session.mutate(
+                "set_vital", {"vital": "health", "field": "current", "value": 77}
+            ).payload
+            assert recovered["health"] == 77
+            assert transport.wire["__trainerObservation"]["revision"] == 7
+            assert transport.wire["__trainerObservation"]["retained"] == []
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 1
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
 
             # Native changes between requests remain observable even when an
             # unrelated command discovers them. Mutable values and bilingual
             # presentation are carried together for changed collections.
-            transport.execute("CurrentRun.Hero.Traits[1].StackNum=7; GameState.Resources.MetaCurrency=555; return '{}'")
+            transport.execute("CurrentRun.Hero.Traits[1].StackNum=7; CurrentRun.Hero.Traits[1].Rarity='Epic'; CurrentRun.Hero.Elements.Fire=9; GameState.Resources.MetaCurrency=555; return '{}'")
             changed = session.mutate("set_vital", {"vital": "health", "field": "current", "value": 80}).payload
             assert changed["currentRunTraits"][0]["level"] == 7
+            assert changed["currentRunTraits"][0]["rarity"] == "Epic"
             assert changed["currentRunTraits"][0]["displayName"].startswith("zh-CN ")
             assert changed["currentRunTraits"][0]["englishName"].startswith("en ")
             assert next(row for row in changed["resources"] if row["id"] == "MetaCurrency")["count"] == 555
-            assert {"resources", "currentRunTraits"} <= inputs[-1]
+            assert next(row for row in changed["elements"] if row["id"] == "Fire")["count"] == 9
+            assert {"resources", "elements", "currentRunTraits"} <= inputs[-1]
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 1
 
             transport.execute("savedHero=CurrentRun.Hero; CurrentRun.Hero=nil; return '{}'")
             absent = session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 556,
@@ -101,7 +190,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             transport.execute("CurrentRun.Hero=savedHero; savedHero.ObjectId=2; return '{}'")
             restored = session.mutate("set_vital", {"vital": "health", "field": "current", "value": 81}).payload
             assert len(restored["currentRunTraits"]) == 4
-            assert transport.wire["__trainerObservation"]["retained"] == []
+            # Restoring Hero invalidates Hero-owned trait/element domains, while the
+            # independent resource domain may remain acknowledged and retained.
+            assert transport.wire["__trainerObservation"]["retained"] == ["resources"]
             # Status always reconstructs all dynamic collections, regardless
             # of an earlier patch sequence. Re-bootstrap creates a new epoch.
             session.status()
@@ -144,7 +235,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
         calls = 0
         def execute(self, source, **kwargs):
             self.calls += 1
-            return json.dumps({"__trainerObservation": {"generation": "new", "retained": ["resources"]}})
+            return json.dumps({"__trainerObservation": {"generation": "new", "revision": 1, "retained": ["resources"]}})
 
     missing = MissingBaseline()
     try:
