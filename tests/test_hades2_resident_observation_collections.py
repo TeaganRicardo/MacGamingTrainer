@@ -99,15 +99,29 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
                 "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
             ))["count"] == 0
 
+            # A mutation that owns one retained collection must publish that
+            # collection fresh while retaining only the unrelated domains.
+            resource_edit = session.mutate(
+                "set_resource", {"resource": "MetaCurrency", "amount": 101}
+            ).payload
+            assert next(row for row in resource_edit["resources"]
+                        if row["id"] == "MetaCurrency")["count"] == 101
+            assert set(transport.wire["__trainerObservation"]["retained"]) == {
+                "elements", "currentRunTraits",
+            }
+            assert transport.wire["__trainerObservation"]["revision"] == 3
+            assert not transport.tainted
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
+
             # A Lua observation can complete after Python loses its reply. The
             # next acknowledged request must notice the revision gap and send a
             # fresh collection baseline instead of retaining unseen state.
             discarded = json.loads(transport.execute(
                 "return __MacGamingTrainerV1.json(__MacGamingTrainerV1.observe("
                 "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
-                "'discarded',2))"
+                "'discarded',3))"
             ))
-            assert discarded["__trainerObservation"]["revision"] == 3
+            assert discarded["__trainerObservation"]["revision"] == 4
             assert set(discarded["__trainerObservation"]["retained"]) == {
                 "resources", "elements", "currentRunTraits",
             }
@@ -115,7 +129,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
                 "set_vital", {"vital": "health", "field": "current", "value": 77}
             ).payload
             assert recovered["health"] == 77
-            assert transport.wire["__trainerObservation"]["revision"] == 4
+            assert transport.wire["__trainerObservation"]["revision"] == 5
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert json.loads(transport.execute(
                 "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
