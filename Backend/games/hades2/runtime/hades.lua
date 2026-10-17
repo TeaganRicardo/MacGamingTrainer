@@ -121,6 +121,11 @@ if __MacGamingTrainerV1 == nil then
   -- Python remains the single owner of complete localized retained collections.
   local observation = (function()
     local missing = {}
+    -- Weak native-reference identities let fingerprints notice owner/function
+    -- replacement without pinning dead Run/Hero/Trait objects in the resident.
+    -- The retained token is Trainer-owned; a GC-reused native address receives
+    -- a new token instead of colliding with its predecessor.
+    local identities = setmetatable({}, { __mode = "k" })
     local fingerprints = {}
     local plan, retained, candidates = nil, nil, nil
     local domainOrder = { "resources", "elements", "currentRunTraits" }
@@ -142,7 +147,21 @@ if __MacGamingTrainerV1 == nil then
     local catalogsReady, generation = false, nil
 
     local function append(result, value)
-      result[#result + 1] = value == nil and missing or value
+      if value == nil then
+        result[#result + 1] = missing
+        return
+      end
+      local kind = type(value)
+      if kind == "table" or kind == "function" or kind == "userdata" or kind == "thread" then
+        local token = identities[value]
+        if token == nil then
+          token = {}
+          identities[value] = token
+        end
+        result[#result + 1] = token
+        return
+      end
+      result[#result + 1] = value
     end
     local function sameFingerprint(left, right)
       if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
