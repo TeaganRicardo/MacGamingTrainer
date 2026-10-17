@@ -29,6 +29,10 @@
     {
       "source": "native/EffectBlockQuery.c",
       "filename": "libMGTNativeEffectQuery.dylib"
+    },
+    {
+      "source": "native/CommandMailbox.c",
+      "filename": "libMGTCommandMailbox.dylib"
     }
   ],
   "app": {

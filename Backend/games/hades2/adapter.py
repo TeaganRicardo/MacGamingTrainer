@@ -18,7 +18,7 @@ from .persistence import PersistenceError
 from .preferences import Hades2PreferenceStore, next_room_reward_consumed, next_occurrence_consumed
 from .profile_service import Hades2ProfileService
 from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
-from .resident_session import Hades2ResidentSession, ResidentGenerationInvalidated, ResidentSessionError
+from .resident_session import Hades2ResidentSession, ResidentConnectionError, ResidentGenerationInvalidated, ResidentSessionError
 from .save_workspace import Hades2SaveWorkspace
 from .schema import (
     MULTIPLIERS,
@@ -565,6 +565,10 @@ class Hades2Adapter(GameAdapter):
                 result=self.execute('set_feature',{'feature':feature,'value':value})
                 self.preference_dirty=was_dirty
                 return result
+            except ResidentConnectionError:
+                # Desired intent was saved and the action receipt is known;
+                # its terminal connection recovery still needs a visible reply.
+                raise
             except TransportError as error:
                 logging.warning('Desired feature %s stored pending reconnect: %s',feature,error)
                 self.state['preferenceApplyError']=str(error)
@@ -669,6 +673,8 @@ class Hades2Adapter(GameAdapter):
             )
             if outcome.reply is not None:
                 self._merge_resident_reply(outcome.reply)
+                if outcome.reply.connection_error is not None:
+                    raise outcome.reply.connection_error
                 if outcome.reply.outcome_unknown:
                     raise TransportError(
                         'outcome_unknown',
@@ -851,7 +857,10 @@ class Hades2Adapter(GameAdapter):
         return decoded
 
     def _project_runtime_error(self,error,project_desired):
-        if error.code=='waiting':self.state['status']='waiting'
+        if isinstance(error,ResidentConnectionError):
+            self._mark_disconnected()
+            self.state['status']='restart_required'
+        elif error.code=='waiting':self.state['status']='waiting'
         elif error.code=='disconnected':
             self.state.update(status='disconnected');self._mark_disconnected()
         elif error.code in ('restart_required','outcome_unknown','restore_failed'):
@@ -867,6 +876,10 @@ class Hades2Adapter(GameAdapter):
         if host_observation_only and command!='status':
             raise ValueError('runtime observation 仅允许 status。')
         project_desired=not host_observation_only
+        connection_error=getattr(self.runtime,'connection_error',None)
+        if connection_error is not None:
+            self._project_runtime_error(connection_error,project_desired)
+            raise connection_error
         teardown=not host_observation_only and command in ('disable_all','cleanup')
         teardown_persistence_error=None
         if teardown:
@@ -889,6 +902,7 @@ class Hades2Adapter(GameAdapter):
             except TransportError as error:
                 teardown_speed_error=error
                 logging.warning('Time Warp teardown failed; continuing Lua cleanup: %s',error)
+        reply=None
         try:
             runtime_params=dict(params or {})
             if command=='status':
@@ -916,9 +930,9 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_json_duration=reply.metrics.json_duration
                 self._last_status_localize_duration=reply.metrics.localize_duration
             asynchronous_unknown=reply.outcome_unknown
+            decoded=self._merge_resident_reply(reply)
             if not asynchronous_unknown and not host_observation_only and not self.preference_initialized and not self.preference_write_blocked:
                 self._adopt_lua_preferences(raw_decoded)
-            decoded=self._merge_resident_reply(reply)
             # Runtime observation skips durable Hades desired-state projection,
             # but Core-owned Process Time Warp remains observable Host state.
             if host_observation_only:self._project_time_warp()
@@ -938,6 +952,11 @@ class Hades2Adapter(GameAdapter):
             # Session trust is already tainted before this evidence reaches Adapter.
             if asynchronous_unknown:
                 raise TransportError('outcome_unknown','游戏调用结果不明，未自动重试；请检查游戏并重启。')
+            if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
+                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
+                    self._save_preferences()
+            if reply.connection_error is not None:
+                raise reply.connection_error
             self._observe_game_speed()
             if not host_observation_only and command=='status' and self.preference_dirty:
                 # Reconcile from this resident observation, not from the
@@ -945,9 +964,6 @@ class Hades2Adapter(GameAdapter):
                 # Otherwise a still-dormant lock can look confirmed and skip
                 # its native lock_* command when the owner becomes available.
                 return self._replay_preferences(copy.deepcopy(decoded))
-            if not host_observation_only and command not in ('status',) and command not in _PREPERSISTED_RUNTIME_COMMANDS:
-                if teardown_persistence_error is None and self._capture_command_preferences(command,runtime_params,raw_decoded):
-                    self._save_preferences()
             if project_desired:self._overlay_preferences()
             if teardown_speed_error is not None:raise teardown_speed_error
             if teardown_persistence_error is not None:raise teardown_persistence_error
@@ -964,6 +980,16 @@ class Hades2Adapter(GameAdapter):
                 self._last_status_localize_duration=e.metrics.localize_duration
             self._project_runtime_error(e,project_desired)
             raise
+        except PersistenceError as error:
+            connection_error=getattr(reply,'connection_error',None)
+            if connection_error is None:
+                raise
+            # The confirmed edit stays in memory with persistence pending. A
+            # secondary disk failure must not hide the terminal game recovery
+            # requirement or leave controls enabled after an accepted receipt.
+            logging.warning('Known resident result has pending persistence after ACK loss: %s',error)
+            self._project_runtime_error(connection_error,project_desired)
+            raise connection_error from error
     def disconnect(self):
         # Manual disconnect is a debugger detach only. The trainer Lua module
         # stays resident in the same game process, so desired features/locks

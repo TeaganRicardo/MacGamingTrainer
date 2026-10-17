@@ -14,6 +14,7 @@ extension Hades2TrainerModel {
             guard !text.key.isEmpty else { return }
             issues.append(Hades2CurrentIssue(id: id, text: text, title: title))
         }
+        if let result = receivedActionResultText { append("result", result) }
         append("operation", errorText)
         if backendErrorText != errorText { append("backend", backendErrorText) }
         if !runtimeIssuePresentations.isEmpty {

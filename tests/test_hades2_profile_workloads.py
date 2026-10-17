@@ -1,13 +1,60 @@
 """Offline workloads verify phase joins, counts and finite native inventories."""
 import os
+import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'Tools'), str(ROOT / 'Backend'), str(ROOT / 'tests')]
-from hades2_profile_workloads import profile_end_to_end, profile_save_queries, profile_time_warp
+from hades2_profile_workloads import profile_end_to_end, profile_save_queries, profile_time_warp, read_records
 from profile_hades2_operations import profile_resident, summarize
+
+# This fixture is also the worker used by the Swift Host workload below. Its
+# successful-result protocol must remain covered on machines without swiftc.
+# Cross the real backend/router/resident/client/worker/Lua owners repeatedly so
+# a missing ACK method cannot turn the first accepted result into terminal loss.
+with tempfile.TemporaryDirectory(prefix='mgt-profile-backend-protocol-') as temporary:
+    folder = Path(temporary)
+    events = folder / 'events.log'
+    requests = [
+        {'id': 'cold', 'command': 'status', 'params': {}},
+        {'id': 'edit', 'command': 'set_resource', 'params': {'resource': 'MetaCurrency', 'amount': 123}},
+        {'id': 'spawn', 'command': 'spawn_reward', 'params': {'reward': 'MetaCurrencyDrop'}},
+        {'id': 'warm', 'command': 'status', 'params': {}},
+    ]
+    run = subprocess.run(
+        [sys.executable, str(ROOT / 'Tools/fixtures/hades2_profile_backend.py')],
+        input=''.join(json.dumps(request) + '\n' for request in requests),
+        env=dict(os.environ, MGT_PROFILE_OPERATIONS='1', MGT_PROFILE_TEMP=str(folder),
+                 MGT_PROFILE_EVENTS=str(events), MGT_PROFILE_SOURCE_ROOT=str(ROOT),
+                 MGT_PROFILE_TRAITS='8', MGT_PROFILE_CATALOG='16', MGT_PROFILE_RESOURCES='8'),
+        capture_output=True, text=True, timeout=30, check=True,
+    )
+    replies = [json.loads(line) for line in run.stdout.splitlines()]
+    assert [reply['id'] for reply in replies] == [request['id'] for request in requests]
+    failures = [(reply['id'], reply.get('error')) for reply in replies if not reply['ok']]
+    assert not failures, failures[0]
+    observed = {}
+    for reply in replies:
+        observed.update(reply['result'])
+        assert observed['connected'] and observed['status'] != 'restart_required'
+        if reply['id'] == 'edit':
+            assert next(row for row in observed['resources'] if row['id'] == 'MetaCurrency')['count'] == 123
+        if reply['id'] == 'spawn':
+            assert observed['applied'] and observed['lastAction']['outcome'] == 'completed'
+    assert next(row for row in observed['resources'] if row['id'] == 'MetaCurrency')['count'] == 123
+    records = read_records(events.read_text())
+    for request in requests:
+        rows = [row for row in records if row['request_id'] == request['id']]
+        rpc = [row['method'] for row in rows if row['phase'] == 'sidecar.rpc']
+        assert rpc == ['transport.execute', 'transport.acknowledge_result'], (request['id'], rpc)
+        # The cold bootstrap replaces the instrumented resident. Each later
+        # operation enters it once; ACK must not dispatch another Lua command.
+        if request['id'] != 'cold':
+            assert sum(row['phase'] == 'resident.materialize_dispatch' for row in rows) == 1, rows
 
 resident = profile_resident(2, 8, 16, 8)
 assert resident['fixture']['mounted_traits'] == 8 and resident['fixture']['catalog_traits'] == 16
@@ -35,6 +82,7 @@ if shutil.which('swiftc'):
     end = profile_end_to_end(2, 8, 16, 8, summarize)
     assert end['observed']
     assert end['sidecar_calls']['transport.execute'] > 0 and all(value > 0 for value in end['bytes'].values())
+    assert end['sidecar_calls']['transport.acknowledge_result'] == end['sidecar_calls']['transport.execute']
     assert {'host.admission', 'host.request_queue', 'host.payload_decode', 'host.payload_apply',
         'backend.routing', 'backend.reply_serialize', 'backend.reply_ready',
         'sidecar.dispatch', 'sidecar.reply_serialize_write', 'resident.materialize_dispatch',

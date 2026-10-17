@@ -33,7 +33,8 @@ for raw in sys.stdin:
              'moduleProtocolVersion': 14, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
         outcomes = ['accepted', 'opened', 'completed', 'completed', 'failed', 'outcome_unknown']
-        outcome = outcomes[count]
+        ack_loss = 'ack_loss_' in pathlib.Path(__file__).name
+        outcome = ('accepted' if 'accepted' in pathlib.Path(__file__).name else 'completed') if ack_loss else outcomes[count]
         count += 1
         payload['lastAction'] = {'requestId': req['id'], 'command': req['command'],
                                  'outcome': outcome, 'duplicate': False}
@@ -42,6 +43,11 @@ for raw in sys.stdin:
             reply['error'] = {'code': outcome, 'presentation': 'hades2.error.exactNotEligible'}
             if outcome == 'outcome_unknown':
                 payload['status'] = 'restart_required'
+        if ack_loss:
+            reply['ok'] = False
+            reply['error'] = {'code': 'restart_required',
+                              'presentation': 'hades2.error.commandResultConnectionLost'}
+            payload.update(connected=False, status='restart_required', capabilities={'sellTraits': False})
     elif req['command'] == 'status':
         status_count += 1
         if status_count == 1 and not issues_path.exists():
@@ -326,6 +332,52 @@ struct Main {
         }
         faultSession.stop(suppressTerminationError: true)
         faultObservation.cancel()
+
+        // A known completed/accepted action and failed command acceptance
+        // arrive in one reply. Keep the receipt visible in recovery details,
+        // while the immediate notice explains why no further action is safe.
+        for outcome in ["completed", "accepted"] {
+            let ackWorker = temporary.appendingPathComponent("ack_loss_\(outcome)_worker.py")
+            try FileManager.default.copyItem(at: worker, to: ackWorker)
+            let ackSession = TrainerBackendSession(client: BackendClient(process: BackendProcess(
+                executableURL: python, argumentsPrefix: ["-u"], forceKillDelay: 0.10
+            )))
+            let ackModel = Hades2TrainerModel(
+                session: ackSession,
+                logSink: TrainerLogSink(url: temporary.appendingPathComponent("ack-\(outcome).log")),
+                backendScriptURL: ackWorker,
+                runLogDirectoryURL: temporary.appendingPathComponent("ack-\(outcome)-game-log")
+            )
+            ackModel.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
+            wait { ackModel.backendAvailable && !ackModel.busy }
+            ackModel.openSellTraits()
+            wait(message: "known receipt hid the terminal command-connection recovery notice") {
+                !ackModel.busy && ackModel.feedbackNotice?.text.key == "hades2.error.commandResultConnectionLost"
+            }
+            check(ackModel.noticeText.key == "hades2.receipt.\(outcome)",
+                  "ACK failure relabeled or erased a known action outcome")
+            check(ackModel.feedbackNotice?.tone == .warning && !ackModel.connected
+                    && ackModel.status == "restart_required" && !ackModel.canOpenSellTraits,
+                  "ACK failure kept mutation controls or omitted terminal connection state")
+            check(ackModel.currentIssues.contains { $0.id == "result" && $0.text == ackModel.noticeText },
+                  "recovery details omitted the known operation receipt")
+            check(ackModel.currentIssues.contains { $0.id == "recovery" },
+                  "recovery details omitted the game restart requirement")
+            check(ackModel.currentIssues.contains { $0.text.key == "hades2.error.commandResultConnectionLost" },
+                  "recovery details replaced acceptance failure with action failure")
+            let feedback = ackModel.feedbackNotice!
+            let rendered = localization.string(feedback.text)
+            check(rendered.contains("result was received") && rendered.contains("Restart the game and the trainer")
+                    && rendered.contains("do not repeat"),
+                  "ACK recovery guidance implied a retry or an unknown action: \(rendered)")
+            ackModel.showFeedbackDetails(for: feedback.id)
+            check(ackModel.feedbackDetailsPresented, "ACK recovery details were not reachable")
+            ackModel.dismissFeedback(feedback.id)
+            check(ackModel.currentIssues.contains { $0.id == "result" }
+                    && ackModel.status == "restart_required",
+                  "dismissing ACK feedback erased the result or recovery evidence")
+            ackSession.stop(suppressTerminationError: true)
+        }
         session.stop(suppressTerminationError: true)
         observation.cancel()
         print("viewport_feedback_ok")

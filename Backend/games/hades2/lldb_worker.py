@@ -69,6 +69,9 @@ class Hades2LLDBWorker:
             "lastAttachProfile": dict(
                 getattr(self.transport, "last_attach_profile", {}) or {}
             ),
+            "lastMailboxProfile": dict(
+                getattr(self.transport, "last_mailbox_profile", {}) or {}
+            ),
         }
 
     @staticmethod
@@ -142,6 +145,9 @@ class Hades2LLDBWorker:
                 source,
                 expression_timeout_seconds=timeout,
             )
+        if method == "transport.acknowledge_result":
+            self.transport.acknowledge_result()
+            return True
         if method == "time_warp.configure":
             return self._configure_time_warp(params)
         if method == "time_warp.set_speed":

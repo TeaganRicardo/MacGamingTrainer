@@ -44,6 +44,8 @@ class FakeTransport:
         self.last_attach_profile = {}
         self.outcomes = list(outcomes or [])
         self.calls = []
+        self.pending_receipt = False
+        self.acknowledged = []
 
     def alive(self):
         return self.live
@@ -59,6 +61,8 @@ class FakeTransport:
         self.live = False
 
     def execute(self, source, *, expression_timeout_seconds=None):
+        if not self.tainted:
+            assert not self.pending_receipt, "A new command crossed before the resident accepted its previous receipt"
         self.calls.append({
             "source": source,
             "expression_timeout_seconds": expression_timeout_seconds,
@@ -68,9 +72,15 @@ class FakeTransport:
         outcome = self.outcomes.pop(0) if self.outcomes else payload()
         if isinstance(outcome, BaseException):
             raise outcome
+        self.pending_receipt = True
         if isinstance(outcome, str):
             return outcome
         return json.dumps(outcome)
+
+    def acknowledge_result(self):
+        assert self.pending_receipt and not self.tainted
+        self.pending_receipt = False
+        self.acknowledged.append(self.calls[-1]["source"])
 
 
 old_localize = session_module.localize_catalog
@@ -88,6 +98,7 @@ try:
     assert first.payload["status"] == "ready"
     assert second.payload["status"] == "ready"
     assert len(status_transport.calls) == 2
+    assert len(status_transport.acknowledged) == 2
     assert status_transport.calls[0]["source"].startswith("BOOTSTRAP\n")
     assert not status_transport.calls[1]["source"].startswith("BOOTSTRAP\n")
 
@@ -150,6 +161,7 @@ try:
     else:
         raise AssertionError("malformed resident payload did not become outcome_unknown")
     assert decode_transport.tainted is True
+    assert not decode_transport.acknowledged and decode_transport.pending_receipt
 
     null_transport = FakeTransport(["null"])
     null_session = Hades2ResidentSession(null_transport, bootstrap="")
@@ -174,6 +186,7 @@ try:
     async_reply = async_session.status()
     assert async_reply.outcome_unknown is True
     assert async_transport.tainted is True
+    assert not async_transport.acknowledged and async_transport.pending_receipt
     try:
         async_session.status()
     except AdapterError as error:
@@ -201,6 +214,100 @@ try:
     known_reply = known_session.status()
     assert known_reply.outcome_unknown is False
     assert known_transport.tainted is False
+    assert len(known_transport.acknowledged) == 1
+
+    # A game-thread VM lease mismatch is a known pre-execution rejection.
+    # Status may bootstrap a fresh VM; a submitted mutation is never replayed.
+    native_missing = AdapterError("resident_generation_missing", "fixture VM reset")
+    lease_transport = FakeTransport([payload(), native_missing, payload()])
+    lease_session = Hades2ResidentSession(lease_transport, bootstrap="BOOTSTRAP")
+    lease_session.status()
+    assert lease_session.status().generation_reset is True
+    assert len(lease_transport.calls) == 3 and len(lease_transport.acknowledged) == 2
+    lease_transport.outcomes = [native_missing]
+    before = len(lease_transport.calls)
+    try:
+        lease_session.mutate("spawn_reward", {"requestId": "never-replay"})
+    except ResidentGenerationInvalidated:
+        pass
+    else:
+        raise AssertionError("A mutation crossed a replacement VM lease")
+    assert len(lease_transport.calls) == before + 1
+
+    # Native menu-close handoff is an ordinary accepted control receipt.
+    # It must release its slot before the next observation/actual mutation.
+    handoff_transport = FakeTransport([
+        {"__trainerTraitTrayHandoff": "closing"}, payload(),
+    ])
+    handoff_session = Hades2ResidentSession(handoff_transport, bootstrap="")
+    handoff_session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 10})
+    assert len(handoff_transport.calls) == len(handoff_transport.acknowledged) == 2
+
+    class LostAcknowledgementTransport(FakeTransport):
+        def acknowledge_result(self):
+            assert self.pending_receipt
+            raise AdapterError("restart_required", "hades2.error.debuggerExited",
+                               diagnostic="ACK reply lost")
+
+    # A decoded receipt remains authoritative when only its release fails. The
+    # session returns both pieces of evidence and closes every later boundary,
+    # even for a transport double that does not enforce sticky terminal state.
+    for action_outcome in ("completed", "accepted", "failed"):
+        action = {"requestId": "known-ack-loss", "command": "open_special_choice",
+                  "outcome": action_outcome}
+        accepted_payload = payload(lastAction=action, requestId="known-ack-loss",
+                                   actionOutcome=action_outcome, applied=action_outcome == "completed")
+        ack_transport = LostAcknowledgementTransport([accepted_payload])
+        ack_session = Hades2ResidentSession(ack_transport, bootstrap="")
+        ack_reply = ack_session.mutate("open_special_choice", {"source": "Artemis"})
+        assert ack_reply.payload == accepted_payload
+        assert ack_reply.outcome_unknown is False
+        assert ack_reply.connection_error.code == "restart_required"
+        assert ack_reply.connection_error.presentation == "hades2.error.commandResultConnectionLost"
+        assert ack_reply.connection_error.metrics == ack_reply.metrics
+        assert not ack_session.allows_process_time_warp() and not ack_session.alive()
+        assert ack_transport.pending_receipt and not ack_transport.acknowledged
+        ack_session.invalidate_generation()  # a log notification cannot restore trust
+        for operation in (ack_session.status, lambda: ack_session.reconcile([]),
+                          lambda: ack_session.mutate("spawn_reward", {"reward": "Money"})):
+            try:
+                operation()
+            except AdapterError as error:
+                assert error.code == "restart_required"
+            else:
+                raise AssertionError("ACK loss admitted another resident command")
+        assert len(ack_transport.calls) == 1
+
+    # The accepted menu-close control action is not the requested mutation.
+    # A lost ACK must end the handoff before another dispatch and say the
+    # original change has not executed, without making the control result unknown.
+    handoff_loss = LostAcknowledgementTransport([
+        {"__trainerTraitTrayHandoff": "closing"}, payload(applied=True),
+    ])
+    handoff_loss_session = Hades2ResidentSession(handoff_loss, bootstrap="")
+    try:
+        handoff_loss_session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 10})
+    except AdapterError as error:
+        assert error.code == "restart_required"
+        assert error.presentation == "hades2.error.commandNotExecutedConnectionLost"
+    else:
+        raise AssertionError("menu-close ACK loss continued into the original mutation")
+    assert len(handoff_loss.calls) == 1 and handoff_loss.pending_receipt
+    assert not handoff_loss_session.allows_process_time_warp()
+
+    # Status recovery carries both its generation reset and the accepted
+    # replacement-generation receipt when ACK is the step that fails.
+    recovering_transport = FakeTransport([payload()])
+    recovering_session = Hades2ResidentSession(recovering_transport, bootstrap="BOOTSTRAP")
+    recovering_session.status()
+    recovering_transport.outcomes = [native_missing, payload(money=99)]
+    recovering_transport.acknowledge_result = lambda: (_ for _ in ()).throw(
+        AdapterError("restart_required", "ACK reply lost")
+    )
+    recovered = recovering_session.status()
+    assert recovered.generation_reset is True and recovered.payload["money"] == 99
+    assert recovered.connection_error.code == "restart_required"
+    assert len(recovering_transport.calls) == 3
 
     cleanup_transport = FakeTransport([
         AdapterError("lua_error", "MGT_RESIDENT_RESTART_REQUIRED: cleanup failed"),

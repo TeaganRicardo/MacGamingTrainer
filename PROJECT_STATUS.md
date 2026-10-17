@@ -12,6 +12,7 @@ Updated: 2026-10-17
 - Invincibility's native query library is tied to the exact supported arm64 UUID and verified function prefixes. It observes Unit identity/block membership; unknown builds cannot reuse its offsets. It remains loaded for the game process lifetime because Lua may retain callbacks after detach. Hostile-effect, room remount and reconnect gameplay checks remain pending. Build/image-selection evidence is in #456/#474.
 - `docs/reference/hades2/1.139672-24556151/` is a frozen research snapshot. Its packaged `ui_terminology.json` remains an intentional executable resource, not current task sequencing. Catalog legality is generated from curated policy and declared reference sources.
 - Backend execution uses bundled CPython from `Tools/python_runtime.json`; Hades owns the separate Xcode Python/LLDB bridge. Build toolchain/provenance policy is in `GAME_MODULES.md` and the existing workflows, not a copied status table.
+- Hades resident commands use a shared-memory mailbox serviced by the supported game's main-thread `App::Update` entry. LLDB installs the process-lifetime helper and still owns attachment and Time Warp; ordinary resident status, mutations and preference batches use the mailbox. `MGT_HADES2_TRANSPORT=lldb` selects the explicit comparison path. An unclaimed deadline can be cancelled safely; a claimed request without trustworthy completion permanently closes its lease and requires a game restart. If the command result arrived but its acceptance connection failed, keep the reported action result and restart both the game and Trainer before reconnecting; do not repeat a completed one-shot action. Implementation and exact-source RDC evidence are owned by [#499](https://github.com/TeaganRicardo/MacGamingTrainer/issues/499) / [PR #501](https://github.com/TeaganRicardo/MacGamingTrainer/pull/501).
 - #433 retains an unlocated historical LLDB test stall. #491 corrected a separately reproduced aggregate test-watchdog ownership defect; it did not establish that the historical stall is fixed. A new relevant reproduction can change its priority; the historical observation alone is not a blanket merge blocker.
 
 ## Accepted and pending real-game behavior
@@ -46,7 +47,9 @@ Retain these unperformed scope families in the consolidated user-run pass; detai
 
 The user authorizes independently reviewed, automated-green merges before consolidated final manual acceptance of the selected work. Coordinate actual overlapping owners and review the final head; missing manual-only evidence does not itself reopen coding tasks or block unrelated work.
 
-Game launches, gameplay/load tests and visual acceptance remain user-executed, never agent/RDC-executed. Build, fixtures, package provenance and source review must not be described as that acceptance.
+For [#499](https://github.com/TeaganRicardo/MacGamingTrainer/issues/499), the user explicitly authorized autonomous RDC real-game validation, independent review and merge on 2026-10-17, and replaced the earlier partial planning scope. This includes the launches, isolated gameplay/load cases and visual checks needed to deliver the complete command mailbox. Preserve the user's saves and record the exact source and observed results.
+
+Outside that task authorization, game launches, gameplay/load tests and visual acceptance remain user-executed. Build, fixtures, package provenance and source review must not be described as real-game acceptance.
 
 ## Conditional risks
 
