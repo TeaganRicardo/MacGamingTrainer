@@ -41,7 +41,11 @@ class Target:
     def __init__(self, module):
         self.module = module
         self.game_uuid, self.game_base = 'supported', 0x100000000
-    def FindModule(self, spec): return self.module
+        self.canonical_path = None
+    def FindModule(self, spec):
+        if self.canonical_path is not None and str(spec) != str(self.canonical_path):
+            return SimpleNamespace(IsValid=lambda: False)
+        return self.module
     def GetModuleAtIndex(self, index):
         assert index == 0
         return SimpleNamespace(IsValid=lambda: True, GetUUIDString=lambda: self.game_uuid,
@@ -77,6 +81,13 @@ with tempfile.TemporaryDirectory(prefix='mgt-query-loading-') as temporary:
         assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base)
         assert process.loaded == 0, 'Reconnect reloaded an already matched image'
         assert process.options.StopOthers is True and process.options.TryAllThreads is False
+        alias = module_root / 'alias'
+        alias.symlink_to(module_root, target_is_directory=True)
+        target.canonical_path = image.resolve()
+        with patch.object(query, '__file__', str(alias / 'native_effect_query.py')):
+            assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base)
+        assert process.loaded == 0, 'Path alias reloaded the same process-lifetime image'
+        target.canonical_path = None
         target.module.valid = False
         assert query.prepare_native_query(transport, lldb) == query.NativeQueryLibrary(200, target.game_base) and process.loaded == 1
         for process.abi in (1, 2):

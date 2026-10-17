@@ -97,6 +97,11 @@ class OfflineLuaTransport:
             raise RuntimeError('offline resident exited: ' + Path(self.events.name).read_text()[-4000:])
         self.last_duration = time.perf_counter() - started
         return result.strip()
+    def acknowledge_result(self):
+        # The synchronous pipe has already consumed the complete reply; this
+        # fixture has no shared mailbox slot to release. Keep ACK side-effect
+        # free, including for older profiling baselines that never issue it.
+        pass
 
 
 def worker():

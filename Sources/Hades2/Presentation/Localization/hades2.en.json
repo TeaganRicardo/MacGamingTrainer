@@ -26,6 +26,8 @@
     "hades2.error.commandLaunchFailed": "Could not run {0}: {1}",
     "hades2.error.desiredSchemaInvalid": "The desired-state schemaVersion is invalid.",
     "hades2.error.debuggerCallFailed": "The LLDB debugger backend call failed.",
+    "hades2.error.commandNotExecutedConnectionLost": "This change has not been executed. The command connection was lost; restart the game and the trainer, then reconnect.",
+    "hades2.error.commandResultConnectionLost": "The operation result was received, but the command connection was lost. Restart the game and the trainer, then reconnect; do not repeat completed actions.",
     "hades2.error.debuggerExited": "The LLDB debugger backend exited; reconnect to the game.",
     "hades2.error.debuggerInternal": "The LLDB debugger backend encountered an internal error.",
     "hades2.error.debuggerProtocol": "The LLDB debugger backend protocol is incompatible.",
@@ -649,7 +651,9 @@
     "hades2.saveEditor.source.backup": "Managed Backup Version",
     "hades2.saveEditor.target.label": "Write Target",
     "hades2.saveEditor.target.choose": "Choose a physical file",
-    "hades2.saveEditor.operation.target": "Selecting save write target"
+    "hades2.saveEditor.operation.target": "Selecting save write target",
+    "hades2.error.commandConnectionUnavailable": "The game connection is not ready. Reconnect and try again.",
+    "hades2.error.commandNotExecuted": "The game has not executed this action. Try again when the game is ready."
   },
   "language": "en"
 }

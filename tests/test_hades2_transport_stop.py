@@ -1,10 +1,10 @@
-"""Portable stop-boundary failures; real debugger lifecycles run on macOS."""
+"""Portable stop and boundary behavior; real debugger lifecycles run on macOS."""
 import json
 import sys
 import time
 import types
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT / "Backend"))
 fake_lldb = types.SimpleNamespace(
     eStateInvalid=0, eStateStopped=5, eStateRunning=6,
     eStateExited=10, eStateDetached=9,
+    eStopReasonBreakpoint=3,
+    SBError=lambda: types.SimpleNamespace(Fail=lambda: False, Success=lambda: True),
 )
 with patch.dict(sys.modules, {"lldb": fake_lldb}), patch(
     "subprocess.check_output", return_value="",
@@ -146,6 +148,52 @@ for phase, invoke in (
         assert observe.call_count == 2 and transport.process.interrupts == 1
         send_signal.assert_not_called()
     assert not transport.tainted
+
+# A default request stops at World::Update. Mailbox installation can select the
+# App::Update rendezvous instead. Both use one entry breakpoint, rather than
+# probing every Lua call, and lease its identity until expression cleanup.
+focus_symbol = '_ZN3sgg13ConfigOptions20RequireFocusToUpdateE'
+world_symbol = '_ZN3sgg5World6UpdateEf'
+lua_state_symbol = '_ZN3sgg13ScriptManager12LuaInterfaceE'
+symbols = json.loads((ROOT / 'Backend/games/hades2/symbols.json').read_text())['symbols']
+assert world_symbol in symbols
+addresses = {focus_symbol: 0x1000, world_symbol: 0x2000, lua_state_symbol: 0x3000}
+app_rendezvous = 0x4010
+for entry_address in (None, app_rendezvous):
+    transport = make_transport(fake_lldb.eStateStopped)
+    transport.tainted = False
+    transport.alive = lambda: True
+    transport.focus_original = None
+    transport.address = Mock(side_effect=addresses.__getitem__)
+    transport.resume = Mock()
+    transport.target = Mock()
+    breakpoint = transport.target.BreakpointCreateByAddress.return_value
+    breakpoint.GetID.return_value = 17
+    thread = Mock()
+    thread.GetName.return_value = 'MainThread'
+    thread.GetStopReason.return_value = fake_lldb.eStopReasonBreakpoint
+    thread.GetStopReasonDataAtIndex.return_value = breakpoint.GetID()
+    transport.process = MagicMock()
+    transport.process.GetState.return_value = fake_lldb.eStateStopped
+    transport.process.__iter__.return_value = iter((thread,))
+    transport.process.ReadMemory.return_value = b'\x01'
+    transport.process.WriteMemory.return_value = 1
+    transport.process.ReadPointerFromMemory.return_value = 0x5000
+
+    result = (transport.boundary() if entry_address is None
+              else transport.boundary(entry_address=entry_address))
+
+    expected_address = addresses[world_symbol] if entry_address is None else entry_address
+    transport.target.BreakpointCreateByAddress.assert_called_once_with(expected_address)
+    resolved_symbols = [call.args[0] for call in transport.address.call_args_list]
+    assert resolved_symbols == ([focus_symbol, world_symbol, lua_state_symbol]
+                                if entry_address is None else [focus_symbol, lua_state_symbol])
+    assert result == (thread, 0x5000, breakpoint)
+    breakpoint.SetEnabled.assert_called_once_with(False)
+    transport.target.BreakpointDelete.assert_not_called()
+    transport.resume.assert_called_once()
+    assert transport.resume.call_args.kwargs == {'breakpoint_expected': True}
+    assert transport.focus_original == b'\x01'
 
 # Cleanup's timeout still replaces the primary error and taints trust. It now
 # retains the primary code as observation rather than changing that priority.

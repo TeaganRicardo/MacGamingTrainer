@@ -159,6 +159,33 @@ class _LLDBWorkerClient:
     def call(self, method, params=None, *, allow_start=True):
         if self._terminal_error is not None:
             raise self._terminal_error
+        accepting_result = method == "transport.acknowledge_result"
+        try:
+            result, state = self._call(
+                method, params, allow_start=allow_start and not accepting_result,
+            )
+            if accepting_result and result is not True:
+                raise AdapterError(
+                    "debugger_protocol", "hades2.error.debuggerProtocol",
+                    diagnostic=f"Malformed mailbox acceptance reply: {result!r}",
+                )
+            return result, state
+        except AdapterError as error:
+            if not accepting_result:
+                raise
+            # The resident result has already been received. Losing only its
+            # release cannot erase that known outcome, but an unacknowledged
+            # game-side completion cannot be reused by a replacement worker.
+            raised = AdapterError(
+                "restart_required", "hades2.error.commandResultConnectionLost",
+                diagnostic=error.diagnostic or str(error),
+            )
+            self._terminal_error = raised
+            self._initial_attach_reply_lost = False
+            self._sidecar.close()
+            raise raised from error
+
+    def _call(self, method, params, *, allow_start):
         if not allow_start and not self.available:
             raise AdapterError("disconnected", "请先连接游戏。")
         self._start()
@@ -243,6 +270,7 @@ class Hades2LuaTransport:
         self.last_duration = 0.0
         self.last_expression_duration = 0.0
         self.last_attach_profile = {}
+        self.last_mailbox_profile = {}
         self._tainted = False
         self._worker = _LLDBWorkerClient(on_state=self._adopt_state)
 
@@ -260,6 +288,8 @@ class Hades2LuaTransport:
         )
         profile = state.get("lastAttachProfile")
         self.last_attach_profile = dict(profile) if isinstance(profile, dict) else {}
+        mailbox = state.get("lastMailboxProfile")
+        self.last_mailbox_profile = dict(mailbox) if isinstance(mailbox, dict) else {}
 
     def _call(self, method, params=None, *, allow_start=True):
         result, _ = self._worker.call(method, params, allow_start=allow_start)
@@ -304,6 +334,11 @@ class Hades2LuaTransport:
             },
             allow_start=False,
         )
+
+    def acknowledge_result(self):
+        # The resident owner has accepted the complete reply. This RPC cannot
+        # execute game work and is deliberately absent from _RISKY_METHODS.
+        self._call("transport.acknowledge_result", allow_start=False)
 
     def create_time_warp_controller(self, helper_path, image_names):
         return RemoteProcessTimeWarpController(

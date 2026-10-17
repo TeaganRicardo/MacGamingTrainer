@@ -26,6 +26,8 @@
     "hades2.error.commandLaunchFailed": "无法运行 {0}：{1}",
     "hades2.error.desiredSchemaInvalid": "desired-state schemaVersion 无效。",
     "hades2.error.debuggerCallFailed": "LLDB 调试后端调用失败。",
+    "hades2.error.commandNotExecutedConnectionLost": "本次修改尚未执行；命令连接已中断。请重启游戏和修改器，然后重新连接。",
+    "hades2.error.commandResultConnectionLost": "本次操作结果已收到；命令连接已中断。请重启游戏和修改器，然后重新连接，不要重复已完成的操作。",
     "hades2.error.debuggerExited": "LLDB 调试后端已退出；请重新连接游戏。",
     "hades2.error.debuggerInternal": "LLDB 调试后端发生内部错误。",
     "hades2.error.debuggerProtocol": "LLDB 调试后端协议不兼容。",
@@ -649,7 +651,9 @@
     "hades2.saveEditor.source.backup": "托管备份版本",
     "hades2.saveEditor.target.label": "写入目标",
     "hades2.saveEditor.target.choose": "选择物理写入文件",
-    "hades2.saveEditor.operation.target": "选择存档写入目标"
+    "hades2.saveEditor.operation.target": "选择存档写入目标",
+    "hades2.error.commandConnectionUnavailable": "游戏连接尚未就绪，请重新连接后重试。",
+    "hades2.error.commandNotExecuted": "游戏尚未执行此次操作，请在游戏就绪后重试。"
   },
   "language": "zh-CN"
 }

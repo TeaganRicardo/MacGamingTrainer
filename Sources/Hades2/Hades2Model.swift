@@ -87,6 +87,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published private(set) var feedbackDetailsPresented = false
     @Published private(set) var feedbackDetailsNoticeID: UUID?
     private var receiptPresentedDuringReply = false
+    @Published private(set) var receivedActionResultText: TrainerTextToken?
     @Published private var runtimeIssueToken: TrainerTextToken?
     @Published private(set) var runtimeIssuePresentations: [Hades2RuntimeIssuePresentation] = []
     private var runtimeFeatureErrors: [String: String] = [:]
@@ -599,6 +600,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         noticeToken = nil
         errorToken = nil
         presentedActionReceipt = nil
+        receivedActionResultText = nil
         // Lock flags and locked values mirror durable desired targets from the
         // backend preference store; retain those projections across a worker
         // restart. Unlocked values are observations and are cleared below.
@@ -850,7 +852,18 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let hasReceiptFeedback = receiptPresentedDuringReply
         if !status.busy { receiptPresentedDuringReply = false }
         backendStatus = status
-        if !hasReceiptFeedback {
+        let resultConnectionLost = status.error == "hades2.error.commandResultConnectionLost"
+        if resultConnectionLost {
+            if hasReceiptFeedback {
+                // The action outcome and its failed receipt release are two
+                // known facts from one reply. Retain the outcome for details
+                // while showing the immediate game-restart guidance.
+                receivedActionResultText = noticeText.key.isEmpty ? errorText : noticeText
+            }
+        } else {
+            receivedActionResultText = nil
+        }
+        if !hasReceiptFeedback || resultConnectionLost {
             if !status.error.isEmpty,
                status.error != previous.error || status.errorArguments != previous.errorArguments {
                 errorToken = nil

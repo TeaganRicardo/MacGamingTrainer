@@ -140,6 +140,7 @@ def attach_helper(executable, delay, *, tick_interval_us=0, diagnostics=False):
         time.sleep(0.05)
         with phase('debugger.create', enabled=diagnostics):
             transport = Hades2LuaTransport()
+            transport.mailbox_mode = "lldb"  # This fixture measures the debugger control plane.
             debugger = transport.debugger
         listener = transport.listener
         with phase('target.create', enabled=diagnostics):

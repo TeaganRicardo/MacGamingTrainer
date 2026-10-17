@@ -18,9 +18,9 @@ transport_class = next(
 )
 methods = [
     node for node in transport_class.body
-    if isinstance(node, ast.FunctionDef) and node.name in {'boundary', 'execute'}
+    if isinstance(node, ast.FunctionDef) and node.name in {'boundary', 'execute', '_execute_lldb'}
 ]
-assert {node.name for node in methods} == {'boundary', 'execute'}
+assert {node.name for node in methods} == {'boundary', 'execute', '_execute_lldb'}
 
 isolated = ast.Module(
     body=[ast.ClassDef(
