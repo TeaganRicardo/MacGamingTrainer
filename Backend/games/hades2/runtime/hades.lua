@@ -119,7 +119,7 @@ if __MacGamingTrainerV1 == nil then
   -- Cross-reply retention is driven by small native input fingerprints, not by
   -- materializing a full collection and comparing/copying it afterwards.
   -- Python remains the single owner of complete localized retained collections.
-  local observation = (function()
+  M.observationRetention = (function()
     local missing = {}
     -- Weak native-reference identities let fingerprints notice owner/function
     -- replacement without pinning dead Run/Hero/Trait objects in the resident.
@@ -242,10 +242,10 @@ if __MacGamingTrainerV1 == nil then
     return { append = append, retain = retainDomain, run = run, runBatch = runBatch }
   end)()
   function M.observe(command, params, nonce, acknowledgedRevision)
-    return observation.run(command, params, nonce, acknowledgedRevision)
+    return M.observationRetention.run(command, params, nonce, acknowledgedRevision)
   end
   function M.observeBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
-    return observation.runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
+    return M.observationRetention.runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
@@ -1742,30 +1742,30 @@ if __MacGamingTrainerV1 == nil then
     end
     return order, metadata, allowed
   end
-  function observation.resourceFingerprint()
+  function M.observationRetention.resourceFingerprint()
     local result = {}
-    observation.append(result, GameState)
-    observation.append(result, type(GameState) == "table" and GameState.Resources or nil)
-    observation.append(result, ResourceData)
-    observation.append(result, M.resourceLocks)
+    M.observationRetention.append(result, GameState)
+    M.observationRetention.append(result, type(GameState) == "table" and GameState.Resources or nil)
+    M.observationRetention.append(result, ResourceData)
+    M.observationRetention.append(result, M.resourceLocks)
     local order, metadata, allowed = resourceCatalog()
     -- resourceCatalog may publish its stable native layout on first use. Record
     -- the post-discovery owner so the next warm request does not invalidate
     -- solely because this observation itself initialized the cache.
-    observation.append(result, M.catalogCache.resources)
+    M.observationRetention.append(result, M.catalogCache.resources)
     for index, id in ipairs(order) do
       if allowed[id] then
         local definition = type(ResourceData) == "table" and ResourceData[id] or nil
         local presentation = metadata[id] or {}
-        observation.append(result, id)
-        observation.append(result, definition)
-        observation.append(result, type(definition) == "table" and definition.DisplayName or nil)
-        observation.append(result, type(GameState) == "table"
+        M.observationRetention.append(result, id)
+        M.observationRetention.append(result, definition)
+        M.observationRetention.append(result, type(definition) == "table" and definition.DisplayName or nil)
+        M.observationRetention.append(result, type(GameState) == "table"
           and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
-        observation.append(result, M.resourceLocks[id])
-        observation.append(result, index)
-        observation.append(result, presentation.sectionId)
-        observation.append(result, presentation.sectionKind)
+        M.observationRetention.append(result, M.resourceLocks[id])
+        M.observationRetention.append(result, index)
+        M.observationRetention.append(result, presentation.sectionId)
+        M.observationRetention.append(result, presentation.sectionKind)
       end
     end
     return result
@@ -4161,7 +4161,7 @@ if __MacGamingTrainerV1 == nil then
     local function observationFingerprint()
       local result = {}
       local owner = M.runtimeOwners.traitInventory()
-      local function append(value) observation.append(result, value) end
+      local function append(value) M.observationRetention.append(result, value) end
       local function appendSequence(value)
         append(value)
         if type(value) == "table" then
@@ -7198,26 +7198,26 @@ if __MacGamingTrainerV1 == nil then
 
   local occurrenceTargets, occurrenceTargetOrder
 
-  observation.elementOrder = { "Fire", "Water", "Earth", "Air", "Aether" }
-  function observation.elementFingerprint(hero)
+  M.observationRetention.elementOrder = { "Fire", "Water", "Earth", "Air", "Aether" }
+  function M.observationRetention.elementFingerprint(hero)
     local result = {}
-    observation.append(result, hero)
-    observation.append(result, type(hero) == "table" and hero.Elements or nil)
-    observation.append(result, TraitElementData)
-    observation.append(result, M.elementLocks)
-    for _, element in ipairs(observation.elementOrder) do
+    M.observationRetention.append(result, hero)
+    M.observationRetention.append(result, type(hero) == "table" and hero.Elements or nil)
+    M.observationRetention.append(result, TraitElementData)
+    M.observationRetention.append(result, M.elementLocks)
+    for _, element in ipairs(M.observationRetention.elementOrder) do
       local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or nil
-      observation.append(result, element)
-      observation.append(result, values and values[element] or nil)
-      observation.append(result, type(TraitElementData) == "table" and TraitElementData[element] or nil)
-      observation.append(result, M.elementLocks[element])
+      M.observationRetention.append(result, element)
+      M.observationRetention.append(result, values and values[element] or nil)
+      M.observationRetention.append(result, type(TraitElementData) == "table" and TraitElementData[element] or nil)
+      M.observationRetention.append(result, M.elementLocks[element])
     end
     return result
   end
-  function observation.buildElements(hero)
+  function M.observationRetention.buildElements(hero)
     local result = setmetatable({}, arrayMeta)
     local values = type(hero) == "table" and type(hero.Elements) == "table" and hero.Elements or {}
-    for _, element in ipairs(observation.elementOrder) do
+    for _, element in ipairs(M.observationRetention.elementOrder) do
       if values[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
         result[#result + 1] = {
           id = element, name = elementNames[element] or element,
@@ -7231,8 +7231,8 @@ if __MacGamingTrainerV1 == nil then
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
-    local resourceFingerprint = observation.resourceFingerprint()
-    local retainResources = observation.retain("resources", resourceFingerprint)
+    local resourceFingerprint = M.observationRetention.resourceFingerprint()
+    local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
     local list = retainResources and nil or resources()
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
@@ -7302,7 +7302,7 @@ if __MacGamingTrainerV1 == nil then
     -- and never desired state. Fingerprints inspect only native inputs; the
     -- expensive capability/presentation projection runs only when that domain
     -- actually changed or the current boundary requires a full snapshot.
-    local retainTraits = observation.retain(
+    local retainTraits = M.observationRetention.retain(
       "currentRunTraits", traitManagement.observationFingerprint()
     )
     local traitList, traitListReason
@@ -7312,10 +7312,10 @@ if __MacGamingTrainerV1 == nil then
     else
       traitList, traitListReason = traitManagement.currentRunTraits()
     end
-    local retainElements = observation.retain(
-      "elements", observation.elementFingerprint(hero)
+    local retainElements = M.observationRetention.retain(
+      "elements", M.observationRetention.elementFingerprint(hero)
     )
-    local elementList = retainElements and nil or observation.buildElements(hero)
+    local elementList = retainElements and nil or M.observationRetention.buildElements(hero)
     local runCount = 0
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}
