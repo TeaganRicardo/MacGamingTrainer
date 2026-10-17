@@ -13,8 +13,10 @@
 #define MGT_EXPORT __attribute__((visibility("default")))
 #define MGT_MAILBOX_MAGIC 0x4d47544du
 #define MGT_MAILBOX_ABI 1u
+/* LLDB retains ownership of large resident bootstrap source installation. */
 #define MGT_INPUT_LIMIT 65536u
-#define MGT_OUTPUT_LIMIT 1048576u
+/* Match the existing Hades Lua result budget, without silently expanding it. */
+#define MGT_OUTPUT_LIMIT 262144u
 
 enum { MGT_IDLE=0, MGT_RESERVING=1, MGT_POSTED=2, MGT_EXECUTING=3, MGT_COMPLETE=4 };
 enum { MGT_SUCCESS=0, MGT_KNOWN_FAILED=1, MGT_OUTCOME_UNKNOWN=2 };
