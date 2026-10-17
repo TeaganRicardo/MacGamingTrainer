@@ -94,6 +94,7 @@ class Slot:
 with tempfile.TemporaryDirectory(prefix="mgt-mailbox-slot-") as temporary:
     lib = load_library(temporary)
     assert lib.MGTMailboxABI() == 1
+    assert 65536 < lib.MGTMailboxSize() < 400000, "Unbounded shared slot allocation"
     slot = Slot(lib)
     assert slot.phase() == IDLE
     assert lib.MGTMailboxInit(slot.address, lib.MGTMailboxSize(), HI, LO) < 0
