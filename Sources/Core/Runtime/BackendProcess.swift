@@ -126,9 +126,7 @@ final class BackendProcess {
         stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
             self?.readQueue.async { [weak self] in
                 guard let self, self.stderrHandlerEnabled else { return }
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                self.enqueueStderrLocked(data)
+                self.readStderrIfReadableLocked(handle)
             }
         }
         task.terminationHandler = { [weak self] task in
@@ -205,9 +203,7 @@ final class BackendProcess {
         handle.readabilityHandler = { [weak self] handle in
             self?.readQueue.async { [weak self] in
                 guard let self, self.stderrHandlerEnabled else { return }
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                self.enqueueStderrLocked(data)
+                self.readStderrIfReadableLocked(handle)
             }
         }
     }
@@ -286,20 +282,29 @@ final class BackendProcess {
         return message.isEmpty ? nil : message
     }
 
+    /// Every stderr read is serialized on readQueue. Multiple readability
+    /// callbacks may have been queued for the same bytes; after the first one
+    /// drains them, another availableData call would block on an open but quiet
+    /// worker. Check readiness at execution time, not callback-enqueue time.
+    @discardableResult
+    private func readStderrIfReadableLocked(_ handle: FileHandle) -> Bool {
+        #if canImport(Darwin) || canImport(Glibc)
+        var descriptor = pollfd(
+            fd: handle.fileDescriptor,
+            events: Int16(POLLIN | POLLHUP),
+            revents: 0
+        )
+        guard poll(&descriptor, 1, 0) > 0,
+              descriptor.revents & Int16(POLLIN | POLLHUP) != 0 else { return false }
+        #endif
+        let data = handle.availableData
+        guard !data.isEmpty else { return false }
+        enqueueStderrLocked(data)
+        return true
+    }
+
     private func drainStderrPipeLocked(_ handle: FileHandle) {
-        while true {
-            #if canImport(Darwin) || canImport(Glibc)
-            var descriptor = pollfd(
-                fd: handle.fileDescriptor,
-                events: Int16(POLLIN | POLLHUP),
-                revents: 0
-            )
-            guard poll(&descriptor, 1, 0) > 0 else { break }
-            #endif
-            let data = handle.availableData
-            guard !data.isEmpty else { break }
-            enqueueStderrLocked(data)
-        }
+        while readStderrIfReadableLocked(handle) {}
     }
 
     private func consume(
