@@ -15,6 +15,14 @@ PYTHON = sys.executable
 if not SWIFTC:
     raise SystemExit("swiftc required")
 
+view_source = (ROOT / "Sources/Hades2/Views/Hades2SaveEditorView.swift").read_text(encoding="utf-8")
+if "coldApplyNotice" in view_source:
+    raise SystemExit("Save Editor still exposes the stopped-only apply notice")
+for locale in ("hades2.en.json", "hades2.zh-CN.json"):
+    localization = (ROOT / "Sources/Hades2/Presentation/Localization" / locale).read_text(encoding="utf-8")
+    if '"hades2.saveEditor.applyOutcome.title"' not in localization:
+        raise SystemExit(f"missing Save Editor apply outcome localization: {locale}")
+
 worker = r'''
 import argparse, json, pathlib, sys
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
@@ -24,6 +32,8 @@ pending_value = None
 opened_summary = None
 workspace_number = 0
 omit_first_target = False
+manual_inventory_count = 0
+apply_count = 0
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -34,16 +44,24 @@ for raw in sys.stdin:
         sources = [
             {'rootId': 'main', 'relativePath': path, 'profile': 'Profile2' if backup else 'Profile1', 'variant': variant}
             for path, variant in ([('Profile2_Temp.sav', 'temp'), ('Profile2_Archive.sav', 'variant')]
-                if backup else [('Profile1.sav', 'profile')])
+                if backup else [('Profile1.sav', 'profile'), ('Profile3.sav', 'profile')])
         ]
+        manual_selection = req['params'].get('snapshotId') == 'manual-selection'
+        if manual_selection:
+            manual_inventory_count += 1
+            if manual_inventory_count > 1:
+                sources = sources[:1] + [
+                    {'rootId': 'main', 'relativePath': 'Profile2_New.sav', 'profile': 'Profile2', 'variant': 'profile'},
+                ]
         result = {
             'sources': sources,
             'targets': [
                 {'rootId': 'main', 'relativePath': path, 'profile': profile, 'variant': 'profile'}
                 for path, profile in [('Profile1.sav', 'Profile1'), ('Profile2.sav', 'Profile2')]
-                if not (omit_first_target and path == 'Profile1.sav')
+                if not ((omit_first_target or (manual_selection and manual_inventory_count > 1))
+                        and path == 'Profile1.sav')
             ],
-            'defaultSource': {key: sources[0][key] for key in ('rootId', 'relativePath')},
+            'defaultSource': None if manual_selection else {key: sources[0][key] for key in ('rootId', 'relativePath')},
         }
     elif command == 'save_editor_open':
         workspace_number += 1
@@ -83,7 +101,8 @@ for raw in sys.stdin:
         opened_summary['relativePath'] = req['params']['target']['relativePath']
         opened_summary['pendingCount'] = int(pending_value is not None)
         result = opened_summary
-        omit_first_target = True
+        if opened_summary['source'].get('snapshotId') != 'manual-selection':
+            omit_first_target = True
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
@@ -350,9 +369,34 @@ for raw in sys.stdin:
         pending_value = None
         result = {'count': 0, 'changes': []}
     elif command == 'save_editor_apply':
+        apply_count += 1
+        if pending_value == 600:
+            print(json.dumps({
+                'type': 'result',
+                'id': req['id'],
+                'protocolVersion': 6,
+                'moduleProtocolVersion': 14,
+                'gameID': args.game,
+                'ok': False,
+                'error': {
+                    'code': 'rollback_failed',
+                    'presentation': 'host.save.error.rollbackFailed',
+                    'arguments': ['/tmp/mgt-recovery/save-600'],
+                    'recoveryPath': '/tmp/mgt-recovery/save-600',
+                },
+            }), flush=True)
+            continue
         resource_value = pending_value
         pending_value = None
-        result = {'applied': True, 'changeCount': 1, 'previousSnapshotId': 'snapshot-1'}
+        result = {
+            'applied': True,
+            'changeCount': 1,
+            'fileCount': 1,
+            'relativePath': 'Profile1.sav',
+            'hot': apply_count == 1,
+            'runtimeReloaded': False,
+            'previousSnapshotId': 'snapshot-hot' if apply_count == 1 else 'snapshot-cold',
+        }
     else:
         result = {}
     print(json.dumps({
@@ -550,6 +594,18 @@ struct Main {
             fail("Save Editor coverage map was not decoded")
         }
 
+        // Primary Save editing must be possible directly from the first result.
+        // No category expansion, entity selection or inspector activation is needed.
+        func inlineValueField() -> NSTextField? {
+            NSApp.windows.compactMap(\.contentView).flatMap(fields).first { field in
+                field.isEditable && field.isEnabled && field.stringValue == "123"
+            }
+        }
+        pumpUntil(timeout: 2.0) { inlineValueField() != nil }
+        if inlineValueField() == nil {
+            fail("The initial Save result requires an extra entity selection before editing")
+        }
+
         let sent = commands(at: commandLog)
         if sent.map({ $0["command"] as? String }) != ["save_editor_inventory", "save_editor_open", "save_editor_query"] {
             fail("unexpected command sequence: \(sent)")
@@ -647,6 +703,25 @@ struct Main {
             fail("cancel did not cross the Save Editor Host command seam")
         }
 
+        // Edit the actual initially rendered Save result, not a detached
+        // field harness. Blur alone must stage the change; no entity selection
+        // or additional per-field button is involved.
+        guard let inPlace = inlineValueField(), let sheet = inPlace.window,
+              sheet.makeFirstResponder(inPlace),
+              let editor = inPlace.currentEditor() as? NSTextView else {
+            fail("Could not directly edit the first Save result in its sheet")
+        }
+        editor.selectAll(nil)
+        editor.insertText("430", replacementRange: editor.selectedRange())
+        sheet.makeFirstResponder(nil)
+        pumpUntil { model.pendingChanges.first?.after == AnyHashable(430) && !model.busy }
+        if model.pendingChanges.first?.after != AnyHashable(430) ||
+            commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
+            fail("Direct Save result editing did not stage on blur")
+        }
+        model.cancel()
+        pumpUntil { model.pendingCount == 0 && !model.busy }
+
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
         pump(0.20)
         model.apply()
@@ -657,12 +732,53 @@ struct Main {
         if model.items.first?.value != AnyHashable(500) {
             fail("successful Apply did not reload the installed page")
         }
+        guard let hotReceipt = model.lastApplyReceipt else {
+            fail("hot Apply did not expose its backend receipt")
+        }
+        if hotReceipt.source != "main/Profile1.sav"
+            || hotReceipt.target != "main/Profile1.sav"
+            || !hotReceipt.hot
+            || hotReceipt.runtimeReloaded
+            || hotReceipt.previousSnapshotID != "snapshot-hot"
+            || hotReceipt.fileCount != 1 {
+            fail("hot Apply receipt was not decoded faithfully: \(hotReceipt)")
+        }
         let appliedCommands = commands(at: commandLog)
         if appliedCommands.suffix(2).compactMap({ $0["command"] as? String }) != [
             "save_editor_apply", "save_editor_query"
         ] {
             fail("Apply did not verify by re-querying the installed workspace: \(appliedCommands)")
         }
+
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 550)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        model.apply()
+        pump(0.35)
+        guard let coldReceipt = model.lastApplyReceipt else {
+            fail("cold Apply did not expose its backend receipt")
+        }
+        if coldReceipt.hot
+            || coldReceipt.runtimeReloaded
+            || coldReceipt.previousSnapshotID != "snapshot-cold"
+            || coldReceipt.source != "main/Profile1.sav"
+            || coldReceipt.target != "main/Profile1.sav" {
+            fail("cold Apply receipt was not decoded faithfully: \(coldReceipt)")
+        }
+        if model.items.first?.value != AnyHashable(550) {
+            fail("cold Apply did not reload the installed page")
+        }
+
+        model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 600)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
+        model.apply()
+        pump(0.20)
+        if model.pendingCount != 1
+            || model.failure?.key != "host.save.error.rollbackFailed"
+            || model.failure?.arguments != ["/tmp/mgt-recovery/save-600"] {
+            fail("Save Editor lost rollback failure/recovery context")
+        }
+        model.cancel()
+        pumpUntil { model.pendingCount == 0 && !model.busy }
 
         model.search = "ash"
         model.submitSearch()
@@ -843,8 +959,91 @@ struct Main {
             fail("All-content discovery could not inspect narrative evidence")
         }
 
+        // The visible source picker loads a new source in one selection when
+        // no changes are staged. The pinned target remains independent.
+        pumpUntil { !model.busy }
+        let oldWorkspace = model.workspaceID
+        model.selectedSourceID = "main/Profile3.sav"
+        pumpUntil(timeout: 2.0) {
+            model.workspaceID != oldWorkspace && model.sourceRelativePath == "Profile3.sav"
+        }
+        guard model.workspaceID != oldWorkspace,
+              model.sourceRelativePath == "Profile3.sav",
+              model.selectedTargetID == "main/Profile1.sav",
+              let sourceRead = commands(at: commandLog).last(where: {
+                  $0["command"] as? String == "save_editor_open"
+              }),
+              let readParams = sourceRead["params"] as? [String: Any],
+              let readSource = readParams["source"] as? [String: String],
+              readSource["relativePath"] == "Profile3.sav" else {
+            fail("A source selection did not load the pinned document in one action")
+        }
+
+        // An inventory can offer selectable files without a default profile.
+        // This must open through the mounted workbench's first source change,
+        // while the ordinary default above still opens exactly once.
+        let manualModel = Hades2SaveEditorModel(session: session, snapshotID: "manual-selection")
+        let beforeManual = commands(at: commandLog).count
+        let manualWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        manualWindow.contentView = NSHostingView(
+            rootView: SaveEditorPresentationHarness(model: manualModel)
+                .environmentObject(localization)
+        )
+        manualWindow.orderFront(nil)
+        pumpUntil {
+            !manualModel.busy && manualModel.sourceFiles.count == 2
+        }
+        if manualModel.workspaceID != nil || manualModel.selectedSourceID != ""
+            || manualModel.sourceFiles.count != 2 {
+            fail("No-default inventory implicitly opened or selected a source")
+        }
+        let initialManualCommands = Array(commands(at: commandLog).dropFirst(beforeManual))
+        if initialManualCommands.compactMap({ $0["command"] as? String }) != ["save_editor_inventory"] {
+            fail("No-default inventory issued an unexpected open: \(initialManualCommands)")
+        }
+
+        manualModel.selectedSourceID = "main/Profile2_Archive.sav"
+        pumpUntil {
+            manualModel.workspaceID != nil && !manualModel.busy && manualModel.items.count == 1
+        }
+        guard let manualWorkspace = manualModel.workspaceID,
+              manualModel.sourceRelativePath == "Profile2_Archive.sav",
+              commands(at: commandLog).dropFirst(beforeManual).filter({
+                  $0["command"] as? String == "save_editor_open"
+              }).count == 1 else {
+            fail("First visible source selection did not open the selected file exactly once")
+        }
+
+        // Inventory refresh must leave the loaded bytes and selected write
+        // destination pinned, even when neither is returned by the new list.
+        manualModel.selectTarget("main/Profile1.sav")
+        pumpUntil { !manualModel.busy && manualModel.hasWriteTarget }
+        let beforeInventoryRefresh = commands(at: commandLog).count
+        manualModel.refreshFiles()
+        pumpUntil {
+            !manualModel.busy && commands(at: commandLog).count > beforeInventoryRefresh
+        }
+        let refreshCommands = Array(commands(at: commandLog).dropFirst(beforeInventoryRefresh))
+        if refreshCommands.compactMap({ $0["command"] as? String }) != ["save_editor_inventory"]
+            || manualModel.workspaceID != manualWorkspace
+            || manualModel.sourceRelativePath != "Profile2_Archive.sav"
+            || manualModel.selectedSourceID != "main/Profile2_Archive.sav"
+            || manualModel.selectedTargetID != "main/Profile1.sav"
+            || manualModel.sourceFiles.contains(where: { $0.id == manualModel.selectedSourceID })
+            || !manualModel.sourceFiles.contains(where: { $0.id == "main/Profile2_New.sav" })
+            || manualModel.writeTargets.contains(where: { $0.id == manualModel.selectedTargetID }) {
+            fail("Inventory refresh re-opened the document or lost missing pinned identities")
+        }
+        manualWindow.close()
+
         // A managed backup uses the same session and semantic model. Source
-        // selection is a proposal until an explicit read; targets are separate.
+        // selection remains an explicit proposal in an unmounted model; targets
+        // are independent.
         let backupModel = Hades2SaveEditorModel(session: session, snapshotID: "verified-backup")
         let beforeBackup = commands(at: commandLog).count
         backupModel.open(language: .en)
