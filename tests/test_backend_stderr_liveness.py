@@ -51,7 +51,10 @@ try backend.start(
     gameID: "quiet-worker",
     onMessage: { _ in },
     onProtocolError: { fail("unexpected stdout protocol error: \($0)") },
-    onStderr: { delivered.append($0) },
+    onStderr: { message in
+        if message.utf8.count > 10_000 { fail("one stderr delivery exceeded its buffer budget") }
+        delivered.append(message)
+    },
     onTermination: { _ in terminated = true }
 )
 
@@ -59,7 +62,10 @@ try backend.start(
 // can accumulate on the serial queue, and the worker then remains alive.
 Thread.sleep(forTimeInterval: 0.5)
 fputs("PHASE:before-flush\n", stderr)
-backend.flushStderr { delivered.append($0) }
+backend.flushStderr { message in
+    if message.utf8.count > 10_000 { fail("flushed stderr exceeded its buffer budget") }
+    delivered.append(message)
+}
 fputs("PHASE:after-flush\n", stderr)
 if delivered.isEmpty { fail("stderr burst was not delivered") }
 
@@ -70,9 +76,6 @@ while Date() < deadline && !terminated {
     RunLoop.current.run(until: Date().addingTimeInterval(0.01))
 }
 if !terminated { fail("persistent worker did not stop") }
-if delivered.joined().utf8.count > 20_000 {
-    fail("stderr buffering exceeded its bound")
-}
 print("backend_stderr_liveness_ok")
 """
 
