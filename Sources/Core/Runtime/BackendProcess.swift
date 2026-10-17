@@ -31,11 +31,17 @@ final class BackendProcess {
     private var errorOutput: FileHandle?
     private let readQueue = DispatchQueue(label: "com.gao.macgamingtrainer.backend-process")
     private var buffer = Data()
+    private var stderrBuffer = Data()
+    private var stderrDroppedBytes = 0
+    private var stderrDeliveryScheduled = false
+    private var stderrHandlerEnabled = false
+    private var stderrCallback: ((String) -> Void)?
     private var profileLog: ((String) -> Void)?
 
     private let executableURL: URL
     private let argumentsPrefix: [String]
     private let maxStdoutBufferBytes: Int
+    private let maxStderrBufferBytes: Int
     private let forceKillDelay: TimeInterval
 
     private static var bundledPythonExecutableURL: URL {
@@ -60,11 +66,13 @@ final class BackendProcess {
         executableURL: URL? = nil,
         argumentsPrefix: [String] = ["-u"],
         maxStdoutBufferBytes: Int = 1_048_576,
+        maxStderrBufferBytes: Int = 65_536,
         forceKillDelay: TimeInterval = 1.5
     ) {
         self.executableURL = executableURL ?? Self.bundledPythonExecutableURL
         self.argumentsPrefix = argumentsPrefix
         self.maxStdoutBufferBytes = max(4_096, maxStdoutBufferBytes)
+        self.maxStderrBufferBytes = max(4_096, maxStderrBufferBytes)
         self.forceKillDelay = max(0.1, forceKillDelay)
     }
 
@@ -82,7 +90,14 @@ final class BackendProcess {
     ) throws {
         guard process == nil else { return }
         profileLog = onProfile
-        readQueue.sync { buffer.removeAll(keepingCapacity: false) }
+        stderrCallback = onStderr
+        readQueue.sync {
+            buffer.removeAll(keepingCapacity: false)
+            stderrBuffer.removeAll(keepingCapacity: false)
+            stderrDroppedBytes = 0
+            stderrDeliveryScheduled = false
+            stderrHandlerEnabled = true
+        }
 
         let task = Process()
         let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
@@ -108,10 +123,11 @@ final class BackendProcess {
                 self?.consume(data, onMessage: onMessage, onProtocolError: onProtocolError)
             }
         }
-        stderr.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard let message = String(data: data, encoding: .utf8), !message.isEmpty else { return }
-            DispatchQueue.main.async { onStderr(message) }
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            self?.readQueue.async { [weak self] in
+                guard let self, self.stderrHandlerEnabled else { return }
+                self.readStderrIfReadableLocked(handle)
+            }
         }
         task.terminationHandler = { [weak self] task in
             let status = task.terminationStatus
@@ -120,13 +136,23 @@ final class BackendProcess {
                 return
             }
             DispatchQueue.main.async {
+                owner.flushStderr { message in
+                    onStderr(message)
+                }
                 owner.output?.readabilityHandler = nil
                 owner.errorOutput?.readabilityHandler = nil
                 owner.input = nil
                 owner.output = nil
                 owner.errorOutput = nil
+                owner.stderrCallback = nil
                 owner.process = nil
-                owner.readQueue.async { owner.buffer.removeAll(keepingCapacity: false) }
+                owner.readQueue.sync {
+                    owner.buffer.removeAll(keepingCapacity: false)
+                    owner.stderrBuffer.removeAll(keepingCapacity: false)
+                    owner.stderrDroppedBytes = 0
+                    owner.stderrDeliveryScheduled = false
+                    owner.stderrHandlerEnabled = false
+                }
                 onTermination(status)
             }
         }
@@ -141,8 +167,44 @@ final class BackendProcess {
             input = nil
             output = nil
             errorOutput = nil
+            stderrCallback = nil
+            readQueue.sync {
+                stderrBuffer.removeAll(keepingCapacity: false)
+                stderrDroppedBytes = 0
+                stderrDeliveryScheduled = false
+                stderrHandlerEnabled = false
+            }
             process = nil
             throw error
+        }
+    }
+
+    /// Deliver all stderr already read or available from the worker without
+    /// blocking on an empty pipe. Normal stderr delivery is coalesced and bounded
+    /// so a burst cannot enqueue an unbounded number of main-thread callbacks.
+    func flushStderr(_ onMessage: @escaping (String) -> Void) {
+        guard let handle = errorOutput else { return }
+        handle.readabilityHandler = nil
+        readQueue.sync {
+            stderrHandlerEnabled = false
+            drainStderrPipeLocked(handle)
+        }
+
+        let message = readQueue.sync {
+            takeStderrBufferLocked()
+        }
+        if let message {
+            onMessage(message)
+        }
+
+        readQueue.sync {
+            stderrHandlerEnabled = true
+        }
+        handle.readabilityHandler = { [weak self] handle in
+            self?.readQueue.async { [weak self] in
+                guard let self, self.stderrHandlerEnabled else { return }
+                self.readStderrIfReadableLocked(handle)
+            }
         }
     }
 
@@ -163,6 +225,7 @@ final class BackendProcess {
         try? input?.close()
         output?.readabilityHandler = nil
         errorOutput?.readabilityHandler = nil
+        readQueue.sync { stderrHandlerEnabled = false }
         guard let task, task.isRunning else { return }
 
         task.terminate()
@@ -174,6 +237,74 @@ final class BackendProcess {
             _ = kill(pid, SIGKILL)
             #endif
         }
+    }
+
+    private func enqueueStderrLocked(_ data: Data) {
+        guard !data.isEmpty else { return }
+        let remaining = max(0, maxStderrBufferBytes - stderrBuffer.count)
+        if remaining > 0 {
+            stderrBuffer.append(data.prefix(remaining))
+        }
+        if data.count > remaining {
+            stderrDroppedBytes = min(Int.max - (data.count - remaining), stderrDroppedBytes) + (data.count - remaining)
+        }
+        if !stderrDeliveryScheduled {
+            stderrDeliveryScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                self?.deliverStderr()
+            }
+        }
+    }
+
+    private func deliverStderr() {
+        let message = readQueue.sync {
+            takeStderrBufferLocked()
+        }
+        guard let message else { return }
+        stderrCallback?(message)
+    }
+
+    private func takeStderrBufferLocked() -> String? {
+        guard !stderrBuffer.isEmpty || stderrDroppedBytes > 0 else {
+            stderrDeliveryScheduled = false
+            return nil
+        }
+        var message = String(decoding: stderrBuffer, as: UTF8.self)
+        if stderrDroppedBytes > 0 {
+            if !message.isEmpty {
+                message += "\n"
+            }
+            message += "[Trainer] stderr overflow droppedBytes=\(stderrDroppedBytes)"
+        }
+        stderrBuffer.removeAll(keepingCapacity: true)
+        stderrDroppedBytes = 0
+        stderrDeliveryScheduled = false
+        return message.isEmpty ? nil : message
+    }
+
+    /// Every stderr read is serialized on readQueue. Multiple readability
+    /// callbacks may have been queued for the same bytes; after the first one
+    /// drains them, another availableData call would block on an open but quiet
+    /// worker. Check readiness at execution time, not callback-enqueue time.
+    @discardableResult
+    private func readStderrIfReadableLocked(_ handle: FileHandle) -> Bool {
+        #if canImport(Darwin) || canImport(Glibc)
+        var descriptor = pollfd(
+            fd: handle.fileDescriptor,
+            events: Int16(POLLIN | POLLHUP),
+            revents: 0
+        )
+        guard poll(&descriptor, 1, 0) > 0,
+              descriptor.revents & Int16(POLLIN | POLLHUP) != 0 else { return false }
+        #endif
+        let data = handle.availableData
+        guard !data.isEmpty else { return false }
+        enqueueStderrLocked(data)
+        return true
+    }
+
+    private func drainStderrPipeLocked(_ handle: FileHandle) {
+        while readStderrIfReadableLocked(handle) {}
     }
 
     private func consume(

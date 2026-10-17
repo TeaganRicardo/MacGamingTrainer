@@ -48,6 +48,7 @@ func wait(_ predicate: () -> Bool) {
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))
         let model = Hades2TrainerModel(session: session, logSink: TrainerLogSink(url: temp.appendingPathComponent("log")),
             backendScriptURL: worker, runLogDirectoryURL: temp.appendingPathComponent("no-game-log"))
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
         wait { model.backendAvailable && !model.busy && model.protocolCompatible }
         check(model.chaosGateProbability == nil, "default is not Native")
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())

@@ -31,6 +31,7 @@ final class TrainerBackendSession {
         let applyPayload: ([String: Any]) -> Void
         let resetGameState: () -> Void
         let log: (String) -> Void
+        let backendLog: (String) -> Void
         let onStatusChange: (TrainerBackendStatus) -> Void
     }
 
@@ -58,7 +59,8 @@ final class TrainerBackendSession {
         applyPayload: @escaping ([String: Any]) -> Void,
         resetGameState: @escaping () -> Void,
         log: @escaping (String) -> Void,
-        onStatusChange: @escaping (TrainerBackendStatus) -> Void
+        onStatusChange: @escaping (TrainerBackendStatus) -> Void,
+        backendLog: ((String) -> Void)? = nil
     ) throws {
         guard !client.isStarted else { return }
         lifecycleID = UUID()
@@ -75,6 +77,7 @@ final class TrainerBackendSession {
             applyPayload: applyPayload,
             resetGameState: resetGameState,
             log: log,
+            backendLog: backendLog ?? log,
             onStatusChange: onStatusChange
         )
         automaticRecoveryAttempts = 0
@@ -135,6 +138,12 @@ final class TrainerBackendSession {
             suppressTerminationError = false
             scheduleRecovery(manual: true)
         }
+    }
+
+    /// Drain backend stderr already buffered by the process before exporting
+    /// diagnostics. Backend restart/reconnect state is otherwise unchanged.
+    func flushDiagnostics() {
+        client.flushStderr()
     }
 
     func stop(suppressTerminationError: Bool = true) {
@@ -241,7 +250,7 @@ final class TrainerBackendSession {
                         $0.errorArguments = coreOwned ? [] : failure.presentationArguments
                     }
                     let diagnostic = failure.diagnostic ?? failure.presentation
-                    configuration.log("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("\(reply.operation.key)失败 [\(failure.code)]：\(diagnostic)")
                 }
             },
             onProtocolMismatch: { [weak self] failure in
@@ -254,18 +263,18 @@ final class TrainerBackendSession {
                     $0.error = "host.backend.error.protocolMismatch"
                 }
                 let diagnostic = failure.diagnostic ?? failure.presentation
-                configuration.log("协议不兼容 [\(failure.code)]：\(diagnostic)")
+                configuration.backendLog("协议不兼容 [\(failure.code)]：\(diagnostic)")
             },
-            onStderr: { clean in configuration.log("BACKEND: \(clean)") },
+            onStderr: { clean in configuration.backendLog(clean) },
             onLog: configuration.log,
-            onTermination: { [weak self] exitStatus, stderrTail in
-                self?.handleTermination(status: exitStatus, stderrTail: stderrTail)
+            onTermination: { [weak self] exitStatus, _ in
+                self?.handleTermination(status: exitStatus)
             },
             onClientError: { [weak self] failure, terminal in
                 guard let self else { return }
                 let diagnostic = failure.diagnostic ?? failure.presentation
                 if terminal {
-                    configuration.log("后端通信终止 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("后端通信终止 [\(failure.code)]：\(diagnostic)")
                     let recoveryOwned = self.client.isStarted
                         || self.recoveryWorkItem != nil
                         || self.restartPending
@@ -290,7 +299,7 @@ final class TrainerBackendSession {
                         }
                     }
                 } else {
-                    configuration.log("后端通信错误 [\(failure.code)]：\(diagnostic)")
+                    configuration.backendLog("后端通信错误 [\(failure.code)]：\(diagnostic)")
                     self.updateStatus {
                         $0.busy = self.client.hasInFlightRequest
                         $0.errorCode = failure.code
@@ -310,7 +319,7 @@ final class TrainerBackendSession {
         }
     }
 
-    private func handleTermination(status exitStatus: Int32, stderrTail: String) {
+    private func handleTermination(status exitStatus: Int32) {
         guard let configuration else { return }
         let mismatch = !status.protocolCompatible
         let manualRestart = restartPending
@@ -334,8 +343,9 @@ final class TrainerBackendSession {
             }
         }
         configuration.resetGameState()
-        let terminationDiagnostic = stderrTail.isEmpty ? "none" : stderrTail
-        configuration.log("后端退出 status=\(exitStatus) recovery=\(willRecover) stderr=\(terminationDiagnostic)")
+        configuration.backendLog(
+            "后端退出 status=\(exitStatus) recovery=\(willRecover)"
+        )
 
         suppressTerminationError = false
         if willRecover {

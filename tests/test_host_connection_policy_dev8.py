@@ -295,6 +295,26 @@ if !missedExitRelaunchPolicy.consumeAutomaticConnectIfEligible(
     fail("launch-time lifetime invalidation lost the reconnect request")
 }
 
+// A refresh can discover a different target PID after a missed OS launch
+// notification. Host first invalidates the old presence, then publishes the
+// replacement as discovery (not a definitive launch). Stale connection state
+// must be refreshed, but no background debugger attachment is authorized.
+var silentReplacement = TrainerConnectionPolicy()
+silentReplacement.observeTarget(running: true, launchGeneration: 0, allowDiscoveryConnect: false)
+silentReplacement.connectionChanged(connected: true)
+silentReplacement.targetStateChanged(running: false, allowAutomaticConnect: false)
+silentReplacement.observeTarget(running: true, launchGeneration: 0, allowDiscoveryConnect: false)
+if !silentReplacement.consumeTargetExitRefreshIfEligible(
+    backendAvailable: true, busy: false, connected: true
+) {
+    fail("PID replacement without launch did not invalidate the old connection")
+}
+if silentReplacement.backgroundConnectionAllowed || silentReplacement.consumeAutomaticConnectIfEligible(
+    backendAvailable: true, busy: false, connected: false, actionsEnabled: true
+) {
+    fail("PID discovery was misidentified as a background attach grant")
+}
+
 // A real target restart resets the previous lifetime's detach/recovery state.
 policy.userWillToggleConnection(currentlyConnected: true)
 policy.targetStateChanged(running: false)

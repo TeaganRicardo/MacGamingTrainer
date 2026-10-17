@@ -38,6 +38,13 @@ assert '.onChange(of: targetMonitor.launchGeneration)' not in host
 launch_start = host.index('.onChange(of: targetMonitor.targetObservation)')
 launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
 launch_block = host[launch_start:launch_end]
+assert 'previous.processIdentifier != observed.processIdentifier' in launch_block, (
+    'PID-only target replacement must refresh the module lifecycle'
+)
+assert 'connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)' in launch_block, (
+    'missed launch must invalidate the old connection without granting background attach'
+)
+assert launch_block.index('connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)') < launch_block.index('connectionPolicy.observeTarget(')
 for token in (
     'connectionPolicy.observeTarget(',
     'model.hostTargetLifetimeChanged(',
@@ -193,12 +200,14 @@ for token in ('.mainMenu', '.runtimeReset', '.runtimeReady', 'activeFeatures = [
 # executing one doomed status request first.
 assert 'case runtimeReset = "runtime_reset"' in command_binding
 assert 'send(.runtimeReset' in event_block
-assert event_block.index('send(.runtimeReset') < event_block.index('case .runtimeReady')
+event_switch_start = event_block.rindex('        switch event {')
+event_switch = event_block[event_switch_start:]
+assert event_switch.index('send(.runtimeReset') < event_switch.index('case .runtimeReady')
 
 # If runtimeReady wins the race against background attach completion, retain the
 # signal while disconnected; the post-connect completion consumes it exactly
 # once instead of leaving the deferred connection stuck in waiting.
-ready_block = event_block[event_block.index('case .runtimeReady'):]
+ready_block = event_switch[event_switch.index('case .runtimeReady'):]
 assert ready_block.index('pendingRunReadySignal = true') < ready_block.index('guard connected else { return }')
 
 backend_start = model[model.index('    private func startBackend()'):model.index('    private func resetAfterBackendTermination()')]

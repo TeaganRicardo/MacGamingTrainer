@@ -14,58 +14,29 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from core.operation_profile import correlation, operation, record
-from core.log_paths import trainer_log_path
 from core.protocol import JsonlRequestRouter
 from core.registry import available_games, create_adapter
 
-_LOG_FORMAT = '%(asctime)s %(levelname)s %(message)s'
-
-
-class _StartupLogBuffer(logging.Handler):
-    """Hold worker records until the selected adapter reveals its log location."""
-
-    def __init__(self):
-        super().__init__(level=logging.INFO)
-        self.records = []
-
-    def emit(self, record):
-        self.records.append(record)
+_LOG_FORMAT = '%(levelname)s %(message)s'
 
 
 class _BackendLoggingSession:
-    """Own exactly one backend file handler without replacing embedder handlers."""
+    """Forward backend diagnostics through stderr; Host owns persistence/retention."""
 
     def __init__(self):
         self.root = logging.getLogger()
         self.original_level = self.root.level
-        self.buffer = _StartupLogBuffer()
-        self.file_handler = None
-        self.root.addHandler(self.buffer)
+        self.handler = logging.StreamHandler(sys.stderr)
+        self.handler.setLevel(logging.INFO)
+        self.handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        self.root.addHandler(self.handler)
         if self.root.level > logging.INFO:
             self.root.setLevel(logging.INFO)
 
-    def configure_file(self, log_path):
-        if self.file_handler is not None:
-            return
-        log_path = Path(log_path)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(log_path, encoding='utf-8')
-        handler.setLevel(logging.INFO)
-        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-        self.file_handler = handler
-        self.root.addHandler(handler)
-        for record in self.buffer.records:
-            handler.handle(record)
-        self.root.removeHandler(self.buffer)
-        self.buffer.records.clear()
-
     def close(self):
-        if self.buffer in self.root.handlers:
-            self.root.removeHandler(self.buffer)
-        if self.file_handler is not None:
-            self.root.removeHandler(self.file_handler)
-            self.file_handler.close()
-            self.file_handler = None
+        if self.handler in self.root.handlers:
+            self.root.removeHandler(self.handler)
+        self.handler.close()
         self.root.setLevel(self.original_level)
 
 
@@ -125,11 +96,9 @@ def main(argv=None):
         try:
             adapter = create_adapter(game_id)
         except Exception:
-            logging_session.configure_file(trainer_log_path(game_id))
             logging.exception('Backend adapter initialization failed game=%s', game_id)
             raise
 
-        logging_session.configure_file(trainer_log_path(adapter.game_id))
         router = JsonlRequestRouter(adapter)
 
         def interrupt(signum, frame):

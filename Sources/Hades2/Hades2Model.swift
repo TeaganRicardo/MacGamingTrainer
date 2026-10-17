@@ -361,9 +361,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self.runLogDirectoryURL = runLogDirectoryURL
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.runLogWatcher.start()
             self.installHotkeys()
-            self.startBackend()
         }
     }
 
@@ -400,6 +398,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         pendingRunReadySignal = false
     }
 
+    func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+        logSink.targetLifetimeChanged(
+            running: observation.isRunning,
+            identity: TrainerLogSink.TargetIdentity(
+                processName: Hades2GameModule.descriptor.targetProcessName,
+                bundleIdentifier: Hades2GameModule.descriptor.targetBundleIdentifier,
+                processIdentifier: observation.processIdentifier
+            )
+        )
+        hostTargetLifetimeChanged(running: observation.isRunning)
+        if observation.isRunning {
+            runLogWatcher.start()
+        } else {
+            runLogWatcher.stop()
+        }
+        startBackend()
+    }
+
     func refreshFromHost() {
         send(connected ? .status : .scan, title: "host.refreshStatus")
     }
@@ -415,6 +431,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func handleRunLogEvent(_ event: Hades2RunLogEvent) {
         guard !exiting else { return }
+        let runtimeEventName: String
+        switch event {
+        case .mainMenu:
+            runtimeEventName = "main_menu"
+        case .runtimeReset:
+            runtimeEventName = "runtime_reset"
+        case .runtimeReady:
+            runtimeEventName = "runtime_ready"
+        }
+        appendLog("runtime event=\(runtimeEventName)", source: "RUNTIME")
         switch event {
         case .mainMenu, .runtimeReset:
             // The native log watcher still owns generation evidence while
@@ -527,7 +553,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                         self?.consumeDeferredLaunchAttachIfPossible()
                         self?.consumeRunLogReadySignalIfPossible()
                     }
-                }
+                },
+                backendLog: { [weak self] line in self?.appendLog(line, source: "BACKEND") }
             )
             send(.scan, title: "hades2.op.detectGame")
         } catch {
@@ -615,6 +642,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     private func apply(_ payload: [String: Any]) {
         let patch = Hades2StatePatch(payload)
+        let runtimeDiagnostics = payload["runtimeDiagnostics"] as? [String: Any]
+        logSink.updateCurrentSessionRuntimeIdentity(
+            gameVersion: patch.version,
+            runtimeRevision: (runtimeDiagnostics?["revision"] as? NSNumber)?.intValue
+        )
         let wasConnected = connected
         let oldPID = pid
         let desiredBeforeApply = Dictionary(uniqueKeysWithValues: Hades2FeatureKey.allCases.map { ($0, desiredFeatureEnabled($0)) })
@@ -1235,7 +1267,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func listProfiles() { send(.listProfiles, title: "hades2.op.listProfiles") }
     func runDiagnostics() { send(.diagnostics, title: "hades2.op.runDiagnostics") }
-    func exportDiagnostics() { send(.exportDiagnostics, title: "hades2.op.exportDiagnostics") }
+    func exportDiagnostics() {
+        // Export reads the Host-owned log files in the Backend process. Drain
+        // both the Backend stderr transport and Host log queue first so the
+        // bundle represents this moment.
+        backendSession.flushDiagnostics()
+        logSink.flush()
+        send(.exportDiagnostics, title: "hades2.op.exportDiagnostics")
+    }
 
     func spawnBoon(_ loot: String) {
         guard canSpawnReward, boons.contains(where: { $0.id == loot }) else { return }
@@ -1512,11 +1551,25 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         // records the stable operation key rather than resolved wording.
         appendLog(presentation("hades2.op.logCreated").key)
         logSink.flush()
-        NSWorkspace.shared.open(logSink.url)
+        NSWorkspace.shared.open(logSink.currentSessionURL() ?? logSink.currentLogURL())
     }
 
-    private func appendLog(_ line: String) {
-        logSink.append(line)
+    func openLogHistory() {
+        logSink.flush()
+        try? FileManager.default.createDirectory(at: logSink.historyURL, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(logSink.historyURL)
+    }
+
+    func clearCompletedLogs() {
+        if logSink.clearCompletedSessions() {
+            notice = "host.logs.cleared"
+        } else {
+            error = "host.logs.clearFailed"
+        }
+    }
+
+    private func appendLog(_ line: String, source: String = "HOST") {
+        logSink.append(line, source: source)
     }
 
     private func detachForTermination(completion: @escaping (Bool) -> Void) {

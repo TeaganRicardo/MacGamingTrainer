@@ -62,6 +62,7 @@ protocol TrainerHostModel: ObservableObject {
     func refreshFromHost()
     func hostDidBecomeActive()
     func hostTargetLifetimeChanged(running: Bool)
+    func hostTargetLifetimeChanged(observation: TrainerTargetObservation)
     func restartBackendFromHost()
     func prepareForTermination(completion: @escaping (Bool) -> Void)
 }
@@ -81,6 +82,12 @@ extension TrainerHostModel {
     /// Definitive target launch/exit invalidates game-owned observations from
     /// the prior OS process lifetime. Modules without such state may ignore it.
     func hostTargetLifetimeChanged(running: Bool) {}
+
+    /// Rich target identity is available to modules that own process-lifetime
+    /// diagnostics. Existing modules can continue consuming only presence.
+    func hostTargetLifetimeChanged(observation: TrainerTargetObservation) {
+        hostTargetLifetimeChanged(running: observation.isRunning)
+    }
 }
 
 /// Game modules supply business content and game-specific actions. The host

@@ -103,7 +103,11 @@
 "host.trainerMenu" = "Trainer";
 "host.shortcutSettings" = "Shortcut Settings";
 "host.viewRuntimeLog" = "View Runtime Log";
-"host.viewLog" = "View Log";
+"host.viewLog" = "View Current Log";
+"host.viewLogHistory" = "View Log History";
+"host.clearCompletedLogs" = "Clear Completed Log History";
+"host.logs.cleared" = "Completed log history cleared.";
+"host.logs.clearFailed" = "Could not clear completed log history.";
 "host.launchGame" = "Launch Game";
 "host.refreshStatus" = "Refresh Status";
 "host.disableAll" = "Disable All";

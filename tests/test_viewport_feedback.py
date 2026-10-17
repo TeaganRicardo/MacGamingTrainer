@@ -107,6 +107,7 @@ struct Main {
             backendScriptURL: worker,
             runLogDirectoryURL: temporary.appendingPathComponent("game-log")
         )
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
         wait { model.backendAvailable && !model.busy && model.feedbackNotice != nil }
         model.dismissFeedback(model.feedbackNotice!.id)
         check(model.currentIssues.isEmpty, "routine success became a retained issue")
@@ -312,6 +313,7 @@ struct Main {
         )
         var faultEvents: [String] = []
         let faultObservation = faultModel.$feedbackNotice.compactMap { $0 }.sink { faultEvents.append($0.text.key) }
+        faultModel.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
         wait { faultModel.backendAvailable && !faultModel.busy }
         faultModel.openSellTraits()
         wait(message: "receipt suppression hid asynchronous backend recovery") {

@@ -82,8 +82,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     }) + "\n")
 
     stdout = io.StringIO()
+    stderr = io.StringIO()
     try:
-        with contextlib.redirect_stdout(stdout):
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             server.main(["--game", "startup_fixture"])
     finally:
         server.create_adapter = original_factory
@@ -91,9 +92,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
         sys.stdin = original_stdin
 
     log_path = home / "Library/Application Support/MacGamingTrainer/startup_fixture/trainer.log"
-    assert log_path.is_file(), "server startup must create a module-scoped trainer.log even when adapter data is legacy/global"
+    assert not log_path.exists(), "backend must not own the persistent trainer log file"
     assert not (data_dir / "trainer.log").exists(), "adapter data_dir must not own the shared trainer log"
-    log_text = log_path.read_text(encoding="utf-8")
+    log_text = stderr.getvalue()
     assert "startup fixture constructor warning" in log_text
     assert "Quarantined invalid desired-state profile" in log_text
     assert "request ping-1 ping success game=startup_fixture" in log_text
@@ -109,8 +110,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
     assert root_logger.level == logging.WARNING, "worker logging must restore the embedder root level"
     assert unrelated_output.getvalue().count("startup fixture constructor warning") == 1
 
-    # A clean startup with no constructor diagnostics must still establish the
-    # worker-owned file before later INFO records are emitted.
+    # A clean startup with no constructor diagnostics must still forward later
+    # INFO records through stderr without creating a persistent worker-owned file.
     clean_data_dir = temp_root / "clean-data"
     clean_data_dir.mkdir()
     clean_created = []
@@ -129,16 +130,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-backend-startup-log-") as td:
         "params": {},
     }) + "\n")
     clean_stdout = io.StringIO()
+    clean_stderr = io.StringIO()
     try:
-        with contextlib.redirect_stdout(clean_stdout):
+        with contextlib.redirect_stdout(clean_stdout), contextlib.redirect_stderr(clean_stderr):
             server.main(["--game", "startup_fixture"])
     finally:
         server.create_adapter = original_factory
         server.available_games = original_available_games
         sys.stdin = original_stdin
 
-    clean_log = log_path.read_text(encoding="utf-8")
+    clean_log = clean_stderr.getvalue()
     assert clean_log.count("request ping-clean ping success game=startup_fixture") == 1
+    assert not log_path.exists()
     assert not (clean_data_dir / "trainer.log").exists()
     assert json.loads(clean_stdout.getvalue().strip())["ok"] is True
     assert clean_created and clean_created[0].closed is True

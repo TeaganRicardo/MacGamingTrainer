@@ -321,7 +321,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-reference-fixture-session-") as td:
     assert "reference_fixture_session_integration_ok" in proc.stdout
 
     log_path = home / "Library/Application Support/MacGamingTrainer/reference_fixture/trainer.log"
-    assert log_path.is_file(), "backend log escaped the temporary HOME"
+    assert not log_path.exists(), (
+        "generic Backend process must not own a persistent trainer.log; "
+        "the Host module owns persistence and retention"
+    )
 
 assert not (ROOT / "Backend/games/reference_fixture").exists()
 assert not (ROOT / "Sources/ReferenceFixture").exists()

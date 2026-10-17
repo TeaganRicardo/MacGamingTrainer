@@ -139,6 +139,12 @@ final class BackendClient {
         )
     }
 
+    func flushStderr() {
+        process.flushStderr { [weak self] message in
+            self?.receiveStderr(message)
+        }
+    }
+
     func send(
         _ command: String,
         params: [String: Any] = [:],

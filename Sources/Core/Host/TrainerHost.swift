@@ -75,6 +75,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         .onAppear {
             registerModulePresentation(localization)
             targetMonitor.refresh()
+            model.hostTargetLifetimeChanged(observation: targetMonitor.targetObservation)
             connectionPolicy.observeTarget(running: targetMonitor.isRunning, launchGeneration: targetMonitor.launchGeneration)
             reconcileAutomaticConnection()
         }
@@ -82,9 +83,18 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             // One published snapshot carries both presence and launch intent.
             // Notify modules before consuming the Host's connection grant so
             // game-owned readiness from an earlier process cannot be reused.
+            let pidChanged = previous.processIdentifier != observed.processIdentifier
             if observed.launchGeneration != previous.launchGeneration ||
+               pidChanged ||
                (previous.isRunning && !observed.isRunning) {
-                model.hostTargetLifetimeChanged(running: observed.isRunning)
+                model.hostTargetLifetimeChanged(observation: observed)
+            }
+            if previous.isRunning && observed.isRunning && pidChanged &&
+               observed.launchGeneration == previous.launchGeneration {
+                // Refresh/activation can discover a replacement PID even if the
+                // OS launch notification was missed. Invalidate the old
+                // connection without granting an unobserved background attach.
+                connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)
             }
             connectionPolicy.observeTarget(
                 running: observed.isRunning,
