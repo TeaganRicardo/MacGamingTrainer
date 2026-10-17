@@ -129,21 +129,6 @@ if __MacGamingTrainerV1 == nil then
     local fingerprints = {}
     local plan, retained, candidates = nil, nil, nil
     local domainOrder = { "resources", "elements", "currentRunTraits" }
-    local retainCommands = {
-      set_feature = true, set_boon_rarity = true,
-      set_gathering_probabilities = true, set_chaos_gate_probability = true,
-      set_stat = true, set_vital = true, lock_vital = true,
-      set_resource = true, lock_resource = true,
-      set_rerolls = true, lock_rerolls = true,
-      set_element = true, lock_element = true,
-      set_counter = true, set_next_room_reward = true, set_next_occurrence = true,
-    }
-    local dirtyDomains = {
-      set_resource = { resources = true },
-      lock_resource = { resources = true },
-      set_element = { elements = true },
-      lock_element = { elements = true },
-    }
     local catalogsReady, generation, publishedRevision = false, nil, 0
 
     local function append(result, value)
@@ -173,20 +158,20 @@ if __MacGamingTrainerV1 == nil then
     local function retainDomain(name, fingerprint)
       if candidates == nil then return false end
       candidates[name] = fingerprint
-      if plan == nil or plan.dirty[name]
-          or not sameFingerprint(fingerprints[name], fingerprint) then
+      if plan == nil or not sameFingerprint(fingerprints[name], fingerprint) then
         return false
       end
       retained[name] = true
       return true
     end
-    local function begin(command, snapshot, acknowledgedRevision)
+    local function begin(snapshot, acknowledgedRevision)
       candidates, retained = {}, {}
-      if not snapshot and acknowledgedRevision == publishedRevision and retainCommands[command] then
-        plan = { dirty = dirtyDomains[command] or {} }
+      if not snapshot and acknowledgedRevision == publishedRevision then
+        -- Mutation/action names do not own invalidation. Each collection's
+        -- post-dispatch fingerprint decides whether its native inputs changed.
+        plan = true
       else
-        -- Unknown/actions/lifecycle boundaries fail fresh. This deliberately
-        -- prefers a full observation over guessing that a future command is safe.
+        -- Full snapshots and unacknowledged/lost replies fail fresh.
         plan = nil
       end
     end
@@ -225,7 +210,7 @@ if __MacGamingTrainerV1 == nil then
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
-      begin(command, command == "status" or params.includeCatalogs == true, acknowledgedRevision)
+      begin(command == "status" or params.includeCatalogs == true, acknowledgedRevision)
       local ok, result = pcall(M.dispatch, command, params)
       local retainedDomains = finish(ok)
       if not ok then error(result) end
@@ -233,7 +218,7 @@ if __MacGamingTrainerV1 == nil then
     end
     local function runBatch(calls, includeCatalogs, nonce, acknowledgedRevision)
       identify(nonce)
-      begin("batch", true, acknowledgedRevision)
+      begin(true, acknowledgedRevision)
       local ok, result = pcall(M.dispatchBatch, calls, includeCatalogs or not catalogsReady)
       local retainedDomains = finish(ok)
       if not ok then error(result) end
