@@ -66,6 +66,18 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert transport.wire["__trainerObservation"]["generation"] == issued[0]
             expected = copy.deepcopy(first)
+            # Count the expensive whole-inventory eligibility pass. An unrelated
+            # mutation may retain the trait domain only when its lightweight
+            # native fingerprint is unchanged; external changes must invalidate it.
+            transport.execute("""
+            __mgtUpgradeQueries = 0
+            __mgtUpgradeable = GetAllUpgradeableGodTraits
+            GetAllUpgradeableGodTraits = function(...)
+              __mgtUpgradeQueries = __mgtUpgradeQueries + 1
+              return __mgtUpgradeable(...)
+            end
+            return '{}'
+            """)
             # Public replies may be mutated by their consumer; that cannot
             # rewrite the private localized baseline used on the next call.
             first["resources"][0]["count"] = 99999
@@ -81,17 +93,25 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             }
             assert not {"resources", "elements", "currentRunTraits"} & inputs[-1]
             assert "__trainerObservation" not in next_reply
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 0
 
             # Native changes between requests remain observable even when an
             # unrelated command discovers them. Mutable values and bilingual
             # presentation are carried together for changed collections.
-            transport.execute("CurrentRun.Hero.Traits[1].StackNum=7; GameState.Resources.MetaCurrency=555; return '{}'")
+            transport.execute("CurrentRun.Hero.Traits[1].StackNum=7; CurrentRun.Hero.Traits[1].Rarity='Epic'; CurrentRun.Hero.Elements.Fire=9; GameState.Resources.MetaCurrency=555; return '{}'")
             changed = session.mutate("set_vital", {"vital": "health", "field": "current", "value": 80}).payload
             assert changed["currentRunTraits"][0]["level"] == 7
+            assert changed["currentRunTraits"][0]["rarity"] == "Epic"
             assert changed["currentRunTraits"][0]["displayName"].startswith("zh-CN ")
             assert changed["currentRunTraits"][0]["englishName"].startswith("en ")
             assert next(row for row in changed["resources"] if row["id"] == "MetaCurrency")["count"] == 555
-            assert {"resources", "currentRunTraits"} <= inputs[-1]
+            assert next(row for row in changed["elements"] if row["id"] == "Fire")["count"] == 9
+            assert {"resources", "elements", "currentRunTraits"} <= inputs[-1]
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 1
 
             transport.execute("savedHero=CurrentRun.Hero; CurrentRun.Hero=nil; return '{}'")
             absent = session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 556,
