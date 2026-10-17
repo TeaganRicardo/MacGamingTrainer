@@ -7206,7 +7206,8 @@ if __MacGamingTrainerV1 == nil then
     local hero = CurrentRun and CurrentRun.Hero or {}
     local resourceFingerprint = M.observationRetention.resourceFingerprint()
     local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
-    local list\n    if not retainResources then list = resources() end
+    local list
+    if not retainResources then list = resources() end
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
       boonList, rewardList = boons(), rewards()
@@ -7288,7 +7289,8 @@ if __MacGamingTrainerV1 == nil then
     local retainElements = M.observationRetention.retain(
       "elements", M.observationRetention.elementFingerprint(hero)
     )
-    local elementList\n    if not retainElements then elementList = M.observationRetention.buildElements(hero) end
+    local elementList
+    if not retainElements then elementList = M.observationRetention.buildElements(hero) end
     local runCount = 0
     if type(GameState.RunHistory) == "table" then runCount = #GameState.RunHistory + (type(CurrentRun) == "table" and 1 or 0) end
     local statsState = {}
