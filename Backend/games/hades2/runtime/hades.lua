@@ -1724,8 +1724,11 @@ if __MacGamingTrainerV1 == nil then
     observation.append(result, type(GameState) == "table" and GameState.Resources or nil)
     observation.append(result, ResourceData)
     observation.append(result, M.resourceLocks)
-    observation.append(result, M.catalogCache.resources)
     local order, metadata, allowed = resourceCatalog()
+    -- resourceCatalog may publish its stable native layout on first use. Record
+    -- the post-discovery owner so the next warm request does not invalidate
+    -- solely because this observation itself initialized the cache.
+    observation.append(result, M.catalogCache.resources)
     for index, id in ipairs(order) do
       if allowed[id] then
         local definition = type(ResourceData) == "table" and ResourceData[id] or nil
