@@ -119,69 +119,66 @@ if __MacGamingTrainerV1 == nil then
   -- Cross-reply retention is driven by small native input fingerprints, not by
   -- materializing a full collection and comparing/copying it afterwards.
   -- Python remains the single owner of complete localized retained collections.
-  local observationMissing = {}
-  local observationFingerprints = {}
-  local observationPlan = nil
-  local observationRetained = nil
-  local observationCandidates = nil
-  local observationDomainOrder = { "resources", "elements", "currentRunTraits" }
-  local observationRetainCommands = {
-    set_feature = true, set_boon_rarity = true,
-    set_gathering_probabilities = true, set_chaos_gate_probability = true,
-    set_stat = true, set_vital = true, lock_vital = true,
-    set_resource = true, lock_resource = true,
-    set_rerolls = true, lock_rerolls = true,
-    set_element = true, lock_element = true,
-    set_counter = true, set_next_room_reward = true, set_next_occurrence = true,
-  }
-  local observationDirtyDomains = {
-    set_resource = { resources = true },
-    lock_resource = { resources = true },
-    set_element = { elements = true },
-    lock_element = { elements = true },
-  }
-  local function appendObservationFingerprint(result, value)
-    result[#result + 1] = value == nil and observationMissing or value
-  end
-  local function sameObservationFingerprint(left, right)
-    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
-    for index = 1, #left do
-      if left[index] ~= right[index] then return false end
+  local observation = (function()
+    local missing = {}
+    local fingerprints = {}
+    local plan, retained, candidates = nil, nil, nil
+    local domainOrder = { "resources", "elements", "currentRunTraits" }
+    local retainCommands = {
+      set_feature = true, set_boon_rarity = true,
+      set_gathering_probabilities = true, set_chaos_gate_probability = true,
+      set_stat = true, set_vital = true, lock_vital = true,
+      set_resource = true, lock_resource = true,
+      set_rerolls = true, lock_rerolls = true,
+      set_element = true, lock_element = true,
+      set_counter = true, set_next_room_reward = true, set_next_occurrence = true,
+    }
+    local dirtyDomains = {
+      set_resource = { resources = true },
+      lock_resource = { resources = true },
+      set_element = { elements = true },
+      lock_element = { elements = true },
+    }
+    local catalogsReady, generation = false, nil
+
+    local function append(result, value)
+      result[#result + 1] = value == nil and missing or value
     end
-    return true
-  end
-  local function retainObservationDomain(name, fingerprint)
-    if observationCandidates == nil then return false end
-    observationCandidates[name] = fingerprint
-    if observationPlan == nil or observationPlan.dirty[name]
-        or not sameObservationFingerprint(observationFingerprints[name], fingerprint) then
-      return false
+    local function sameFingerprint(left, right)
+      if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+      for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+      end
+      return true
     end
-    observationRetained[name] = true
-    return true
-  end
-  local function beginObservation(command, snapshot)
-    observationCandidates, observationRetained = {}, {}
-    if not snapshot and observationRetainCommands[command] then
-      observationPlan = { dirty = observationDirtyDomains[command] or {} }
-    else
-      -- Unknown/actions/lifecycle boundaries fail fresh. This deliberately
-      -- prefers a full observation over guessing that a future command is safe.
-      observationPlan = nil
+    local function retainDomain(name, fingerprint)
+      if candidates == nil then return false end
+      candidates[name] = fingerprint
+      if plan == nil or plan.dirty[name]
+          or not sameFingerprint(fingerprints[name], fingerprint) then
+        return false
+      end
+      retained[name] = true
+      return true
     end
-  end
-  local function finishObservation(succeeded)
-    local retained = observationRetained or {}
-    if succeeded then
-      for name, fingerprint in pairs(observationCandidates or {}) do
-        observationFingerprints[name] = fingerprint
+    local function begin(command, snapshot)
+      candidates, retained = {}, {}
+      if not snapshot and retainCommands[command] then
+        plan = { dirty = dirtyDomains[command] or {} }
+      else
+        -- Unknown/actions/lifecycle boundaries fail fresh. This deliberately
+        -- prefers a full observation over guessing that a future command is safe.
+        plan = nil
       end
     end
-    observationPlan, observationRetained, observationCandidates = nil, nil, nil
-    return retained
-  end
-  do
-    local catalogsReady, generation = false, nil
+    local function finish(succeeded)
+      local result = retained or {}
+      if succeeded then
+        for name, fingerprint in pairs(candidates or {}) do fingerprints[name] = fingerprint end
+      end
+      plan, retained, candidates = nil, nil, nil
+      return result
+    end
     local function identify(nonce)
       if generation == nil then
         if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
@@ -191,36 +188,40 @@ if __MacGamingTrainerV1 == nil then
         M.traitInventoryGeneration = generation
       end
     end
-    function M.projectObservation(result, retained)
+    local function project(result, retainedDomains)
       local retainedList = setmetatable({}, arrayMeta)
-      for _, name in ipairs(observationDomainOrder) do
-        if retained[name] then retainedList[#retainedList + 1] = name end
+      for _, name in ipairs(domainOrder) do
+        if retainedDomains[name] then retainedList[#retainedList + 1] = name end
       end
       if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
       result.__trainerObservation = { generation = generation, retained = retainedList }
       return result
     end
-    function M.observe(command, params, nonce)
+    local function run(command, params, nonce)
       identify(nonce)
       params = params or {}
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
-      local snapshot = command == "status" or params.includeCatalogs == true
-      beginObservation(command, snapshot)
+      begin(command, command == "status" or params.includeCatalogs == true)
       local ok, result = pcall(M.dispatch, command, params)
-      local retained = finishObservation(ok)
+      local retainedDomains = finish(ok)
       if not ok then error(result) end
-      return M.projectObservation(result, retained)
+      return project(result, retainedDomains)
     end
-    function M.observeBatch(calls, includeCatalogs, nonce)
+    local function runBatch(calls, includeCatalogs, nonce)
       identify(nonce)
-      beginObservation("batch", true)
+      begin("batch", true)
       local ok, result = pcall(M.dispatchBatch, calls, includeCatalogs or not catalogsReady)
-      local retained = finishObservation(ok)
+      local retainedDomains = finish(ok)
       if not ok then error(result) end
-      return M.projectObservation(result, retained)
+      return project(result, retainedDomains)
     end
+    return { append = append, retain = retainDomain, run = run, runBatch = runBatch }
+  end)()
+  function M.observe(command, params, nonce) return observation.run(command, params, nonce) end
+  function M.observeBatch(calls, includeCatalogs, nonce)
+    return observation.runBatch(calls, includeCatalogs, nonce)
   end
 
   -- Catalog order is semantic, not alphabetical.  The numeric sort keys are
@@ -1719,25 +1720,25 @@ if __MacGamingTrainerV1 == nil then
   end
   local function resourceObservationFingerprint()
     local result = {}
-    appendObservationFingerprint(result, GameState)
-    appendObservationFingerprint(result, type(GameState) == "table" and GameState.Resources or nil)
-    appendObservationFingerprint(result, ResourceData)
-    appendObservationFingerprint(result, M.resourceLocks)
-    appendObservationFingerprint(result, M.catalogCache.resources)
+    observation.append(result, GameState)
+    observation.append(result, type(GameState) == "table" and GameState.Resources or nil)
+    observation.append(result, ResourceData)
+    observation.append(result, M.resourceLocks)
+    observation.append(result, M.catalogCache.resources)
     local order, metadata, allowed = resourceCatalog()
     for index, id in ipairs(order) do
       if allowed[id] then
         local definition = type(ResourceData) == "table" and ResourceData[id] or nil
         local presentation = metadata[id] or {}
-        appendObservationFingerprint(result, id)
-        appendObservationFingerprint(result, definition)
-        appendObservationFingerprint(result, type(definition) == "table" and definition.DisplayName or nil)
-        appendObservationFingerprint(result, type(GameState) == "table"
+        observation.append(result, id)
+        observation.append(result, definition)
+        observation.append(result, type(definition) == "table" and definition.DisplayName or nil)
+        observation.append(result, type(GameState) == "table"
           and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
-        appendObservationFingerprint(result, M.resourceLocks[id])
-        appendObservationFingerprint(result, index)
-        appendObservationFingerprint(result, presentation.sectionId)
-        appendObservationFingerprint(result, presentation.sectionKind)
+        observation.append(result, M.resourceLocks[id])
+        observation.append(result, index)
+        observation.append(result, presentation.sectionId)
+        observation.append(result, presentation.sectionKind)
       end
     end
     return result
