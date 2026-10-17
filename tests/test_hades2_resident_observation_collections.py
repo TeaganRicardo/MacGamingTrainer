@@ -62,13 +62,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
         with patch.object(resident_session, "localize_catalog", side_effect=localize), patch.object(
             localization, "GAME_SPEC", replace(localization.GAME_SPEC, app_bundle_path=game),
         ), patch.object(resident_session.uuid, "uuid4", side_effect=install_nonce):
-            first = session.status().payload
-            assert transport.wire["__trainerObservation"]["retained"] == []
-            assert transport.wire["__trainerObservation"]["generation"] == issued[0]
-            expected = copy.deepcopy(first)
-            # Count the expensive whole-inventory eligibility pass. An unrelated
-            # mutation may retain the trait domain only when its lightweight
-            # native fingerprint is unchanged; external changes must invalidate it.
+            # Count the expensive whole-inventory eligibility pass without
+            # replacing its native owner after the retained-domain baseline.
             transport.execute("""
             __mgtUpgradeQueries = 0
             __mgtUpgradeable = GetAllUpgradeableGodTraits
@@ -78,6 +73,11 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             end
             return '{}'
             """)
+            first = session.status().payload
+            assert transport.wire["__trainerObservation"]["retained"] == []
+            assert transport.wire["__trainerObservation"]["generation"] == issued[0]
+            expected = copy.deepcopy(first)
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
             # Public replies may be mutated by their consumer; that cannot
             # rewrite the private localized baseline used on the next call.
             first["resources"][0]["count"] = 99999
