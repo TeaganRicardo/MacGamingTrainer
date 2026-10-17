@@ -76,6 +76,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             first = session.status().payload
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert transport.wire["__trainerObservation"]["generation"] == issued[0]
+            assert transport.wire["__trainerObservation"]["revision"] == 1
             expected = copy.deepcopy(first)
             transport.execute("__mgtUpgradeQueries = 0; return '{}'")
             # Public replies may be mutated by their consumer; that cannot
@@ -93,9 +94,33 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             }
             assert not {"resources", "elements", "currentRunTraits"} & inputs[-1]
             assert "__trainerObservation" not in next_reply
+            assert transport.wire["__trainerObservation"]["revision"] == 2
             assert json.loads(transport.execute(
                 "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
             ))["count"] == 0
+
+            # A Lua observation can complete after Python loses its reply. The
+            # next acknowledged request must notice the revision gap and send a
+            # fresh collection baseline instead of retaining unseen state.
+            discarded = json.loads(transport.execute(
+                "return __MacGamingTrainerV1.json(__MacGamingTrainerV1.observe("
+                .. "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
+                .. "'discarded',2))"
+            ))
+            assert discarded["__trainerObservation"]["revision"] == 3
+            assert set(discarded["__trainerObservation"]["retained"]) == {
+                "resources", "elements", "currentRunTraits",
+            }
+            recovered = session.mutate(
+                "set_vital", {"vital": "health", "field": "current", "value": 77}
+            ).payload
+            assert recovered["health"] == 77
+            assert transport.wire["__trainerObservation"]["revision"] == 4
+            assert transport.wire["__trainerObservation"]["retained"] == []
+            assert json.loads(transport.execute(
+                "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
+            ))["count"] == 1
+            transport.execute("__mgtUpgradeQueries = 0; return '{}'")
 
             # Native changes between requests remain observable even when an
             # unrelated command discovers them. Mutable values and bilingual
