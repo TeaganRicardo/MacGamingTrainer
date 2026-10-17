@@ -84,6 +84,15 @@ struct Hades2SaveEditorChange: Identifiable, Equatable {
     var id: String { entryID }
 }
 
+struct Hades2SaveEditorApplyReceipt: Equatable {
+    let source: String
+    let target: String
+    let hot: Bool
+    let runtimeReloaded: Bool
+    let previousSnapshotID: String
+    let fileCount: Int
+}
+
 struct Hades2SaveEditorEntry: Identifiable, Equatable {
     let id: String
     let domain: String
@@ -333,6 +342,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var pendingChanges: [Hades2SaveEditorChange] = []
     @Published private(set) var busy = false
     @Published private(set) var failure: TrainerTextToken?
+    @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
     var pendingCount: Int { pendingChanges.count }
 
@@ -349,6 +359,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     func open(language: TrainerPresentationLanguage) {
         self.language = language
         failure = nil
+        lastApplyReceipt = nil
         selectedInvestigationID = nil
         investigationDetail = nil
         refreshFiles(openDefault: true)
@@ -371,24 +382,31 @@ final class Hades2SaveEditorModel: ObservableObject {
             }
             self.sourceFiles = decodedSources
             self.writeTargets = decodedTargets
-            if self.workspaceID == nil, let source = result["defaultSource"] as? [String: String],
+            if openDefault, self.workspaceID == nil,
+               let source = result["defaultSource"] as? [String: String],
                let selected = decodedSources.first(where: { $0.identity == source }) {
                 self.selectedSourceID = selected.id
                 let target = decodedTargets.first(where: { $0.identity == source })
                 self.selectedTargetID = target?.id ?? ""
                 self.selectedTargetIdentity = target?.identity
-                if openDefault { self.openSelection() }
+                self.openSelection()
             }
         }
     }
 
     func openSelection() {
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
+        lastApplyReceipt = nil
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
                 operation: "hades2.saveEditor.operation.open") { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self else { return }
+            guard reply.success, let result = reply.result else {
+                self.restoreLoadedSourceSelection()
+                return
+            }
             guard self.applySummary(result) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.restoreLoadedSourceSelection()
                 return
             }
             self.pendingChanges = []
@@ -397,6 +415,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.selectedDomain = .discover
             self.query(offset: 0)
         }
+    }
+
+    private func restoreLoadedSourceSelection() {
+        selectedSourceID = sourceRelativePath.isEmpty
+            ? "" : sourceRootID + "/" + sourceRelativePath
     }
 
     func selectTarget(_ identifier: String) {
@@ -413,6 +436,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
+            self.lastApplyReceipt = nil
             self.failure = nil
         }
     }
@@ -642,6 +666,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func stage(entryID: String, operation: String, value: Any?) {
+        lastApplyReceipt = nil
         perform(
             .saveEditorStage(entryID: entryID, operation: operation, value: value),
             operation: "hades2.saveEditor.operation.stage",
@@ -689,19 +714,53 @@ final class Hades2SaveEditorModel: ObservableObject {
     func apply() {
         guard !pendingChanges.isEmpty, hasWriteTarget else { return }
         let appliedOffset = offset
+        let source = sourceRootID + "/" + sourceRelativePath
+        let target = selectedTargetID
+        lastApplyReceipt = nil
         perform(
             .saveEditorApply,
             operation: "hades2.saveEditor.operation.apply"
         ) { [weak self] reply in
             guard let self, reply.success, let result = reply.result else { return }
-            guard result["applied"] as? Bool == true else {
+            guard let receipt = self.decodeApplyReceipt(
+                result,
+                source: source,
+                target: target
+            ) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.pendingChanges = []
+            self.lastApplyReceipt = receipt
             self.failure = nil
             self.query(offset: appliedOffset)
         }
+    }
+
+    private func decodeApplyReceipt(
+        _ result: [String: Any],
+        source: String,
+        target: String
+    ) -> Hades2SaveEditorApplyReceipt? {
+        guard result["applied"] as? Bool == true,
+              let hot = result["hot"] as? Bool,
+              let runtimeReloaded = result["runtimeReloaded"] as? Bool,
+              let previousSnapshotID = result["previousSnapshotId"] as? String,
+              !previousSnapshotID.isEmpty,
+              let fileCount = Self.intValue(result["fileCount"]),
+              fileCount > 0,
+              let relativePath = result["relativePath"] as? String,
+              !relativePath.isEmpty,
+              relativePath == target.split(separator: "/", maxSplits: 1).last.map(String.init)
+        else { return nil }
+        return Hades2SaveEditorApplyReceipt(
+            source: source,
+            target: target,
+            hot: hot,
+            runtimeReloaded: runtimeReloaded,
+            previousSnapshotID: previousSnapshotID,
+            fileCount: fileCount
+        )
     }
 
     private func applySummary(_ result: [String: Any]) -> Bool {
