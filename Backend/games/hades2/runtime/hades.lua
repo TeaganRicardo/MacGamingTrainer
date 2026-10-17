@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 113 then
+if previousModule and previousModule.revision ~= 114 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 113 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 113,
+    version = 1, revision = 114,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -116,11 +116,72 @@ if __MacGamingTrainerV1 == nil then
     return encode(value)
   end
 
-  -- The transport can retain expensive collection domains between replies.
-  -- Every dispatch still observes all live values; only equal wire collections
-  -- are omitted. Capabilities, desired/active state and receipts always travel.
+  -- Cross-reply retention is driven by small native input fingerprints, not by
+  -- materializing a full collection and comparing/copying it afterwards.
+  -- Python remains the single owner of complete localized retained collections.
+  local observationMissing = {}
+  local observationFingerprints = {}
+  local observationPlan = nil
+  local observationRetained = nil
+  local observationCandidates = nil
+  local observationDomainOrder = { "resources", "elements", "currentRunTraits" }
+  local observationRetainCommands = {
+    set_feature = true, set_boon_rarity = true,
+    set_gathering_probabilities = true, set_chaos_gate_probability = true,
+    set_stat = true, set_vital = true, lock_vital = true,
+    set_resource = true, lock_resource = true,
+    set_rerolls = true, lock_rerolls = true,
+    set_element = true, lock_element = true,
+    set_counter = true, set_next_room_reward = true, set_next_occurrence = true,
+  }
+  local observationDirtyDomains = {
+    set_resource = { resources = true },
+    lock_resource = { resources = true },
+    set_element = { elements = true },
+    lock_element = { elements = true },
+  }
+  local function appendObservationFingerprint(result, value)
+    result[#result + 1] = value == nil and observationMissing or value
+  end
+  local function sameObservationFingerprint(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+    for index = 1, #left do
+      if left[index] ~= right[index] then return false end
+    end
+    return true
+  end
+  local function retainObservationDomain(name, fingerprint)
+    if observationCandidates == nil then return false end
+    observationCandidates[name] = fingerprint
+    if observationPlan == nil or observationPlan.dirty[name]
+        or not sameObservationFingerprint(observationFingerprints[name], fingerprint) then
+      return false
+    end
+    observationRetained[name] = true
+    return true
+  end
+  local function beginObservation(command, snapshot)
+    observationCandidates, observationRetained = {}, {}
+    if not snapshot and observationRetainCommands[command] then
+      observationPlan = { dirty = observationDirtyDomains[command] or {} }
+    else
+      -- Unknown/actions/lifecycle boundaries fail fresh. This deliberately
+      -- prefers a full observation over guessing that a future command is safe.
+      observationPlan = nil
+    end
+  end
+  local function finishObservation(succeeded)
+    local retained = observationRetained or {}
+    if succeeded then
+      for name, fingerprint in pairs(observationCandidates or {}) do
+        observationFingerprints[name] = fingerprint
+      end
+    end
+    observationPlan, observationRetained, observationCandidates = nil, nil, nil
+    return retained
+  end
   do
-    local previous, owners, catalogsReady, generation = {}, nil, false, nil
+    local catalogsReady, generation = false, nil
     local function identify(nonce)
       if generation == nil then
         if type(nonce) ~= "string" or nonce == "" then error("Missing observation install identity") end
@@ -130,46 +191,13 @@ if __MacGamingTrainerV1 == nil then
         M.traitInventoryGeneration = generation
       end
     end
-    local function copy(value)
-      if type(value) ~= "table" or value == jsonNull then return value end
-      local result = setmetatable({}, getmetatable(value))
-      for key, item in pairs(value) do result[key] = copy(item) end
-      return result
-    end
-    local function equal(left, right)
-      if left == right then return true end
-      if type(left) ~= "table" or type(right) ~= "table"
-          or left == jsonNull or right == jsonNull then return false end
-      for key, value in pairs(left) do if not equal(value, right[key]) then return false end end
-      for key in pairs(right) do if left[key] == nil then return false end end
-      return true
-    end
-    function M.projectObservation(result, snapshot)
-      local current = {
-        session = SessionState or false, game = GameState or false, run = CurrentRun or false,
-        hero = type(CurrentRun) == "table" and CurrentRun.Hero or false,
-        room = type(CurrentRun) == "table" and CurrentRun.CurrentRoom or false,
-        resources = type(GameState) == "table" and GameState.Resources or false,
-        traits = TraitData or false, resourceData = ResourceData or false,
-      }
-      if owners == nil then snapshot = true else
-        for key, value in pairs(current) do
-          if owners[key] ~= value then snapshot = true; break end
-        end
+    function M.projectObservation(result, retained)
+      local retainedList = setmetatable({}, arrayMeta)
+      for _, name in ipairs(observationDomainOrder) do
+        if retained[name] then retainedList[#retainedList + 1] = name end
       end
-      local retained = setmetatable({}, arrayMeta)
-      for _, key in ipairs({ "resources", "elements", "currentRunTraits" }) do
-        local value = result[key]
-        if not snapshot and value ~= nil and equal(previous[key], value) then
-          retained[#retained + 1] = key
-          result[key] = nil
-        else
-          previous[key] = copy(value)
-        end
-      end
-      owners = current
       if result.boons ~= nil and result.rewards ~= nil then catalogsReady = true end
-      result.__trainerObservation = { generation = generation, retained = retained }
+      result.__trainerObservation = { generation = generation, retained = retainedList }
       return result
     end
     function M.observe(command, params, nonce)
@@ -178,11 +206,20 @@ if __MacGamingTrainerV1 == nil then
       -- A newly replaced resident owns a new catalog generation, even when
       -- the Python caller last observed catalogs from its predecessor.
       if not catalogsReady then params.includeCatalogs = true end
-      return M.projectObservation(M.dispatch(command, params), command == "status" or params.includeCatalogs == true)
+      local snapshot = command == "status" or params.includeCatalogs == true
+      beginObservation(command, snapshot)
+      local ok, result = pcall(M.dispatch, command, params)
+      local retained = finishObservation(ok)
+      if not ok then error(result) end
+      return M.projectObservation(result, retained)
     end
     function M.observeBatch(calls, includeCatalogs, nonce)
       identify(nonce)
-      return M.projectObservation(M.dispatchBatch(calls, includeCatalogs or not catalogsReady), true)
+      beginObservation("batch", true)
+      local ok, result = pcall(M.dispatchBatch, calls, includeCatalogs or not catalogsReady)
+      local retained = finishObservation(ok)
+      if not ok then error(result) end
+      return M.projectObservation(result, retained)
     end
   end
 
