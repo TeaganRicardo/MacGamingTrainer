@@ -189,7 +189,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
         calls = 0
         def execute(self, source, **kwargs):
             self.calls += 1
-            return json.dumps({"__trainerObservation": {"generation": "new", "retained": ["resources"]}})
+            return json.dumps({"__trainerObservation": {"generation": "new", "revision": 1, "retained": ["resources"]}})
 
     missing = MissingBaseline()
     try:
