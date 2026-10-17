@@ -1753,19 +1753,15 @@ if __MacGamingTrainerV1 == nil then
     -- the post-discovery owner so the next warm request does not invalidate
     -- solely because this observation itself initialized the cache.
     M.observationRetention.append(result, M.catalogCache.resources)
-    for index, id in ipairs(order) do
+    -- order/metadata/allowed are immutable catalog presentation for this
+    -- resident source generation. Warm freshness tracks only mutable values;
+    -- replacing ResourceData/catalog owners above invalidates the whole domain.
+    for _, id in ipairs(order) do
       if allowed[id] then
-        local definition = type(ResourceData) == "table" and ResourceData[id] or nil
-        local presentation = metadata[id] or {}
         M.observationRetention.append(result, id)
-        M.observationRetention.append(result, definition)
-        M.observationRetention.append(result, type(definition) == "table" and definition.DisplayName or nil)
         M.observationRetention.append(result, type(GameState) == "table"
           and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
         M.observationRetention.append(result, M.resourceLocks[id])
-        M.observationRetention.append(result, index)
-        M.observationRetention.append(result, presentation.sectionId)
-        M.observationRetention.append(result, presentation.sectionKind)
       end
     end
     return result
@@ -4291,40 +4287,17 @@ if __MacGamingTrainerV1 == nil then
           append(type(linked) == "table" and linked.Name or nil)
           append(type(linked) == "table" and linked.RarityLevels or nil)
 
+          -- TraitData is static source truth for one resident generation.
+          -- Its table identity is sufficient; mutable mounted-instance state is
+          -- tracked explicitly above. A replaced definition invalidates safely.
           local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
           append(definition)
-          appendSequence(type(definition) == "table" and definition.InheritFrom or nil)
-          append(type(definition) == "table" and definition.RarityLevels or nil)
-          local rarities = type(definition) == "table" and definition.RarityLevels
-            or trait.RarityLevels
-          for _, rarity in ipairs({ "Common", "Rare", "Epic", "Heroic", "Legendary" }) do
-            append(type(rarities) == "table" and rarities[rarity] or nil)
-          end
-          append(type(definition) == "table" and definition.AcquireFunctionName or nil)
-          append(type(definition) == "table" and definition.AcquireFunction or nil)
-          append(type(definition) == "table" and definition.BlockStacking or nil)
-          append(type(definition) == "table" and definition.BlockInRunRarify or nil)
-          append(type(definition) == "table" and definition.OnExpire or nil)
-          append(type(definition) == "table" and definition.OnExpireFunctionName or nil)
-          append(type(definition) == "table" and definition.CurrentRoom or nil)
-          append(type(definition) == "table" and definition.RoomsPerUpgrade or nil)
-          append(type(definition) == "table" and definition.UseFunctionName or nil)
-          appendSequence(type(definition) == "table" and definition.UseFunctionNames or nil)
-          append(type(definition) == "table" and definition.AddMetaUpgradeLastStands or nil)
-          append(type(definition) == "table" and definition.OnLevelOrRarityChangeFunctionName or nil)
-          append(type(definition) == "table" and definition.FamiliarDataModifiers or nil)
-          append(type(definition) == "table" and definition.CodexWeapon or nil)
-          local definitionSetup = type(definition) == "table" and definition.SetupFunction or nil
-          append(definitionSetup)
-          append(type(definitionSetup) == "table" and definitionSetup.Name or nil)
-          local definitionSetups = type(definition) == "table" and definition.SetupFunctions or nil
-          append(definitionSetups)
-          if type(definitionSetups) == "table" then
-            for _, setup in pairs(definitionSetups) do
-              append(setup); append(type(setup) == "table" and setup.Name or nil)
+          append(trait.RarityLevels)
+          if type(trait.RarityLevels) == "table" then
+            for _, rarity in ipairs({ "Common", "Rare", "Epic", "Heroic", "Legendary" }) do
+              append(trait.RarityLevels[rarity])
             end
           end
-          appendMap(type(definition) == "table" and definition.PreEquipWeapons or nil)
         end
       end
       return result
