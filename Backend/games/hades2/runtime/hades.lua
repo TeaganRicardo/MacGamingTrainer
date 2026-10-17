@@ -4131,6 +4131,165 @@ if __MacGamingTrainerV1 == nil then
         removalCapability, removalReason
     end
 
+    local function observationFingerprint()
+      local result = {}
+      local owner = M.runtimeOwners.traitInventory()
+      local function append(value) observation.append(result, value) end
+      local function appendSequence(value)
+        append(value)
+        if type(value) == "table" then
+          for _, item in ipairs(value) do append(item) end
+        end
+      end
+      local function appendMap(value)
+        append(value)
+        if type(value) ~= "table" then return end
+        local keys = {}
+        for key in pairs(value) do keys[#keys + 1] = tostring(key) end
+        table.sort(keys)
+        for _, text in ipairs(keys) do
+          local actual = text
+          if value[actual] == nil then
+            for key in pairs(value) do
+              if tostring(key) == text then actual = key; break end
+            end
+          end
+          append(text)
+          append(value[actual])
+        end
+      end
+
+      append(M.traitInventoryGeneration)
+      append(SessionState)
+      append(CurrentRun)
+      append(type(CurrentRun) == "table" and CurrentRun.CurrentRoom or nil)
+      append(owner and owner.hero or nil)
+      append(owner and owner.traits or nil)
+      append(TraitData)
+      append(LootData)
+      append(GameState)
+      append(type(GameState) == "table" and GameState.LastAwardTrait or nil)
+      append(type(GameState) == "table" and GameState.EquippedFamiliar or nil)
+      append(type(GameState) == "table" and GameState.MetaUpgradeState or nil)
+      append(MetaUpgradeCardData)
+      append(FamiliarData)
+      append(MapState)
+      append(type(MapState) == "table" and MapState.FamiliarUnit or nil)
+      append(type(MapState) == "table" and type(MapState.FamiliarUnit) == "table"
+        and MapState.FamiliarUnit.ObjectId or nil)
+
+      -- Capability projection depends on function ownership as well as trait
+      -- values. Function replacement is rare, but must invalidate a retained
+      -- domain rather than preserve stale edit affordances.
+      for _, callback in ipairs({
+        IsGodTrait, GetAllUpgradeableGodTraits, IncreaseTraitLevel, AddRarityToTraits,
+        GetProcessedTraitData, RemoveTraitData, AddTraitToHero, GetTraitTooltipTitle,
+        GetLootSourceName, UpdateTalentPointInvestedCache, UpdateTraitNumber,
+        UnequipKeepsake, EquipKeepsake, UnequipWeapon, RemoveTrait, RemoveLastStand,
+        Destroy, SetupCostume, CallFunctionName, ValidateMaxHealth, ValidateMaxMana,
+        HandleWeaponAnimSwaps, GetEquippedWeapon,
+      }) do append(callback) end
+
+      local hero = owner and owner.hero or nil
+      append(type(hero) == "table" and hero.Weapons or nil)
+      if type(hero) == "table" and type(hero.Weapons) == "table" then appendMap(hero.Weapons) end
+      local aspect = type(GameState) == "table" and GameState.LastWeaponUpgradeName or nil
+      if type(aspect) == "table" then appendMap(aspect) else append(aspect) end
+
+      local slotted = type(hero) == "table" and hero.SlottedSpell or nil
+      append(slotted)
+      append(type(slotted) == "table" and slotted.TraitName or nil)
+      append(type(slotted) == "table" and slotted.ObtainedDuoTalent or nil)
+      local talents = type(slotted) == "table" and slotted.Talents or nil
+      append(talents)
+      if type(talents) == "table" then
+        for depth, column in ipairs(talents) do
+          append(depth); append(column)
+          if type(column) == "table" then
+            local slots = {}
+            for slot in pairs(column) do slots[#slots + 1] = tostring(slot) end
+            table.sort(slots)
+            for _, slotText in ipairs(slots) do
+              local slot = slotText
+              if column[slot] == nil then
+                for key in pairs(column) do
+                  if tostring(key) == slotText then slot = key; break end
+                end
+              end
+              local node = column[slot]
+              append(slotText); append(node)
+              append(type(node) == "table" and node.Name or nil)
+              append(type(node) == "table" and node.Invested or nil)
+              append(type(node) == "table" and node.QueuedInvested or nil)
+            end
+          end
+        end
+      end
+
+      local meta = type(GameState) == "table" and GameState.MetaUpgradeState or nil
+      if type(meta) == "table" then
+        local names = {}
+        for name in pairs(meta) do names[#names + 1] = tostring(name) end
+        table.sort(names)
+        for _, name in ipairs(names) do
+          local state = meta[name]
+          append(name); append(state)
+          append(type(state) == "table" and state.Unlocked or nil)
+          append(type(state) == "table" and state.Equipped or nil)
+          append(type(state) == "table" and state.Level or nil)
+          local adjacency = type(state) == "table" and state.AdjacencyBonuses or nil
+          append(adjacency)
+          append(type(adjacency) == "table" and adjacency.CustomMultiplier or nil)
+          local card = type(MetaUpgradeCardData) == "table" and MetaUpgradeCardData[name] or nil
+          append(card)
+          append(type(card) == "table" and card.TraitName or nil)
+          append(type(card) == "table" and card.OnGrantedFunctionName or nil)
+          append(type(card) == "table" and card.OnUpgradedFunctionName or nil)
+        end
+      end
+
+      local familiarName = type(GameState) == "table" and GameState.EquippedFamiliar or nil
+      local familiar = type(FamiliarData) == "table" and FamiliarData[familiarName] or nil
+      append(familiar)
+      appendSequence(type(familiar) == "table" and familiar.TraitNames or nil)
+
+      for index, trait in ipairs(owner and owner.traits or {}) do
+        append(index); append(trait)
+        if type(trait) == "table" then
+          append(trait.Name); append(trait.Id); append(trait.StackNum); append(trait.Rarity)
+          append(trait.RemainingUses); append(trait.Uses); append(trait.Slot)
+          append(trait.BiomeStateTrait); append(trait.LootDataName); append(trait.SourceId)
+          append(trait.CustomTitle); append(trait.IsHammerTrait); append(trait.IsWeaponEnchantment)
+          append(trait.RequiredWeapon); append(trait.BlockStacking); append(trait.CurrentArmor)
+          appendSequence(trait.InheritFrom)
+          appendMap(trait.PreEquipWeapons)
+
+          local onExpire = trait.OnExpire
+          append(onExpire)
+          local linked = type(onExpire) == "table" and onExpire.TraitData or nil
+          append(linked)
+          append(type(linked) == "table" and linked.Name or nil)
+          append(type(linked) == "table" and linked.RarityLevels or nil)
+
+          local definition = type(TraitData) == "table" and TraitData[trait.Name] or nil
+          append(definition)
+          appendSequence(type(definition) == "table" and definition.InheritFrom or nil)
+          append(type(definition) == "table" and definition.RarityLevels or nil)
+          local rarities = type(definition) == "table" and definition.RarityLevels
+            or trait.RarityLevels
+          for _, rarity in ipairs({ "Common", "Rare", "Epic", "Heroic", "Legendary" }) do
+            append(type(rarities) == "table" and rarities[rarity] or nil)
+          end
+          append(type(definition) == "table" and definition.AcquireFunctionName or nil)
+          append(type(definition) == "table" and definition.FamiliarDataModifiers or nil)
+          append(type(definition) == "table" and definition.CodexWeapon or nil)
+          append(type(definition) == "table" and definition.SetupFunction or nil)
+          append(type(definition) == "table" and definition.SetupFunctions or nil)
+        end
+      end
+      return result
+    end
+
     local currentRunTraits = function()
       local result = setmetatable({}, arrayMeta)
       local owner = M.runtimeOwners.traitInventory()
@@ -4615,6 +4774,7 @@ if __MacGamingTrainerV1 == nil then
 
     return {
       currentRunTraits = currentRunTraits,
+      observationFingerprint = observationFingerprint,
       mutate = mutate,
       isArachneCostumeChoice = isArachneCostumeChoice,
       applyCostume = applyCostume,
