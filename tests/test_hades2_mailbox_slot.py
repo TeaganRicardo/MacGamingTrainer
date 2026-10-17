@@ -62,32 +62,33 @@ def load_library(directory):
 
 
 class Slot:
-    def __init__(self, lib):
+    def __init__(self, lib, hi=HI, lo=LO):
         self.lib = lib
+        self.hi, self.lo = hi, lo
         self.mapping = mmap.mmap(-1, lib.MGTMailboxSize(),
                                   flags=mmap.MAP_SHARED,
                                   prot=mmap.PROT_READ | mmap.PROT_WRITE)
         self.address = ctypes.c_void_p(ctypes.addressof(ctypes.c_char.from_buffer(self.mapping)))
-        assert lib.MGTMailboxInit(self.address, lib.MGTMailboxSize(), HI, LO) == 0
+        assert lib.MGTMailboxInit(self.address, lib.MGTMailboxSize(), self.hi, self.lo) == 0
 
     def phase(self):
-        return self.lib.MGTMailboxPhase(self.address, HI, LO)
+        return self.lib.MGTMailboxPhase(self.address, self.hi, self.lo)
 
     def submit(self, request_id, payload):
-        return self.lib.MGTMailboxSubmit(self.address, HI, LO, request_id,
+        return self.lib.MGTMailboxSubmit(self.address, self.hi, self.lo, request_id,
                                           ctypes.c_char_p(payload), len(payload))
 
     def read(self, request_id, capacity=128):
         output = ctypes.create_string_buffer(capacity)
         length, outcome = ctypes.c_uint32(99), ctypes.c_uint32(99)
         result = self.lib.MGTMailboxRead(
-            self.address, HI, LO, request_id, output, capacity,
+            self.address, self.hi, self.lo, request_id, output, capacity,
             ctypes.byref(length), ctypes.byref(outcome),
         )
         return result, output.raw[:length.value] if result == 0 else None, outcome.value
 
     def ack(self, request_id):
-        return self.lib.MGTMailboxAck(self.address, HI, LO, request_id)
+        return self.lib.MGTMailboxAck(self.address, self.hi, self.lo, request_id)
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-mailbox-slot-") as temporary:
@@ -122,6 +123,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-mailbox-slot-") as temporary:
     assert slot.phase() == COMPLETE
     assert slot.read(2)[0] < 0, "Wrong request ID read a completed result"
     assert slot.read(1, 2)[0] < 0, "Partial result buffer was treated as complete"
+    assert slot.ack(1) < 0, "Incomplete result was acknowledged"
     assert slot.read(1) == (0, b"a\0b", 0)
     assert lib.MGTMailboxAck(slot.address, OTHER_HI, LO, 1) < 0
     assert slot.ack(2) < 0
@@ -140,6 +142,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-mailbox-slot-") as temporary:
         assert not thread.is_alive() and off_thread_result == [-3]
         assert slot.phase() == POSTED, "Foreign thread consumed game-thread work"
     assert lib.MGTMailboxPump(slot.address, HI, LO, echo, None) == 1
+    assert slot.ack(2) < 0, "Unobserved result was acknowledged"
     assert slot.read(2) == (0, b"ok", 0)
     assert slot.ack(2) == 0
 
@@ -152,28 +155,29 @@ with tempfile.TemporaryDirectory(prefix="mgt-mailbox-slot-") as temporary:
     assert lib.MGTMailboxPump(slot.address, HI, LO, malformed, None) == 1
     assert slot.read(3) == (0, b"", UNKNOWN)
     assert slot.submit(4, b"retry before acknowledgement") < 0
-    assert slot.ack(3) == 0
+    assert slot.ack(3) < 0, "Outcome-unknown must terminalize this generation"
     assert slot.submit(3, b"retry same ID") < 0
 
+    slot = Slot(lib, OTHER_HI, LO)  # Explicit fresh mapping/nonce after unknown.
     @HANDLER
     def known_failure(input_buffer, input_len, output_buffer, capacity, length, context):
         message = b"known failure"
         ctypes.memmove(output_buffer, message, len(message))
         length[0] = len(message)
         return 1
-    assert slot.submit(4, b"reject") == 0
-    assert lib.MGTMailboxPump(slot.address, HI, LO, known_failure, None) == 1
-    assert slot.read(4) == (0, b"known failure", 1)
-    assert slot.ack(4) == 0
-    assert slot.submit(4, b"retry duplicate") < 0
+    assert slot.submit(1, b"reject") == 0
+    assert lib.MGTMailboxPump(slot.address, slot.hi, slot.lo, known_failure, None) == 1
+    assert slot.read(1) == (0, b"known failure", 1)
+    assert slot.ack(1) == 0
+    assert slot.submit(1, b"retry duplicate") < 0
 
     # A posted, possibly crossed request cannot be canceled with an ordinary
     # submit or replaced by another generation in the same live mapping.
-    assert slot.submit(5, b"abandoned") == 0
+    assert slot.submit(2, b"abandoned") == 0
     assert slot.phase() == POSTED
-    assert slot.submit(6, b"must block") < 0
-    assert lib.MGTMailboxInit(slot.address, lib.MGTMailboxSize(), OTHER_HI, LO) < 0
-    assert lib.MGTMailboxPump(slot.address, OTHER_HI, LO, echo, None) < 0
+    assert slot.submit(3, b"must block") < 0
+    assert lib.MGTMailboxInit(slot.address, lib.MGTMailboxSize(), HI, LO) < 0
+    assert lib.MGTMailboxPump(slot.address, HI, LO, echo, None) < 0
     assert slot.phase() == POSTED
 
     # Verify actual inter-process release/acquire visibility: parent publishes
