@@ -24,6 +24,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-470-red-") as temporary, patch.dict
     try:
         first = session.status().payload
         assert len(first["resources"]) >= 2
+        for _ in range(3):
+            session.status()
         edited = session.mutate(
             "set_resource", {"resource": "MetaCurrency", "amount": 101}
         ).payload
