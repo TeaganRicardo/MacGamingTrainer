@@ -1717,6 +1717,31 @@ if __MacGamingTrainerV1 == nil then
     end
     return order, metadata, allowed
   end
+  local function resourceObservationFingerprint()
+    local result = {}
+    appendObservationFingerprint(result, GameState)
+    appendObservationFingerprint(result, type(GameState) == "table" and GameState.Resources or nil)
+    appendObservationFingerprint(result, ResourceData)
+    appendObservationFingerprint(result, M.resourceLocks)
+    appendObservationFingerprint(result, M.catalogCache.resources)
+    local order, metadata, allowed = resourceCatalog()
+    for index, id in ipairs(order) do
+      if allowed[id] then
+        local definition = type(ResourceData) == "table" and ResourceData[id] or nil
+        local presentation = metadata[id] or {}
+        appendObservationFingerprint(result, id)
+        appendObservationFingerprint(result, definition)
+        appendObservationFingerprint(result, type(definition) == "table" and definition.DisplayName or nil)
+        appendObservationFingerprint(result, type(GameState) == "table"
+          and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
+        appendObservationFingerprint(result, M.resourceLocks[id])
+        appendObservationFingerprint(result, index)
+        appendObservationFingerprint(result, presentation.sectionId)
+        appendObservationFingerprint(result, presentation.sectionKind)
+      end
+    end
+    return result
+  end
   local function resources()
     local result = setmetatable({}, arrayMeta)
     local order, metadata, allowed = resourceCatalog()
