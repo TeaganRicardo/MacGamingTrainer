@@ -243,6 +243,7 @@ class Hades2LuaTransport:
         self.last_duration = 0.0
         self.last_expression_duration = 0.0
         self.last_attach_profile = {}
+        self.last_mailbox_profile = {}
         self._tainted = False
         self._worker = _LLDBWorkerClient(on_state=self._adopt_state)
 
@@ -260,6 +261,8 @@ class Hades2LuaTransport:
         )
         profile = state.get("lastAttachProfile")
         self.last_attach_profile = dict(profile) if isinstance(profile, dict) else {}
+        mailbox = state.get("lastMailboxProfile")
+        self.last_mailbox_profile = dict(mailbox) if isinstance(mailbox, dict) else {}
 
     def _call(self, method, params=None, *, allow_start=True):
         result, _ = self._worker.call(method, params, allow_start=allow_start)
@@ -304,6 +307,11 @@ class Hades2LuaTransport:
             },
             allow_start=False,
         )
+
+    def acknowledge_result(self):
+        # The resident owner has accepted the complete reply. This RPC cannot
+        # execute game work and is deliberately absent from _RISKY_METHODS.
+        self._call("transport.acknowledge_result", allow_start=False)
 
     def create_time_warp_controller(self, helper_path, image_names):
         return RemoteProcessTimeWarpController(

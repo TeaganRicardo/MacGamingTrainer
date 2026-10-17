@@ -649,7 +649,9 @@
     "hades2.saveEditor.source.backup": "Managed Backup Version",
     "hades2.saveEditor.target.label": "Write Target",
     "hades2.saveEditor.target.choose": "Choose a physical file",
-    "hades2.saveEditor.operation.target": "Selecting save write target"
+    "hades2.saveEditor.operation.target": "Selecting save write target",
+    "hades2.error.commandConnectionUnavailable": "The game connection is not ready. Reconnect and try again.",
+    "hades2.error.commandNotExecuted": "The game has not executed this action. Try again when the game is ready."
   },
   "language": "en"
 }

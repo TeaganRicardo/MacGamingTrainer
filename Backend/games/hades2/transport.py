@@ -15,10 +15,18 @@ from core.adapter import AdapterError as TransportError
 
 from .config import GAME_SPEC, LUA_TRANSPORT_RESULT_LIMIT_BYTES, LUA_TRANSPORT_SOURCE_LIMIT_BYTES
 from .native_effect_query import prepare_native_query
+from .mailbox import Hades2CommandMailbox
+from .native_mailbox import prepare_command_mailbox, install_command_mailbox
 
 
 class Hades2LuaTransport:
     def __init__(self):
+        self.mailbox_mode = os.environ.get('MGT_HADES2_TRANSPORT', 'mailbox')
+        if self.mailbox_mode not in ('mailbox', 'lldb'):
+            raise ValueError('MGT_HADES2_TRANSPORT must be mailbox or lldb')
+        self._mailbox = None
+        self.native_mailbox_library = None
+        self.last_mailbox_profile = {}
         lldb.SBDebugger.Initialize()
         self.debugger=lldb.SBDebugger.Create(); self.debugger.SetAsync(True)
         for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','false'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
@@ -30,6 +38,17 @@ class Hades2LuaTransport:
         self.last_duration=0; self.last_expression_duration=0; self.last_attach_profile={}; self.focus_original=None; self.tainted=False
         manifest=json.loads(Path(__file__).with_name('symbols.json').read_text())
         self.symbols=manifest['symbols'];self.known_uuid=manifest['uuid'];self.runtime_uuid=None
+
+    @property
+    def tainted(self):
+        mailbox = getattr(self, '_mailbox', None)
+        return getattr(self, '_tainted', False) or (mailbox is not None and mailbox.tainted)
+
+    @tainted.setter
+    def tainted(self, value):
+        self._tainted = bool(value)
+        if value and getattr(self, '_mailbox', None) is not None:
+            self._mailbox.poison()
 
     def attach(self,pid):
         if self.process:
@@ -88,6 +107,12 @@ class Hades2LuaTransport:
                 self.native_runtime_installer=prepare_native_query(self,lldb)
             finally:
                 profile['nativeQuery']=time.monotonic()-phase
+            if self.mailbox_mode == 'mailbox':
+                phase=time.monotonic()
+                try:
+                    self.native_mailbox_library=prepare_command_mailbox(self,lldb)
+                finally:
+                    profile['nativeMailbox']=time.monotonic()-phase
         except Exception as exc:
             profile['total']=time.monotonic()-started
             logging.info(
@@ -213,7 +238,7 @@ class Hades2LuaTransport:
         self.focus_original=None
 
     @profiled("debugger.boundary")
-    def boundary(self, timeout=3):
+    def boundary(self, timeout=3, *, entry_address=None):
         if self.tainted:raise TransportError('restart_required','上次调用结果不明，请重启游戏后重新连接。')
         if not self.alive():raise TransportError('disconnected','游戏已退出或连接已断开。')
         deadline=time.monotonic()+timeout
@@ -225,7 +250,8 @@ class Hades2LuaTransport:
         if error.Fail() or original not in (b'\x00',b'\x01'):raise TransportError('incompatible','后台运行标志无法验证。')
         self.focus_original=original
         if self.process.WriteMemory(focus,b'\x00',error)!=1 or error.Fail():raise TransportError('memory_error',str(error))
-        bp=self.target.BreakpointCreateByAddress(self.address('_ZN3sgg5World6UpdateEf'))
+        bp=self.target.BreakpointCreateByAddress(
+            entry_address if entry_address is not None else self.address('_ZN3sgg5World6UpdateEf'))
         leased=False
         try:
             self.resume(deadline,breakpoint_expected=True)
@@ -249,12 +275,68 @@ class Hades2LuaTransport:
                     leased=True
                     return th,L,bp
                 self.resume(deadline,breakpoint_expected=True)
-            raise TransportError('waiting','等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。')
+            raise TransportError('waiting',
+                '等待游戏主线程就绪超时，请在游戏就绪后重试。' if entry_address is not None
+                else '等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。')
         finally:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 
-    @profiled("debugger.execute")
     def execute(self, source, *, expression_timeout_seconds=2.0):
+        if getattr(self, 'mailbox_mode', 'lldb') == 'mailbox':
+            return self._execute_mailbox(source, expression_timeout_seconds=expression_timeout_seconds)
+        return self._execute_lldb(source, expression_timeout_seconds=expression_timeout_seconds)
+
+    def _execute_mailbox(self, source, *, expression_timeout_seconds=2.0):
+        started=time.monotonic()
+        self.last_expression_duration=0
+        self.last_mailbox_profile={}
+        try:
+            if self.tainted:
+                raise TransportError('restart_required','hades2.error.restartRequired')
+            if not self.alive():
+                raise TransportError('disconnected','hades2.error.notAttached')
+            if self._mailbox is None:
+                library=self.native_mailbox_library
+                if library is None:
+                    raise TransportError('incompatible','hades2.error.commandConnectionUnavailable')
+                try:
+                    mailbox=Hades2CommandMailbox(library.path,self.pid,alive=self.alive)
+                except (OSError,ValueError) as error:
+                    raise TransportError('incompatible','hades2.error.commandConnectionUnavailable',diagnostic=str(error)) from error
+                self._mailbox=mailbox
+                try:
+                    install_command_mailbox(self,lldb,mailbox,library)
+                except BaseException:
+                    mailbox.close()
+                    self._mailbox=None
+                    raise
+            try:
+                return self._mailbox.execute(source,timeout_seconds=expression_timeout_seconds)
+            except TransportError as error:
+                if self._mailbox.tainted:
+                    self.tainted=True
+                if error.code == 'resident_generation_missing':
+                    # The native consumer proved this source never executed.
+                    # The resident owner decides whether a later status may
+                    # bootstrap; this request is never replayed here.
+                    self._mailbox.close()
+                    self._mailbox=None
+                raise
+        finally:
+            self.last_duration=time.monotonic()-started
+            if self._mailbox is not None:
+                self.last_mailbox_profile=dict(self._mailbox.last_profile)
+
+    def acknowledge_result(self):
+        if self._mailbox is not None:
+            try:
+                self._mailbox.acknowledge()
+            except BaseException:
+                self.tainted=True
+                raise
+
+    @profiled("debugger.execute")
+    def _execute_lldb(self, source, *, expression_timeout_seconds=2.0):
         started=time.monotonic(); scratch=None; bp=None; self.last_expression_duration=0; primary_error_code=None
         try:
             th,L,bp=self.boundary()
@@ -342,6 +424,10 @@ class Hades2LuaTransport:
 
     def detach(self):
         detached_pid=None
+        mailbox=getattr(self,'_mailbox',None)
+        if mailbox is not None:
+            mailbox.close()
+            self._mailbox=None
         if self.process and self.alive():
             self.stop(time.monotonic()+3,phase='detach.stop')
             self.restore_focus()
@@ -350,7 +436,7 @@ class Hades2LuaTransport:
             if error.Fail():raise TransportError('detach_failed',str(error))
             detached_pid=self.pid
             self.drain()
-        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None
+        self.process=None;self.pid=None;self.addresses={};self.tainted=False;self.native_runtime_installer=None;self.native_mailbox_library=None
         if detached_pid is not None:
             # LLDB has released the target, but macOS may retain its BSD stop
             # signal. Complete the process handoff after debugger ownership ends.

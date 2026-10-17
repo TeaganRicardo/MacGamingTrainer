@@ -188,7 +188,13 @@ class Hades2ResidentSession:
     @staticmethod
     def _runtime_generation_missing(error):
         message = str(error)
-        return error.code == "lua_error" and "__MacGamingTrainerV1" in message and "nil value" in message
+        return (error.code == "resident_generation_missing"
+                or (error.code == "lua_error" and "__MacGamingTrainerV1" in message and "nil value" in message))
+
+    def _acknowledge_result(self):
+        acknowledge = getattr(self._transport, "acknowledge_result", None)
+        if acknowledge is not None:
+            acknowledge()
 
     @staticmethod
     def _resident_cleanup_failed(error):
@@ -287,6 +293,7 @@ class Hades2ResidentSession:
             )
             if handoff is None:
                 break
+            self._acknowledge_result()
             if handoff == "unsupported":
                 raise TransportError(
                     "incompatible",
@@ -346,6 +353,7 @@ class Hades2ResidentSession:
                 generation_reset=reply.generation_reset,
                 outcome_unknown=True,
             )
+        self._acknowledge_result()
         return reply
 
     def _dispatch_source(self, command, params, batch):

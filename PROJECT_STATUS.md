@@ -46,7 +46,9 @@ Retain these unperformed scope families in the consolidated user-run pass; detai
 
 The user authorizes independently reviewed, automated-green merges before consolidated final manual acceptance of the selected work. Coordinate actual overlapping owners and review the final head; missing manual-only evidence does not itself reopen coding tasks or block unrelated work.
 
-Game launches, gameplay/load tests and visual acceptance remain user-executed, never agent/RDC-executed. Build, fixtures, package provenance and source review must not be described as that acceptance.
+For [#499](https://github.com/TeaganRicardo/MacGamingTrainer/issues/499), the user explicitly authorized autonomous RDC real-game validation, independent review and merge on 2026-10-17, and replaced the earlier partial planning scope. This includes the launches, isolated gameplay/load cases and visual checks needed to deliver the complete command mailbox. Preserve the user's saves and record the exact source and observed results.
+
+Outside that task authorization, game launches, gameplay/load tests and visual acceptance remain user-executed. Build, fixtures, package provenance and source review must not be described as real-game acceptance.
 
 ## Conditional risks
 

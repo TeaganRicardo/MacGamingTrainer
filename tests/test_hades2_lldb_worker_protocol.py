@@ -20,6 +20,8 @@ class FakeTransport:
         self.last_duration = 0.0
         self.last_expression_duration = 0.0
         self.last_attach_profile = {}
+        self.last_mailbox_profile = {}
+        self.pending_result = None
 
     def alive(self):
         return self.pid is not None
@@ -36,6 +38,7 @@ class FakeTransport:
         self.detach()
 
     def execute(self, source, *, expression_timeout_seconds=2.0):
+        assert self.pending_result is None, "worker reused an unacknowledged receipt"
         self.last_duration = 0.25
         self.last_expression_duration = expression_timeout_seconds
         if source == "fail":
@@ -46,7 +49,13 @@ class FakeTransport:
                 diagnostic="fake uncertain result",
                 arguments=("fake",),
             )
-        return "result:" + source
+        self.pending_result = "result:" + source
+        self.last_mailbox_profile = {"sequence": 1, "roundTripSeconds": 0.015}
+        return self.pending_result
+
+    def acknowledge_result(self):
+        assert self.pending_result is not None
+        self.pending_result = None
 
 
 class FakeTimeWarp:
@@ -100,6 +109,7 @@ requests = [
     },
     {"id": "5", "method": "time_warp.set_speed", "params": {"value": 2.5}},
     {"id": "6", "method": "time_warp.current_speed", "params": {}},
+    {"id": "6a", "method": "transport.acknowledge_result", "params": {}},
     {"id": "7", "method": "transport.execute", "params": {"source": "fail"}},
 ]
 input_stream = io.StringIO(
@@ -109,23 +119,25 @@ output_stream = io.StringIO()
 serve_requests(input_stream, output_stream, worker)
 replies = [json.loads(line) for line in output_stream.getvalue().splitlines()]
 
-assert [reply["id"] for reply in replies] == [str(index) for index in range(1, 8)]
+assert [reply["id"] for reply in replies] == ["1", "2", "3", "4", "5", "6", "6a", "7"]
 assert replies[0]["result"]["protocolVersion"] == 1
 assert replies[1]["state"]["pid"] == 4242
 assert replies[1]["state"]["lastAttachProfile"] == {"attachProcess": 0.01}
 assert replies[2]["result"] == "result:return true"
 assert replies[2]["state"]["lastDuration"] == 0.25
 assert replies[2]["state"]["lastExpressionDuration"] == 4.5
+assert replies[2]["state"]["lastMailboxProfile"] == {"sequence": 1, "roundTripSeconds": 0.015}
 assert replies[4]["result"] == 2.5
 assert replies[5]["result"] == 2.5
 assert len(created) == 1
-assert replies[6]["error"] == {
+assert replies[6]["result"] is True
+assert replies[7]["error"] == {
     "code": "outcome_unknown",
     "presentation": "unknown outcome",
     "diagnostic": "fake uncertain result",
     "arguments": ["fake"],
 }
-assert replies[6]["state"]["tainted"] is True
+assert replies[7]["state"]["tainted"] is True
 
 
 class FakeSidecar:
@@ -237,6 +249,30 @@ except AdapterError as error:
     assert error.code == "outcome_unknown", "terminal trust failure was not sticky"
 else:
     raise AssertionError("terminal LLDB sidecar was reused")
+
+# Acceptance crosses a separate non-executing RPC. Losing its reply closes the
+# session, without replaying the already-observed operation or recreating a child.
+lost_acceptance_sidecar = FakeSidecar([
+    {"id": "1", "result": {"protocolVersion": 1}},
+    {"id": "2", "result": "known completed result", "state": {"pid": 4242}},
+    SidecarTerminalError("lost mailbox acceptance reply", outcome_unknown=False),
+])
+lost_acceptance_client = _LLDBWorkerClient(sidecar=lost_acceptance_sidecar)
+assert lost_acceptance_client.call("transport.execute", {"source": "one shot"})[0] == "known completed result"
+try:
+    lost_acceptance_client.call("transport.acknowledge_result", allow_start=False)
+except AdapterError as error:
+    assert error.code == "restart_required"
+else:
+    raise AssertionError("lost acceptance reply reused the worker")
+assert lost_acceptance_sidecar.calls[-1] == ("transport.acknowledge_result", {}, False, False)
+try:
+    lost_acceptance_client.call("transport.execute", {"source": "one shot"})
+except AdapterError as error:
+    assert error.code == "restart_required"
+else:
+    raise AssertionError("lost acceptance caused a duplicate operation")
+assert len(lost_acceptance_sidecar.calls) == 3
 
 reported_unknown_sidecar = FakeSidecar([
     {"id": "1", "result": {"protocolVersion": 1}},

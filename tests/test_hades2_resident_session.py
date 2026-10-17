@@ -44,6 +44,8 @@ class FakeTransport:
         self.last_attach_profile = {}
         self.outcomes = list(outcomes or [])
         self.calls = []
+        self.pending_receipt = False
+        self.acknowledged = []
 
     def alive(self):
         return self.live
@@ -59,6 +61,8 @@ class FakeTransport:
         self.live = False
 
     def execute(self, source, *, expression_timeout_seconds=None):
+        if not self.tainted:
+            assert not self.pending_receipt, "A new command crossed before the resident accepted its previous receipt"
         self.calls.append({
             "source": source,
             "expression_timeout_seconds": expression_timeout_seconds,
@@ -68,9 +72,15 @@ class FakeTransport:
         outcome = self.outcomes.pop(0) if self.outcomes else payload()
         if isinstance(outcome, BaseException):
             raise outcome
+        self.pending_receipt = True
         if isinstance(outcome, str):
             return outcome
         return json.dumps(outcome)
+
+    def acknowledge_result(self):
+        assert self.pending_receipt and not self.tainted
+        self.pending_receipt = False
+        self.acknowledged.append(self.calls[-1]["source"])
 
 
 old_localize = session_module.localize_catalog
@@ -88,6 +98,7 @@ try:
     assert first.payload["status"] == "ready"
     assert second.payload["status"] == "ready"
     assert len(status_transport.calls) == 2
+    assert len(status_transport.acknowledged) == 2
     assert status_transport.calls[0]["source"].startswith("BOOTSTRAP\n")
     assert not status_transport.calls[1]["source"].startswith("BOOTSTRAP\n")
 
@@ -150,6 +161,7 @@ try:
     else:
         raise AssertionError("malformed resident payload did not become outcome_unknown")
     assert decode_transport.tainted is True
+    assert not decode_transport.acknowledged and decode_transport.pending_receipt
 
     null_transport = FakeTransport(["null"])
     null_session = Hades2ResidentSession(null_transport, bootstrap="")
@@ -174,6 +186,7 @@ try:
     async_reply = async_session.status()
     assert async_reply.outcome_unknown is True
     assert async_transport.tainted is True
+    assert not async_transport.acknowledged and async_transport.pending_receipt
     try:
         async_session.status()
     except AdapterError as error:
@@ -201,6 +214,34 @@ try:
     known_reply = known_session.status()
     assert known_reply.outcome_unknown is False
     assert known_transport.tainted is False
+    assert len(known_transport.acknowledged) == 1
+
+    # A game-thread VM lease mismatch is a known pre-execution rejection.
+    # Status may bootstrap a fresh VM; a submitted mutation is never replayed.
+    native_missing = AdapterError("resident_generation_missing", "fixture VM reset")
+    lease_transport = FakeTransport([payload(), native_missing, payload()])
+    lease_session = Hades2ResidentSession(lease_transport, bootstrap="BOOTSTRAP")
+    lease_session.status()
+    assert lease_session.status().generation_reset is True
+    assert len(lease_transport.calls) == 3 and len(lease_transport.acknowledged) == 2
+    lease_transport.outcomes = [native_missing]
+    before = len(lease_transport.calls)
+    try:
+        lease_session.mutate("spawn_reward", {"requestId": "never-replay"})
+    except ResidentGenerationInvalidated:
+        pass
+    else:
+        raise AssertionError("A mutation crossed a replacement VM lease")
+    assert len(lease_transport.calls) == before + 1
+
+    # Native menu-close handoff is an ordinary accepted control receipt.
+    # It must release its slot before the next observation/actual mutation.
+    handoff_transport = FakeTransport([
+        {"__trainerTraitTrayHandoff": "closing"}, payload(),
+    ])
+    handoff_session = Hades2ResidentSession(handoff_transport, bootstrap="")
+    handoff_session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 10})
+    assert len(handoff_transport.calls) == len(handoff_transport.acknowledged) == 2
 
     cleanup_transport = FakeTransport([
         AdapterError("lua_error", "MGT_RESIDENT_RESTART_REQUIRED: cleanup failed"),
