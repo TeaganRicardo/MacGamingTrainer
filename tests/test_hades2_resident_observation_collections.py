@@ -161,7 +161,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             transport.execute("CurrentRun.Hero=savedHero; savedHero.ObjectId=2; return '{}'")
             restored = session.mutate("set_vital", {"vital": "health", "field": "current", "value": 81}).payload
             assert len(restored["currentRunTraits"]) == 4
-            assert transport.wire["__trainerObservation"]["retained"] == []
+            # Restoring Hero invalidates Hero-owned trait/element domains, while the
+            # independent resource domain may remain acknowledged and retained.
+            assert transport.wire["__trainerObservation"]["retained"] == ["resources"]
             # Status always reconstructs all dynamic collections, regardless
             # of an earlier patch sequence. Re-bootstrap creates a new epoch.
             session.status()
