@@ -104,8 +104,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             # fresh collection baseline instead of retaining unseen state.
             discarded = json.loads(transport.execute(
                 "return __MacGamingTrainerV1.json(__MacGamingTrainerV1.observe("
-                .. "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
-                .. "'discarded',2))"
+                "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
+                "'discarded',2))"
             ))
             assert discarded["__trainerObservation"]["revision"] == 3
             assert set(discarded["__trainerObservation"]["retained"]) == {
