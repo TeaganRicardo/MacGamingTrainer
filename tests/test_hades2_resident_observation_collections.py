@@ -112,6 +112,35 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             }
             assert transport.wire["__trainerObservation"]["revision"] == 3
             assert not transport.tainted
+
+            # Action commands use the same domain contract. A trait edit must
+            # republish the changed trait domain without rebuilding unrelated
+            # resources/elements; an unrelated reward spawn may retain all three.
+            trait = resource_edit["currentRunTraits"][0]
+            level = trait["level"]
+            trait_edit = session.mutate("set_trait_level", {
+                "generationId": trait["generationId"], "runId": trait["runId"],
+                "instanceId": trait["instanceId"], "trait": trait["name"],
+                "family": trait["family"], "expectedLevel": level,
+                "expectedRarity": trait["rarity"],
+                "expectedSameNameCount": trait["sameNameCount"],
+                "targetLevel": level + 1, "requestId": "trait-retention-boundary",
+            }).payload
+            assert trait_edit["currentRunTraits"][0]["level"] == level + 1
+            assert transport.wire["__trainerObservation"]["retained"] == ["resources", "elements"]
+            assert "currentRunTraits" in transport.wire
+            assert "resources" not in transport.wire and "elements" not in transport.wire
+            assert transport.wire["__trainerObservation"]["revision"] == 4
+
+            reward = session.mutate("spawn_reward", {
+                "reward": "MetaCurrencyDrop", "requestId": "reward-retention-boundary",
+            }).payload
+            assert reward["applied"] and reward["lastAction"]["outcome"] == "completed"
+            assert set(transport.wire["__trainerObservation"]["retained"]) == {
+                "resources", "elements", "currentRunTraits",
+            }
+            assert not {"resources", "elements", "currentRunTraits"} & transport.wire.keys()
+            assert transport.wire["__trainerObservation"]["revision"] == 7
             transport.execute("__mgtUpgradeQueries = 0; return '{}'")
 
             # A Lua observation can complete after Python loses its reply. The
@@ -120,9 +149,9 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
             discarded = json.loads(transport.execute(
                 "return __MacGamingTrainerV1.json(__MacGamingTrainerV1.observe("
                 "'set_vital',{vital='health',field='current',value=76,includeCatalogs=false},"
-                "'discarded',3))"
+                "'discarded',5))"
             ))
-            assert discarded["__trainerObservation"]["revision"] == 4
+            assert discarded["__trainerObservation"]["revision"] == 6
             assert set(discarded["__trainerObservation"]["retained"]) == {
                 "resources", "elements", "currentRunTraits",
             }
