@@ -15,6 +15,8 @@ WORKER = r"""
 import argparse, json, pathlib, sys, time
 p=argparse.ArgumentParser(); p.add_argument('--game'); args=p.parse_args()
 log=pathlib.Path(__file__).with_suffix('.commands.jsonl')
+with pathlib.Path(__file__).with_suffix('.startups').open('a') as startup:
+ startup.write('started\n')
 state={'connected':True, 'status':'ready', 'scene':'run',
        'capabilities':{'setResource':True,'setHealth':True,'setMana':True,'setArmor':True,
                        'setRerolls':True,'setSpellCharge':True,'setStats':True,'setElements':True},
@@ -94,9 +96,23 @@ final class GenerateAction: NSObject {
   let python=URL(fileURLWithPath:CommandLine.arguments[1])
   let worker=URL(fileURLWithPath:CommandLine.arguments[2]); let temporary=worker.deletingLastPathComponent()
   let log=worker.deletingPathExtension().appendingPathExtension("commands.jsonl")
+  let startups=worker.deletingPathExtension().appendingPathExtension("startups")
+  func workerStartCount() -> Int {
+   ((try? String(contentsOf:startups,encoding:.utf8)) ?? "").split(separator:"\n").count
+  }
   let session=TrainerBackendSession(client:BackendClient(process:BackendProcess(executableURL:python,argumentsPrefix:["-u"])))
   let model=Hades2TrainerModel(session:session,logSink:TrainerLogSink(url:temporary.appendingPathComponent("log")),backendScriptURL:worker,runLogDirectoryURL:temporary.appendingPathComponent("no-game-log"))
+  check(!session.isStarted && workerStartCount()==0,
+        "direct-model initialization eagerly started Backend before Host observed the target")
+  let initialObservation=TrainerTargetObservation(isRunning:false,launchGeneration:0)
+  model.hostTargetLifetimeChanged(observation:initialObservation)
   wait { model.canSetResource && !model.busy }
+  check(session.isStarted && workerStartCount()==1,
+        "Host initial target observation did not start exactly one Backend worker")
+  model.hostTargetLifetimeChanged(observation:initialObservation)
+  pump(0.15)
+  check(model.canSetResource && workerStartCount()==1,
+        "duplicate initial observation restarted the Backend worker")
   let localization=TrainerLocalizationStore(defaults:InMemoryDefaults())
   let host=NSHostingView(rootView:TrainerShell { EmptyView() } content: {
    Hades2TrainerView(model:model)

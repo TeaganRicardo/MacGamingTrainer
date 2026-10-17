@@ -80,6 +80,7 @@ func wait(_ predicate: () -> Bool) {
             backendScriptURL: worker,
             runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log")
         )
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
 
         wait { model.backendAvailable && !model.busy }
         check(!model.forceEnableRerolls, "force rerolls unexpectedly enabled")

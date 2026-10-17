@@ -60,6 +60,7 @@ func wait(_ predicate: () -> Bool) {
         let session = TrainerBackendSession(client: BackendClient(process: BackendProcess(executableURL: python, argumentsPrefix: ["-u"])))
         let model = Hades2TrainerModel(session: session, logSink: TrainerLogSink(url: temporary.appendingPathComponent("log")),
             backendScriptURL: worker, runLogDirectoryURL: temporary.appendingPathComponent("no-real-game-log"))
+        model.hostTargetLifetimeChanged(observation: TrainerTargetObservation(isRunning: false, launchGeneration: 0))
         wait { model.backendAvailable && !model.busy && model.canGenerateGathering(.flora) }
         check(model.gatheringProbabilities.isEmpty && model.gatheringTargets.count == 5, "Native defaults or five observed targets missing")
         let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
