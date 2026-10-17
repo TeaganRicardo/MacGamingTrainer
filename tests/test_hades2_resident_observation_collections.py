@@ -140,7 +140,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
                 "resources", "elements", "currentRunTraits",
             }
             assert not {"resources", "elements", "currentRunTraits"} & transport.wire.keys()
-            assert transport.wire["__trainerObservation"]["revision"] == 7
+            assert transport.wire["__trainerObservation"]["revision"] == 5
             transport.execute("__mgtUpgradeQueries = 0; return '{}'")
 
             # A Lua observation can complete after Python loses its reply. The
@@ -159,7 +159,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-observation-") as temporary, patch.
                 "set_vital", {"vital": "health", "field": "current", "value": 77}
             ).payload
             assert recovered["health"] == 77
-            assert transport.wire["__trainerObservation"]["revision"] == 5
+            assert transport.wire["__trainerObservation"]["revision"] == 7
             assert transport.wire["__trainerObservation"]["retained"] == []
             assert json.loads(transport.execute(
                 "return '{\\\"count\\\":' .. tostring(__mgtUpgradeQueries) .. '}'"
