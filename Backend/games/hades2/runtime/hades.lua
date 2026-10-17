@@ -4144,19 +4144,10 @@ if __MacGamingTrainerV1 == nil then
       local function appendMap(value)
         append(value)
         if type(value) ~= "table" then return end
-        local keys = {}
-        for key in pairs(value) do keys[#keys + 1] = tostring(key) end
-        table.sort(keys)
-        for _, text in ipairs(keys) do
-          local actual = text
-          if value[actual] == nil then
-            for key in pairs(value) do
-              if tostring(key) == text then actual = key; break end
-            end
-          end
-          append(text)
-          append(value[actual])
-        end
+        -- The same native table has stable traversal while untouched. Any
+        -- insertion/removal may reorder pairs and conservatively invalidates
+        -- the domain, which is safe and cheaper than sorting every request.
+        for key, item in pairs(value) do append(key); append(item) end
       end
 
       append(M.traitInventoryGeneration)
@@ -4181,14 +4172,14 @@ if __MacGamingTrainerV1 == nil then
       -- Capability projection depends on function ownership as well as trait
       -- values. Function replacement is rare, but must invalidate a retained
       -- domain rather than preserve stale edit affordances.
-      for _, callback in ipairs({
-        IsGodTrait, GetAllUpgradeableGodTraits, IncreaseTraitLevel, AddRarityToTraits,
-        GetProcessedTraitData, RemoveTraitData, AddTraitToHero, GetTraitTooltipTitle,
-        GetLootSourceName, UpdateTalentPointInvestedCache, UpdateTraitNumber,
-        UnequipKeepsake, EquipKeepsake, UnequipWeapon, RemoveTrait, RemoveLastStand,
-        Destroy, SetupCostume, CallFunctionName, ValidateMaxHealth, ValidateMaxMana,
-        HandleWeaponAnimSwaps, GetEquippedWeapon,
-      }) do append(callback) end
+      for _, name in ipairs({
+        "IsGodTrait", "GetAllUpgradeableGodTraits", "IncreaseTraitLevel", "AddRarityToTraits",
+        "GetProcessedTraitData", "RemoveTraitData", "AddTraitToHero", "GetTraitTooltipTitle",
+        "GetLootSourceName", "UpdateTalentPointInvestedCache", "UpdateTraitNumber",
+        "UnequipKeepsake", "EquipKeepsake", "UnequipWeapon", "RemoveTrait", "RemoveLastStand",
+        "Destroy", "SetupCostume", "CallFunctionName", "ValidateMaxHealth", "ValidateMaxMana",
+        "HandleWeaponAnimSwaps", "GetEquippedWeapon",
+      }) do append(_G[name]) end
 
       local hero = owner and owner.hero or nil
       append(type(hero) == "table" and hero.Weapons or nil)
@@ -4206,18 +4197,8 @@ if __MacGamingTrainerV1 == nil then
         for depth, column in ipairs(talents) do
           append(depth); append(column)
           if type(column) == "table" then
-            local slots = {}
-            for slot in pairs(column) do slots[#slots + 1] = tostring(slot) end
-            table.sort(slots)
-            for _, slotText in ipairs(slots) do
-              local slot = slotText
-              if column[slot] == nil then
-                for key in pairs(column) do
-                  if tostring(key) == slotText then slot = key; break end
-                end
-              end
-              local node = column[slot]
-              append(slotText); append(node)
+            for slot, node in pairs(column) do
+              append(slot); append(node)
               append(type(node) == "table" and node.Name or nil)
               append(type(node) == "table" and node.Invested or nil)
               append(type(node) == "table" and node.QueuedInvested or nil)
@@ -4228,11 +4209,7 @@ if __MacGamingTrainerV1 == nil then
 
       local meta = type(GameState) == "table" and GameState.MetaUpgradeState or nil
       if type(meta) == "table" then
-        local names = {}
-        for name in pairs(meta) do names[#names + 1] = tostring(name) end
-        table.sort(names)
-        for _, name in ipairs(names) do
-          local state = meta[name]
+        for name, state in pairs(meta) do
           append(name); append(state)
           append(type(state) == "table" and state.Unlocked or nil)
           append(type(state) == "table" and state.Equipped or nil)
@@ -7194,9 +7171,8 @@ if __MacGamingTrainerV1 == nil then
   local function state(includeCatalogs)
     if preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
-    local resourceFingerprint = observationCandidates ~= nil and resourceObservationFingerprint() or nil
-    local retainResources = resourceFingerprint ~= nil
-      and observation.retain("resources", resourceFingerprint)
+    local resourceFingerprint = resourceObservationFingerprint()
+    local retainResources = observation.retain("resources", resourceFingerprint)
     local list = retainResources and nil or resources()
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
