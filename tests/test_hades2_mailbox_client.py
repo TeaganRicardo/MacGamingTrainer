@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "Backend"))
 
 from core.adapter import AdapterError
 from games.hades2.mailbox import (
-    BUSY, CAPACITY, CLOSED, EMPTY, ERROR, GENERATION_CHANGED, OK,
+    BUSY, CANCELLED, CAPACITY, CLOSED, EMPTY, ERROR, GENERATION_CHANGED, OK,
     SUCCESS, Hades2CommandMailbox,
 )
 
@@ -114,10 +114,10 @@ def consumer_process(connection, library_path):
             if operation in ("roundtrip", "complete"):
                 if request is None:
                     raise AssertionError("Completion has no successful consumer claim")
-                outcome, status, payload = arguments
+                outcome, status, payload, *timing = arguments
                 result = library.MGTTestMailboxComplete(
                     address, request.sequence, outcome, status,
-                    ctypes.c_char_p(payload), len(payload), 123_000,
+                    ctypes.c_char_p(payload), len(payload), timing[0] if timing else 123_000,
                 )
                 connection.send(("completed", result, request.sequence))
                 request = None
@@ -258,6 +258,12 @@ class MailboxClientTests(unittest.TestCase):
         mailbox, consumer = self.mailbox()
         self.assertFalse(mailbox.path.exists())
         self.roundtrip(mailbox, consumer, '{"text":"回执"}'.encode())
+        profile = mailbox.last_profile
+        self.assertGreater(profile["queueSeconds"], 0)
+        self.assertEqual(profile["executionSeconds"], 0.000123)
+        self.assertGreaterEqual(profile["roundTripSeconds"], profile["queueSeconds"])
+        self.assertAlmostEqual(profile["overheadSeconds"], max(0.0, profile["roundTripSeconds"]
+                               - profile["queueSeconds"] - profile["executionSeconds"]))
         before = consumer.snapshot()
         self.assertEqual((before["state"], before["claimed_count"]), (COMPLETE, 1))
         self.assert_error("mailbox_unacknowledged", lambda: mailbox.execute("second command"))
@@ -372,6 +378,23 @@ class MailboxClientTests(unittest.TestCase):
                 self.assertEqual(consumer.receive()[0:2], ("completed", complete_result))
                 self.assert_poisoned(mailbox)
                 self.assertEqual(consumer.snapshot()["state"], COMPLETE)
+
+    def test_contradictory_error_and_cancelled_receipts_keep_trust_poisoned(self):
+        cases = (
+            ("error with success status", ERROR, 0, b"error", 123_000),
+            ("cancellation with error status", CANCELLED, 7, b"", 0),
+            ("cancellation with result bytes", CANCELLED, 0, b"executed", 0),
+            ("cancellation with execution time", CANCELLED, 0, b"", 123_000),
+        )
+        for name, outcome, status, payload, execution_ns in cases:
+            with self.subTest(name=name):
+                mailbox, consumer = self.mailbox()
+                consumer.send("roundtrip", outcome, status, payload, execution_ns)
+                self.assert_error("outcome_unknown", lambda: mailbox.execute("mutation"))
+                self.assertEqual(consumer.receive()[0:2], ("completed", OK))
+                self.assert_poisoned(mailbox)
+                snapshot = consumer.snapshot()
+                self.assertEqual((snapshot["state"], snapshot["claimed_count"]), (COMPLETE, 1))
 
     def test_target_exit_before_publication_leaves_slot_unused(self):
         mailbox, consumer = self.mailbox()

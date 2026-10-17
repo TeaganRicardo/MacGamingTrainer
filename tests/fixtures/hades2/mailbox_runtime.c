@@ -5,15 +5,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <time.h>
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
 
 static int fixture_main_thread = 1;
 static int fixtureMainThread(void) { return fixture_main_thread; }
+static unsigned clock_calls;
+static int fixtureClockGettime(clockid_t clock, struct timespec *now) {
+    ++clock_calls;
+    return clock_gettime(clock, now);
+}
 #define pthread_main_np fixtureMainThread
+#define clock_gettime fixtureClockGettime
 #define MGT_MAILBOX_RUNTIME_TEST 1
 #include "CommandMailbox.c"
+#undef clock_gettime
 
 static lua_State *fixture_state;
 static unsigned query_calls, gettop_calls, tostring_calls;
@@ -65,7 +73,7 @@ static void freshProcess(void) {
     lua_pushliteral(fixture_state, "stack sentinel");
     assert(bindGeneration(&active_lease) == LUA_OK);
     assert(generationMatches(&active_lease));
-    gettop_calls = tostring_calls = query_calls = 0;
+    gettop_calls = tostring_calls = query_calls = clock_calls = 0;
 }
 
 static void submit(const char *source) {
@@ -82,6 +90,8 @@ static MGTMailboxReceipt receipt(uint32_t outcome, int status, char *output, siz
                             &result, output, capacity) == MGT_MAILBOX_OK);
     assert(result.outcome == outcome && result.status == status);
     assert(result.length <= capacity);
+    if (outcome == MGT_MAILBOX_CANCELLED)
+        assert(result.queue_ns == 0 && result.execution_ns == 0);
     if (result.length < capacity) output[result.length] = 0;
     assert(lua_gettop(fixture_state) == 1);
     assert(strcmp(lua_tostring(fixture_state, 1), "stack sentinel") == 0);
@@ -108,6 +118,7 @@ static void testIdleAndMainThread(void) {
     for (unsigned index = 0; index < 1000; ++index) mgtCommandMailboxPump();
     assert(gettop_calls == 0 && tostring_calls == 0 && query_calls == 0);
     assert(atomic_load(&active_lease.slot->heartbeat_count) == 1000);
+    assert(clock_calls == 1000); /* One existing heartbeat sample per idle frame. */
     submit("marker = (marker or 0) + 1; return 'completed'");
     fixture_main_thread = 0;
     mgtCommandMailboxPump();
@@ -121,6 +132,45 @@ static void testIdleAndMainThread(void) {
     assert(query_calls == 1);
     lua_getglobal(fixture_state, "marker");
     assert(lua_tointeger(fixture_state, -1) == 1); lua_pop(fixture_state, 1);
+    acknowledge();
+}
+
+static uint64_t lua_entered_ns, lua_finished_ns;
+
+static void pauseForTiming(void) {
+    struct timespec delay = {0, 5000000};
+    while (nanosleep(&delay, &delay) != 0) assert(errno == EINTR);
+}
+
+static int timedLuaWork(lua_State *state) {
+    (void)state;
+    lua_entered_ns = mgt_mailbox_monotonic_ns();
+    pauseForTiming();
+    lua_finished_ns = mgt_mailbox_monotonic_ns();
+    return 0;
+}
+
+static void testQueueAndExecutionTiming(void) {
+    freshProcess();
+    lua_pushcfunction(fixture_state, timedLuaWork);
+    lua_setglobal(fixture_state, "timed_work");
+    submit("timed_work(); return 'timed'");
+    uint64_t submitted = active_lease.slot->submitted_ns;
+    pauseForTiming();
+    uint64_t pump_started = mgt_mailbox_monotonic_ns();
+    mgtCommandMailboxPump();
+    uint64_t pump_finished = mgt_mailbox_monotonic_ns();
+    pauseForTiming(); /* Delayed host polling cannot enlarge either duration. */
+    char output[32];
+    MGTMailboxReceipt result = receipt(MGT_MAILBOX_SUCCESS, 0, output, sizeof(output));
+    assert(strcmp(output, "timed") == 0);
+    assert(result.queue_ns >= pump_started - submitted);
+    assert(result.queue_ns <= lua_entered_ns - submitted);
+    assert(result.queue_ns >= UINT64_C(5000000));
+    assert(result.execution_ns >= lua_finished_ns - lua_entered_ns);
+    assert(result.execution_ns >= UINT64_C(5000000));
+    assert(submitted + result.queue_ns + result.execution_ns >= lua_finished_ns);
+    assert(submitted + result.queue_ns + result.execution_ns <= pump_finished);
     acknowledge();
 }
 
@@ -244,12 +294,13 @@ static void testProtectedRegistryAllocation(void) {
 
 int main(void) {
     testIdleAndMainThread();
+    testQueueAndExecutionTiming();
     testGeneration();
     testErrorsAndBounds();
     testLeaseRecovery();
     testProtectedRegistryAllocation();
     free(active_lease.slot); active_lease.slot = NULL;
     lua_close(fixture_state); fixture_state = NULL;
-    puts("mailbox_runtime_ok: idle/main-thread, exactly-once claim, Lua stack/errors/bounds, registry generation/OOM, producer death, unacknowledged lease");
+    puts("mailbox_runtime_ok: idle/main-thread/clock, actual queue/execution timing, exactly-once claim, Lua stack/errors/bounds, registry generation/OOM, producer death, unacknowledged lease");
     return 0;
 }

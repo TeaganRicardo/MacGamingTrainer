@@ -45,6 +45,9 @@ def load_native_library(transport, lldb, path, *, abi_symbol, abi_version, expor
     base = game_module.GetObjectFileHeaderAddress().GetLoadAddress(transport.target)
     if base in (0, lldb.LLDB_INVALID_ADDRESS):
         raise ValueError("Cannot locate the verified game image header")
+    # dyld records canonical paths (for example /private/tmp on macOS).
+    # Resolve the package alias before asking LLDB to match the loaded module.
+    path = Path(path).resolve(strict=True)
     expected_uuid = image_uuid(path)
     spec = lldb.SBFileSpec(str(path))
     module = transport.target.FindModule(spec)

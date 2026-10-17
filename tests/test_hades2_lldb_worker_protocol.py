@@ -263,6 +263,7 @@ try:
     lost_acceptance_client.call("transport.acknowledge_result", allow_start=False)
 except AdapterError as error:
     assert error.code == "restart_required"
+    assert error.presentation == "hades2.error.commandResultConnectionLost"
 else:
     raise AssertionError("lost acceptance reply reused the worker")
 assert lost_acceptance_sidecar.calls[-1] == ("transport.acknowledge_result", {}, False, False)
@@ -273,6 +274,54 @@ except AdapterError as error:
 else:
     raise AssertionError("lost acceptance caused a duplicate operation")
 assert len(lost_acceptance_sidecar.calls) == 3
+assert lost_acceptance_sidecar.closed
+assert not lost_acceptance_client.reopen_after_initial_attach_loss()
+
+# An exited worker before ACK, a refused ACK, or an invalid success payload all
+# leave the completed result unaccepted. None may create a replacement worker or
+# downgrade the recovery requirement to an ordinary reconnect.
+for acceptance in ("idle_exit", {"result": False}, {"result": None}, {
+    "error": {"code": "debugger_worker_internal", "presentation": "hades2.error.debuggerInternal",
+              "diagnostic": "unsupported worker method: transport.acknowledge_result"},
+}):
+    acceptance_sidecar = FakeSidecar([
+        {"result": {"protocolVersion": 1}},
+        {"result": "known completed result", "state": {"pid": 4242}},
+        acceptance,
+    ])
+    acceptance_client = _LLDBWorkerClient(sidecar=acceptance_sidecar)
+    acceptance_client.call("transport.execute", {"source": "one shot"})
+    if acceptance == "idle_exit":
+        acceptance_sidecar.started = False
+    try:
+        acceptance_client.call("transport.acknowledge_result")
+    except AdapterError as error:
+        assert error.code == "restart_required"
+        assert error.presentation == "hades2.error.commandResultConnectionLost"
+        if isinstance(acceptance, dict) and acceptance.get("error"):
+            assert "unsupported worker method" in error.diagnostic
+    else:
+        raise AssertionError(f"invalid ACK revived a completed command: {acceptance!r}")
+    assert acceptance_client.terminal and acceptance_sidecar.closed
+    assert not acceptance_client.reopen_after_initial_attach_loss()
+    expected_calls = 2 if acceptance == "idle_exit" else 3
+    assert len(acceptance_sidecar.calls) == expected_calls
+    try:
+        acceptance_client.call("time_warp.reset")
+    except AdapterError as error:
+        assert error.code == "restart_required"
+    else:
+        raise AssertionError("ACK failure admitted a later native mutation")
+    assert len(acceptance_sidecar.calls) == expected_calls
+
+# A previous unknown mutation cannot be reclassified as a known receipt merely
+# by asking for ACK after trust has already terminated.
+try:
+    lost_mutation_client.call("transport.acknowledge_result")
+except AdapterError as error:
+    assert error.code == "outcome_unknown"
+else:
+    raise AssertionError("ACK relabeled an earlier unknown result")
 
 reported_unknown_sidecar = FakeSidecar([
     {"id": "1", "result": {"protocolVersion": 1}},

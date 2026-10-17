@@ -1,5 +1,8 @@
 /* Hades II command transport. Protocol entry points are also loaded in the
  * producer process so every shared-memory transition uses the same C11 ABI. */
+#if !defined(__APPLE__) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "MailboxProtocol.h"
 
 #define EXPORT __attribute__((visibility("default")))
@@ -60,12 +63,9 @@ EXPORT int MGTMailboxDiagnostics(void *memory, uint64_t hi, uint64_t lo,
 #if !defined(MGT_MAILBOX_RUNTIME_TEST)
 #include <dlfcn.h>
 #include <mach/mach.h>
-#include <mach/mach_time.h>
 #include <mach/mach_vm.h>
 #include <libkern/OSCacheControl.h>
 #include <pthread.h>
-#else
-#include <time.h>
 #endif
 #include <signal.h>
 #include <stdio.h>
@@ -123,7 +123,6 @@ static uintptr_t image_base;
 static MailboxLease active_lease;
 static MailboxLease *installing_lease;
 #if !defined(MGT_MAILBOX_RUNTIME_TEST)
-static mach_timebase_info_data_t timebase;
 static int hook_installed;
 #endif
 static int in_pump;
@@ -180,15 +179,6 @@ __attribute__((used, naked, noinline)) static void mgt_app_update_entry(void) {
     );
 }
 
-static uint64_t monotonicNanoseconds(void) {
-    return (uint64_t)(((__uint128_t)mach_absolute_time() * timebase.numer) / timebase.denom);
-}
-#else
-static uint64_t monotonicNanoseconds(void) {
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (uint64_t)now.tv_sec * UINT64_C(1000000000) + (uint64_t)now.tv_nsec;
-}
 #endif
 
 static int failure(char *output, size_t capacity, int status, const char *message) {
@@ -403,7 +393,7 @@ static void finishRequest(MailboxLease *lease, const MGTMailboxRequest *request,
                           size_t length, uint64_t started) {
     if (outcome == MGT_MAILBOX_UNKNOWN) process_tainted = 1;
     int completed = mgt_mailbox_complete(lease->slot, lease->hi, lease->lo,
-        request->sequence, outcome, status, result, length, monotonicNanoseconds() - started);
+        request->sequence, outcome, status, result, length, mgt_mailbox_monotonic_ns() - started);
     if (completed != MGT_MAILBOX_OK || (mgt_mailbox_flags(lease->slot) & MGT_MAILBOX_POISONED_FLAG)) {
         process_tainted = 1;
         mgt_mailbox_poison(lease->slot, lease->hi, lease->lo);
@@ -420,8 +410,7 @@ __attribute__((used, noinline)) static void mgtCommandMailboxPump(void) {
     uint32_t flags = mgt_mailbox_flags(slot);
     if (flags & MGT_MAILBOX_POISONED_FLAG) process_tainted = 1;
     if (flags != 0 || process_tainted) return;
-    uint64_t started = monotonicNanoseconds();
-    mgt_mailbox_tick(slot, started);
+    mgt_mailbox_tick(slot, mgt_mailbox_monotonic_ns());
     /* Empty frames perform no Lua access, allocation, I/O or process query. */
     if (mgt_mailbox_state(slot) != MGT_MAILBOX_POSTED) return;
     if (!producerAlive(slot->producer_pid)) {
@@ -437,6 +426,9 @@ __attribute__((used, noinline)) static void mgtCommandMailboxPump(void) {
         }
         return;
     }
+    /* The successful claim records this boundary. Reuse it rather than
+     * sampling a later start that would leave native work unattributed. */
+    uint64_t started = slot->submitted_ns + slot->queue_ns;
     in_pump = 1;
     lua_State *current = *(lua_State *volatile *)(image_base + LUA_INTERFACE_RVA);
     if (current != lease->state || current == NULL) {
@@ -540,8 +532,8 @@ EXPORT int MGTCommandMailboxInstall(void *state_pointer, uintptr_t base, const c
     installing = 1;
     result = bindGeneration(&candidate);
     if (result == 0) {
-        if (mach_timebase_info(&timebase) != KERN_SUCCESS || timebase.denom == 0)
-            result = failure(output, capacity, INSTALL_FAILURE, "Cannot initialize mailbox monotonic clock");
+        if (mgt_mailbox_monotonic_ns() == 0)
+            result = failure(output, capacity, INSTALL_FAILURE, "Cannot read mailbox monotonic clock");
         else result = installHook(base, output, capacity);
     } else result = failure(output, capacity, INSTALL_FAILURE, "Cannot bind mailbox Lua registry generation");
     if (result != 0) {

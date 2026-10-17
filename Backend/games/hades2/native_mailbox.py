@@ -19,7 +19,7 @@ def prepare_command_mailbox(transport, lldb):
     path = Path(__file__).with_name("native") / "libMGTCommandMailbox.dylib"
     try:
         library = load_native_library(
-            transport, lldb, path, abi_symbol="MGTMailboxABI", abi_version=1,
+            transport, lldb, path, abi_symbol="MGTMailboxABI", abi_version=2,
             exports=("MGTCommandMailboxInstall",),
         )
         # This entry runs before the game's focus/paused-world checks. The

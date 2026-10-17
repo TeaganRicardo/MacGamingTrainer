@@ -276,8 +276,8 @@ class Hades2LuaTransport:
                     return th,L,bp
                 self.resume(deadline,breakpoint_expected=True)
             raise TransportError('waiting',
-                '等待游戏主线程就绪超时，请在游戏就绪后重试。' if entry_address is not None
-                else '等待游戏世界更新超时。请进入存档并关闭暂停菜单后重试。')
+                'hades2.error.commandNotExecuted' if entry_address is not None
+                else 'hades2.error.worldUpdateTimeout')
         finally:
             if not leased:self.target.BreakpointDelete(bp.GetID())
 

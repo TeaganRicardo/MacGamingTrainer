@@ -10,8 +10,9 @@
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <time.h>
 
-#define MGT_MAILBOX_ABI 1u
+#define MGT_MAILBOX_ABI 2u
 #define MGT_MAILBOX_MAGIC UINT32_C(0x4d47544d)
 #define MGT_MAILBOX_SOURCE_CAPACITY UINT32_C(1048576)
 #define MGT_MAILBOX_RESULT_CAPACITY UINT32_C(262144)
@@ -70,6 +71,8 @@ typedef struct {
     uint32_t outcome;
     int32_t status;
     uint64_t execution_ns;
+    uint64_t submitted_ns;
+    uint64_t queue_ns;
     unsigned char source[MGT_MAILBOX_SOURCE_CAPACITY];
     unsigned char result[MGT_MAILBOX_RESULT_CAPACITY];
 } MGTMailboxSlot;
@@ -88,11 +91,21 @@ typedef struct {
     int32_t status;
     size_t length;
     uint64_t execution_ns;
+    uint64_t queue_ns;
 } MGTMailboxReceipt;
 
 _Static_assert(sizeof(_Atomic uint32_t) == sizeof(uint32_t), "Mailbox requires a fixed atomic ABI");
 _Static_assert(sizeof(_Atomic uint64_t) == sizeof(uint64_t), "Mailbox requires a fixed atomic ABI");
 _Static_assert(sizeof(MGTMailboxSlot) < UINT32_MAX, "Mailbox size must fit its ABI header");
+
+/* Both mappings use the OS-wide monotonic clock, including when the producer
+ * loads only the portable ABI and never runs the native installer. POSIX
+ * consumers must enable clock_gettime declarations before including headers. */
+static inline uint64_t mgt_mailbox_monotonic_ns(void) {
+    struct timespec now;
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 0;
+    return (uint64_t)now.tv_sec * UINT64_C(1000000000) + (uint64_t)now.tv_nsec;
+}
 
 static inline uint32_t mgt_mailbox_state(const MGTMailboxSlot *slot) {
     return atomic_load_explicit(&slot->control, memory_order_acquire) & MGT_MAILBOX_STATE_MASK;
@@ -191,7 +204,15 @@ static inline MGTMailboxResult mgt_mailbox_submit(
     slot->outcome = MGT_MAILBOX_UNKNOWN;
     slot->status = 0;
     slot->execution_ns = 0;
+    slot->queue_ns = 0;
     atomic_store_explicit(&slot->highest_sequence, sequence, memory_order_release);
+    /* Source copying is finished. The small clock/CAS interval belongs to
+     * queue time; producer validation, allocation and copying do not. */
+    slot->submitted_ns = mgt_mailbox_monotonic_ns();
+    if (slot->submitted_ns == 0) {
+        atomic_fetch_and_explicit(&slot->control, MGT_MAILBOX_LEASE_FLAGS, memory_order_release);
+        return MGT_MAILBOX_INVALID;
+    }
     expected = MGT_MAILBOX_RESERVING;
     if (!atomic_compare_exchange_strong_explicit(&slot->control, &expected,
             MGT_MAILBOX_POSTED, memory_order_release, memory_order_relaxed)) {
@@ -238,8 +259,11 @@ static inline MGTMailboxResult mgt_mailbox_claim(
     }
     /* Read mutable request fields only after owning the claim. Otherwise a
      * cancel/ack/new submission could replace them between load and CAS. */
+    uint64_t claimed_ns = mgt_mailbox_monotonic_ns();
+    slot->queue_ns = claimed_ns >= slot->submitted_ns ? claimed_ns - slot->submitted_ns : 0;
     atomic_fetch_add_explicit(&slot->claimed_count, 1, memory_order_relaxed);
     if (slot->source_length > MGT_MAILBOX_SOURCE_CAPACITY || slot->sequence == 0
+        || slot->submitted_ns == 0 || claimed_ns < slot->submitted_ns
         || slot->sequence != atomic_load_explicit(&slot->highest_sequence, memory_order_acquire)) {
         slot->result_length = 0;
         slot->outcome = MGT_MAILBOX_ERROR;
@@ -300,7 +324,7 @@ static inline MGTMailboxResult mgt_mailbox_read(
         return MGT_MAILBOX_CAPACITY;
     MGTMailboxReceipt observed = {
         slot->generation_hi, slot->generation_lo, slot->sequence, slot->outcome,
-        slot->status, slot->result_length, slot->execution_ns
+        slot->status, slot->result_length, slot->execution_ns, slot->queue_ns
     };
     if (slot->result_length != 0) memcpy(bytes, slot->result, slot->result_length);
     *receipt = observed;
@@ -333,6 +357,7 @@ static inline MGTMailboxResult mgt_mailbox_finish_cancel(MGTMailboxSlot *slot) {
     slot->outcome = MGT_MAILBOX_CANCELLED;
     slot->status = 0;
     slot->execution_ns = 0;
+    slot->queue_ns = 0;
     atomic_fetch_add_explicit(&slot->completed_count, 1, memory_order_relaxed);
     return mgt_mailbox_publish_terminal(slot, MGT_MAILBOX_RESERVING);
 }

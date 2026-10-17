@@ -4,12 +4,13 @@ Callers express semantic resident operations here. Raw Lua construction, bootstr
 state, debugger budgets, transaction ledger, Trait Tray handoff, decode trust and
 resident-generation recovery stay behind this interface.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 import logging
 import math
 import time
 import uuid
+from typing import Optional
 
 from core.operation_profile import correlation, record
 from pathlib import Path
@@ -56,6 +57,7 @@ class ResidentReply:
     metrics: ResidentMetrics
     generation_reset: bool = False
     outcome_unknown: bool = False
+    connection_error: Optional["ResidentConnectionError"] = None
 
 
 class ResidentSessionError(AdapterError):
@@ -81,6 +83,10 @@ class ResidentSessionError(AdapterError):
             diagnostic=error.diagnostic,
             arguments=error.arguments,
         )
+
+
+class ResidentConnectionError(ResidentSessionError):
+    """A known resident receipt whose acceptance connection cannot be reused."""
 
 
 class ResidentGenerationInvalidated(Exception):
@@ -124,6 +130,7 @@ class Hades2ResidentSession:
         self._observation_generation = None
         self._observation_revision = None
         self._observation_collections = {}
+        self._connection_error = None
 
     @property
     def pid(self):
@@ -134,7 +141,11 @@ class Hades2ResidentSession:
         return dict(getattr(self._transport, "last_attach_profile", {}) or {})
 
     def alive(self):
-        return self._transport.alive()
+        return self._connection_error is None and self._transport.alive()
+
+    @property
+    def connection_error(self):
+        return self._connection_error
 
     @property
     def has_attachment(self):
@@ -146,13 +157,14 @@ class Hades2ResidentSession:
 
         This exposes the semantic capability, not bootstrap/catalog bookkeeping.
         """
-        return self._generation_ready
+        return self._connection_error is None and self._generation_ready
 
     def attach(self, pid, *, recover_lost_attach=False):
         if recover_lost_attach:
             self._transport.attach(pid, recover_lost_attach=True)
         else:
             self._transport.attach(pid)
+        self._connection_error = None
         # A debugger reconnect is the synchronization seam for resident source.
         # Re-bootstrap once even when the same game process survived a manual detach.
         self.invalidate_generation()
@@ -191,10 +203,25 @@ class Hades2ResidentSession:
         return (error.code == "resident_generation_missing"
                 or (error.code == "lua_error" and "__MacGamingTrainerV1" in message and "nil value" in message))
 
-    def _acknowledge_result(self):
+    def _acknowledge_result(self, reply, *, handoff=False):
         acknowledge = getattr(self._transport, "acknowledge_result", None)
-        if acknowledge is not None:
-            acknowledge()
+        try:
+            if acknowledge is not None:
+                acknowledge()
+        except Exception as error:
+            # Decoding/localization already accepted this receipt. Only the
+            # connection is terminal; do not relabel the action as unknown or
+            # issue another command merely to report the failed release.
+            self._connection_error = ResidentConnectionError(
+                "restart_required",
+                "hades2.error.commandNotExecutedConnectionLost" if handoff else
+                "hades2.error.commandResultConnectionLost",
+                reply.metrics,
+                diagnostic=getattr(error, "diagnostic", None) or str(error),
+            )
+            self.invalidate_generation()
+            return self._connection_error
+        return None
 
     @staticmethod
     def _resident_cleanup_failed(error):
@@ -210,12 +237,7 @@ class Hades2ResidentSession:
                     "status", runtime_params, replay=False, read_only=read_only, batch=None
                 )
                 if generation_reset:
-                    return ResidentReply(
-                        payload=reply.payload,
-                        metrics=reply.metrics,
-                        generation_reset=True,
-                        outcome_unknown=reply.outcome_unknown,
-                    )
+                    return replace(reply, generation_reset=True)
                 return reply
             except TransportError as error:
                 if self._resident_cleanup_failed(error):
@@ -238,6 +260,8 @@ class Hades2ResidentSession:
                 )
 
     def _execute(self, command, params, *, replay, read_only, batch):
+        if self._connection_error is not None:
+            raise self._connection_error
         if not self.has_attachment:
             raise TransportError("disconnected", "请先连接游戏。")
 
@@ -293,7 +317,9 @@ class Hades2ResidentSession:
             )
             if handoff is None:
                 break
-            self._acknowledge_result()
+            connection_error = self._acknowledge_result(reply, handoff=True)
+            if connection_error is not None:
+                raise connection_error
             if handoff == "unsupported":
                 raise TransportError(
                     "incompatible",
@@ -347,14 +373,9 @@ class Hades2ResidentSession:
             )
 
         if outcome_unknown:
-            return ResidentReply(
-                payload=reply.payload,
-                metrics=reply.metrics,
-                generation_reset=reply.generation_reset,
-                outcome_unknown=True,
-            )
-        self._acknowledge_result()
-        return reply
+            return replace(reply, outcome_unknown=True)
+        connection_error = self._acknowledge_result(reply)
+        return replace(reply, connection_error=connection_error) if connection_error else reply
 
     def _dispatch_source(self, command, params, batch):
         install_nonce = lua_value(uuid.uuid4().hex)

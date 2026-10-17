@@ -159,6 +159,33 @@ class _LLDBWorkerClient:
     def call(self, method, params=None, *, allow_start=True):
         if self._terminal_error is not None:
             raise self._terminal_error
+        accepting_result = method == "transport.acknowledge_result"
+        try:
+            result, state = self._call(
+                method, params, allow_start=allow_start and not accepting_result,
+            )
+            if accepting_result and result is not True:
+                raise AdapterError(
+                    "debugger_protocol", "hades2.error.debuggerProtocol",
+                    diagnostic=f"Malformed mailbox acceptance reply: {result!r}",
+                )
+            return result, state
+        except AdapterError as error:
+            if not accepting_result:
+                raise
+            # The resident result has already been received. Losing only its
+            # release cannot erase that known outcome, but an unacknowledged
+            # game-side completion cannot be reused by a replacement worker.
+            raised = AdapterError(
+                "restart_required", "hades2.error.commandResultConnectionLost",
+                diagnostic=error.diagnostic or str(error),
+            )
+            self._terminal_error = raised
+            self._initial_attach_reply_lost = False
+            self._sidecar.close()
+            raise raised from error
+
+    def _call(self, method, params, *, allow_start):
         if not allow_start and not self.available:
             raise AdapterError("disconnected", "请先连接游戏。")
         self._start()

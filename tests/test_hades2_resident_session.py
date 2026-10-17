@@ -243,6 +243,72 @@ try:
     handoff_session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 10})
     assert len(handoff_transport.calls) == len(handoff_transport.acknowledged) == 2
 
+    class LostAcknowledgementTransport(FakeTransport):
+        def acknowledge_result(self):
+            assert self.pending_receipt
+            raise AdapterError("restart_required", "hades2.error.debuggerExited",
+                               diagnostic="ACK reply lost")
+
+    # A decoded receipt remains authoritative when only its release fails. The
+    # session returns both pieces of evidence and closes every later boundary,
+    # even for a transport double that does not enforce sticky terminal state.
+    for action_outcome in ("completed", "accepted", "failed"):
+        action = {"requestId": "known-ack-loss", "command": "open_special_choice",
+                  "outcome": action_outcome}
+        accepted_payload = payload(lastAction=action, requestId="known-ack-loss",
+                                   actionOutcome=action_outcome, applied=action_outcome == "completed")
+        ack_transport = LostAcknowledgementTransport([accepted_payload])
+        ack_session = Hades2ResidentSession(ack_transport, bootstrap="")
+        ack_reply = ack_session.mutate("open_special_choice", {"source": "Artemis"})
+        assert ack_reply.payload == accepted_payload
+        assert ack_reply.outcome_unknown is False
+        assert ack_reply.connection_error.code == "restart_required"
+        assert ack_reply.connection_error.presentation == "hades2.error.commandResultConnectionLost"
+        assert ack_reply.connection_error.metrics == ack_reply.metrics
+        assert not ack_session.allows_process_time_warp() and not ack_session.alive()
+        assert ack_transport.pending_receipt and not ack_transport.acknowledged
+        ack_session.invalidate_generation()  # a log notification cannot restore trust
+        for operation in (ack_session.status, lambda: ack_session.reconcile([]),
+                          lambda: ack_session.mutate("spawn_reward", {"reward": "Money"})):
+            try:
+                operation()
+            except AdapterError as error:
+                assert error.code == "restart_required"
+            else:
+                raise AssertionError("ACK loss admitted another resident command")
+        assert len(ack_transport.calls) == 1
+
+    # The accepted menu-close control action is not the requested mutation.
+    # A lost ACK must end the handoff before another dispatch and say the
+    # original change has not executed, without making the control result unknown.
+    handoff_loss = LostAcknowledgementTransport([
+        {"__trainerTraitTrayHandoff": "closing"}, payload(applied=True),
+    ])
+    handoff_loss_session = Hades2ResidentSession(handoff_loss, bootstrap="")
+    try:
+        handoff_loss_session.mutate("set_resource", {"resource": "MetaCurrency", "amount": 10})
+    except AdapterError as error:
+        assert error.code == "restart_required"
+        assert error.presentation == "hades2.error.commandNotExecutedConnectionLost"
+    else:
+        raise AssertionError("menu-close ACK loss continued into the original mutation")
+    assert len(handoff_loss.calls) == 1 and handoff_loss.pending_receipt
+    assert not handoff_loss_session.allows_process_time_warp()
+
+    # Status recovery carries both its generation reset and the accepted
+    # replacement-generation receipt when ACK is the step that fails.
+    recovering_transport = FakeTransport([payload()])
+    recovering_session = Hades2ResidentSession(recovering_transport, bootstrap="BOOTSTRAP")
+    recovering_session.status()
+    recovering_transport.outcomes = [native_missing, payload(money=99)]
+    recovering_transport.acknowledge_result = lambda: (_ for _ in ()).throw(
+        AdapterError("restart_required", "ACK reply lost")
+    )
+    recovered = recovering_session.status()
+    assert recovered.generation_reset is True and recovered.payload["money"] == 99
+    assert recovered.connection_error.code == "restart_required"
+    assert len(recovering_transport.calls) == 3
+
     cleanup_transport = FakeTransport([
         AdapterError("lua_error", "MGT_RESIDENT_RESTART_REQUIRED: cleanup failed"),
     ])

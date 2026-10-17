@@ -35,6 +35,7 @@ class _Receipt(ctypes.Structure):
         ("status", ctypes.c_int32),
         ("length", ctypes.c_size_t),
         ("execution_ns", ctypes.c_uint64),
+        ("queue_ns", ctypes.c_uint64),
     ]
 
 
@@ -57,7 +58,7 @@ def _bind_library(path):
     for name, (arguments, result) in signatures.items():
         function = getattr(library, name)
         function.argtypes, function.restype = arguments, result
-    if library.MGTMailboxABI() != 1:
+    if library.MGTMailboxABI() != 2:
         raise ValueError("Incompatible Hades command mailbox ABI")
     return library
 
@@ -150,6 +151,12 @@ class Hades2CommandMailbox:
             raise self._unknown("Mailbox receipt identity or size is invalid")
         if receipt.outcome not in (SUCCESS, ERROR, CANCELLED, UNKNOWN):
             raise self._unknown("Mailbox receipt outcome is invalid")
+        if ((receipt.outcome == SUCCESS and receipt.status != 0)
+                or (receipt.outcome == ERROR and receipt.status == 0)
+                or (receipt.outcome == CANCELLED
+                    and (receipt.status != 0 or receipt.length != 0
+                         or receipt.execution_ns != 0 or receipt.queue_ns != 0))):
+            raise self._unknown("Mailbox receipt contains contradictory completion evidence")
         try:
             text = output.raw[:receipt.length].decode("utf-8", errors="strict")
         except UnicodeDecodeError as error:
@@ -174,14 +181,17 @@ class Hades2CommandMailbox:
         receipt, text = read
         duration = self._clock() - started
         execution = receipt.execution_ns / 1_000_000_000
+        queue = receipt.queue_ns / 1_000_000_000
         self.last_profile = {
             "sequence": sequence, "roundTripSeconds": duration,
-            "executionSeconds": execution, "waitSeconds": max(0.0, duration - execution),
+            "queueSeconds": queue, "executionSeconds": execution,
+            "overheadSeconds": max(0.0, duration - queue - execution),
         }
         record("mailbox.round_trip", duration, request_bytes=payload_size, reply_bytes=receipt.length)
+        record("mailbox.queue", queue)
         record("mailbox.execution", execution)
-        logging.info("MailboxBoundary request=%d duration=%.6fs execution=%.6fs outcome=%d status=%d",
-                     sequence, duration, execution, receipt.outcome, receipt.status)
+        logging.info("MailboxBoundary request=%d duration=%.6fs queue=%.6fs execution=%.6fs outcome=%d status=%d",
+                     sequence, duration, queue, execution, receipt.outcome, receipt.status)
         self._pending_sequence = sequence
         if receipt.outcome == CANCELLED:
             self.acknowledge()
@@ -193,8 +203,6 @@ class Hades2CommandMailbox:
             if receipt.status == GENERATION_CHANGED:
                 raise AdapterError("resident_generation_missing", "Lua runtime generation changed before command execution")
             raise AdapterError("lua_error", text or "hades2.error.luaFailed")
-        if receipt.status != 0:
-            raise self._unknown("Successful mailbox receipt has a nonzero status")
         return text
 
     def execute(self, source, *, timeout_seconds=2.0):

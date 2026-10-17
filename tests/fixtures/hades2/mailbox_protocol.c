@@ -13,6 +13,12 @@
 
 #include "MailboxProtocol.h"
 
+/* Exercise timing through the shipped producer ABI as well as the protocol
+ * used by the independently mapped consumer. */
+int MGTMailboxInit(void *, size_t, uint64_t, uint64_t, uint32_t, uint32_t);
+int MGTMailboxSubmit(void *, uint64_t, uint64_t, uint64_t, const void *, size_t);
+int MGTMailboxRead(void *, uint64_t, uint64_t, uint64_t, MGTMailboxReceipt *, void *, size_t);
+
 static const uint64_t generation_hi = UINT64_C(0x1122334455667788);
 static const uint64_t generation_lo = UINT64_C(0x99aabbccddeeff00);
 
@@ -578,6 +584,89 @@ static void roundtrip(void) {
     fclose(backing);
 }
 
+static void queue_timing(void) {
+    FILE *backing = tmpfile();
+    assert(backing != NULL);
+    int descriptor = fileno(backing);
+    assert(ftruncate(descriptor, (off_t)sizeof(MGTMailboxSlot)) == 0);
+    MGTMailboxSlot *slot = shared_slot(descriptor);
+    int requests[2], replies[2];
+    assert(pipe(requests) == 0 && pipe(replies) == 0);
+    pid_t child = fork();
+    assert(child >= 0);
+    if (child == 0) {
+        close(requests[1]);
+        close(replies[0]);
+        assert(munmap(slot, sizeof(*slot)) == 0);
+        slot = shared_slot(descriptor);
+        unsigned char signal;
+        receive_bytes(requests[0], &signal, 1);
+        MGTMailboxRequest request;
+        uint64_t claim_before = monotonic_ns();
+        assert(mgt_mailbox_claim(slot, generation_hi, generation_lo, &request) == MGT_MAILBOX_OK);
+        uint64_t evidence[] = {claim_before, monotonic_ns(), slot->queue_ns};
+        send_bytes(replies[1], evidence, sizeof(evidence));
+        receive_bytes(requests[0], &signal, 1);
+        uint64_t completion = monotonic_ns();
+        assert(mgt_mailbox_complete(slot, generation_hi, generation_lo, request.sequence,
+            MGT_MAILBOX_SUCCESS, 0, "done", 4, completion - evidence[1]) == MGT_MAILBOX_OK);
+        send_bytes(replies[1], &completion, sizeof(completion));
+        assert(munmap(slot, sizeof(*slot)) == 0);
+        fclose(backing);
+        close(requests[0]);
+        close(replies[1]);
+        _exit(0);
+    }
+    close(requests[0]);
+    close(replies[1]);
+    assert(MGTMailboxInit(slot, sizeof(*slot), generation_hi, generation_lo,
+        (uint32_t)getpid(), (uint32_t)child) == MGT_MAILBOX_OK);
+    uint64_t submit_before = monotonic_ns();
+    assert(MGTMailboxSubmit(slot, generation_hi, generation_lo, 1, "request", 7) == MGT_MAILBOX_OK);
+    uint64_t submit_after = monotonic_ns();
+    /* Keep queue, execution and unread-receipt intervals independently
+     * observable. No tight scheduler-dependent upper bound is required. */
+    while (monotonic_ns() - submit_after < UINT64_C(5000000)) briefly_wait();
+    send_bytes(requests[1], "c", 1);
+    uint64_t evidence[3];
+    receive_bytes(replies[0], evidence, sizeof(evidence));
+    uint64_t execution_wait = monotonic_ns();
+    while (monotonic_ns() - execution_wait < UINT64_C(5000000)) briefly_wait();
+    send_bytes(requests[1], "f", 1);
+    uint64_t completion;
+    receive_bytes(replies[0], &completion, sizeof(completion));
+    uint64_t unread_wait = monotonic_ns();
+    while (monotonic_ns() - unread_wait < UINT64_C(5000000)) briefly_wait();
+    MGTMailboxReceipt receipt;
+    char output[4];
+    assert(MGTMailboxRead(slot, generation_hi, generation_lo, 1,
+        &receipt, output, sizeof(output)) == MGT_MAILBOX_OK);
+    assert(receipt.queue_ns == evidence[2]);
+    assert(slot->submitted_ns >= submit_before && slot->submitted_ns <= submit_after);
+    assert(receipt.queue_ns >= evidence[0] - slot->submitted_ns);
+    assert(receipt.queue_ns <= evidence[1] - slot->submitted_ns);
+    assert(receipt.queue_ns >= UINT64_C(5000000));
+    assert(receipt.execution_ns == completion - evidence[1]);
+    assert(receipt.execution_ns >= UINT64_C(5000000));
+    assert(memcmp(output, "done", sizeof(output)) == 0);
+    assert(mgt_mailbox_ack(slot, generation_hi, generation_lo, 1) == MGT_MAILBOX_OK);
+    int status;
+    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    /* Reusing a formerly executed slot must not retain its positive queue
+     * duration when cancellation establishes that no claim ever occurred. */
+    assert(MGTMailboxSubmit(slot, generation_hi, generation_lo, 2, "cancel", 6) == MGT_MAILBOX_OK);
+    briefly_wait();
+    assert(mgt_mailbox_cancel(slot, generation_hi, generation_lo, 2) == MGT_MAILBOX_OK);
+    assert(MGTMailboxRead(slot, generation_hi, generation_lo, 2,
+        &receipt, output, sizeof(output)) == MGT_MAILBOX_OK);
+    assert(receipt.outcome == MGT_MAILBOX_CANCELLED && receipt.queue_ns == 0 && receipt.execution_ns == 0);
+    assert(mgt_mailbox_ack(slot, generation_hi, generation_lo, 2) == MGT_MAILBOX_OK);
+    close(requests[1]);
+    close(replies[0]);
+    assert(munmap(slot, sizeof(*slot)) == 0);
+    fclose(backing);
+}
+
 int main(int argc, char **argv) {
     assert(argc == 2);
     if (strcmp(argv[1], "roundtrip") == 0) roundtrip();
@@ -591,6 +680,7 @@ int main(int argc, char **argv) {
         independent_mapping_lifetime(1);
     }
     else if (strcmp(argv[1], "shared_publication_stream") == 0) shared_publication_stream();
+    else if (strcmp(argv[1], "queue_timing") == 0) queue_timing();
     else assert(!"unknown mailbox fixture case");
     return 0;
 }
