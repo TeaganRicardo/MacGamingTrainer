@@ -38,6 +38,13 @@ assert '.onChange(of: targetMonitor.launchGeneration)' not in host
 launch_start = host.index('.onChange(of: targetMonitor.targetObservation)')
 launch_end = host.index('.onChange(of: targetMonitor.activationGeneration)', launch_start)
 launch_block = host[launch_start:launch_end]
+assert 'previous.processIdentifier != observed.processIdentifier' in launch_block, (
+    'PID-only target replacement must refresh the module lifecycle'
+)
+assert 'connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)' in launch_block, (
+    'missed launch must invalidate the old connection without granting background attach'
+)
+assert launch_block.index('connectionPolicy.targetStateChanged(running: false, allowAutomaticConnect: false)') < launch_block.index('connectionPolicy.observeTarget(')
 for token in (
     'connectionPolicy.observeTarget(',
     'model.hostTargetLifetimeChanged(',
