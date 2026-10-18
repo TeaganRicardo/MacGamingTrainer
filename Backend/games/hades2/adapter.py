@@ -1040,13 +1040,19 @@ class Hades2Adapter(GameAdapter):
             params["entryId"],
             params["operation"],
             params.get("value"),
+            language=params["language"],
         )
 
-    def review_save_editor(self):
-        return self._require_save_workspace().review()
+    def unstage_save_editor(self, params):
+        return self._require_save_workspace().unstage(
+            params["entryId"], language=params["language"]
+        )
 
-    def cancel_save_editor(self):
-        return self._require_save_workspace().cancel()
+    def review_save_editor(self, params):
+        return self._require_save_workspace().review(language=params["language"])
+
+    def cancel_save_editor(self, params):
+        return self._require_save_workspace().cancel(language=params["language"])
 
     def apply_save_editor(self):
         return self._require_save_workspace().apply()

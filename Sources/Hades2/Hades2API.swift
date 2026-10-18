@@ -39,8 +39,11 @@ enum Hades2Request {
     case saveEditorTarget([String: String])
     case saveEditorQuery(domain: String, scope: String, search: String, offset: Int, limit: Int, path: [Any], language: String, stateFilter: String)
     case saveEditorDetail(entryID: String, language: String)
-    case saveEditorStage(entryID: String, operation: String, value: Any?)
-    case saveEditorReview, saveEditorCancel, saveEditorApply
+    case saveEditorStage(entryID: String, operation: String, value: Any?, language: String)
+    case saveEditorUnstage(entryID: String, language: String)
+    case saveEditorReview(language: String)
+    case saveEditorCancel(language: String)
+    case saveEditorApply
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
@@ -92,6 +95,7 @@ enum Hades2Request {
         case .saveEditorQuery: return .saveEditorQuery
         case .saveEditorDetail: return .saveEditorDetail
         case .saveEditorStage: return .saveEditorStage
+        case .saveEditorUnstage: return .saveEditorUnstage
         case .saveEditorReview: return .saveEditorReview
         case .saveEditorCancel: return .saveEditorCancel
         case .saveEditorApply: return .saveEditorApply
@@ -212,10 +216,16 @@ enum Hades2Request {
             ]
         case .saveEditorDetail(let entryID, let language):
             return ["entryId": entryID, "language": language]
-        case .saveEditorStage(let entryID, let operation, let value):
-            var result: [String: Any] = ["entryId": entryID, "operation": operation]
+        case .saveEditorStage(let entryID, let operation, let value, let language):
+            var result: [String: Any] = [
+                "entryId": entryID, "operation": operation, "language": language,
+            ]
             if let value { result["value"] = value }
             return result
+        case .saveEditorUnstage(let entryID, let language):
+            return ["entryId": entryID, "language": language]
+        case .saveEditorReview(let language), .saveEditorCancel(let language):
+            return ["language": language]
         case .saveProfile(let name, let shortcuts):
             return ["name": name, "shortcuts": shortcuts]
         case .loadProfile(let name), .deleteProfile(let name):

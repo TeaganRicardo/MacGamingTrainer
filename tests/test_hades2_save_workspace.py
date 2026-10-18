@@ -220,7 +220,8 @@ assert review["changes"] == [
     },
 ]
 workspace.cancel()
-assert workspace.review() == {"count": 0, "changes": []}
+assert workspace.review()["changes"] == []
+assert workspace.review()["actionCount"] == 0
 
 for entry_id, operation, value in (
     ("resource:UnmodeledCurrency", "set", 500),
@@ -270,7 +271,8 @@ assert applied["applied"] is True
 assert applied["hot"] is True
 assert applied["runtimeReloaded"] is False
 assert applied["previousSnapshotId"]
-assert pinned.review() == {"count": 0, "changes": []}
+assert pinned.review()["changes"] == []
+assert pinned.review()["actionCount"] == 0
 
 installed = Hades2SaveDocument.load(pinned_path)
 assert installed.lua_state["GameState"]["Resources"]["MetaCurrency"] == 500.0
@@ -602,7 +604,8 @@ except ValueError:
     pass
 else:
     raise AssertionError("unverified dialogue reset accepted")
-assert nested_workspace.review() == {"count": 0, "changes": []}
+assert nested_workspace.review()["changes"] == []
+assert nested_workspace.review()["actionCount"] == 0
 json.dumps(nested_workspace.query(domain="dialogue")["items"])
 nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
 assert nested_game["TextLinesChoiceRecord"]["ChoiceScene"]["ChoiceIndex"] == 2.0
@@ -849,11 +852,13 @@ except ValueError:
     pass
 else:
     raise AssertionError("malformed completed quest record became writable")
-assert invalid_editor.review() == {"count": 0, "changes": []}
+assert invalid_editor.review()["changes"] == []
+assert invalid_editor.review()["actionCount"] == 0
 invalid_editor.stage("resource:MetaCurrency", "set", 17)
 assert invalid_editor.review()["count"] == 1
 invalid_editor.cancel()
-assert invalid_editor.review() == {"count": 0, "changes": []}
+assert invalid_editor.review()["changes"] == []
+assert invalid_editor.review()["actionCount"] == 0
 
 
 # Native interaction keys are UnitSetData units, not localization/speaker

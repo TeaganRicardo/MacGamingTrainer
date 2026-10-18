@@ -39,12 +39,16 @@ class Probe:
         self.calls.append(("stage", params))
         return {"count": 1, "changes": []}
 
-    def review_save_editor(self):
-        self.calls.append(("review", {}))
+    def unstage_save_editor(self, params):
+        self.calls.append(("unstage", params))
+        return {"actionCount": 0, "actions": []}
+
+    def review_save_editor(self, params):
+        self.calls.append(("review", params))
         return {"count": 1, "changes": []}
 
-    def cancel_save_editor(self):
-        self.calls.append(("cancel", {}))
+    def cancel_save_editor(self, params):
+        self.calls.append(("cancel", params))
         return {"count": 0, "changes": []}
 
     def apply_save_editor(self):
@@ -86,12 +90,17 @@ assert contract.dispatch(
 
 staged = contract.dispatch(
     "save_editor_stage",
-    {"entryId": "resource:MetaCurrency", "operation": "set", "value": 500},
+    {"entryId": "resource:MetaCurrency", "operation": "set", "value": 500, "language": "en"},
     "stage",
 )
 assert staged["count"] == 1
-assert contract.dispatch("save_editor_review", {}, "review")["count"] == 1
-assert contract.dispatch("save_editor_cancel", {}, "cancel")["count"] == 0
+assert contract.dispatch(
+    "save_editor_unstage",
+    {"entryId": "resource:MetaCurrency", "language": "en"},
+    "unstage",
+)["actionCount"] == 0
+assert contract.dispatch("save_editor_review", {"language": "zh-CN"}, "review")["count"] == 1
+assert contract.dispatch("save_editor_cancel", {"language": "en"}, "cancel")["count"] == 0
 assert contract.dispatch("save_editor_apply", {}, "apply")["applied"] is True
 
 assert probe.calls == [
@@ -121,9 +130,11 @@ assert probe.calls == [
         "entryId": "resource:MetaCurrency",
         "operation": "set",
         "value": 500,
+        "language": "en",
     }),
-    ("review", {}),
-    ("cancel", {}),
+    ("unstage", {"entryId": "resource:MetaCurrency", "language": "en"}),
+    ("review", {"language": "zh-CN"}),
+    ("cancel", {"language": "en"}),
     ("apply", {}),
 ]
 
@@ -135,6 +146,7 @@ for name in (
     "save_editor_query",
     "save_editor_detail",
     "save_editor_stage",
+    "save_editor_unstage",
     "save_editor_review",
     "save_editor_cancel",
     "save_editor_apply",
@@ -181,6 +193,10 @@ for command, params, presentation in (
     ("save_editor_detail", {"entryId": "resource:MetaCurrency"}, "hades2.saveEditor.error.invalidQuery"),
     ("save_editor_stage", {"entryId": "", "operation": "set", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
     ("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "raw", "value": 1}, "hades2.saveEditor.error.invalidMutation"),
+    ("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "set", "value": 1, "language": "fr"}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_unstage", {"entryId": "", "language": "en"}, "hades2.saveEditor.error.invalidMutation"),
+    ("save_editor_unstage", {"entryId": "resource:MetaCurrency", "language": "fr"}, "hades2.saveEditor.error.invalidQuery"),
+    ("save_editor_review", {"language": "fr"}, "hades2.saveEditor.error.invalidQuery"),
 ):
     try:
         contract.dispatch(command, params, "invalid")

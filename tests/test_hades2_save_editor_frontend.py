@@ -29,12 +29,57 @@ p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
 resource_value = 123
 pending_value = None
+pending_entry_id = None
+pending_operation = None
 opened_summary = None
 workspace_number = 0
 omit_first_target = False
 manual_inventory_count = 0
 apply_count = 0
 detail_counts = {}
+
+def staged_result():
+    if pending_value is None or pending_entry_id is None or pending_operation is None:
+        return {
+            'count': 0, 'changes': [],
+            'actionCount': 0, 'effectCount': 0, 'physicalChangeCount': 0,
+            'actions': [],
+        }
+    change = {
+        'id': pending_entry_id,
+        'domain': 'resources',
+        'rawId': 'MetaCurrency',
+        'operation': pending_operation,
+        'before': resource_value,
+        'after': pending_value,
+    }
+    return {
+        'count': 1,
+        'changes': [change],
+        'actionCount': 1,
+        'effectCount': 0,
+        'physicalChangeCount': 1,
+        'actions': [{
+            'id': pending_entry_id,
+            'entryId': pending_entry_id,
+            'entityId': 'entry:' + pending_entry_id,
+            'entityName': 'Ashes',
+            'domain': 'resources',
+            'rawId': 'MetaCurrency',
+            'name': 'Ashes',
+            'englishName': 'Ashes',
+            'operation': pending_operation,
+            'before': resource_value,
+            'after': pending_value,
+            'valueType': 'integer',
+            'mutationKinds': ['set'],
+            'constraints': {'min': 0, 'max': 999999, 'integer': True},
+            'choices': [],
+            'choiceNames': {},
+            'effects': [],
+        }],
+    }
+
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -429,33 +474,23 @@ for raw in sys.stdin:
             }],
         }
     elif command == 'save_editor_stage':
+        pending_entry_id = req['params']['entryId']
+        pending_operation = req['params']['operation']
         pending_value = req['params']['value']
-        result = {
-            'count': 1,
-            'changes': [{
-                'id': req['params']['entryId'],
-                'domain': 'resources',
-                'rawId': 'MetaCurrency',
-                'operation': req['params']['operation'],
-                'before': resource_value,
-                'after': pending_value,
-            }],
-        }
+        result = staged_result()
+    elif command == 'save_editor_unstage':
+        if req['params']['entryId'] == pending_entry_id:
+            pending_value = None
+            pending_entry_id = None
+            pending_operation = None
+        result = staged_result()
     elif command == 'save_editor_review':
-        result = {
-            'count': 1,
-            'changes': [{
-                'id': 'resource:MetaCurrency',
-                'domain': 'resources',
-                'rawId': 'MetaCurrency',
-                'operation': 'set',
-                'before': resource_value,
-                'after': pending_value,
-            }],
-        }
+        result = staged_result()
     elif command == 'save_editor_cancel':
         pending_value = None
-        result = {'count': 0, 'changes': []}
+        pending_entry_id = None
+        pending_operation = None
+        result = staged_result()
     elif command == 'save_editor_apply':
         apply_count += 1
         if pending_value == 600:
@@ -476,6 +511,8 @@ for raw in sys.stdin:
             continue
         resource_value = pending_value
         pending_value = None
+        pending_entry_id = None
+        pending_operation = None
         result = {
             'applied': True,
             'changeCount': 1,
@@ -542,6 +579,22 @@ func commands(at url: URL) -> [[String: Any]] {
 
 func fields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+
+final class SaveUnstageAction: NSObject {
+    let model: Hades2SaveEditorModel
+    let entryID: String
+    var presses = 0
+
+    init(model: Hades2SaveEditorModel, entryID: String) {
+        self.model = model
+        self.entryID = entryID
+    }
+
+    @objc(removeClicked:) func clicked(_ sender: Any?) {
+        presses += 1
+        model.unstage(entryID: entryID)
+    }
 }
 
 @main
@@ -802,13 +855,75 @@ struct Main {
         editor.selectAll(nil)
         editor.insertText("430", replacementRange: editor.selectedRange())
         sheet.makeFirstResponder(nil)
-        pumpUntil { model.pendingChanges.first?.after == AnyHashable(430) && !model.busy }
-        if model.pendingChanges.first?.after != AnyHashable(430) ||
+        pumpUntil { model.pendingActions.first?.after == AnyHashable(430) && !model.busy }
+        if model.pendingActions.first?.after != AnyHashable(430) ||
             commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
             fail("Direct Save result editing did not stage on blur")
         }
-        model.cancel()
+
+        // Exercise the same basket action data through real native controls.
+        // TrainerTextField owns edit completion; NSButton owns the explicit
+        // per-action removal click, and both cross the Host command seam.
+        guard let basketAction = model.pendingActions.first else {
+            fail("Changes basket did not expose the staged action")
+        }
+        var basketDraft = String(describing: basketAction.after?.base ?? "")
+        let basketHost = NSHostingView(rootView: TrainerTextField(
+            title: "Value",
+            text: Binding(
+                get: { basketDraft },
+                set: { basketDraft = $0 }
+            ),
+            onCommit: { edit in
+                model.completeTextEdit(
+                    basketAction.editorEntry,
+                    text: edit.text,
+                    changed: edit.changed
+                )
+            }
+        ))
+        let basketWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 260, height: 80),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        basketWindow.contentView = basketHost
+        basketWindow.orderFront(nil)
+        pumpUntil { fields(basketHost).first?.stringValue == "430" }
+        guard let basketField = fields(basketHost).first,
+              basketWindow.makeFirstResponder(basketField),
+              let basketEditor = basketField.currentEditor() as? NSTextView else {
+            fail("Staged action was not editable through the native basket field")
+        }
+        basketEditor.selectAll(nil)
+        basketEditor.insertText("440", replacementRange: basketEditor.selectedRange())
+        basketWindow.makeFirstResponder(nil)
+        pumpUntil {
+            model.pendingActions.first?.after == AnyHashable(440) && !model.busy
+        }
+        basketWindow.close()
+        if model.pendingActions.first?.after != AnyHashable(440)
+            || commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
+            fail("Native basket field did not revise the authoritative staged action")
+        }
+
+        let removeTarget = SaveUnstageAction(
+            model: model,
+            entryID: "resource:MetaCurrency"
+        )
+        let removeButton = NSButton(
+            title: "Remove change",
+            target: removeTarget,
+            action: NSSelectorFromString("removeClicked:")
+        )
+        removeButton.performClick(nil)
         pumpUntil { model.pendingCount == 0 && !model.busy }
+        if removeTarget.presses != 1
+            || !model.pendingActions.isEmpty
+            || commands(at: commandLog).last?["command"] as? String != "save_editor_unstage" {
+            fail("Native per-action remove control did not unstage exactly one action")
+        }
 
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
         pump(0.20)
