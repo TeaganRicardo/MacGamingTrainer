@@ -1609,7 +1609,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if action == .disableAll {
             // Global disable remains an exclusive barrier. Rejected shortcuts
             // now sound distinct from a confirmed runtime mutation.
-            guard connected && backendAvailable && protocolCompatible else {
+            guard connected && backendAvailable && protocolCompatible
+                    && canAcceptRuntimeAction else {
                 rejectShortcut(action)
                 return
             }

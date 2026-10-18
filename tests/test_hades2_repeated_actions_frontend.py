@@ -80,10 +80,10 @@ func loggedCommands(at url: URL) -> [[String: Any]] {
         try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
     }
 }
-func makeReward(_ id: String) -> BoonOption {
+func makeReward(_ id: String, group: String = "pickup") -> BoonOption {
     BoonOption(
         id: id, name: id, englishName: id, category: "Pickup",
-        englishCategory: "Pickup", kind: "consumable", group: "pickup",
+        englishCategory: "Pickup", kind: "consumable", group: group,
         targetID: id, officialName: true, sectionTitle: "Pickup",
         englishSectionTitle: "Pickup", sourceId: "Pickup",
         sourceName: "Pickup", sourceEnglishName: "Pickup",
@@ -143,7 +143,18 @@ struct Main {
         model.spawnBoon(reward.id)
         check(model.canSpawnReward,
               "GUI spawn must remain enabled during a queued burst")
+        // Disable All cannot overtake outstanding one-shot commands, nor may
+        // it be queued behind them: its native GUI already forbids doing so.
+        model.performShortcut(.disableAll)
+        check(model.canSpawnReward,
+              "rejected Disable All must not suppress pending repeatable spawns")
         pump(0.85)
+        let disableRequests = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "disable_all"
+        }
+        check(disableRequests.isEmpty,
+              "Disable All shortcut bypassed the outstanding-spawn barrier: \(disableRequests)")
+
         let spawned = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "spawn_reward"
         }
@@ -220,6 +231,33 @@ struct Main {
         }
         check(nextRoomRequests.count == 1,
               "rapid hotkey duplicated a next-room consumption token: \(nextRoomRequests.count)")
+
+        // Route the normal special-reward shortcut through the actual typed
+        // backend boundary. A source-string assertion cannot prove dispatch.
+        let specialReward = makeReward("SpecialDrop", group: "special")
+        model.boons = [reward, specialReward]
+        model.selectedSpecialReward = specialReward.id
+        check(model.canPerformSelectedSpecialReward, "ordinary special reward should be available")
+        model.performShortcut(.spawnSpecial)
+        pump(0.26)
+        let specials = loggedCommands(at: logURL).filter {
+            guard ($0["command"] as? String) == "spawn_reward",
+                  let params = $0["params"] as? [String: Any] else { return false }
+            return (params["reward"] as? String) == specialReward.id
+        }
+        check(specials.count == 1,
+              "special-reward shortcut bypassed typed spawn dispatch: \(specials)")
+
+        // Preserve the supported idle success path as well as rejecting
+        // Disable All during a burst.
+        check(model.canAcceptRuntimeAction, "idle Disable All should be admissible")
+        model.performShortcut(.disableAll)
+        pump(0.20)
+        let acceptedDisable = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "disable_all"
+        }
+        check(acceptedDisable.count == 1,
+              "idle Disable All should produce exactly one backend request")
 
         session.stop()
         pump(0.10)
