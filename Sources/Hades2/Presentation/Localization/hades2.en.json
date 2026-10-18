@@ -288,6 +288,8 @@
     "hades2.rarity.multiplier": "Rarity Probability Multiplier",
     "hades2.rarity.title": "Boon Rarity Control",
     "hades2.receipt.accepted": "{0} was accepted and is waiting for the game",
+    "hades2.shortcut.unconfirmed": "Hotkey command completed, but its effect is not yet confirmed.",
+    "hades2.shortcut.unavailable": "This hotkey is unavailable in the current state.",
     "hades2.receipt.completed": "{0} completed",
     "hades2.receipt.failed": "{0} failed; check the log",
     "hades2.receipt.openChoice": "Open {0}",

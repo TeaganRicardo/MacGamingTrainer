@@ -29,7 +29,7 @@ assert "if let feedback" in shortcut_block
 # hook is already active. They are deferred only while that parent runtime is
 # dormant/unavailable; disabling is immediately off.
 assert "performBoonForceShortcutFeedback" in model
-force_helper = model[model.index("private func performBoonForceShortcutFeedback"):model.index("private func performShortcut")]
+force_helper = model[model.index("private func performBoonForceShortcutFeedback"):model.index("func performShortcut")]
 assert "activeFeatures[Hades2FeatureKey.boonRarityEnabled.rawValue] == true" in force_helper
 assert ".enabled" in force_helper and ".deferred" in force_helper and ".disabled" in force_helper
 assert "forceLegendary" in model and "forceDuo" in model
