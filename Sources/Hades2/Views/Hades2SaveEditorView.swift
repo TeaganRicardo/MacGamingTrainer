@@ -19,43 +19,13 @@ extension View {
 enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all
     case story
-    case quests
-    case dialogue
-    case flags
-    case people
-    case resources
     case growth
-    case equipment
+    case resources
     case records
     case advanced
 
     var id: String { rawValue }
-
-    var domain: Hades2SaveEditorDomain {
-        switch self {
-        case .all: return .discover
-        case .story: return .investigate
-        case .quests: return .quests
-        case .dialogue: return .dialogue
-        case .flags: return .flags
-        case .people: return .relationships
-        case .resources: return .resources
-        case .growth: return .arcana
-        case .equipment: return .weapons
-        case .records: return .playerStats
-        case .advanced: return .advanced
-        }
-    }
-
-    var titleKey: String {
-        switch self {
-        case .story: return "hades2.saveEditor.workbench.story.scenes"
-        case .quests: return "hades2.saveEditor.workbench.story.quests"
-        case .dialogue: return "hades2.saveEditor.workbench.story.dialogue"
-        case .flags: return "hades2.saveEditor.workbench.story.flags"
-        default: return "hades2.saveEditor.workbench.section." + rawValue
-        }
-    }
+    var titleKey: String { "hades2.saveEditor.workbench.section." + rawValue }
 }
 
 struct Hades2SaveEditorView: View {
@@ -80,7 +50,7 @@ struct Hades2SaveEditorView: View {
     }
 
     private var entities: [Hades2SaveEditorEntity] {
-        Hades2SaveEditorEntityGrouping.entities(from: model.items)
+        model.entityResults
     }
 
     var body: some View {
@@ -99,6 +69,15 @@ struct Hades2SaveEditorView: View {
                 .padding(.top, 10)
             }
             workbenchToolbar
+            if let queryFailure = model.queryFailure {
+                TrainerInlineNotice(color: theme.warning) {
+                    Text(localization.string(queryFailure))
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 18)
+                .padding(.bottom, 8)
+            }
             Divider()
             inlineResults
                 .id(model.workspaceID)
@@ -144,6 +123,9 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: localization.language) { _, language in
             model.setLanguage(language)
+        }
+        .onChange(of: model.search) { _, _ in
+            model.searchChanged()
         }
         .onChange(of: model.selectedSourceID) { _, identifier in
             guard !identifier.isEmpty, identifier != loadedSourceID else { return }
@@ -309,14 +291,20 @@ struct Hades2SaveEditorView: View {
                     set: { item in
                         guard section != item else { return }
                         section = item
-                        model.selectDomain(item.domain)
+                        if item == .advanced {
+                            model.selectDomain(.advanced)
+                        } else {
+                            model.selectScope(item.rawValue)
+                        }
                     }
                 )
             ) {
                 ForEach(Hades2SaveWorkbenchSection.allCases) { item in
                     Text(text(item.titleKey))
                         .tag(item)
-                        .disabled(!model.availableDomains.contains(item.domain))
+                        .disabled(!model.availableDomains.contains(
+                            item == .advanced ? .advanced : .entities
+                        ))
                 }
             }
             .labelsHidden()
@@ -342,7 +330,8 @@ struct Hades2SaveEditorView: View {
             if model.profile.isEmpty && !model.busy {
                 TrainerEmptyState(text: text("hades2.saveEditor.source.choose"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.profile.isEmpty || (model.busy && model.items.isEmpty) {
+            } else if model.profile.isEmpty
+                || ((model.busy || model.querying) && model.items.isEmpty) {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.items.isEmpty {
@@ -401,6 +390,12 @@ struct Hades2SaveEditorView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(model.busy)
+                }
+                if let detailError = model.detailFailure,
+                   model.selectedInvestigationID == entry.rawID {
+                    Text(localization.string(detailError))
+                        .font(.caption)
+                        .foregroundStyle(theme.warning)
                 }
                 if let detail = model.investigationDetail, detail.scene == entry.rawID {
                     investigationDetailView(detail)
@@ -563,7 +558,7 @@ struct Hades2SaveEditorView: View {
     private var pageSummary: String {
         text("hades2.saveEditor.pageSummary", arguments: [
             String(model.offset + 1),
-            String(min(model.offset + model.items.count, model.total)),
+            String(min(model.offset + model.entityResults.count, model.total)),
             String(model.total)
         ])
     }

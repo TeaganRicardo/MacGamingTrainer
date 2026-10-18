@@ -10,6 +10,7 @@ import math
 import uuid
 
 from . import save_equipment, save_long_term, save_narrative
+from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
@@ -56,6 +57,7 @@ _PLAYER_STAT_FIELDS = (
 
 
 SAVE_EDITOR_DOMAINS = (
+    "entities",
     "overview",
     "discover",
     "resources",
@@ -70,6 +72,7 @@ SAVE_EDITOR_DOMAINS = (
     "weapons",
     "advanced",
 )
+SAVE_EDITOR_SCOPES = ("all", "story", "growth", "resources", "records")
 SAVE_EDITOR_MUTATION_KINDS = (
     "set",
     "unset",
@@ -816,6 +819,105 @@ class Hades2SaveWorkspace:
             language, self._dialogue_write_decisions()
         )
 
+    def _entity_source_rows(self, language, scope, search):
+        """Reuse native-owner descriptors; scopes only choose a read projection."""
+        root = self.document.lua_state
+        rows = []
+        if scope in ("all", "resources"):
+            rows.extend(self._resource_rows(language))
+        if scope in ("all", "records"):
+            rows.extend(self._player_stat_rows(language))
+        if scope in ("all", "story"):
+            rows.extend(save_narrative.rows(
+                root, "flags", language, game_path=self._game_path
+            ))
+            rows.extend(save_narrative.rows(
+                root, "progression", language, game_path=self._game_path
+            ))
+            rows.extend(save_long_term.rows(
+                root, "relationships", language, game_path=self._game_path
+            ))
+            if search.strip():
+                try:
+                    rows.extend(save_narrative.rows(
+                        root, "dialogue", language, game_path=self._game_path
+                    ))
+                except ValueError as error:
+                    # A missing dialogue index has no writable dialogue fields;
+                    # native-source investigation may still explain known scenes.
+                    if "TextLinesRecord" not in str(error):
+                        raise
+            if search.strip():
+                rows.extend(self._known_absent_quest_rows(language))
+        if scope in ("all", "growth", "records"):
+            progression = save_long_term.rows(
+                root, "progression", language, game_path=self._game_path
+            )
+            rows.extend(row for row in progression if (
+                scope == "all"
+                or (row["id"].startswith("card:") if scope == "growth"
+                    else row["id"].startswith("objective:"))
+            ))
+        if scope in ("all", "growth"):
+            rows.extend(save_equipment.rows(root, language, game_path=self._game_path))
+        return rows
+
+    def _entity_query(self, *, scope, search, offset, limit, language):
+        if scope not in SAVE_EDITOR_SCOPES:
+            raise ValueError("Save Editor browse scope is invalid.")
+        rows = self._entity_source_rows(language, scope, search)
+        aliases = {}
+        if search.strip():
+            other = "en" if language == "zh-CN" else "zh-CN"
+            for alias in self._entity_source_rows(other, scope, search):
+                aliases[alias["id"]] = (
+                    alias.get("name"), alias.get("englishName"),
+                    alias.get("entityName"), alias.get("group"),
+                )
+            # Authored scenes and spoken text are source-backed, read-only
+            # context for the same character entity. Never infer a mutation
+            # from the scene's Boolean observation or its localised name.
+            if scope in ("all", "story"):
+                results = self._narrative_investigation().query(
+                    self.document.lua_state, search=search, offset=0,
+                    limit=100000, language=language,
+                    permissions=self._dialogue_write_decisions(),
+                )
+                verified_people = {}
+                for scene in results["items"]:
+                    # The source-bound narrative index must prove the native
+                    # NPC identity before its dialogue can join a person's
+                    # durable mutation descriptors.
+                    if scene.get("entityId"):
+                        verified_people[scene["rawId"]] = (
+                            scene["entityId"], scene["entityName"],
+                            scene.get("snippet") or "",
+                        )
+                    scene["_search"] = (search,)
+                    if scene.get("snippet"):
+                        prefix = "对话" if language == "zh-CN" else "Dialogue"
+                        scene["name"] = prefix + " · " + scene["snippet"][:100]
+                    rows.append(scene)
+                for row in rows:
+                    if row["domain"] != "dialogue":
+                        continue
+                    person = verified_people.get(row["rawId"])
+                    if person is None:
+                        continue
+                    row["entityId"], row["entityName"] = person[:2]
+                    if person[2]:
+                        prefix = "对话记录" if language == "zh-CN" else "Dialogue history"
+                        row["name"] = prefix + " · " + person[2][:100]
+        page = entity_page(rows, search=search, offset=offset, limit=limit,
+                           aliases=aliases)
+        return {
+            "profile": self.profile,
+            "relativePath": self.relative_path,
+            "domain": "entities",
+            "scope": scope,
+            **page,
+        }
+
     def query(
         self,
         *,
@@ -826,6 +928,7 @@ class Hades2SaveWorkspace:
         path=None,
         language="zh-CN",
         stateFilter="all",
+        scope="all",
     ):
         if domain not in SAVE_EDITOR_DOMAINS:
             raise ValueError("Save Editor domain is unknown.")
@@ -834,6 +937,12 @@ class Hades2SaveWorkspace:
         if language not in ("zh-CN", "en"):
             raise ValueError("Save Editor language is unsupported.")
         offset, limit = _page(offset, limit)
+        if domain == "entities":
+            if stateFilter != "all" or path not in (None, []):
+                raise ValueError("Save Editor entity query does not support diagnostic filters.")
+            return self._entity_query(
+                scope=scope, search=search, offset=offset, limit=limit, language=language
+            )
         if domain == "investigate":
             if stateFilter not in SAVE_EDITOR_INVESTIGATION_FILTERS:
                 raise ValueError("Save Editor investigation filter is invalid.")

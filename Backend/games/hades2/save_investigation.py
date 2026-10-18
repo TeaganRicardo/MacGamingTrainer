@@ -256,12 +256,45 @@ def _original_roots(game_path):
     return None, None
 
 
-def _capture_native(game_path):
-    """Identity and parsing use the same bytes, including unreadable inputs.
+def _source_signature(game_path):
+    """Cheap freshness signature for the installed source set.
 
-    Recheck the selected roots and complete consumed file set at each public
-    query boundary. Timestamps cannot detect replacement with preserved mtime.
-    Capturing bytes also avoids hashing one version and parsing another.
+    This deliberately avoids reading file contents on the typeahead path. File
+    identity, size, mode, mtime and ctime detect normal replacement and in-place
+    rewrites, including replacement that preserves mtime. Deliberate detail
+    retrieval still forces a byte capture/hash before presenting evidence.
+    """
+    scripts, texts = _original_roots(game_path)
+    roots = tuple(str(path.resolve()) for path in (scripts, texts)) if scripts else ()
+    entries = []
+    if scripts:
+        groups = [('Scripts', scripts, sorted(scripts.glob('*.lua')))]
+        groups.extend((language, texts / language, sorted((texts / language).rglob('*.sjson')))
+                      for language in ('en', 'zh-CN'))
+        for owner, folder, paths in groups:
+            for path in paths:
+                if path.name.startswith('._'):
+                    continue
+                name = path.relative_to(folder).as_posix()
+                try:
+                    stat = path.stat()
+                except OSError:
+                    identity = None
+                else:
+                    identity = (
+                        stat.st_dev, stat.st_ino, stat.st_mode, stat.st_size,
+                        stat.st_mtime_ns, stat.st_ctime_ns,
+                    )
+                entries.append((owner, name, identity))
+    return roots, tuple(entries)
+
+
+def _capture_native(game_path):
+    """Capture and hash the exact native bytes used for parsed evidence.
+
+    Queries reuse the parsed capture while the cheap source signature is
+    unchanged. Any signature change, and every deliberate detail read, returns
+    through this byte-level integrity boundary before evidence is presented.
     """
     scripts, texts = _original_roots(game_path)
     roots = [str(path.resolve()) for path in (scripts, texts)] if scripts else []
@@ -288,7 +321,10 @@ def _capture_native(game_path):
                 inputs.append((owner, name, digest, raw))
     manifest = {'roots': roots, 'inputs': [item[:3] for item in inputs]}
     identity = hashlib.sha256(json.dumps(manifest, ensure_ascii=True, separators=(',', ':')).encode()).hexdigest()
-    return {'identity': identity, 'roots': roots, 'inputs': inputs, 'errors': errors}
+    return {
+        'identity': identity, 'roots': roots, 'inputs': inputs, 'errors': errors,
+        'signature': _source_signature(game_path),
+    }
 
 
 def _load_native(source, expected_hash):
@@ -418,10 +454,19 @@ class NativeDialogueInvestigation:
         # document. Query/detail receive the workspace's current document.
         self.game_path = str(game_path) if game_path is not None else None
         self.expected_hash = expected_hash
-        self._refresh()
+        self.native = None
+        self._native_signature = None
+        self._refresh(force=True)
 
-    def _refresh(self):
-        self.native = _cached(_capture_native(self.game_path), self.expected_hash)
+    def _refresh(self, *, force=False):
+        if not force and self.native is not None:
+            current = _source_signature(self.game_path)
+            if current == self._native_signature:
+                return False
+        source = _capture_native(self.game_path)
+        self.native = _cached(source, self.expected_hash)
+        self._native_signature = source['signature']
+        return True
 
     def _records(self, save_root):
         try:
@@ -564,7 +609,10 @@ class NativeDialogueInvestigation:
                 'sourceErrors': self.native['errors']}
 
     def detail(self, save_root, scene, language, permissions):
-        self._refresh()
+        # Detail is deliberate evidence retrieval rather than typeahead. Force
+        # byte capture/hash here so presented native context is integrity-bound
+        # even if filesystem metadata was preserved unusually.
+        self._refresh(force=True)
         records, ambiguous = self._records(save_root)
         if scene not in records and scene not in STORY_RESET_TEXT_IDS and scene not in self.native['scenes'] and scene not in self.native['events']:
             raise ValueError('Save Editor native scene identity is unknown.')
