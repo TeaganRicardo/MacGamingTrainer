@@ -27,8 +27,11 @@ for line in sys.stdin:
     request = json.loads(line)
     with log.open("a", encoding="utf-8") as file:
         file.write(json.dumps(request, sort_keys=True) + "\n")
-    # Force a reproducible busy interval longer than a fast input burst.
-    if request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
+    # Special reward deliberately exceeds the old fixed 0.26s wait:
+    # dispatch logging happens before this delay and before Host completion.
+    if request["command"] == "spawn_reward" and request["params"].get("reward") == "SpecialDrop":
+        time.sleep(0.45)
+    elif request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
         time.sleep(0.16)
     observed = {"connected": True}
     success = True
@@ -78,6 +81,24 @@ func loggedCommands(at url: URL) -> [[String: Any]] {
     guard let contents = try? String(contentsOf: url, encoding: .utf8) else { return [] }
     return contents.split(separator: "\n").compactMap {
         try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
+    }
+}
+@MainActor
+func waitForIdle(_ model: Hades2TrainerModel, logURL: URL, phase: String) {
+    let timeout: TimeInterval = 5.0
+    let deadline = Date().addingTimeInterval(timeout)
+    while (model.busy || !model.canAcceptRuntimeAction || !model.backendAvailable)
+          && Date() < deadline {
+        pump(0.02)
+    }
+    guard !model.busy && model.canAcceptRuntimeAction && model.backendAvailable else {
+        let dispatched = loggedCommands(at: logURL).suffix(12).map { row in
+            "\(row["command"] as? String ?? "?")#\(row["id"] as? String ?? "?")"
+        }.joined(separator: ", ")
+        fail("idle gate timeout [\(phase)] after \(timeout)s; busy=\(model.busy) "
+             + "admissible=\(model.canAcceptRuntimeAction) backend=\(model.backendAvailable) "
+             + "connected=\(model.connected) status=\(model.status) error=\(model.error) "
+             + "dispatched=[\(dispatched)]")
     }
 }
 func makeReward(_ id: String, group: String = "pickup") -> BoonOption {
@@ -148,7 +169,7 @@ struct Main {
         model.performShortcut(.disableAll)
         check(model.canSpawnReward,
               "rejected Disable All must not suppress pending repeatable spawns")
-        pump(0.85)
+        waitForIdle(model, logURL: logURL, phase: "three GUI spawns")
         let disableRequests = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "disable_all"
         }
@@ -169,7 +190,7 @@ struct Main {
         model.performShortcut(.spawnPickup)
         model.performShortcut(.spawnPickup)
         check(model.canSpawnReward, "shortcut burst must not disable GUI spawn")
-        pump(0.45)
+        waitForIdle(model, logURL: logURL, phase: "two shortcut spawns")
         let repeated = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "spawn_reward"
         }
@@ -191,7 +212,7 @@ struct Main {
                   "older acknowledgement overwrote a later hotkey's pending intent")
         }
         model.performShortcut(.invincibility)
-        pump(0.72)
+        waitForIdle(model, logURL: logURL, phase: "three durable toggles")
         let toggles = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "set_desired"
         }
@@ -205,18 +226,15 @@ struct Main {
         // The backend may reject a later requested state while returning the
         // last authoritative desired value. Optimistic UI must reconcile it.
         model.performShortcut(.invincibility)
-        let offDeadline = Date().addingTimeInterval(3)
-        while !model.canAcceptRuntimeAction && Date() < offDeadline { pump(0.02) }
+        waitForIdle(model, logURL: logURL, phase: "explicit toggle disable")
         check(!model.invincibility, "explicit disable did not settle")
         model.performShortcut(.invincibility)
-        let failureDeadline = Date().addingTimeInterval(3)
-        while !model.canAcceptRuntimeAction && Date() < failureDeadline { pump(0.02) }
+        waitForIdle(model, logURL: logURL, phase: "rejected feature enable")
         check(!model.invincibility,
               "rejected enable retained an optimistic value against the backend's explicit state")
 
         model.performShortcut(.forceLegendary)
-        let boonFailureDeadline = Date().addingTimeInterval(3)
-        while model.busy && Date() < boonFailureDeadline { pump(0.02) }
+        waitForIdle(model, logURL: logURL, phase: "rejected boon rarity")
         check(!model.boonForceLegendary,
               "failed boon rarity edit retained an optimistic forced legendary value")
 
@@ -225,7 +243,7 @@ struct Main {
         model.selectedNextRoomReward = reward.id
         model.performShortcut(.applyNextRoomReward)
         model.performShortcut(.applyNextRoomReward)
-        pump(0.20)
+        waitForIdle(model, logURL: logURL, phase: "next-room token update")
         let nextRoomRequests = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "set_next_room_reward_desired"
         }
@@ -239,7 +257,7 @@ struct Main {
         model.selectedSpecialReward = specialReward.id
         check(model.canPerformSelectedSpecialReward, "ordinary special reward should be available")
         model.performShortcut(.spawnSpecial)
-        pump(0.26)
+        waitForIdle(model, logURL: logURL, phase: "slow special-reward spawn")
         let specials = loggedCommands(at: logURL).filter {
             guard ($0["command"] as? String) == "spawn_reward",
                   let params = $0["params"] as? [String: Any] else { return false }
@@ -252,7 +270,7 @@ struct Main {
         // Disable All during a burst.
         check(model.canAcceptRuntimeAction, "idle Disable All should be admissible")
         model.performShortcut(.disableAll)
-        pump(0.20)
+        waitForIdle(model, logURL: logURL, phase: "idle Disable All")
         let acceptedDisable = loggedCommands(at: logURL).filter {
             ($0["command"] as? String) == "disable_all"
         }
