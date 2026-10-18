@@ -37,7 +37,7 @@ enum Hades2Request {
     case saveEditorInventory(snapshotID: String?)
     case saveEditorOpenSelection(snapshotID: String?, source: [String: String], target: [String: String]?)
     case saveEditorTarget([String: String])
-    case saveEditorQuery(domain: String, search: String, offset: Int, limit: Int, path: [Any], language: String, stateFilter: String)
+    case saveEditorQuery(domain: String, scope: String, search: String, offset: Int, limit: Int, path: [Any], language: String, stateFilter: String)
     case saveEditorDetail(entryID: String, language: String)
     case saveEditorStage(entryID: String, operation: String, value: Any?)
     case saveEditorReview, saveEditorCancel, saveEditorApply
@@ -199,9 +199,10 @@ enum Hades2Request {
             return params
         case .saveEditorTarget(let target):
             return ["target": target]
-        case .saveEditorQuery(let domain, let search, let offset, let limit, let path, let language, let stateFilter):
+        case .saveEditorQuery(let domain, let scope, let search, let offset, let limit, let path, let language, let stateFilter):
             return [
                 "domain": domain,
+                "scope": scope,
                 "search": search,
                 "offset": offset,
                 "limit": limit,

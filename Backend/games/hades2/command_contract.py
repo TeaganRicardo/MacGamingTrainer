@@ -20,6 +20,7 @@ from .operation_budgets import EXPORT_REVEAL_TIMEOUT_SECONDS
 from .runtime_error_presentation import present_runtime_error
 from .save_workspace import (
     SAVE_EDITOR_DOMAINS,
+    SAVE_EDITOR_SCOPES,
     SAVE_EDITOR_MUTATION_KINDS,
     SAVE_EDITOR_STATE_FILTERS,
 )
@@ -394,6 +395,10 @@ def _save_editor_query(raw):
     }
     if "stateFilter" in params:
         result["stateFilter"] = state_filter
+    if "scope" in params:
+        if params["scope"] not in SAVE_EDITOR_SCOPES:
+            raise ValueError("Save Editor browse scope is invalid.")
+        result["scope"] = params["scope"]
     return result
 
 

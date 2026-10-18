@@ -80,7 +80,7 @@ for raw in sys.stdin:
             'sourceSHA256': ('a' if source['relativePath'].endswith('_Temp.sav') else 'b') * 64 if snapshot else '0' * 64,
             'target': req['params'].get('target'),
             'domains': [
-                'overview', 'discover', 'resources', 'playerStats', 'progression',
+                'entities', 'overview', 'discover', 'resources', 'playerStats', 'progression',
                 'quests', 'arcana', 'investigate', 'dialogue',
                 'flags', 'relationships', 'weapons', 'advanced',
             ],
@@ -106,7 +106,73 @@ for raw in sys.stdin:
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
-        if domain == 'discover':
+        if domain == 'entities':
+            scope = req['params'].get('scope', 'all')
+            term = req['params']['search'].lower()
+            items = []
+            if scope in ('all', 'resources') and (not term or 'ash' in term or term == 'invalid-offset'):
+                items = [{
+                    'id': 'resource:MetaCurrency', 'domain': 'resources',
+                    'rawId': 'MetaCurrency',
+                    'path': ['GameState', 'Resources', 'MetaCurrency'],
+                    'name': 'Ashes', 'englishName': 'Ashes',
+                    'value': resource_value, 'valueType': 'integer',
+                    'editable': True, 'mutationKinds': ['set'],
+                    'constraints': {'min': 0, 'max': 999999, 'integer': True},
+                    'state': 'observed', 'reasonCode': 'editable',
+                }]
+            elif scope in ('all', 'story') and ('nemesis' in term or '复仇' in term):
+                items = [{
+                    'id': 'interaction:NPC_Nemesis_01', 'domain': 'relationships',
+                    'rawId': 'NPC_Nemesis_01',
+                    'path': ['GameState', 'NPCInteractions', 'NPC_Nemesis_01'],
+                    'name': 'Interactions · Nemesis', 'englishName': 'Interactions · Nemesis',
+                    'entityId': 'person:Nemesis', 'entityName': 'Nemesis',
+                    'value': 3, 'valueType': 'integer',
+                    'editable': True, 'mutationKinds': ['set'],
+                    'constraints': {'min': 0, 'max': 9999, 'integer': True},
+                }, {
+                    'id': 'investigate:NemesisPostTrueEnding01', 'domain': 'investigate',
+                    'rawId': 'NemesisPostTrueEnding01',
+                    'path': ['GameState', 'TextLinesRecord', 'NemesisPostTrueEnding01'],
+                    'name': 'Nemesis · NemesisPostTrueEnding01',
+                    'englishName': 'Nemesis · NemesisPostTrueEnding01',
+                    'entityId': 'person:Nemesis', 'entityName': 'Nemesis',
+                    'value': True, 'valueType': 'boolean',
+                    'editable': False, 'mutationKinds': [],
+                    'status': 'recorded', 'sourceStatus': 'available',
+                    'snippet': 'I still remember',
+                }]
+            elif scope in ('all', 'growth') and ('sorceress' in term or '女巫' in term):
+                items = [{
+                    'id': 'card:ChanneledCast:Level', 'domain': 'progression',
+                    'rawId': 'ChanneledCast',
+                    'path': ['GameState', 'MetaUpgradeState', 'ChanneledCast', 'Level'],
+                    'name': 'Sorceress · Level', 'englishName': 'Sorceress · Level',
+                    'entityId': 'arcana:ChanneledCast', 'entityName': 'Sorceress',
+                    'value': 2, 'valueType': 'integer',
+                    'editable': True, 'mutationKinds': ['set'],
+                    'constraints': {'min': 1, 'max': 3, 'integer': True},
+                }, {
+                    'id': 'card:ChanneledCast:Unlocked', 'domain': 'progression',
+                    'rawId': 'ChanneledCast',
+                    'path': ['GameState', 'MetaUpgradeState', 'ChanneledCast', 'Unlocked'],
+                    'name': 'Sorceress · Unlocked', 'englishName': 'Sorceress · Unlocked',
+                    'entityId': 'arcana:ChanneledCast', 'entityName': 'Sorceress',
+                    'value': True, 'valueType': 'boolean',
+                    'editable': True, 'mutationKinds': ['set'],
+                }]
+            elif scope == 'records':
+                items = [{
+                    'id': 'playerStat:GameplayTime', 'domain': 'playerStats',
+                    'rawId': 'GameplayTime',
+                    'path': ['GameState', 'GameplayTime'],
+                    'name': 'Gameplay Time (seconds)', 'englishName': 'Gameplay Time (seconds)',
+                    'value': 900.5, 'valueType': 'number',
+                    'editable': True, 'mutationKinds': ['set'],
+                    'constraints': {'min': 0, 'integer': False},
+                }]
+        elif domain == 'discover':
             if req['params']['search'] == 'MysteryCounter':
                 items = [{
                     'id': 'advanced:["GameState","UnknownFutureField","MysteryCounter"]:0',
@@ -307,16 +373,27 @@ for raw in sys.stdin:
                 'mutationKinds': ['set'],
                 'constraints': {'min': 0, 'max': 999999, 'integer': True},
             }]
+        groups = {}
+        if domain == 'entities':
+            for row in items:
+                key = row.get('entityId') or 'entry:' + row['id']
+                if key not in groups:
+                    groups[key] = {'id': key, 'name': row.get('entityName') or row['name'],
+                                   'items': []}
+                groups[key]['items'].append(row)
         result = {
             'profile': 'Profile1',
             'relativePath': 'Profile1.sav',
             'domain': domain,
             'offset': True if req['params']['search'] == 'invalid-offset' else req['params']['offset'],
             'limit': req['params']['limit'],
-            'total': len(items),
-            'items': items,
+            'total': len(groups) if domain == 'entities' else len(items),
+            'items': [] if domain == 'entities' else items,
+            'entities': list(groups.values()) if domain == 'entities' else [],
             'sourceStatus': 'available' if domain == 'investigate' else None,
         }
+        if domain == 'entities':
+            result['scope'] = req['params']['scope']
     elif command == 'save_editor_detail':
         scene = req['params']['entryId'].removeprefix('investigate:')
         result = {
@@ -580,8 +657,8 @@ struct Main {
         if model.availableDomains != Hades2SaveEditorDomain.allCases {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
         }
-        if model.selectedDomain != .discover { fail("Save Editor did not open on unified discovery") }
-        if model.total != 1 || model.items.count != 1 { fail("initial discovery page was not loaded") }
+        if model.selectedDomain != .entities { fail("Save Editor did not open on entity results") }
+        if model.total != 1 || model.items.count != 1 || model.entityResults.count != 1 { fail("initial entity page was not loaded") }
         if model.items[0].rawID != "MetaCurrency" || model.items[0].displayName != "Ashes" {
             fail("discovery resource row was not decoded")
         }
@@ -614,7 +691,7 @@ struct Main {
         if params["workspaceId"] as? String != "fixture-workspace" {
             fail("query was not bound to the opened document")
         }
-        if params["domain"] as? String != "discover" || params["language"] as? String != "en" {
+        if params["domain"] as? String != "entities" || params["scope"] as? String != "all" || params["language"] as? String != "en" {
             fail("query did not use initial unified discovery domain / live language")
         }
         if params["offset"] as? Int != 0 || params["limit"] as? Int != 100 {
@@ -780,6 +857,41 @@ struct Main {
         model.cancel()
         pumpUntil { model.pendingCount == 0 && !model.busy }
 
+        model.selectScope("all")
+        pump(0.20)
+        model.search = "Nemesis"
+        model.submitSearch()
+        pumpUntil { model.entityResults.first?.entries.count == 2 && !model.querying }
+        guard let nemesis = model.entityResults.first,
+              nemesis.id == "person:Nemesis",
+              nemesis.entries.count == 2,
+              nemesis.entries.contains(where: { $0.id == "interaction:NPC_Nemesis_01" }),
+              nemesis.entries.contains(where: { $0.id == "investigate:NemesisPostTrueEnding01" }) else {
+            fail("Entity lookup split Nemesis interaction from native dialogue context")
+        }
+        model.selectScope("story")
+        pumpUntil { model.selectedScope == "story" && !model.querying }
+        if model.search != "Nemesis" || model.entityResults.first?.id != "person:Nemesis" {
+            fail("Scope switch lost the typed search or semantic entity identity")
+        }
+        model.inspect(nemesis.entries[1])
+        pumpUntil { model.investigationDetail != nil }
+        if model.investigationDetail?.scene != "NemesisPostTrueEnding01" {
+            fail("Entity-native authored details did not open on demand")
+        }
+        model.search = "Sorceress"
+        model.selectScope("growth")
+        pumpUntil { model.entityResults.first?.id == "arcana:ChanneledCast" && !model.querying }
+        if model.entityResults.first?.entries.count != 2
+            || model.entityResults.first?.entries.filter({ $0.editable }).count != 2 {
+            fail("Arcana was not a complete, immediately editable multi-field entity")
+        }
+        model.selectScope("all")
+        pumpUntil { !model.querying }
+        if model.search != "Sorceress" {
+            fail("Global scope cleared search")
+        }
+
         model.search = "ash"
         model.submitSearch()
         pump(0.20)
@@ -788,6 +900,9 @@ struct Main {
             fail("search was not delegated to the backend query")
         }
 
+        // Raw/unknown data is an explicit read-only diagnostic fallback.
+        model.selectDomain(.discover)
+        pump(0.20)
         model.search = "MysteryCounter"
         model.submitSearch()
         pump(0.20)
@@ -868,9 +983,9 @@ struct Main {
             fail("playerStats descriptor row was not decoded")
         }
 
-        if Hades2SaveWorkbenchSection.growth.domain != .arcana
-            || Hades2SaveWorkbenchSection.story.domain != .investigate {
-            fail("Workbench navigation resolves the wrong source domain")
+        if Hades2SaveWorkbenchSection.growth.rawValue != "growth"
+            || Hades2SaveWorkbenchSection.story.rawValue != "story" {
+            fail("Workbench navigation resolves the wrong entity browse scope")
         }
         model.selectDomain(.quests)
         pump(0.20)
@@ -941,7 +1056,7 @@ struct Main {
         model.search = "invalid-offset"
         model.submitSearch()
         pump(0.20)
-        if model.failure == nil {
+        if model.queryFailure == nil {
             fail("A boolean query offset was accepted as a numeric offset")
         }
 

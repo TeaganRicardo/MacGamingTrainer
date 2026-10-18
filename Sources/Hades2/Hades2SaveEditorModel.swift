@@ -3,6 +3,7 @@ import CoreFoundation
 import Combine
 
 enum Hades2SaveEditorDomain: String, CaseIterable, Identifiable {
+    case entities
     case overview
     case discover
     case resources
@@ -328,7 +329,12 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var selectedTargetIdentity: [String: String]?
     @Published private(set) var availableDomains: [Hades2SaveEditorDomain] = []
     @Published private(set) var coverage: [Hades2SaveEditorCoverage] = []
-    @Published var selectedDomain: Hades2SaveEditorDomain = .discover
+    @Published var selectedDomain: Hades2SaveEditorDomain = .entities
+    @Published private(set) var selectedScope = "all"
+    @Published private(set) var entityResults: [Hades2SaveEditorEntity] = []
+    @Published private(set) var querying = false
+    @Published private(set) var queryFailure: TrainerTextToken?
+    @Published private(set) var detailFailure: TrainerTextToken?
     @Published var search = ""
     @Published private(set) var offset = 0
     @Published private(set) var total = 0
@@ -350,6 +356,9 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var language: TrainerPresentationLanguage = .zhCN
     private var pendingRequests = 0
     private var knownDisplayNames: [String: String] = [:]
+    private var queryGeneration = 0
+    private var lastRequestedSearch: String?
+    private var scheduledSearch: DispatchWorkItem?
 
     init(session: TrainerBackendSession, snapshotID: String? = nil) {
         api = Hades2API(session: session)
@@ -395,6 +404,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func openSelection() {
+        invalidateQuery()
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
         lastApplyReceipt = nil
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
@@ -411,8 +421,10 @@ final class Hades2SaveEditorModel: ObservableObject {
             }
             self.pendingChanges = []
             self.items = []
+            self.entityResults = []
             self.knownDisplayNames = [:]
-            self.selectedDomain = .discover
+            self.selectedDomain = .entities
+            self.selectedScope = "all"
             self.query(offset: 0)
         }
     }
@@ -448,14 +460,56 @@ final class Hades2SaveEditorModel: ObservableObject {
         query(offset: offset)
     }
 
+    private func invalidateQuery() {
+        scheduledSearch?.cancel()
+        scheduledSearch = nil
+        queryGeneration += 1
+        querying = false
+        queryFailure = nil
+    }
+
+    /// Text changes cancel superseded lookups immediately, then coalesce work.
+    /// No source reload, draft replacement or Save authority transition occurs.
+    func searchChanged() {
+        // Return has already submitted this term. A later SwiftUI onChange
+        // must not cancel its immediate query and re-delay the lookup.
+        guard lastRequestedSearch != search else { return }
+        invalidateQuery()
+        let work = DispatchWorkItem { [weak self] in self?.query(offset: 0) }
+        scheduledSearch = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(280), execute: work)
+    }
+
+    func selectScope(_ scope: String) {
+        guard ["all", "story", "growth", "resources", "records"].contains(scope),
+              availableDomains.contains(.entities) else { return }
+        selectedScope = scope
+        selectedDomain = .entities
+        selectedInvestigationID = nil
+        investigationDetail = nil
+        detailFailure = nil
+        advancedPath = []
+        query(offset: 0)
+    }
+
     func query(offset requestedOffset: Int = 0) {
-        guard !profile.isEmpty else { return }
+        guard !profile.isEmpty, workspaceID != nil else { return }
+        scheduledSearch?.cancel()
+        scheduledSearch = nil
+        queryGeneration += 1
+        let generation = queryGeneration
+        let workspace = workspaceID
+        let requestedDomain = selectedDomain
+        let requestedScope = selectedScope
+        let requestedSearch = search
+        lastRequestedSearch = requestedSearch
+        let requestedLanguage = language
         let boundedOffset = max(0, requestedOffset)
-        let path = selectedDomain == .advanced
+        let path = requestedDomain == .advanced
             ? advancedPath.map(\.jsonValue)
             : []
         let stateFilter: String
-        switch selectedDomain {
+        switch requestedDomain {
         case .discover:
             stateFilter = discoveryFilter
         case .investigate:
@@ -463,43 +517,98 @@ final class Hades2SaveEditorModel: ObservableObject {
         default:
             stateFilter = "all"
         }
+        querying = true
+        queryFailure = nil
         perform(
             .saveEditorQuery(
-                domain: selectedDomain.rawValue,
-                search: search,
+                domain: requestedDomain.rawValue,
+                scope: requestedScope,
+                search: requestedSearch,
                 offset: boundedOffset,
                 limit: Self.pageSize,
                 path: path,
-                language: language.rawValue,
+                language: requestedLanguage.rawValue,
                 stateFilter: stateFilter
             ),
             operation: "hades2.saveEditor.operation.query",
-            announceSuccess: false
+            announceSuccess: false,
+            occupy: false,
+            presentFailure: false
         ) { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self, self.queryGeneration == generation,
+                  self.workspaceID == workspace,
+                  self.selectedDomain == requestedDomain,
+                  self.selectedScope == requestedScope,
+                  self.search == requestedSearch,
+                  self.language == requestedLanguage else { return }
+            self.querying = false
+            guard reply.success, let result = reply.result else {
+                if let error = reply.failure {
+                    self.queryFailure = TrainerTextToken(
+                        key: error.presentation,
+                        arguments: error.presentationArguments
+                    )
+                } else {
+                    self.queryFailure = TrainerTextToken(
+                        key: "hades2.saveEditor.error.invalidResponse"
+                    )
+                }
+                return
+            }
             guard let domain = result["domain"] as? String,
-                  domain == self.selectedDomain.rawValue,
+                  domain == requestedDomain.rawValue,
                   let total = Self.intValue(result["total"]),
-                  let offset = Self.intValue(result["offset"]),
-                  let rows = result["items"] as? [[String: Any]]
+                  let offset = Self.intValue(result["offset"]), offset == boundedOffset
             else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             var decoded: [Hades2SaveEditorEntry] = []
-            decoded.reserveCapacity(rows.count)
-            for row in rows {
-                guard let entry = Self.decodeEntry(row) else {
-                    self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+            var entities: [Hades2SaveEditorEntity] = []
+            if requestedDomain == .entities {
+                guard result["scope"] as? String == requestedScope,
+                      let groups = result["entities"] as? [[String: Any]],
+                      groups.count <= Self.pageSize else {
+                    self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                     return
                 }
-                decoded.append(entry)
+                var identities = Set<String>()
+                for group in groups {
+                    guard let id = group["id"] as? String, !id.isEmpty,
+                          let title = group["name"] as? String, !title.isEmpty,
+                          let fields = group["items"] as? [[String: Any]],
+                          !fields.isEmpty, identities.insert(id).inserted else {
+                        self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                        return
+                    }
+                    let entries = fields.compactMap(Self.decodeEntry)
+                    guard entries.count == fields.count, entries.allSatisfy({
+                        ($0.entityID ?? "entry:" + $0.id) == id
+                    }) else {
+                        self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                        return
+                    }
+                    decoded.append(contentsOf: entries)
+                    entities.append(Hades2SaveEditorEntity(id: id, title: title, entries: entries))
+                }
+            } else {
+                guard let rows = result["items"] as? [[String: Any]] else {
+                    self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                    return
+                }
+                decoded = rows.compactMap(Self.decodeEntry)
+                guard decoded.count == rows.count else {
+                    self.queryFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                    return
+                }
+                entities = Hades2SaveEditorEntityGrouping.entities(from: decoded)
             }
             self.total = total
             self.offset = offset
             self.items = decoded
+            self.entityResults = entities
             self.investigationSourceStatus = result["sourceStatus"] as? String ?? "missing"
-            if self.selectedDomain == .investigate,
+            if requestedDomain == .investigate,
                let selected = decoded.first(where: { $0.rawID == self.selectedInvestigationID }) {
                 self.inspect(selected)
             } else {
@@ -509,7 +618,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             for entry in decoded {
                 self.knownDisplayNames[entry.id] = entry.displayName
             }
-            self.failure = nil
+            self.queryFailure = nil
         }
     }
 
@@ -518,6 +627,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func submitSearch() {
+        invalidateQuery()
         selectedInvestigationID = nil
         investigationDetail = nil
         query(offset: 0)
@@ -538,28 +648,37 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func inspect(_ entry: Hades2SaveEditorEntry) {
-        guard (selectedDomain == .investigate || selectedDomain == .discover),
+        guard (selectedDomain == .entities || selectedDomain == .investigate
+               || selectedDomain == .discover),
               entry.domain == "investigate" else { return }
         selectedInvestigationID = entry.rawID
         investigationDetail = nil
+        detailFailure = nil
         perform(
             .saveEditorDetail(entryID: entry.id, language: language.rawValue),
-            operation: "hades2.saveEditor.operation.detail", announceSuccess: false
+            operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
+            occupy: false, presentFailure: false
         ) { [weak self] reply in
-            guard let self, self.selectedInvestigationID == entry.rawID,
-                  reply.success, let result = reply.result else { return }
+            guard let self, self.selectedInvestigationID == entry.rawID else { return }
+            guard reply.success, let result = reply.result else {
+                self.detailFailure = reply.failure.map {
+                    TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
+                } ?? TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
             guard let detail = Hades2SaveInvestigationDetail(result),
                   detail.scene == entry.rawID else {
-                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                self.detailFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.investigationDetail = detail
-            self.failure = nil
+            self.detailFailure = nil
         }
     }
 
     func selectDomain(_ domain: Hades2SaveEditorDomain) {
         guard availableDomains.contains(domain) else { return }
+        if domain == .entities { selectScope("all"); return }
         selectedDomain = domain
         selectedInvestigationID = nil
         investigationDetail = nil
@@ -855,17 +974,22 @@ final class Hades2SaveEditorModel: ObservableObject {
         _ request: Hades2Request,
         operation: String,
         announceSuccess: Bool = true,
+        occupy: Bool = true,
+        presentFailure: Bool = true,
         reply: @escaping (BackendReply) -> Void
     ) {
-        pendingRequests += 1
-        busy = true
+        if occupy {
+            pendingRequests += 1
+            busy = true
+        }
         api.request(
             request,
             operation: operation,
             announceSuccess: announceSuccess,
             saveWorkspaceID: (request.command == .saveEditorOpen || request.command == .saveEditorInventory) ? nil : workspaceID,
             reply: { [weak self] backendReply in
-                if !backendReply.success, let backendFailure = backendReply.failure {
+                if presentFailure, !backendReply.success,
+                   let backendFailure = backendReply.failure {
                     self?.failure = TrainerTextToken(
                         key: backendFailure.presentation,
                         arguments: backendFailure.presentationArguments
@@ -874,7 +998,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 reply(backendReply)
             },
             completion: { [weak self] _ in
-                guard let self else { return }
+                guard let self, occupy else { return }
                 self.pendingRequests = max(0, self.pendingRequests - 1)
                 self.busy = self.pendingRequests > 0
             }
