@@ -23,7 +23,8 @@ assert "dormantFeatures[key.rawValue] == true" in model
 assert "featureHotkeyFeedback" in model
 shortcut_block = model[model.index("private func performFeatureShortcut"):model.index("private func performBoonForceShortcutFeedback")]
 assert ".toggle(targetEnabled:" not in shortcut_block, "active=false alone must not be reported as deferred"
-assert "if let feedback" in shortcut_block
+assert "let feedback = self.featureHotkeyFeedback" in shortcut_block
+assert "TrainerHotkeyFeedbackPlayer.play(feedback)" in shortcut_block
 
 # Force Legendary / Duo are immediately active when the boon-rarity runtime
 # hook is already active. They are deferred only while that parent runtime is

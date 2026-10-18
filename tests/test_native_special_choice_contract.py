@@ -83,7 +83,10 @@ assert 'native-choice:' in model
 assert 'kind: "native_choice"' in model
 assert 'func performSpecialReward(_ reward: String)' in model
 assert '.openSpecialChoice(source: option.sourceId)' in model
-assert 'spawnBoon(option.id)' in model
+# The UI route delegates ordinary special drops to the same reward operation.
+# Completion is now propagated for truthful hotkey feedback.
+special_handler = model[model.index('private func performSpecialReward('):model.index('func setMultiplier(',model.index('private func performSpecialReward('))]
+assert 'return spawnBoon(option.id, completion: completion)' in special_handler
 assert 'performSpecialReward(selectedSpecialReward)' in model
 assert 'name: option.nativeChoiceTitle.isEmpty ? option.sectionTitle : option.nativeChoiceTitle' in model
 assert 'englishName: option.nativeChoiceEnglishTitle.isEmpty ? option.englishSectionTitle : option.nativeChoiceEnglishTitle' in model

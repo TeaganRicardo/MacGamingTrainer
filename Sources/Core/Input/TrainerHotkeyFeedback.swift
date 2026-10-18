@@ -1,8 +1,8 @@
 import AppKit
 
-/// Game-agnostic result of a global-hotkey toggle after the target module has
-/// processed the request. Modules decide whether an enabled request is already
-/// active or still deferred; Core only owns the shared feedback vocabulary.
+/// Game-agnostic feedback after a hotkey request has been processed.
+/// Modules own active/deferred/unconfirmed semantics; Core owns the audible
+/// feedback vocabulary and independent playback.
 enum TrainerHotkeyFeedback {
     case enabled
     case deferred

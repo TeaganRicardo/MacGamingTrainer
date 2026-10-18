@@ -517,9 +517,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             exiting: exiting
         ) else { return }
         pendingRunReadySignal = false
-        send(.status, title: "hades2.op.probeScene", announceSuccess: false) { [weak self] _ in
-            self?.consumeRunLogReadySignalIfPossible()
-        }
+        send(.status, title: "hades2.op.probeScene", announceSuccess: false,
+             completion: { [weak self] _ in
+                 self?.consumeRunLogReadySignalIfPossible()
+             })
     }
 
     private func toggleConnection(probeRuntime: Bool, recoverLostAttach: Bool = false) {
@@ -530,11 +531,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 pendingRunReadySignal = false
             }
             runLogWatcher.start()
-            send(.connect(probeRuntime: probeRuntime, recoverLostAttach: recoverLostAttach), title: "host.connectGame") { [weak self] _ in
-                guard let self else { return }
-                self.runLogWatcher.start()
-                self.consumeRunLogReadySignalIfPossible()
-            }
+            send(.connect(probeRuntime: probeRuntime, recoverLostAttach: recoverLostAttach),
+                 title: "host.connectGame",
+                 completion: { [weak self] _ in
+                     guard let self else { return }
+                     self.runLogWatcher.start()
+                     self.consumeRunLogReadySignalIfPossible()
+                 })
         }
     }
 
@@ -722,10 +725,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if let value = patch.moneyMultiplier { moneyMultiplier = value }
         if let value = patch.resourceMultiplier { resourceMultiplier = value }
         if let rarity = patch.boonRarity, pendingBoonRarityRequestID == nil {
-            if let value = rarity.target { boonRarityTarget = value }
-            if let value = rarity.multiplier { boonRarityMultiplier = value }
-            if let value = rarity.forceLegendary { boonForceLegendary = value }
-            if let value = rarity.forceDuo { boonForceDuo = value }
+            applyBoonRarity(rarity)
         }
         if patch.nextRoomReward.isPresent { nextRoomReward = patch.nextRoomReward.value }
         if patch.nextOccurrenceTarget.isPresent { nextOccurrenceTarget = patch.nextOccurrenceTarget.value }
@@ -921,6 +921,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         feedbackDetailsNoticeID = nil
     }
 
+    private func applyBoonRarity(_ rarity: Hades2BoonRaritySnapshot) {
+        if let value = rarity.target { boonRarityTarget = value }
+        if let value = rarity.multiplier { boonRarityMultiplier = value }
+        if let value = rarity.forceLegendary { boonForceLegendary = value }
+        if let value = rarity.forceDuo { boonForceDuo = value }
+    }
+
     private func applyStat(_ snapshot: Hades2StatSnapshot?, value: inout Double?, locked: inout Bool) {
         guard let snapshot else { return }
         value = snapshot.value
@@ -934,6 +941,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         allowsFollowingAction: Bool = false,
         repeatableSpawn: Bool = false,
         announceSuccess: Bool = true,
+        onReply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         let identity = UUID()
@@ -950,7 +958,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             // Session has now applied the payload and any generic envelope.
             // Even a receipt with no generic publication ends its suppression
             // here, so a later transport/recovery failure is a new event.
-            reply: { [weak self] _ in self?.receiptPresentedDuringReply = false },
+            reply: { [weak self] reply in
+                self?.receiptPresentedDuringReply = false
+                onReply?(reply)
+            },
             completion: { [weak self] success in
                 if let self {
                     if self.activeEditRequest == identity { self.activeEditRequest = nil }
@@ -1015,10 +1026,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         request: Hades2Request,
         title: String,
         titleArguments: [String] = [],
+        onReply: ((BackendReply) -> Void)? = nil,
         completion: ((Bool) -> Void)? = nil
     ) {
         send(request, title: title, titleArguments: titleArguments,
-             allowsFollowingAction: true, announceSuccess: false, completion: completion)
+             allowsFollowingAction: true, announceSuccess: false,
+             onReply: onReply, completion: completion)
     }
 
     func feature(_ key: Hades2FeatureKey, value: Bool, completion: ((Bool) -> Void)? = nil) {
@@ -1031,9 +1044,22 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         self[keyPath: key.modelKeyPath] = value
         let requestID = UUID()
         pendingFeatureIntents[key] = PendingFeatureIntent(requestID: requestID, enabled: value)
-        send(.setDesired(feature: key.rawValue, value: value), title: "hades2.op.updateFeature") { [weak self] success in
+        var rejectedObservedValue: Bool?
+        send(.setDesired(feature: key.rawValue, value: value),
+             title: "hades2.op.updateFeature",
+             onReply: { reply in
+                 if !reply.success, let state = reply.state {
+                     rejectedObservedValue = Hades2StatePatch(state).desiredFeatures?[key]
+                 }
+             }) { [weak self] success in
             if let self, self.pendingFeatureIntents[key]?.requestID == requestID {
                 self.pendingFeatureIntents.removeValue(forKey: key)
+                // The failure-state payload has already been projected while
+                // the optimistic intent was protected. Use its confirmed value
+                // only for this failed request; never rollback a newer intent.
+                if !success, let observed = rejectedObservedValue {
+                    self[keyPath: key.modelKeyPath] = observed
+                }
             }
             completion?(success)
         }
@@ -1274,12 +1300,21 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         boonRarityTarget = target; boonRarityMultiplier = value; boonForceLegendary = forceLegendary; boonForceDuo = forceDuo
         let requestID = UUID()
         pendingBoonRarityRequestID = requestID
+        var rejectedObservedRarity: Hades2BoonRaritySnapshot?
         sendEdit(
             request: .setBoonRarity(target: target, multiplier: value, forceLegendary: forceLegendary, forceDuo: forceDuo),
-            title: "hades2.op.updateBoonRarity"
+            title: "hades2.op.updateBoonRarity",
+            onReply: { reply in
+                if !reply.success, let state = reply.state {
+                    rejectedObservedRarity = Hades2StatePatch(state).boonRarity
+                }
+            }
         ) { [weak self] success in
-            if self?.pendingBoonRarityRequestID == requestID {
-                self?.pendingBoonRarityRequestID = nil
+            if let self, self.pendingBoonRarityRequestID == requestID {
+                self.pendingBoonRarityRequestID = nil
+                if !success, let rarity = rejectedObservedRarity {
+                    self.applyBoonRarity(rarity)
+                }
             }
             completion?(success)
         }
@@ -1516,7 +1551,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         shortcutIssue = .unrecognized
     }
 
-    private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback? {
+    private func featureHotkeyFeedback(_ key: Hades2FeatureKey, targetEnabled: Bool) -> TrainerHotkeyFeedback {
         guard targetEnabled else { return .disabled }
         if activeFeatures[key.rawValue] == true { return .enabled }
         if dormantFeatures[key.rawValue] == true || !connected || status != "ready" { return .deferred }
@@ -1533,12 +1568,11 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 TrainerHotkeyFeedbackPlayer.play(.rejected)
                 return
             }
-            if let feedback = self.featureHotkeyFeedback(key, targetEnabled: targetEnabled) {
-                if case .unconfirmed = feedback {
-                    self.presentFeedback(self.presentation("hades2.shortcut.unconfirmed"), tone: .information)
-                }
-                TrainerHotkeyFeedbackPlayer.play(feedback)
+            let feedback = self.featureHotkeyFeedback(key, targetEnabled: targetEnabled)
+            if case .unconfirmed = feedback {
+                self.presentFeedback(self.presentation("hades2.shortcut.unconfirmed"), tone: .information)
             }
+            TrainerHotkeyFeedbackPlayer.play(feedback)
         }
     }
 
@@ -1624,12 +1658,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 self?.performBoonForceShortcutFeedback(targetEnabled: targetEnabled, success: success)
             }
         case .applyNextRoomReward:
-            guard canEditDesired else {
+            // Applying this durable one-shot mints a consumption token.
+            // Key repeat must not replace an unacknowledged token.
+            guard canEditDesired && canAcceptRuntimeAction else {
                 rejectShortcut(action)
                 return
             }
             setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward) { success in
-                TrainerHotkeyFeedbackPlayer.play(success ? .completed : .rejected)
+                TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
             }
         case .spawnOlympian:
             guard !selectedOlympianReward.isEmpty,

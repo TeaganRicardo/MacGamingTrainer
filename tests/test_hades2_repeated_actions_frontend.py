@@ -22,23 +22,42 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--game", required=True)
 args = parser.parse_args()
 log = pathlib.Path(__file__).with_suffix(".commands.jsonl")
+enable_count = 0
 for line in sys.stdin:
     request = json.loads(line)
     with log.open("a", encoding="utf-8") as file:
         file.write(json.dumps(request, sort_keys=True) + "\n")
     # Force a reproducible busy interval longer than a fast input burst.
-    if request["command"] in ("spawn_reward", "set_desired"):
+    if request["command"] in ("spawn_reward", "set_desired", "set_boon_rarity_desired"):
         time.sleep(0.16)
     observed = {"connected": True}
+    success = True
     if request["command"] == "set_desired":
-        observed["desiredFeatures"] = {
-            request["params"]["feature"]: request["params"]["value"],
+        feature = request["params"]["feature"]
+        value = request["params"]["value"]
+        observed["desiredFeatures"] = {feature: value}
+        if feature == "invincibility" and value:
+            enable_count += 1
+            if enable_count == 3:
+                success = False
+                observed["desiredFeatures"] = {feature: False}
+    if request["command"] == "set_boon_rarity_desired":
+        success = False
+        observed["boonRarity"] = {
+            "target": "Epic", "multiplier": 100,
+            "forceLegendary": False, "forceDuo": False,
         }
-    print(json.dumps({
+    response = {
         "type": "result", "id": request["id"], "protocolVersion": 6,
-        "moduleProtocolVersion": 14, "gameID": args.game, "ok": True,
-        "result": observed,
-    }), flush=True)
+        "moduleProtocolVersion": 14, "gameID": args.game, "ok": success,
+        "result" if success else "state": observed,
+    }
+    if not success:
+        response["error"] = {
+            "code": "invalid_request", "presentation": "hades2.error.invalidRequest",
+            "diagnostic": "synthetic rejected request",
+        }
+    print(json.dumps(response), flush=True)
 '''
 
 harness = r'''
@@ -171,6 +190,36 @@ struct Main {
         check(values == [true, false, true],
               "rapid toggles lost or inverted an intent: \(values)")
         check(model.invincibility, "final desired state did not follow the last shortcut")
+
+        // The backend may reject a later requested state while returning the
+        // last authoritative desired value. Optimistic UI must reconcile it.
+        model.performShortcut(.invincibility)
+        let offDeadline = Date().addingTimeInterval(3)
+        while !model.canAcceptRuntimeAction && Date() < offDeadline { pump(0.02) }
+        check(!model.invincibility, "explicit disable did not settle")
+        model.performShortcut(.invincibility)
+        let failureDeadline = Date().addingTimeInterval(3)
+        while !model.canAcceptRuntimeAction && Date() < failureDeadline { pump(0.02) }
+        check(!model.invincibility,
+              "rejected enable retained an optimistic value against the backend's explicit state")
+
+        model.performShortcut(.forceLegendary)
+        let boonFailureDeadline = Date().addingTimeInterval(3)
+        while model.busy && Date() < boonFailureDeadline { pump(0.02) }
+        check(!model.boonForceLegendary,
+              "failed boon rarity edit retained an optimistic forced legendary value")
+
+        // Applying a next-room reward mints a consumption identity. A double
+        // shortcut press must not mint a second token while the first is pending.
+        model.selectedNextRoomReward = reward.id
+        model.performShortcut(.applyNextRoomReward)
+        model.performShortcut(.applyNextRoomReward)
+        pump(0.20)
+        let nextRoomRequests = loggedCommands(at: logURL).filter {
+            ($0["command"] as? String) == "set_next_room_reward_desired"
+        }
+        check(nextRoomRequests.count == 1,
+              "rapid hotkey duplicated a next-room consumption token: \(nextRoomRequests.count)")
 
         session.stop()
         pump(0.10)
