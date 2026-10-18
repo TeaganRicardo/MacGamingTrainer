@@ -83,8 +83,11 @@ assert 'native-choice:' in model
 assert 'kind: "native_choice"' in model
 assert 'func performSpecialReward(_ reward: String)' in model
 assert '.openSpecialChoice(source: option.sourceId)' in model
-assert 'spawnBoon(option.id)' in model
-assert 'performSpecialReward(selectedSpecialReward)' in model
+# Native special-choice routing is a separate non-repeatable operation.
+# The ordinary special-reward shortcut is exercised through Model -> API ->
+# BackendSession in test_hades2_repeated_actions_frontend.py (macOS). Avoid
+# asserting exact Swift call syntax here; callback forwarding is an
+# implementation detail, not the native-choice command contract.
 assert 'name: option.nativeChoiceTitle.isEmpty ? option.sectionTitle : option.nativeChoiceTitle' in model
 assert 'englishName: option.nativeChoiceEnglishTitle.isEmpty ? option.englishSectionTitle : option.nativeChoiceEnglishTitle' in model
 assert 'model.specialRewardOptions' in view
