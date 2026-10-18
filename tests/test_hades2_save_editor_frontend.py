@@ -474,6 +474,21 @@ for raw in sys.stdin:
             }],
         }
     elif command == 'save_editor_stage':
+        if req['params']['value'] == 445:
+            print(json.dumps({
+                'type': 'result',
+                'id': req['id'],
+                'protocolVersion': 6,
+                'moduleProtocolVersion': 15,
+                'gameID': args.game,
+                'ok': False,
+                'error': {
+                    'code': 'invalid_request',
+                    'presentation': 'hades2.saveEditor.error.invalidMutation',
+                    'arguments': [],
+                },
+            }), flush=True)
+            continue
         pending_entry_id = req['params']['entryId']
         pending_operation = req['params']['operation']
         pending_value = req['params']['value']
@@ -861,6 +876,25 @@ struct Main {
             fail("Direct Save result editing did not stage on blur")
         }
 
+        // A backend-refused but syntactically valid edit must not strand the
+        // real inline field on an unacknowledged local value.
+        guard sheet.makeFirstResponder(inPlace),
+              let rejectedEditor = inPlace.currentEditor() as? NSTextView else {
+            fail("Could not refocus inline Save field for stage-refusal coverage")
+        }
+        rejectedEditor.selectAll(nil)
+        rejectedEditor.insertText("445", replacementRange: rejectedEditor.selectedRange())
+        sheet.makeFirstResponder(nil)
+        pumpUntil {
+            !model.busy
+                && model.failure?.key == "hades2.saveEditor.error.invalidMutation"
+                && inPlace.stringValue == "430"
+        }
+        if model.pendingActions.first?.after != AnyHashable(430)
+            || inPlace.stringValue != "430" {
+            fail("Rejected stage left a misleading inline value or changed pending intent")
+        }
+
         // Exercise the same basket action data through real native controls.
         // TrainerTextField owns edit completion; NSButton owns the explicit
         // per-action removal click, and both cross the Host command seam.
@@ -926,7 +960,7 @@ struct Main {
         }
 
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
-        pump(0.20)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
         model.apply()
         pump(0.35)
         if model.pendingCount != 0 || !model.pendingChanges.isEmpty {

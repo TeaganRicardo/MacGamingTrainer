@@ -93,6 +93,9 @@ assert {effect["id"] for effect in arcana["effects"]} == {
     "linked:card:ChanneledCast:Equipped",
     "linked:card:ChanneledCast:Level",
 }
+zh_arcana = workspace.review(language="zh-CN")["actions"][0]["effects"]
+assert any(effect["name"].endswith("已装备") for effect in zh_arcana)
+assert any(effect["name"].endswith("等级") for effect in zh_arcana)
 
 # Remove only the middle requested action. Surviving requested actions and
 # their dependent effects are recomputed from authoritative staged intent.
@@ -156,6 +159,8 @@ _, equipment = environment("overlap", equipment_state)
 first = equipment.stage("familiar:HoundFamiliar", "set", False, language="en")
 assert first["effectCount"] == 1
 assert first["actions"][0]["effects"][0]["id"] == "linked:familiarSelection"
+assert first["actions"][0]["effects"][0]["name"] == "Equipped Familiar"
+assert equipment.review(language="zh-CN")["actions"][0]["effects"][0]["name"] == "当前魔宠"
 second = equipment.stage("familiarSelection", "setEnum", "", language="en")
 assert second["actionCount"] == 2
 assert second["effectCount"] == 0

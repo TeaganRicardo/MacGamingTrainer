@@ -1183,6 +1183,79 @@ class Hades2SaveWorkspace:
             order.append(identity)
         return [unique[identity] for identity in order]
 
+    def _present_linked_effect(self, effect, language):
+        """Give a physical linked effect a user-facing game label.
+
+        The effect keeps its stable physical id/rawId for diagnostics, but the
+        primary Changes UI receives the same localized entity vocabulary as the
+        owning Save descriptors rather than a synthesized native identifier.
+        """
+        result = dict(effect)
+        identity = effect["id"]
+        root = self.document.lua_state
+
+        if identity.startswith("linked:card:"):
+            parts = identity.split(":")
+            if len(parts) == 4:
+                name, field = parts[2], parts[3]
+                rows = save_long_term.rows(
+                    root, "progression", language, game_path=self._game_path
+                )
+                if field == "Level":
+                    row = next(
+                        (item for item in rows if item["id"] == "card:{}:Level".format(name)),
+                        None,
+                    )
+                    if row is not None:
+                        result["name"] = row["name"]
+                        return result
+                row = next(
+                    (item for item in rows if item["id"] == "card:{}:Unlocked".format(name)),
+                    None,
+                )
+                if row is not None:
+                    entity = row.get("entityName") or row["name"]
+                    result["name"] = entity + (
+                        " · 已装备" if language == "zh-CN" else " · Equipped"
+                    )
+                    return result
+
+        if identity.startswith("linked:quest:"):
+            name = identity[len("linked:quest:"):]
+            rows = save_narrative.rows(
+                root, "progression", language, game_path=self._game_path
+            )
+            row = next(
+                (item for item in rows if item["id"] == "quest:" + name),
+                None,
+            )
+            if row is not None:
+                result["name"] = row["name"] + (
+                    " · 完成记录" if language == "zh-CN" else " · Completion history"
+                )
+                return result
+
+        if identity.startswith("linked:dialogue:"):
+            # Companion-owner identities are technical implementation detail.
+            # The originating action already names the scene; child rows only
+            # need to explain that another dialogue-history owner is affected.
+            result["name"] = (
+                "关联对话历史记录"
+                if language == "zh-CN"
+                else "Linked dialogue history record"
+            )
+            return result
+
+        if identity.startswith("linked:"):
+            target = identity[len("linked:"):]
+            rows = save_equipment.rows(
+                root, language, game_path=self._game_path
+            )
+            row = next((item for item in rows if item["id"] == target), None)
+            if row is not None:
+                result["name"] = row["name"]
+        return result
+
     def _effects_by_action(self, intents, effects):
         intents = tuple(intents)
         grouped = {intent["id"]: [] for intent in intents}
@@ -1353,7 +1426,10 @@ class Hades2SaveWorkspace:
                 "constraints": dict(row.get("constraints") or {}),
                 "choices": list(row.get("choices") or ()),
                 "choiceNames": dict(row.get("choiceNames") or {}),
-                "effects": effects_by_action.get(intent["id"], []),
+                "effects": [
+                    self._present_linked_effect(effect, language)
+                    for effect in effects_by_action.get(intent["id"], [])
+                ],
             })
 
         changes = direct + effects
