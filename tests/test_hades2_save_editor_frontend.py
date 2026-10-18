@@ -24,7 +24,7 @@ for locale in ("hades2.en.json", "hades2.zh-CN.json"):
         raise SystemExit(f"missing Save Editor apply outcome localization: {locale}")
 
 worker = r'''
-import argparse, json, pathlib, sys
+import argparse, json, pathlib, sys, time
 p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p.parse_args()
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
 resource_value = 123
@@ -34,6 +34,7 @@ workspace_number = 0
 omit_first_target = False
 manual_inventory_count = 0
 apply_count = 0
+detail_counts = {}
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -67,6 +68,8 @@ for raw in sys.stdin:
         workspace_number += 1
         snapshot = req['params'].get('snapshotId')
         source = dict(req['params']['source'])
+        if source.get('relativePath') == 'Profile3.sav':
+            time.sleep(0.25)
         source['kind'] = 'managedBackup' if snapshot else 'currentFile'
         if snapshot:
             source['snapshotId'] = snapshot
@@ -106,6 +109,8 @@ for raw in sys.stdin:
     elif command == 'save_editor_query':
         domain = req['params']['domain']
         path = req['params']['path']
+        if domain == 'entities' and req['params'].get('search') == 'detail-race':
+            time.sleep(0.25)
         if domain == 'entities':
             scope = req['params'].get('scope', 'all')
             term = req['params']['search'].lower()
@@ -396,6 +401,12 @@ for raw in sys.stdin:
             result['scope'] = req['params']['scope']
     elif command == 'save_editor_detail':
         scene = req['params']['entryId'].removeprefix('investigate:')
+        detail_counts[scene] = detail_counts.get(scene, 0) + 1
+        if scene == 'DetailRace':
+            time.sleep(0.20)
+            line_text = 'detail reply ' + str(detail_counts[scene])
+        else:
+            line_text = 'I still remember'
         result = {
             'scene': scene, 'status': 'recorded', 'sourceStatus': 'available',
             'reason': 'Recorded; owner verified.', 'canStage': True,
@@ -414,7 +425,7 @@ for raw in sys.stdin:
             }],
             'lines': [{
                 'cueId': 'Nemesis_0407', 'speaker': 'Nemesis', 'events': [scene],
-                'en': ['I still remember'], 'zhCN': ['我从未忘记'],
+                'en': [line_text], 'zhCN': ['我从未忘记'],
             }],
         }
     elif command == 'save_editor_stage':
@@ -1072,6 +1083,55 @@ struct Main {
         pump(0.30)
         if model.investigationDetail?.scene != "NemesisPostTrueEnding01" {
             fail("All-content discovery could not inspect narrative evidence")
+        }
+
+        // Non-occupying detail reads must remain owned by the exact request,
+        // language and workspace that started them.
+        model.selectScope("all")
+        model.setLanguage(.en)
+        pumpUntil(timeout: 1.0) { !model.querying && !model.busy }
+        let raceDetail = sample(
+            "investigate:DetailRace", "investigate", "DetailRace", "Detail race"
+        )
+
+        model.inspect(raceDetail)
+        model.inspect(raceDetail)
+        pump(0.24)
+        if model.investigationDetail != nil {
+            fail("Superseded detail reply was accepted before the newer request completed")
+        }
+        pumpUntil(timeout: 1.0) {
+            model.investigationDetail?.lines.first?.english == ["detail reply 2"]
+        }
+        if model.investigationDetail?.lines.first?.english != ["detail reply 2"] {
+            fail("Newest detail request did not win after an overlapping request")
+        }
+
+        model.search = "detail-race"
+        model.inspect(raceDetail)
+        model.setLanguage(.zhCN)
+        pump(0.24)
+        if model.investigationDetail != nil {
+            fail("Old-language detail reply was accepted after language changed")
+        }
+        pumpUntil(timeout: 1.2) { !model.querying }
+        model.setLanguage(.en)
+        model.search = ""
+        model.submitSearch()
+        pumpUntil(timeout: 1.0) { !model.querying }
+
+        model.inspect(raceDetail)
+        model.selectedSourceID = "main/Profile3.sav"
+        pump(0.24)
+        if model.investigationDetail != nil {
+            fail("Old-workspace detail reply was accepted during source transition")
+        }
+        pumpUntil(timeout: 1.5) {
+            model.sourceRelativePath == "Profile3.sav" && !model.busy && !model.querying
+        }
+        model.selectedSourceID = "main/Profile1.sav"
+        pumpUntil(timeout: 1.5) {
+            model.sourceRelativePath == "Profile1.sav" && !model.busy && !model.querying
         }
 
         // The visible source picker loads a new source in one selection when

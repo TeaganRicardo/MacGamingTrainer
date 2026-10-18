@@ -357,6 +357,7 @@ final class Hades2SaveEditorModel: ObservableObject {
     private var pendingRequests = 0
     private var knownDisplayNames: [String: String] = [:]
     private var queryGeneration = 0
+    private var detailGeneration = 0
     private var lastRequestedSearch: String?
     private var scheduledSearch: DispatchWorkItem?
 
@@ -369,8 +370,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         self.language = language
         failure = nil
         lastApplyReceipt = nil
-        selectedInvestigationID = nil
-        investigationDetail = nil
+        invalidateDetail()
         refreshFiles(openDefault: true)
     }
 
@@ -405,6 +405,7 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func openSelection() {
         invalidateQuery()
+        invalidateDetail()
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
         lastApplyReceipt = nil
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
@@ -455,9 +456,17 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func setLanguage(_ language: TrainerPresentationLanguage) {
         guard self.language != language else { return }
+        invalidateDetail()
         self.language = language
         guard !profile.isEmpty else { return }
         query(offset: offset)
+    }
+
+    private func invalidateDetail() {
+        detailGeneration += 1
+        selectedInvestigationID = nil
+        investigationDetail = nil
+        detailFailure = nil
     }
 
     private func invalidateQuery() {
@@ -485,9 +494,7 @@ final class Hades2SaveEditorModel: ObservableObject {
               availableDomains.contains(.entities) else { return }
         selectedScope = scope
         selectedDomain = .entities
-        selectedInvestigationID = nil
-        investigationDetail = nil
-        detailFailure = nil
+        invalidateDetail()
         advancedPath = []
         query(offset: 0)
     }
@@ -612,8 +619,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                let selected = decoded.first(where: { $0.rawID == self.selectedInvestigationID }) {
                 self.inspect(selected)
             } else {
-                self.selectedInvestigationID = nil
-                self.investigationDetail = nil
+                self.invalidateDetail()
             }
             for entry in decoded {
                 self.knownDisplayNames[entry.id] = entry.displayName
@@ -628,8 +634,7 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func submitSearch() {
         invalidateQuery()
-        selectedInvestigationID = nil
-        investigationDetail = nil
+        invalidateDetail()
         query(offset: 0)
     }
 
@@ -642,24 +647,32 @@ final class Hades2SaveEditorModel: ObservableObject {
     func setInvestigationFilter(_ value: String) {
         guard ["all", "recorded", "notRecorded", "ambiguous", "unknown"].contains(value) else { return }
         investigationFilter = value
-        selectedInvestigationID = nil
-        investigationDetail = nil
+        invalidateDetail()
         query(offset: 0)
     }
 
     func inspect(_ entry: Hades2SaveEditorEntry) {
         guard (selectedDomain == .entities || selectedDomain == .investigate
                || selectedDomain == .discover),
-              entry.domain == "investigate" else { return }
-        selectedInvestigationID = entry.rawID
+              entry.domain == "investigate",
+              let workspace = workspaceID else { return }
+        detailGeneration += 1
+        let generation = detailGeneration
+        let requestedLanguage = language
+        let scene = entry.rawID
+        selectedInvestigationID = scene
         investigationDetail = nil
         detailFailure = nil
         perform(
-            .saveEditorDetail(entryID: entry.id, language: language.rawValue),
+            .saveEditorDetail(entryID: entry.id, language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.detail", announceSuccess: false,
             occupy: false, presentFailure: false
         ) { [weak self] reply in
-            guard let self, self.selectedInvestigationID == entry.rawID else { return }
+            guard let self,
+                  self.detailGeneration == generation,
+                  self.workspaceID == workspace,
+                  self.language == requestedLanguage,
+                  self.selectedInvestigationID == scene else { return }
             guard reply.success, let result = reply.result else {
                 self.detailFailure = reply.failure.map {
                     TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
@@ -667,7 +680,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 return
             }
             guard let detail = Hades2SaveInvestigationDetail(result),
-                  detail.scene == entry.rawID else {
+                  detail.scene == scene else {
                 self.detailFailure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
@@ -680,8 +693,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         guard availableDomains.contains(domain) else { return }
         if domain == .entities { selectScope("all"); return }
         selectedDomain = domain
-        selectedInvestigationID = nil
-        investigationDetail = nil
+        invalidateDetail()
         discoveryFilter = "all"
         investigationFilter = "all"
         search = ""
@@ -691,8 +703,7 @@ final class Hades2SaveEditorModel: ObservableObject {
 
     func openDiscoveryEntry(_ entry: Hades2SaveEditorEntry) {
         guard selectedDomain == .discover else { return }
-        selectedInvestigationID = nil
-        investigationDetail = nil
+        invalidateDetail()
         discoveryFilter = "all"
 
         if entry.domain == Hades2SaveEditorDomain.advanced.rawValue {
