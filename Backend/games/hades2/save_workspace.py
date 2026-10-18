@@ -1254,6 +1254,14 @@ class Hades2SaveWorkspace:
             row = next((item for item in rows if item["id"] == target), None)
             if row is not None:
                 result["name"] = row["name"]
+                if row.get("valueType") == "enum":
+                    choices = row.get("choiceNames") or {}
+                    before = effect.get("before")
+                    after = effect.get("after")
+                    if isinstance(before, str) and before in choices:
+                        result["beforeDisplay"] = choices[before]
+                    if isinstance(after, str) and after in choices:
+                        result["afterDisplay"] = choices[after]
         return result
 
     def _effects_by_action(self, intents, effects):

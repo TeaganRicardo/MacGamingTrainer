@@ -160,7 +160,10 @@ first = equipment.stage("familiar:HoundFamiliar", "set", False, language="en")
 assert first["effectCount"] == 1
 assert first["actions"][0]["effects"][0]["id"] == "linked:familiarSelection"
 assert first["actions"][0]["effects"][0]["name"] == "Equipped Familiar"
-assert equipment.review(language="zh-CN")["actions"][0]["effects"][0]["name"] == "当前魔宠"
+assert first["actions"][0]["effects"][0]["afterDisplay"] == "None"
+zh_familiar_effect = equipment.review(language="zh-CN")["actions"][0]["effects"][0]
+assert zh_familiar_effect["name"] == "当前魔宠"
+assert zh_familiar_effect["afterDisplay"] == "不携带"
 second = equipment.stage("familiarSelection", "setEnum", "", language="en")
 assert second["actionCount"] == 2
 assert second["effectCount"] == 0

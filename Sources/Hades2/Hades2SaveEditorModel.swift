@@ -81,6 +81,8 @@ struct Hades2SaveEditorChange: Identifiable, Equatable {
     let name: String?
     let before: AnyHashable?
     let after: AnyHashable?
+    let beforeDisplay: String?
+    let afterDisplay: String?
 
     var id: String { entryID }
 }
@@ -1061,6 +1063,7 @@ final class Hades2SaveEditorModel: ObservableObject {
               let rawActions = result["actions"] as? [[String: Any]],
               count == rows.count,
               physicalChangeCount == rows.count,
+              physicalChangeCount == actionCount + effectCount,
               actionCount == rawActions.count
         else { return false }
 
@@ -1077,7 +1080,9 @@ final class Hades2SaveEditorModel: ObservableObject {
                 operation: operation,
                 name: row["name"] as? String,
                 before: Self.hashableScalar(row["before"]),
-                after: Self.hashableScalar(row["after"])
+                after: Self.hashableScalar(row["after"]),
+                beforeDisplay: row["beforeDisplay"] as? String,
+                afterDisplay: row["afterDisplay"] as? String
             )
         }
 

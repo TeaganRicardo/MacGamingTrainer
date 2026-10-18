@@ -156,6 +156,7 @@ struct Hades2SaveEditorView: View {
         .onChange(of: model.editRevision) { _, _ in
             if let entryID = model.reconciledEntryID {
                 drafts.removeValue(forKey: entryID)
+                expandedEffects.remove(entryID)
             } else {
                 drafts.removeAll()
             }
@@ -762,7 +763,7 @@ struct Hades2SaveEditorView: View {
                             Text(effect.name ?? effect.rawID)
                                 .lineLimit(1)
                             Spacer()
-                            Text(reviewValue(
+                            Text(effect.beforeDisplay ?? reviewValue(
                                 effect.before,
                                 operation: effect.operation,
                                 domain: effect.domain
@@ -770,7 +771,7 @@ struct Hades2SaveEditorView: View {
                             .foregroundStyle(.secondary)
                             Image(systemName: "arrow.right")
                                 .foregroundStyle(.secondary)
-                            Text(reviewValue(
+                            Text(effect.afterDisplay ?? reviewValue(
                                 effect.after,
                                 operation: effect.operation,
                                 domain: effect.domain
