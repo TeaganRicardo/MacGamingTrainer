@@ -5,9 +5,11 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
+import copy
 import json
 import math
 import uuid
+from types import SimpleNamespace
 
 from . import save_equipment, save_long_term, save_narrative
 from .save_entities import entity_page
@@ -1366,10 +1368,8 @@ class Hades2SaveWorkspace:
             self._pending.update(snapshot)
             raise
 
-    def _validated_candidate(self, intents):
+    def _apply_and_validate_intents(self, candidate, intents):
         intents = tuple(intents)
-        source_document = self._session.document
-        candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never
@@ -1383,6 +1383,10 @@ class Hades2SaveWorkspace:
         save_long_term.validate_batch(candidate.lua_state, intents)
         save_equipment.validate_batch(candidate.lua_state, intents)
         return candidate
+
+    def _validated_review_state(self, intents):
+        candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
+        return self._apply_and_validate_intents(candidate, intents)
 
     def review(self, language="en"):
         if language not in ("en", "zh-CN"):
@@ -1408,7 +1412,8 @@ class Hades2SaveWorkspace:
         # Review and Apply share one combined-intent validation seam. A newly
         # staged action that would make the batch impossible is rejected before
         # it can become authoritative pending state.
-        self._validated_candidate(intents)
+        if intents:
+            self._validated_review_state(intents)
 
         effects = self._linked_change_rows(intents)
         effects_by_action = self._effects_by_action(intents, effects)
@@ -1502,7 +1507,8 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor has no changes to apply.")
 
         source_document = self._session.document
-        candidate = self._validated_candidate(self._pending.values())
+        candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
+        self._apply_and_validate_intents(candidate, self._pending.values())
         self._session.document = candidate
         try:
             result = self._session.apply()
