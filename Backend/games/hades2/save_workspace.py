@@ -1285,6 +1285,24 @@ class Hades2SaveWorkspace:
             self._pending.update(snapshot)
             raise
 
+    def _validated_candidate(self, intents):
+        intents = tuple(intents)
+        source_document = self._session.document
+        candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
+        for intent in intents:
+            # Resolve mutation authority only from the pinned source document.
+            # The candidate is a derived validation/apply projection; it never
+            # becomes a new source of descriptor identity.
+            descriptor = self._descriptor(intent["id"])
+            if intent["operation"] not in descriptor["mutationKinds"]:
+                raise ValueError("Save Editor mutation is no longer allowed.")
+            if intent["before"] != descriptor["before"]:
+                raise ValueError("Save Editor staged owner is ambiguous or has changed.")
+            self._apply_intent(candidate, intent)
+        save_long_term.validate_batch(candidate.lua_state, intents)
+        save_equipment.validate_batch(candidate.lua_state, intents)
+        return candidate
+
     def review(self, language="en"):
         if language not in ("en", "zh-CN"):
             raise ValueError("Save Editor language is unsupported.")
@@ -1305,6 +1323,11 @@ class Hades2SaveWorkspace:
             })
             action_rows[intent["id"]] = row
             action_descriptors[intent["id"]] = descriptor
+
+        # Review and Apply share one combined-intent validation seam. A newly
+        # staged action that would make the batch impossible is rejected before
+        # it can become authoritative pending state.
+        self._validated_candidate(intents)
 
         effects = self._linked_change_rows(intents)
         effects_by_action = self._effects_by_action(intents, effects)
@@ -1395,18 +1418,7 @@ class Hades2SaveWorkspace:
             raise ValueError("Save Editor has no changes to apply.")
 
         source_document = self._session.document
-        candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
-        for intent in self._pending.values():
-            # Re-resolve the descriptor against the pinned source before
-            # applying its typed intent. This keeps mutation authority in the
-            # semantic workspace rather than in caller-supplied Lua paths.
-            descriptor = self._descriptor(intent["id"])
-            if intent["operation"] not in descriptor["mutationKinds"]:
-                raise ValueError("Save Editor mutation is no longer allowed.")
-            self._apply_intent(candidate, intent)
-
-        save_long_term.validate_batch(candidate.lua_state, self._pending.values())
-        save_equipment.validate_batch(candidate.lua_state, self._pending.values())
+        candidate = self._validated_candidate(self._pending.values())
         self._session.document = candidate
         try:
             result = self._session.apply()

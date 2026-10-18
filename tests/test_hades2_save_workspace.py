@@ -725,15 +725,16 @@ assert state["LastWeaponUpgradeName"]["WeaponDagger"] == "DaggerBlockAspect"
 # contradictory states, regardless of staging order.
 conflict = Hades2SaveWorkspace.open(equipment_service)
 conflict.stage("weapon:WeaponDagger", "set", False)
-conflict.stage("aspect:DaggerBlockAspect", "set", 4)
 previous_save = (equipment_saves / "Profile1.sav").read_bytes()
 try:
-    conflict.apply()
+    conflict.stage("aspect:DaggerBlockAspect", "set", 4)
 except ValueError:
     pass
 else:
-    raise AssertionError("contradictory weapon/aspect batch was accepted")
+    raise AssertionError("contradictory weapon/aspect batch was staged")
 assert (equipment_saves / "Profile1.sav").read_bytes() == previous_save
+assert conflict.review()["actionCount"] == 1
+assert conflict.review()["actions"][0]["entryId"] == "weapon:WeaponDagger"
 
 
 # Initial starting weapon state in CreateNewHero writes only WeaponsUnlocked.

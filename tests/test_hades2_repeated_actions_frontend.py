@@ -52,7 +52,7 @@ for line in sys.stdin:
         }
     response = {
         "type": "result", "id": request["id"], "protocolVersion": 6,
-        "moduleProtocolVersion": 14, "gameID": args.game, "ok": success,
+        "moduleProtocolVersion": 15, "gameID": args.game, "ok": success,
         "result" if success else "state": observed,
     }
     if not success:
