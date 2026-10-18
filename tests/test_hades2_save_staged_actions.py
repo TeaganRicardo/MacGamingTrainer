@@ -164,6 +164,8 @@ assert equipment.review(language="zh-CN")["actions"][0]["effects"][0]["name"] ==
 second = equipment.stage("familiarSelection", "setEnum", "", language="en")
 assert second["actionCount"] == 2
 assert second["effectCount"] == 0
+assert second["actions"][1]["choiceNames"][""] == "None"
+assert equipment.review(language="zh-CN")["actions"][1]["choiceNames"][""] == "不携带"
 third = equipment.unstage("familiarSelection", language="en")
 assert third["actionCount"] == 1
 assert third["effectCount"] == 1

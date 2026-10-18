@@ -396,7 +396,6 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var selectedInvestigationID: String?
     @Published private(set) var investigationDetail: Hades2SaveInvestigationDetail?
     @Published private(set) var investigationSourceStatus = "missing"
-    @Published private(set) var pendingChanges: [Hades2SaveEditorChange] = []
     @Published private(set) var pendingActions: [Hades2SaveEditorAction] = []
     @Published private(set) var pendingEffectCount = 0
     @Published private(set) var pendingPhysicalChangeCount = 0
@@ -476,7 +475,6 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.restoreLoadedSourceSelection()
                 return
             }
-            self.pendingChanges = []
             self.pendingActions = []
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
@@ -961,7 +959,6 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.pendingChanges = []
             self.pendingActions = []
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
@@ -1138,7 +1135,6 @@ final class Hades2SaveEditorModel: ObservableObject {
         }
         guard decodedEffectCount == effectCount else { return false }
 
-        pendingChanges = changes
         pendingActions = actions
         pendingEffectCount = effectCount
         pendingPhysicalChangeCount = physicalChangeCount

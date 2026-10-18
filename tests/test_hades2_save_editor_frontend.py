@@ -807,19 +807,19 @@ struct Main {
         editorWindow.makeFirstResponder(nil)
         pumpUntil { model.pendingCount == 1 && !model.busy }
         editorWindow.close()
-        if model.pendingCount != 1 || model.pendingChanges.count != 1 {
-            fail("staged change was not projected into review state")
+        if model.pendingCount != 1 || model.pendingActions.count != 1 {
+            fail("staged action was not projected into review state")
         }
-        let change = model.pendingChanges[0]
-        if model.displayName(for: change) != "Ashes" {
-            fail("review lost the semantic name for a staged entry")
+        let action = model.pendingActions[0]
+        if action.name != "Ashes" {
+            fail("review lost the semantic name for a staged action")
         }
-        if change.entryID != "resource:MetaCurrency"
-            || change.rawID != "MetaCurrency"
-            || change.operation != "set"
-            || change.before != AnyHashable(123)
-            || change.after != AnyHashable(500) {
-            fail("staged before/after change was decoded incorrectly: \(change)")
+        if action.entryID != "resource:MetaCurrency"
+            || action.rawID != "MetaCurrency"
+            || action.operation != "set"
+            || action.before != AnyHashable(123)
+            || action.after != AnyHashable(500) {
+            fail("staged before/after action was decoded incorrectly: \(action)")
         }
         if model.items[0].value != AnyHashable(123) {
             fail("staging mutated the loaded source row before Apply")
@@ -842,8 +842,8 @@ struct Main {
 
         model.review()
         pump(0.20)
-        if model.pendingCount != 1 || model.pendingChanges.first?.after != AnyHashable(500) {
-            fail("explicit review did not restore authoritative pending changes")
+        if model.pendingCount != 1 || model.pendingActions.first?.after != AnyHashable(500) {
+            fail("explicit review did not restore authoritative pending action")
         }
         let reviewedCommands = commands(at: commandLog)
         if reviewedCommands.last?["command"] as? String != "save_editor_review" {
@@ -852,7 +852,7 @@ struct Main {
 
         model.cancel()
         pump(0.20)
-        if model.pendingCount != 0 || !model.pendingChanges.isEmpty {
+        if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("cancel did not clear the authoritative pending batch")
         }
         if commands(at: commandLog).last?["command"] as? String != "save_editor_cancel" {
@@ -963,7 +963,7 @@ struct Main {
         pumpUntil { !model.busy && model.pendingCount == 1 }
         model.apply()
         pump(0.35)
-        if model.pendingCount != 0 || !model.pendingChanges.isEmpty {
+        if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("successful Apply did not clear the committed batch")
         }
         if model.items.first?.value != AnyHashable(500) {

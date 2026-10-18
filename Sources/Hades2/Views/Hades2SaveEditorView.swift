@@ -735,19 +735,11 @@ struct Hades2SaveEditorView: View {
                 .disabled(model.busy)
             }
             HStack(spacing: 6) {
-                Text(reviewValue(
-                    action.before,
-                    operation: action.operation,
-                    domain: action.domain
-                ))
+                Text(reviewValue(action.before, for: action))
                 .foregroundStyle(.secondary)
                 Image(systemName: "arrow.right")
                     .foregroundStyle(.secondary)
-                Text(reviewValue(
-                    action.after,
-                    operation: action.operation,
-                    domain: action.domain
-                ))
+                Text(reviewValue(action.after, for: action))
                 Spacer()
                 if !action.effects.isEmpty {
                     Button(text("hades2.saveEditor.basket.linkedEffects", arguments: [
@@ -849,6 +841,15 @@ struct Hades2SaveEditorView: View {
     private var loadedSourceID: String {
         guard !model.sourceRelativePath.isEmpty else { return "" }
         return model.sourceRootID + "/" + model.sourceRelativePath
+    }
+
+    private func reviewValue(
+        _ value: AnyHashable?, for action: Hades2SaveEditorAction
+    ) -> String {
+        if action.operation == "setEnum", let raw = value?.base as? String {
+            return action.choiceNames[raw] ?? enumTitle(raw)
+        }
+        return reviewValue(value, operation: action.operation, domain: action.domain)
     }
 
     private func reviewValue(
