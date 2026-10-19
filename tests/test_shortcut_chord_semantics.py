@@ -106,6 +106,34 @@ precondition(defaults.chord(.generateFlora) == HotkeyChord.controlOptionDefault(
 precondition(defaults.chord(.generateFishing) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
 precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
 precondition(defaults.chord(.disableAll).keyLabel == "T")
+precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
+precondition(defaults.payload()["invincibility"] == nil)
+
+// Legacy Profiles serialized every derived chord. Loading their untouched
+// layout should reflow to current visible order, while a real custom chord survives.
+let legacyDefaults = legacyV4DefaultLayout()
+var legacyDefaultProfile: [String: Any] = [:]
+for action in legacyV4Order {
+    legacyDefaultProfile[action.rawValue] = legacyDefaults[action]!.payload
+}
+var migratedLegacyProfile = Hades2ShortcutStore(defaults: makeDefaults())
+let seedCustom = HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X")
+precondition(migratedLegacyProfile.set(.invincibility, chord: seedCustom) == nil)
+migratedLegacyProfile.applyProfile(legacyDefaultProfile)
+precondition(matchesDerivedDefaults(migratedLegacyProfile))
+
+var legacyCustomProfile = legacyDefaultProfile
+legacyCustomProfile[ShortcutAction.invincibility.rawValue] = seedCustom.payload
+var migratedCustomProfile = Hades2ShortcutStore(defaults: makeDefaults())
+migratedCustomProfile.applyProfile(legacyCustomProfile)
+precondition(migratedCustomProfile.chord(.invincibility) == seedCustom)
+precondition(unique(migratedCustomProfile))
+
+var currentDefaultProfile = Hades2ShortcutStore(defaults: makeDefaults()).payload()
+var resetByCurrentProfile = Hades2ShortcutStore(defaults: makeDefaults())
+precondition(resetByCurrentProfile.set(.invincibility, chord: seedCustom) == nil)
+resetByCurrentProfile.applyProfile(currentDefaultProfile)
+precondition(matchesDerivedDefaults(resetByCurrentProfile))
 
 var full = Hades2ShortcutStore(defaults: makeDefaults())
 var profile = full.payload()
