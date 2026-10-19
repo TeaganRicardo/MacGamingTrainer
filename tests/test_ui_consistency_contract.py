@@ -35,6 +35,10 @@ assert "compactActionWidth: 88" in theme
 assert "TrainerSecondaryActionButton(" in resource
 assert "TrainerSecondaryActionButton(" in occurrence
 assert view.count("TrainerSecondaryActionButton(") >= 6
+assert "static let removeControlWidth: CGFloat = 132" in view
+assert "static let commonControlsWidth: CGFloat = 606" in view
+assert ".minimumScaleFactor(0.65)" not in view
+assert ".minimumScaleFactor(0.85)" in view
 assert ".frame(width: theme.connectionActionWidth)" not in status
 assert "width: theme.connectionActionWidth" in status
 assert "struct TrainerSecondaryActionButton" in primary_button

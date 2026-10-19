@@ -18,8 +18,8 @@ struct Hades2TrainerView: View {
         static let rowSpacing: CGFloat = 12
         static let levelControlsWidth: CGFloat = 200
         static let rarityControlsWidth: CGFloat = 250
-        static let removeControlWidth: CGFloat = 106
-        static let commonControlsWidth: CGFloat = 580
+        static let removeControlWidth: CGFloat = 132
+        static let commonControlsWidth: CGFloat = 606
         static let searchWidth: CGFloat = 260
     }
 
@@ -769,8 +769,8 @@ struct Hades2TrainerView: View {
                 model.removeTrait(trait)
             } label: {
                 Text(currentRunTraitRemovalLabel(trait))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
