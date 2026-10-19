@@ -28,6 +28,7 @@ required = (
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
     'TrainerPillBadge', 'TrainerEmptyState',
     'TrainerSheetScaffold', 'TrainerSectionHeader', 'TrainerMappedSlider',
+    'TrainerSearchField',
 )
 for name in required:
     assert f'struct {name}' in core_ui, name
@@ -39,9 +40,15 @@ for token in ('Hades2','invincibility','boonRarity','rerollsLocked','statAvailab
     assert token not in core_ui, token
 
 management_view = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
-assert 'TextField("100", text: $boonRarityFactor)' not in hades_views
-assert '.buttonStyle(.borderedProminent)' not in management_view
+save_editor_view = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
+assert not re.search(r'(?<![A-Za-z0-9_])TextField\\(', hades_views), 'Hades views must use Core-owned input primitives'
+assert 'TrainerSearchField(' in hades_views
+assert '.buttonStyle(.borderedProminent)' not in hades_views
 assert 'TrainerPrimaryActionButton(' in management_view
+assert 'TrainerPrimaryActionButton(' in save_editor_view
+assert 'theme.rowHorizontalPadding' in save_editor_view
+assert 'theme.panelPadding' in save_editor_view
+assert 'theme.inlineRowVerticalPadding' in save_editor_view
 
 print('ui_component_boundary_v0175_ok')
 

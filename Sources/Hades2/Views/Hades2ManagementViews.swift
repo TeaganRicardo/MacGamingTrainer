@@ -21,7 +21,11 @@ struct Hades2ProfileManagerView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
-                TextField(text("hades2.profile.namePlaceholder"), text: $profileName).textFieldStyle(.roundedBorder)
+                TrainerTextField(
+                    title: text("hades2.profile.namePlaceholder"),
+                    text: $profileName
+                )
+                .frame(maxWidth: .infinity)
                 Button(text("hades2.profile.saveCurrent")) {
                     model.saveProfile(profileName)
                     selectedProfile = profileName.trimmingCharacters(in: .whitespacesAndNewlines)

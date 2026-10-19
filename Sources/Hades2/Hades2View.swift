@@ -579,9 +579,12 @@ struct Hades2TrainerView: View {
                 .frame(maxWidth: .infinity)
                 .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
 
-                TextField(text("hades2.traits.search"), text: $traitSearch)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: TraitManagerLayout.searchWidth)
+                TrainerSearchField(
+                    text: $traitSearch,
+                    placeholder: text("hades2.traits.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(width: TraitManagerLayout.searchWidth)
             }
 
             currentRunTraitCommonControls(managedCurrentRunTrait)
@@ -680,10 +683,12 @@ struct Hades2TrainerView: View {
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 58)
-                        .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
+                    TrainerTextField(
+                        title: text("hades2.traits.targetLevel"),
+                        text: traitLevelInput(trait)
+                    )
+                    .frame(width: 58)
+                    .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
                     Button(text("hades2.traits.apply")) {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
@@ -693,10 +698,12 @@ struct Hades2TrainerView: View {
                     .frame(width: 62)
                     .disabled(!canApplyTraitLevel(trait))
                 } else {
-                    TextField(text("hades2.traits.targetLevel"), text: .constant(""))
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 58)
-                        .disabled(true)
+                    TrainerTextField(
+                        title: text("hades2.traits.targetLevel"),
+                        text: .constant("")
+                    )
+                    .frame(width: 58)
+                    .disabled(true)
 
                     Button(text("hades2.traits.apply")) {}
                         .buttonStyle(.bordered)
@@ -1396,7 +1403,12 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.characterRewards"), systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
                 Spacer()
-                TextField(text("hades2.spawn.search"), text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                TrainerSearchField(
+                    text: $specialSearch,
+                    placeholder: text("hades2.spawn.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 280)
             }
             spawnRow(
                 title: nil,
@@ -1411,7 +1423,12 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
                 Spacer()
-                TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                TrainerSearchField(
+                    text: $exactSearch,
+                    placeholder: text("hades2.spawn.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 280)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(text("hades2.spawn.chaosPair"))
