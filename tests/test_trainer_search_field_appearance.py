@@ -31,14 +31,15 @@ func fields(in view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
 }
 
-func buttons(in view: NSView) -> [NSButton] {
-    (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
+func accessibilityElements(in element: any NSAccessibilityProtocol) -> [any NSAccessibilityProtocol] {
+    let children = (element.accessibilityAttributeValue(NSAccessibility.Attribute.children) as? [Any]) ?? []
+    let accessibleChildren = children.compactMap { $0 as? any NSAccessibilityProtocol }
+    return accessibleChildren + accessibleChildren.flatMap { accessibilityElements(in: $0) }
 }
 
-func clearActionButtons(in view: NSView) -> [NSButton] {
-    buttons(in: view).filter { button in
-        let identifier = button.accessibilityAttributeValue(NSAccessibility.Attribute.identifier) as? String
-        return identifier == "trainer.search.clear" || button.title == "Clear search"
+func clearActionElements(in view: NSView) -> [any NSAccessibilityProtocol] {
+    accessibilityElements(in: view).filter {
+        $0.accessibilityAttributeValue(NSAccessibility.Attribute.identifier) as? String == "trainer.search.clear"
     }
 }
 
@@ -91,18 +92,18 @@ struct Main {
             check(search.textColor != NSColor.clear && search.bounds.height > 0,
                   "search field text must remain visible and laid out")
 
-            check(clearActionButtons(in: host).isEmpty, "clear action must stay hidden for an empty query")
+            check(clearActionElements(in: host).isEmpty, "clear action must stay hidden for an empty query")
             model.query = "Nemesis"
             RunLoop.current.run(until: Date().addingTimeInterval(0.10))
             host.layoutSubtreeIfNeeded()
-            let clearButtons = clearActionButtons(in: host)
+            let clearButtons = clearActionElements(in: host)
             check(clearButtons.count == 1, "one accessible clear action must appear for a non-empty query")
-            clearButtons[0].performClick(nil)
+            check(clearButtons[0].accessibilityPerformPress(), "clear action did not accept an accessibility press")
             RunLoop.current.run(until: Date().addingTimeInterval(0.10))
             host.layoutSubtreeIfNeeded()
             check(model.query.isEmpty, "clear action did not clear the bound query")
             check(model.submits == 1, "clear action must submit exactly once")
-            check(clearActionButtons(in: host).isEmpty, "clear action must disappear after clearing")
+            check(clearActionElements(in: host).isEmpty, "clear action must disappear after clearing")
             window.close()
         }
         print("trainer_search_field_appearance_ok")
