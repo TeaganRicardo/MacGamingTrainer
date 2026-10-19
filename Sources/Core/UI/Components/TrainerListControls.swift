@@ -6,31 +6,38 @@ struct TrainerPrimaryActionButton: View {
     let title: String
     let systemImage: String?
     let enabled: Bool
+    let width: CGFloat?
     let action: () -> Void
 
     init(
         title: String,
         systemImage: String? = nil,
         enabled: Bool = true,
+        width: CGFloat? = nil,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
+        self.width = width
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            if let systemImage {
-                Label(title, systemImage: systemImage)
-            } else {
-                Text(title)
+            Group {
+                if let systemImage {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Text(title)
+                }
             }
+            .frame(maxWidth: width == nil ? nil : .infinity)
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
         .disabled(!enabled)
+        .frame(width: width)
     }
 }
 

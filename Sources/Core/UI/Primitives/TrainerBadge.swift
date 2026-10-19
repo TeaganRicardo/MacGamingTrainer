@@ -10,8 +10,8 @@ struct TrainerShortcutBadge: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 7)
             .padding(.vertical, 6)
-            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 6))
             .frame(minWidth: 52, alignment: .center)
+            .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 6))
     }
 }
 

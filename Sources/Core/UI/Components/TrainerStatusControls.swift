@@ -37,16 +37,16 @@ struct TrainerConnectionStatusCard: View {
                 TrainerPrimaryActionButton(
                     title: connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"),
                     enabled: actionsEnabled,
+                    width: theme.connectionActionWidth,
                     action: onPrimary
                 )
-                .frame(width: theme.connectionActionWidth)
             } else {
                 TrainerPrimaryActionButton(
                     title: localization.localized("host.restartBackend"),
                     enabled: actionsEnabled,
+                    width: theme.connectionActionWidth,
                     action: onRestart
                 )
-                .frame(width: theme.connectionActionWidth)
             }
         }
         .padding(theme.panelPadding)
