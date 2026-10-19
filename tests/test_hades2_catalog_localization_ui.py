@@ -675,11 +675,13 @@ assert 'deferredIssue' not in trait_manager
 assert 'model.advanceTraitLifecycle(trait)' in trait_manager
 assert 'hades2.traits.chaos.cancelPair' in trait_manager
 
-# #345: contextual controls may change with the selected effect, but they must
-# never participate in positioning the fixed level / rarity / remove group.
+# #345: contextual controls occupy a separate conditional row so they cannot
+# compress or overlap the fixed level / rarity / remove group.
 assert 'currentRunTraitCommonControls(managedCurrentRunTrait)' in trait_manager
-assert '.overlay(alignment: .leading)' in trait_manager
-assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' in trait_manager
+assert 'if managedTraitHasContextualControls, let trait = managedCurrentRunTrait {' in trait_manager
+assert 'currentRunTraitContextualControls(trait)' in trait_manager
+assert '.overlay(alignment: .leading)' not in trait_manager
+assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' not in trait_manager
 
 contextual_controls = trait_manager[
     trait_manager.index('private func currentRunTraitContextualControls'):
