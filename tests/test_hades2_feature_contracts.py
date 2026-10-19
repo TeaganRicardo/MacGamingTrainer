@@ -155,6 +155,7 @@ assert set(presentation_cases) == set(action_order), "every shortcut action need
 for language in ("en", "zh-CN"):
     entries = json.loads(read(f"Sources/Hades2/Presentation/Localization/hades2.{language}.json"))["entries"]
     assert required_shortcut_labels <= entries.keys(), f"{language} shortcut labels are incomplete"
+    assert entries["hades2.shortcut.disableAll"] == ("Disable All" if language == "en" else "关闭全部修改器")
     for action, key in presentation_cases.items():
         assert key.startswith("hades2."), f"{action} bypasses the Hades presentation catalogue: {key}"
         assert key in entries, f"{language} lacks shortcut label for {action}: {key}"
