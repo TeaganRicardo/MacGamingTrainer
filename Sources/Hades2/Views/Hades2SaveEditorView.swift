@@ -319,7 +319,7 @@ struct Hades2SaveEditorView: View {
             }
         }
         .padding(.horizontal, theme.panelPadding)
-        .padding(.vertical, 12)
+        .padding(.vertical, theme.sectionSpacing)
     }
 
     private var inlineResults: some View {

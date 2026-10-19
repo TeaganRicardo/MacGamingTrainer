@@ -41,7 +41,7 @@ for token in ('Hades2','invincibility','boonRarity','rerollsLocked','statAvailab
 
 management_view = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
 save_editor_view = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
-assert not re.search(r'(?<![A-Za-z0-9_])TextField\\(', hades_views), 'Hades views must use Core-owned input primitives'
+assert not re.search(r'(?<![A-Za-z0-9_])TextField\(', hades_views), 'Hades views must use Core-owned input primitives'
 assert 'TrainerSearchField(' in hades_views
 assert '.buttonStyle(.borderedProminent)' not in hades_views
 assert 'TrainerPrimaryActionButton(' in management_view
