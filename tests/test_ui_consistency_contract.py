@@ -68,6 +68,11 @@ trait_action_keys = {
     "hades2.traits.applyLevel",
     "hades2.traits.applyRarity",
 }
+assert 'text("hades2.traits.levelLabel")' in view
+assert 'TrainerTextField(title: "—", text: traitLevelInput(trait))' in view
+assert '.accessibilityLabel(text("hades2.traits.targetLevel"))' in view
+assert '.minimumScaleFactor(0.72)' not in view
+assert '.minimumScaleFactor(0.8)' not in view
 assert 'text("hades2.traits.applyLevel")' in view
 assert 'text("hades2.traits.applyRarity")' in view
 

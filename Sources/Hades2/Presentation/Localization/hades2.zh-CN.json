@@ -397,6 +397,7 @@
     "hades2.traits.level": "等级 {0}",
     "hades2.traits.levelUp": "等级 +1",
     "hades2.traits.manager": "祝福管理",
+    "hades2.traits.levelLabel": "等级",
     "hades2.traits.targetLevel": "目标等级",
     "hades2.traits.targetRarity": "稀有度",
     "hades2.traits.apply": "应用",

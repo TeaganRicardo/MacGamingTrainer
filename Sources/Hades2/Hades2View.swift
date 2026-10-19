@@ -675,20 +675,17 @@ struct Hades2TrainerView: View {
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
         HStack(spacing: TraitManagerLayout.rowSpacing) {
             HStack(spacing: 6) {
-                Text(text("hades2.traits.targetLevel"))
+                Text(text("hades2.traits.levelLabel"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TrainerTextField(
-                        title: text("hades2.traits.targetLevel"),
-                        text: traitLevelInput(trait)
-                    )
-                    .frame(width: 58)
-                    .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
+                    TrainerTextField(title: "—", text: traitLevelInput(trait))
+                        .frame(width: 58)
+                        .accessibilityLabel(text("hades2.traits.targetLevel"))
+                        .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
@@ -698,12 +695,10 @@ struct Hades2TrainerView: View {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
                 } else {
-                    TrainerTextField(
-                        title: text("hades2.traits.targetLevel"),
-                        text: .constant("")
-                    )
-                    .frame(width: 58)
-                    .disabled(true)
+                    TrainerTextField(title: "—", text: .constant(""))
+                        .frame(width: 58)
+                        .accessibilityLabel(text("hades2.traits.targetLevel"))
+                        .disabled(true)
 
                     TrainerSecondaryActionButton(
                         title: text("hades2.traits.applyLevel"),
@@ -720,7 +715,6 @@ struct Hades2TrainerView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .frame(width: 48, alignment: .trailing)
 
                 if let trait {
