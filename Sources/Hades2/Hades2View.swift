@@ -61,8 +61,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
     @ViewState<String> private var exactSourceSelection = ""
-    @ViewState<String> private var chaosBlessingSelection = ""
-    @ViewState<String> private var chaosCurseSelection = ""
     @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
@@ -261,11 +259,11 @@ struct Hades2TrainerView: View {
     }
 
     private func repairChaosPairSelections() {
-        if !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection }) {
-            chaosBlessingSelection = chaosBlessingOptions.first?.id ?? ""
+        if !chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing }) {
+            model.selectedChaosBlessing = chaosBlessingOptions.first?.id ?? ""
         }
-        if !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection }) {
-            chaosCurseSelection = chaosCurseOptions.first?.id ?? ""
+        if !chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }) {
+            model.selectedChaosCurse = chaosCurseOptions.first?.id ?? ""
         }
     }
 
@@ -1352,12 +1350,13 @@ struct Hades2TrainerView: View {
             .labelsHidden()
             .frame(maxWidth: 360)
             .disabled(!model.canEditDesired)
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
             TrainerSecondaryActionButton(
                 title: text("hades2.occurrence.apply"),
                 enabled: model.canEditDesired,
                 width: theme.compactActionWidth
             ) {
-                model.setNextOccurrence(
+                _ = model.setNextOccurrence(
                     model.selectedNextOccurrenceTarget.isEmpty
                         ? nil
                         : model.selectedNextOccurrenceTarget
@@ -1450,7 +1449,7 @@ struct Hades2TrainerView: View {
                         Text(text("hades2.spawn.chaosBlessing"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection) {
+                        Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
                             if chaosBlessingOptions.isEmpty {
                                 Text(text("hades2.spawn.noItems")).tag("")
                             }
@@ -1467,7 +1466,7 @@ struct Hades2TrainerView: View {
                         Text(text("hades2.spawn.chaosCurse"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection) {
+                        Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
                             if chaosCurseOptions.isEmpty {
                                 Text(text("hades2.spawn.noItems")).tag("")
                             }
@@ -1480,16 +1479,17 @@ struct Hades2TrainerView: View {
                         .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
                         enabled: model.canAcquireChaosPair
-                            && chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection })
-                            && chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection }),
+                            && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
+                            && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
                         width: theme.compactActionWidth
                     ) {
-                        model.acquireChaosPair(
-                            blessingReward: chaosBlessingSelection,
-                            curseReward: chaosCurseSelection
+                        _ = model.acquireChaosPair(
+                            blessingReward: model.selectedChaosBlessing,
+                            curseReward: model.selectedChaosCurse
                         )
                     }
                 }
@@ -1539,13 +1539,14 @@ struct Hades2TrainerView: View {
                         .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
                     TrainerSecondaryActionButton(
                         title: text("hades2.spawn.acquire"),
                         enabled: model.canAcquireExactReward
                             && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
                         width: theme.compactActionWidth
                     ) {
-                        model.acquireExactBoon(model.selectedExactBoon)
+                        _ = model.acquireExactBoon(model.selectedExactBoon)
                     }
                 }
             }
@@ -1556,7 +1557,8 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
-                Button(text("hades2.spawn.open")) { model.openSellTraits() }
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
+                Button(text("hades2.spawn.open")) { _ = model.openSellTraits() }
                     .disabled(!model.canOpenSellTraits)
             }
             if model.connected {

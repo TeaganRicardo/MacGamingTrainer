@@ -51,12 +51,13 @@ struct Hades2GatheringPanel: View {
                         },
                         onReset: { model.setGatheringProbability(family, probability: nil) },
                         generateLabel: text("hades2.gathering.generate"),
+                        generateShortcutText: model.shortcutText(family.shortcutAction),
                         generateHelp: model.gatheringTargets[family]?.reason.map { text($0) }
                             ?? (model.gatheringTargets[family] == nil
                                 ? text("hades2.gathering.unavailable.scene")
                                 : text("hades2.gathering.generateHelp")),
                         canGenerate: model.canGenerateGathering(family),
-                        onGenerate: { model.generateGathering(family) }
+                        onGenerate: { _ = model.generateGathering(family) }
                     )
                 }
             }

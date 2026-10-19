@@ -49,33 +49,34 @@ struct BoonOption: Identifiable {
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
+    // Case declaration order is the visible feature order and the only source
+    // for derived default allocation. Keep this in lockstep with the UI contract.
     case invincibility, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
     case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
-    case boonRarityEnabled, forceEnableRerolls, forceLegendary, forceDuo
+    case forceEnableRerolls
+    case boonRarityEnabled, forceLegendary, forceDuo
     case moneyMultiplierEnabled, resourceMultiplierEnabled
-    case applyNextRoomReward, spawnOlympian, spawnPickup, spawnSpecial
+    case generateFlora, generateMining, generateDigging, generateShades, generateFishing
+    case spawnOlympian, spawnPickup, spawnSpecial, acquireChaosPair, acquireExactBoon, openSellTraits
+    case applyNextRoomReward, applyNextOccurrence
     case disableAll
 
     var id: String { rawValue }
     var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
 
-    static let uiOrder: [ShortcutAction] = [
-        .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
-        .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL,
-        .boonRarityEnabled, .forceEnableRerolls, .forceLegendary, .forceDuo,
-        .moneyMultiplierEnabled, .resourceMultiplierEnabled,
-        .spawnOlympian, .spawnPickup, .spawnSpecial, .applyNextRoomReward,
-        .disableAll,
-    ]
+    var gatheringFamily: Hades2GatheringFamily? {
+        switch self {
+        case .generateFlora: .flora
+        case .generateMining: .mining
+        case .generateDigging: .digging
+        case .generateShades: .shades
+        case .generateFishing: .fishing
+        default: nil
+        }
+    }
 
-    static let legacyDigitActions: [ShortcutAction] = [
-        .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
-        .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
-    ]
-
-    /// Presentation key for this action's label. Resolved by
-    /// `Hades2Presentation` at the presentation boundary so a language switch
-    /// re-renders the shortcut sheet and its conflict diagnostics live.
+    /// Presentation key for this action's label. Resolved by the presentation
+    /// boundary so a language switch updates the shortcut sheet live.
     var presentationKey: String {
         switch self {
         case .invincibility: return "hades2.feature.invincibility"
@@ -87,18 +88,25 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .damageEnabled: return "hades2.feature.damageMultiplier"
         case .autoMiniGames: return "hades2.feature.autoMiniGames"
         case .gardenQoL: return "hades2.feature.gardenQoL"
-        case .boonRarityEnabled: return "hades2.feature.boonRarity"
         case .forceEnableRerolls: return "hades2.feature.forceEnableRerolls"
+        case .boonRarityEnabled: return "hades2.feature.boonRarity"
         case .forceLegendary: return "hades2.feature.forceLegendary"
         case .forceDuo: return "hades2.feature.forceDuo"
         case .moneyMultiplierEnabled: return "hades2.feature.moneyMultiplier"
         case .resourceMultiplierEnabled: return "hades2.feature.resourceMultiplier"
-        case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"
+        case .generateFlora: return "hades2.shortcut.generateFlora"
+        case .generateMining: return "hades2.shortcut.generateMining"
+        case .generateDigging: return "hades2.shortcut.generateDigging"
+        case .generateShades: return "hades2.shortcut.generateShades"
+        case .generateFishing: return "hades2.shortcut.generateFishing"
         case .spawnOlympian: return "hades2.shortcut.spawnOlympian"
         case .spawnPickup: return "hades2.shortcut.spawnPickup"
         case .spawnSpecial: return "hades2.shortcut.spawnSpecial"
-        // Disable All is a Host-shell action that happens to live in the Hades
-        // module, so it keeps the Host key and the Host resource.
+        case .acquireChaosPair: return "hades2.shortcut.acquireChaosPair"
+        case .acquireExactBoon: return "hades2.shortcut.acquireExactBoon"
+        case .openSellTraits: return "hades2.shortcut.openPurgingPool"
+        case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"
+        case .applyNextOccurrence: return "hades2.shortcut.applyNextOccurrence"
         case .disableAll: return "host.disableAll"
         }
     }
@@ -209,6 +217,16 @@ enum Hades2GatheringFamily: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var titleKey: String { "hades2.gathering.family.\(rawValue)" }
     var collectionKey: String { "hades2.gathering.collection.\(rawValue)" }
+
+    var shortcutAction: ShortcutAction {
+        switch self {
+        case .flora: .generateFlora
+        case .mining: .generateMining
+        case .digging: .generateDigging
+        case .shades: .generateShades
+        case .fishing: .generateFishing
+        }
+    }
 }
 
 struct Hades2GatheringTarget {

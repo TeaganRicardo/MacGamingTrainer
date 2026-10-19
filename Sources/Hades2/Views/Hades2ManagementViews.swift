@@ -139,7 +139,7 @@ struct Hades2ShortcutSettingsView: View {
             Text(localization.localized("host.hotkeys.help"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(ShortcutAction.uiOrder) { action in
+            ForEach(ShortcutAction.allCases) { action in
                 HStack {
                     Text(text(action.presentationKey))
                     Spacer()
