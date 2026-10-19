@@ -38,8 +38,7 @@ func buttons(in view: NSView) -> [NSButton] {
 func clearActionButtons(in view: NSView) -> [NSButton] {
     buttons(in: view).filter { button in
         let identifier = button.accessibilityAttributeValue(NSAccessibility.Attribute.identifier) as? String
-        let label = button.accessibilityAttributeValue(NSAccessibility.Attribute.label) as? String
-        return identifier == "trainer.search.clear" || label == "Clear search"
+        return identifier == "trainer.search.clear" || button.title == "Clear search"
     }
 }
 

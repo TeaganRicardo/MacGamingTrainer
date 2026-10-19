@@ -62,12 +62,25 @@ assert ".buttonStyle(.borderedProminent)" not in status
 
 # Shortcut settings and conflict feedback use action names, not just the name
 # of the surrounding section or picker.
-action_keys = {
-    "hades2.shortcut.applyNextRoomReward",
-    "hades2.shortcut.spawnOlympian",
-    "hades2.shortcut.spawnPickup",
-    "hades2.shortcut.spawnSpecial",
-}
+shortcut_start = types.index("enum ShortcutAction: String, CaseIterable, Identifiable {")
+shortcut_end = types.index("struct ElementCount", shortcut_start)
+shortcut_block = types[shortcut_start:shortcut_end]
+shortcut_declarations = shortcut_block.split("var id:", 1)[0]
+actions = [
+    action.strip().lstrip(".")
+    for declaration in re.findall(r"^\s*case\s+([^\n]+)$", shortcut_declarations, re.M)
+    for action in declaration.split(",")
+]
+presentation_block = shortcut_block.split("var presentationKey: String", 1)[1]
+presentation_cases = dict(re.findall(
+    r'case \.([A-Za-z][A-Za-z0-9]*): return "([^"]+)"',
+    presentation_block,
+))
+assert len(actions) == len(set(actions)), "duplicate shortcut action declaration"
+assert set(presentation_cases) == set(actions), (
+    "every registered shortcut action must have one presentation label"
+)
+action_keys = set(presentation_cases.values())
 trait_action_keys = {
     "hades2.traits.applyLevel",
     "hades2.traits.applyRarity",
@@ -99,13 +112,23 @@ for key in (
 ):
     assert key in types
 
-# Every registered shortcut action must have a visible affordance in its
-# owning panel or management UI. A settings entry alone is insufficient.
-ui_order = types.split("static let uiOrder:", 1)[1].split("static let legacyDigitActions:", 1)[0]
-actions = re.findall(r"\.([A-Za-z][A-Za-z0-9]*)", ui_order)
-assert len(actions) == 20, f"unexpected shortcut inventory size: {len(actions)}"
-visible_ui = view + "\n" + management_view
+# Every registered action must be discoverable at its owning UI seam. The five
+# gathering actions share one family-driven row, so their mapping is checked
+# through Hades2GatheringFamily rather than five duplicated view literals.
+gathering = (HADES / "Views/Hades2GatheringPanel.swift").read_text()
+occurrence_setting = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
+visible_ui = "\n".join((view, management_view, gathering, occurrence_setting))
+gathering_actions = {
+    "generateFlora", "generateMining", "generateDigging", "generateShades", "generateFishing",
+}
+assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gathering
+assert "var shortcutAction: ShortcutAction" in types
 for action in actions:
+    if action in gathering_actions:
+        assert re.search(rf"case \.{re.escape(action)}: \.\w+", types), (
+            f"gathering shortcut is not mapped to a family: {action}"
+        )
+        continue
     patterns = (
         rf"shortcut\s*:\s*\.{re.escape(action)}\b",
         rf"shortcutText\(\s*\.{re.escape(action)}\s*\)",

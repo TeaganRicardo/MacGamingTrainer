@@ -80,7 +80,7 @@ assert 'theme.controlPadding' in search_field
 assert '.trainerSurface(.subtle, cornerRadius: theme.controlCornerRadius)' in search_field
 assert 'TrainerSearchField(' in view
 assert 'TrainerSearchField(' in save_editor
-assert 'TrainerSecondaryActionButton(' in action_buttons
+assert 'struct TrainerSecondaryActionButton' in action_buttons
 assert 'TrainerSecondaryActionButton(' in occurrence
 assert 'TrainerSearchField(' in resource_controls
 assert 'TrainerPrimaryActionButton(' in save_editor
