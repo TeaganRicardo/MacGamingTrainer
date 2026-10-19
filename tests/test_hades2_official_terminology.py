@@ -165,8 +165,8 @@ assert 'text("hades2.spawn.purgingPool")' in view
 assert 'text("hades2.spawn.characterRewards")' in view
 assert 'text("hades2.spawn.olympianBoons")' in view
 assert 'text("hades2.metric.rerolls")' in view
-assert "hades2.spawn.olympianBoons" in types
-assert "hades2.spawn.characterRewards" in types
+assert 'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"' in types
+assert 'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"' in types
 
 host_actions = (ROOT / "Sources/Hades2/Views/Hades2HostActions.swift").read_text(encoding="utf-8")
 host_zh = (ROOT / "Resources/Localization/zh-CN.lproj/Host.strings").read_text(encoding="utf-8")
