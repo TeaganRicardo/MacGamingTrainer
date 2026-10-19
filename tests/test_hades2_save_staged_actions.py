@@ -8,12 +8,15 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
+from core.adapter import GameAdapter, GameAdapterContext
 from core.module_manifest import SaveManagementSpec, SaveRootSpec
+from core.protocol import JsonlRequestRouter
 from core.save_service import CoreSaveService
 from games.hades2.save_document import Hades2SaveDocument, Hades2SaveHeader, LuaTable
 from games.hades2.save_provider import Hades2SaveProvider
 from games.hades2.save_edit import Hades2SaveEditSession
 from games.hades2.save_workspace import Hades2SaveWorkspace
+from games.hades2.command_contract import Hades2CommandContract
 
 
 def table(values):
@@ -256,5 +259,92 @@ with patch.object(Hades2SaveEditSession, "apply", side_effect=RuntimeError("simu
 assert failed_apply.document is original_document
 assert failed_apply.review(language="en")["actionCount"] == 1
 assert (failure_saves / "Profile1.sav").read_bytes() == original_disk
+
+
+# The real JSONL route must preserve a Hades-owned actionable presentation key
+# and the localized action labels when combined equipment validation rejects
+# a staged operation. Generic host invalidRequest is not sufficient.
+class SaveActionJSONLAdapter(GameAdapter):
+    def __init__(self, workspace):
+        super().__init__(GameAdapterContext(
+            game_id="hades2",
+            display_name="Hades II",
+            module_protocol_version=15,
+            module_dir=ROOT / "Backend/games/hades2",
+            public_metadata={"protocolVersion": 15},
+        ))
+        self.workspace = workspace
+        self.command_contract = Hades2CommandContract(self)
+
+    def dispatch(self, command, params, request_id):
+        return self.command_contract.dispatch(command, params, request_id)
+
+    def validate_save_workspace(self, identifier):
+        if identifier != self.workspace.identifier:
+            raise ValueError("Save Editor document is no longer selected.")
+
+    def stage_save_editor(self, params):
+        return self.workspace.stage(
+            params["entryId"], params["operation"], params.get("value"),
+            language=params["language"],
+        )
+
+    def close(self):
+        pass
+
+
+jsonl_saves, jsonl_workspace = environment("jsonl-conflict", conflict_state)
+equipment_rows = {
+    row["id"]: row
+    for row in jsonl_workspace.query(domain="weapons", language="en")["items"]
+}
+router_data = tempfile.TemporaryDirectory(prefix="mgt-save-action-jsonl-")
+router = JsonlRequestRouter(
+    SaveActionJSONLAdapter(jsonl_workspace),
+    save_data_root=Path(router_data.name),
+    target_running_probe=lambda: False,
+)
+try:
+    first_reply = router.handle({
+        "id": "stage-weapon",
+        "command": "save_editor_stage",
+        "params": {
+            "workspaceId": jsonl_workspace.identifier,
+            "entryId": "weapon:WeaponDagger",
+            "operation": "set",
+            "value": False,
+            "language": "en",
+        },
+    })
+    assert first_reply["ok"] is True, first_reply
+    rejected = router.handle({
+        "id": "stage-conflicting-aspect",
+        "command": "save_editor_stage",
+        "params": {
+            "workspaceId": jsonl_workspace.identifier,
+            "entryId": "aspect:DaggerBlockAspect",
+            "operation": "set",
+            "value": 4,
+            "language": "en",
+        },
+    })
+    assert rejected["ok"] is False, rejected
+    error = rejected["error"]
+    expected_keys = {
+        "Save Editor equipment changes conflict.": "hades2.saveEditor.error.equipmentChangesConflict",
+        "Save Editor locked weapon has acquired aspects.": "hades2.saveEditor.error.lockedWeaponHasAspects",
+        "Save Editor unlocked weapon lacks default aspect.": "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect",
+        "Save Editor selected aspect is not purchased.": "hades2.saveEditor.error.selectedAspectNotPurchased",
+    }
+    assert expected_keys.get(error.get("diagnostic")) == error.get("presentation"), error
+    assert error["code"] == "invalid_request", error
+    assert len(error.get("arguments", [])) == 1, error
+    labels = error["arguments"][0]
+    for entry_id in ("weapon:WeaponDagger", "aspect:DaggerBlockAspect"):
+        assert equipment_rows[entry_id]["name"] in labels, (entry_id, error)
+    assert jsonl_workspace.review(language="en")["actionCount"] == 1
+finally:
+    router.close()
+    router_data.cleanup()
 
 print("hades2_save_staged_actions_ok")

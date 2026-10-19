@@ -171,6 +171,17 @@ for raw in sys.stdin:
                     'constraints': {'min': 0, 'max': 999999, 'integer': True},
                     'state': 'observed', 'reasonCode': 'editable',
                 }]
+                if not term:
+                    items.append({
+                        'id': 'resource:GiftPoints', 'domain': 'resources',
+                        'rawId': 'GiftPoints',
+                        'path': ['GameState', 'Resources', 'GiftPoints'],
+                        'name': 'Nectar', 'englishName': 'Nectar',
+                        'value': 7, 'valueType': 'integer',
+                        'editable': True, 'mutationKinds': ['set'],
+                        'constraints': {'min': 0, 'max': 999999, 'integer': True},
+                        'state': 'observed', 'reasonCode': 'editable',
+                    })
             elif scope in ('all', 'story') and ('nemesis' in term or '复仇' in term):
                 items = [{
                     'id': 'interaction:NPC_Nemesis_01', 'domain': 'relationships',
@@ -737,7 +748,7 @@ struct Main {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
         }
         if model.selectedDomain != .entities { fail("Save Editor did not open on entity results") }
-        if model.total != 1 || model.items.count != 1 || model.entityResults.count != 1 { fail("initial entity page was not loaded") }
+        if model.total != 2 || model.items.count != 2 || model.entityResults.count != 2 { fail("initial entity page was not loaded") }
         if model.items[0].rawID != "MetaCurrency" || model.items[0].displayName != "Ashes" {
             fail("discovery resource row was not decoded")
         }
@@ -752,11 +763,12 @@ struct Main {
 
         // Primary Save editing must be possible directly from the first result.
         // No category expansion, entity selection or inspector activation is needed.
-        func inlineValueField() -> NSTextField? {
+        func inlineField(_ value: String) -> NSTextField? {
             NSApp.windows.compactMap(\.contentView).flatMap(fields).first { field in
-                field.isEditable && field.isEnabled && field.stringValue == "123"
+                field.isEditable && field.isEnabled && field.stringValue == value
             }
         }
+        func inlineValueField() -> NSTextField? { inlineField("123") }
         pumpUntil(timeout: 2.0) { inlineValueField() != nil }
         if inlineValueField() == nil {
             fail("The initial Save result requires an extra entity selection before editing")
@@ -859,6 +871,24 @@ struct Main {
             fail("cancel did not cross the Save Editor Host command seam")
         }
 
+        // Keep an unrelated invalid draft in a second actual Save row. Removing
+        // the last staged action below must preserve this correction in place.
+        guard let unrelatedDraftField = inlineField("7"),
+              let unrelatedDraftWindow = unrelatedDraftField.window,
+              unrelatedDraftWindow.makeFirstResponder(unrelatedDraftField),
+              let unrelatedDraftEditor = unrelatedDraftField.currentEditor() as? NSTextView else {
+            fail("Could not edit the unrelated Save field")
+        }
+        unrelatedDraftEditor.selectAll(nil)
+        unrelatedDraftEditor.insertText("3.5", replacementRange: unrelatedDraftEditor.selectedRange())
+        unrelatedDraftWindow.makeFirstResponder(nil)
+        pump(0.15)
+        if model.pendingCount != 0
+            || model.failure?.key != "hades2.saveEditor.invalidDraft"
+            || unrelatedDraftField.stringValue != "3.5" {
+            fail("Unrelated invalid draft was not retained before per-item removal")
+        }
+
         // Edit the actual initially rendered Save result, not a detached
         // field harness. Blur alone must stage the change; no entity selection
         // or additional per-field button is involved.
@@ -957,6 +987,10 @@ struct Main {
             || !model.pendingActions.isEmpty
             || commands(at: commandLog).last?["command"] as? String != "save_editor_unstage" {
             fail("Native per-action remove control did not unstage exactly one action")
+        }
+        pump(0.15)
+        if inlineField("3.5") == nil {
+            fail("Removing the last staged action discarded an unrelated invalid field draft")
         }
 
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
