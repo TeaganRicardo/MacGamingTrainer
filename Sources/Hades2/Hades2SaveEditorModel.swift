@@ -964,6 +964,7 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.pendingActions = []
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
+            self.reconcileEdit(nil)
             self.lastApplyReceipt = receipt
             self.failure = nil
             self.query(offset: appliedOffset)

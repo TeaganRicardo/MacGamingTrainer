@@ -148,7 +148,6 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.pendingCount) { previous, current in
             if previous > 0 && current == 0 {
-                drafts.removeAll()
                 expandedEffects.removeAll()
                 reviewExpanded = false
             }

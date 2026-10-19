@@ -15,6 +15,7 @@ from . import save_equipment, save_long_term, save_narrative
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
+from .error_presentation import Hades2PresentationError, presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
@@ -95,6 +96,19 @@ SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
     (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
 ))
 
+_ACTIONABLE_BATCH_VALIDATION_MESSAGES = {
+    "Save Editor equipment changes conflict.": "equipment",
+    "Save Editor locked weapon has acquired aspects.": "equipment",
+    "Save Editor unlocked weapon lacks default aspect.": "equipment",
+    "Save Editor selected aspect is not purchased.": "equipment",
+    "Save Editor equipped familiar must be unlocked.": "familiar",
+    "Save Editor Arcana level is invalid.": "arcana",
+    "Save Editor equipped Arcana must be unlocked.": "arcana",
+    "Save Editor upgraded Arcana must be unlocked.": "arcana",
+    "Save Editor Arcana changes conflict.": "arcana",
+    "Save Editor linked changes conflict.": "all",
+}
+
 
 def _page(offset, limit):
     if type(offset) is not int or offset < 0:
@@ -143,13 +157,14 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "profile", "identifier")
+    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
         self._game_path = game_path
         self._pending = {}
         self._investigation = None
+        self._presentation_language = "en"
         self.profile = profile
         self.identifier = uuid.uuid4().hex
 
@@ -1166,6 +1181,54 @@ class Hades2SaveWorkspace:
         keys = ("id", "domain", "rawId", "operation", "before", "after")
         return all(left.get(key) == right.get(key) for key in keys)
 
+    def _actionable_batch_error(self, error, intents, language):
+        """Keep combined-intent failures in Hades presentation with the actions involved."""
+        message = str(error)
+        category = _ACTIONABLE_BATCH_VALIDATION_MESSAGES.get(message)
+        if category is None:
+            return error
+        key, _ = presentation_for(message)
+        if key is None:
+            return error
+
+        intents = tuple(intents)
+        if category == "equipment":
+            relevant = [intent for intent in intents if intent["domain"] == "weapons"]
+        elif category == "arcana":
+            relevant = [intent for intent in intents if intent["id"].startswith("card:")]
+        elif category == "familiar":
+            relevant = [
+                intent for intent in intents
+                if intent["id"].startswith("familiar:") or intent["id"] == "familiarSelection"
+            ]
+        else:
+            relevant = list(intents)
+
+        labels = []
+        for intent in relevant:
+            try:
+                _, row = self._pending_action_row(intent["id"], language)
+            except (KeyError, OSError, TypeError, ValueError):
+                row = {}
+            label = row.get("name") or row.get("englishName") or intent.get("rawId") or intent["id"]
+            entity = row.get("entityName")
+            if entity and entity != label:
+                label = entity + " · " + label
+            if label not in labels:
+                labels.append(label)
+
+        if not labels:
+            labels = ["当前暂存操作" if language == "zh-CN" else "the staged actions"]
+        separator = "、" if language == "zh-CN" else ", "
+        label_text = separator.join(labels[:4])
+        if len(labels) > 4:
+            label_text += "等" if language == "zh-CN" else ", …"
+        if len(label_text) > 240:
+            label_text = label_text[:237] + "…"
+        return Hades2PresentationError(
+            "invalid_request", key, (label_text,), diagnostic=message
+        )
+
     def _linked_change_rows(self, intents):
         intents = tuple(intents)
         rows = []
@@ -1368,7 +1431,7 @@ class Hades2SaveWorkspace:
             self._pending.update(snapshot)
             raise
 
-    def _apply_and_validate_intents(self, candidate, intents):
+    def _apply_and_validate_intents(self, candidate, intents, language="en"):
         intents = tuple(intents)
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
@@ -1380,17 +1443,24 @@ class Hades2SaveWorkspace:
             if intent["before"] != descriptor["before"]:
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             self._apply_intent(candidate, intent)
-        save_long_term.validate_batch(candidate.lua_state, intents)
-        save_equipment.validate_batch(candidate.lua_state, intents)
+        try:
+            save_long_term.validate_batch(candidate.lua_state, intents)
+            save_equipment.validate_batch(candidate.lua_state, intents)
+        except ValueError as error:
+            presented = self._actionable_batch_error(error, intents, language)
+            if presented is error:
+                raise
+            raise presented from error
         return candidate
 
-    def _validated_review_state(self, intents):
+    def _validated_review_state(self, intents, language="en"):
         candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
-        return self._apply_and_validate_intents(candidate, intents)
+        return self._apply_and_validate_intents(candidate, intents, language)
 
     def review(self, language="en"):
         if language not in ("en", "zh-CN"):
             raise ValueError("Save Editor language is unsupported.")
+        self._presentation_language = language
         intents = tuple(self._pending.values())
         direct = []
         action_rows = {}
@@ -1413,9 +1483,15 @@ class Hades2SaveWorkspace:
         # staged action that would make the batch impossible is rejected before
         # it can become authoritative pending state.
         if intents:
-            self._validated_review_state(intents)
+            self._validated_review_state(intents, language)
 
-        effects = self._linked_change_rows(intents)
+        try:
+            effects = self._linked_change_rows(intents)
+        except ValueError as error:
+            presented = self._actionable_batch_error(error, intents, language)
+            if presented is error:
+                raise
+            raise presented from error
         effects_by_action = self._effects_by_action(intents, effects)
 
         actions = []
