@@ -32,6 +32,7 @@ struct TrainerTheme {
     let inlineRowVerticalPadding: CGFloat
     let shortcutCaptureWidth: CGFloat
     let connectionActionWidth: CGFloat
+    let compactActionWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -68,6 +69,7 @@ struct TrainerTheme {
         inlineRowVerticalPadding: 10,
         shortcutCaptureWidth: 180,
         connectionActionWidth: 160,
+        compactActionWidth: 80,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24

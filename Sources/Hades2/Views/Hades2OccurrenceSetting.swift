@@ -58,12 +58,14 @@ struct Hades2OccurrenceSetting: View {
                     Color.clear.frame(width: 26, height: 24)
                 }
                 if let onGenerate, let generateLabel {
-                    Button(generateLabel, action: onGenerate)
-                        .buttonStyle(.bordered)
-                        .lineLimit(1)
-                        .disabled(!canGenerate)
-                        .help(generateHelp)
-                        .accessibilityLabel(title + " " + generateLabel)
+                    TrainerSecondaryActionButton(
+                        title: generateLabel,
+                        enabled: canGenerate,
+                        width: theme.compactActionWidth,
+                        action: onGenerate
+                    )
+                    .help(generateHelp)
+                    .accessibilityLabel(title + " " + generateLabel)
                 }
             }
         }

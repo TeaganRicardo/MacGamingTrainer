@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+private struct TrainerActionButtonLabel: View {
+    let title: String
+    let systemImage: String?
+    let fillsWidth: Bool
+
+    var body: some View {
+        Group {
+            if let systemImage {
+                Label(title, systemImage: systemImage)
+            } else {
+                Text(title)
+            }
+        }
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
+    }
+}
+
 struct TrainerPrimaryActionButton: View {
     @Environment(\.trainerTheme) private var theme
     let title: String
@@ -25,17 +42,41 @@ struct TrainerPrimaryActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Group {
-                if let systemImage {
-                    Label(title, systemImage: systemImage)
-                } else {
-                    Text(title)
-                }
-            }
-            .frame(maxWidth: width == nil ? nil : .infinity)
+            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
         }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
+        .disabled(!enabled)
+        .frame(width: width)
+    }
+}
+
+struct TrainerSecondaryActionButton: View {
+    let title: String
+    let systemImage: String?
+    let enabled: Bool
+    let width: CGFloat?
+    let action: () -> Void
+
+    init(
+        title: String,
+        systemImage: String? = nil,
+        enabled: Bool = true,
+        width: CGFloat? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.enabled = enabled
+        self.width = width
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+        }
+        .buttonStyle(.bordered)
         .disabled(!enabled)
         .frame(width: width)
     }

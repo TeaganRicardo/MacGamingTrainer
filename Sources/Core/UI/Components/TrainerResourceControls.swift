@@ -106,6 +106,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
     let title: String?
     let icon: String?
     let pickerLabel: String
+    @Environment(\.trainerTheme) private var theme
     @Binding var selection: String
     let sections: [TrainerPickerSection<Item>]
     let enabled: Bool
@@ -142,11 +143,14 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
                 .disabled(!enabled || allItems.isEmpty)
 
                 TrainerShortcutBadgeSlot(text: shortcutText)
-                Button(actionTitle) {
+                TrainerSecondaryActionButton(
+                    title: actionTitle,
+                    enabled: enabled && hasSelection,
+                    width: theme.compactActionWidth
+                ) {
                     guard hasSelection else { return }
                     onAction(selectedID)
                 }
-                .disabled(!enabled || !hasSelection)
             }
         }
     }
