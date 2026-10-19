@@ -95,8 +95,6 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     enabled: enabled && !selection.isEmpty,
                     action: onLock
                 )
-                .accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))
-                .help(localization.localized(locked ? "host.unlock" : "host.lock"))
             }
         }
     }

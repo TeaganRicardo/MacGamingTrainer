@@ -79,6 +79,7 @@ struct TrainerCheckboxControl: View {
 
 struct TrainerLockButton: View {
     @Environment(\.trainerTheme) private var theme
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let locked: Bool
     let enabled: Bool
     let action: () -> Void
@@ -93,5 +94,7 @@ struct TrainerLockButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
+        .accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))
+        .help(localization.localized(locked ? "host.unlock" : "host.lock"))
     }
 }

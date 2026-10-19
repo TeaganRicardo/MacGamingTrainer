@@ -13,6 +13,7 @@ resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
 status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 primary_button = (CORE_UI / "Components/TrainerListControls.swift").read_text()
+lock_button = (CORE_UI / "Primitives/TrainerToggleControl.swift").read_text()
 occurrence = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
 types = (HADES / "Hades2Types.swift").read_text()
 view = (HADES / "Hades2View.swift").read_text()
@@ -52,7 +53,8 @@ assert ".frame(minWidth: 110)" not in management
 # feature views; do not reintroduce a second search or primary-action treatment.
 assert "TrainerSearchField(" in resource
 assert "TrainerLockButton(" in resource
-assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in resource
+assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
+assert '.accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))' in lock_button
 assert "TrainerPrimaryActionButton(" in status
 assert ".buttonStyle(.borderedProminent)" not in status
 

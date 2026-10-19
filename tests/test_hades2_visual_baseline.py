@@ -18,6 +18,7 @@ action_buttons = (CORE_UI / 'Components/TrainerListControls.swift').read_text()
 occurrence = (HADES / 'Views/Hades2OccurrenceSetting.swift').read_text()
 save_editor = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
 resource_controls = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
+lock_button = (CORE_UI / 'Primitives/TrainerToggleControl.swift').read_text()
 status_controls = (CORE_UI / 'Components/TrainerStatusControls.swift').read_text()
 management = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
 
@@ -96,7 +97,7 @@ assert 'TrainerRow(opacity:' in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(text: $amount' in resource
 assert 'TrainerLockButton(' in resource
-assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in resource
+assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
 
 print('hades2_visual_baseline_v0175_ok')
 
