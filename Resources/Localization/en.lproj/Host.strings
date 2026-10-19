@@ -4,7 +4,7 @@
 "host.language.en" = "English";
 "host.saveManagement" = "Save Management";
 "host.connectGame" = "Connect Game";
-"host.disconnectGame" = "Disconnect";
+"host.disconnectGame" = "Disconnect Game";
 "host.connected" = "Connected";
 "host.disconnected" = "Disconnected";
 "host.refreshStatusHelp" = "Read status on demand without continuous debugger polling";

@@ -39,12 +39,14 @@ struct TrainerConnectionStatusCard: View {
                     enabled: actionsEnabled,
                     action: onPrimary
                 )
+                .frame(width: theme.connectionActionWidth)
             } else {
                 TrainerPrimaryActionButton(
                     title: localization.localized("host.restartBackend"),
                     enabled: actionsEnabled,
                     action: onRestart
                 )
+                .frame(width: theme.connectionActionWidth)
             }
         }
         .padding(theme.panelPadding)

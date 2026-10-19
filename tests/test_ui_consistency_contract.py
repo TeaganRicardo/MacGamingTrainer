@@ -26,6 +26,9 @@ assert ".frame(minWidth: 52" not in slot
 # captured and after assignment; long labels/chords must not resize the column.
 assert "let shortcutCaptureWidth: CGFloat" in theme
 assert "shortcutCaptureWidth: 180" in theme
+assert "let connectionActionWidth: CGFloat" in theme
+assert "connectionActionWidth: 160" in theme
+assert ".frame(width: theme.connectionActionWidth)" in status
 assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in management
 assert ".frame(minWidth: 110)" not in management
 
