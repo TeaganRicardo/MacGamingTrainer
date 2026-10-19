@@ -35,6 +35,8 @@ assert ".frame(minWidth: 110)" not in management
 # Shared visual controls are adopted by the owning Core controls as well as
 # feature views; do not reintroduce a second search or primary-action treatment.
 assert "TrainerSearchField(" in resource
+assert "TrainerLockButton(" in resource
+assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in resource
 assert "TrainerPrimaryActionButton(" in status
 assert ".buttonStyle(.borderedProminent)" not in status
 

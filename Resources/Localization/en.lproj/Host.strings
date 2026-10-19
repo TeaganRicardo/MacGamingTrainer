@@ -20,6 +20,7 @@
 "host.amount" = "Amount";
 "host.lock" = "Lock";
 "host.locked" = "Locked";
+"host.unlock" = "Unlock";
 "host.resource.searchPlaceholder" = "Search name or resource ID";
 "host.search.clear" = "Clear search";
 "host.resource.noMatches" = "No matching items";

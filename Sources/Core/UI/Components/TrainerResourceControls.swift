@@ -90,11 +90,13 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                 Spacer()
                 TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
                     .id(selection)
-                Button(action: onLock) {
-                    Label(localization.localized(locked ? "host.locked" : "host.lock"), systemImage: locked ? "lock.fill" : "lock.open")
-                        .foregroundStyle(locked ? theme.accent : .secondary)
-                }
-                .disabled(!enabled || selection.isEmpty)
+                TrainerLockButton(
+                    locked: locked,
+                    enabled: enabled && !selection.isEmpty,
+                    action: onLock
+                )
+                .accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))
+                .help(localization.localized(locked ? "host.unlock" : "host.lock"))
             }
         }
     }
