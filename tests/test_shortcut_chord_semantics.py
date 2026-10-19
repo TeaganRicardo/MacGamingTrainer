@@ -11,17 +11,17 @@ if not swiftc:
 harness = r'''
 import Foundation
 
-precondition(ShortcutAction.uiOrder.count == ShortcutAction.allCases.count)
-precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)) == Set(ShortcutAction.allCases.map(\.rawValue)))
-precondition(Set(ShortcutAction.uiOrder.map(\.rawValue)).count == ShortcutAction.uiOrder.count)
-precondition(ShortcutAction.uiOrder.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
+precondition(Set(ShortcutAction.allCases.map(\.rawValue)).count == ShortcutAction.allCases.count)
+precondition(ShortcutAction.allCases.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
+precondition(Hades2ShortcutStore.defaultLayout().count == ShortcutAction.allCases.count)
+precondition(ShortcutAction.allCases.last == .disableAll)
 
 // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
 // preferences directory; a real suite there cannot be cleaned up afterwards.
 func makeDefaults() -> UserDefaults { InMemoryDefaults() }
 
 func unique(_ store: Hades2ShortcutStore) -> Bool {
-    let values = ShortcutAction.uiOrder.map { "\(store.chord($0).keyCode):\(store.chord($0).modifiers)" }
+    let values = ShortcutAction.allCases.map { "\(store.chord($0).keyCode):\(store.chord($0).modifiers)" }
     return Set(values).count == values.count
 }
 
@@ -47,10 +47,24 @@ func seedV3Defaults(_ defaults: UserDefaults, invincibilityOverride: Int? = nil)
     }
 }
 
+let legacyV4Order: [ShortcutAction] = [
+    .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+    .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
+    .forceEnableRerolls, .forceLegendary, .forceDuo, .moneyMultiplierEnabled,
+    .resourceMultiplierEnabled, .spawnOlympian, .spawnPickup, .spawnSpecial,
+    .applyNextRoomReward, .disableAll,
+]
+
+func legacyV4DefaultLayout() -> [ShortcutAction: HotkeyChord] {
+    Dictionary(uniqueKeysWithValues: legacyV4Order.enumerated().compactMap { index, action in
+        HotkeyChord.controlOptionDefault(index: index).map { (action, $0) }
+    })
+}
+
 func seedKnownBrokenV4Defaults(_ defaults: UserDefaults) {
     defaults.set(4, forKey: "shortcut.layoutVersion")
-    let clean = Hades2ShortcutStore.defaultLayout()
-    for action in ShortcutAction.uiOrder {
+    let clean = legacyV4DefaultLayout()
+    for action in legacyV4Order {
         defaults.set(clean[action]!.payload, forKey: legacyShortcutKey(action))
     }
     defaults.set(clean[.moneyMultiplierEnabled]!.payload, forKey: legacyShortcutKey(.gardenQoL))
@@ -61,8 +75,14 @@ func seedKnownBrokenV4Defaults(_ defaults: UserDefaults) {
 let migratedV3DefaultsStore = makeDefaults()
 seedV3Defaults(migratedV3DefaultsStore)
 let migratedV3Defaults = Hades2ShortcutStore(defaults: migratedV3DefaultsStore)
-precondition(ShortcutAction.uiOrder.map { migratedV3Defaults.chord($0).keyLabel } ==
-    ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K"])
+func matchesDerivedDefaults(_ store: Hades2ShortcutStore) -> Bool {
+    ShortcutAction.allCases.enumerated().allSatisfy { index, action in
+        guard let expected = HotkeyChord.controlOptionDefault(index: index) else { return false }
+        return store.chord(action) == expected
+    }
+}
+
+precondition(matchesDerivedDefaults(migratedV3Defaults))
 
 let migratedV3CustomStore = makeDefaults()
 seedV3Defaults(migratedV3CustomStore, invincibilityOverride: 0)
@@ -71,24 +91,21 @@ precondition(migratedV3Custom.chord(.invincibility).keyLabel == "0")
 precondition(migratedV3Custom.chord(.infiniteHealth).keyLabel == "2")
 precondition(migratedV3Custom.chord(.gardenQoL).keyLabel == "9")
 precondition(migratedV3Custom.chord(.moneyMultiplierEnabled).keyLabel == "E")
-precondition(migratedV3Custom.chord(.disableAll).keyLabel == "K")
+precondition(migratedV3Custom.chord(.disableAll).keyLabel == "T")
 precondition(unique(migratedV3Custom))
 
 let brokenV4Store = makeDefaults()
 seedKnownBrokenV4Defaults(brokenV4Store)
 let repairedV4 = Hades2ShortcutStore(defaults: brokenV4Store)
-precondition(ShortcutAction.uiOrder.map { repairedV4.chord($0).keyLabel } ==
-    ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K"])
+precondition(matchesDerivedDefaults(repairedV4))
 
 let defaults = Hades2ShortcutStore(defaults: makeDefaults())
-precondition(ShortcutAction.uiOrder.map { defaults.chord($0).keyLabel } ==
-    ["1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K"])
+precondition(matchesDerivedDefaults(defaults))
 precondition(unique(defaults))
-precondition(defaults.chord(.spawnOlympian).keyLabel == "G")
-precondition(defaults.chord(.spawnPickup).keyLabel == "H")
-precondition(defaults.chord(.spawnSpecial).keyLabel == "I")
-precondition(defaults.chord(.applyNextRoomReward).keyLabel == "J")
-precondition(defaults.chord(.disableAll).keyLabel == "K")
+precondition(defaults.chord(.generateFlora) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .generateFlora)!)!)
+precondition(defaults.chord(.generateFishing) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
+precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
+precondition(defaults.chord(.disableAll).keyLabel == "T")
 
 var full = Hades2ShortcutStore(defaults: makeDefaults())
 var profile = full.payload()
