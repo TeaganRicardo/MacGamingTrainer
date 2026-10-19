@@ -21,6 +21,7 @@
 "host.lock" = "Lock";
 "host.locked" = "Locked";
 "host.resource.searchPlaceholder" = "Search name or resource ID";
+"host.search.clear" = "Clear search";
 "host.resource.noMatches" = "No matching items";
 "host.backend.operation.recover" = "Recover Backend";
 "host.backend.error.startFailed" = "Unable to start the backend. Check the log.";

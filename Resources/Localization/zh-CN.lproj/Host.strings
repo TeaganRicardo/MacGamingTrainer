@@ -21,6 +21,7 @@
 "host.lock" = "锁定";
 "host.locked" = "已锁定";
 "host.resource.searchPlaceholder" = "搜索名称或资源 ID";
+"host.search.clear" = "清除搜索";
 "host.resource.noMatches" = "没有匹配项目";
 "host.backend.operation.recover" = "恢复后端";
 "host.backend.error.startFailed" = "无法启动后端，请查看日志。";

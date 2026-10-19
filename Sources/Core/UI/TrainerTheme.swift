@@ -17,6 +17,8 @@ struct TrainerTheme {
     let panelCornerRadius: CGFloat
     let cardCornerRadius: CGFloat
     let controlCornerRadius: CGFloat
+    let controlPadding: CGFloat
+    let compactControlSpacing: CGFloat
     let compactCornerRadius: CGFloat
     let pageMaxWidth: CGFloat
     let contentMinWidth: CGFloat
@@ -27,6 +29,7 @@ struct TrainerTheme {
     let panelPadding: CGFloat
     let rowHorizontalPadding: CGFloat
     let rowMinimumHeight: CGFloat
+    let inlineRowVerticalPadding: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -48,6 +51,8 @@ struct TrainerTheme {
         panelCornerRadius: 16,
         cardCornerRadius: 14,
         controlCornerRadius: 10,
+        controlPadding: 10,
+        compactControlSpacing: 8,
         compactCornerRadius: 7,
         pageMaxWidth: 1000,
         contentMinWidth: 760,
@@ -58,6 +63,7 @@ struct TrainerTheme {
         panelPadding: 20,
         rowHorizontalPadding: 22,
         rowMinimumHeight: 64,
+        inlineRowVerticalPadding: 10,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24
