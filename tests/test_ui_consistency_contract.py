@@ -12,6 +12,7 @@ theme = (CORE_UI / "TrainerTheme.swift").read_text()
 resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
 status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
+primary_button = (CORE_UI / "Components/TrainerListControls.swift").read_text()
 types = (HADES / "Hades2Types.swift").read_text()
 view = (HADES / "Hades2View.swift").read_text()
 management_view = (HADES / "Views/Hades2ManagementViews.swift").read_text()
@@ -29,7 +30,11 @@ assert "let shortcutCaptureWidth: CGFloat" in theme
 assert "shortcutCaptureWidth: 180" in theme
 assert "let connectionActionWidth: CGFloat" in theme
 assert "connectionActionWidth: 160" in theme
-assert ".frame(width: theme.connectionActionWidth)" in status
+assert ".frame(width: theme.connectionActionWidth)" not in status
+assert "width: theme.connectionActionWidth" in status
+assert "let width: CGFloat?" in primary_button
+assert ".frame(maxWidth: width == nil ? nil : .infinity)" in primary_button
+assert ".frame(width: width)" in primary_button
 assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in management
 assert ".frame(minWidth: 110)" not in management
 
