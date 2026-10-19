@@ -556,6 +556,13 @@ struct Hades2TrainerView: View {
             && target != trait.rarity
     }
 
+    private var managedTraitHasContextualControls: Bool {
+        guard let trait = managedCurrentRunTrait else { return false }
+        return (trait.family == "temporary"
+            && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire))
+            || trait.canAdvanceLifecycle
+    }
+
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -587,15 +594,14 @@ struct Hades2TrainerView: View {
                 .frame(width: TraitManagerLayout.searchWidth)
             }
 
-            currentRunTraitCommonControls(managedCurrentRunTrait)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .overlay(alignment: .leading) {
-                    if let trait = managedCurrentRunTrait {
-                        currentRunTraitContextualControls(trait)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                currentRunTraitCommonControls(managedCurrentRunTrait)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if managedTraitHasContextualControls, let trait = managedCurrentRunTrait {
+                    currentRunTraitContextualControls(trait)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
         }
         .onAppear {
             repairManagedTraitSelection()
