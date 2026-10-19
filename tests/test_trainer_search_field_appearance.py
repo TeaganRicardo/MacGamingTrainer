@@ -35,6 +35,7 @@ func buttons(in view: NSView) -> [NSButton] {
     (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
 }
 
+@MainActor
 struct Fixture: View {
     @ObservedObject var model: SearchModel
 
