@@ -15,7 +15,7 @@ from . import save_equipment, save_long_term, save_narrative
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
-from .error_presentation import Hades2PresentationError, presentation_for
+from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
@@ -108,6 +108,18 @@ _ACTIONABLE_BATCH_VALIDATION_MESSAGES = {
     "Save Editor Arcana changes conflict.": "arcana",
     "Save Editor linked changes conflict.": "all",
 }
+
+class _SaveEditorActionValidationError(ValueError):
+    """ValueError-compatible batch rejection with a Hades-owned presentation."""
+
+    def __init__(self, diagnostic, presentation, arguments):
+        super().__init__(diagnostic)
+        self.code = "invalid_request"
+        self.presentation = presentation
+        self.arguments = list(arguments)
+        self.diagnostic = diagnostic
+        self._hades2_presentation_ready = True
+
 
 
 def _page(offset, limit):
@@ -1225,9 +1237,7 @@ class Hades2SaveWorkspace:
             label_text += "等" if language == "zh-CN" else ", …"
         if len(label_text) > 240:
             label_text = label_text[:237] + "…"
-        return Hades2PresentationError(
-            "invalid_request", key, (label_text,), diagnostic=message
-        )
+        return _SaveEditorActionValidationError(message, key, (label_text,))
 
     def _linked_change_rows(self, intents):
         intents = tuple(intents)

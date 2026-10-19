@@ -750,6 +750,11 @@ class Hades2CommandContract:
 
     @staticmethod
     def _as_presentation_key(error):
+        # Workspace batch-validation errors are ValueError-compatible so
+        # direct semantic callers retain the established exception contract.
+        # Preserve their already-resolved Hades key/arguments at the JSONL seam.
+        if getattr(error, "_hades2_presentation_ready", False):
+            return error
         key, arguments = presentation_for(str(error))
         if key is None:
             return error
