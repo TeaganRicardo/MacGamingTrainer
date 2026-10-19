@@ -48,7 +48,8 @@ assert "struct Hades2ActionReceipt" in state
 assert "let outcome: Hades2ActionOutcome" in state
 assert "let lastAction: Hades2ActionReceipt?" in state
 assert 'payload["lastAction"]' in state
-modal_model = model[model.index("func openSellTraits()"):model.index("func setMultiplier(", model.index("func openSellTraits()"))]
+modal_start = model.index("func openSellTraits(")
+modal_model = model[modal_start:model.index("func setTraitLevel(", modal_start)]
 assert "announceSuccess: false" in modal_model
 assert "Hades2Command(rawValue: receipt.command)" in model
 assert '"open_sell_traits"' not in model and '"open_special_choice"' not in model

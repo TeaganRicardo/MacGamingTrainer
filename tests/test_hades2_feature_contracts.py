@@ -146,10 +146,18 @@ required_shortcut_labels = {
     "hades2.shortcut.acquireExactBoon",
     "hades2.shortcut.openPurgingPool",
     "hades2.shortcut.applyNextOccurrence",
+    "hades2.shortcut.disableAll",
 }
+presentation_section = types[types.index("var presentationKey: String"):types.index("\n    }\n}", types.index("var presentationKey: String"))]
+presentation_cases = dict(re.findall(r'case \.([A-Za-z]\w*): return "([^"]+)"', presentation_section))
+assert set(presentation_cases) == set(action_order), "every shortcut action needs exactly one presentation label"
+
 for language in ("en", "zh-CN"):
     entries = json.loads(read(f"Sources/Hades2/Presentation/Localization/hades2.{language}.json"))["entries"]
     assert required_shortcut_labels <= entries.keys(), f"{language} shortcut labels are incomplete"
+    for action, key in presentation_cases.items():
+        assert key.startswith("hades2."), f"{action} bypasses the Hades presentation catalogue: {key}"
+        assert key in entries, f"{language} lacks shortcut label for {action}: {key}"
 
 # Elements have distinct symbols and colors rather than sharing the atom icon.
 for line in (

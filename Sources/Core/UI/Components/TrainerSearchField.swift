@@ -40,6 +40,7 @@ struct TrainerSearchField: View {
                 .buttonStyle(.plain)
                 .help(clearLabel)
                 .accessibilityLabel(clearLabel)
+                .accessibilityIdentifier("trainer.search.clear")
             }
         }
         .padding(theme.controlPadding)

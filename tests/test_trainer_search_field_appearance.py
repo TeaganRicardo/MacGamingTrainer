@@ -35,6 +35,10 @@ func buttons(in view: NSView) -> [NSButton] {
     (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons)
 }
 
+func clearActionButtons(in view: NSView) -> [NSButton] {
+    buttons(in: view).filter { $0.identifier?.rawValue == "trainer.search.clear" }
+}
+
 @MainActor
 struct Fixture: View {
     @ObservedObject var model: SearchModel
@@ -84,18 +88,18 @@ struct Main {
             check(search.textColor != NSColor.clear && search.bounds.height > 0,
                   "search field text must remain visible and laid out")
 
-            check(buttons(in: host).isEmpty, "clear action must stay hidden for an empty query")
+            check(clearActionButtons(in: host).isEmpty, "clear action must stay hidden for an empty query")
             model.query = "Nemesis"
             RunLoop.current.run(until: Date().addingTimeInterval(0.10))
             host.layoutSubtreeIfNeeded()
-            let clearButtons = buttons(in: host)
-            check(clearButtons.count == 1, "one clear action must appear for a non-empty query")
+            let clearButtons = clearActionButtons(in: host)
+            check(clearButtons.count == 1, "one accessible clear action must appear for a non-empty query")
             clearButtons[0].performClick(nil)
             RunLoop.current.run(until: Date().addingTimeInterval(0.10))
             host.layoutSubtreeIfNeeded()
             check(model.query.isEmpty, "clear action did not clear the bound query")
             check(model.submits == 1, "clear action must submit exactly once")
-            check(buttons(in: host).isEmpty, "clear action must disappear after clearing")
+            check(clearActionButtons(in: host).isEmpty, "clear action must disappear after clearing")
             window.close()
         }
         print("trainer_search_field_appearance_ok")

@@ -61,6 +61,13 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case applyNextRoomReward, applyNextOccurrence
     case disableAll
 
+    /// Stable legacy subset used only to interpret the v3 numeric layout.
+    /// It must not participate in active default allocation.
+    static let legacyDigitActions: [ShortcutAction] = [
+        .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
+        .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
+    ]
+
     var id: String { rawValue }
     var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
 
@@ -107,7 +114,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .openSellTraits: return "hades2.shortcut.openPurgingPool"
         case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"
         case .applyNextOccurrence: return "hades2.shortcut.applyNextOccurrence"
-        case .disableAll: return "host.disableAll"
+        case .disableAll: return "hades2.shortcut.disableAll"
         }
     }
 }
