@@ -1399,7 +1399,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         guard canAcquireExactReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return false }
         send(
             .spawnReward(reward),
-            title: "hades2.op.acquireExactBoon",
+            title: "hades2.op.acquireSelectedReward",
             repeatableSpawn: true,
             completion: completion
         )
@@ -1423,7 +1423,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
               !curse.targetID.isEmpty else { return false }
         send(
             .acquireChaosPair(blessing: blessing.targetID, curse: curse.targetID),
-            title: "hades2.op.acquireExactBoon",
+            title: "hades2.op.acquireChaosPair",
             completion: completion
         )
         return true

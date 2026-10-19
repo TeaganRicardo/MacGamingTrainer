@@ -88,6 +88,8 @@ assert "ShortcutAction.uiOrder" not in store + model + management
 assert "ShortcutAction.allCases" in store
 assert "ShortcutAction.allCases" in model
 assert "ShortcutAction.allCases" in management
+assert 'title: "hades2.op.acquireSelectedReward"' in model
+assert 'title: "hades2.op.acquireChaosPair"' in model
 assert "family.shortcutAction" in gathering
 assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gathering
 assert "TrainerShortcutBadgeSlot(text: generateShortcutText)" in occurrence
@@ -159,6 +161,8 @@ for language in ("en", "zh-CN"):
     for action, key in presentation_cases.items():
         assert key.startswith("hades2."), f"{action} bypasses the Hades presentation catalogue: {key}"
         assert key in entries, f"{language} lacks shortcut label for {action}: {key}"
+    assert "hades2.op.acquireSelectedReward" in entries
+    assert "hades2.op.acquireChaosPair" in entries
 
 # Elements have distinct symbols and colors rather than sharing the atom icon.
 for line in (

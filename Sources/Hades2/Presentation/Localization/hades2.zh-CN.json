@@ -686,7 +686,9 @@
     "hades2.shortcut.acquireExactBoon": "获取所选奖励",
     "hades2.shortcut.openPurgingPool": "打开净化池",
     "hades2.shortcut.applyNextOccurrence": "设置下一次合资格遭遇",
-    "hades2.shortcut.disableAll": "关闭全部修改器"
+    "hades2.shortcut.disableAll": "关闭全部修改器",
+    "hades2.op.acquireSelectedReward": "正在获取所选奖励",
+    "hades2.op.acquireChaosPair": "正在获取混沌祝福与诅咒"
   },
   "language": "zh-CN"
 }

@@ -686,7 +686,9 @@
     "hades2.shortcut.acquireExactBoon": "Acquire Selected Reward",
     "hades2.shortcut.openPurgingPool": "Open Pool of Purging",
     "hades2.shortcut.applyNextOccurrence": "Set Next Eligible Encounter",
-    "hades2.shortcut.disableAll": "Disable All"
+    "hades2.shortcut.disableAll": "Disable All",
+    "hades2.op.acquireSelectedReward": "Acquiring Selected Reward",
+    "hades2.op.acquireChaosPair": "Acquiring Chaos Pair"
   },
   "language": "en"
 }
