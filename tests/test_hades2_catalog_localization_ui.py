@@ -182,8 +182,10 @@ assert '"hades2.spawn.exactTarget": "Boon / Effect"' in en_presentation
 
 # #347: Chaos is a dedicated two-sided lifecycle acquisition rather than two
 # independent rows in the generic Exact Boon navigator.
-assert '@ViewState<String> private var chaosBlessingSelection = ""' in view
-assert '@ViewState<String> private var chaosCurseSelection = ""' in view
+assert '@Published var selectedChaosBlessing = ""' in model
+assert '@Published var selectedChaosCurse = ""' in model
+assert '$model.selectedChaosBlessing' in view
+assert '$model.selectedChaosCurse' in view
 assert 'private var chaosBlessingOptions: [BoonOption]' in view
 assert 'private var chaosCurseOptions: [BoonOption]' in view
 assert '$0.acquisitionMode == "chaosBlessing"' in view
@@ -194,10 +196,11 @@ chaos_pair_surface = exact_surface[
     exact_surface.index('hades2.spawn.chaosPair'):
     exact_surface.index('hades2.spawn.exactSource')
 ]
-assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection)' in chaos_pair_surface
-assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection)' in chaos_pair_surface
+assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing)' in chaos_pair_surface
+assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse)' in chaos_pair_surface
 assert 'model.acquireChaosPair(' in chaos_pair_surface
-assert chaos_pair_surface.count('Button(text("hades2.spawn.acquire"))') == 1
+assert chaos_pair_surface.count('TrainerSecondaryActionButton(') == 1
+assert 'title: text("hades2.spawn.acquire")' in chaos_pair_surface
 assert '"hades2.spawn.chaosPair": "卡俄斯配对"' in zh_presentation
 assert '"hades2.spawn.chaosPair": "Chaos Pair"' in en_presentation
 assert '"hades2.spawn.chaosBlessing": "祝福"' in zh_presentation
