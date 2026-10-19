@@ -15,6 +15,9 @@ row = (CORE_UI / 'Primitives/TrainerRow.swift').read_text()
 card = (CORE_UI / 'Primitives/TrainerCard.swift').read_text()
 search_field = (CORE_UI / 'Components/TrainerSearchField.swift').read_text()
 save_editor = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
+resource_controls = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
+status_controls = (CORE_UI / 'Components/TrainerStatusControls.swift').read_text()
+management = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
 
 # v0.17.5 keeps v0.11 visuals but the implementation now lives in Core.
 assert not (HADES / 'Views/Controls').exists()
@@ -74,7 +77,11 @@ assert 'theme.controlPadding' in search_field
 assert '.trainerSurface(.subtle, cornerRadius: theme.controlCornerRadius)' in search_field
 assert 'TrainerSearchField(' in view
 assert 'TrainerSearchField(' in save_editor
+assert 'TrainerSearchField(' in resource_controls
 assert 'TrainerPrimaryActionButton(' in save_editor
+assert 'TrainerPrimaryActionButton(' in status_controls
+assert 'TrainerPrimaryActionButton(' in management
+assert '.buttonStyle(.borderedProminent)' not in status_controls
 assert 'theme.rowHorizontalPadding' in save_editor
 assert 'theme.panelPadding' in save_editor
 assert 'theme.inlineRowVerticalPadding' in save_editor

@@ -63,9 +63,12 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(theme.accent)
                 Spacer()
-                TextField(localization.presentation(searchPlaceholder), text: $search)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 260)
+                TrainerSearchField(
+                    text: $search,
+                    placeholder: localization.presentation(searchPlaceholder),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 260)
             }
             Picker(title, selection: $selection) {
                 if selection.isEmpty || sections.allSatisfy({ $0.items.isEmpty }) {

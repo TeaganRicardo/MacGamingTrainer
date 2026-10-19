@@ -26,11 +26,13 @@ struct Hades2ProfileManagerView: View {
                     text: $profileName
                 )
                 .frame(maxWidth: .infinity)
-                Button(text("hades2.profile.saveCurrent")) {
+                TrainerPrimaryActionButton(
+                    title: text("hades2.profile.saveCurrent"),
+                    enabled: !model.busy && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
                     model.saveProfile(profileName)
                     selectedProfile = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-                .disabled(model.busy || profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             Divider()
             if model.profiles.isEmpty {
