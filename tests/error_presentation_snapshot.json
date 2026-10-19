@@ -24,6 +24,14 @@
       "arguments": [],
       "key": "hades2.error.luaFailed"
     },
+    "Next occurrence target must be a string or nil": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
+    "Next occurrence token is invalid": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
+    },
     "Profile desired 字段无效。": {
       "arguments": [],
       "key": "hades2.error.profileDesiredInvalid"
@@ -84,6 +92,14 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
     },
+    "Save Editor Arcana changes conflict.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.arcanaChangesConflict"
+    },
+    "Save Editor Arcana level is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.arcanaLevelInvalid"
+    },
     "Save Editor GameState is malformed.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.operationFailed"
@@ -100,6 +116,10 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.operationFailed"
     },
+    "Save Editor discovery filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
     "Save Editor domain is unknown.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
@@ -112,23 +132,23 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidMutation"
     },
+    "Save Editor equipment changes conflict.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.equipmentChangesConflict"
+    },
+    "Save Editor equipped Arcana must be unlocked.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.equippedArcanaMustBeUnlocked"
+    },
+    "Save Editor equipped familiar must be unlocked.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.equippedFamiliarMustBeUnlocked"
+    },
     "Save Editor has no changes to apply.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidMutation"
     },
-    "Save Editor discovery filter is invalid.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.invalidQuery"
-    },
     "Save Editor investigation filter is invalid.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.invalidQuery"
-    },
-    "Save Editor state filter is invalid.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.invalidQuery"
-    },
-    "Save Editor state filter is not supported for this domain.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
     },
@@ -136,13 +156,17 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
     },
-    "Save Editor native scene identity is unknown.": {
-      "arguments": [],
-      "key": "hades2.saveEditor.error.invalidQuery"
-    },
     "Save Editor language is unsupported.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor linked changes conflict.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.linkedChangesConflict"
+    },
+    "Save Editor locked weapon has acquired aspects.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.lockedWeaponHasAspects"
     },
     "Save Editor membership target is missing.": {
       "arguments": [],
@@ -175,6 +199,10 @@
     "Save Editor mutation owner is not a table.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidMutation"
+    },
+    "Save Editor native scene identity is unknown.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
     },
     "Save Editor path does not identify a table.": {
       "arguments": [],
@@ -264,6 +292,38 @@
       "arguments": [],
       "key": "hades2.saveEditor.error.invalidQuery"
     },
+    "Save Editor selected aspect is not purchased.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.selectedAspectNotPurchased"
+    },
+    "Save Editor staged action identity is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidMutation"
+    },
+    "Save Editor staged action is unavailable.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidMutation"
+    },
+    "Save Editor staged owner is ambiguous or has changed.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidMutation"
+    },
+    "Save Editor state filter is invalid.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor state filter is not supported for this domain.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.invalidQuery"
+    },
+    "Save Editor unlocked weapon lacks default aspect.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect"
+    },
+    "Save Editor upgraded Arcana must be unlocked.": {
+      "arguments": [],
+      "key": "hades2.saveEditor.error.upgradedArcanaMustBeUnlocked"
+    },
     "Save Editor workspace is not open.": {
       "arguments": [],
       "key": "hades2.saveEditor.error.notOpen"
@@ -274,6 +334,10 @@
         "arm64"
       ],
       "key": "hades2.error.architectureRequired"
+    },
+    "Unsupported next occurrence target": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
     },
     "desired-state schemaVersion 无效。": {
       "arguments": [],
@@ -329,6 +393,10 @@
     "下一房奖励无效。": {
       "arguments": [],
       "key": "hades2.error.invalidNextRoomReward"
+    },
+    "下一次遭遇目标无效。": {
+      "arguments": [],
+      "key": "hades2.error.invalidNextOccurrence"
     },
     "使用新的数据格式": {
       "arguments": [],
@@ -1329,22 +1397,6 @@
     "额外魔力恢复必须为 0–1000/秒。": {
       "arguments": [],
       "key": "hades2.error.manaRegenRange"
-    },
-    "下一次遭遇目标无效。": {
-      "arguments": [],
-      "key": "hades2.error.invalidNextOccurrence"
-    },
-    "Unsupported next occurrence target": {
-      "arguments": [],
-      "key": "hades2.error.invalidNextOccurrence"
-    },
-    "Next occurrence target must be a string or nil": {
-      "arguments": [],
-      "key": "hades2.error.invalidNextOccurrence"
-    },
-    "Next occurrence token is invalid": {
-      "arguments": [],
-      "key": "hades2.error.invalidNextOccurrence"
     }
   },
   "fallback_key": "hades2.error.runtimeActionFailed",

@@ -25,6 +25,52 @@ _DEFAULT_ASPECTS = {aspects[0] for aspects in _WEAPONS.values()}
 _MARKER_FIELDS = ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded")
 
 
+class SaveEquipmentBatchValidationError(ValueError):
+    """Equipment batch rejection with the requested actions that caused it."""
+
+    def __init__(self, message, action_ids):
+        super().__init__(message)
+        self.action_ids = tuple(sorted(set(action_ids)))
+
+
+def _action_ids(own, related):
+    related = set(related)
+    return tuple(sorted(
+        intent["id"] for intent in own if intent["id"] in related
+    ))
+
+
+def _conflicting_action_ids(entry, own):
+    """Identify staged equipment actions sharing the overwritten owner."""
+    related = {entry}
+    if entry.startswith("weapon:"):
+        weapon = entry[len("weapon:"):]
+        related.add("aspectSelection:" + weapon)
+        related.update("aspect:" + aspect for aspect in _WEAPONS.get(weapon, ()))
+    elif entry.startswith("aspect:"):
+        aspect = entry[len("aspect:"):]
+        weapon = _ASPECT_PARENT.get(aspect)
+        if weapon:
+            related.update(("weapon:" + weapon, "aspectSelection:" + weapon))
+    elif entry.startswith("aspectSelection:"):
+        weapon = entry[len("aspectSelection:"):]
+        related.add("weapon:" + weapon)
+        selected = next(
+            (intent["after"] for intent in own if intent["id"] == entry), None
+        )
+        if selected:
+            related.add("aspect:" + selected)
+    elif entry == "familiarSelection":
+        selected = next(
+            (intent["after"] for intent in own if intent["id"] == entry), None
+        )
+        if selected:
+            related.add("familiar:" + selected)
+    elif entry.startswith("familiar:"):
+        related.add("familiarSelection")
+    return _action_ids(own, related)
+
+
 def _state(root):
     state = root["GameState"]
     if not isinstance(state, LuaTable):
@@ -605,7 +651,10 @@ def validate_batch(root, intents):
     for intent in own:
         entry = intent["id"]
         if current.get(entry) != intent["after"]:
-            raise ValueError("Save Editor equipment changes conflict.")
+            raise SaveEquipmentBatchValidationError(
+                "Save Editor equipment changes conflict.",
+                _conflicting_action_ids(entry, own),
+            )
         if entry.startswith("weapon:"):
             affected_weapons.add(entry[len("weapon:"):])
         elif entry.startswith("aspect:"):
@@ -624,14 +673,34 @@ def validate_batch(root, intents):
             key = "aspect:" + aspect
             if key in current:
                 if not owned and current[key] > 0:
-                    raise ValueError("Save Editor locked weapon has acquired aspects.")
+                    related = {"weapon:" + weapon, key}
+                    raise SaveEquipmentBatchValidationError(
+                        "Save Editor locked weapon has acquired aspects.",
+                        _action_ids(own, related),
+                    )
                 if owned and aspect in _DEFAULT_ASPECTS and current[key] < 1:
-                    raise ValueError("Save Editor unlocked weapon lacks default aspect.")
+                    related = {"weapon:" + weapon, key}
+                    raise SaveEquipmentBatchValidationError(
+                        "Save Editor unlocked weapon lacks default aspect.",
+                        _action_ids(own, related),
+                    )
         selected = current.get("aspectSelection:" + weapon)
         if selected and (not owned or current.get("aspect:" + selected, 0) == 0):
-            raise ValueError("Save Editor selected aspect is not purchased.")
+            related = {
+                "weapon:" + weapon,
+                "aspectSelection:" + weapon,
+                "aspect:" + selected,
+            }
+            raise SaveEquipmentBatchValidationError(
+                "Save Editor selected aspect is not purchased.",
+                _action_ids(own, related),
+            )
 
     if familiars_changed:
         familiar = current.get("familiarSelection")
         if familiar and current.get("familiar:" + familiar) is not True:
-            raise ValueError("Save Editor equipped familiar must be unlocked.")
+            related = {"familiarSelection", "familiar:" + familiar}
+            raise SaveEquipmentBatchValidationError(
+                "Save Editor equipped familiar must be unlocked.",
+                _action_ids(own, related),
+            )

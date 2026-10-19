@@ -35,7 +35,7 @@ for raw in sys.stdin:
  if command=='status': time.sleep(.20)
  if command=='set_resource':
   if params['amount']==888:
-   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':14,'gameID':args.game,'ok':False,
+   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':15,'gameID':args.game,'ok':False,
                      'error':{'code':'fixture_rejected','presentation':'hades2.error.exactNotEligible'}}),flush=True)
    continue
   if params['resource']=='Money': state['money']=params['amount']
@@ -58,7 +58,7 @@ for raw in sys.stdin:
  if command=='set_chaos_gate_desired': state['chaosGateProbability']=params['probability']
  if command=='load_profile': state['money']=200
  if command=='disconnect': state['connected']=False
- print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':14,'gameID':args.game,'ok':True,'result':state}),flush=True)
+ print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':15,'gameID':args.game,'ok':True,'result':state}),flush=True)
 """
 HARNESS = r"""
 import AppKit

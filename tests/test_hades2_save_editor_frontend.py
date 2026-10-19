@@ -29,12 +29,57 @@ p = argparse.ArgumentParser(); p.add_argument('--game', required=True); args = p
 log_path = pathlib.Path(__file__).with_suffix('.commands.jsonl')
 resource_value = 123
 pending_value = None
+pending_entry_id = None
+pending_operation = None
 opened_summary = None
 workspace_number = 0
 omit_first_target = False
 manual_inventory_count = 0
 apply_count = 0
 detail_counts = {}
+
+def staged_result():
+    if pending_value is None or pending_entry_id is None or pending_operation is None:
+        return {
+            'count': 0, 'changes': [],
+            'actionCount': 0, 'effectCount': 0, 'physicalChangeCount': 0,
+            'actions': [],
+        }
+    change = {
+        'id': pending_entry_id,
+        'domain': 'resources',
+        'rawId': 'MetaCurrency',
+        'operation': pending_operation,
+        'before': resource_value,
+        'after': pending_value,
+    }
+    return {
+        'count': 1,
+        'changes': [change],
+        'actionCount': 1,
+        'effectCount': 0,
+        'physicalChangeCount': 1,
+        'actions': [{
+            'id': pending_entry_id,
+            'entryId': pending_entry_id,
+            'entityId': 'entry:' + pending_entry_id,
+            'entityName': 'Ashes',
+            'domain': 'resources',
+            'rawId': 'MetaCurrency',
+            'name': 'Ashes',
+            'englishName': 'Ashes',
+            'operation': pending_operation,
+            'before': resource_value,
+            'after': pending_value,
+            'valueType': 'integer',
+            'mutationKinds': ['set'],
+            'constraints': {'min': 0, 'max': 999999, 'integer': True},
+            'choices': [],
+            'choiceNames': {},
+            'effects': [],
+        }],
+    }
+
 for raw in sys.stdin:
     req = json.loads(raw)
     with log_path.open('a', encoding='utf-8') as handle:
@@ -126,6 +171,17 @@ for raw in sys.stdin:
                     'constraints': {'min': 0, 'max': 999999, 'integer': True},
                     'state': 'observed', 'reasonCode': 'editable',
                 }]
+                if not term:
+                    items.append({
+                        'id': 'resource:GiftPoints', 'domain': 'resources',
+                        'rawId': 'GiftPoints',
+                        'path': ['GameState', 'Resources', 'GiftPoints'],
+                        'name': 'Nectar', 'englishName': 'Nectar',
+                        'value': 7, 'valueType': 'integer',
+                        'editable': True, 'mutationKinds': ['set'],
+                        'constraints': {'min': 0, 'max': 999999, 'integer': True},
+                        'state': 'observed', 'reasonCode': 'editable',
+                    })
             elif scope in ('all', 'story') and ('nemesis' in term or '复仇' in term):
                 items = [{
                     'id': 'interaction:NPC_Nemesis_01', 'domain': 'relationships',
@@ -429,33 +485,38 @@ for raw in sys.stdin:
             }],
         }
     elif command == 'save_editor_stage':
+        if req['params']['value'] == 445:
+            print(json.dumps({
+                'type': 'result',
+                'id': req['id'],
+                'protocolVersion': 6,
+                'moduleProtocolVersion': 15,
+                'gameID': args.game,
+                'ok': False,
+                'error': {
+                    'code': 'invalid_request',
+                    'presentation': 'hades2.saveEditor.error.invalidMutation',
+                    'arguments': [],
+                },
+            }), flush=True)
+            continue
+        pending_entry_id = req['params']['entryId']
+        pending_operation = req['params']['operation']
         pending_value = req['params']['value']
-        result = {
-            'count': 1,
-            'changes': [{
-                'id': req['params']['entryId'],
-                'domain': 'resources',
-                'rawId': 'MetaCurrency',
-                'operation': req['params']['operation'],
-                'before': resource_value,
-                'after': pending_value,
-            }],
-        }
+        result = staged_result()
+    elif command == 'save_editor_unstage':
+        if req['params']['entryId'] == pending_entry_id:
+            pending_value = None
+            pending_entry_id = None
+            pending_operation = None
+        result = staged_result()
     elif command == 'save_editor_review':
-        result = {
-            'count': 1,
-            'changes': [{
-                'id': 'resource:MetaCurrency',
-                'domain': 'resources',
-                'rawId': 'MetaCurrency',
-                'operation': 'set',
-                'before': resource_value,
-                'after': pending_value,
-            }],
-        }
+        result = staged_result()
     elif command == 'save_editor_cancel':
         pending_value = None
-        result = {'count': 0, 'changes': []}
+        pending_entry_id = None
+        pending_operation = None
+        result = staged_result()
     elif command == 'save_editor_apply':
         apply_count += 1
         if pending_value == 600:
@@ -463,7 +524,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 14,
+                'moduleProtocolVersion': 15,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -476,6 +537,8 @@ for raw in sys.stdin:
             continue
         resource_value = pending_value
         pending_value = None
+        pending_entry_id = None
+        pending_operation = None
         result = {
             'applied': True,
             'changeCount': 1,
@@ -491,7 +554,7 @@ for raw in sys.stdin:
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 14,
+        'moduleProtocolVersion': 15,
         'gameID': args.game,
         'ok': True,
         'result': result,
@@ -542,6 +605,22 @@ func commands(at url: URL) -> [[String: Any]] {
 
 func fields(_ view: NSView) -> [NSTextField] {
     (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+}
+
+final class SaveUnstageAction: NSObject {
+    let model: Hades2SaveEditorModel
+    let entryID: String
+    var presses = 0
+
+    init(model: Hades2SaveEditorModel, entryID: String) {
+        self.model = model
+        self.entryID = entryID
+    }
+
+    @objc(removeClicked:) func clicked(_ sender: Any?) {
+        presses += 1
+        model.unstage(entryID: entryID)
+    }
 }
 
 @main
@@ -669,7 +748,7 @@ struct Main {
             fail("Save Editor domain contract was not preserved: \(model.availableDomains)")
         }
         if model.selectedDomain != .entities { fail("Save Editor did not open on entity results") }
-        if model.total != 1 || model.items.count != 1 || model.entityResults.count != 1 { fail("initial entity page was not loaded") }
+        if model.total != 2 || model.items.count != 2 || model.entityResults.count != 2 { fail("initial entity page was not loaded") }
         if model.items[0].rawID != "MetaCurrency" || model.items[0].displayName != "Ashes" {
             fail("discovery resource row was not decoded")
         }
@@ -684,11 +763,12 @@ struct Main {
 
         // Primary Save editing must be possible directly from the first result.
         // No category expansion, entity selection or inspector activation is needed.
-        func inlineValueField() -> NSTextField? {
+        func inlineField(_ value: String) -> NSTextField? {
             NSApp.windows.compactMap(\.contentView).flatMap(fields).first { field in
-                field.isEditable && field.isEnabled && field.stringValue == "123"
+                field.isEditable && field.isEnabled && field.stringValue == value
             }
         }
+        func inlineValueField() -> NSTextField? { inlineField("123") }
         pumpUntil(timeout: 2.0) { inlineValueField() != nil }
         if inlineValueField() == nil {
             fail("The initial Save result requires an extra entity selection before editing")
@@ -739,19 +819,19 @@ struct Main {
         editorWindow.makeFirstResponder(nil)
         pumpUntil { model.pendingCount == 1 && !model.busy }
         editorWindow.close()
-        if model.pendingCount != 1 || model.pendingChanges.count != 1 {
-            fail("staged change was not projected into review state")
+        if model.pendingCount != 1 || model.pendingActions.count != 1 {
+            fail("staged action was not projected into review state")
         }
-        let change = model.pendingChanges[0]
-        if model.displayName(for: change) != "Ashes" {
-            fail("review lost the semantic name for a staged entry")
+        let action = model.pendingActions[0]
+        if action.name != "Ashes" {
+            fail("review lost the semantic name for a staged action")
         }
-        if change.entryID != "resource:MetaCurrency"
-            || change.rawID != "MetaCurrency"
-            || change.operation != "set"
-            || change.before != AnyHashable(123)
-            || change.after != AnyHashable(500) {
-            fail("staged before/after change was decoded incorrectly: \(change)")
+        if action.entryID != "resource:MetaCurrency"
+            || action.rawID != "MetaCurrency"
+            || action.operation != "set"
+            || action.before != AnyHashable(123)
+            || action.after != AnyHashable(500) {
+            fail("staged before/after action was decoded incorrectly: \(action)")
         }
         if model.items[0].value != AnyHashable(123) {
             fail("staging mutated the loaded source row before Apply")
@@ -774,8 +854,8 @@ struct Main {
 
         model.review()
         pump(0.20)
-        if model.pendingCount != 1 || model.pendingChanges.first?.after != AnyHashable(500) {
-            fail("explicit review did not restore authoritative pending changes")
+        if model.pendingCount != 1 || model.pendingActions.first?.after != AnyHashable(500) {
+            fail("explicit review did not restore authoritative pending action")
         }
         let reviewedCommands = commands(at: commandLog)
         if reviewedCommands.last?["command"] as? String != "save_editor_review" {
@@ -784,11 +864,29 @@ struct Main {
 
         model.cancel()
         pump(0.20)
-        if model.pendingCount != 0 || !model.pendingChanges.isEmpty {
+        if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("cancel did not clear the authoritative pending batch")
         }
         if commands(at: commandLog).last?["command"] as? String != "save_editor_cancel" {
             fail("cancel did not cross the Save Editor Host command seam")
+        }
+
+        // Keep an unrelated invalid draft in a second actual Save row. Removing
+        // the last staged action below must preserve this correction in place.
+        guard let unrelatedDraftField = inlineField("7"),
+              let unrelatedDraftWindow = unrelatedDraftField.window,
+              unrelatedDraftWindow.makeFirstResponder(unrelatedDraftField),
+              let unrelatedDraftEditor = unrelatedDraftField.currentEditor() as? NSTextView else {
+            fail("Could not edit the unrelated Save field")
+        }
+        unrelatedDraftEditor.selectAll(nil)
+        unrelatedDraftEditor.insertText("3.5", replacementRange: unrelatedDraftEditor.selectedRange())
+        unrelatedDraftWindow.makeFirstResponder(nil)
+        pump(0.15)
+        if model.pendingCount != 0
+            || model.failure?.key != "hades2.saveEditor.invalidDraft"
+            || unrelatedDraftField.stringValue != "3.5" {
+            fail("Unrelated invalid draft was not retained before per-item removal")
         }
 
         // Edit the actual initially rendered Save result, not a detached
@@ -802,19 +900,104 @@ struct Main {
         editor.selectAll(nil)
         editor.insertText("430", replacementRange: editor.selectedRange())
         sheet.makeFirstResponder(nil)
-        pumpUntil { model.pendingChanges.first?.after == AnyHashable(430) && !model.busy }
-        if model.pendingChanges.first?.after != AnyHashable(430) ||
+        pumpUntil { model.pendingActions.first?.after == AnyHashable(430) && !model.busy }
+        if model.pendingActions.first?.after != AnyHashable(430) ||
             commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
             fail("Direct Save result editing did not stage on blur")
         }
-        model.cancel()
+
+        // A backend-refused but syntactically valid edit must not strand the
+        // real inline field on an unacknowledged local value.
+        guard sheet.makeFirstResponder(inPlace),
+              let rejectedEditor = inPlace.currentEditor() as? NSTextView else {
+            fail("Could not refocus inline Save field for stage-refusal coverage")
+        }
+        rejectedEditor.selectAll(nil)
+        rejectedEditor.insertText("445", replacementRange: rejectedEditor.selectedRange())
+        sheet.makeFirstResponder(nil)
+        pumpUntil {
+            !model.busy
+                && model.failure?.key == "hades2.saveEditor.error.invalidMutation"
+                && inPlace.stringValue == "430"
+        }
+        if model.pendingActions.first?.after != AnyHashable(430)
+            || inPlace.stringValue != "430" {
+            fail("Rejected stage left a misleading inline value or changed pending intent")
+        }
+
+        // Exercise the same basket action data through real native controls.
+        // TrainerTextField owns edit completion; NSButton owns the explicit
+        // per-action removal click, and both cross the Host command seam.
+        guard let basketAction = model.pendingActions.first else {
+            fail("Changes basket did not expose the staged action")
+        }
+        var basketDraft = String(describing: basketAction.after?.base ?? "")
+        let basketHost = NSHostingView(rootView: TrainerTextField(
+            title: "Value",
+            text: Binding(
+                get: { basketDraft },
+                set: { basketDraft = $0 }
+            ),
+            onCommit: { edit in
+                model.completeTextEdit(
+                    basketAction.editorEntry,
+                    text: edit.text,
+                    changed: edit.changed
+                )
+            }
+        ))
+        let basketWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 260, height: 80),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        basketWindow.contentView = basketHost
+        basketWindow.orderFront(nil)
+        pumpUntil { fields(basketHost).first?.stringValue == "430" }
+        guard let basketField = fields(basketHost).first,
+              basketWindow.makeFirstResponder(basketField),
+              let basketEditor = basketField.currentEditor() as? NSTextView else {
+            fail("Staged action was not editable through the native basket field")
+        }
+        basketEditor.selectAll(nil)
+        basketEditor.insertText("440", replacementRange: basketEditor.selectedRange())
+        basketWindow.makeFirstResponder(nil)
+        pumpUntil {
+            model.pendingActions.first?.after == AnyHashable(440) && !model.busy
+        }
+        basketWindow.close()
+        if model.pendingActions.first?.after != AnyHashable(440)
+            || commands(at: commandLog).last?["command"] as? String != "save_editor_stage" {
+            fail("Native basket field did not revise the authoritative staged action")
+        }
+
+        let removeTarget = SaveUnstageAction(
+            model: model,
+            entryID: "resource:MetaCurrency"
+        )
+        let removeButton = NSButton(
+            title: "Remove change",
+            target: removeTarget,
+            action: NSSelectorFromString("removeClicked:")
+        )
+        removeButton.performClick(nil)
         pumpUntil { model.pendingCount == 0 && !model.busy }
+        if removeTarget.presses != 1
+            || !model.pendingActions.isEmpty
+            || commands(at: commandLog).last?["command"] as? String != "save_editor_unstage" {
+            fail("Native per-action remove control did not unstage exactly one action")
+        }
+        pump(0.15)
+        if inlineField("3.5") == nil {
+            fail("Removing the last staged action discarded an unrelated invalid field draft")
+        }
 
         model.stage(entryID: "resource:MetaCurrency", operation: "set", value: 500)
-        pump(0.20)
+        pumpUntil { !model.busy && model.pendingCount == 1 }
         model.apply()
         pump(0.35)
-        if model.pendingCount != 0 || !model.pendingChanges.isEmpty {
+        if model.pendingCount != 0 || !model.pendingActions.isEmpty {
             fail("successful Apply did not clear the committed batch")
         }
         if model.items.first?.value != AnyHashable(500) {

@@ -81,8 +81,61 @@ struct Hades2SaveEditorChange: Identifiable, Equatable {
     let name: String?
     let before: AnyHashable?
     let after: AnyHashable?
+    let beforeDisplay: String?
+    let afterDisplay: String?
 
     var id: String { entryID }
+}
+
+struct Hades2SaveEditorAction: Identifiable, Equatable {
+    let entryID: String
+    let entityID: String
+    let entityName: String
+    let domain: String
+    let rawID: String
+    let name: String
+    let englishName: String
+    let operation: String
+    let before: AnyHashable?
+    let after: AnyHashable?
+    let valueType: String
+    let mutationKinds: [String]
+    let constraints: Hades2SaveEditorConstraints?
+    let choices: [String]
+    let choiceNames: [String: String]
+    let effects: [Hades2SaveEditorChange]
+
+    var id: String { entryID }
+
+    var editorEntry: Hades2SaveEditorEntry {
+        Hades2SaveEditorEntry(
+            id: entryID,
+            domain: domain,
+            rawID: rawID,
+            path: [],
+            displayName: name,
+            englishName: englishName,
+            value: before,
+            valueType: valueType,
+            editable: true,
+            mutationKinds: mutationKinds,
+            group: nil,
+            entityID: entityID,
+            entityName: entityName,
+            choices: choices,
+            choiceNames: choiceNames,
+            constraints: constraints,
+            childCount: nil,
+            pathAmbiguous: false,
+            investigationStatus: nil,
+            investigationSnippet: nil,
+            investigationSourceStatus: nil,
+            investigationReason: nil,
+            discoveryState: nil,
+            discoveryReasonCode: nil,
+            discoveryReason: nil
+        )
+    }
 }
 
 struct Hades2SaveEditorApplyReceipt: Equatable {
@@ -345,12 +398,16 @@ final class Hades2SaveEditorModel: ObservableObject {
     @Published private(set) var selectedInvestigationID: String?
     @Published private(set) var investigationDetail: Hades2SaveInvestigationDetail?
     @Published private(set) var investigationSourceStatus = "missing"
-    @Published private(set) var pendingChanges: [Hades2SaveEditorChange] = []
+    @Published private(set) var pendingActions: [Hades2SaveEditorAction] = []
+    @Published private(set) var pendingEffectCount = 0
+    @Published private(set) var pendingPhysicalChangeCount = 0
+    @Published private(set) var editRevision = 0
+    private(set) var reconciledEntryID: String?
     @Published private(set) var busy = false
     @Published private(set) var failure: TrainerTextToken?
     @Published private(set) var lastApplyReceipt: Hades2SaveEditorApplyReceipt?
 
-    var pendingCount: Int { pendingChanges.count }
+    var pendingCount: Int { pendingActions.count }
 
     private let api: Hades2API
     private var language: TrainerPresentationLanguage = .zhCN
@@ -420,7 +477,9 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.restoreLoadedSourceSelection()
                 return
             }
-            self.pendingChanges = []
+            self.pendingActions = []
+            self.pendingEffectCount = 0
+            self.pendingPhysicalChangeCount = 0
             self.items = []
             self.entityResults = []
             self.knownDisplayNames = [:]
@@ -460,6 +519,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         self.language = language
         guard !profile.isEmpty else { return }
         query(offset: offset)
+        if !pendingActions.isEmpty { review() }
     }
 
     private func invalidateDetail() {
@@ -795,29 +855,68 @@ final class Hades2SaveEditorModel: ObservableObject {
         return String(describing: value)
     }
 
+    private func reconcileEdit(_ entryID: String?) {
+        reconciledEntryID = entryID
+        editRevision += 1
+    }
+
     func stage(entryID: String, operation: String, value: Any?) {
         lastApplyReceipt = nil
+        let requestedLanguage = language
         perform(
-            .saveEditorStage(entryID: entryID, operation: operation, value: value),
+            .saveEditorStage(
+                entryID: entryID,
+                operation: operation,
+                value: value,
+                language: requestedLanguage.rawValue
+            ),
             operation: "hades2.saveEditor.operation.stage",
             announceSuccess: false
         ) { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self else { return }
+            defer { self.reconcileEdit(entryID) }
+            guard reply.success, let result = reply.result else { return }
             guard self.applyReview(result) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
             self.failure = nil
+            if self.language != requestedLanguage { self.review() }
+        }
+    }
+
+    func unstage(entryID: String) {
+        let requestedLanguage = language
+        perform(
+            .saveEditorUnstage(entryID: entryID, language: requestedLanguage.rawValue),
+            operation: "hades2.saveEditor.operation.unstage",
+            announceSuccess: false
+        ) { [weak self] reply in
+            guard let self else { return }
+            defer { self.reconcileEdit(entryID) }
+            guard reply.success, let result = reply.result else { return }
+            guard self.applyReview(result) else {
+                self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
+                return
+            }
+            self.failure = nil
+            if self.language != requestedLanguage { self.review() }
         }
     }
 
     func review() {
+        let requestedLanguage = language
+        let workspace = workspaceID
         perform(
-            .saveEditorReview,
+            .saveEditorReview(language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.review",
-            announceSuccess: false
+            announceSuccess: false,
+            occupy: false
         ) { [weak self] reply in
-            guard let self, reply.success, let result = reply.result else { return }
+            guard let self,
+                  self.workspaceID == workspace,
+                  self.language == requestedLanguage,
+                  reply.success, let result = reply.result else { return }
             guard self.applyReview(result) else {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
@@ -827,8 +926,9 @@ final class Hades2SaveEditorModel: ObservableObject {
     }
 
     func cancel() {
+        let requestedLanguage = language
         perform(
-            .saveEditorCancel,
+            .saveEditorCancel(language: requestedLanguage.rawValue),
             operation: "hades2.saveEditor.operation.cancel",
             announceSuccess: false
         ) { [weak self] reply in
@@ -837,12 +937,13 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
+            self.reconcileEdit(nil)
             self.failure = nil
         }
     }
 
     func apply() {
-        guard !pendingChanges.isEmpty, hasWriteTarget else { return }
+        guard !pendingActions.isEmpty, hasWriteTarget else { return }
         let appliedOffset = offset
         let source = sourceRootID + "/" + sourceRelativePath
         let target = selectedTargetID
@@ -860,7 +961,10 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.failure = TrainerTextToken(key: "hades2.saveEditor.error.invalidResponse")
                 return
             }
-            self.pendingChanges = []
+            self.pendingActions = []
+            self.pendingEffectCount = 0
+            self.pendingPhysicalChangeCount = 0
+            self.reconcileEdit(nil)
             self.lastApplyReceipt = receipt
             self.failure = nil
             self.query(offset: appliedOffset)
@@ -954,30 +1058,92 @@ final class Hades2SaveEditorModel: ObservableObject {
     private func applyReview(_ result: [String: Any]) -> Bool {
         guard let count = Self.intValue(result["count"]),
               let rows = result["changes"] as? [[String: Any]],
-              count == rows.count
+              let actionCount = Self.intValue(result["actionCount"]),
+              let effectCount = Self.intValue(result["effectCount"]),
+              let physicalChangeCount = Self.intValue(result["physicalChangeCount"]),
+              let rawActions = result["actions"] as? [[String: Any]],
+              count == rows.count,
+              physicalChangeCount == rows.count,
+              physicalChangeCount == actionCount + effectCount,
+              actionCount == rawActions.count
         else { return false }
 
-        var changes: [Hades2SaveEditorChange] = []
-        changes.reserveCapacity(rows.count)
-        for row in rows {
+        func decodeChange(_ row: [String: Any]) -> Hades2SaveEditorChange? {
             guard let entryID = row["id"] as? String,
                   let domain = row["domain"] as? String,
                   let rawID = row["rawId"] as? String,
                   let operation = row["operation"] as? String
-            else { return false }
-            changes.append(
-                Hades2SaveEditorChange(
-                    entryID: entryID,
-                    domain: domain,
-                    rawID: rawID,
-                    operation: operation,
-                    name: row["name"] as? String,
-                    before: Self.hashableScalar(row["before"]),
-                    after: Self.hashableScalar(row["after"])
-                )
+            else { return nil }
+            return Hades2SaveEditorChange(
+                entryID: entryID,
+                domain: domain,
+                rawID: rawID,
+                operation: operation,
+                name: row["name"] as? String,
+                before: Self.hashableScalar(row["before"]),
+                after: Self.hashableScalar(row["after"]),
+                beforeDisplay: row["beforeDisplay"] as? String,
+                afterDisplay: row["afterDisplay"] as? String
             )
         }
-        pendingChanges = changes
+
+        let changes = rows.compactMap(decodeChange)
+        guard changes.count == rows.count else { return false }
+
+        var actions: [Hades2SaveEditorAction] = []
+        var decodedEffectCount = 0
+        for row in rawActions {
+            guard let entryID = row["entryId"] as? String,
+                  let identity = row["id"] as? String, identity == entryID,
+                  let entityID = row["entityId"] as? String, !entityID.isEmpty,
+                  let entityName = row["entityName"] as? String, !entityName.isEmpty,
+                  let domain = row["domain"] as? String,
+                  let rawID = row["rawId"] as? String,
+                  let name = row["name"] as? String, !name.isEmpty,
+                  let englishName = row["englishName"] as? String, !englishName.isEmpty,
+                  let operation = row["operation"] as? String,
+                  let valueType = row["valueType"] as? String,
+                  let mutationKinds = row["mutationKinds"] as? [String],
+                  let rawEffects = row["effects"] as? [[String: Any]]
+            else { return false }
+
+            let constraints: Hades2SaveEditorConstraints?
+            if let raw = row["constraints"] as? [String: Any], !raw.isEmpty {
+                constraints = Hades2SaveEditorConstraints(
+                    minimum: Self.doubleValue(raw["min"]),
+                    maximum: Self.doubleValue(raw["max"]),
+                    integer: raw["integer"] as? Bool ?? false
+                )
+            } else {
+                constraints = nil
+            }
+            let effects = rawEffects.compactMap(decodeChange)
+            guard effects.count == rawEffects.count else { return false }
+            decodedEffectCount += effects.count
+            actions.append(Hades2SaveEditorAction(
+                entryID: entryID,
+                entityID: entityID,
+                entityName: entityName,
+                domain: domain,
+                rawID: rawID,
+                name: name,
+                englishName: englishName,
+                operation: operation,
+                before: Self.hashableScalar(row["before"]),
+                after: Self.hashableScalar(row["after"]),
+                valueType: valueType,
+                mutationKinds: mutationKinds,
+                constraints: constraints,
+                choices: row["choices"] as? [String] ?? [],
+                choiceNames: row["choiceNames"] as? [String: String] ?? [:],
+                effects: effects
+            ))
+        }
+        guard decodedEffectCount == effectCount else { return false }
+
+        pendingActions = actions
+        pendingEffectCount = effectCount
+        pendingPhysicalChangeCount = physicalChangeCount
         return true
     }
 

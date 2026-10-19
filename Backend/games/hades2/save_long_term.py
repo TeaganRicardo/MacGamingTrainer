@@ -481,6 +481,7 @@ def linked_changes(root, intents):
     state = _state(root)
     changes = []
     cards = state.get("MetaUpgradeState")
+    direct_ids = {intent["id"] for intent in intents}
     for intent in intents:
         entry = intent["id"]
         if entry.startswith("card:") and entry.endswith(":Unlocked") and intent["after"] is False:
@@ -494,7 +495,10 @@ def linked_changes(root, intents):
                         "name": "Arcana equipped · " + name,
                         "operation": "set", "before": True, "after": False,
                     })
-                if int(card.get("Level", 1)) != 1:
+                if (
+                    int(card.get("Level", 1)) != 1
+                    and "card:{}:Level".format(name) not in direct_ids
+                ):
                     changes.append({
                         "id": "linked:card:{}:Level".format(name),
                         "domain": "progression", "rawId": name,

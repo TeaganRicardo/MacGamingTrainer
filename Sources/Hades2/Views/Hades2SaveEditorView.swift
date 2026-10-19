@@ -37,6 +37,7 @@ struct Hades2SaveEditorView: View {
     @State private var section: Hades2SaveWorkbenchSection = .all
     @State private var drafts: [String: String] = [:]
     @State private var reviewExpanded = false
+    @State private var expandedEffects: Set<String> = []
     @State private var confirmingSource = false
 
     init(model: Hades2SaveEditorModel) {
@@ -147,12 +148,21 @@ struct Hades2SaveEditorView: View {
         }
         .onChange(of: model.pendingCount) { previous, current in
             if previous > 0 && current == 0 {
-                drafts.removeAll()
+                expandedEffects.removeAll()
                 reviewExpanded = false
+            }
+        }
+        .onChange(of: model.editRevision) { _, _ in
+            if let entryID = model.reconciledEntryID {
+                drafts.removeValue(forKey: entryID)
+                expandedEffects.remove(entryID)
+            } else {
+                drafts.removeAll()
             }
         }
         .onChange(of: model.workspaceID) { _, _ in
             drafts.removeAll()
+            expandedEffects.removeAll()
             section = .all
             reviewExpanded = false
         }
@@ -448,7 +458,9 @@ struct Hades2SaveEditorView: View {
     }
 
     @ViewBuilder
-    private func editorControl(_ entry: Hades2SaveEditorEntry) -> some View {
+    private func editorControl(
+        _ entry: Hades2SaveEditorEntry, identity: String? = nil
+    ) -> some View {
         let workspaceID = model.workspaceID
         let draft = draftBinding(for: entry)
         if entry.valueType == "boolean" {
@@ -488,7 +500,7 @@ struct Hades2SaveEditorView: View {
                     return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)
                 }
             )
-            .id(entry.id)
+            .id(identity ?? entry.id)
             .disabled(model.busy)
             .frame(width: 175)
         }
@@ -656,13 +668,20 @@ struct Hades2SaveEditorView: View {
     private var reviewDrawer: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
-                Text(text("hades2.saveEditor.review"))
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text("hades2.saveEditor.review"))
+                        .font(.headline)
+                    Text(text("hades2.saveEditor.basket.summary", arguments: [
+                        String(model.pendingCount),
+                        String(model.pendingEffectCount),
+                        String(model.pendingPhysicalChangeCount),
+                    ]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button(text("hades2.saveEditor.cancelChanges")) { model.cancel() }
                     .disabled(model.busy)
-                // Reviewing the full staged diff is the confirmation step.
-                // Applying from this panel is one explicit recoverable transaction.
                 Button(text("hades2.saveEditor.apply")) { model.apply() }
                     .buttonStyle(.borderedProminent)
                     .disabled(model.busy || !model.hasWriteTarget)
@@ -673,20 +692,9 @@ struct Hades2SaveEditorView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             ScrollView {
-                LazyVStack(spacing: 7) {
-                    ForEach(model.pendingChanges) { change in
-                        HStack(spacing: 9) {
-                            Text(model.displayName(for: change))
-                                .font(.callout.weight(.medium))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(reviewValue(change.before, for: change))
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right")
-                                .foregroundStyle(.secondary)
-                            Text(reviewValue(change.after, for: change))
-                        }
-                        .font(.caption.monospacedDigit())
+                LazyVStack(spacing: 8) {
+                    ForEach(model.pendingActions) { action in
+                        stagedAction(action)
                     }
                 }
             }
@@ -694,6 +702,87 @@ struct Hades2SaveEditorView: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .trainerSurface(.panel)
+    }
+
+    @ViewBuilder
+    private func stagedAction(_ action: Hades2SaveEditorAction) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 9) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(action.name)
+                        .font(.callout.weight(.medium))
+                        .lineLimit(1)
+                    if action.entityName != action.name {
+                        Text(action.entityName)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                editorControl(
+                    action.editorEntry,
+                    identity: "basket:" + action.entryID
+                )
+                Button {
+                    model.unstage(entryID: action.entryID)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .help(text("hades2.saveEditor.basket.remove"))
+                .accessibilityLabel(text("hades2.saveEditor.basket.remove"))
+                .disabled(model.busy)
+            }
+            HStack(spacing: 6) {
+                Text(reviewValue(action.before, for: action))
+                .foregroundStyle(.secondary)
+                Image(systemName: "arrow.right")
+                    .foregroundStyle(.secondary)
+                Text(reviewValue(action.after, for: action))
+                Spacer()
+                if !action.effects.isEmpty {
+                    Button(text("hades2.saveEditor.basket.linkedEffects", arguments: [
+                        String(action.effects.count)
+                    ])) {
+                        if expandedEffects.contains(action.id) {
+                            expandedEffects.remove(action.id)
+                        } else {
+                            expandedEffects.insert(action.id)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .font(.caption.monospacedDigit())
+            if expandedEffects.contains(action.id) {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(action.effects) { effect in
+                        HStack(spacing: 6) {
+                            Text(effect.name ?? effect.rawID)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(effect.beforeDisplay ?? reviewValue(
+                                effect.before,
+                                operation: effect.operation,
+                                domain: effect.domain
+                            ))
+                            .foregroundStyle(.secondary)
+                            Image(systemName: "arrow.right")
+                                .foregroundStyle(.secondary)
+                            Text(effect.afterDisplay ?? reviewValue(
+                                effect.after,
+                                operation: effect.operation,
+                                domain: effect.domain
+                            ))
+                        }
+                        .font(.caption2.monospacedDigit())
+                    }
+                }
+                .padding(.leading, 12)
+            }
+        }
+        .padding(.vertical, 3)
     }
 
     private func applyReceipt(_ receipt: Hades2SaveEditorApplyReceipt) -> some View {
@@ -755,13 +844,22 @@ struct Hades2SaveEditorView: View {
     }
 
     private func reviewValue(
-        _ value: AnyHashable?, for change: Hades2SaveEditorChange
+        _ value: AnyHashable?, for action: Hades2SaveEditorAction
     ) -> String {
-        if change.operation == "setEnum", let raw = value?.base as? String {
+        if action.operation == "setEnum", let raw = value?.base as? String {
+            return action.choiceNames[raw] ?? enumTitle(raw)
+        }
+        return reviewValue(value, operation: action.operation, domain: action.domain)
+    }
+
+    private func reviewValue(
+        _ value: AnyHashable?, operation: String, domain: String
+    ) -> String {
+        if operation == "setEnum", let raw = value?.base as? String {
             return enumTitle(raw)
         }
         if let bool = value?.base as? Bool {
-            if change.domain == "dialogue" || change.domain == "flags" {
+            if domain == "dialogue" || domain == "flags" {
                 return text(bool ? "hades2.saveEditor.true" : "hades2.saveEditor.false")
             }
             return text(bool
@@ -771,16 +869,16 @@ struct Hades2SaveEditorView: View {
         return valueText(value)
     }
 
-    // Non-text controls project the acknowledged pending batch. A failed
-    // stage must never leave a selected value that the backend rejected.
+    // All controls project the backend-acknowledged requested action, including
+    // after the user changes search scope/page and the source row is reloaded.
     private func stagedValue(for entry: Hades2SaveEditorEntry) -> AnyHashable? {
-        model.pendingChanges.first(where: { $0.entryID == entry.id })?.after ?? entry.value
+        model.pendingActions.first(where: { $0.entryID == entry.id })?.after ?? entry.value
     }
 
     private func draftBinding(for entry: Hades2SaveEditorEntry) -> Binding<String> {
         let workspaceID = model.workspaceID
         return Binding(
-            get: { drafts[entry.id] ?? valueText(entry.value) },
+            get: { drafts[entry.id] ?? valueText(stagedValue(for: entry)) },
             set: { if model.workspaceID == workspaceID { drafts[entry.id] = $0 } }
         )
     }

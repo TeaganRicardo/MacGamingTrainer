@@ -412,18 +412,40 @@ def _save_editor_detail(raw):
     return {"entryId": entry_id, "language": language}
 
 
+def _save_editor_language(raw):
+    params = _params(raw)
+    language = params.get("language", "zh-CN")
+    if language not in ("en", "zh-CN"):
+        raise ValueError("Save Editor language is unsupported.")
+    return {"language": language}
+
+
 def _save_editor_stage(raw):
     params = _params(raw)
     entry_id = params.get("entryId")
     operation = params.get("operation")
+    language = params.get("language", "zh-CN")
     if not isinstance(entry_id, str) or not 1 <= len(entry_id) <= 512:
         raise ValueError("Save Editor mutation entry is invalid.")
     if operation not in SAVE_EDITOR_MUTATION_KINDS:
         raise ValueError("Save Editor mutation operation is invalid.")
-    result = {"entryId": entry_id, "operation": operation}
+    if language not in ("en", "zh-CN"):
+        raise ValueError("Save Editor language is unsupported.")
+    result = {"entryId": entry_id, "operation": operation, "language": language}
     if "value" in params:
         result["value"] = params["value"]
     return result
+
+
+def _save_editor_unstage(raw):
+    params = _params(raw)
+    entry_id = params.get("entryId")
+    language = params.get("language", "zh-CN")
+    if not isinstance(entry_id, str) or not 1 <= len(entry_id) <= 512:
+        raise ValueError("Save Editor staged action identity is invalid.")
+    if language not in ("en", "zh-CN"):
+        raise ValueError("Save Editor language is unsupported.")
+    return {"entryId": entry_id, "language": language}
 
 
 def _direct(method):
@@ -659,8 +681,21 @@ _COMMAND_SPECS = (
         validate=_save_editor_stage,
         invoke=_save_editor_stage_invoke,
     ),
-    _spec("save_editor_review", invoke=_direct("review_save_editor")),
-    _spec("save_editor_cancel", invoke=_direct("cancel_save_editor")),
+    _spec(
+        "save_editor_unstage",
+        validate=_save_editor_unstage,
+        invoke=lambda adapter, params: adapter.unstage_save_editor(params),
+    ),
+    _spec(
+        "save_editor_review",
+        validate=_save_editor_language,
+        invoke=lambda adapter, params: adapter.review_save_editor(params),
+    ),
+    _spec(
+        "save_editor_cancel",
+        validate=_save_editor_language,
+        invoke=lambda adapter, params: adapter.cancel_save_editor(params),
+    ),
     _spec("save_editor_apply", timeout=30.0, invoke=_direct("apply_save_editor")),
     _spec("list_profiles", invoke=_list_profiles),
     _spec("save_profile", invoke=_save_profile),
@@ -715,6 +750,11 @@ class Hades2CommandContract:
 
     @staticmethod
     def _as_presentation_key(error):
+        # Workspace batch-validation errors are ValueError-compatible so
+        # direct semantic callers retain the established exception contract.
+        # Preserve their already-resolved Hades key/arguments at the JSONL seam.
+        if getattr(error, "_hades2_presentation_ready", False):
+            return error
         key, arguments = presentation_for(str(error))
         if key is None:
             return error

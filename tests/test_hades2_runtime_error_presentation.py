@@ -146,7 +146,7 @@ else:
     raise AssertionError("Fixture stop timeout was not propagated")
 
 router = JsonlRequestRouter.__new__(JsonlRequestRouter)
-router.adapter = SimpleNamespace(game_id="hades2", module_protocol_version=14)
+router.adapter = SimpleNamespace(game_id="hades2", module_protocol_version=15)
 reply = router.error_reply("status", presented.code, presented.presentation,
                           diagnostic=presented.diagnostic, arguments=presented.arguments)
 assert reply["error"] == {

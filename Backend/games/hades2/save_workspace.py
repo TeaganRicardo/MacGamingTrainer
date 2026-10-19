@@ -5,14 +5,17 @@ query/mutation seam over one lossless Hades save document. Callers never need
 to receive the complete Lua tree just to browse or search it.
 """
 
+import copy
 import json
 import math
 import uuid
+from types import SimpleNamespace
 
 from . import save_equipment, save_long_term, save_narrative
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
+from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, LuaTable
 from .save_edit import Hades2SaveEditSession
@@ -93,6 +96,31 @@ SAVE_EDITOR_STATE_FILTERS = tuple(dict.fromkeys(
     (*SAVE_EDITOR_INVESTIGATION_FILTERS, *SAVE_EDITOR_DISCOVERY_FILTERS)
 ))
 
+_ACTIONABLE_BATCH_VALIDATION_MESSAGES = {
+    "Save Editor equipment changes conflict.": "equipment",
+    "Save Editor locked weapon has acquired aspects.": "equipment",
+    "Save Editor unlocked weapon lacks default aspect.": "equipment",
+    "Save Editor selected aspect is not purchased.": "equipment",
+    "Save Editor equipped familiar must be unlocked.": "familiar",
+    "Save Editor Arcana level is invalid.": "arcana",
+    "Save Editor equipped Arcana must be unlocked.": "arcana",
+    "Save Editor upgraded Arcana must be unlocked.": "arcana",
+    "Save Editor Arcana changes conflict.": "arcana",
+    "Save Editor linked changes conflict.": "all",
+}
+
+class _SaveEditorActionValidationError(ValueError):
+    """ValueError-compatible batch rejection with a Hades-owned presentation."""
+
+    def __init__(self, diagnostic, presentation, arguments):
+        super().__init__(diagnostic)
+        self.code = "invalid_request"
+        self.presentation = presentation
+        self.arguments = list(arguments)
+        self.diagnostic = diagnostic
+        self._hades2_presentation_ready = True
+
+
 
 def _page(offset, limit):
     if type(offset) is not int or offset < 0:
@@ -141,13 +169,14 @@ def _json_scalar(value):
 class Hades2SaveWorkspace:
     """One semantic workspace with independent, explicitly selected source/target."""
 
-    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "profile", "identifier")
+    __slots__ = ("_session", "_game_path", "_pending", "_investigation", "_presentation_language", "profile", "identifier")
 
     def __init__(self, session, profile, game_path=None):
         self._session = session
         self._game_path = game_path
         self._pending = {}
         self._investigation = None
+        self._presentation_language = "en"
         self.profile = profile
         self.identifier = uuid.uuid4().hex
 
@@ -1117,7 +1146,228 @@ class Hades2SaveWorkspace:
             return semantic
         raise ValueError("Save Editor entry is not writable.")
 
-    def stage(self, entry_id, operation, value=None):
+    def _pending_action_row(self, entry_id, language):
+        if language not in ("en", "zh-CN"):
+            raise ValueError("Save Editor language is unsupported.")
+        descriptor = self._descriptor(entry_id)
+        root = self.document.lua_state
+        prefix = entry_id.partition(":")[0]
+        if prefix == "resource":
+            rows = self._resource_rows(language)
+        elif prefix == "playerStat":
+            rows = self._player_stat_rows(language)
+        elif prefix in ("flag", "dialogue", "quest"):
+            rows = save_narrative.rows(
+                root, descriptor["domain"], language, game_path=self._game_path
+            )
+        elif prefix in ("interaction", "specialInteraction", "card", "objective"):
+            rows = save_long_term.rows(
+                root, descriptor["domain"], language, game_path=self._game_path
+            )
+        else:
+            rows = save_equipment.rows(
+                root, language, game_path=self._game_path
+            )
+        row = next((item for item in rows if item["id"] == entry_id), None)
+        if row is None:
+            # Presentation lookup must never widen mutation authority. A
+            # descriptor that resolved above may still lack a browse row only
+            # when its owning source is temporarily unavailable; keep the
+            # basket truthful with the stable descriptor identity.
+            row = {
+                "id": entry_id,
+                "name": entry_id,
+                "englishName": entry_id,
+                "entityId": "entry:" + entry_id,
+                "entityName": entry_id,
+                "valueType": descriptor.get("valueType", "unknown"),
+                "mutationKinds": list(descriptor["mutationKinds"]),
+                "constraints": descriptor.get("constraints", {}),
+                "choices": descriptor.get("choices", ()),
+                "choiceNames": {},
+            }
+        return descriptor, row
+
+    @staticmethod
+    def _same_linked_effect(left, right):
+        keys = ("id", "domain", "rawId", "operation", "before", "after")
+        return all(left.get(key) == right.get(key) for key in keys)
+
+    def _actionable_batch_error(self, error, intents, language):
+        """Keep combined-intent failures in Hades presentation with the actions involved."""
+        message = str(error)
+        category = _ACTIONABLE_BATCH_VALIDATION_MESSAGES.get(message)
+        if category is None:
+            return error
+        key, _ = presentation_for(message)
+        if key is None:
+            return error
+
+        intents = tuple(intents)
+        action_ids = set(getattr(error, "action_ids", ()) or ())
+        if action_ids:
+            relevant = [intent for intent in intents if intent["id"] in action_ids]
+        elif category == "equipment":
+            relevant = [intent for intent in intents if intent["domain"] == "weapons"]
+        elif category == "arcana":
+            relevant = [intent for intent in intents if intent["id"].startswith("card:")]
+        elif category == "familiar":
+            relevant = [
+                intent for intent in intents
+                if intent["id"].startswith("familiar:") or intent["id"] == "familiarSelection"
+            ]
+        else:
+            relevant = list(intents)
+
+        labels = []
+        for intent in relevant:
+            try:
+                _, row = self._pending_action_row(intent["id"], language)
+            except (KeyError, OSError, TypeError, ValueError):
+                row = {}
+            label = row.get("name") or row.get("englishName") or intent.get("rawId") or intent["id"]
+            entity = row.get("entityName")
+            if entity and entity != label:
+                label = entity + " · " + label
+            if label not in labels:
+                labels.append(label)
+
+        if not labels:
+            labels = ["当前暂存操作" if language == "zh-CN" else "the staged actions"]
+        separator = "、" if language == "zh-CN" else ", "
+        label_text = separator.join(labels[:4])
+        if len(labels) > 4:
+            label_text += "等" if language == "zh-CN" else ", …"
+        if len(label_text) > 240:
+            label_text = label_text[:237] + "…"
+        return _SaveEditorActionValidationError(message, key, (label_text,))
+
+    def _linked_change_rows(self, intents):
+        intents = tuple(intents)
+        rows = []
+        rows.extend(save_narrative.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_long_term.linked_changes(self.document.lua_state, intents))
+        rows.extend(save_equipment.linked_changes(self.document.lua_state, intents))
+        unique = {}
+        order = []
+        for row in rows:
+            identity = row["id"]
+            previous = unique.get(identity)
+            if previous is not None:
+                if not self._same_linked_effect(previous, row):
+                    raise ValueError("Save Editor linked changes conflict.")
+                continue
+            unique[identity] = row
+            order.append(identity)
+        return [unique[identity] for identity in order]
+
+    def _present_linked_effect(self, effect, language):
+        """Give a physical linked effect a user-facing game label.
+
+        The effect keeps its stable physical id/rawId for diagnostics, but the
+        primary Changes UI receives the same localized entity vocabulary as the
+        owning Save descriptors rather than a synthesized native identifier.
+        """
+        result = dict(effect)
+        identity = effect["id"]
+        root = self.document.lua_state
+
+        if identity.startswith("linked:card:"):
+            parts = identity.split(":")
+            if len(parts) == 4:
+                name, field = parts[2], parts[3]
+                rows = save_long_term.rows(
+                    root, "progression", language, game_path=self._game_path
+                )
+                if field == "Level":
+                    row = next(
+                        (item for item in rows if item["id"] == "card:{}:Level".format(name)),
+                        None,
+                    )
+                    if row is not None:
+                        result["name"] = row["name"]
+                        return result
+                row = next(
+                    (item for item in rows if item["id"] == "card:{}:Unlocked".format(name)),
+                    None,
+                )
+                if row is not None:
+                    entity = row.get("entityName") or row["name"]
+                    result["name"] = entity + (
+                        " · 已装备" if language == "zh-CN" else " · Equipped"
+                    )
+                    return result
+
+        if identity.startswith("linked:quest:"):
+            name = identity[len("linked:quest:"):]
+            rows = save_narrative.rows(
+                root, "progression", language, game_path=self._game_path
+            )
+            row = next(
+                (item for item in rows if item["id"] == "quest:" + name),
+                None,
+            )
+            if row is not None:
+                result["name"] = row["name"] + (
+                    " · 完成记录" if language == "zh-CN" else " · Completion history"
+                )
+                return result
+
+        if identity.startswith("linked:dialogue:"):
+            # Companion-owner identities are technical implementation detail.
+            # The originating action already names the scene; child rows only
+            # need to explain that another dialogue-history owner is affected.
+            result["name"] = (
+                "关联对话历史记录"
+                if language == "zh-CN"
+                else "Linked dialogue history record"
+            )
+            return result
+
+        if identity.startswith("linked:"):
+            target = identity[len("linked:"):]
+            rows = save_equipment.rows(
+                root, language, game_path=self._game_path
+            )
+            row = next((item for item in rows if item["id"] == target), None)
+            if row is not None:
+                result["name"] = row["name"]
+                if row.get("valueType") == "enum":
+                    choices = row.get("choiceNames") or {}
+                    before = effect.get("before")
+                    after = effect.get("after")
+                    if isinstance(before, str) and before in choices:
+                        result["beforeDisplay"] = choices[before]
+                    if isinstance(after, str) and after in choices:
+                        result["afterDisplay"] = choices[after]
+        return result
+
+    def _effects_by_action(self, intents, effects):
+        intents = tuple(intents)
+        grouped = {intent["id"]: [] for intent in intents}
+        if not effects:
+            return grouped
+
+        solo = {}
+        for intent in intents:
+            solo[intent["id"]] = {
+                row["id"]: row for row in self._linked_change_rows((intent,))
+            }
+
+        for effect in effects:
+            contributors = [
+                intent["id"] for intent in intents
+                if effect["id"] in solo[intent["id"]]
+                and self._same_linked_effect(effect, solo[intent["id"]][effect["id"]])
+            ]
+            # A combination-only effect has no single originating action.
+            # Attribute it to the last staged action that completed the current
+            # basket; every review recomputes this from authoritative intent.
+            owner = contributors[-1] if contributors else intents[-1]["id"]
+            grouped[owner].append(effect)
+        return grouped
+
+    def stage(self, entry_id, operation, value=None, language="en"):
         descriptor = self._descriptor(entry_id)
         if operation not in descriptor["mutationKinds"]:
             raise ValueError("Save Editor mutation is not allowed for this entry.")
@@ -1161,7 +1411,7 @@ class Hades2SaveWorkspace:
                         )
                     value = float(value)
         before = descriptor["before"]
-        previous = self._pending.get(entry_id)
+        snapshot = dict(self._pending)
         if value == before:
             self._pending.pop(entry_id, None)
         else:
@@ -1175,42 +1425,133 @@ class Hades2SaveWorkspace:
                 "after": value,
             }
         try:
-            return self.review()
+            return self.review(language=language)
         except Exception:
             # A rejected preview must not leave an invisible pending mutation.
-            if previous is None:
-                self._pending.pop(entry_id, None)
-            else:
-                self._pending[entry_id] = previous
+            self._pending.clear()
+            self._pending.update(snapshot)
             raise
 
-    def review(self):
-        changes = []
-        for intent in self._pending.values():
+    def unstage(self, entry_id, language="en"):
+        if not isinstance(entry_id, str) or entry_id not in self._pending:
+            raise ValueError("Save Editor staged action is unavailable.")
+        snapshot = dict(self._pending)
+        self._pending.pop(entry_id)
+        try:
+            return self.review(language=language)
+        except Exception:
+            self._pending.clear()
+            self._pending.update(snapshot)
+            raise
+
+    def _apply_and_validate_intents(self, candidate, intents, language="en"):
+        # A staged batch represents a set of user intents, not a sequence of
+        # mutations. Canonical ordering makes overlapping side effects and the
+        # resulting constraint error independent of click/staging order.
+        intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
+        for intent in intents:
+            # Resolve mutation authority only from the pinned source document.
+            # The candidate is a derived validation/apply projection; it never
+            # becomes a new source of descriptor identity.
+            descriptor = self._descriptor(intent["id"])
+            if intent["operation"] not in descriptor["mutationKinds"]:
+                raise ValueError("Save Editor mutation is no longer allowed.")
+            if intent["before"] != descriptor["before"]:
+                raise ValueError("Save Editor staged owner is ambiguous or has changed.")
+            self._apply_intent(candidate, intent)
+        try:
+            save_long_term.validate_batch(candidate.lua_state, intents)
+            save_equipment.validate_batch(candidate.lua_state, intents)
+        except ValueError as error:
+            presented = self._actionable_batch_error(error, intents, language)
+            if presented is error:
+                raise
+            raise presented from error
+        return candidate
+
+    def _validated_review_state(self, intents, language="en"):
+        candidate = SimpleNamespace(lua_state=copy.deepcopy(self.document.lua_state))
+        return self._apply_and_validate_intents(candidate, intents, language)
+
+    def review(self, language="en"):
+        if language not in ("en", "zh-CN"):
+            raise ValueError("Save Editor language is unsupported.")
+        self._presentation_language = language
+        intents = tuple(self._pending.values())
+        direct = []
+        action_rows = {}
+        action_descriptors = {}
+        for intent in intents:
             # A staged identity must still resolve uniquely on the pinned source.
             # Reject a stale or ambiguous preview before linked effects are shown.
-            descriptor = self._descriptor(intent["id"])
+            descriptor, row = self._pending_action_row(intent["id"], language)
             if (intent["operation"] not in descriptor["mutationKinds"]
                     or intent["before"] != descriptor["before"]):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
-            changes.append({
+            direct.append({
                 key: intent[key]
                 for key in ("id", "domain", "rawId", "operation", "before", "after")
             })
-        changes.extend(
-            save_narrative.linked_changes(self.document.lua_state, self._pending.values())
-        )
-        changes.extend(
-            save_long_term.linked_changes(self.document.lua_state, self._pending.values())
-        )
-        changes.extend(
-            save_equipment.linked_changes(self.document.lua_state, self._pending.values())
-        )
-        return {"count": len(changes), "changes": changes}
+            action_rows[intent["id"]] = row
+            action_descriptors[intent["id"]] = descriptor
 
-    def cancel(self):
+        # Review and Apply share one combined-intent validation seam. A newly
+        # staged action that would make the batch impossible is rejected before
+        # it can become authoritative pending state.
+        if intents:
+            self._validated_review_state(intents, language)
+
+        try:
+            effects = self._linked_change_rows(intents)
+        except ValueError as error:
+            presented = self._actionable_batch_error(error, intents, language)
+            if presented is error:
+                raise
+            raise presented from error
+        effects_by_action = self._effects_by_action(intents, effects)
+
+        actions = []
+        for intent in intents:
+            row = action_rows[intent["id"]]
+            descriptor = action_descriptors[intent["id"]]
+            actions.append({
+                "id": intent["id"],
+                "entryId": intent["id"],
+                "entityId": row.get("entityId") or "entry:" + intent["id"],
+                "entityName": row.get("entityName") or row.get("name") or intent["rawId"],
+                "domain": intent["domain"],
+                "rawId": intent["rawId"],
+                "name": row.get("name") or intent["rawId"],
+                "englishName": row.get("englishName") or row.get("name") or intent["rawId"],
+                "operation": intent["operation"],
+                "before": intent["before"],
+                "after": intent["after"],
+                "valueType": row.get("valueType", "unknown"),
+                "mutationKinds": list(row.get("mutationKinds") or descriptor.get("mutationKinds", ())),
+                "constraints": dict(row.get("constraints") or {}),
+                "choices": list(row.get("choices") or ()),
+                "choiceNames": dict(row.get("choiceNames") or {}),
+                "effects": [
+                    self._present_linked_effect(effect, language)
+                    for effect in effects_by_action.get(intent["id"], [])
+                ],
+            })
+
+        changes = direct + effects
+        return {
+            # Legacy physical-diff projection remains available to existing
+            # diagnostics/tests; primary UI uses the action/effect counts.
+            "count": len(changes),
+            "changes": changes,
+            "actionCount": len(actions),
+            "effectCount": len(effects),
+            "physicalChangeCount": len(changes),
+            "actions": actions,
+        }
+
+    def cancel(self, language="en"):
         self._pending.clear()
-        return self.review()
+        return self.review(language=language)
 
     @staticmethod
     def _apply_intent(document, intent):
@@ -1259,17 +1600,7 @@ class Hades2SaveWorkspace:
 
         source_document = self._session.document
         candidate = Hades2SaveDocument.from_bytes(source_document.to_bytes())
-        for intent in self._pending.values():
-            # Re-resolve the descriptor against the pinned source before
-            # applying its typed intent. This keeps mutation authority in the
-            # semantic workspace rather than in caller-supplied Lua paths.
-            descriptor = self._descriptor(intent["id"])
-            if intent["operation"] not in descriptor["mutationKinds"]:
-                raise ValueError("Save Editor mutation is no longer allowed.")
-            self._apply_intent(candidate, intent)
-
-        save_long_term.validate_batch(candidate.lua_state, self._pending.values())
-        save_equipment.validate_batch(candidate.lua_state, self._pending.values())
+        self._apply_and_validate_intents(candidate, self._pending.values())
         self._session.document = candidate
         try:
             result = self._session.apply()

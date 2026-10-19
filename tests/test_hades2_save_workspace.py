@@ -220,7 +220,8 @@ assert review["changes"] == [
     },
 ]
 workspace.cancel()
-assert workspace.review() == {"count": 0, "changes": []}
+assert workspace.review()["changes"] == []
+assert workspace.review()["actionCount"] == 0
 
 for entry_id, operation, value in (
     ("resource:UnmodeledCurrency", "set", 500),
@@ -270,7 +271,8 @@ assert applied["applied"] is True
 assert applied["hot"] is True
 assert applied["runtimeReloaded"] is False
 assert applied["previousSnapshotId"]
-assert pinned.review() == {"count": 0, "changes": []}
+assert pinned.review()["changes"] == []
+assert pinned.review()["actionCount"] == 0
 
 installed = Hades2SaveDocument.load(pinned_path)
 assert installed.lua_state["GameState"]["Resources"]["MetaCurrency"] == 500.0
@@ -517,19 +519,19 @@ assert edited["ObjectivesCompleted"]["GiftPrompt"] == 3
 assert edited["MetaUpgradeState"]["UnknownHiddenCard"]["Level"] == 17
 assert edited["UnknownFutureField"]["KeepMe"] == "yes"
 
-# A card cannot be upgraded while locked, even when a batch also edits its
-# unlocked state. Reject the whole candidate before crossing Core Save.
+# A card cannot be upgraded while locked. #481 validates the combined staged
+# intent before it becomes authoritative, so this known-invalid action is
+# rejected at Stage rather than being retained until Apply.
 bad = Hades2SaveWorkspace.open(long_term_service)
-bad.stage("card:BonusHealth:Level", "set", 2)
 before_bad = (long_term_saves / "Profile1.sav").read_bytes()
 try:
-    bad.apply()
+    bad.stage("card:BonusHealth:Level", "set", 2)
 except ValueError:
     pass
 else:
-    raise AssertionError("upgrading locked Arcana was accepted")
+    raise AssertionError("upgrading locked Arcana was staged")
+assert bad.review()["actionCount"] == 0
 assert (long_term_saves / "Profile1.sav").read_bytes() == before_bad
-bad.cancel()
 bad.stage("card:BonusHealth:Unlocked", "set", True)
 bad.stage("card:BonusHealth:Level", "set", 2)
 bad.apply()
@@ -602,7 +604,8 @@ except ValueError:
     pass
 else:
     raise AssertionError("unverified dialogue reset accepted")
-assert nested_workspace.review() == {"count": 0, "changes": []}
+assert nested_workspace.review()["changes"] == []
+assert nested_workspace.review()["actionCount"] == 0
 json.dumps(nested_workspace.query(domain="dialogue")["items"])
 nested_game = Hades2SaveDocument.load(nested_saves / "Profile1.sav").lua_state["GameState"]
 assert nested_game["TextLinesChoiceRecord"]["ChoiceScene"]["ChoiceIndex"] == 2.0
@@ -695,18 +698,17 @@ for table_name in ("WeaponsUnlocked", "WorldUpgrades", "WorldUpgradesAdded"):
         assert state[table_name].get(tier) is None
 
 # A proposed selection of an unowned aspect is not silently installed. The
-# entire batch fails before mutating the on-disk save.
+# known-invalid action is rejected before entering the staged basket.
 bad_equipment = Hades2SaveWorkspace.open(equipment_service)
-bad_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
 before_bad_equipment = (equipment_saves / "Profile1.sav").read_bytes()
 try:
-    bad_equipment.apply()
+    bad_equipment.stage("aspectSelection:WeaponDagger", "setEnum", "DaggerBlockAspect")
 except ValueError:
     pass
 else:
-    raise AssertionError("unowned selected weapon aspect was accepted")
+    raise AssertionError("unowned selected weapon aspect was staged")
+assert bad_equipment.review()["actionCount"] == 0
 assert (equipment_saves / "Profile1.sav").read_bytes() == before_bad_equipment
-bad_equipment.cancel()
 
 # Compatible staged unlock and selection are committed together, without
 # rewriting CurrentRun runtime mounted effects.
@@ -722,15 +724,16 @@ assert state["LastWeaponUpgradeName"]["WeaponDagger"] == "DaggerBlockAspect"
 # contradictory states, regardless of staging order.
 conflict = Hades2SaveWorkspace.open(equipment_service)
 conflict.stage("weapon:WeaponDagger", "set", False)
-conflict.stage("aspect:DaggerBlockAspect", "set", 4)
 previous_save = (equipment_saves / "Profile1.sav").read_bytes()
 try:
-    conflict.apply()
+    conflict.stage("aspect:DaggerBlockAspect", "set", 4)
 except ValueError:
     pass
 else:
-    raise AssertionError("contradictory weapon/aspect batch was accepted")
+    raise AssertionError("contradictory weapon/aspect batch was staged")
 assert (equipment_saves / "Profile1.sav").read_bytes() == previous_save
+assert conflict.review()["actionCount"] == 1
+assert conflict.review()["actions"][0]["entryId"] == "weapon:WeaponDagger"
 
 
 # Initial starting weapon state in CreateNewHero writes only WeaponsUnlocked.
@@ -849,11 +852,13 @@ except ValueError:
     pass
 else:
     raise AssertionError("malformed completed quest record became writable")
-assert invalid_editor.review() == {"count": 0, "changes": []}
+assert invalid_editor.review()["changes"] == []
+assert invalid_editor.review()["actionCount"] == 0
 invalid_editor.stage("resource:MetaCurrency", "set", 17)
 assert invalid_editor.review()["count"] == 1
 invalid_editor.cancel()
-assert invalid_editor.review() == {"count": 0, "changes": []}
+assert invalid_editor.review()["changes"] == []
+assert invalid_editor.review()["actionCount"] == 0
 
 
 # Native interaction keys are UnitSetData units, not localization/speaker
