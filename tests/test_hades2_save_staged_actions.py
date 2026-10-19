@@ -146,6 +146,38 @@ assert installed["Resources"]["MetaCurrency"] == 75
 card = installed["MetaUpgradeState"]["ChanneledCast"]
 assert card.get("Unlocked") is None and card.get("Equipped") is None and card["Level"] == 1
 
+# A direct Arcana level intent owns the same physical field as the unlock
+# action's implicit reset. Do not show that field twice; removing the direct
+# intent must restore the linked effect from the pinned source.
+arcana_overlap_state = {
+    "MetaUpgradeState": table({
+        "ChanneledCast": table({"Unlocked": True, "Equipped": True, "Level": 2.0}),
+    }),
+    "ObjectivesCompleted": table({}),
+    "CompletedObjectiveSets": table({}),
+}
+_, arcana_overlap = environment("arcana-overlap", arcana_overlap_state)
+arcana_overlap.stage("card:ChanneledCast:Unlocked", "set", False, language="en")
+overlap_review = arcana_overlap.stage("card:ChanneledCast:Level", "set", 1, language="en")
+assert overlap_review["actionCount"] == 2
+assert overlap_review["effectCount"] == 1
+assert overlap_review["physicalChangeCount"] == 3
+assert {row["id"] for row in overlap_review["changes"]} == {
+    "card:ChanneledCast:Unlocked",
+    "card:ChanneledCast:Level",
+    "linked:card:ChanneledCast:Equipped",
+}
+assert len({row["id"] for row in overlap_review["changes"]}) == 3
+overlap_review = arcana_overlap.unstage("card:ChanneledCast:Level", language="en")
+assert overlap_review["actionCount"] == 1
+assert overlap_review["effectCount"] == 2
+assert overlap_review["physicalChangeCount"] == 3
+assert {row["id"] for row in overlap_review["changes"]} == {
+    "card:ChanneledCast:Unlocked",
+    "linked:card:ChanneledCast:Equipped",
+    "linked:card:ChanneledCast:Level",
+}
+
 # Overlapping direct/linked ownership must be recomputed rather than cached.
 # Disabling the equipped familiar implies clearing the selection. Explicitly
 # staging that same selection suppresses the linked effect; removing the direct
@@ -346,5 +378,85 @@ try:
 finally:
     router.close()
     router_data.cleanup()
+
+
+# The same invalid familiar-selection/unlock pair must yield the same
+# action-specific error in either staging order, even with unrelated equipment
+# work in the basket. The unrelated tool must not appear in the error labels.
+def familiar_conflict_in_order(name, ordered_actions):
+    familiar_state = {
+        "WeaponsUnlocked": table({}),
+        "WorldUpgrades": table({}),
+        "WorldUpgradesAdded": table({}),
+        "LastWeaponUpgradeName": table({}),
+        "FamiliarsUnlocked": table({"CatFamiliar": True, "RavenFamiliar": True}),
+        "EquippedFamiliar": "CatFamiliar",
+    }
+    _, familiar_workspace = environment("familiar-order-" + name, familiar_state)
+    rows = {
+        row["id"]: row
+        for row in familiar_workspace.query(domain="weapons", language="en")["items"]
+    }
+    router_data = tempfile.TemporaryDirectory(prefix="mgt-familiar-order-jsonl-")
+    router = JsonlRequestRouter(
+        SaveActionJSONLAdapter(familiar_workspace),
+        save_data_root=Path(router_data.name),
+        target_running_probe=lambda: False,
+    )
+
+    def stage(index, entry_id, operation, value):
+        return router.handle({
+            "id": "{}-{}".format(name, index),
+            "command": "save_editor_stage",
+            "params": {
+                "workspaceId": familiar_workspace.identifier,
+                "entryId": entry_id,
+                "operation": operation,
+                "value": value,
+                "language": "en",
+            },
+        })
+
+    try:
+        unrelated = stage(0, "tool:ToolFishingRod", "set", 2)
+        assert unrelated["ok"] is True, unrelated
+        for index, (entry_id, operation, value) in enumerate(ordered_actions, start=1):
+            reply = stage(index, entry_id, operation, value)
+            if index < len(ordered_actions):
+                assert reply["ok"] is True, reply
+                continue
+            assert reply["ok"] is False, reply
+            error = reply["error"]
+            assert error["presentation"] == "hades2.saveEditor.error.equippedFamiliarMustBeUnlocked", error
+            assert error["diagnostic"] == "Save Editor equipped familiar must be unlocked.", error
+            assert len(error.get("arguments", [])) == 1, error
+            labels = error["arguments"][0]
+            assert rows["familiarSelection"]["name"] in labels, (rows, error)
+            assert rows["familiar:RavenFamiliar"]["name"] in labels, (rows, error)
+            assert rows["tool:ToolFishingRod"]["name"] not in labels, (rows, error)
+            assert familiar_workspace.review(language="en")["actionCount"] == 2
+            return error["presentation"], labels
+    finally:
+        router.close()
+        router_data.cleanup()
+
+
+selection_then_lock = familiar_conflict_in_order(
+    "selection-first",
+    [
+        ("familiarSelection", "setEnum", "RavenFamiliar"),
+        ("familiar:RavenFamiliar", "set", False),
+    ],
+)
+lock_then_selection = familiar_conflict_in_order(
+    "unlock-first",
+    [
+        ("familiar:RavenFamiliar", "set", False),
+        ("familiarSelection", "setEnum", "RavenFamiliar"),
+    ],
+)
+assert selection_then_lock == lock_then_selection, (
+    selection_then_lock, lock_then_selection
+)
 
 print("hades2_save_staged_actions_ok")
