@@ -87,7 +87,7 @@ struct Hades2ShortcutStore {
         for action in ShortcutAction.allCases {
             guard let value = values[action.rawValue], let proposed = HotkeyChord(payload: value) else { continue }
             if !isCurrentPayload,
-               proposed == legacyV4Defaults[action] || proposed == legacyV3Defaults[action] {
+               (proposed == legacyV4Defaults[action] || proposed == legacyV3Defaults[action]) {
                 // Old Profiles serialized derived defaults as if they were
                 // user choices. Re-derive those slots in the current UI order.
                 continue
