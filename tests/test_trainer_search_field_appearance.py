@@ -32,14 +32,14 @@ func fields(in view: NSView) -> [NSTextField] {
 }
 
 func accessibilityElements(in element: any NSAccessibilityProtocol) -> [any NSAccessibilityProtocol] {
-    let children = (element.accessibilityAttributeValue(NSAccessibility.Attribute.children) as? [Any]) ?? []
+    let children = element.accessibilityChildren() ?? []
     let accessibleChildren = children.compactMap { $0 as? any NSAccessibilityProtocol }
     return accessibleChildren + accessibleChildren.flatMap { accessibilityElements(in: $0) }
 }
 
 func clearActionElements(in view: NSView) -> [any NSAccessibilityProtocol] {
     accessibilityElements(in: view).filter {
-        $0.accessibilityAttributeValue(NSAccessibility.Attribute.identifier) as? String == "trainer.search.clear"
+        $0.accessibilityIdentifier() == "trainer.search.clear"
     }
 }
 
