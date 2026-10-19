@@ -50,6 +50,10 @@ valid = {
 assert _normalize_shortcuts(valid) == valid
 versioned = {"_layoutVersion": 1, **valid}
 assert _normalize_shortcuts(versioned) == versioned
+future_layout_version = {"_layoutVersion": 2, **valid}
+assert _normalize_shortcuts(future_layout_version) == future_layout_version, (
+    "preserve a future shortcut-layout marker so the frontend can report that it left shortcuts unchanged"
+)
 assert _normalize_shortcuts({"_layoutVersion": True, **valid}) == valid
 
 

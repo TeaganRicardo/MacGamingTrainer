@@ -98,7 +98,9 @@ precondition(migratedV3Custom.chord(.invincibility).keyLabel == "0")
 precondition(migratedV3Custom.chord(.infiniteHealth).keyLabel == "2")
 precondition(migratedV3Custom.chord(.gardenQoL).keyLabel == "9")
 precondition(migratedV3Custom.chord(.moneyMultiplierEnabled).keyLabel == "E")
-precondition(migratedV3Custom.chord(.disableAll).keyLabel == "T")
+let disableAllIndex = ShortcutAction.allCases.firstIndex(of: .disableAll)!
+let disableAllDefault = HotkeyChord.defaultShortcut(index: disableAllIndex)!
+precondition(migratedV3Custom.chord(.disableAll) == disableAllDefault)
 precondition(unique(migratedV3Custom))
 
 let brokenV4Store = makeDefaults()
@@ -112,7 +114,7 @@ precondition(unique(defaults))
 precondition(defaults.chord(.generateFlora) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFlora)!)!)
 precondition(defaults.chord(.generateFishing) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
 precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
-precondition(defaults.chord(.disableAll).keyLabel == "T")
+precondition(defaults.chord(.disableAll) == disableAllDefault)
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)
 
@@ -125,6 +127,15 @@ for action in legacyV4Order {
 }
 var migratedLegacyProfile = Hades2ShortcutStore(defaults: makeDefaults())
 let seedCustom = HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X")
+var futureVersionStore = Hades2ShortcutStore(defaults: makeDefaults())
+let futureVersionOriginal = futureVersionStore.chord(.invincibility)
+let futureVersionResult = futureVersionStore.applyProfile([
+    "_layoutVersion": 2,
+    ShortcutAction.invincibility.rawValue: seedCustom.payload,
+])
+precondition(futureVersionResult == .unsupportedLayoutVersion(2))
+precondition(futureVersionStore.chord(.invincibility) == futureVersionOriginal)
+precondition(futureVersionStore.payload()["invincibility"] == nil)
 precondition(migratedLegacyProfile.set(.invincibility, chord: seedCustom) == nil)
 migratedLegacyProfile.applyProfile(legacyDefaultProfile)
 precondition(matchesDerivedDefaults(migratedLegacyProfile))

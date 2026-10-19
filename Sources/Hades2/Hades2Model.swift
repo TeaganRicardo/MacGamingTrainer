@@ -241,6 +241,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
     @Published var shortcutIssue: Hades2ShortcutIssue?
+    @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
 
@@ -1363,6 +1364,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
 
     func loadProfile(_ name: String) {
         guard !name.isEmpty else { return }
+        profileShortcutWarning = nil
         sendBarrier(.loadProfile(name), title: "hades2.op.loadProfile")
     }
 
@@ -1564,8 +1566,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func applyProfileShortcuts(_ values: [String: Any]) {
-        shortcutStore.applyProfile(values)
-        installHotkeys()
+        switch shortcutStore.applyProfile(values) {
+        case .applied:
+            profileShortcutWarning = nil
+            installHotkeys()
+        case .unsupportedLayoutVersion(let version):
+            // Other Profile settings have already been applied. Keep the current
+            // shortcuts intact and explain the partial compatibility result where
+            // the user initiated the load.
+            profileShortcutWarning = presentation(
+                "hades2.error.profileShortcutLayoutUnsupported",
+                arguments: [String(version)]
+            )
+        }
     }
 
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }

@@ -4,6 +4,7 @@ import AppKit
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
     @Binding var isPresented: Bool
     @State private var profileName = ""
     @State private var selectedProfile = ""
@@ -20,6 +21,12 @@ struct Hades2ProfileManagerView: View {
             Text(text("hades2.profile.explanation"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let warning = model.profileShortcutWarning {
+                Text(localization.localized(warning.key, arguments: warning.arguments))
+                    .foregroundStyle(theme.warning)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 10) {
                 TrainerTextField(
                     title: text("hades2.profile.namePlaceholder"),

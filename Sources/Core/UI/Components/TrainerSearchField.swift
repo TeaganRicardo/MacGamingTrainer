@@ -20,6 +20,13 @@ struct TrainerSearchField: View {
         self.onSubmit = onSubmit
     }
 
+    var showsClearAction: Bool { !text.isEmpty && clearLabel != nil }
+
+    func clearSearch() {
+        text = ""
+        onSubmit()
+    }
+
     var body: some View {
         HStack(spacing: theme.compactControlSpacing) {
             Image(systemName: "magnifyingglass")
@@ -29,11 +36,8 @@ struct TrainerSearchField: View {
                 .textFieldStyle(.plain)
                 .onSubmit(onSubmit)
                 .accessibilityLabel(placeholder)
-            if !text.isEmpty, let clearLabel {
-                Button {
-                    text = ""
-                    onSubmit()
-                } label: {
+            if showsClearAction, let clearLabel {
+                Button(action: clearSearch) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
                 }

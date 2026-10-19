@@ -86,6 +86,10 @@ family_order = enum_cases(
 assert "static let uiOrder" not in types
 assert "ShortcutAction.uiOrder" not in store + model + management
 assert "ShortcutAction.allCases" in store
+assert "ShortcutAction.allCases.enumerated()" in store
+assert "defaultShortcutIndex" not in types + store
+assert "profileShortcutWarning" in model + management
+assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
 assert "ShortcutAction.allCases" in model
 assert "ShortcutAction.allCases" in management
 assert 'title: "hades2.op.acquireSelectedReward"' in model

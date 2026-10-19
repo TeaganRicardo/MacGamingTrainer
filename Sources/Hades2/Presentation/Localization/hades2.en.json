@@ -111,6 +111,7 @@
     "hades2.error.profileNotFound": "That Profile was not found.",
     "hades2.error.profileSchemaInvalid": "The Profile schemaVersion is invalid.",
     "hades2.error.profileShortcutsInvalid": "The Profile shortcuts field is invalid.",
+    "hades2.error.profileShortcutLayoutUnsupported": "This Profile uses unsupported shortcut layout version {0}. Its other settings were loaded; existing shortcuts were left unchanged.",
     "hades2.error.profileUnknownFields": "The Profile contains top-level fields the current schema does not define.",
     "hades2.error.profileUpdatedAtInvalid": "The Profile updatedAt field is invalid.",
     "hades2.error.profileUpdatedAtMissing": "The Profile updatedAt field is missing.",

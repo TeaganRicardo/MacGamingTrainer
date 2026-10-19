@@ -3,6 +3,11 @@ import Foundation
 /// Hades-specific shortcut persistence. Registration/capture mechanics live in
 /// Core; this store owns action semantics, derived defaults, explicit user
 /// overrides and local migration.
+enum Hades2ShortcutProfileApplyResult: Equatable {
+    case applied
+    case unsupportedLayoutVersion(Int)
+}
+
 struct Hades2ShortcutStore {
     private(set) var chords: [ShortcutAction: HotkeyChord]
     private var overrides: [ShortcutAction: HotkeyChord] = [:]
@@ -73,10 +78,11 @@ struct Hades2ShortcutStore {
         return nil
     }
 
-    mutating func applyProfile(_ values: [String: Any]) {
+    @discardableResult
+    mutating func applyProfile(_ values: [String: Any]) -> Hades2ShortcutProfileApplyResult {
         let importedLayoutVersion = values[Self.profileLayoutVersionKey] as? Int
         if let importedLayoutVersion, importedLayoutVersion != Self.profileLayoutVersion {
-            return
+            return .unsupportedLayoutVersion(importedLayoutVersion)
         }
         let isCurrentPayload = importedLayoutVersion == Self.profileLayoutVersion
         let legacyV4Defaults = Self.legacyV4DefaultLayout()
@@ -104,7 +110,7 @@ struct Hades2ShortcutStore {
             overrides = patch
             rebuildResolvedLayout()
             persistOverrides()
-            return
+            return .applied
         }
 
         let completeLegacyV4Layout = Self.legacyV4ActionOrder.allSatisfy {
@@ -117,7 +123,7 @@ struct Hades2ShortcutStore {
             overrides = patch
         } else {
             // Unversioned partial patches keep the historical merge semantics.
-            guard !patch.isEmpty else { return }
+            guard !patch.isEmpty else { return .applied }
             for action in ShortcutAction.allCases where patch[action] == nil {
                 if let existing = overrides[action], patchTokens.contains(Self.token(existing)) {
                     overrides[action] = nil
@@ -130,6 +136,7 @@ struct Hades2ShortcutStore {
 
         rebuildResolvedLayout()
         persistOverrides()
+        return .applied
     }
 
     private mutating func loadAndMigrate() {

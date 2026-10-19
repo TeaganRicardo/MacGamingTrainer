@@ -111,6 +111,7 @@
     "hades2.error.profileNotFound": "未找到该 Profile。",
     "hades2.error.profileSchemaInvalid": "Profile schemaVersion 无效。",
     "hades2.error.profileShortcutsInvalid": "Profile shortcuts 字段无效。",
+    "hades2.error.profileShortcutLayoutUnsupported": "此 Profile 使用了不受支持的快捷键布局版本 {0}。其他设置已载入，现有快捷键保持不变。",
     "hades2.error.profileUnknownFields": "Profile 包含当前 schema 未定义的顶层字段。",
     "hades2.error.profileUpdatedAtInvalid": "Profile updatedAt 字段无效。",
     "hades2.error.profileUpdatedAtMissing": "Profile updatedAt 字段缺失。",
