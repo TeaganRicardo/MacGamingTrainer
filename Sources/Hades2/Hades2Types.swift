@@ -93,10 +93,10 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .forceDuo: return "hades2.feature.forceDuo"
         case .moneyMultiplierEnabled: return "hades2.feature.moneyMultiplier"
         case .resourceMultiplierEnabled: return "hades2.feature.resourceMultiplier"
-        case .applyNextRoomReward: return "hades2.nextRoom.title"
-        case .spawnOlympian: return "hades2.spawn.olympianBoons"
-        case .spawnPickup: return "hades2.spawn.pickupRewards"
-        case .spawnSpecial: return "hades2.spawn.characterRewards"
+        case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"
+        case .spawnOlympian: return "hades2.shortcut.spawnOlympian"
+        case .spawnPickup: return "hades2.shortcut.spawnPickup"
+        case .spawnSpecial: return "hades2.shortcut.spawnSpecial"
         // Disable All is a Host-shell action that happens to live in the Hades
         // module, so it keeps the Host key and the Host resource.
         case .disableAll: return "host.disableAll"

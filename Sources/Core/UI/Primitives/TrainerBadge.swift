@@ -11,6 +11,7 @@ struct TrainerShortcutBadge: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 6)
             .background(theme.subtleFill, in: RoundedRectangle(cornerRadius: 6))
+            .frame(minWidth: 52, alignment: .center)
     }
 }
 
@@ -23,7 +24,6 @@ struct TrainerShortcutBadgeSlot: View {
     var body: some View {
         if let text, !text.isEmpty {
             TrainerShortcutBadge(text: text)
-                .frame(minWidth: 52, alignment: .center)
         }
     }
 }

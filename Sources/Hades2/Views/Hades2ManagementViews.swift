@@ -148,7 +148,7 @@ struct Hades2ShortcutSettingsView: View {
                     } label: {
                         Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
                             .font(.system(.body, design: .monospaced))
-                            .frame(minWidth: 110)
+                            .frame(width: theme.shortcutCaptureWidth, alignment: .center)
                     }
                     .buttonStyle(.bordered)
                 }

@@ -1,0 +1,59 @@
+"""Protect cross-surface UI contracts discovered by the consistency audit."""
+import json
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CORE_UI = ROOT / "Sources/Core/UI"
+HADES = ROOT / "Sources/Hades2"
+
+badge = (CORE_UI / "Primitives/TrainerBadge.swift").read_text()
+theme = (CORE_UI / "TrainerTheme.swift").read_text()
+resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
+status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
+management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
+types = (HADES / "Hades2Types.swift").read_text()
+
+# A shortcut has one width owner. Direct badges and optional slots render the
+# same control, rather than giving one presentation path a different minimum.
+assert ".frame(minWidth: 52, alignment: .center)" in badge
+slot = badge[badge.index("struct TrainerShortcutBadgeSlot"): ]
+assert ".frame(minWidth: 52" not in slot
+
+# The shortcut capture control has a stable width while a chord is being
+# captured and after assignment; long labels/chords must not resize the column.
+assert "let shortcutCaptureWidth: CGFloat" in theme
+assert "shortcutCaptureWidth: 180" in theme
+assert ".frame(width: theme.shortcutCaptureWidth, alignment: .center)" in management
+assert ".frame(minWidth: 110)" not in management
+
+# Shared visual controls are adopted by the owning Core controls as well as
+# feature views; do not reintroduce a second search or primary-action treatment.
+assert "TrainerSearchField(" in resource
+assert "TrainerPrimaryActionButton(" in status
+assert ".buttonStyle(.borderedProminent)" not in status
+
+# Shortcut settings and conflict feedback use action names, not just the name
+# of the surrounding section or picker.
+action_keys = {
+    "hades2.shortcut.applyNextRoomReward",
+    "hades2.shortcut.spawnOlympian",
+    "hades2.shortcut.spawnPickup",
+    "hades2.shortcut.spawnSpecial",
+}
+for language in ("en", "zh-CN"):
+    table = json.loads(
+        (HADES / f"Presentation/Localization/hades2.{language}.json").read_text()
+    )["entries"]
+    assert action_keys <= table.keys()
+    labels = [table[key] for key in sorted(action_keys)]
+    assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
+
+for key in (
+    'case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"',
+    'case .spawnOlympian: return "hades2.shortcut.spawnOlympian"',
+    'case .spawnPickup: return "hades2.shortcut.spawnPickup"',
+    'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"',
+):
+    assert key in types
+
+print("ui_consistency_contract_ok")

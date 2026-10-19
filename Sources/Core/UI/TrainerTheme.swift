@@ -30,6 +30,7 @@ struct TrainerTheme {
     let rowHorizontalPadding: CGFloat
     let rowMinimumHeight: CGFloat
     let inlineRowVerticalPadding: CGFloat
+    let shortcutCaptureWidth: CGFloat
     let sheetPadding: CGFloat
     let sheetSpacing: CGFloat
     let emptyStatePadding: CGFloat
@@ -64,6 +65,7 @@ struct TrainerTheme {
         rowHorizontalPadding: 22,
         rowMinimumHeight: 64,
         inlineRowVerticalPadding: 10,
+        shortcutCaptureWidth: 180,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24
