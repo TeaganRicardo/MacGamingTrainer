@@ -12,9 +12,16 @@ harness = r'''
 import Foundation
 
 precondition(Set(ShortcutAction.allCases.map(\.rawValue)).count == ShortcutAction.allCases.count)
-precondition(ShortcutAction.allCases.count <= 35, "default shortcut namespace 1-9/A-Z is exhausted")
+precondition(ShortcutAction.allCases.count <= HotkeyChord.defaultShortcutCapacity)
 precondition(Hades2ShortcutStore.defaultLayout().count == ShortcutAction.allCases.count)
 precondition(ShortcutAction.allCases.last == .disableAll)
+precondition(HotkeyChord.defaultShortcut(index: 34)?.displayText == "⌃⌥Z")
+precondition(HotkeyChord.defaultShortcut(index: 35)?.displayText == "⌃⌥⇧1")
+precondition(HotkeyChord.defaultShortcut(index: 70)?.displayText == "⌃⌥⌘1")
+precondition(HotkeyChord.defaultShortcut(index: 105)?.displayText == "⌃⌥⇧⌘1")
+precondition(HotkeyChord.defaultShortcut(index: HotkeyChord.defaultShortcutCapacity) == nil)
+let generatedDefaults = (0..<HotkeyChord.defaultShortcutCapacity).compactMap(HotkeyChord.defaultShortcut(index:))
+precondition(Set(generatedDefaults.map { "\($0.keyCode):\($0.modifiers)" }).count == HotkeyChord.defaultShortcutCapacity)
 
 // InMemoryDefaults (tests/fixtures/swift) keeps this harness off the real
 // preferences directory; a real suite there cannot be cleaned up afterwards.
@@ -77,7 +84,7 @@ seedV3Defaults(migratedV3DefaultsStore)
 let migratedV3Defaults = Hades2ShortcutStore(defaults: migratedV3DefaultsStore)
 func matchesDerivedDefaults(_ store: Hades2ShortcutStore) -> Bool {
     ShortcutAction.allCases.enumerated().allSatisfy { index, action in
-        guard let expected = HotkeyChord.controlOptionDefault(index: index) else { return false }
+        guard let expected = HotkeyChord.defaultShortcut(index: index) else { return false }
         return store.chord(action) == expected
     }
 }
@@ -102,9 +109,9 @@ precondition(matchesDerivedDefaults(repairedV4))
 let defaults = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(matchesDerivedDefaults(defaults))
 precondition(unique(defaults))
-precondition(defaults.chord(.generateFlora) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .generateFlora)!)!)
-precondition(defaults.chord(.generateFishing) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
-precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.controlOptionDefault(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
+precondition(defaults.chord(.generateFlora) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFlora)!)!)
+precondition(defaults.chord(.generateFishing) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
+precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
 precondition(defaults.chord(.disableAll).keyLabel == "T")
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)

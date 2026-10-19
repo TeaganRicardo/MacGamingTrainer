@@ -35,7 +35,7 @@ struct Hades2ShortcutStore {
 
     static func defaultLayout() -> [ShortcutAction: HotkeyChord] {
         Dictionary(uniqueKeysWithValues: ShortcutAction.allCases.enumerated().compactMap { index, action in
-            HotkeyChord.controlOptionDefault(index: index).map { (action, $0) }
+            HotkeyChord.defaultShortcut(index: index).map { (action, $0) }
         })
     }
 
@@ -277,8 +277,8 @@ struct Hades2ShortcutStore {
                 continue
             }
 
-            if let free = ShortcutAction.allCases.enumerated()
-                .compactMap({ HotkeyChord.controlOptionDefault(index: $0.offset) })
+            if let free = (0..<HotkeyChord.defaultShortcutCapacity)
+                .compactMap({ HotkeyChord.defaultShortcut(index: $0) })
                 .first(where: { !used.contains(Self.token($0)) }) {
                 next[action] = free
                 used.insert(Self.token(free))
