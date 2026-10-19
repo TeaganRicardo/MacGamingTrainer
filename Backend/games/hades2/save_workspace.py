@@ -1204,7 +1204,10 @@ class Hades2SaveWorkspace:
             return error
 
         intents = tuple(intents)
-        if category == "equipment":
+        action_ids = set(getattr(error, "action_ids", ()) or ())
+        if action_ids:
+            relevant = [intent for intent in intents if intent["id"] in action_ids]
+        elif category == "equipment":
             relevant = [intent for intent in intents if intent["domain"] == "weapons"]
         elif category == "arcana":
             relevant = [intent for intent in intents if intent["id"].startswith("card:")]
@@ -1442,7 +1445,10 @@ class Hades2SaveWorkspace:
             raise
 
     def _apply_and_validate_intents(self, candidate, intents, language="en"):
-        intents = tuple(intents)
+        # A staged batch represents a set of user intents, not a sequence of
+        # mutations. Canonical ordering makes overlapping side effects and the
+        # resulting constraint error independent of click/staging order.
+        intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
         for intent in intents:
             # Resolve mutation authority only from the pinned source document.
             # The candidate is a derived validation/apply projection; it never

@@ -592,7 +592,7 @@
     "hades2.saveEditor.error.applyRequiresStopped": "请先完全退出 Hades II，再应用已暂存的存档修改。",
     "hades2.saveEditor.error.invalidQuery": "存档编辑器查询参数无效。",
     "hades2.saveEditor.error.invalidMutation": "请求的存档修改无效。",
-    "hades2.saveEditor.error.equipmentChangesConflict": "这些武器/形态操作互相冲突：{0}。请在“修改清单”中修改或移除其中一项。",
+    "hades2.saveEditor.error.equipmentChangesConflict": "这些装备修改操作互相冲突：{0}。请在“修改清单”中修改或移除其中一项。",
     "hades2.saveEditor.error.lockedWeaponHasAspects": "武器仍有已解锁的形态时不能锁定：{0}。请修改武器或形态操作。",
     "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect": "已解锁的武器必须保留默认形态：{0}。请恢复默认形态或修改武器操作。",
     "hades2.saveEditor.error.selectedAspectNotPurchased": "所选形态必须已购买并解锁：{0}。请修改形态选择或解锁操作。",

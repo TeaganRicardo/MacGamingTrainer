@@ -592,7 +592,7 @@
     "hades2.saveEditor.error.applyRequiresStopped": "Quit Hades II before applying staged save changes.",
     "hades2.saveEditor.error.invalidQuery": "The Save Editor query is invalid.",
     "hades2.saveEditor.error.invalidMutation": "The requested save change is invalid.",
-    "hades2.saveEditor.error.equipmentChangesConflict": "These weapon/aspect actions conflict: {0}. Revise or remove one of the listed actions in Changes.",
+    "hades2.saveEditor.error.equipmentChangesConflict": "These equipment actions conflict: {0}. Revise or remove one of the listed actions in Changes.",
     "hades2.saveEditor.error.lockedWeaponHasAspects": "A weapon cannot be locked while an aspect remains acquired: {0}. Revise the weapon or aspect action.",
     "hades2.saveEditor.error.unlockedWeaponNeedsDefaultAspect": "An unlocked weapon must retain its default aspect: {0}. Restore the default aspect or revise the weapon action.",
     "hades2.saveEditor.error.selectedAspectNotPurchased": "The selected aspect must be purchased and unlocked: {0}. Revise the aspect-selection or aspect-unlock action.",
