@@ -31,7 +31,7 @@ assert "let shortcutCaptureWidth: CGFloat" in theme
 assert "shortcutCaptureWidth: 180" in theme
 assert "let connectionActionWidth: CGFloat" in theme
 assert "connectionActionWidth: 160" in theme
-assert "compactActionWidth: 80" in theme
+assert "compactActionWidth: 88" in theme
 assert "TrainerSecondaryActionButton(" in resource
 assert "TrainerSecondaryActionButton(" in occurrence
 assert view.count("TrainerSecondaryActionButton(") >= 6
@@ -60,11 +60,21 @@ action_keys = {
     "hades2.shortcut.spawnPickup",
     "hades2.shortcut.spawnSpecial",
 }
+trait_action_keys = {
+    "hades2.traits.applyLevel",
+    "hades2.traits.applyRarity",
+}
+assert 'text("hades2.traits.applyLevel")' in view
+assert 'text("hades2.traits.applyRarity")' in view
+
 for language in ("en", "zh-CN"):
     table = json.loads(
         (HADES / f"Presentation/Localization/hades2.{language}.json").read_text()
     )["entries"]
     assert action_keys <= table.keys()
+    assert trait_action_keys <= table.keys()
+    trait_labels = [table[key] for key in sorted(trait_action_keys)]
+    assert len(trait_labels) == len(set(trait_labels)), f"{language} trait action labels are ambiguous"
     labels = [table[key] for key in sorted(action_keys)]
     assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
 

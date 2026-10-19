@@ -400,6 +400,8 @@
     "hades2.traits.targetLevel": "Target Level",
     "hades2.traits.targetRarity": "Rarity",
     "hades2.traits.apply": "Apply",
+    "hades2.traits.applyLevel": "Set Level",
+    "hades2.traits.applyRarity": "Set Rarity",
     "hades2.traits.limit.level": "Level unavailable: {0}",
     "hades2.traits.limit.rarity": "Rarity unavailable: {0}",
     "hades2.traits.limit.remove": "Removal unavailable: {0}",

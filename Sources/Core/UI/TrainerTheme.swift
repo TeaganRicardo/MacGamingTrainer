@@ -69,7 +69,7 @@ struct TrainerTheme {
         inlineRowVerticalPadding: 10,
         shortcutCaptureWidth: 180,
         connectionActionWidth: 160,
-        compactActionWidth: 80,
+        compactActionWidth: 88,
         sheetPadding: 28,
         sheetSpacing: 16,
         emptyStatePadding: 24

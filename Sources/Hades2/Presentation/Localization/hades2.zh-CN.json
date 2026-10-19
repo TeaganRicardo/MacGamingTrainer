@@ -400,6 +400,8 @@
     "hades2.traits.targetLevel": "目标等级",
     "hades2.traits.targetRarity": "稀有度",
     "hades2.traits.apply": "应用",
+    "hades2.traits.applyLevel": "设置等级",
+    "hades2.traits.applyRarity": "设置稀有度",
     "hades2.traits.limit.level": "等级不可修改：{0}",
     "hades2.traits.limit.rarity": "稀有度不可修改：{0}",
     "hades2.traits.limit.remove": "无法移除：{0}",

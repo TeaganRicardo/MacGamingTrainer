@@ -16,10 +16,10 @@ struct Hades2TrainerView: View {
 
     private enum TraitManagerLayout {
         static let rowSpacing: CGFloat = 12
-        static let levelControlsWidth: CGFloat = 192
-        static let rarityControlsWidth: CGFloat = 242
+        static let levelControlsWidth: CGFloat = 200
+        static let rarityControlsWidth: CGFloat = 250
         static let removeControlWidth: CGFloat = 106
-        static let commonControlsWidth: CGFloat = 564
+        static let commonControlsWidth: CGFloat = 580
         static let searchWidth: CGFloat = 260
     }
 
@@ -691,7 +691,7 @@ struct Hades2TrainerView: View {
                     .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
                     TrainerSecondaryActionButton(
-                        title: text("hades2.traits.apply"),
+                        title: text("hades2.traits.applyLevel"),
                         enabled: canApplyTraitLevel(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -706,7 +706,7 @@ struct Hades2TrainerView: View {
                     .disabled(true)
 
                     TrainerSecondaryActionButton(
-                        title: text("hades2.traits.apply"),
+                        title: text("hades2.traits.applyLevel"),
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
@@ -739,7 +739,7 @@ struct Hades2TrainerView: View {
                     .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
                     TrainerSecondaryActionButton(
-                        title: text("hades2.traits.apply"),
+                        title: text("hades2.traits.applyRarity"),
                         enabled: canApplyTraitRarity(trait),
                         width: theme.compactActionWidth
                     ) {
@@ -755,7 +755,7 @@ struct Hades2TrainerView: View {
                     .disabled(true)
 
                     TrainerSecondaryActionButton(
-                        title: text("hades2.traits.apply"),
+                        title: text("hades2.traits.applyRarity"),
                         enabled: false,
                         width: theme.compactActionWidth,
                         action: {}
