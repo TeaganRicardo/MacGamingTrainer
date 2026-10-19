@@ -1,5 +1,6 @@
 """Protect cross-surface UI contracts discovered by the consistency audit."""
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +13,8 @@ resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
 status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 types = (HADES / "Hades2Types.swift").read_text()
+view = (HADES / "Hades2View.swift").read_text()
+management_view = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 
 # A shortcut has one width owner. Direct badges and optional slots render the
 # same control, rather than giving one presentation path a different minimum.
@@ -55,5 +58,20 @@ for key in (
     'case .spawnSpecial: return "hades2.shortcut.spawnSpecial"',
 ):
     assert key in types
+
+# Every registered shortcut action must have a visible affordance in its
+# owning panel or management UI. A settings entry alone is insufficient.
+ui_order = types.split("static let uiOrder:", 1)[1].split("static let legacyDigitActions:", 1)[0]
+actions = re.findall(r"\.([A-Za-z][A-Za-z0-9]*)", ui_order)
+assert len(actions) == 20, f"unexpected shortcut inventory size: {len(actions)}"
+visible_ui = view + "\\n" + management_view
+for action in actions:
+    patterns = (
+        rf"shortcut\\s*:\\s*\\.{re.escape(action)}\\b",
+        rf"shortcutText\\(\\s*\\.{re.escape(action)}\\s*\\)",
+    )
+    assert any(re.search(pattern, visible_ui) for pattern in patterns), (
+        f"registered shortcut has no visible badge/affordance: {action}"
+    )
 
 print("ui_consistency_contract_ok")
