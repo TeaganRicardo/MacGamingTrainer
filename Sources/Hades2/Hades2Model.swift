@@ -1430,13 +1430,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     @discardableResult
-    func openSellTraits(completion: ((Bool) -> Void)? = nil) -> Bool {
+    func openSellTraits() -> Bool {
         guard canOpenSellTraits else { return false }
         send(
             .openSellTraits,
             title: "hades2.receipt.openPurgingPool",
-            announceSuccess: false,
-            completion: completion
+            announceSuccess: false
         )
         return true
     }
@@ -1745,7 +1744,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 return
             }
         case .openSellTraits:
-            guard openSellTraits(completion: Self.playOneShotShortcutResult) else {
+            // Modal acceptance is provisional. Its typed action receipt owns
+            // the eventual opened/failed outcome, so do not play a completion
+            // sound from the transport callback here.
+            guard openSellTraits() else {
                 rejectShortcut(action)
                 return
             }

@@ -51,6 +51,7 @@ assert 'payload["lastAction"]' in state
 modal_start = model.index("func openSellTraits(")
 modal_model = model[modal_start:model.index("func setTraitLevel(", modal_start)]
 assert "announceSuccess: false" in modal_model
+assert "openSellTraits(completion: Self.playOneShotShortcutResult)" not in model
 assert "Hades2Command(rawValue: receipt.command)" in model
 assert '"open_sell_traits"' not in model and '"open_special_choice"' not in model
 # The model carries language-neutral keys; the module presentation table owns

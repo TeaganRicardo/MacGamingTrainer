@@ -683,9 +683,9 @@
     "hades2.shortcut.generateShades": "Generate Shades Point",
     "hades2.shortcut.generateFishing": "Generate Fishing Point",
     "hades2.shortcut.acquireChaosPair": "Acquire Chaos Pair",
-    "hades2.shortcut.acquireExactBoon": "Acquire Exact Boon",
+    "hades2.shortcut.acquireExactBoon": "Acquire Selected Reward",
     "hades2.shortcut.openPurgingPool": "Open Pool of Purging",
-    "hades2.shortcut.applyNextOccurrence": "Apply Next Eligible Encounter",
+    "hades2.shortcut.applyNextOccurrence": "Set Next Eligible Encounter",
     "hades2.shortcut.disableAll": "Disable All Modifiers"
   },
   "language": "en"

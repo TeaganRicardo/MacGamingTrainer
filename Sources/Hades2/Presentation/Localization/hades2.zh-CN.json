@@ -683,9 +683,9 @@
     "hades2.shortcut.generateShades": "生成冥影采集点",
     "hades2.shortcut.generateFishing": "生成钓鱼点",
     "hades2.shortcut.acquireChaosPair": "获取混沌祝福与诅咒",
-    "hades2.shortcut.acquireExactBoon": "获取指定祝福",
+    "hades2.shortcut.acquireExactBoon": "获取所选奖励",
     "hades2.shortcut.openPurgingPool": "打开净化池",
-    "hades2.shortcut.applyNextOccurrence": "应用下一次合资格遭遇",
+    "hades2.shortcut.applyNextOccurrence": "设置下一次合资格遭遇",
     "hades2.shortcut.disableAll": "关闭全部修改器"
   },
   "language": "zh-CN"
