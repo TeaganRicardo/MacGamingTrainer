@@ -1,9 +1,9 @@
 """Compile the shipped Hades II resident and measure Lua 5.2 local headroom.
 
-The unchanged production source must compile. A second compile probe prefixes
-synthetic locals to the source so they remain active across the entire main
-chunk, including nested scopes. This measures the minimum spare-local capacity
-at the most constrained point in the main function.
+The unchanged production source must compile. A main-chunk probe prefixes
+synthetic locals to measure reserve at the most constrained point in the
+initializer. Additional probes inject synthetic locals into each named private
+factory so each factory's independent Lua 5.2 local budget remains governed.
 """
 
 import subprocess
@@ -54,14 +54,18 @@ if proc.returncode != 0:
 print("hades2_runtime_compile_ok")
 
 source = RUNTIME.read_text(encoding="utf-8")
-CAST_FACTORY_ANCHOR = "  M.castControl = (function()\n"
+FACTORY_ANCHORS = {
+    "cast": "  M.castControl = (function()\n",
+    "catalog_projection": "  M.catalogProjection = (function()\n",
+}
 RECOMMENDED_MAIN_CHUNK_RESERVE = 24
 MINIMUM_FACTORY_RESERVE = 16
-if source.count(CAST_FACTORY_ANCHOR) != 1:
-    raise SystemExit(
-        "resident source must contain exactly one Cast runtime function factory "
-        "so its independent local budget can be measured"
-    )
+for scope_name, anchor in FACTORY_ANCHORS.items():
+    if source.count(anchor) != 1:
+        raise SystemExit(
+            f"resident source must contain exactly one {scope_name} function factory "
+            "so its independent local budget can be measured"
+        )
 
 with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary_directory:
     probe_path = Path(temporary_directory) / "hades.lua"
@@ -108,22 +112,27 @@ with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary
 
     main_available = measure_reserve(lambda declarations: declarations + source, "main")
 
-    def inject_cast_factory_locals(declarations: str) -> str:
-        offset = source.index(CAST_FACTORY_ANCHOR) + len(CAST_FACTORY_ANCHOR)
-        return source[:offset] + declarations + source[offset:]
+    factory_available = {}
+    for scope_name, anchor in FACTORY_ANCHORS.items():
+        def inject_factory_locals(declarations: str, factory_anchor=anchor) -> str:
+            offset = source.index(factory_anchor) + len(factory_anchor)
+            return source[:offset] + declarations + source[offset:]
 
-    factory_available = measure_reserve(inject_cast_factory_locals, "cast_factory")
+        factory_available[scope_name] = measure_reserve(
+            inject_factory_locals, f"{scope_name}_factory"
+        )
 
 if main_available < MINIMUM_LOCAL_RESERVE:
     raise SystemExit(
         f"hades2_runtime_local_headroom_failed available={main_available} "
         f"required={MINIMUM_LOCAL_RESERVE}"
     )
-if factory_available < MINIMUM_FACTORY_RESERVE:
-    raise SystemExit(
-        f"hades2_runtime_factory_local_headroom_failed available={factory_available} "
-        f"required={MINIMUM_FACTORY_RESERVE}"
-    )
+for scope_name, available in factory_available.items():
+    if available < MINIMUM_FACTORY_RESERVE:
+        raise SystemExit(
+            f"hades2_runtime_factory_local_headroom_failed scope={scope_name} "
+            f"available={available} required={MINIMUM_FACTORY_RESERVE}"
+        )
 if main_available < RECOMMENDED_MAIN_CHUNK_RESERVE:
     print(
         f"hades2_runtime_local_headroom_warning available={main_available} "
@@ -134,7 +143,8 @@ else:
         f"hades2_runtime_local_headroom_ok available={main_available} "
         f"minimum={MINIMUM_LOCAL_RESERVE} recommended={RECOMMENDED_MAIN_CHUNK_RESERVE}"
     )
-print(
-    f"hades2_runtime_factory_local_headroom_ok cast_available={factory_available} "
-    f"required={MINIMUM_FACTORY_RESERVE}"
-)
+for scope_name, available in factory_available.items():
+    print(
+        f"hades2_runtime_factory_local_headroom_ok scope={scope_name} "
+        f"available={available} required={MINIMUM_FACTORY_RESERVE}"
+    )
