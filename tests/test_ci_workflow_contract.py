@@ -8,10 +8,32 @@ WORKFLOWS = [
     ROOT / '.github/workflows/build2-macos.yml',
     ROOT / '.github/workflows/module-build-matrix.yml',
 ]
+PYTHON_WORKFLOWS = [
+    *WORKFLOWS,
+    ROOT / '.github/workflows/direct-release.yml',
+]
 RUNTIME_VERSION = json.loads((ROOT / 'Tools/python_runtime.json').read_text())["version"]
-match = re.fullmatch(r"(\d+\.\d+\.\d+)(a|b|rc)(\d+)", RUNTIME_VERSION)
+match = re.fullmatch(r"(\d+\.\d+\.\d+)(?:(a|b|rc)(\d+))?", RUNTIME_VERSION)
 assert match, f"unsupported pinned Python version format: {RUNTIME_VERSION}"
-CI_PYTHON_VERSION = f"{match.group(1)}-{match.group(2)}.{match.group(3)}"
+CI_PYTHON_VERSION = (
+    f"{match.group(1)}-{match.group(2)}.{match.group(3)}"
+    if match.group(2)
+    else match.group(1)
+)
+
+# Every setup-python step in all four workflows must consume the same version
+# derived from the bundled-runtime manifest. The direct-release workflow is
+# intentionally included here even though it has a separate workflow contract.
+for workflow in PYTHON_WORKFLOWS:
+    assert workflow.is_file(), workflow
+    text = workflow.read_text()
+    setup_matches = list(re.finditer(r'actions/setup-python@[0-9a-f]{40}', text))
+    assert setup_matches, f'{workflow.name}: setup-python must use an immutable commit'
+    for setup_match in setup_matches:
+        setup_window = text[setup_match.start():setup_match.start() + 300]
+        assert f"python-version: '{CI_PYTHON_VERSION}'" in setup_window, (
+            f'{workflow.name}: every setup-python step must match Tools/python_runtime.json'
+        )
 
 for workflow in WORKFLOWS:
     assert workflow.is_file(), workflow
