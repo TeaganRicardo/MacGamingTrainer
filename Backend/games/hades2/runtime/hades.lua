@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 116 then
+if previousModule and previousModule.revision ~= 117 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 116 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 116,
+    version = 1, revision = 117,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -1784,154 +1784,522 @@ if __MacGamingTrainerV1 == nil then
     M.originalUpdateTimers, M.guardWrapper = original, wrapper
     UpdateTimers = wrapper
   end
-  local function resourceSectionKind(id)
-    if string.find(id, "Gift", 1, true) then return "gifts" end
-    if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "plants" end
-    if string.find(id, "Ore", 1, true) then return "ores" end
-    if string.find(id, "Fish", 1, true) then return "fish" end
-    if string.find(id, "Boss", 1, true) then return "boss" end
-    return "resources"
-  end
-  catalogs.resourceInventorySectionKinds = {
-    InventoryScreen_ResourcesTab = "resources",
-    InventoryScreen_GardenTab = "plants",
-    InventoryScreen_GiftsTab = "gifts",
-    InventoryScreen_FishTab = "fish",
-  }
-  local function inventoryResourceLayout()
-    local order, metadata, seen = {}, {}, {}
-    local categories = type(ScreenData) == "table" and type(ScreenData.InventoryScreen) == "table"
-      and ScreenData.InventoryScreen.ItemCategories or nil
-    if type(categories) == "table" then
-      for categoryIndex, category in ipairs(categories) do
-        local sectionId = type(category) == "table" and category.Name or nil
-        local sectionKind = type(sectionId) == "string" and catalogs.resourceInventorySectionKinds[sectionId] or nil
-        if sectionKind ~= nil then
-          local itemOrder = 0
-          for _, id in ipairs(category) do
-            if type(id) == "string" and id ~= "Money" and not seen[id]
-                and type(ResourceData) == "table" and type(ResourceData[id]) == "table" then
-              itemOrder = itemOrder + 1
-              seen[id] = true
-              order[#order + 1] = id
-              metadata[id] = {
-                sectionId = sectionId, sectionKind = sectionKind,
-                sectionOrder = categoryIndex, itemOrder = itemOrder,
-              }
+  local seleneModel, hammerModel, echoModel
+  M.catalogProjection = (function()
+    local function resourceSectionKind(id)
+      if string.find(id, "Gift", 1, true) then return "gifts" end
+      if string.find(id, "Plant", 1, true) or string.find(id, "Seed", 1, true) then return "plants" end
+      if string.find(id, "Ore", 1, true) then return "ores" end
+      if string.find(id, "Fish", 1, true) then return "fish" end
+      if string.find(id, "Boss", 1, true) then return "boss" end
+      return "resources"
+    end
+    catalogs.resourceInventorySectionKinds = {
+      InventoryScreen_ResourcesTab = "resources",
+      InventoryScreen_GardenTab = "plants",
+      InventoryScreen_GiftsTab = "gifts",
+      InventoryScreen_FishTab = "fish",
+    }
+    local function inventoryResourceLayout()
+      local order, metadata, seen = {}, {}, {}
+      local categories = type(ScreenData) == "table" and type(ScreenData.InventoryScreen) == "table"
+        and ScreenData.InventoryScreen.ItemCategories or nil
+      if type(categories) == "table" then
+        for categoryIndex, category in ipairs(categories) do
+          local sectionId = type(category) == "table" and category.Name or nil
+          local sectionKind = type(sectionId) == "string" and catalogs.resourceInventorySectionKinds[sectionId] or nil
+          if sectionKind ~= nil then
+            local itemOrder = 0
+            for _, id in ipairs(category) do
+              if type(id) == "string" and id ~= "Money" and not seen[id]
+                  and type(ResourceData) == "table" and type(ResourceData[id]) == "table" then
+                itemOrder = itemOrder + 1
+                seen[id] = true
+                order[#order + 1] = id
+                metadata[id] = {
+                  sectionId = sectionId, sectionKind = sectionKind,
+                  sectionOrder = categoryIndex, itemOrder = itemOrder,
+                }
+              end
             end
           end
         end
       end
+      -- Fallback/forward compatibility: append game resources that are not part
+      -- of the Inventory screen categories in ResourceDisplayOrderData order.
+      if type(ResourceDisplayOrderData) == "table" and type(ResourceData) == "table" then
+        for _, id in ipairs(ResourceDisplayOrderData) do
+          if type(id) == "string" and id ~= "Money" and not seen[id] and type(ResourceData[id]) == "table" then
+            seen[id] = true
+            order[#order + 1] = id
+            metadata[id] = {
+              sectionId = "", sectionKind = resourceSectionKind(id),
+              sectionOrder = 999, itemOrder = #order,
+            }
+          end
+        end
+      end
+      return order, metadata
     end
-    -- Fallback/forward compatibility: append game resources that are not part
-    -- of the Inventory screen categories in ResourceDisplayOrderData order.
-    if type(ResourceDisplayOrderData) == "table" and type(ResourceData) == "table" then
-      for _, id in ipairs(ResourceDisplayOrderData) do
-        if type(id) == "string" and id ~= "Money" and not seen[id] and type(ResourceData[id]) == "table" then
-          seen[id] = true
-          order[#order + 1] = id
-          metadata[id] = {
-            sectionId = "", sectionKind = resourceSectionKind(id),
-            sectionOrder = 999, itemOrder = #order,
+    local function resourceCatalog()
+      local cached = M.catalogCache.resources
+      if type(cached) == "table" then return cached.order, cached.metadata, cached.allowed end
+      if type(ResourceDisplayOrderData) ~= "table" or type(ResourceData) ~= "table" then return {}, {}, {} end
+      -- Prefer the Inventory screen's own category arrays: they are the game's
+      -- source of truth for both grouping and per-category presentation order.
+      -- ResourceDisplayOrderData remains the fallback for uncategorized/future
+      -- resources so the catalog never silently drops a real ResourceData item.
+      local order, metadata = inventoryResourceLayout()
+      local allowed = {}
+      for _, id in ipairs(order) do
+        if type(id) == "string" and id ~= "Money" and type(ResourceData[id]) == "table" then allowed[id] = true end
+      end
+      -- Do not freeze the fallback-only layout if InventoryScreen has not been
+      -- initialized yet; the next state call can still discover official groups.
+      local categories = type(ScreenData) == "table" and type(ScreenData.InventoryScreen) == "table"
+        and ScreenData.InventoryScreen.ItemCategories or nil
+      if type(categories) == "table" then
+        cached = { order = order, metadata = metadata, allowed = allowed }
+        M.catalogCache.resources = cached
+      end
+      return order, metadata, allowed
+    end
+    local function resourceFingerprint()
+      local result = {}
+      M.observationRetention.append(result, GameState)
+      M.observationRetention.append(result, type(GameState) == "table" and GameState.Resources or nil)
+      M.observationRetention.append(result, ResourceData)
+      M.observationRetention.append(result, M.resourceLocks)
+      local order, _, allowed = resourceCatalog()
+      -- resourceCatalog may publish its stable native layout on first use. Record
+      -- the post-discovery owner so the next warm request does not invalidate
+      -- solely because this observation itself initialized the cache.
+      M.observationRetention.append(result, M.catalogCache.resources)
+      -- order/metadata/allowed are immutable catalog presentation for this
+      -- resident source generation. Warm freshness tracks only mutable values;
+      -- replacing ResourceData/catalog owners above invalidates the whole domain.
+      for _, id in ipairs(order) do
+        if allowed[id] then
+          M.observationRetention.append(result, id)
+          M.observationRetention.append(result, type(GameState) == "table"
+            and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
+          M.observationRetention.append(result, M.resourceLocks[id])
+        end
+      end
+      return result
+    end
+    M.observationRetention.resourceFingerprint = resourceFingerprint
+    local function resources()
+      local result = setmetatable({}, arrayMeta)
+      local order, metadata, allowed = resourceCatalog()
+      for index, id in ipairs(order) do
+        if allowed[id] then
+          local presentation = metadata[id] or {}
+          result[#result + 1] = {
+            id = id,
+            displayId = type(ResourceData[id].DisplayName) == "string" and ResourceData[id].DisplayName or id,
+            count = number(GameState.Resources and GameState.Resources[id]),
+            locked = M.resourceLocks[id] ~= nil, sortOrder = index,
+            sectionId = presentation.sectionId or "",
+            sectionKind = presentation.sectionKind or resourceSectionKind(id),
           }
         end
       end
+      return result, allowed
     end
-    return order, metadata
-  end
-  local function resourceCatalog()
-    local cached = M.catalogCache.resources
-    if type(cached) == "table" then return cached.order, cached.metadata, cached.allowed end
-    if type(ResourceDisplayOrderData) ~= "table" or type(ResourceData) ~= "table" then return {}, {}, {} end
-    -- Prefer the Inventory screen's own category arrays: they are the game's
-    -- source of truth for both grouping and per-category presentation order.
-    -- ResourceDisplayOrderData remains the fallback for uncategorized/future
-    -- resources so the catalog never silently drops a real ResourceData item.
-    local order, metadata = inventoryResourceLayout()
-    local allowed = {}
-    for _, id in ipairs(order) do
-      if type(id) == "string" and id ~= "Money" and type(ResourceData[id]) == "table" then allowed[id] = true end
-    end
-    -- Do not freeze the fallback-only layout if InventoryScreen has not been
-    -- initialized yet; the next state call can still discover official groups.
-    local categories = type(ScreenData) == "table" and type(ScreenData.InventoryScreen) == "table"
-      and ScreenData.InventoryScreen.ItemCategories or nil
-    if type(categories) == "table" then
-      cached = { order = order, metadata = metadata, allowed = allowed }
-      M.catalogCache.resources = cached
-    end
-    return order, metadata, allowed
-  end
-  function M.observationRetention.resourceFingerprint()
-    local result = {}
-    M.observationRetention.append(result, GameState)
-    M.observationRetention.append(result, type(GameState) == "table" and GameState.Resources or nil)
-    M.observationRetention.append(result, ResourceData)
-    M.observationRetention.append(result, M.resourceLocks)
-    local order, _, allowed = resourceCatalog()
-    -- resourceCatalog may publish its stable native layout on first use. Record
-    -- the post-discovery owner so the next warm request does not invalidate
-    -- solely because this observation itself initialized the cache.
-    M.observationRetention.append(result, M.catalogCache.resources)
-    -- order/metadata/allowed are immutable catalog presentation for this
-    -- resident source generation. Warm freshness tracks only mutable values;
-    -- replacing ResourceData/catalog owners above invalidates the whole domain.
-    for _, id in ipairs(order) do
-      if allowed[id] then
-        M.observationRetention.append(result, id)
-        M.observationRetention.append(result, type(GameState) == "table"
-          and type(GameState.Resources) == "table" and GameState.Resources[id] or nil)
-        M.observationRetention.append(result, M.resourceLocks[id])
+    local function officialOlympianOrder()
+      local order = {}
+      local list = type(CodexOrdering) == "table" and CodexOrdering.OlympianGods or nil
+      if type(list) ~= "table" and type(CodexData) == "table" then list = CodexData.OlympianGods end
+      if type(list) == "table" then
+        for index, id in ipairs(list) do
+          if type(id) == "string" then order[id] = index * 10 end
+        end
       end
+      return order
     end
-    return result
-  end
-  local function resources()
-    local result = setmetatable({}, arrayMeta)
-    local order, metadata, allowed = resourceCatalog()
-    for index, id in ipairs(order) do
-      if allowed[id] then
-        local presentation = metadata[id] or {}
-        result[#result + 1] = {
-          id = id,
-          displayId = type(ResourceData[id].DisplayName) == "string" and ResourceData[id].DisplayName or id,
-          count = number(GameState.Resources and GameState.Resources[id]),
-          locked = M.resourceLocks[id] ~= nil, sortOrder = index,
-          sectionId = presentation.sectionId or "",
-          sectionKind = presentation.sectionKind or resourceSectionKind(id),
+    local function boons()
+      local cached = M.catalogCache.boons
+      if type(cached) == "table" then return cached.list, cached.allowed end
+      local result, allowed = setmetatable({}, arrayMeta), {}
+      local officialOrder = officialOlympianOrder()
+      for _, entry in ipairs(catalogs.boonDefinitions) do
+        if type(LootData) == "table" and type(LootData[entry.id]) == "table" then
+          allowed[entry.id] = true
+          result[#result + 1] = { id = entry.id, name = entry.name, sortSection = 20, sortGroup = officialOrder[entry.id] or entry.order, sortOrder = 0 }
+        end
+      end
+      table.sort(result, function(a,b) return (a.sortGroup or 999) < (b.sortGroup or 999) end)
+      if type(LootData) == "table" and (type(CodexOrdering) == "table" or type(CodexData) == "table") then
+        M.catalogCache.boons = { list = result, allowed = allowed }
+      end
+      return result, allowed
+    end
+    local function officialSpecialSourceOrder()
+      local order, codexRank = {}, {}
+      if type(CodexOrdering) == "table" then
+        local chapters = CodexOrdering.Order
+        if type(chapters) ~= "table" then chapters = { "ChthonicGods", "OlympianGods", "OtherDenizens" } end
+        for chapterIndex, chapterName in ipairs(chapters) do
+          local entries = CodexOrdering[chapterName]
+          if type(entries) == "table" then
+            for itemIndex, id in ipairs(entries) do
+              if type(id) == "string" then codexRank[id] = chapterIndex * 1000 + itemIndex end
+            end
+          end
+        end
+      end
+      for sourceId, codexId in pairs(catalogs.specialSourceCodexIds) do
+        if codexRank[codexId] then order[sourceId] = codexRank[codexId] end
+      end
+      return order
+    end
+    local function orderedTraitIds(traits)
+      local result, found = {}, {}
+      if type(traits) ~= "table" or type(TraitData) ~= "table" then return result end
+      local function add(name)
+        if type(name) == "string" and type(TraitData[name]) == "table" and not found[name] then
+          found[name] = true; result[#result + 1] = name
+        end
+      end
+      -- Array order is the closest thing to an official presentation order for
+      -- in-person boon pools. Preserve it before considering keyed fallbacks.
+      for _, value in ipairs(traits) do
+        if type(value) == "string" then add(value)
+        elseif type(value) == "table" then add(value.TraitName or value.Name) end
+      end
+      local fallback = {}
+      for key, value in pairs(traits) do
+        local name
+        if type(value) == "string" then name = value
+        elseif type(value) == "table" then name = value.TraitName or value.Name
+        elseif type(key) == "string" and (value == true or finite(value)) then name = key end
+        if type(name) == "string" and not found[name] then fallback[#fallback + 1] = name end
+      end
+      table.sort(fallback)
+      for _, name in ipairs(fallback) do add(name) end
+      return result
+    end
+    local function rewards()
+      local cached = M.catalogCache.rewards
+      local seleneSignature = seleneModel.catalogSignature()
+      local hammerSignature = hammerModel.catalogSignature()
+      local echoSignature = echoModel.catalogSignature()
+      if type(cached) == "table"
+          and cached.seleneSignature == seleneSignature
+          and cached.hammerSignature == hammerSignature
+          and cached.echoSignature == echoSignature then
+        return cached.list, cached.allowed
+      end
+      local result, allowed = setmetatable({}, arrayMeta), {}
+      local officialSourceOrder = officialSpecialSourceOrder()
+      local familyTitles = {
+        money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
+        healing = "恢复", armor = "护甲", hammer = "狄德勒斯之锤", pom = "力量石榴",
+        utility = "其他局内奖励", meta = "局外资源奖励",
+        metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励", shop = "商店商品", well = "卡戎之井",
+      }
+      local knownBoonIds = {}
+      for _, entry in ipairs(catalogs.boonDefinitions) do knownBoonIds[entry.id] = true end
+      local function addDefinition(entry)
+        if allowed[entry.id] then return end
+        local traitId = entry.trait
+        if traitId == nil and entry.kind == "trait" then traitId = string.match(entry.id, "^trait:(.+)$") end
+        local exists = (entry.kind == "loot" and type(LootData) == "table" and type(LootData[entry.id]) == "table")
+          or (entry.kind == "consumable" and type(ConsumableData) == "table" and type(ConsumableData[entry.id]) == "table")
+          or (entry.kind == "trait" and type(TraitData) == "table" and type(TraitData[traitId]) == "table")
+        if exists then
+          local section = entry.group == "pickup" and 10 or (entry.group == "exact" and 25 or 30)
+          allowed[entry.id] = {
+            id = entry.id, name = entry.name, category = entry.category, group = entry.group or "pickup", kind = entry.kind,
+            family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode,
+            acquisitionMode = entry.acquisitionMode, spellName = entry.spellName, sortSection = section,
+            sortGroup = (entry.group == "special" or entry.group == "exact")
+              and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
+            sortOrder = entry.itemOrder or 0, sourceId = entry.sourceId, sourceName = entry.sourceName,
+            sectionTitle = (entry.group == "special" or entry.group == "exact") and entry.sourceName or familyTitles[entry.family],
+          }
+          result[#result + 1] = allowed[entry.id]
+        end
+      end
+      for _, entry in ipairs(catalogs.rewardDefinitions) do addDefinition(entry) end
+
+      -- RewardStoreData is the game's authoritative list of room reward pools.
+      -- Add any direct LootData/ConsumableData entries that are not yet in our
+      -- curated catalog. This prevents the trainer catalog from silently going
+      -- stale when Supergiant adds or rearranges rewards.
+      if type(RewardStoreData) == "table" then
+        local storeNames = {}
+        for storeName, store in pairs(RewardStoreData) do
+          if storeName ~= "InvalidOverrides" and type(store) == "table" then storeNames[#storeNames + 1] = storeName end
+        end
+        table.sort(storeNames)
+        local discovered, seenDiscovered = {}, {}
+        for _, storeName in ipairs(storeNames) do
+          local store = RewardStoreData[storeName]
+          for _, definition in ipairs(store) do
+            local id = type(definition) == "table" and definition.Name or nil
+            if type(id) == "string" and not seenDiscovered[id] then
+              seenDiscovered[id] = true
+              local kind = type(ConsumableData) == "table" and type(ConsumableData[id]) == "table" and "consumable" or nil
+              if kind == nil and type(LootData) == "table" and type(LootData[id]) == "table" then kind = "loot" end
+              if kind ~= nil and not allowed[id] and not knownBoonIds[id] then
+                discovered[#discovered + 1] = { id = id, kind = kind, store = storeName }
+              end
+            end
+          end
+        end
+        table.sort(discovered, function(a, b) return a.id < b.id end)
+        for index, entry in ipairs(discovered) do
+          addDefinition({
+            id = entry.id, name = entry.id, category = "其他房间奖励", kind = entry.kind,
+            group = "pickup", family = "runtimeReward", familyOrder = 90, itemOrder = index,
+          })
+          if allowed[entry.id] then allowed[entry.id].sectionTitle = "其他房间奖励" end
+        end
+      end
+
+      local officialGodOrder = officialOlympianOrder()
+      for _, entry in ipairs(catalogs.boonDefinitions) do
+        local item = { id = entry.id, name = entry.name, category = "奥林匹斯的祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
+        if type(LootData) == "table" and type(LootData[entry.id]) == "table" then allowed[entry.id] = item; result[#result + 1] = item end
+      end
+      -- Exact ordinary acquisition is projected from the same native GodLoot
+      -- sources that own eligibility/replacement. These rows are catalog targets,
+      -- not authorization to bypass the source's operation-time rules.
+      for _, entry in ipairs(catalogs.boonDefinitions) do
+        local source = type(LootData) == "table" and LootData[entry.id] or nil
+        if type(source) == "table" then
+          local seen, ordered = {}, {}
+          local function collectExact(pool)
+            for _, traitName in ipairs(orderedTraitIds(pool)) do
+              if not seen[traitName] then
+                seen[traitName] = true
+                ordered[#ordered + 1] = traitName
+              end
+            end
+          end
+          collectExact(source.PriorityUpgrades)
+          collectExact(source.WeaponUpgrades)
+          collectExact(source.Traits)
+          for index, traitName in ipairs(ordered) do
+            local id = "exact:" .. entry.id .. ":" .. traitName
+            if not allowed[id] then
+              local item = {
+                id = id, name = traitName, category = "奥林匹斯的祝福", group = "exact", kind = "trait",
+                trait = traitName, family = "olympianHermes", sourceId = entry.id, sourceName = entry.name,
+                sectionTitle = entry.name, acquisitionMode = "ordinaryNative",
+                sortSection = 25, sortGroup = officialGodOrder[entry.id] or entry.order or 999, sortOrder = index,
+              }
+              allowed[id] = item
+              result[#result + 1] = item
+            end
+          end
+        end
+      end
+
+      -- Chaos exact targets remain paired lifecycle choices. Selecting one
+      -- exact phase narrows only that side of TrialUpgrade; the counterpart is
+      -- still chosen from the target build's eligible native pool at operation time.
+      local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
+      if type(chaosSource) == "table" and chaosSource.TransformingTraits then
+        local chaosOrder = officialSourceOrder.Chaos or 20
+        local function addChaosExactRows(pool, prefix, mode, sectionTitle, orderOffset)
+          for index, traitName in ipairs(orderedTraitIds(pool)) do
+            local id = "chaos:" .. prefix .. ":" .. traitName
+            if not allowed[id] then
+              local item = {
+                id = id, name = traitName, category = "卡俄斯的祝福", group = "exact", kind = "trait",
+                trait = traitName, family = "chaos", sourceId = "Chaos", sourceName = "卡俄斯",
+                sectionTitle = sectionTitle, acquisitionMode = mode,
+                sortSection = 25, sortGroup = chaosOrder + orderOffset, sortOrder = index,
+              }
+              allowed[id] = item
+              result[#result + 1] = item
+            end
+          end
+        end
+        addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯的祝福", 0)
+        addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯的祝福", 1)
+      end
+
+      -- Selene exact targets are projected from the native spell owner. Main
+      -- Hexes come from SpellData; talents come only from the current generated
+      -- Path of Stars rather than the global TraitData talent universe.
+      if type(SpellData) == "table" and type(TraitData) == "table" then
+        local seleneOrder = officialSourceOrder.Selene or 10
+        local spellNames = {}
+        for spellName, spellData in pairs(SpellData) do
+          if type(spellName) == "string" and type(spellData) == "table"
+              and not spellData.Skip
+              and not (type(spellData.GameStateRequirements) == "table"
+                and spellData.GameStateRequirements.Skip)
+              and type(spellData.TraitName) == "string"
+              and type(TraitData[spellData.TraitName]) == "table" then
+            spellNames[#spellNames + 1] = spellName
+          end
+        end
+        table.sort(spellNames)
+        for index, spellName in ipairs(spellNames) do
+          local spellData = SpellData[spellName]
+          local id = "selene:spell:" .. spellName
+          local item = {
+            id = id, name = spellData.TraitName, category = "角色奖励", group = "exact", kind = "trait",
+            trait = spellData.TraitName, family = "hex", sourceId = "Selene", sourceName = "塞勒涅",
+            sectionTitle = "塞勒涅", acquisitionMode = "seleneSpell", spellName = spellName,
+            sortSection = 25, sortGroup = seleneOrder, sortOrder = index,
+          }
+          allowed[id] = item
+          result[#result + 1] = item
+        end
+
+        local slotted = seleneModel.currentSpell()
+        if type(slotted) == "table" and type(slotted.Name) == "string"
+            and type(slotted.Talents) == "table" then
+          local talentNames, seenTalents, availableTalents = {}, {}, {}
+          for _, column in ipairs(slotted.Talents) do
+            for _, node in pairs(type(column) == "table" and column or {}) do
+              if type(node) == "table" and type(node.Name) == "string"
+                  and type(TraitData[node.Name]) == "table" then
+                if not seenTalents[node.Name] then
+                  seenTalents[node.Name] = true
+                  talentNames[#talentNames + 1] = node.Name
+                end
+                if not node.Invested then availableTalents[node.Name] = true end
+              end
+            end
+          end
+          table.sort(talentNames)
+          for index, traitName in ipairs(talentNames) do
+            local id = "selene:talent:" .. slotted.Name .. ":" .. traitName
+            local item = {
+              id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
+              trait = traitName, family = "hexTalent", sourceId = "Selene", sourceName = "塞勒涅",
+              sectionTitle = "繁星之路", acquisitionMode = "seleneTalent", spellName = slotted.Name,
+              sortSection = 25, sortGroup = seleneOrder + 1, sortOrder = index,
+            }
+            allowed[id] = item
+            if availableTalents[traitName] then result[#result + 1] = item end
+          end
+        end
+      end
+
+      -- Echo's previous-run blessing is an owner action, not a trait target.
+      -- Project the concrete God boons from the latest run history directly so
+      -- exact acquisition never opens/waits on Echo's random three-choice menu.
+      do
+        local echoOrder = officialSourceOrder.Echo or 60
+        for index, target in ipairs(echoModel.catalogTargets()) do
+          local id = "echo:lastRun:" .. target.name
+          local item = {
+            id = id, name = target.name, category = "角色奖励", group = "exact", kind = "trait",
+            trait = target.name, family = "Echo", sourceId = "Echo", sourceName = "回声",
+            sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
+            sortSection = 25, sortGroup = echoOrder, sortOrder = index,
+          }
+          allowed[id] = item
+          result[#result + 1] = item
+        end
+      end
+
+
+      -- Daedalus Hammer exact targets are the game's current native eligibility
+      -- for the equipped weapon/aspect.  Mounted targets remain in the internal
+      -- allowed map only so an identical completed request can return its receipt
+      -- after the game removes that target from the visible eligible pool.
+      do
+        local visibleNames, allowedNames = hammerModel.catalogNames()
+        local visible = {}
+        for _, name in ipairs(visibleNames) do visible[name] = true end
+        local hammerOrder = 850
+        for index, traitName in ipairs(allowedNames) do
+          local id = "hammer:" .. traitName
+          local item = {
+            id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
+            trait = traitName, family = "hammer", sourceId = "WeaponUpgrade",
+            sourceName = "狄德勒斯之锤", sectionTitle = "狄德勒斯之锤",
+            acquisitionMode = "hammerNative",
+            sortSection = 25, sortGroup = hammerOrder, sortOrder = index,
+          }
+          allowed[id] = item
+          if visible[traitName] then result[#result + 1] = item end
+        end
+      end
+
+      local buckets = {}
+      for _, source in ipairs(catalogs.specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
+      local function collect(sourceId, traits)
+        local bucket = buckets[sourceId]
+        if not bucket then return end
+        for _, traitName in ipairs(orderedTraitIds(traits)) do
+          if not bucket.seen[traitName] then bucket.seen[traitName] = true; bucket.traits[#bucket.traits + 1] = traitName end
+        end
+      end
+      if type(UnitSetData) == "table" then
+        for setKey, unitSet in pairs(UnitSetData) do
+          if type(unitSet) == "table" then
+            for unitKey, unit in pairs(unitSet) do
+              if type(unit) == "table" then
+                local speaker = type(unit.SpeakerName) == "string" and unit.SpeakerName or ""
+                local sourceId = catalogs.specialTraitSources[speaker] and speaker or nil
+                if sourceId == nil and type(unitKey) == "string" then
+                  for _, source in ipairs(catalogs.specialSourceDefinitions) do
+                    if string.find(unitKey, source.id, 1, true) then sourceId = source.id; break end
+                  end
+                end
+                if sourceId == nil and type(setKey) == "string" then
+                  for _, source in ipairs(catalogs.specialSourceDefinitions) do
+                    if string.find(setKey, source.id, 1, true) then sourceId = source.id; break end
+                  end
+                end
+                if sourceId then collect(sourceId, unit.Traits) end
+              end
+            end
+          end
+        end
+      end
+      for _, source in ipairs(catalogs.specialSourceDefinitions) do
+        local bucket = buckets[source.id]
+        for index, traitName in ipairs(bucket and bucket.traits or {}) do
+          local id = "trait:" .. traitName
+          if not allowed[id] and not catalogs.nativeChoiceOnlyTraits[traitName] then
+            local item = {
+              id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait", trait = traitName,
+              family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
+              nativeChoice = catalogs.nativeSpecialChoiceSources[source.id] == true,
+              acquisitionMode = source.id == "Arachne" and "costume" or "direct",
+              sortSection = 25, sortGroup = officialSourceOrder[source.id] or catalogs.specialTraitSourceOrder[source.id] or 999, sortOrder = index,
+            }
+            allowed[id] = item; result[#result + 1] = item
+          end
+        end
+      end
+      table.sort(result, function(a, b)
+        local sa, sb = a.sortSection or 999, b.sortSection or 999
+        if sa ~= sb then return sa < sb end
+        local ga, gb = a.sortGroup or 999, b.sortGroup or 999
+        if ga ~= gb then return ga < gb end
+        local oa, ob = a.sortOrder or 999, b.sortOrder or 999
+        if oa ~= ob then return oa < ob end
+        return a.id < b.id
+      end)
+      if type(LootData) == "table" and type(ConsumableData) == "table"
+          and type(RewardStoreData) == "table" and type(UnitSetData) == "table" and type(TraitData) == "table" then
+        M.catalogCache.rewards = {
+          list = result, allowed = allowed, seleneSignature = seleneSignature,
+          hammerSignature = hammerSignature, echoSignature = echoSignature,
         }
       end
+      return result, allowed
     end
-    return result, allowed
-  end
-  local function officialOlympianOrder()
-    local order = {}
-    local list = type(CodexOrdering) == "table" and CodexOrdering.OlympianGods or nil
-    if type(list) ~= "table" and type(CodexData) == "table" then list = CodexData.OlympianGods end
-    if type(list) == "table" then
-      for index, id in ipairs(list) do
-        if type(id) == "string" then order[id] = index * 10 end
-      end
-    end
-    return order
-  end
-  local function boons()
-    local cached = M.catalogCache.boons
-    if type(cached) == "table" then return cached.list, cached.allowed end
-    local result, allowed = setmetatable({}, arrayMeta), {}
-    local officialOrder = officialOlympianOrder()
-    for _, entry in ipairs(catalogs.boonDefinitions) do
-      if type(LootData) == "table" and type(LootData[entry.id]) == "table" then
-        allowed[entry.id] = true
-        result[#result + 1] = { id = entry.id, name = entry.name, sortSection = 20, sortGroup = officialOrder[entry.id] or entry.order, sortOrder = 0 }
-      end
-    end
-    table.sort(result, function(a,b) return (a.sortGroup or 999) < (b.sortGroup or 999) end)
-    if type(LootData) == "table" and (type(CodexOrdering) == "table" or type(CodexData) == "table") then
-      M.catalogCache.boons = { list = result, allowed = allowed }
-    end
-    return result, allowed
-  end
+    return {
+      resourceCatalog = resourceCatalog,
+      resources = resources,
+      boons = boons,
+      orderedTraitIds = orderedTraitIds,
+      rewards = rewards,
+    }
+  end)()
   catalogs.specialSourceCodexIds = {
     Selene = "SpellDrop", Chaos = "TrialUpgrade",
     Artemis = "NPC_Artemis_01", Athena = "NPC_Athena_01", Dionysus = "NPC_Dionysus_01",
@@ -1939,52 +2307,7 @@ if __MacGamingTrainerV1 == nil then
     Circe = "NPC_Circe_01", Icarus = "NPC_Icarus_01", Medea = "NPC_Medea_01",
     Arachne = "NPC_Arachne_01",
   }
-  local function officialSpecialSourceOrder()
-    local order, codexRank = {}, {}
-    if type(CodexOrdering) == "table" then
-      local chapters = CodexOrdering.Order
-      if type(chapters) ~= "table" then chapters = { "ChthonicGods", "OlympianGods", "OtherDenizens" } end
-      for chapterIndex, chapterName in ipairs(chapters) do
-        local entries = CodexOrdering[chapterName]
-        if type(entries) == "table" then
-          for itemIndex, id in ipairs(entries) do
-            if type(id) == "string" then codexRank[id] = chapterIndex * 1000 + itemIndex end
-          end
-        end
-      end
-    end
-    for sourceId, codexId in pairs(catalogs.specialSourceCodexIds) do
-      if codexRank[codexId] then order[sourceId] = codexRank[codexId] end
-    end
-    return order
-  end
-  local function orderedTraitIds(traits)
-    local result, found = {}, {}
-    if type(traits) ~= "table" or type(TraitData) ~= "table" then return result end
-    local function add(name)
-      if type(name) == "string" and type(TraitData[name]) == "table" and not found[name] then
-        found[name] = true; result[#result + 1] = name
-      end
-    end
-    -- Array order is the closest thing to an official presentation order for
-    -- in-person boon pools. Preserve it before considering keyed fallbacks.
-    for _, value in ipairs(traits) do
-      if type(value) == "string" then add(value)
-      elseif type(value) == "table" then add(value.TraitName or value.Name) end
-    end
-    local fallback = {}
-    for key, value in pairs(traits) do
-      local name
-      if type(value) == "string" then name = value
-      elseif type(value) == "table" then name = value.TraitName or value.Name
-      elseif type(key) == "string" and (value == true or finite(value)) then name = key end
-      if type(name) == "string" and not found[name] then fallback[#fallback + 1] = name end
-    end
-    table.sort(fallback)
-    for _, name in ipairs(fallback) do add(name) end
-    return result
-  end
-  local seleneModel = (function()
+  seleneModel = (function()
     local function currentSpell()
       local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
       local slotted = type(hero) == "table" and hero.SlottedSpell or nil
@@ -2240,7 +2563,7 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
-  local hammerModel = (function()
+  hammerModel = (function()
     local parentWeapons = {
       StaffHammerTrait = "WeaponStaffSwing",
       DaggerHammerTrait = "WeaponDagger",
@@ -2260,7 +2583,7 @@ if __MacGamingTrainerV1 == nil then
       local value = source()
       if value == nil then return result end
       for _, pool in ipairs({ value.PriorityUpgrades, value.WeaponUpgrades, value.Traits }) do
-        for _, name in ipairs(orderedTraitIds(pool)) do
+        for _, name in ipairs(M.catalogProjection.orderedTraitIds(pool)) do
           if not seen[name] then
             seen[name] = true
             result[#result + 1] = name
@@ -2503,7 +2826,7 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
-  local echoModel = (function()
+  echoModel = (function()
     local prefix = "echo:lastRun:"
 
     local function previousRun()
@@ -2650,318 +2973,6 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
-  local function rewards()
-    local cached = M.catalogCache.rewards
-    local seleneSignature = seleneModel.catalogSignature()
-    local hammerSignature = hammerModel.catalogSignature()
-    local echoSignature = echoModel.catalogSignature()
-    if type(cached) == "table"
-        and cached.seleneSignature == seleneSignature
-        and cached.hammerSignature == hammerSignature
-        and cached.echoSignature == echoSignature then
-      return cached.list, cached.allowed
-    end
-    local result, allowed = setmetatable({}, arrayMeta), {}
-    local officialSourceOrder = officialSpecialSourceOrder()
-    local familyTitles = {
-      money = "金币", centaurHeart = "半人马之心", centaurSoul = "半人马之魂", soulTonic = "灵魂之水",
-      healing = "恢复", armor = "护甲", hammer = "狄德勒斯之锤", pom = "力量石榴",
-      utility = "其他局内奖励", meta = "局外资源奖励",
-      metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励", shop = "商店商品", well = "卡戎之井",
-    }
-    local knownBoonIds = {}
-    for _, entry in ipairs(catalogs.boonDefinitions) do knownBoonIds[entry.id] = true end
-    local function addDefinition(entry)
-      if allowed[entry.id] then return end
-      local traitId = entry.trait
-      if traitId == nil and entry.kind == "trait" then traitId = string.match(entry.id, "^trait:(.+)$") end
-      local exists = (entry.kind == "loot" and type(LootData) == "table" and type(LootData[entry.id]) == "table")
-        or (entry.kind == "consumable" and type(ConsumableData) == "table" and type(ConsumableData[entry.id]) == "table")
-        or (entry.kind == "trait" and type(TraitData) == "table" and type(TraitData[traitId]) == "table")
-      if exists then
-        local section = entry.group == "pickup" and 10 or (entry.group == "exact" and 25 or 30)
-        allowed[entry.id] = {
-          id = entry.id, name = entry.name, category = entry.category, group = entry.group or "pickup", kind = entry.kind,
-          family = entry.family, trait = traitId, storeTrait = entry.storeTrait, spawnMode = entry.spawnMode,
-          acquisitionMode = entry.acquisitionMode, spellName = entry.spellName, sortSection = section,
-          sortGroup = (entry.group == "special" or entry.group == "exact")
-            and (officialSourceOrder[entry.sourceId] or entry.familyOrder or 999) or (entry.familyOrder or 0),
-          sortOrder = entry.itemOrder or 0, sourceId = entry.sourceId, sourceName = entry.sourceName,
-          sectionTitle = (entry.group == "special" or entry.group == "exact") and entry.sourceName or familyTitles[entry.family],
-        }
-        result[#result + 1] = allowed[entry.id]
-      end
-    end
-    for _, entry in ipairs(catalogs.rewardDefinitions) do addDefinition(entry) end
-
-    -- RewardStoreData is the game's authoritative list of room reward pools.
-    -- Add any direct LootData/ConsumableData entries that are not yet in our
-    -- curated catalog. This prevents the trainer catalog from silently going
-    -- stale when Supergiant adds or rearranges rewards.
-    if type(RewardStoreData) == "table" then
-      local storeNames = {}
-      for storeName, store in pairs(RewardStoreData) do
-        if storeName ~= "InvalidOverrides" and type(store) == "table" then storeNames[#storeNames + 1] = storeName end
-      end
-      table.sort(storeNames)
-      local discovered, seenDiscovered = {}, {}
-      for _, storeName in ipairs(storeNames) do
-        local store = RewardStoreData[storeName]
-        for _, definition in ipairs(store) do
-          local id = type(definition) == "table" and definition.Name or nil
-          if type(id) == "string" and not seenDiscovered[id] then
-            seenDiscovered[id] = true
-            local kind = type(ConsumableData) == "table" and type(ConsumableData[id]) == "table" and "consumable" or nil
-            if kind == nil and type(LootData) == "table" and type(LootData[id]) == "table" then kind = "loot" end
-            if kind ~= nil and not allowed[id] and not knownBoonIds[id] then
-              discovered[#discovered + 1] = { id = id, kind = kind, store = storeName }
-            end
-          end
-        end
-      end
-      table.sort(discovered, function(a, b) return a.id < b.id end)
-      for index, entry in ipairs(discovered) do
-        addDefinition({
-          id = entry.id, name = entry.id, category = "其他房间奖励", kind = entry.kind,
-          group = "pickup", family = "runtimeReward", familyOrder = 90, itemOrder = index,
-        })
-        if allowed[entry.id] then allowed[entry.id].sectionTitle = "其他房间奖励" end
-      end
-    end
-
-    local officialGodOrder = officialOlympianOrder()
-    for _, entry in ipairs(catalogs.boonDefinitions) do
-      local item = { id = entry.id, name = entry.name, category = "奥林匹斯的祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
-      if type(LootData) == "table" and type(LootData[entry.id]) == "table" then allowed[entry.id] = item; result[#result + 1] = item end
-    end
-    -- Exact ordinary acquisition is projected from the same native GodLoot
-    -- sources that own eligibility/replacement. These rows are catalog targets,
-    -- not authorization to bypass the source's operation-time rules.
-    for _, entry in ipairs(catalogs.boonDefinitions) do
-      local source = type(LootData) == "table" and LootData[entry.id] or nil
-      if type(source) == "table" then
-        local seen, ordered = {}, {}
-        local function collectExact(pool)
-          for _, traitName in ipairs(orderedTraitIds(pool)) do
-            if not seen[traitName] then
-              seen[traitName] = true
-              ordered[#ordered + 1] = traitName
-            end
-          end
-        end
-        collectExact(source.PriorityUpgrades)
-        collectExact(source.WeaponUpgrades)
-        collectExact(source.Traits)
-        for index, traitName in ipairs(ordered) do
-          local id = "exact:" .. entry.id .. ":" .. traitName
-          if not allowed[id] then
-            local item = {
-              id = id, name = traitName, category = "奥林匹斯的祝福", group = "exact", kind = "trait",
-              trait = traitName, family = "olympianHermes", sourceId = entry.id, sourceName = entry.name,
-              sectionTitle = entry.name, acquisitionMode = "ordinaryNative",
-              sortSection = 25, sortGroup = officialGodOrder[entry.id] or entry.order or 999, sortOrder = index,
-            }
-            allowed[id] = item
-            result[#result + 1] = item
-          end
-        end
-      end
-    end
-
-    -- Chaos exact targets remain paired lifecycle choices. Selecting one
-    -- exact phase narrows only that side of TrialUpgrade; the counterpart is
-    -- still chosen from the target build's eligible native pool at operation time.
-    local chaosSource = type(LootData) == "table" and LootData.TrialUpgrade or nil
-    if type(chaosSource) == "table" and chaosSource.TransformingTraits then
-      local chaosOrder = officialSourceOrder.Chaos or 20
-      local function addChaosExactRows(pool, prefix, mode, sectionTitle, orderOffset)
-        for index, traitName in ipairs(orderedTraitIds(pool)) do
-          local id = "chaos:" .. prefix .. ":" .. traitName
-          if not allowed[id] then
-            local item = {
-              id = id, name = traitName, category = "卡俄斯的祝福", group = "exact", kind = "trait",
-              trait = traitName, family = "chaos", sourceId = "Chaos", sourceName = "卡俄斯",
-              sectionTitle = sectionTitle, acquisitionMode = mode,
-              sortSection = 25, sortGroup = chaosOrder + orderOffset, sortOrder = index,
-            }
-            allowed[id] = item
-            result[#result + 1] = item
-          end
-        end
-      end
-      addChaosExactRows(chaosSource.PermanentTraits, "blessing", "chaosBlessing", "卡俄斯的祝福", 0)
-      addChaosExactRows(chaosSource.TemporaryTraits, "curse", "chaosCurse", "卡俄斯的祝福", 1)
-    end
-
-    -- Selene exact targets are projected from the native spell owner. Main
-    -- Hexes come from SpellData; talents come only from the current generated
-    -- Path of Stars rather than the global TraitData talent universe.
-    if type(SpellData) == "table" and type(TraitData) == "table" then
-      local seleneOrder = officialSourceOrder.Selene or 10
-      local spellNames = {}
-      for spellName, spellData in pairs(SpellData) do
-        if type(spellName) == "string" and type(spellData) == "table"
-            and not spellData.Skip
-            and not (type(spellData.GameStateRequirements) == "table"
-              and spellData.GameStateRequirements.Skip)
-            and type(spellData.TraitName) == "string"
-            and type(TraitData[spellData.TraitName]) == "table" then
-          spellNames[#spellNames + 1] = spellName
-        end
-      end
-      table.sort(spellNames)
-      for index, spellName in ipairs(spellNames) do
-        local spellData = SpellData[spellName]
-        local id = "selene:spell:" .. spellName
-        local item = {
-          id = id, name = spellData.TraitName, category = "角色奖励", group = "exact", kind = "trait",
-          trait = spellData.TraitName, family = "hex", sourceId = "Selene", sourceName = "塞勒涅",
-          sectionTitle = "塞勒涅", acquisitionMode = "seleneSpell", spellName = spellName,
-          sortSection = 25, sortGroup = seleneOrder, sortOrder = index,
-        }
-        allowed[id] = item
-        result[#result + 1] = item
-      end
-
-      local slotted = seleneModel.currentSpell()
-      if type(slotted) == "table" and type(slotted.Name) == "string"
-          and type(slotted.Talents) == "table" then
-        local talentNames, seenTalents, availableTalents = {}, {}, {}
-        for _, column in ipairs(slotted.Talents) do
-          for _, node in pairs(type(column) == "table" and column or {}) do
-            if type(node) == "table" and type(node.Name) == "string"
-                and type(TraitData[node.Name]) == "table" then
-              if not seenTalents[node.Name] then
-                seenTalents[node.Name] = true
-                talentNames[#talentNames + 1] = node.Name
-              end
-              if not node.Invested then availableTalents[node.Name] = true end
-            end
-          end
-        end
-        table.sort(talentNames)
-        for index, traitName in ipairs(talentNames) do
-          local id = "selene:talent:" .. slotted.Name .. ":" .. traitName
-          local item = {
-            id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
-            trait = traitName, family = "hexTalent", sourceId = "Selene", sourceName = "塞勒涅",
-            sectionTitle = "繁星之路", acquisitionMode = "seleneTalent", spellName = slotted.Name,
-            sortSection = 25, sortGroup = seleneOrder + 1, sortOrder = index,
-          }
-          allowed[id] = item
-          if availableTalents[traitName] then result[#result + 1] = item end
-        end
-      end
-    end
-
-    -- Echo's previous-run blessing is an owner action, not a trait target.
-    -- Project the concrete God boons from the latest run history directly so
-    -- exact acquisition never opens/waits on Echo's random three-choice menu.
-    do
-      local echoOrder = officialSourceOrder.Echo or 60
-      for index, target in ipairs(echoModel.catalogTargets()) do
-        local id = "echo:lastRun:" .. target.name
-        local item = {
-          id = id, name = target.name, category = "角色奖励", group = "exact", kind = "trait",
-          trait = target.name, family = "Echo", sourceId = "Echo", sourceName = "回声",
-          sectionTitle = "上局祝福", acquisitionMode = "echoLastRunExact",
-          sortSection = 25, sortGroup = echoOrder, sortOrder = index,
-        }
-        allowed[id] = item
-        result[#result + 1] = item
-      end
-    end
-
-
-    -- Daedalus Hammer exact targets are the game's current native eligibility
-    -- for the equipped weapon/aspect.  Mounted targets remain in the internal
-    -- allowed map only so an identical completed request can return its receipt
-    -- after the game removes that target from the visible eligible pool.
-    do
-      local visibleNames, allowedNames = hammerModel.catalogNames()
-      local visible = {}
-      for _, name in ipairs(visibleNames) do visible[name] = true end
-      local hammerOrder = 850
-      for index, traitName in ipairs(allowedNames) do
-        local id = "hammer:" .. traitName
-        local item = {
-          id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait",
-          trait = traitName, family = "hammer", sourceId = "WeaponUpgrade",
-          sourceName = "狄德勒斯之锤", sectionTitle = "狄德勒斯之锤",
-          acquisitionMode = "hammerNative",
-          sortSection = 25, sortGroup = hammerOrder, sortOrder = index,
-        }
-        allowed[id] = item
-        if visible[traitName] then result[#result + 1] = item end
-      end
-    end
-
-    local buckets = {}
-    for _, source in ipairs(catalogs.specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
-    local function collect(sourceId, traits)
-      local bucket = buckets[sourceId]
-      if not bucket then return end
-      for _, traitName in ipairs(orderedTraitIds(traits)) do
-        if not bucket.seen[traitName] then bucket.seen[traitName] = true; bucket.traits[#bucket.traits + 1] = traitName end
-      end
-    end
-    if type(UnitSetData) == "table" then
-      for setKey, unitSet in pairs(UnitSetData) do
-        if type(unitSet) == "table" then
-          for unitKey, unit in pairs(unitSet) do
-            if type(unit) == "table" then
-              local speaker = type(unit.SpeakerName) == "string" and unit.SpeakerName or ""
-              local sourceId = catalogs.specialTraitSources[speaker] and speaker or nil
-              if sourceId == nil and type(unitKey) == "string" then
-                for _, source in ipairs(catalogs.specialSourceDefinitions) do
-                  if string.find(unitKey, source.id, 1, true) then sourceId = source.id; break end
-                end
-              end
-              if sourceId == nil and type(setKey) == "string" then
-                for _, source in ipairs(catalogs.specialSourceDefinitions) do
-                  if string.find(setKey, source.id, 1, true) then sourceId = source.id; break end
-                end
-              end
-              if sourceId then collect(sourceId, unit.Traits) end
-            end
-          end
-        end
-      end
-    end
-    for _, source in ipairs(catalogs.specialSourceDefinitions) do
-      local bucket = buckets[source.id]
-      for index, traitName in ipairs(bucket and bucket.traits or {}) do
-        local id = "trait:" .. traitName
-        if not allowed[id] and not catalogs.nativeChoiceOnlyTraits[traitName] then
-          local item = {
-            id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait", trait = traitName,
-            family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
-            nativeChoice = catalogs.nativeSpecialChoiceSources[source.id] == true,
-            acquisitionMode = source.id == "Arachne" and "costume" or "direct",
-            sortSection = 25, sortGroup = officialSourceOrder[source.id] or catalogs.specialTraitSourceOrder[source.id] or 999, sortOrder = index,
-          }
-          allowed[id] = item; result[#result + 1] = item
-        end
-      end
-    end
-    table.sort(result, function(a, b)
-      local sa, sb = a.sortSection or 999, b.sortSection or 999
-      if sa ~= sb then return sa < sb end
-      local ga, gb = a.sortGroup or 999, b.sortGroup or 999
-      if ga ~= gb then return ga < gb end
-      local oa, ob = a.sortOrder or 999, b.sortOrder or 999
-      if oa ~= ob then return oa < ob end
-      return a.id < b.id
-    end)
-    if type(LootData) == "table" and type(ConsumableData) == "table"
-        and type(RewardStoreData) == "table" and type(UnitSetData) == "table" and type(TraitData) == "table" then
-      M.catalogCache.rewards = {
-        list = result, allowed = allowed, seleneSignature = seleneSignature,
-        hammerSignature = hammerSignature, echoSignature = echoSignature,
-      }
-    end
-    return result, allowed
-  end
   local statOrder, statRegistry
   local function statSupport()
     local result = {}
@@ -7260,10 +7271,10 @@ if __MacGamingTrainerV1 == nil then
     local resourceFingerprint = M.observationRetention.resourceFingerprint()
     local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
     local list
-    if not retainResources then list = resources() end
+    if not retainResources then list = M.catalogProjection.resources() end
     local boonList, rewardList, occurrenceList = nil, nil, nil
     if includeCatalogs ~= false then
-      boonList, rewardList = boons(), rewards()
+      boonList, rewardList = M.catalogProjection.boons(), M.catalogProjection.rewards()
       occurrenceList = setmetatable({}, arrayMeta)
       if type(occurrenceTargets) == "table" and type(occurrenceTargetOrder) == "table" then
         for _, id in ipairs(occurrenceTargetOrder) do
@@ -8478,7 +8489,7 @@ if __MacGamingTrainerV1 == nil then
       if finite(amount) and amount > 0 and source ~= trainerSource then
         if id == "Money" and M.moneyMultiplierEnabled then amount = amount * M.moneyMultiplier
         elseif id ~= "Money" and M.resourceMultiplierEnabled then
-          local _, _, allowed = resourceCatalog()
+          local _, _, allowed = M.catalogProjection.resourceCatalog()
           if allowed[id] then amount = amount * M.resourceMultiplier end
         end
       end
@@ -8837,7 +8848,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function validateResource(id)
     requireResources()
-    local _, _, allowed = resourceCatalog()
+    local _, _, allowed = M.catalogProjection.resourceCatalog()
     if type(id) ~= "string" or not (allowed[id] or id == "Money") or type(ResourceData[id]) ~= "table" then
       error("Unknown or unsupported resource")
     end
@@ -9507,7 +9518,7 @@ if __MacGamingTrainerV1 == nil then
       end
       if command ~= "spawn_reward" then error("Unknown reward acquisition command") end
 
-      local _, allowed = rewards()
+      local _, allowed = M.catalogProjection.rewards()
       local rewardId = params.reward
       local entry = type(rewardId) == "string" and allowed[rewardId] or nil
       if not entry then entry = echoModel.hiddenEntry(rewardId) end
