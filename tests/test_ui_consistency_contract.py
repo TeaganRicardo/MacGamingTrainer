@@ -37,8 +37,14 @@ assert "TrainerSecondaryActionButton(" in resource
 assert "TrainerSecondaryActionButton(" in occurrence
 assert view.count("TrainerSecondaryActionButton(") >= 6
 assert "static let removeControlWidth: CGFloat = 132" in view
-assert "static let commonControlsWidth: CGFloat = 606" in view
-assert "private var managedTraitHasContextualControls: Bool" in view
+assert "static let commonControlsWidth: CGFloat = 606" not in view
+assert "static let levelControlsWidth: CGFloat = 200" not in view
+assert "static let rarityControlsWidth: CGFloat = 250" not in view
+assert "static func levelControlsWidth(compactActionWidth: CGFloat)" in view
+assert "static func rarityControlsWidth(compactActionWidth: CGFloat)" in view
+assert "static func commonControlsWidth(compactActionWidth: CGFloat)" in view
+assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth)" in view
+assert "hasTemporaryContextualControls(for: trait)" in view
 assert ".padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)" not in view
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
@@ -77,6 +83,7 @@ presentation_cases = dict(re.findall(
     presentation_block,
 ))
 assert len(actions) == len(set(actions)), "duplicate shortcut action declaration"
+assert presentation_cases.get("disableAll") == "host.disableAll"
 assert set(presentation_cases) == set(actions), (
     "every registered shortcut action must have one presentation label"
 )
@@ -97,11 +104,15 @@ for language in ("en", "zh-CN"):
     table = json.loads(
         (HADES / f"Presentation/Localization/hades2.{language}.json").read_text()
     )["entries"]
-    assert action_keys <= table.keys()
+    module_action_keys = {key for key in action_keys if key.startswith("hades2.")}
+    assert module_action_keys <= table.keys()
     assert trait_action_keys <= table.keys()
     trait_labels = [table[key] for key in sorted(trait_action_keys)]
     assert len(trait_labels) == len(set(trait_labels)), f"{language} trait action labels are ambiguous"
-    labels = [table[key] for key in sorted(action_keys)]
+    host_strings = (ROOT.parent / "Resources" / "Localization" / f"{language}.lproj" / "Host.strings").read_text()
+    host_disable_all = re.search(r'"host.disableAll" = "([^"]+)";', host_strings)
+    assert host_disable_all, f"{language} Host-owned Disable All label is missing"
+    labels = [table[key] for key in sorted(module_action_keys)] + [host_disable_all.group(1)]
     assert len(labels) == len(set(labels)), f"{language} shortcut action labels are ambiguous"
 
 for key in (
