@@ -64,10 +64,10 @@ struct Hades2OccurrenceSetting: View {
                         title: generateLabel,
                         enabled: canGenerate,
                         width: theme.compactActionWidth,
+                        helpText: generateHelp,
+                        accessibilityLabel: title + " " + generateLabel,
                         action: onGenerate
                     )
-                    .help(generateHelp)
-                    .accessibilityLabel(title + " " + generateLabel)
                 }
             }
         }
