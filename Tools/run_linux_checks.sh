@@ -1,13 +1,37 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
+if ! cd "$ROOT"; then
+  echo "ERROR: cannot enter repository root: $ROOT" >&2
+  exit 2
+fi
+
+failures=()
+record_failure() {
+  failures+=("$1")
+  printf 'FAIL: %s\n' "$1" >&2
+}
+
+run_check() {
+  local label="$1"
+  shift
+  printf '==> %s\n' "$label"
+  if "$@"; then
+    printf 'PASS: %s\n' "$label"
+  else
+    local status=$?
+    record_failure "$label (exit $status)"
+  fi
+}
 
 # Tests build fixtures with tempfile.mkdtemp and some production defaults derive
 # storage from HOME. Keep both temporary files and accidental default-path
 # writes inside one private tree owned by the lane.
-LANE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgt-lane-XXXXXX")"
+if ! LANE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mgt-lane-XXXXXX")"; then
+  echo "ERROR: could not create isolated test directory" >&2
+  exit 2
+fi
 cleanup_lane_tmp() {
   if [[ -n "${LANE_TMP:-}" && -d "${LANE_TMP:-}" && "${LANE_TMP}" == */mgt-lane-* ]]; then
     rm -rf -- "$LANE_TMP"
@@ -17,26 +41,46 @@ cleanup_lane_tmp() {
 trap cleanup_lane_tmp EXIT
 export TMPDIR="$LANE_TMP"
 export HOME="$LANE_TMP/home"
-mkdir -p "$HOME"
+if ! mkdir -p "$HOME"; then
+  record_failure "create isolated HOME"
+fi
 
 MACOS_ONLY_LIST="$ROOT/Tools/macos_only_tests.txt"
-test -f "$MACOS_ONLY_LIST"
+if [[ -f "$MACOS_ONLY_LIST" ]]; then
+  while IFS= read -r name || [[ -n "$name" ]]; do
+    [[ -n "$name" ]] || continue
+    if [[ ! -f "$ROOT/tests/$name" ]]; then
+      record_failure "missing macOS-only test: $name"
+    fi
+  done < "$MACOS_ONLY_LIST"
+else
+  record_failure "missing macOS-only test list: $MACOS_ONLY_LIST"
+fi
 
-while IFS= read -r name || [[ -n "$name" ]]; do
-  [[ -n "$name" ]] || continue
-  test -f "$ROOT/tests/$name"
-done < "$MACOS_ONLY_LIST"
-
-python3 -m compileall -q Backend
-python3 Tools/validate_game_module.py --all
+run_check "Compile backend" python3 -m compileall -q Backend
+run_check "Validate game modules" python3 Tools/validate_game_module.py --all
 
 # Linux collects paths recursively; the shared macOS-only list is the sole
-# exclusion source, so new portable tests cannot miss the gate.
-discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"
-while IFS= read -r test_file; do
-  [[ -n "$test_file" ]] || continue
-  echo "==> $test_file"
-  python3 "$test_file"
-done <<< "$discovered_tests"
+# exclusion source, so new portable tests cannot miss the gate. A failing
+# test is recorded and does not prevent later tests from running.
+if [[ -f "$MACOS_ONLY_LIST" ]]; then
+  if discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"; then
+    while IFS= read -r test_file; do
+      [[ -n "$test_file" ]] || continue
+      run_check "$test_file" python3 "$test_file"
+    done <<< "$discovered_tests"
+  else
+    status=$?
+    record_failure "discover Linux tests (exit $status)"
+  fi
+else
+  record_failure "discover Linux tests (missing macOS-only list)"
+fi
+
+if (("${#failures[@]}" > 0)); then
+  printf '\nLinux contract suite failed in %d check(s):\n' "${#failures[@]}" >&2
+  printf ' - %s\n' "${failures[@]}" >&2
+  exit 1
+fi
 
 echo "linux_checks_ok"
