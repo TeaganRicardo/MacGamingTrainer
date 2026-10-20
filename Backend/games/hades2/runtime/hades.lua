@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 115 then
+if previousModule and previousModule.revision ~= 116 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 115 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 115,
+    version = 1, revision = 116,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -693,264 +693,397 @@ if __MacGamingTrainerV1 == nil then
   -- list in TraitData_MetaUpgrade.lua.  The recast gate is a per-weapon engine
   -- property, so overriding only WeaponCast leaves the fired variant's own gate
   -- in force and the recast stays blocked for those shapes.
-  local castModel = {
-    baseWeapon = "WeaponCast",
-    variantWeapons = setmetatable({
-      "WeaponCastProjectile", "WeaponCastProjectileHades", "WeaponAnywhereCast", "WeaponCastLob",
-    }, arrayMeta),
-    variantSet = {},
-    overrides = {
-      IgnoreOwnerAttackDisabled = true,
-      Cooldown = 0,
-      AllowMultiFireRequest = true,
-      IgnoreForceCooldown = true,
-      -- A cast weapon also has an engine-level active-projectile cap.  Removing
-      -- the cooldown/control effects alone still leaves a live cast occupying
-      -- that slot, so a second fire request can be rejected until the first cast
-      -- dies.  Keep a generous finite cap instead of touching projectile
-      -- lifetime or expiring the player's current cast; overlapping casts
-      -- therefore retain their native boon/damage behavior.
-      ActiveProjectileCap = 32,
-    },
-    propertyOrder = {
-      "IgnoreOwnerAttackDisabled", "Cooldown", "AllowMultiFireRequest", "IgnoreForceCooldown", "ActiveProjectileCap",
-    },
-  }
-  for _, weaponName in ipairs(castModel.variantWeapons) do castModel.variantSet[weaponName] = true end
-  function castModel.isWeapon(weaponName)
-    return weaponName == castModel.baseWeapon or castModel.variantSet[weaponName] == true
-  end
-  -- Resolve the weapons that currently deliver the cast.  This mirrors
-  -- WeaponLogic.CheckSpinControl and is re-evaluated on every apply, so acquiring
-  -- or removing a supported Cast modifier re-targets the gate without toggling
-  -- the feature.  Only the bounded cast-shape family is admitted; a Spell/Hex
-  -- PreEquipWeapons entry is not a cast delivery weapon.
-  function castModel.effectiveWeapons(hero)
-    hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
-    local active = { [castModel.baseWeapon] = true }
-    if type(hero) == "table" and type(hero.Traits) == "table" then
-      for _, trait in ipairs(hero.Traits) do
-        if type(trait) == "table" and type(trait.PreEquipWeapons) == "table" then
-          for _, equipped in ipairs(trait.PreEquipWeapons) do
-            if castModel.variantSet[equipped] then active[equipped] = true end
+  M.castControl = (function()
+    local castModel = {
+      baseWeapon = "WeaponCast",
+      variantWeapons = setmetatable({
+        "WeaponCastProjectile", "WeaponCastProjectileHades", "WeaponAnywhereCast", "WeaponCastLob",
+      }, arrayMeta),
+      variantSet = {},
+      overrides = {
+        IgnoreOwnerAttackDisabled = true,
+        Cooldown = 0,
+        AllowMultiFireRequest = true,
+        IgnoreForceCooldown = true,
+        -- A cast weapon also has an engine-level active-projectile cap.  Removing
+        -- the cooldown/control effects alone still leaves a live cast occupying
+        -- that slot, so a second fire request can be rejected until the first cast
+        -- dies.  Keep a generous finite cap instead of touching projectile
+        -- lifetime or expiring the player's current cast; overlapping casts
+        -- therefore retain their native boon/damage behavior.
+        ActiveProjectileCap = 32,
+      },
+      propertyOrder = {
+        "IgnoreOwnerAttackDisabled", "Cooldown", "AllowMultiFireRequest", "IgnoreForceCooldown", "ActiveProjectileCap",
+      },
+    }
+    for _, weaponName in ipairs(castModel.variantWeapons) do castModel.variantSet[weaponName] = true end
+    function castModel.isWeapon(weaponName)
+      return weaponName == castModel.baseWeapon or castModel.variantSet[weaponName] == true
+    end
+    -- Resolve the weapons that currently deliver the cast.  This mirrors
+    -- WeaponLogic.CheckSpinControl and is re-evaluated on every apply, so acquiring
+    -- or removing a supported Cast modifier re-targets the gate without toggling
+    -- the feature.  Only the bounded cast-shape family is admitted; a Spell/Hex
+    -- PreEquipWeapons entry is not a cast delivery weapon.
+    function castModel.effectiveWeapons(hero)
+      hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
+      local active = { [castModel.baseWeapon] = true }
+      if type(hero) == "table" and type(hero.Traits) == "table" then
+        for _, trait in ipairs(hero.Traits) do
+          if type(trait) == "table" and type(trait.PreEquipWeapons) == "table" then
+            for _, equipped in ipairs(trait.PreEquipWeapons) do
+              if castModel.variantSet[equipped] then active[equipped] = true end
+            end
           end
         end
       end
+      local resolved = setmetatable({ castModel.baseWeapon }, arrayMeta)
+      for _, weaponName in ipairs(castModel.variantWeapons) do
+        if active[weaponName] then resolved[#resolved + 1] = weaponName end
+      end
+      return resolved
     end
-    local resolved = setmetatable({ castModel.baseWeapon }, arrayMeta)
-    for _, weaponName in ipairs(castModel.variantWeapons) do
-      if active[weaponName] then resolved[#resolved + 1] = weaponName end
-    end
-    return resolved
-  end
-  -- The gate belongs to the weapon that actually fires.  A cast-family weapon
-  -- that is not the current delivery shape must keep native behavior, so the
-  -- property hook only protects a weapon while it is effective.
-  function castModel.protects(weaponName)
-    if not castModel.isWeapon(weaponName) then return false end
-    for _, effectiveName in ipairs(castModel.effectiveWeapons()) do
-      if effectiveName == weaponName then return true end
-    end
-    return false
-  end
-  -- The current game's projected-cast traits disable this entire trio.  Treat
-  -- them as one reversible group rather than declaring success after changing
-  -- only WeaponCastAttackDisable.  Every cast-shape boon in the target build
-  -- declares these effects under WeaponName = "WeaponCast" (the effect stays
-  -- owned by the base cast weapon even after the fired weapon is swapped), so
-  -- the effect group does not follow the delivery weapon.
-  runtimeConfig.castEffectOverrides = {
-    WeaponCastAttackDisable = false,
-    WeaponCastSelfSlow = false,
-    WeaponCastSelfSlow2 = false,
-  }
-  runtimeConfig.castEffectOrder = { "WeaponCastAttackDisable", "WeaponCastSelfSlow", "WeaponCastSelfSlow2" }
-  local function castEffectNaturallyActive(effectName)
-    local function containsOverride(value, seen, depth)
-      if type(value) ~= "table" or depth > 8 then return false end
-      seen = seen or {}
-      if seen[value] then return false end
-      seen[value] = true
-      if value.WeaponName == "WeaponCast" and value.EffectName == effectName
-          and value.EffectProperty == "Active" and value.ChangeValue == false then return true end
-      for _, child in pairs(value) do
-        if containsOverride(child, seen, depth + 1) then return true end
+    -- The gate belongs to the weapon that actually fires.  A cast-family weapon
+    -- that is not the current delivery shape must keep native behavior, so the
+    -- property hook only protects a weapon while it is effective.
+    function castModel.protects(weaponName)
+      if not castModel.isWeapon(weaponName) then return false end
+      for _, effectiveName in ipairs(castModel.effectiveWeapons()) do
+        if effectiveName == weaponName then return true end
       end
       return false
     end
-    local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
-    if type(hero) == "table" and type(hero.Traits) == "table" then
-      for _, trait in ipairs(hero.Traits) do
-        if containsOverride(trait, nil, 0) then return false end
-        if type(TraitData) == "table" and type(trait) == "table" and type(trait.Name) == "string"
-            and containsOverride(TraitData[trait.Name], nil, 0) then return false end
-      end
-    end
-    return true
-  end
-  local function readCastWeaponProperty(property, hero, weaponName)
-    weaponName = weaponName or castModel.baseWeapon
-    hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
-    if type(hero) ~= "table" or hero.ObjectId == nil then return nil, false end
-    if type(GetWeaponDataValue) == "function" then
-      local ok, value = pcall(GetWeaponDataValue, { Id = hero.ObjectId, WeaponName = weaponName, Property = property })
-      if ok and value ~= nil then return value, true end
-    end
-    -- Some engine builds do not surface every inherited Weapon property through
-    -- GetWeaponDataValue until it has been overridden once. Use the canonical
-    -- base weapon value as the restoration fallback instead of leaking the
-    -- trainer's override after the feature is disabled.
-    if type(GetBaseDataValue) == "function" then
-      local ok, value = pcall(GetBaseDataValue, { Type = "Weapon", Name = weaponName, Property = property })
-      if ok and value ~= nil then return value, true end
-    end
-    return nil, false
-  end
-  local function writeCastWeaponProperty(property, value, setter, hero, weaponName)
-    weaponName = weaponName or castModel.baseWeapon
-    setter = setter or SetWeaponProperty
-    hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
-    if type(hero) ~= "table" or hero.ObjectId == nil or type(setter) ~= "function" then return false end
-    -- Match ApplyWeaponPropertyChange: ordinary WeaponProperty mutations omit
-    -- DataValue entirely.  Round 7 forced DataValue=false, which only touched
-    -- the transient instance layer; the live build then continued reporting
-    -- native Cooldown/IgnoreForceCooldown through GetWeaponDataValue.
-    return pcall(setter, {
-      WeaponName = weaponName, DestinationId = hero.ObjectId, Property = property,
-      Value = value, ValueChangeType = "Absolute",
-    })
-  end
-  local function writeCastEffectActive(effectName, active, setter, hero)
-    setter = setter or SetEffectProperty
-    hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
-    if type(hero) ~= "table" or hero.ObjectId == nil or type(setter) ~= "function" then return false end
-    local ok = pcall(setter, {
-      WeaponName = "WeaponCast", EffectName = effectName,
-      DestinationId = hero.ObjectId, Property = "Active",
-      Value = not not active, ValueChangeType = "Absolute",
-    })
-    return ok
-  end
-  function castModel.ensureWeaponRuntime(runtime, weaponName, hero)
-    local weapon = runtime.weapons[weaponName]
-    if weapon ~= nil then return weapon end
-    weapon = { nativeProperties = {}, nativePropertyKnown = {}, applied = false }
-    for _, property in ipairs(castModel.propertyOrder) do
-      local value, ok = readCastWeaponProperty(property, hero, weaponName)
-      if ok and value ~= nil then
-        weapon.nativeProperties[property] = value
-        weapon.nativePropertyKnown[property] = true
-      end
-    end
-    runtime.weapons[weaponName] = weapon
-    return weapon
-  end
-  local function ensureCastRuntime()
-    local hero = M.runtimeOwners.hero()
-    if hero == nil then return nil end
-    if type(M.castRuntime) == "table" and M.castRuntime.hero == hero then return M.castRuntime end
-    local runtime = {
-      hero = hero, weapons = {}, appliedWeapons = {},
-      nativeEffects = {}, nativeEffectKnown = {}, applied = false,
+    -- The current game's projected-cast traits disable this entire trio.  Treat
+    -- them as one reversible group rather than declaring success after changing
+    -- only WeaponCastAttackDisable.  Every cast-shape boon in the target build
+    -- declares these effects under WeaponName = "WeaponCast" (the effect stays
+    -- owned by the base cast weapon even after the fired weapon is swapped), so
+    -- the effect group does not follow the delivery weapon.
+    local castEffectOverrides = {
+      WeaponCastAttackDisable = false,
+      WeaponCastSelfSlow = false,
+      WeaponCastSelfSlow2 = false,
     }
-    for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
-      runtime.nativeEffects[effectName] = castEffectNaturallyActive(effectName)
-      runtime.nativeEffectKnown[effectName] = true
+    local castEffectOrder = { "WeaponCastAttackDisable", "WeaponCastSelfSlow", "WeaponCastSelfSlow2" }
+    local function castEffectNaturallyActive(effectName)
+      local function containsOverride(value, seen, depth)
+        if type(value) ~= "table" or depth > 8 then return false end
+        seen = seen or {}
+        if seen[value] then return false end
+        seen[value] = true
+        if value.WeaponName == "WeaponCast" and value.EffectName == effectName
+            and value.EffectProperty == "Active" and value.ChangeValue == false then return true end
+        for _, child in pairs(value) do
+          if containsOverride(child, seen, depth + 1) then return true end
+        end
+        return false
+      end
+      local hero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      if type(hero) == "table" and type(hero.Traits) == "table" then
+        for _, trait in ipairs(hero.Traits) do
+          if containsOverride(trait, nil, 0) then return false end
+          if type(TraitData) == "table" and type(trait) == "table" and type(trait.Name) == "string"
+              and containsOverride(TraitData[trait.Name], nil, 0) then return false end
+        end
+      end
+      return true
     end
-    for _, weaponName in ipairs(castModel.effectiveWeapons(hero)) do
-      castModel.ensureWeaponRuntime(runtime, weaponName, hero)
+    local function readCastWeaponProperty(property, hero, weaponName)
+      weaponName = weaponName or castModel.baseWeapon
+      hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
+      if type(hero) ~= "table" or hero.ObjectId == nil then return nil, false end
+      if type(GetWeaponDataValue) == "function" then
+        local ok, value = pcall(GetWeaponDataValue, { Id = hero.ObjectId, WeaponName = weaponName, Property = property })
+        if ok and value ~= nil then return value, true end
+      end
+      -- Some engine builds do not surface every inherited Weapon property through
+      -- GetWeaponDataValue until it has been overridden once. Use the canonical
+      -- base weapon value as the restoration fallback instead of leaking the
+      -- trainer's override after the feature is disabled.
+      if type(GetBaseDataValue) == "function" then
+        local ok, value = pcall(GetBaseDataValue, { Type = "Weapon", Name = weaponName, Property = property })
+        if ok and value ~= nil then return value, true end
+      end
+      return nil, false
     end
-    M.castRuntime = runtime
-    return runtime
-  end
-  local function applyCastAvailability()
-    if not M.instantCastCooldown or not M.runtimeOwners.heroAvailable() then return false end
-    local runtime = ensureCastRuntime()
-    if runtime == nil then return false end
-    local weaponHook = M.hooks["SetWeaponProperty"]
-    local effectHook = M.hooks["SetEffectProperty"]
-    local weaponSetter = weaponHook and weaponHook.original or SetWeaponProperty
-    local effectSetter = effectHook and effectHook.original or SetEffectProperty
-    local applied = true
-    -- Re-resolve on every apply: a Cast modifier acquired or removed since the
-    -- last tick changes which weapon is fired, and the gate has to follow it.
-    local effective = castModel.effectiveWeapons(runtime.hero)
-    local active = {}
-    for _, weaponName in ipairs(effective) do active[weaponName] = true end
-    -- A delivery weapon that was replaced or removed must not keep the
-    -- trainer's gate; restore the latest native value the game exposed for it.
-    for weaponName in pairs(runtime.appliedWeapons) do
-      if not active[weaponName] then
-        local weapon = runtime.weapons[weaponName]
-        if weapon ~= nil then
-          for _, property in ipairs(castModel.propertyOrder) do
-            if weapon.nativePropertyKnown[property] then
-              if not writeCastWeaponProperty(property, weapon.nativeProperties[property], weaponSetter, runtime.hero, weaponName) then
-                applied = false
+    local function writeCastWeaponProperty(property, value, setter, hero, weaponName)
+      weaponName = weaponName or castModel.baseWeapon
+      setter = setter or SetWeaponProperty
+      hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
+      if type(hero) ~= "table" or hero.ObjectId == nil or type(setter) ~= "function" then return false end
+      -- Match ApplyWeaponPropertyChange: ordinary WeaponProperty mutations omit
+      -- DataValue entirely.  Round 7 forced DataValue=false, which only touched
+      -- the transient instance layer; the live build then continued reporting
+      -- native Cooldown/IgnoreForceCooldown through GetWeaponDataValue.
+      return pcall(setter, {
+        WeaponName = weaponName, DestinationId = hero.ObjectId, Property = property,
+        Value = value, ValueChangeType = "Absolute",
+      })
+    end
+    local function writeCastEffectActive(effectName, active, setter, hero)
+      setter = setter or SetEffectProperty
+      hero = hero or (type(CurrentRun) == "table" and CurrentRun.Hero or nil)
+      if type(hero) ~= "table" or hero.ObjectId == nil or type(setter) ~= "function" then return false end
+      local ok = pcall(setter, {
+        WeaponName = "WeaponCast", EffectName = effectName,
+        DestinationId = hero.ObjectId, Property = "Active",
+        Value = not not active, ValueChangeType = "Absolute",
+      })
+      return ok
+    end
+    function castModel.ensureWeaponRuntime(runtime, weaponName, hero)
+      local weapon = runtime.weapons[weaponName]
+      if weapon ~= nil then return weapon end
+      weapon = { nativeProperties = {}, nativePropertyKnown = {}, applied = false }
+      for _, property in ipairs(castModel.propertyOrder) do
+        local value, ok = readCastWeaponProperty(property, hero, weaponName)
+        if ok and value ~= nil then
+          weapon.nativeProperties[property] = value
+          weapon.nativePropertyKnown[property] = true
+        end
+      end
+      runtime.weapons[weaponName] = weapon
+      return weapon
+    end
+    local function ensureCastRuntime()
+      local hero = M.runtimeOwners.hero()
+      if hero == nil then return nil end
+      if type(M.castRuntime) == "table" and M.castRuntime.hero == hero then return M.castRuntime end
+      local runtime = {
+        hero = hero, weapons = {}, appliedWeapons = {},
+        nativeEffects = {}, nativeEffectKnown = {}, applied = false,
+      }
+      for _, effectName in ipairs(castEffectOrder) do
+        runtime.nativeEffects[effectName] = castEffectNaturallyActive(effectName)
+        runtime.nativeEffectKnown[effectName] = true
+      end
+      for _, weaponName in ipairs(castModel.effectiveWeapons(hero)) do
+        castModel.ensureWeaponRuntime(runtime, weaponName, hero)
+      end
+      M.castRuntime = runtime
+      return runtime
+    end
+    local function applyCastAvailability()
+      if not M.instantCastCooldown or not M.runtimeOwners.heroAvailable() then return false end
+      local runtime = ensureCastRuntime()
+      if runtime == nil then return false end
+      local weaponHook = M.hooks["SetWeaponProperty"]
+      local effectHook = M.hooks["SetEffectProperty"]
+      local weaponSetter = weaponHook and weaponHook.original or SetWeaponProperty
+      local effectSetter = effectHook and effectHook.original or SetEffectProperty
+      local applied = true
+      -- Re-resolve on every apply: a Cast modifier acquired or removed since the
+      -- last tick changes which weapon is fired, and the gate has to follow it.
+      local effective = castModel.effectiveWeapons(runtime.hero)
+      local active = {}
+      for _, weaponName in ipairs(effective) do active[weaponName] = true end
+      -- A delivery weapon that was replaced or removed must not keep the
+      -- trainer's gate; restore the latest native value the game exposed for it.
+      for weaponName in pairs(runtime.appliedWeapons) do
+        if not active[weaponName] then
+          local weapon = runtime.weapons[weaponName]
+          if weapon ~= nil then
+            for _, property in ipairs(castModel.propertyOrder) do
+              if weapon.nativePropertyKnown[property] then
+                if not writeCastWeaponProperty(property, weapon.nativeProperties[property], weaponSetter, runtime.hero, weaponName) then
+                  applied = false
+                end
               end
             end
           end
         end
       end
-    end
-    for _, weaponName in ipairs(effective) do
-      castModel.ensureWeaponRuntime(runtime, weaponName, runtime.hero)
-      for _, property in ipairs(castModel.propertyOrder) do
-        if not writeCastWeaponProperty(property, castModel.overrides[property], weaponSetter, runtime.hero, weaponName) then
-          applied = false
-        end
-      end
-    end
-    runtime.appliedWeapons = active
-    for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
-      if not writeCastEffectActive(effectName, runtimeConfig.castEffectOverrides[effectName], effectSetter, runtime.hero) then
-        applied = false
-      end
-    end
-    runtime.applied = applied
-    return applied
-  end
-  local function releaseInstantCastCooldown()
-    local runtime = M.castRuntime
-    local weaponHook = M.hooks["SetWeaponProperty"]
-    local effectHook = M.hooks["SetEffectProperty"]
-    local weaponSetter = weaponHook and weaponHook.original or SetWeaponProperty
-    local effectSetter = effectHook and effectHook.original or SetEffectProperty
-    M.instantCastCooldown = false
-    releaseHook("SetWeaponProperty")
-    releaseHook("SetEffectProperty")
-    -- Do not replay old-Hero properties into a freshly-created run.  When the
-    -- user toggles the feature off in-place, however, restore the latest values
-    -- the game attempted to set while the trainer was active.
-    local currentHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
-    if type(runtime) == "table" and runtime.hero == currentHero then
-      local nativeKeepsCastOpen = not castEffectNaturallyActive("WeaponCastAttackDisable")
-      -- Restore every patched cast weapon to the latest value the game exposed or
-      -- attempted while the trainer was active. This is important for
-      -- ActiveProjectileCap: leaving the trainer's expanded cap behind would leak
-      -- behavior after the toggle is disabled, including when a native
-      -- projected-cast boon is owned. Restoring per weapon also undoes a variant
-      -- that was gated while a Cast modifier was equipped.
-      if type(weaponSetter) == "function" then
-        for weaponName, weapon in pairs(runtime.weapons or {}) do
-          for _, property in ipairs(castModel.propertyOrder) do
-            if weapon.nativePropertyKnown[property] then
-              pcall(writeCastWeaponProperty, property, weapon.nativeProperties[property], weaponSetter, runtime.hero, weaponName)
-            end
+      for _, weaponName in ipairs(effective) do
+        castModel.ensureWeaponRuntime(runtime, weaponName, runtime.hero)
+        for _, property in ipairs(castModel.propertyOrder) do
+          if not writeCastWeaponProperty(property, castModel.overrides[property], weaponSetter, runtime.hero, weaponName) then
+            applied = false
           end
         end
       end
-      if type(effectSetter) == "function" then
-        for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
-          local natural = runtime.nativeEffects[effectName]
-          if nativeKeepsCastOpen and runtimeConfig.castEffectOverrides[effectName] == false then natural = false end
-          if type(natural) ~= "boolean" then natural = castEffectNaturallyActive(effectName) end
-          pcall(writeCastEffectActive, effectName, natural, effectSetter, runtime.hero)
+      runtime.appliedWeapons = active
+      for _, effectName in ipairs(castEffectOrder) do
+        if not writeCastEffectActive(effectName, castEffectOverrides[effectName], effectSetter, runtime.hero) then
+          applied = false
         end
       end
+      runtime.applied = applied
+      return applied
     end
-    M.castRuntime = nil
-  end
+    local function releaseInstantCastCooldown()
+      local runtime = M.castRuntime
+      local weaponHook = M.hooks["SetWeaponProperty"]
+      local effectHook = M.hooks["SetEffectProperty"]
+      local weaponSetter = weaponHook and weaponHook.original or SetWeaponProperty
+      local effectSetter = effectHook and effectHook.original or SetEffectProperty
+      M.instantCastCooldown = false
+      releaseHook("SetWeaponProperty")
+      releaseHook("SetEffectProperty")
+      -- Do not replay old-Hero properties into a freshly-created run.  When the
+      -- user toggles the feature off in-place, however, restore the latest values
+      -- the game attempted to set while the trainer was active.
+      local currentHero = type(CurrentRun) == "table" and CurrentRun.Hero or nil
+      if type(runtime) == "table" and runtime.hero == currentHero then
+        local nativeKeepsCastOpen = not castEffectNaturallyActive("WeaponCastAttackDisable")
+        -- Restore every patched cast weapon to the latest value the game exposed or
+        -- attempted while the trainer was active. This is important for
+        -- ActiveProjectileCap: leaving the trainer's expanded cap behind would leak
+        -- behavior after the toggle is disabled, including when a native
+        -- projected-cast boon is owned. Restoring per weapon also undoes a variant
+        -- that was gated while a Cast modifier was equipped.
+        if type(weaponSetter) == "function" then
+          for weaponName, weapon in pairs(runtime.weapons or {}) do
+            for _, property in ipairs(castModel.propertyOrder) do
+              if weapon.nativePropertyKnown[property] then
+                pcall(writeCastWeaponProperty, property, weapon.nativeProperties[property], weaponSetter, runtime.hero, weaponName)
+              end
+            end
+          end
+        end
+        if type(effectSetter) == "function" then
+          for _, effectName in ipairs(castEffectOrder) do
+            local natural = runtime.nativeEffects[effectName]
+            if nativeKeepsCastOpen and castEffectOverrides[effectName] == false then natural = false end
+            if type(natural) ~= "boolean" then natural = castEffectNaturallyActive(effectName) end
+            pcall(writeCastEffectActive, effectName, natural, effectSetter, runtime.hero)
+          end
+        end
+      end
+      M.castRuntime = nil
+    end
+    local function castWeaponGateVerified(runtime)
+      local hero = M.runtimeOwners.hero()
+      if type(runtime) ~= "table" or hero == nil or runtime.hero ~= hero then return false end
+      for _, weaponName in ipairs(castModel.effectiveWeapons(runtime.hero)) do
+        for _, property in ipairs(castModel.propertyOrder) do
+          local value, ok = readCastWeaponProperty(property, runtime.hero, weaponName)
+          if not ok or value ~= castModel.overrides[property] then return false end
+        end
+      end
+      return true
+    end
+    local function castDiagnostics()
+      local runtime = M.castRuntime
+      local diagnostics = {
+        method = "nativeMultiCastControlSet",
+        effectHook = owns("SetEffectProperty"), weaponHook = owns("SetWeaponProperty"),
+        effectOverrides = { WeaponCastAttackDisable = false, WeaponCastSelfSlow = false, WeaponCastSelfSlow2 = false },
+        castVariantWeapons = castModel.variantWeapons,
+      }
+      if type(runtime) ~= "table" then return diagnostics end
+      diagnostics.heroBound = M.runtimeOwners.heroAvailable() and runtime.hero == M.runtimeOwners.hero() or false
+      diagnostics.applied = not not runtime.applied
+      if not diagnostics.heroBound then
+        diagnostics.weaponGateVerified = false
+        return diagnostics
+      end
+      -- The recast decision belongs to whichever weapon actually fires, so report
+      -- the resolved delivery set and each weapon's own gate instead of only the
+      -- base WeaponCast.  This is the runtime evidence surface for a modified Cast
+      -- shape (for example Hestia's thrown cast or Hades' attached cast).
+      local effective = castModel.effectiveWeapons(runtime.hero)
+      diagnostics.effectiveWeapons = effective
+      local actual = {}
+      for _, weaponName in ipairs(effective) do
+        local values = {}
+        for _, property in ipairs(castModel.propertyOrder) do
+          local value, ok = readCastWeaponProperty(property, runtime.hero, weaponName)
+          if ok and value ~= nil then values[property] = value end
+        end
+        actual[weaponName] = values
+      end
+      diagnostics.weaponProperties = actual
+      diagnostics.weaponGateVerified = castWeaponGateVerified(runtime)
+      if type(SessionMapState) == "table" then
+        diagnostics.lastProjectileId = SessionMapState.LastCastProjectileId
+        local tracked = 0
+        local seen = {}
+        if type(SessionMapState.CastAttachedProjectiles) == "table" then
+          for projectileId in pairs(SessionMapState.CastAttachedProjectiles) do
+            local exists = true
+            if type(ProjectileExists) == "function" then
+              local ok, value = pcall(ProjectileExists, { Id = projectileId })
+              exists = ok and not not value
+            end
+            if exists then tracked = tracked + 1; seen[projectileId] = true end
+          end
+        end
+        local lastId = SessionMapState.LastCastProjectileId
+        if lastId ~= nil and not seen[lastId] and type(ProjectileExists) == "function" then
+          local ok, exists = pcall(ProjectileExists, { Id = lastId })
+          if ok and exists then tracked = tracked + 1 end
+          diagnostics.lastProjectileExists = ok and not not exists or false
+        end
+        diagnostics.activeTrackedCasts = tracked
+      end
+      return diagnostics
+    end
+    local function installInstantCastCooldown()
+      requireFunctions("cast always available", { "SetEffectProperty", "SetWeaponProperty", "GetWeaponDataValue" })
+      M.instantCastCooldown = true
+      local runtime = ensureCastRuntime()
+      if runtime == nil then error("Unable to initialize cast delivery runtime") end
+      if not owns("SetWeaponProperty") then
+        installHook("SetWeaponProperty", function(original, args, ...)
+          if M.instantCastCooldown and type(args) == "table" and castModel.protects(args.WeaponName)
+              and castModel.overrides[args.Property] ~= nil
+              and (args.DestinationId == nil or args.DestinationId == CurrentRun.Hero.ObjectId) then
+            local current = ensureCastRuntime()
+            if current then
+              local weapon = castModel.ensureWeaponRuntime(current, args.WeaponName, CurrentRun.Hero)
+              weapon.nativeProperties[args.Property] = args.Value
+              weapon.nativePropertyKnown[args.Property] = args.Value ~= nil
+            end
+            local protected = {}
+            for key, value in pairs(args) do protected[key] = value end
+            protected.DestinationId = CurrentRun.Hero.ObjectId
+            protected.Value = castModel.overrides[args.Property]
+            protected.ValueChangeType = "Absolute"
+            -- Preserve the caller's DataValue mode.  Native trait property
+            -- changes omit it; injecting false here prevented the engine-level
+            -- cast gate from actually changing in revision 13.
+            return original(protected, ...)
+          end
+          return original(args, ...)
+        end)
+      end
+      if not owns("SetEffectProperty") then
+        installHook("SetEffectProperty", function(original, args, ...)
+          if M.instantCastCooldown and type(args) == "table"
+              and args.WeaponName == "WeaponCast" and castEffectOverrides[args.EffectName] ~= nil
+              and args.Property == "Active"
+              and (args.DestinationId == nil or args.DestinationId == CurrentRun.Hero.ObjectId) then
+            local current = ensureCastRuntime()
+            if current and type(args.Value) == "boolean" then
+              current.nativeEffects[args.EffectName] = args.Value
+              current.nativeEffectKnown[args.EffectName] = true
+            end
+            local protected = {}
+            for key, value in pairs(args) do protected[key] = value end
+            protected.DestinationId = CurrentRun.Hero.ObjectId
+            protected.Value = castEffectOverrides[args.EffectName]
+            protected.ValueChangeType = "Absolute"
+            return original(protected, ...)
+          end
+          return original(args, ...)
+        end)
+      end
+      if not applyCastAvailability() then error("Unable to arm cast delivery multi-fire path") end
+    end
+    local function active(hero)
+      return M.instantCastCooldown and owns("SetEffectProperty") and owns("SetWeaponProperty")
+        and type(M.castRuntime) == "table" and M.castRuntime.hero == hero
+        and M.castRuntime.applied and castWeaponGateVerified(M.castRuntime)
+    end
+    return {
+      install = installInstantCastCooldown,
+      release = releaseInstantCastCooldown,
+      apply = applyCastAvailability,
+      diagnostics = castDiagnostics,
+      active = active,
+    }
+  end)()
   local function releaseHex()
     M.hexAlwaysReady = false
     M.hexRuntime = nil
@@ -1354,7 +1487,7 @@ if __MacGamingTrainerV1 == nil then
     releaseHealth()
     releaseMana()
     releaseDamage()
-    releaseInstantCastCooldown()
+    M.castControl.release()
     releaseHex()
     releaseAmmo()
     releaseMiniGames()
@@ -1491,7 +1624,7 @@ if __MacGamingTrainerV1 == nil then
     if M.infiniteHealth and (not owns("Damage") or not owns("SacrificeHealth")) then releaseHealth() end
     if M.infiniteMana and not owns("ManaDelta") then releaseMana() end
     if M.damageEnabled and not owns("CalculateDamageMultipliers") then releaseDamage() end
-    if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then releaseInstantCastCooldown() end
+    if M.instantCastCooldown and (not owns("SetEffectProperty") or not owns("SetWeaponProperty")) then M.castControl.release() end
     if M.hexAlwaysReady and not owns("SpellFire") then releaseHex() end
     if M.infiniteAmmo and not owns("UpdateWeaponAmmo") then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
@@ -2884,73 +3017,6 @@ if __MacGamingTrainerV1 == nil then
     end
     local ok, available = pcall(entry.available)
     return ok and not not available
-  end
-  local function castWeaponGateVerified(runtime)
-    local hero = M.runtimeOwners.hero()
-    if type(runtime) ~= "table" or hero == nil or runtime.hero ~= hero then return false end
-    for _, weaponName in ipairs(castModel.effectiveWeapons(runtime.hero)) do
-      for _, property in ipairs(castModel.propertyOrder) do
-        local value, ok = readCastWeaponProperty(property, runtime.hero, weaponName)
-        if not ok or value ~= castModel.overrides[property] then return false end
-      end
-    end
-    return true
-  end
-  local function castDiagnostics()
-    local runtime = M.castRuntime
-    local diagnostics = {
-      method = "nativeMultiCastControlSet",
-      effectHook = owns("SetEffectProperty"), weaponHook = owns("SetWeaponProperty"),
-      effectOverrides = { WeaponCastAttackDisable = false, WeaponCastSelfSlow = false, WeaponCastSelfSlow2 = false },
-      castVariantWeapons = castModel.variantWeapons,
-    }
-    if type(runtime) ~= "table" then return diagnostics end
-    diagnostics.heroBound = M.runtimeOwners.heroAvailable() and runtime.hero == M.runtimeOwners.hero() or false
-    diagnostics.applied = not not runtime.applied
-    if not diagnostics.heroBound then
-      diagnostics.weaponGateVerified = false
-      return diagnostics
-    end
-    -- The recast decision belongs to whichever weapon actually fires, so report
-    -- the resolved delivery set and each weapon's own gate instead of only the
-    -- base WeaponCast.  This is the runtime evidence surface for a modified Cast
-    -- shape (for example Hestia's thrown cast or Hades' attached cast).
-    local effective = castModel.effectiveWeapons(runtime.hero)
-    diagnostics.effectiveWeapons = effective
-    local actual = {}
-    for _, weaponName in ipairs(effective) do
-      local values = {}
-      for _, property in ipairs(castModel.propertyOrder) do
-        local value, ok = readCastWeaponProperty(property, runtime.hero, weaponName)
-        if ok and value ~= nil then values[property] = value end
-      end
-      actual[weaponName] = values
-    end
-    diagnostics.weaponProperties = actual
-    diagnostics.weaponGateVerified = castWeaponGateVerified(runtime)
-    if type(SessionMapState) == "table" then
-      diagnostics.lastProjectileId = SessionMapState.LastCastProjectileId
-      local tracked = 0
-      local seen = {}
-      if type(SessionMapState.CastAttachedProjectiles) == "table" then
-        for projectileId in pairs(SessionMapState.CastAttachedProjectiles) do
-          local exists = true
-          if type(ProjectileExists) == "function" then
-            local ok, value = pcall(ProjectileExists, { Id = projectileId })
-            exists = ok and not not value
-          end
-          if exists then tracked = tracked + 1; seen[projectileId] = true end
-        end
-      end
-      local lastId = SessionMapState.LastCastProjectileId
-      if lastId ~= nil and not seen[lastId] and type(ProjectileExists) == "function" then
-        local ok, exists = pcall(ProjectileExists, { Id = lastId })
-        if ok and exists then tracked = tracked + 1 end
-        diagnostics.lastProjectileExists = ok and not not exists or false
-      end
-      diagnostics.activeTrackedCasts = tracked
-    end
-    return diagnostics
   end
   local featureOrder, featureRegistry
   local function featureRuntimeMaps(hero)
@@ -7378,7 +7444,7 @@ if __MacGamingTrainerV1 == nil then
       runtimeDiagnostics = {
         revision = M.revision, heroObjectId = hero.ObjectId or jsonNull, runCount = runCount,
         guardInstalled = not not (M.guardWrapper and UpdateTimers == M.guardWrapper),
-        castHook = owns("SetEffectProperty") and owns("SetWeaponProperty"), castRuntime = castDiagnostics(),
+        castHook = owns("SetEffectProperty") and owns("SetWeaponProperty"), castRuntime = M.castControl.diagnostics(),
         hexRuntime = M.hexRuntime or jsonNull,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
         boonRarityHooks = { chances = owns("GetRarityChances"), options = owns("SetTraitsOnLoot") },
@@ -7737,59 +7803,7 @@ if __MacGamingTrainerV1 == nil then
   end
   forceCastAvailable = function()
     if not M.instantCastCooldown then return false end
-    return applyCastAvailability()
-  end
-  local function installInstantCastCooldown()
-    requireFunctions("cast always available", { "SetEffectProperty", "SetWeaponProperty", "GetWeaponDataValue" })
-    M.instantCastCooldown = true
-    local runtime = ensureCastRuntime()
-    if runtime == nil then error("Unable to initialize cast delivery runtime") end
-    if not owns("SetWeaponProperty") then
-      installHook("SetWeaponProperty", function(original, args, ...)
-        if M.instantCastCooldown and type(args) == "table" and castModel.protects(args.WeaponName)
-            and castModel.overrides[args.Property] ~= nil
-            and (args.DestinationId == nil or args.DestinationId == CurrentRun.Hero.ObjectId) then
-          local current = ensureCastRuntime()
-          if current then
-            local weapon = castModel.ensureWeaponRuntime(current, args.WeaponName, CurrentRun.Hero)
-            weapon.nativeProperties[args.Property] = args.Value
-            weapon.nativePropertyKnown[args.Property] = args.Value ~= nil
-          end
-          local protected = {}
-          for key, value in pairs(args) do protected[key] = value end
-          protected.DestinationId = CurrentRun.Hero.ObjectId
-          protected.Value = castModel.overrides[args.Property]
-          protected.ValueChangeType = "Absolute"
-          -- Preserve the caller's DataValue mode.  Native trait property
-          -- changes omit it; injecting false here prevented the engine-level
-          -- cast gate from actually changing in revision 13.
-          return original(protected, ...)
-        end
-        return original(args, ...)
-      end)
-    end
-    if not owns("SetEffectProperty") then
-      installHook("SetEffectProperty", function(original, args, ...)
-        if M.instantCastCooldown and type(args) == "table"
-            and args.WeaponName == "WeaponCast" and runtimeConfig.castEffectOverrides[args.EffectName] ~= nil
-            and args.Property == "Active"
-            and (args.DestinationId == nil or args.DestinationId == CurrentRun.Hero.ObjectId) then
-          local current = ensureCastRuntime()
-          if current and type(args.Value) == "boolean" then
-            current.nativeEffects[args.EffectName] = args.Value
-            current.nativeEffectKnown[args.EffectName] = true
-          end
-          local protected = {}
-          for key, value in pairs(args) do protected[key] = value end
-          protected.DestinationId = CurrentRun.Hero.ObjectId
-          protected.Value = runtimeConfig.castEffectOverrides[args.EffectName]
-          protected.ValueChangeType = "Absolute"
-          return original(protected, ...)
-        end
-        return original(args, ...)
-      end)
-    end
-    if not forceCastAvailable() then error("Unable to arm cast delivery multi-fire path") end
+    return M.castControl.apply()
   end
   currentSpellRuntime = function()
     local hero = M.runtimeOwners.hero()
@@ -8604,9 +8618,9 @@ if __MacGamingTrainerV1 == nil then
       active = function() return M.damageEnabled and owns("CalculateDamageMultipliers") end,
     },
     instantCastCooldown = {
-      install = installInstantCastCooldown, release = releaseInstantCastCooldown, available = M.runtimeOwners.heroAvailable,
+      install = M.castControl.install, release = M.castControl.release, available = M.runtimeOwners.heroAvailable,
       support = function() return type(SetEffectProperty) == "function" and type(SetWeaponProperty) == "function" and type(GetWeaponDataValue) == "function" end,
-      active = function(hero) return M.instantCastCooldown and owns("SetEffectProperty") and owns("SetWeaponProperty") and type(M.castRuntime) == "table" and M.castRuntime.hero == hero and M.castRuntime.applied and castWeaponGateVerified(M.castRuntime) end,
+      active = M.castControl.active,
     },
     hexAlwaysReady = {
       install = installHex, release = releaseHex, available = function() return true end,
