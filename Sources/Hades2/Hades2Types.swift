@@ -201,6 +201,13 @@ struct CurrentRunTrait: Identifiable, Equatable, Sendable {
     let deferredIssue: Int?
 
     var id: String { "\(generationID):\(runID):\(instanceID)" }
+    var hasTemporaryContextualControls: Bool {
+        family == "temporary"
+            && (remainingUses != nil || canSetRemainingUses || canExpire)
+    }
+    var hasContextualControls: Bool {
+        hasTemporaryContextualControls || canAdvanceLifecycle
+    }
     var canIncreaseLevel: Bool { levelCapability == .increaseOne }
     var canSetRarity: Bool { rarityCapability == .setExact }
     var canRemove: Bool { removalCapability != .none }
