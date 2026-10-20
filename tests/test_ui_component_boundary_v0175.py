@@ -52,7 +52,7 @@ assert 'TrainerSearchField(' in resource_controls
 assert 'TrainerPrimaryActionButton(' in status_controls
 assert '.buttonStyle(.borderedProminent)' not in status_controls
 assert 'theme.rowHorizontalPadding' in save_editor_view
-assert 'theme.panelPadding' in save_editor_view
+assert 'theme.panelPadding' not in save_editor_view
 assert 'theme.inlineRowVerticalPadding' in save_editor_view
 
 print('ui_component_boundary_v0175_ok')
