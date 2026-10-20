@@ -56,6 +56,8 @@ struct TrainerSecondaryActionButton: View {
     let systemImage: String?
     let enabled: Bool
     let width: CGFloat?
+    let helpText: String?
+    let accessibilityLabel: String?
     let action: () -> Void
 
     init(
@@ -63,12 +65,16 @@ struct TrainerSecondaryActionButton: View {
         systemImage: String? = nil,
         enabled: Bool = true,
         width: CGFloat? = nil,
+        helpText: String? = nil,
+        accessibilityLabel: String? = nil,
         action: @escaping () -> Void
     ) {
         self.title = title
         self.systemImage = systemImage
         self.enabled = enabled
         self.width = width
+        self.helpText = helpText
+        self.accessibilityLabel = accessibilityLabel
         self.action = action
     }
 
@@ -78,6 +84,8 @@ struct TrainerSecondaryActionButton: View {
         }
         .buttonStyle(.bordered)
         .disabled(!enabled)
+        .help(helpText ?? "")
+        .accessibilityLabel(accessibilityLabel ?? title)
         .frame(width: width)
     }
 }
