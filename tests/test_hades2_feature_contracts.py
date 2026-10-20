@@ -90,6 +90,12 @@ assert "ShortcutAction.allCases.enumerated()" in store
 assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
+assert "clearProfileShortcutWarning()" in model + management
+assert '.onDisappear { model.clearProfileShortcutWarning() }' in management
+assert 'Text(localization.string(warning))' in management
+shortcut_settings = management[management.index("struct Hades2ShortcutSettingsView"):management.index("struct Hades2ManagementUtilities")]
+assert "ScrollView {" in shortcut_settings
+assert ".frame(maxHeight: 560)" in shortcut_settings
 assert "ShortcutAction.allCases" in model
 assert "ShortcutAction.allCases" in management
 assert 'title: "hades2.op.acquireSelectedReward"' in model
