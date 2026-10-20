@@ -566,11 +566,6 @@ struct Hades2TrainerView: View {
             && target != trait.rarity
     }
 
-    private func hasTemporaryContextualControls(for trait: CurrentRunTrait) -> Bool {
-        trait.family == "temporary"
-            && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire)
-    }
-
     private var currentRunTraitsPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -605,7 +600,7 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 currentRunTraitCommonControls(managedCurrentRunTrait)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                if let trait = managedCurrentRunTrait, hasTemporaryContextualControls(for: trait) || trait.canAdvanceLifecycle {
+                if let trait = managedCurrentRunTrait, trait.hasContextualControls {
                     currentRunTraitContextualControls(trait)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -630,7 +625,7 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
-        if hasTemporaryContextualControls(for: trait) {
+        if trait.hasTemporaryContextualControls {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.remainingUses"))
                     .font(.caption)
