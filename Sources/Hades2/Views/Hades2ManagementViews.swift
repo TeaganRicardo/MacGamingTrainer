@@ -22,7 +22,7 @@ struct Hades2ProfileManagerView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let warning = model.profileShortcutWarning {
-                Text(localization.localized(warning.key, arguments: warning.arguments))
+                Text(localization.string(warning))
                     .foregroundStyle(theme.warning)
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
@@ -66,6 +66,7 @@ struct Hades2ProfileManagerView: View {
         } footer: {
             HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
+        .onDisappear { model.clearProfileShortcutWarning() }
         .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
             if !names.contains(selectedProfile) {
                 selectedProfile = names.first ?? ""
@@ -146,20 +147,25 @@ struct Hades2ShortcutSettingsView: View {
             Text(localization.localized("host.hotkeys.help"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(ShortcutAction.allCases) { action in
-                HStack {
-                    Text(text(action.presentationKey))
-                    Spacer()
-                    Button {
-                        beginCapture(action)
-                    } label: {
-                        Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
-                            .font(.system(.body, design: .monospaced))
-                            .frame(width: theme.shortcutCaptureWidth, alignment: .center)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
+                    ForEach(ShortcutAction.allCases) { action in
+                        HStack {
+                            Text(text(action.presentationKey))
+                            Spacer()
+                            Button {
+                                beginCapture(action)
+                            } label: {
+                                Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(width: theme.shortcutCaptureWidth, alignment: .center)
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    .buttonStyle(.bordered)
                 }
             }
+            .frame(maxHeight: 560)
             if let issue = model.shortcutIssue {
                 Text(shortcutIssueText(issue))
                     .foregroundStyle(theme.warning)
