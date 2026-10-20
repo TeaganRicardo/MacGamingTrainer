@@ -45,7 +45,6 @@ required_keys = {
     "host.value",
     "host.amount",
     "host.lock",
-    "host.locked",
     "host.resource.searchPlaceholder",
     "host.resource.noMatches",
     "host.backend.operation.recover",
