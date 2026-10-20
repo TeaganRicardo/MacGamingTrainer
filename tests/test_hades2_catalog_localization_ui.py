@@ -678,7 +678,7 @@ assert 'hades2.traits.chaos.cancelPair' in trait_manager
 # #345: contextual controls occupy a separate conditional row so they cannot
 # compress or overlap the fixed level / rarity / remove group.
 assert 'currentRunTraitCommonControls(managedCurrentRunTrait)' in trait_manager
-assert 'if managedTraitHasContextualControls, let trait = managedCurrentRunTrait {' in trait_manager
+assert 'if let trait = managedCurrentRunTrait, hasTemporaryContextualControls(for: trait) || trait.canAdvanceLifecycle {' in trait_manager
 assert 'currentRunTraitContextualControls(trait)' in trait_manager
 assert '.overlay(alignment: .leading)' not in trait_manager
 assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' not in trait_manager
