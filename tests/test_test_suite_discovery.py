@@ -35,7 +35,11 @@ assert 'macos_only_tests.txt' in macos_text
 assert 'tests/test_*.py' not in macos_text
 assert 'python3 -m compileall -q Backend' not in macos_text
 assert 'python3 Tools/validate_game_module.py hades2' not in macos_text
-assert 'python3 "$test_file"' in macos_text
+assert 'run_check "$name" python3 "$test_file"' in macos_text
+assert 'if "$@"; then' in macos_text
+assert 'record_failure "$label (exit $status)"' in macos_text
+assert 'macOS contract suite failed in %d check(s)' in macos_text
+assert 'set -euo pipefail' not in macos_text
 assert 'bash Tools/run_macos_checks.sh' in workflow
 assert 'python3 tests/test_host_connection_policy_dev8.py' not in workflow
 assert 'python3 tests/test_hades2_run_log_watcher.py' not in workflow
@@ -45,11 +49,14 @@ assert 'chmod +x build.sh Tools/*.py' not in workflow
 # exclusion source, so new portable test_*.py files cannot miss the gate.
 linux_text = linux_runner.read_text()
 assert 'discover_linux_tests.py' in linux_text
-assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"' in linux_text, (
-    'discovery failure must propagate through the set -e runner, not process substitution'
-)
+assert 'if discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT")"; then' in linux_text
+assert 'run_check "$test_file" python3 "$test_file"' in linux_text
+assert 'if "$@"; then' in linux_text
+assert 'record_failure "$label (exit $status)"' in linux_text
+assert 'Linux contract suite failed in %d check(s)' in linux_text
 assert 'done < <(' not in linux_text, 'process substitution hides discovery failure'
 assert 'macos_only_tests.txt' in linux_text
+assert 'set -euo pipefail' not in linux_text
 assert 'python3 "$test_file"' in linux_text
 assert 'tests/test_*.py' not in linux_text
 assert 'test_host_localization_runtime.py' not in linux_text
