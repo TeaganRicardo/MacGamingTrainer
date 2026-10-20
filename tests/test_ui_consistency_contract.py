@@ -45,6 +45,7 @@ assert "static func rarityControlsWidth(compactActionWidth: CGFloat)" in view
 assert "static func commonControlsWidth(compactActionWidth: CGFloat)" in view
 assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth)" in view
 assert "hasTemporaryContextualControls(for: trait)" in view
+assert "hasContextualControls(for: trait)" not in view
 assert ".padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)" not in view
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
@@ -109,7 +110,7 @@ for language in ("en", "zh-CN"):
     assert trait_action_keys <= table.keys()
     trait_labels = [table[key] for key in sorted(trait_action_keys)]
     assert len(trait_labels) == len(set(trait_labels)), f"{language} trait action labels are ambiguous"
-    host_strings = (ROOT.parent / "Resources" / "Localization" / f"{language}.lproj" / "Host.strings").read_text()
+    host_strings = (ROOT / "Resources" / "Localization" / f"{language}.lproj" / "Host.strings").read_text()
     host_disable_all = re.search(r'"host.disableAll" = "([^"]+)";', host_strings)
     assert host_disable_all, f"{language} Host-owned Disable All label is missing"
     labels = [table[key] for key in sorted(module_action_keys)] + [host_disable_all.group(1)]
