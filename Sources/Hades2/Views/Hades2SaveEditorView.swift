@@ -66,7 +66,7 @@ struct Hades2SaveEditorView: View {
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, theme.panelPadding)
+                .padding(.horizontal, theme.rowHorizontalPadding
                 .padding(.top, theme.controlPadding)
             }
             workbenchToolbar
@@ -76,7 +76,7 @@ struct Hades2SaveEditorView: View {
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, theme.panelPadding)
+                .padding(.horizontal, theme.rowHorizontalPadding
                 .padding(.bottom, theme.compactControlSpacing)
             }
             Divider()
@@ -86,7 +86,7 @@ struct Hades2SaveEditorView: View {
             if model.total > Hades2SaveEditorModel.pageSize {
                 Divider()
                 pagingControls
-                    .padding(.horizontal, theme.panelPadding)
+                    .padding(.horizontal, theme.rowHorizontalPadding
                     .padding(.vertical, theme.inlineRowVerticalPadding)
             }
             if model.pendingCount > 0 {
@@ -211,7 +211,7 @@ struct Hades2SaveEditorView: View {
                 dismiss()
             }
         }
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, 15)
     }
 
@@ -267,7 +267,7 @@ struct Hades2SaveEditorView: View {
             .disabled(model.busy)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, theme.inlineRowVerticalPadding)
     }
 
@@ -318,7 +318,7 @@ struct Hades2SaveEditorView: View {
                 .buttonStyle(.borderless)
             }
         }
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, theme.sectionSpacing)
     }
 
@@ -649,7 +649,7 @@ struct Hades2SaveEditorView: View {
                 if reviewExpanded { model.review() }
             }
         }
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, theme.inlineRowVerticalPadding)
     }
 
@@ -690,7 +690,7 @@ struct Hades2SaveEditorView: View {
                 }
             }
         }
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, theme.inlineRowVerticalPadding)
         .trainerSurface(.panel)
     }
@@ -814,7 +814,7 @@ struct Hades2SaveEditorView: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, theme.panelPadding)
+        .padding(.horizontal, theme.rowHorizontalPadding
         .padding(.vertical, theme.inlineRowVerticalPadding)
         .trainerSurface(.panel)
     }
