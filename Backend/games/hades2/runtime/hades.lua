@@ -10135,5 +10135,4 @@ if __MacGamingTrainerV1 == nil then
     synchronize()
     return state(includeCatalogs == true)
   end
-  -- MGT_LUA52_LOCAL_RESERVE_PROBE
 end

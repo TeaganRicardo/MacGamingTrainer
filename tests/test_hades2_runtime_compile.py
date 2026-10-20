@@ -1,9 +1,9 @@
 """Compile the shipped Hades II resident and measure Lua 5.2 local headroom.
 
-The unchanged production source must compile. A second compile probe inserts
-synthetic locals at a stable point inside the resident initialization block,
-where all long-lived chunk locals are active, and reports the exact remaining
-capacity under Lua 5.2's 200-local limit.
+The unchanged production source must compile. A second compile probe prefixes
+synthetic locals to the source so they remain active across the entire main
+chunk, including nested scopes. This measures the minimum spare-local capacity
+at the most constrained point in the main function.
 """
 
 import subprocess
@@ -16,7 +16,23 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "Backend/games/hades2/runtime/hades.lua"
 LUA = require_lua52("resident-runtime compile verification")
 MINIMUM_LOCAL_RESERVE = 16
-LOCAL_RESERVE_MARKER = "  -- MGT_LUA52_LOCAL_RESERVE_PROBE"
+
+version_proc = subprocess.run(
+    [LUA, "-e", "io.write(_VERSION)"],
+    text=True,
+    capture_output=True,
+    timeout=30,
+)
+if version_proc.returncode != 0 or version_proc.stdout.strip() != "Lua 5.2":
+    actual_version = (
+        version_proc.stdout.strip()
+        or version_proc.stderr.strip()
+        or "no version output"
+    )
+    raise SystemExit(
+        "resident-runtime compile verification requires Lua 5.2; "
+        f"got {actual_version}"
+    )
 
 
 def compile_file(path: Path):
@@ -38,13 +54,6 @@ if proc.returncode != 0:
 print("hades2_runtime_compile_ok")
 
 source = RUNTIME.read_text(encoding="utf-8")
-if source.count(LOCAL_RESERVE_MARKER) != 1 or not source.rstrip().endswith(
-    f"{LOCAL_RESERVE_MARKER}\nend"
-):
-    raise SystemExit(
-        "resident source must contain exactly one local-reserve probe marker "
-        "immediately before the initialization block closes"
-    )
 
 with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary_directory:
     probe_path = Path(temporary_directory) / "hades.lua"
@@ -53,10 +62,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary
         names = ", ".join(
             f"__mgt_local_reserve_{index}" for index in range(1, extra_locals + 1)
         )
-        declarations = f"  local {names}\n" if extra_locals else ""
-        probe_source = source.replace(
-            LOCAL_RESERVE_MARKER, declarations + LOCAL_RESERVE_MARKER, 1
-        )
+        declarations = f"local {names}\n" if extra_locals else ""
+        probe_source = declarations + source
         probe_path.write_text(probe_source, encoding="utf-8")
         result = compile_file(probe_path)
         if result.returncode == 0:
