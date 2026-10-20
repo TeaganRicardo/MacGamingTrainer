@@ -10,6 +10,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from lua_local_reserve import (
+    discover_top_level_factories,
+    inject_factory_locals,
+    measure_local_reserve,
+    require_minimum_reserve,
+)
 from lua_runtime_support import require_lua52
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,23 +60,14 @@ if proc.returncode != 0:
 print("hades2_runtime_compile_ok")
 
 source = RUNTIME.read_text(encoding="utf-8")
-FACTORY_ANCHORS = {
-    "cast": "  M.castControl = (function()\n",
-    "catalog_projection": "  M.catalogProjection = (function()\n",
-}
+factories = discover_top_level_factories(source)
 RECOMMENDED_MAIN_CHUNK_RESERVE = 24
 MINIMUM_FACTORY_RESERVE = 16
-for scope_name, anchor in FACTORY_ANCHORS.items():
-    if source.count(anchor) != 1:
-        raise SystemExit(
-            f"resident source must contain exactly one {scope_name} function factory "
-            "so its independent local budget can be measured"
-        )
 
 with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary_directory:
     probe_path = Path(temporary_directory) / "hades.lua"
 
-    def compiles_with(probe_source: str) -> bool:
+    def compiles(probe_source: str) -> bool:
         probe_path.write_text(probe_source, encoding="utf-8")
         result = compile_file(probe_path)
         if result.returncode == 0:
@@ -82,57 +79,28 @@ with tempfile.TemporaryDirectory(prefix="mgt-lua52-local-reserve-") as temporary
             + result.stderr
         )
 
-    def measure_reserve(source_for_probe, scope_name: str) -> int:
-        def with_extra_locals(extra_locals: int) -> bool:
-            names = ", ".join(
-                f"__mgt_{scope_name}_reserve_{index}"
-                for index in range(1, extra_locals + 1)
-            )
-            declarations = f"local {names}\n" if extra_locals else ""
-            return compiles_with(source_for_probe(declarations))
-
-        available = 0
-        candidate = 1
-        while with_extra_locals(candidate):
-            available = candidate
-            candidate *= 2
-            if candidate > 256:
-                raise SystemExit(
-                    f"Lua 5.2 {scope_name} reserve probe did not reach the local limit"
-                )
-
-        lower, upper = available, candidate
-        while lower + 1 < upper:
-            middle = (lower + upper) // 2
-            if with_extra_locals(middle):
-                lower = middle
-            else:
-                upper = middle
-        return lower
-
-    main_available = measure_reserve(lambda declarations: declarations + source, "main")
-
-    factory_available = {}
-    for scope_name, anchor in FACTORY_ANCHORS.items():
-        def inject_factory_locals(declarations: str, factory_anchor=anchor) -> str:
-            offset = source.index(factory_anchor) + len(factory_anchor)
-            return source[:offset] + declarations + source[offset:]
-
-        factory_available[scope_name] = measure_reserve(
-            inject_factory_locals, f"{scope_name}_factory"
-        )
-
-if main_available < MINIMUM_LOCAL_RESERVE:
-    raise SystemExit(
-        f"hades2_runtime_local_headroom_failed available={main_available} "
-        f"required={MINIMUM_LOCAL_RESERVE}"
+    main_available = measure_local_reserve(
+        lambda declarations: declarations + source,
+        compiles,
+        "main_chunk",
     )
-for scope_name, available in factory_available.items():
-    if available < MINIMUM_FACTORY_RESERVE:
-        raise SystemExit(
-            f"hades2_runtime_factory_local_headroom_failed scope={scope_name} "
-            f"available={available} required={MINIMUM_FACTORY_RESERVE}"
+    factory_available = {}
+    for factory in factories:
+        factory_available[factory.name] = measure_local_reserve(
+            lambda declarations, scope=factory: inject_factory_locals(
+                source, scope, declarations
+            ),
+            compiles,
+            f"factory_{factory.name}",
         )
+
+try:
+    require_minimum_reserve("main chunk", main_available, MINIMUM_LOCAL_RESERVE)
+    for scope_name, available in factory_available.items():
+        require_minimum_reserve(scope_name, available, MINIMUM_FACTORY_RESERVE)
+except ValueError as error:
+    raise SystemExit(str(error))
+
 if main_available < RECOMMENDED_MAIN_CHUNK_RESERVE:
     print(
         f"hades2_runtime_local_headroom_warning available={main_available} "
