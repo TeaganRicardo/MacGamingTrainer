@@ -152,7 +152,6 @@ required_shortcut_labels = {
     "hades2.shortcut.acquireExactBoon",
     "hades2.shortcut.openPurgingPool",
     "hades2.shortcut.applyNextOccurrence",
-    "hades2.shortcut.disableAll",
 }
 presentation_section = types[types.index("var presentationKey: String"):types.index("\n    }\n}", types.index("var presentationKey: String"))]
 presentation_cases = dict(re.findall(r'case \.([A-Za-z]\w*): return "([^"]+)"', presentation_section))
@@ -163,6 +162,11 @@ for language in ("en", "zh-CN"):
     assert required_shortcut_labels <= entries.keys(), f"{language} shortcut labels are incomplete"
     assert entries["hades2.shortcut.disableAll"] == ("Disable All" if language == "en" else "关闭全部修改器")
     for action, key in presentation_cases.items():
+        if action == "disableAll":
+            assert key == "host.disableAll"
+            host_strings = read(f"Resources/Localization/{language}.lproj/Host.strings")
+            assert f'"host.disableAll" =' in host_strings
+            continue
         assert key.startswith("hades2."), f"{action} bypasses the Hades presentation catalogue: {key}"
         assert key in entries, f"{language} lacks shortcut label for {action}: {key}"
     assert "hades2.op.acquireSelectedReward" in entries
