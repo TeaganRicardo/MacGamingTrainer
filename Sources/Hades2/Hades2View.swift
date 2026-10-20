@@ -16,11 +16,23 @@ struct Hades2TrainerView: View {
 
     private enum TraitManagerLayout {
         static let rowSpacing: CGFloat = 12
-        static let levelControlsWidth: CGFloat = 200
-        static let rarityControlsWidth: CGFloat = 250
         static let removeControlWidth: CGFloat = 132
-        static let commonControlsWidth: CGFloat = 606
         static let searchWidth: CGFloat = 260
+
+        static func levelControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            42 + 58 + compactActionWidth + 2 * 6
+        }
+
+        static func rarityControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            48 + 102 + compactActionWidth + 2 * 6
+        }
+
+        static func commonControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            levelControlsWidth(compactActionWidth: compactActionWidth)
+                + rarityControlsWidth(compactActionWidth: compactActionWidth)
+                + removeControlWidth
+                + 2 * rowSpacing
+        }
     }
 
     private struct ExactBoonSourceGroup: Identifiable {
@@ -554,9 +566,8 @@ struct Hades2TrainerView: View {
             && target != trait.rarity
     }
 
-    private var managedTraitHasContextualControls: Bool {
-        guard let trait = managedCurrentRunTrait else { return false }
-        return (trait.family == "temporary"
+    private func hasContextualControls(for trait: CurrentRunTrait) -> Bool {
+        (trait.family == "temporary"
             && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire))
             || trait.canAdvanceLifecycle
     }
@@ -595,7 +606,7 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 currentRunTraitCommonControls(managedCurrentRunTrait)
                     .frame(maxWidth: .infinity, alignment: .trailing)
-                if managedTraitHasContextualControls, let trait = managedCurrentRunTrait {
+                if let trait = managedCurrentRunTrait, hasContextualControls(for: trait) {
                     currentRunTraitContextualControls(trait)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -620,8 +631,7 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
-        if trait.family == "temporary"
-            && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire) {
+        if hasContextualControls(for: trait) && trait.family == "temporary" {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.remainingUses"))
                     .font(.caption)
@@ -712,7 +722,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TraitManagerLayout.levelControlsWidth, alignment: .trailing)
+            .frame(width: TraitManagerLayout.levelControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             HStack(spacing: 6) {
                 Text(text("hades2.traits.targetRarity"))
@@ -760,7 +770,7 @@ struct Hades2TrainerView: View {
                     )
                 }
             }
-            .frame(width: TraitManagerLayout.rarityControlsWidth, alignment: .trailing)
+            .frame(width: TraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             Button(role: .destructive) {
                 guard let trait else { return }
@@ -775,7 +785,7 @@ struct Hades2TrainerView: View {
             .frame(width: TraitManagerLayout.removeControlWidth)
             .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
-        .frame(width: TraitManagerLayout.commonControlsWidth, alignment: .trailing)
+        .frame(width: TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
     }
 
     private var resourceSection: some View {
@@ -1558,8 +1568,11 @@ struct Hades2TrainerView: View {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
                 TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
-                Button(text("hades2.spawn.open")) { _ = model.openSellTraits() }
-                    .disabled(!model.canOpenSellTraits)
+                TrainerSecondaryActionButton(
+                    title: text("hades2.spawn.open"),
+                    enabled: model.canOpenSellTraits,
+                    width: theme.compactActionWidth
+                ) { _ = model.openSellTraits() }
             }
             if model.connected {
                 Divider()
@@ -1629,10 +1642,11 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Spacer()
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
                     Button { model.disableAll() } label: {
-                        Label("\(localization.localized("host.disableAll"))  \(model.shortcutText(.disableAll))", systemImage: "power")
+                        Label(localization.localized("host.disableAll"), systemImage: "power")
                     }
-                        .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
+                    .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
                 }
                 HStack(spacing: 12) {
                     Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }
