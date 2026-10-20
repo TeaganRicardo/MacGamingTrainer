@@ -43,6 +43,9 @@ assert "static let rarityControlsWidth: CGFloat = 250" not in view
 assert "static func levelControlsWidth(compactActionWidth: CGFloat)" in view
 assert "static func rarityControlsWidth(compactActionWidth: CGFloat)" in view
 assert "static func commonControlsWidth(compactActionWidth: CGFloat)" in view
+assert "42 + 58 + compactActionWidth + 2 * 6" in view
+assert "48 + 102 + compactActionWidth + 2 * 6" in view
+assert "+ removeControlWidth" in view
 assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth)" in view
 assert "hasTemporaryContextualControls(for: trait)" in view
 assert "hasContextualControls(for: trait)" not in view
