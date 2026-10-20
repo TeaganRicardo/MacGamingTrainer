@@ -47,8 +47,11 @@ assert "42 + 58 + compactActionWidth + 2 * 6" in view
 assert "48 + 102 + compactActionWidth + 2 * 6" in view
 assert "+ removeControlWidth" in view
 assert "TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth)" in view
-assert "hasTemporaryContextualControls(for: trait)" in view
-assert "hasContextualControls(for: trait)" not in view
+assert "hasTemporaryContextualControls(for: trait)" not in view
+assert "trait.hasTemporaryContextualControls" in view
+assert "trait.hasContextualControls" in view
+assert "var hasTemporaryContextualControls: Bool" in types
+assert "var hasContextualControls: Bool" in types
 assert ".padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)" not in view
 assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
