@@ -29,7 +29,7 @@ for essence in ('火元素精华', '水元素精华', '土元素精华', '风元
 
 # Parse the declarative reward table and protect the audited full-release
 # spawn catalog. A missing row or wrong grouping is a user-visible catalog bug.
-reward_block = lua.split('local rewardDefinitions = {', 1)[1].split('  local elementNames =', 1)[0]
+reward_block = lua.split('catalogs.rewardDefinitions = {', 1)[1].split('  catalogs.elementNames =', 1)[0]
 reward_rows = {}
 for line in reward_block.splitlines():
     if '{ id = "' not in line:

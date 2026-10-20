@@ -100,7 +100,7 @@ assert 'text("hades2.spawn.open")' in view
 assert 'Label(text("hades2.spawn.purgingPool")' in view
 assert '祝福管理' not in view
 
-definitions = lua[lua.index('local nativeSpecialChoiceDefinitions'):lua.index('local nativeSpecialChoiceSources')]
+definitions = lua[lua.index('catalogs.nativeSpecialChoiceDefinitions'):lua.index('catalogs.nativeSpecialChoiceSources')]
 for source in (
     'Artemis', 'Athena', 'Dionysus', 'Hades',
     'Arachne', 'Narcissus', 'Echo', 'Medea', 'Circe', 'Icarus',
@@ -125,7 +125,7 @@ def command_block(name):
 
 
 block = command_block("open_special_choice")
-assert 'local definition = nativeSpecialChoiceDefinitions[params.source]' in block
+assert 'local definition = catalogs.nativeSpecialChoiceDefinitions[params.source]' in block
 assert 'allowedNativeSources' not in block, "native choice capability must have one source of truth"
 assert 'type(EnemyData) ~= "table"' in block
 assert 'type(PresetEventArgs) ~= "table"' in block
@@ -183,15 +183,15 @@ assert 'AddTraitToHero' not in block
 assert 'hadLootChoiceHistory' in block
 assert 'CurrentRun.LootChoiceHistory = nil' in block
 
-assert 'EchoLastRunBoon = true' in lua and 'nativeChoiceOnlyTraits[traitName]' in lua, (
+assert 'EchoLastRunBoon = true' in lua and 'catalogs.nativeChoiceOnlyTraits[traitName]' in lua, (
     "Echo Last Run must stay on the native Echo choice flow because its acquire function waits on a boon menu"
 )
 
 # Catalog advertises the capability instead of making Swift infer it from localized names.
-assert 'nativeChoice = nativeSpecialChoiceSources[source.id] == true' in lua
-source_registry = lua[lua.index('local specialSourceDefinitions'):lua.index('local nativeSpecialChoiceDefinitions')]
+assert 'nativeChoice = catalogs.nativeSpecialChoiceSources[source.id] == true' in lua
+source_registry = lua[lua.index('catalogs.specialSourceDefinitions'):lua.index('catalogs.nativeSpecialChoiceDefinitions')]
 assert 'Heracles' not in source_registry and 'Moros' not in source_registry
-codex_registry = lua[lua.index('local specialSourceCodexIds'):lua.index('local function officialSpecialSourceOrder')]
+codex_registry = lua[lua.index('catalogs.specialSourceCodexIds'):lua.index('local function officialSpecialSourceOrder')]
 assert 'Heracles' not in codex_registry and 'Moros' not in codex_registry
 
 print('native_special_choice_contract_ok')

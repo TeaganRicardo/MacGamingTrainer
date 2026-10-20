@@ -18,7 +18,7 @@ from hades2_resident_session_fakes import FakeTimeWarpController
 # terminal action returns observation without restoring desired runtime hooks.
 lua = (root/'Backend/games/hades2/runtime/hades.lua').read_text(encoding='utf-8')
 dispatch = lua[lua.index('  function M.dispatch(command, params)'):]
-sync_guard = '    elseif preferenceReplayDepth == 0 then synchronize() end'
+sync_guard = '    elseif runtimeState.preferenceReplayDepth == 0 then synchronize() end'
 assert dispatch.index(sync_guard) < dispatch.index(
     '    if command == "status" then return state(params.includeCatalogs) end',
     dispatch.index(sync_guard),
