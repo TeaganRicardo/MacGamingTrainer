@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 lua = (ROOT / "Backend/games/hades2/runtime/hades.lua").read_text()
 
-reward_block = lua.split("local rewardDefinitions = {", 1)[1].split("  local elementNames =", 1)[0]
+reward_block = lua.split("catalogs.rewardDefinitions = {", 1)[1].split("  catalogs.elementNames =", 1)[0]
 rows = {}
 for line in reward_block.splitlines():
     if '{ id = "' not in line:

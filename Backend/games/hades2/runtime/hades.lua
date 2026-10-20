@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 114 then
+if previousModule and previousModule.revision ~= 115 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 114 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 114,
+    version = 1, revision = 115,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -67,8 +67,10 @@ if __MacGamingTrainerV1 == nil then
     traitInventoryGeneration = tostring({}),
   }
   __MacGamingTrainerV1 = M
-  local forceRerolls, roomGeneration
-  local preferenceReplayDepth = 0
+  local runtimeState = {}
+  runtimeState.preferenceReplayDepth = 0
+  local catalogs = {}
+  local runtimeConfig = {}
 
   local arrayMeta = { __trainerJSONArray = true }
   local jsonNull = {}
@@ -237,7 +239,7 @@ if __MacGamingTrainerV1 == nil then
   -- protocol data so the UI can preserve game/family order without re-sorting
   -- localized strings.  Within dynamic NPC boon groups, array order from the
   -- game's UnitSetData is kept whenever the game provides one.
-  local boonDefinitions = {
+  catalogs.boonDefinitions = {
     -- Fallback mirrors CodexOrdering.OlympianGods from the current game. Runtime
     -- Codex order takes precedence below when available.
     { id = "ZeusUpgrade", name = "宙斯", order = 10 },
@@ -251,7 +253,7 @@ if __MacGamingTrainerV1 == nil then
     { id = "AresUpgrade", name = "阿瑞斯", order = 90 },
     { id = "HermesUpgrade", name = "赫尔墨斯", order = 130 },
   }
-  local rewardDefinitions = {
+  catalogs.rewardDefinitions = {
     -- Curated ordering for common room rewards.  Runtime discovery below adds
     -- any current/future RewardStoreData entries we do not know about yet.
     { id = "RoomMoneyTinyDrop", name = "少量金币", category = "资源与常规掉落", kind = "consumable", group = "pickup", family = "money", familyOrder = 10, itemOrder = 5 },
@@ -356,8 +358,8 @@ if __MacGamingTrainerV1 == nil then
     { id = "SpellDrop", name = "月之礼赠", category = "角色奖励", kind = "loot", group = "special", family = "Selene", familyOrder = 10, itemOrder = 10, sourceId = "Selene", sourceName = "塞勒涅" },
     { id = "TrialUpgrade", name = "卡俄斯的祝福", category = "角色奖励", kind = "loot", group = "special", family = "Chaos", familyOrder = 20, itemOrder = 10, sourceId = "Chaos", sourceName = "卡俄斯" },
   }
-  local elementNames = { Fire = "火", Water = "水", Earth = "土", Air = "风", Aether = "以太" }
-  local specialSourceDefinitions = {
+  catalogs.elementNames = { Fire = "火", Water = "水", Earth = "土", Air = "风", Aether = "以太" }
+  catalogs.specialSourceDefinitions = {
     { id = "Artemis", name = "阿尔忒弥斯", order = 30 },
     { id = "Athena", name = "雅典娜", order = 40 },
     { id = "Dionysus", name = "迪奥尼索司", order = 50 },
@@ -369,7 +371,7 @@ if __MacGamingTrainerV1 == nil then
     { id = "Medea", name = "美狄亚", order = 110 },
     { id = "Arachne", name = "阿拉克涅", order = 120 },
   }
-  local nativeSpecialChoiceDefinitions = {
+  catalogs.nativeSpecialChoiceDefinitions = {
     Artemis = { npc = "NPC_Artemis_Field_01", mode = "loot" },
     Athena = { npc = "NPC_Athena_01", mode = "loot" },
     Dionysus = { npc = "NPC_Dionysus_01", mode = "loot" },
@@ -381,16 +383,16 @@ if __MacGamingTrainerV1 == nil then
     Circe = { npc = "NPC_Circe_01", choices = "CirceBlessingChoices", circe = true },
     Icarus = { npc = "NPC_Icarus_01", choices = "IcarusBenefitChoices" },
   }
-  local nativeSpecialChoiceSources = {}
-  for sourceId in pairs(nativeSpecialChoiceDefinitions) do nativeSpecialChoiceSources[sourceId] = true end
-  local nativeChoiceOnlyTraits = {
+  catalogs.nativeSpecialChoiceSources = {}
+  for sourceId in pairs(catalogs.nativeSpecialChoiceDefinitions) do catalogs.nativeSpecialChoiceSources[sourceId] = true end
+  catalogs.nativeChoiceOnlyTraits = {
     EchoLastRunBoon = true,
   }
 
-  local specialTraitSources, specialTraitSourceOrder = {}, {}
-  for _, source in ipairs(specialSourceDefinitions) do
-    specialTraitSources[source.id] = source.name
-    specialTraitSourceOrder[source.id] = source.order
+  catalogs.specialTraitSources, catalogs.specialTraitSourceOrder = {}, {}
+  for _, source in ipairs(catalogs.specialSourceDefinitions) do
+    catalogs.specialTraitSources[source.id] = source.name
+    catalogs.specialTraitSourceOrder[source.id] = source.order
   end
   local trainerSource = "MacGamingTrainer"
   local trainerInvincibilityFlag = "MacGamingTrainerInvincibility"
@@ -757,12 +759,12 @@ if __MacGamingTrainerV1 == nil then
   -- declares these effects under WeaponName = "WeaponCast" (the effect stays
   -- owned by the base cast weapon even after the fired weapon is swapped), so
   -- the effect group does not follow the delivery weapon.
-  local castEffectOverrides = {
+  runtimeConfig.castEffectOverrides = {
     WeaponCastAttackDisable = false,
     WeaponCastSelfSlow = false,
     WeaponCastSelfSlow2 = false,
   }
-  local castEffectOrder = { "WeaponCastAttackDisable", "WeaponCastSelfSlow", "WeaponCastSelfSlow2" }
+  runtimeConfig.castEffectOrder = { "WeaponCastAttackDisable", "WeaponCastSelfSlow", "WeaponCastSelfSlow2" }
   local function castEffectNaturallyActive(effectName)
     local function containsOverride(value, seen, depth)
       if type(value) ~= "table" or depth > 8 then return false end
@@ -851,7 +853,7 @@ if __MacGamingTrainerV1 == nil then
       hero = hero, weapons = {}, appliedWeapons = {},
       nativeEffects = {}, nativeEffectKnown = {}, applied = false,
     }
-    for _, effectName in ipairs(castEffectOrder) do
+    for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
       runtime.nativeEffects[effectName] = castEffectNaturallyActive(effectName)
       runtime.nativeEffectKnown[effectName] = true
     end
@@ -900,8 +902,8 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     runtime.appliedWeapons = active
-    for _, effectName in ipairs(castEffectOrder) do
-      if not writeCastEffectActive(effectName, castEffectOverrides[effectName], effectSetter, runtime.hero) then
+    for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
+      if not writeCastEffectActive(effectName, runtimeConfig.castEffectOverrides[effectName], effectSetter, runtime.hero) then
         applied = false
       end
     end
@@ -939,9 +941,9 @@ if __MacGamingTrainerV1 == nil then
         end
       end
       if type(effectSetter) == "function" then
-        for _, effectName in ipairs(castEffectOrder) do
+        for _, effectName in ipairs(runtimeConfig.castEffectOrder) do
           local natural = runtime.nativeEffects[effectName]
-          if nativeKeepsCastOpen and castEffectOverrides[effectName] == false then natural = false end
+          if nativeKeepsCastOpen and runtimeConfig.castEffectOverrides[effectName] == false then natural = false end
           if type(natural) ~= "boolean" then natural = castEffectNaturallyActive(effectName) end
           pcall(writeCastEffectActive, effectName, natural, effectSetter, runtime.hero)
         end
@@ -1134,12 +1136,12 @@ if __MacGamingTrainerV1 == nil then
     runtime.factor = factor
   end
 
-  local trainerChargeSpeedName = "MacGamingTrainerChargeSpeed"
+  runtimeConfig.trainerChargeSpeedName = "MacGamingTrainerChargeSpeed"
   local function releaseChargeSpeedLock()
     local applied = M.statRuntime.chargeSpeed
     M.statRuntime.chargeSpeed = nil
     if finite(applied) and type(RemovePlayerAttackSpecialChargeSpeed) == "function" then
-      pcall(RemovePlayerAttackSpecialChargeSpeed, trainerChargeSpeedName, applied)
+      pcall(RemovePlayerAttackSpecialChargeSpeed, runtimeConfig.trainerChargeSpeedName, applied)
     end
   end
   local function installChargeSpeedLock()
@@ -1149,7 +1151,7 @@ if __MacGamingTrainerV1 == nil then
     local multiplier = target / 100
     if M.statRuntime.chargeSpeed == multiplier then return end
     releaseChargeSpeedLock()
-    SetPlayerAttackSpecialChargeSpeed(trainerChargeSpeedName, multiplier)
+    SetPlayerAttackSpecialChargeSpeed(runtimeConfig.trainerChargeSpeedName, multiplier)
     M.statRuntime.chargeSpeed = multiplier
   end
 
@@ -1300,18 +1302,18 @@ if __MacGamingTrainerV1 == nil then
     ApplyUnitPropertyChanges(hero, changes, true, false)
     M.statRuntime.attackSpeed = { hero = hero, timeFactor = timeFactor, changes = changes }
   end
-  local trainerManaRegenSource = "MacGamingTrainerManaRegen"
+  runtimeConfig.trainerManaRegenSource = "MacGamingTrainerManaRegen"
   local function currentTrainerManaRegen(hero)
     if type(hero) ~= "table" or type(hero.ManaRegenSources) ~= "table" then return nil end
-    local source = hero.ManaRegenSources[trainerManaRegenSource]
+    local source = hero.ManaRegenSources[runtimeConfig.trainerManaRegenSource]
     return type(source) == "table" and finite(source.Value) and source.Value or 0
   end
   local function releaseManaRegenLock()
     local runtime = M.statRuntime.manaRegen
     M.statRuntime.manaRegen = nil
     if type(runtime) == "table" and type(runtime.hero) == "table" and type(runtime.hero.ManaRegenSources) == "table" then
-      if runtime.previous ~= nil then runtime.hero.ManaRegenSources[trainerManaRegenSource] = runtime.previous
-      else runtime.hero.ManaRegenSources[trainerManaRegenSource] = nil end
+      if runtime.previous ~= nil then runtime.hero.ManaRegenSources[runtimeConfig.trainerManaRegenSource] = runtime.previous
+      else runtime.hero.ManaRegenSources[runtimeConfig.trainerManaRegenSource] = nil end
     end
   end
   local function installManaRegenLock()
@@ -1322,8 +1324,8 @@ if __MacGamingTrainerV1 == nil then
     local runtime = M.statRuntime.manaRegen
     if type(runtime) == "table" and runtime.hero == hero and runtime.value == target then return end
     releaseManaRegenLock()
-    local previous = hero.ManaRegenSources[trainerManaRegenSource]
-    hero.ManaRegenSources[trainerManaRegenSource] = { Value = target, ShowManaRegen = true }
+    local previous = hero.ManaRegenSources[runtimeConfig.trainerManaRegenSource]
+    hero.ManaRegenSources[runtimeConfig.trainerManaRegenSource] = { Value = target, ShowManaRegen = true }
     M.statRuntime.manaRegen = { hero = hero, previous = previous, value = target }
     if type(ManaRegen) == "function" and type(thread) == "function" then pcall(thread, ManaRegen) end
   end
@@ -1347,7 +1349,7 @@ if __MacGamingTrainerV1 == nil then
     M.guardWrapper, M.originalUpdateTimers = nil, nil
   end
   local function deactivateRuntime()
-    if roomGeneration ~= nil then roomGeneration.release() end
+    if runtimeState.roomGeneration ~= nil then runtimeState.roomGeneration.release() end
     releaseInvincibility()
     releaseHealth()
     releaseMana()
@@ -1358,7 +1360,7 @@ if __MacGamingTrainerV1 == nil then
     releaseMiniGames()
     releaseGardenQoL()
     releaseBoonRarity()
-    if forceRerolls ~= nil then forceRerolls.release() end
+    if runtimeState.forceRerolls ~= nil then runtimeState.forceRerolls.release() end
     M.forceEnableRerolls = false
     releaseNextRoomReward()
     releaseOccurrenceRouting()
@@ -1657,7 +1659,7 @@ if __MacGamingTrainerV1 == nil then
     if string.find(id, "Boss", 1, true) then return "boss" end
     return "resources"
   end
-  local resourceInventorySectionKinds = {
+  catalogs.resourceInventorySectionKinds = {
     InventoryScreen_ResourcesTab = "resources",
     InventoryScreen_GardenTab = "plants",
     InventoryScreen_GiftsTab = "gifts",
@@ -1670,7 +1672,7 @@ if __MacGamingTrainerV1 == nil then
     if type(categories) == "table" then
       for categoryIndex, category in ipairs(categories) do
         local sectionId = type(category) == "table" and category.Name or nil
-        local sectionKind = type(sectionId) == "string" and resourceInventorySectionKinds[sectionId] or nil
+        local sectionKind = type(sectionId) == "string" and catalogs.resourceInventorySectionKinds[sectionId] or nil
         if sectionKind ~= nil then
           local itemOrder = 0
           for _, id in ipairs(category) do
@@ -1785,7 +1787,7 @@ if __MacGamingTrainerV1 == nil then
     if type(cached) == "table" then return cached.list, cached.allowed end
     local result, allowed = setmetatable({}, arrayMeta), {}
     local officialOrder = officialOlympianOrder()
-    for _, entry in ipairs(boonDefinitions) do
+    for _, entry in ipairs(catalogs.boonDefinitions) do
       if type(LootData) == "table" and type(LootData[entry.id]) == "table" then
         allowed[entry.id] = true
         result[#result + 1] = { id = entry.id, name = entry.name, sortSection = 20, sortGroup = officialOrder[entry.id] or entry.order, sortOrder = 0 }
@@ -1797,7 +1799,7 @@ if __MacGamingTrainerV1 == nil then
     end
     return result, allowed
   end
-  local specialSourceCodexIds = {
+  catalogs.specialSourceCodexIds = {
     Selene = "SpellDrop", Chaos = "TrialUpgrade",
     Artemis = "NPC_Artemis_01", Athena = "NPC_Athena_01", Dionysus = "NPC_Dionysus_01",
     Echo = "NPC_Echo_01", Hades = "NPC_Hades_Field_01", Narcissus = "NPC_Narcissus_01",
@@ -1818,7 +1820,7 @@ if __MacGamingTrainerV1 == nil then
         end
       end
     end
-    for sourceId, codexId in pairs(specialSourceCodexIds) do
+    for sourceId, codexId in pairs(catalogs.specialSourceCodexIds) do
       if codexRank[codexId] then order[sourceId] = codexRank[codexId] end
     end
     return order
@@ -2535,7 +2537,7 @@ if __MacGamingTrainerV1 == nil then
       metaHarvest = "采集与杂项资源", metaBoss = "首领资源", metaAdvanced = "高阶资源", element = "元素奖励", shop = "商店商品", well = "卡戎之井",
     }
     local knownBoonIds = {}
-    for _, entry in ipairs(boonDefinitions) do knownBoonIds[entry.id] = true end
+    for _, entry in ipairs(catalogs.boonDefinitions) do knownBoonIds[entry.id] = true end
     local function addDefinition(entry)
       if allowed[entry.id] then return end
       local traitId = entry.trait
@@ -2557,7 +2559,7 @@ if __MacGamingTrainerV1 == nil then
         result[#result + 1] = allowed[entry.id]
       end
     end
-    for _, entry in ipairs(rewardDefinitions) do addDefinition(entry) end
+    for _, entry in ipairs(catalogs.rewardDefinitions) do addDefinition(entry) end
 
     -- RewardStoreData is the game's authoritative list of room reward pools.
     -- Add any direct LootData/ConsumableData entries that are not yet in our
@@ -2595,14 +2597,14 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local officialGodOrder = officialOlympianOrder()
-    for _, entry in ipairs(boonDefinitions) do
+    for _, entry in ipairs(catalogs.boonDefinitions) do
       local item = { id = entry.id, name = entry.name, category = "奥林匹斯的祝福", group = "olympian", kind = "loot", sortSection = 20, sortGroup = officialGodOrder[entry.id] or entry.order, sortOrder = 0, sectionTitle = "奥林匹斯诸神" }
       if type(LootData) == "table" and type(LootData[entry.id]) == "table" then allowed[entry.id] = item; result[#result + 1] = item end
     end
     -- Exact ordinary acquisition is projected from the same native GodLoot
     -- sources that own eligibility/replacement. These rows are catalog targets,
     -- not authorization to bypass the source's operation-time rules.
-    for _, entry in ipairs(boonDefinitions) do
+    for _, entry in ipairs(catalogs.boonDefinitions) do
       local source = type(LootData) == "table" and LootData[entry.id] or nil
       if type(source) == "table" then
         local seen, ordered = {}, {}
@@ -2762,7 +2764,7 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local buckets = {}
-    for _, source in ipairs(specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
+    for _, source in ipairs(catalogs.specialSourceDefinitions) do buckets[source.id] = { seen = {}, traits = {} } end
     local function collect(sourceId, traits)
       local bucket = buckets[sourceId]
       if not bucket then return end
@@ -2776,14 +2778,14 @@ if __MacGamingTrainerV1 == nil then
           for unitKey, unit in pairs(unitSet) do
             if type(unit) == "table" then
               local speaker = type(unit.SpeakerName) == "string" and unit.SpeakerName or ""
-              local sourceId = specialTraitSources[speaker] and speaker or nil
+              local sourceId = catalogs.specialTraitSources[speaker] and speaker or nil
               if sourceId == nil and type(unitKey) == "string" then
-                for _, source in ipairs(specialSourceDefinitions) do
+                for _, source in ipairs(catalogs.specialSourceDefinitions) do
                   if string.find(unitKey, source.id, 1, true) then sourceId = source.id; break end
                 end
               end
               if sourceId == nil and type(setKey) == "string" then
-                for _, source in ipairs(specialSourceDefinitions) do
+                for _, source in ipairs(catalogs.specialSourceDefinitions) do
                   if string.find(setKey, source.id, 1, true) then sourceId = source.id; break end
                 end
               end
@@ -2793,17 +2795,17 @@ if __MacGamingTrainerV1 == nil then
         end
       end
     end
-    for _, source in ipairs(specialSourceDefinitions) do
+    for _, source in ipairs(catalogs.specialSourceDefinitions) do
       local bucket = buckets[source.id]
       for index, traitName in ipairs(bucket and bucket.traits or {}) do
         local id = "trait:" .. traitName
-        if not allowed[id] and not nativeChoiceOnlyTraits[traitName] then
+        if not allowed[id] and not catalogs.nativeChoiceOnlyTraits[traitName] then
           local item = {
             id = id, name = traitName, category = "角色奖励", group = "exact", kind = "trait", trait = traitName,
             family = source.id, sourceId = source.id, sourceName = source.name, sectionTitle = source.name,
-            nativeChoice = nativeSpecialChoiceSources[source.id] == true,
+            nativeChoice = catalogs.nativeSpecialChoiceSources[source.id] == true,
             acquisitionMode = source.id == "Arachne" and "costume" or "direct",
-            sortSection = 25, sortGroup = officialSourceOrder[source.id] or specialTraitSourceOrder[source.id] or 999, sortOrder = index,
+            sortSection = 25, sortGroup = officialSourceOrder[source.id] or catalogs.specialTraitSourceOrder[source.id] or 999, sortOrder = index,
           }
           allowed[id] = item; result[#result + 1] = item
         end
@@ -3104,7 +3106,7 @@ if __MacGamingTrainerV1 == nil then
 
     local function specialTraitSourceId(name)
       if type(name) ~= "string" or name == "" then return "" end
-      for sourceId, definition in pairs(nativeSpecialChoiceDefinitions) do
+      for sourceId, definition in pairs(catalogs.nativeSpecialChoiceDefinitions) do
         local npcData = type(EnemyData) == "table" and EnemyData[definition.npc] or nil
         if type(npcData) == "table" and type(npcData.Traits) == "table" then
           for _, traitName in pairs(npcData.Traits) do
@@ -3964,7 +3966,7 @@ if __MacGamingTrainerV1 == nil then
       local source = traitSourceId(trait)
       if type(source) == "string" and source ~= "" then
         if string.find(source, "NPC_", 1, true) == 1
-            or nativeSpecialChoiceDefinitions[source] ~= nil then
+            or catalogs.nativeSpecialChoiceDefinitions[source] ~= nil then
           return "directSpecial"
         end
       end
@@ -4779,7 +4781,7 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
-  roomGeneration = (function()
+  runtimeState.roomGeneration = (function()
     -- The single Hades gathering strategy declaration. Wire enums name these
     -- families; native source, cache, tool and collection meaning lives here.
     local strategies = {
@@ -5113,7 +5115,7 @@ if __MacGamingTrainerV1 == nil then
     return { release = release, install = install, enabled = enabled, setChaosProbability = setChaosProbability, setProbabilities = setProbabilities, snapshot = snapshot, observe = observe, prepare = prepare, generate = generate }
   end)()
 
-  forceRerolls = (function()
+  runtimeState.forceRerolls = (function()
     local callbackName = "MacGamingTrainerForceRerollChoice"
     local seleneCallbackName = "MacGamingTrainerForceRerollSelene"
     local surfaceShopCallbackName = "MacGamingTrainerForceRerollSurfaceShop"
@@ -5135,7 +5137,7 @@ if __MacGamingTrainerV1 == nil then
     }
     local syntheticSpent = setmetatable({}, { __mode = "k" })
     local npcOwners = {}
-    for id, definition in pairs(nativeSpecialChoiceDefinitions) do
+    for id, definition in pairs(catalogs.nativeSpecialChoiceDefinitions) do
       npcOwners[definition.npc] = definition
       npcOwners["MacGamingTrainerSpecial_" .. id] = definition
     end
@@ -7178,7 +7180,7 @@ if __MacGamingTrainerV1 == nil then
     for _, element in ipairs(M.observationRetention.elementOrder) do
       if values[element] ~= nil or (type(TraitElementData) == "table" and TraitElementData[element] ~= nil) then
         result[#result + 1] = {
-          id = element, name = elementNames[element] or element,
+          id = element, name = catalogs.elementNames[element] or element,
           count = number(values[element]), locked = M.elementLocks[element] ~= nil,
         }
       end
@@ -7187,7 +7189,7 @@ if __MacGamingTrainerV1 == nil then
   end
 
   local function state(includeCatalogs)
-    if preferenceReplayDepth > 0 then return {} end
+    if runtimeState.preferenceReplayDepth > 0 then return {} end
     local hero = CurrentRun and CurrentRun.Hero or {}
     local resourceFingerprint = M.observationRetention.resourceFingerprint()
     local retainResources = M.observationRetention.retain("resources", resourceFingerprint)
@@ -7363,9 +7365,9 @@ if __MacGamingTrainerV1 == nil then
         resourceLocks = M.resourceLocks, elementLocks = M.elementLocks,
         rerollsLock = M.rerollsLock == nil and jsonNull or M.rerollsLock,
       },
-      gatheringProbabilities = roomGeneration.snapshot(),
+      gatheringProbabilities = runtimeState.roomGeneration.snapshot(),
       chaosGateProbability = M.chaosGateProbability == nil and jsonNull or M.chaosGateProbability,
-      gatheringTargets = roomGeneration.observe(),
+      gatheringTargets = runtimeState.roomGeneration.observe(),
       runCount = runCount, elements = elementList,
       statSupport = support, statAvailable = statAvailable, stats = statsState,
       resources = list, boons = boonList, rewards = rewardList,
@@ -7769,7 +7771,7 @@ if __MacGamingTrainerV1 == nil then
     if not owns("SetEffectProperty") then
       installHook("SetEffectProperty", function(original, args, ...)
         if M.instantCastCooldown and type(args) == "table"
-            and args.WeaponName == "WeaponCast" and castEffectOverrides[args.EffectName] ~= nil
+            and args.WeaponName == "WeaponCast" and runtimeConfig.castEffectOverrides[args.EffectName] ~= nil
             and args.Property == "Active"
             and (args.DestinationId == nil or args.DestinationId == CurrentRun.Hero.ObjectId) then
           local current = ensureCastRuntime()
@@ -7780,7 +7782,7 @@ if __MacGamingTrainerV1 == nil then
           local protected = {}
           for key, value in pairs(args) do protected[key] = value end
           protected.DestinationId = CurrentRun.Hero.ObjectId
-          protected.Value = castEffectOverrides[args.EffectName]
+          protected.Value = runtimeConfig.castEffectOverrides[args.EffectName]
           protected.ValueChangeType = "Absolute"
           return original(protected, ...)
         end
@@ -7933,7 +7935,7 @@ if __MacGamingTrainerV1 == nil then
     M.gardenQoL = true
   end
 
-  local rarityRank = { Common = 1, Rare = 2, Epic = 3, Heroic = 4 }
+  runtimeConfig.rarityRank = { Common = 1, Rare = 2, Epic = 3, Heroic = 4 }
   local function traitSpecialRarity(traitName)
     local data = type(TraitData) == "table" and TraitData[traitName] or nil
     if type(data) ~= "table" then return nil end
@@ -7961,12 +7963,12 @@ if __MacGamingTrainerV1 == nil then
   end
   local function applyMinimumBoonRarity(lootData)
     if type(lootData) ~= "table" or type(lootData.UpgradeOptions) ~= "table" then return end
-    local targetRank = rarityRank[M.boonRarityTarget] or 1
+    local targetRank = runtimeConfig.rarityRank[M.boonRarityTarget] or 1
     for _, option in ipairs(lootData.UpgradeOptions) do
       if type(option) == "table" then
         local special = specialOptionKind(option)
         if not special then
-          local currentRank = rarityRank[option.Rarity or "Common"] or 1
+          local currentRank = runtimeConfig.rarityRank[option.Rarity or "Common"] or 1
           if currentRank < targetRank then option.Rarity = M.boonRarityTarget end
         end
       end
@@ -8307,14 +8309,14 @@ if __MacGamingTrainerV1 == nil then
     end
   end
 
-  local nextRoomDirectRewards = {
+  runtimeConfig.nextRoomDirectRewards = {
     RoomMoneyDrop=true, MetaCurrencyDrop=true, MetaCardPointsCommonDrop=true, MemPointsCommonDrop=true,
     MaxHealthDrop=true, MaxManaDrop=true, StackUpgrade=true, WeaponUpgrade=true, HermesUpgrade=true,
   }
 
   local function nextRoomRewardSpec(wanted)
     if type(wanted) ~= "string" then return nil, nil end
-    if nextRoomDirectRewards[wanted] then return wanted, nil end
+    if runtimeConfig.nextRoomDirectRewards[wanted] then return wanted, nil end
     if type(LootData) == "table" and type(LootData[wanted]) == "table" then return "Boon", wanted end
     return nil, nil
   end
@@ -8325,7 +8327,7 @@ if __MacGamingTrainerV1 == nil then
     if native == "Story" or native == "Shop" or native == "Empty" or native == "Devotion" then return false end
     if type(room.Encounter) == "table" and type(room.Encounter.Name) == "string"
         and string.find(room.Encounter.Name, "Boss", 1, true) then return false end
-    return native == "Boon" or nextRoomDirectRewards[native] == true
+    return native == "Boon" or runtimeConfig.nextRoomDirectRewards[native] == true
       or (type(ConsumableData) == "table" and type(ConsumableData[native]) == "table")
       or (type(LootData) == "table" and type(LootData[native]) == "table")
   end
@@ -8567,11 +8569,11 @@ if __MacGamingTrainerV1 == nil then
     end
   end
   local function installForceEnableRerolls()
-    forceRerolls.install()
+    runtimeState.forceRerolls.install()
     M.forceEnableRerolls = true
   end
   local function releaseForceEnableRerolls()
-    forceRerolls.release()
+    runtimeState.forceRerolls.release()
     M.forceEnableRerolls = false
   end
 
@@ -8634,8 +8636,8 @@ if __MacGamingTrainerV1 == nil then
     },
     forceEnableRerolls = {
       install = installForceEnableRerolls, release = releaseForceEnableRerolls, available = function() return true end,
-      support = forceRerolls.supported,
-      active = function() return M.forceEnableRerolls and forceRerolls.active() end,
+      support = runtimeState.forceRerolls.supported,
+      active = function() return M.forceEnableRerolls and runtimeState.forceRerolls.active() end,
     },
   }
   featureOrder = {
@@ -8763,8 +8765,8 @@ if __MacGamingTrainerV1 == nil then
       run(key, desired, entry)
     end
     if onlyKey == nil or onlyKey == "gathering" or onlyKey == "chaosGate" then
-      if not featureAttempt("roomGeneration", roomGeneration.enabled(),
-          roomGeneration.install, roomGeneration.release, raiseOnError) then
+      if not featureAttempt("roomGeneration", runtimeState.roomGeneration.enabled(),
+          runtimeState.roomGeneration.install, runtimeState.roomGeneration.release, raiseOnError) then
         allOk = false
       end
     end
@@ -9620,14 +9622,14 @@ if __MacGamingTrainerV1 == nil then
       if command ~= "cleanup" and command ~= "disable_all" then
         error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
       end
-    elseif preferenceReplayDepth == 0 then synchronize() end
+    elseif runtimeState.preferenceReplayDepth == 0 then synchronize() end
     if command == "status" then return state(params.includeCatalogs) end
     if command == "stage_desired_locks" then
       -- This is an internal, idempotent preference-replay operation. In a menu
       -- or Hero-less hub, transport the complete lock intent into resident Lua
       -- once, so the existing frame/owner guard can remount it later without a
       -- Host timer or an unrelated status request.
-      if preferenceReplayDepth == 0 then error("Desired lock staging requires a replay batch") end
+      if runtimeState.preferenceReplayDepth == 0 then error("Desired lock staging requires a replay batch") end
       for _, key in ipairs({ "statLocks", "vitalLocks", "resourceLocks", "elementLocks" }) do
         if type(params[key]) ~= "table" then error("Invalid staged lock family: " .. key) end
       end
@@ -9673,8 +9675,8 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "generate_gathering" then
       local target
-      return actionLedger.run(command, params, function(record) return roomGeneration.generate(record, target) end,
-        function() target = roomGeneration.prepare(params) end)
+      return actionLedger.run(command, params, function(record) return runtimeState.roomGeneration.generate(record, target) end,
+        function() target = runtimeState.roomGeneration.prepare(params) end)
     end
     if command == "spawn_reward" or command == "acquire_chaos_pair" then
       local plan
@@ -9686,13 +9688,13 @@ if __MacGamingTrainerV1 == nil then
         end)
     end
     if command == "set_chaos_gate_probability" then
-      roomGeneration.setChaosProbability(params.probability)
-      if preferenceReplayDepth == 0 then synchronize() end
+      runtimeState.roomGeneration.setChaosProbability(params.probability)
+      if runtimeState.preferenceReplayDepth == 0 then synchronize() end
       return state(params.includeCatalogs)
     end
     if command == "set_gathering_probabilities" then
-      roomGeneration.setProbabilities(params.probabilities)
-      if preferenceReplayDepth == 0 then synchronize() end
+      runtimeState.roomGeneration.setProbabilities(params.probabilities)
+      if runtimeState.preferenceReplayDepth == 0 then synchronize() end
       return state(params.includeCatalogs)
     end
     if command == "cleanup" or command == "disable_all" then
@@ -9986,7 +9988,7 @@ if __MacGamingTrainerV1 == nil then
         "IsGameStateEligible", "RemoveRandomValue", "RandomSynchronize", "thread",
       })
       if AreScreensActive() then error("Cannot open special blessing choice while another screen is active") end
-      local definition = nativeSpecialChoiceDefinitions[params.source]
+      local definition = catalogs.nativeSpecialChoiceDefinitions[params.source]
       if type(definition) ~= "table" then error("Special blessing source has no audited native choice flow") end
       if type(EnemyData) ~= "table" or type(PresetEventArgs) ~= "table" or type(TraitData) ~= "table" then
         error("Special blessing source data is unavailable")
@@ -10044,7 +10046,7 @@ if __MacGamingTrainerV1 == nil then
           args.PortraitShift = nil
 
           local preview
-          source.UpgradeOptions, preview = forceRerolls.fixedPlan(source, definition)
+          source.UpgradeOptions, preview = runtimeState.forceRerolls.fixedPlan(source, definition)
           if preview ~= nil then
             SessionMapState.OldFamiliarTrait, SessionMapState.NewFamiliarTrait, SessionMapState.StatLine = preview.old, preview.new, preview.statLine
           end
@@ -10091,7 +10093,7 @@ if __MacGamingTrainerV1 == nil then
     error("Unknown command")
   end
 
-  local preferenceReplayCommands = {
+  runtimeConfig.preferenceReplayCommands = {
     stage_desired_locks = true,
     set_feature = true,
     set_boon_rarity = true,
@@ -10111,16 +10113,16 @@ if __MacGamingTrainerV1 == nil then
   }
   function M.dispatchBatch(calls, includeCatalogs)
     if type(calls) ~= "table" then error("Preference replay batch must be a table") end
-    if preferenceReplayDepth ~= 0 then error("Nested preference replay is unsupported") end
+    if runtimeState.preferenceReplayDepth ~= 0 then error("Nested preference replay is unsupported") end
     if M.terminalActionUnknown then
       error("MGT_OUTCOME_UNKNOWN: Previous action outcome is unknown; do not retry")
     end
     synchronize()
-    preferenceReplayDepth = 1
+    runtimeState.preferenceReplayDepth = 1
     local ok, message = pcall(function()
       for index = 1, #calls do
         local call = calls[index]
-        if type(call) ~= "table" or not preferenceReplayCommands[call.command] then
+        if type(call) ~= "table" or not runtimeConfig.preferenceReplayCommands[call.command] then
           error("Unsupported preference replay command at index " .. tostring(index))
         end
         local params = call.params or {}
@@ -10128,9 +10130,10 @@ if __MacGamingTrainerV1 == nil then
         M.dispatch(call.command, params)
       end
     end)
-    preferenceReplayDepth = 0
+    runtimeState.preferenceReplayDepth = 0
     if not ok then error(message) end
     synchronize()
     return state(includeCatalogs == true)
   end
+  -- MGT_LUA52_LOCAL_RESERVE_PROBE
 end
