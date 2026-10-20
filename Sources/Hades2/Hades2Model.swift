@@ -1362,6 +1362,10 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile")
     }
 
+    func clearProfileShortcutWarning() {
+        profileShortcutWarning = nil
+    }
+
     func loadProfile(_ name: String) {
         guard !name.isEmpty else { return }
         profileShortcutWarning = nil
