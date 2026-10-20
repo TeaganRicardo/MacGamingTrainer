@@ -114,7 +114,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .openSellTraits: return "hades2.shortcut.openPurgingPool"
         case .applyNextRoomReward: return "hades2.shortcut.applyNextRoomReward"
         case .applyNextOccurrence: return "hades2.shortcut.applyNextOccurrence"
-        case .disableAll: return "hades2.shortcut.disableAll"
+        case .disableAll: return "host.disableAll"
         }
     }
 }
