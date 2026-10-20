@@ -29,6 +29,7 @@ assert zh.keys() == en.keys(), (
     f"Host localization key drift: zh-only={sorted(zh.keys() - en.keys())}, "
     f"en-only={sorted(en.keys() - zh.keys())}"
 )
+assert "host.locked" not in zh and "host.locked" not in en, "retired lock-state label must not remain in Host localization"
 
 required_keys = {
     "host.language.zhCN",
