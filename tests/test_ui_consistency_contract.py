@@ -62,6 +62,13 @@ assert ".frame(minWidth: 110)" not in management
 # feature views; do not reintroduce a second search or primary-action treatment.
 assert "TrainerSearchField(" in resource
 assert "TrainerLockButton(" in resource
+save_editor = (HADES / "Views/Hades2SaveEditorView.swift").read_text()
+assert ".padding(.horizontal, theme.panelPadding)" not in save_editor
+assert ".padding(.horizontal, theme.rowHorizontalPadding)" in save_editor
+assert 'TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))' in view
+assert "model.shortcutText(.disableAll))" not in view
+assert "hasTemporaryContextualControls(for: trait)" in view
+assert "if hasContextualControls(for: trait)" not in view
 assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
 assert '.accessibilityLabel(localization.localized(locked ? "host.unlock" : "host.lock"))' in lock_button
 assert "TrainerPrimaryActionButton(" in status
@@ -108,6 +115,8 @@ for language in ("en", "zh-CN"):
     module_action_keys = {key for key in action_keys if key.startswith("hades2.")}
     assert module_action_keys <= table.keys()
     assert trait_action_keys <= table.keys()
+    assert "hades2.op.acquireExactBoon" not in table
+    assert "hades2.shortcut.disableAll" not in table
     trait_labels = [table[key] for key in sorted(trait_action_keys)]
     assert len(trait_labels) == len(set(trait_labels)), f"{language} trait action labels are ambiguous"
     host_strings = (ROOT / "Resources" / "Localization" / f"{language}.lproj" / "Host.strings").read_text()
