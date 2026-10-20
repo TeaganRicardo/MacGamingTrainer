@@ -35,7 +35,7 @@ assert 'macos_only_tests.txt' in macos_text
 assert 'tests/test_*.py' not in macos_text
 assert 'python3 -m compileall -q Backend' not in macos_text
 assert 'python3 Tools/validate_game_module.py hades2' not in macos_text
-assert 'python3 "$test_file"' in macos_text
+assert 'run_check "$name" python3 "$test_file"' in macos_text\nassert 'macOS contract suite failed in %d check(s)' in macos_text\nassert 'set -euo pipefail' not in macos_text
 assert 'bash Tools/run_macos_checks.sh' in workflow
 assert 'python3 tests/test_host_connection_policy_dev8.py' not in workflow
 assert 'python3 tests/test_hades2_run_log_watcher.py' not in workflow
@@ -50,7 +50,7 @@ assert 'discovered_tests="$(python3 Tools/discover_linux_tests.py --root "$ROOT"
 )
 assert 'done < <(' not in linux_text, 'process substitution hides discovery failure'
 assert 'macos_only_tests.txt' in linux_text
-assert 'python3 "$test_file"' in linux_text
+assert 'set -euo pipefail' not in linux_text\nassert 'python3 "$test_file"' in linux_text
 assert 'tests/test_*.py' not in linux_text
 assert 'test_host_localization_runtime.py' not in linux_text
 assert 'tests=(' not in linux_text, 'Linux runner must not maintain a curated positive test list'
