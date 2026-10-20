@@ -19,7 +19,6 @@
 "host.value" = "数值";
 "host.amount" = "数量";
 "host.lock" = "锁定";
-"host.locked" = "已锁定";
 "host.unlock" = "解锁";
 "host.resource.searchPlaceholder" = "搜索名称或资源 ID";
 "host.search.clear" = "清除搜索";
