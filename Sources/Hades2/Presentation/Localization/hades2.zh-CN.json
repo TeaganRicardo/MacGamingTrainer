@@ -252,7 +252,6 @@
     "hades2.op.saveProfile": "保存自定义配置",
     "hades2.op.setNextOccurrence": "设置下一次合资格遭遇",
     "hades2.op.setNextRoom": "设置下一房奖励",
-    "hades2.op.acquireExactBoon": "获取指定祝福",
     "hades2.op.spawnReward": "生成掉落物",
     "hades2.op.unlockElement": "解除元素锁定",
     "hades2.op.unlockRerolls": "解除{term:officialTerms.reroll}锁定",
@@ -687,7 +686,6 @@
     "hades2.shortcut.acquireExactBoon": "获取所选奖励",
     "hades2.shortcut.openPurgingPool": "打开净化池",
     "hades2.shortcut.applyNextOccurrence": "设置下一次合资格遭遇",
-    "hades2.shortcut.disableAll": "关闭全部修改器",
     "hades2.op.acquireSelectedReward": "正在获取所选奖励",
     "hades2.op.acquireChaosPair": "正在获取混沌祝福与诅咒"
   },
