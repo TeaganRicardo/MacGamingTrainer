@@ -77,7 +77,7 @@ else
   record_failure "discover Linux tests (missing macOS-only list)"
 fi
 
-if (("${#failures[@]}" > 0)); then
+if [[ ${#failures[@]} -gt 0 ]]; then
   printf '\nLinux contract suite failed in %d check(s):\n' "${#failures[@]}" >&2
   printf ' - %s\n' "${failures[@]}" >&2
   exit 1
