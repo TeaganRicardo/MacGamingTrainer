@@ -200,6 +200,8 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var selectedPickupReward = ""
     @Published var selectedSpecialReward = ""
     @Published var selectedExactBoon = ""
+    @Published var selectedChaosBlessing = ""
+    @Published var selectedChaosCurse = ""
     @Published var selectedNextRoomReward = ""
     @Published var selectedNextOccurrenceTarget = ""
     @Published var statSupport: [String: Bool] = [:]
@@ -239,6 +241,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var resources: [MaterialResource] = []
     @Published private var shortcutStore = Hades2ShortcutStore()
     @Published var shortcutIssue: Hades2ShortcutIssue?
+    @Published private(set) var profileShortcutWarning: TrainerTextToken?
     @Published var exiting = false
     @Published var shortcutSettingsPresented = false
 
@@ -1266,9 +1269,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             && gatheringTargets[family]?.available == true
     }
 
-    func generateGathering(_ family: Hades2GatheringFamily) {
-        guard canGenerateGathering(family), let token = gatheringTargets[family]?.scopeToken else { return }
-        send(.generateGathering(family: family, scopeToken: token), title: "hades2.gathering.generate", announceSuccess: false)
+    @discardableResult
+    func generateGathering(
+        _ family: Hades2GatheringFamily,
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
+        guard canGenerateGathering(family), let token = gatheringTargets[family]?.scopeToken else { return false }
+        send(
+            .generateGathering(family: family, scopeToken: token),
+            title: "hades2.gathering.generate",
+            announceSuccess: false,
+            completion: completion
+        )
+        return true
     }
 
     func setStat(_ stat: String, text: String, locked: Bool) {
@@ -1329,10 +1342,16 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
              completion: completion)
     }
 
-    func setNextOccurrence(_ target: String?) {
-        guard canEditDesired else { return }
+    @discardableResult
+    func setNextOccurrence(_ target: String?, completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canEditDesired else { return false }
         nextOccurrenceTarget = target
-        send(.setNextOccurrence(target), title: target == nil ? "hades2.op.clearNextOccurrence" : "hades2.op.setNextOccurrence")
+        send(
+            .setNextOccurrence(target),
+            title: target == nil ? "hades2.op.clearNextOccurrence" : "hades2.op.setNextOccurrence",
+            completion: completion
+        )
+        return true
     }
 
     private func shortcutPayload() -> [String: Any] { shortcutStore.payload() }
@@ -1343,8 +1362,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         send(.saveProfile(name: trimmed, shortcuts: shortcutPayload()), title: "hades2.op.saveProfile")
     }
 
+    func clearProfileShortcutWarning() {
+        profileShortcutWarning = nil
+    }
+
     func loadProfile(_ name: String) {
         guard !name.isEmpty else { return }
+        profileShortcutWarning = nil
         sendBarrier(.loadProfile(name), title: "hades2.op.loadProfile")
     }
 
@@ -1376,13 +1400,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return true
     }
 
-    func acquireExactBoon(_ reward: String) {
-        guard canAcquireExactReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return }
-        send(.spawnReward(reward), title: "hades2.op.acquireExactBoon",
-             repeatableSpawn: true)
+    @discardableResult
+    func acquireExactBoon(_ reward: String, completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canAcquireExactReward, exactBoonOptions.contains(where: { $0.id == reward }) else { return false }
+        send(
+            .spawnReward(reward),
+            title: "hades2.op.acquireSelectedReward",
+            repeatableSpawn: true,
+            completion: completion
+        )
+        return true
     }
 
-    func acquireChaosPair(blessingReward: String, curseReward: String) {
+    @discardableResult
+    func acquireChaosPair(
+        blessingReward: String,
+        curseReward: String,
+        completion: ((Bool) -> Void)? = nil
+    ) -> Bool {
         guard canAcquireChaosPair,
               let blessing = exactBoonOptions.first(where: {
                   $0.id == blessingReward && $0.acquisitionMode == "chaosBlessing"
@@ -1391,16 +1426,24 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                   $0.id == curseReward && $0.acquisitionMode == "chaosCurse"
               }),
               !blessing.targetID.isEmpty,
-              !curse.targetID.isEmpty else { return }
+              !curse.targetID.isEmpty else { return false }
         send(
             .acquireChaosPair(blessing: blessing.targetID, curse: curse.targetID),
-            title: "hades2.op.acquireExactBoon"
+            title: "hades2.op.acquireChaosPair",
+            completion: completion
         )
+        return true
     }
 
-    func openSellTraits() {
-        guard canOpenSellTraits else { return }
-        send(.openSellTraits, title: "hades2.receipt.openPurgingPool", announceSuccess: false)
+    @discardableResult
+    func openSellTraits() -> Bool {
+        guard canOpenSellTraits else { return false }
+        send(
+            .openSellTraits,
+            title: "hades2.receipt.openPurgingPool",
+            announceSuccess: false
+        )
+        return true
     }
 
     func setTraitLevel(_ trait: CurrentRunTrait, targetLevel: String) {
@@ -1527,8 +1570,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     private func applyProfileShortcuts(_ values: [String: Any]) {
-        shortcutStore.applyProfile(values)
-        installHotkeys()
+        switch shortcutStore.applyProfile(values) {
+        case .applied:
+            profileShortcutWarning = nil
+            installHotkeys()
+        case .unsupportedLayoutVersion(let version):
+            // Other Profile settings have already been applied. Keep the current
+            // shortcuts intact and explain the partial compatibility result where
+            // the user initiated the load.
+            profileShortcutWarning = presentation(
+                "hades2.error.profileShortcutLayoutUnsupported",
+                arguments: [String(version)]
+            )
+        }
     }
 
     func shortcutChord(_ action: ShortcutAction) -> HotkeyChord { shortcutStore.chord(action) }
@@ -1668,6 +1722,12 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             setNextRoomReward(selectedNextRoomReward.isEmpty ? nil : selectedNextRoomReward) { success in
                 TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
             }
+        case .generateFlora, .generateMining, .generateDigging, .generateShades, .generateFishing:
+            guard let family = action.gatheringFamily,
+                  generateGathering(family, completion: Self.playOneShotShortcutResult) else {
+                rejectShortcut(action)
+                return
+            }
         case .spawnOlympian:
             guard !selectedOlympianReward.isEmpty,
                   spawnBoon(selectedOlympianReward, completion: Self.playOneShotShortcutResult) else {
@@ -1686,6 +1746,39 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 rejectShortcut(action)
                 return
             }
+        case .acquireChaosPair:
+            guard acquireChaosPair(
+                blessingReward: selectedChaosBlessing,
+                curseReward: selectedChaosCurse,
+                completion: Self.playOneShotShortcutResult
+            ) else {
+                rejectShortcut(action)
+                return
+            }
+        case .acquireExactBoon:
+            guard acquireExactBoon(selectedExactBoon, completion: Self.playOneShotShortcutResult) else {
+                rejectShortcut(action)
+                return
+            }
+        case .openSellTraits:
+            // Modal acceptance is provisional. Its typed action receipt owns
+            // the eventual opened/failed outcome, so do not play a completion
+            // sound from the transport callback here.
+            guard openSellTraits() else {
+                rejectShortcut(action)
+                return
+            }
+        case .applyNextOccurrence:
+            guard canEditDesired && canAcceptRuntimeAction,
+                  setNextOccurrence(
+                    selectedNextOccurrenceTarget.isEmpty ? nil : selectedNextOccurrenceTarget,
+                    completion: { success in
+                        TrainerHotkeyFeedbackPlayer.play(success ? .deferred : .rejected)
+                    }
+                  ) else {
+                rejectShortcut(action)
+                return
+            }
         case .disableAll: break
         }
     }
@@ -1700,7 +1793,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             guard let self, let action = ShortcutAction(rawValue: actionID) else { return }
             self.performShortcut(action)
         }
-        let bindings = ShortcutAction.uiOrder.map { action in
+        let bindings = ShortcutAction.allCases.map { action in
             HotkeyBinding(actionID: action.rawValue, chord: shortcutChord(action))
         }
         if let failure = instance.register(bindings) {

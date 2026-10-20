@@ -66,8 +66,8 @@ struct Hades2SaveEditorView: View {
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
+                .padding(.horizontal, theme.rowHorizontalPadding)
+                .padding(.top, theme.controlPadding)
             }
             workbenchToolbar
             if let queryFailure = model.queryFailure {
@@ -76,8 +76,8 @@ struct Hades2SaveEditorView: View {
                         .font(.caption)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 8)
+                .padding(.horizontal, theme.rowHorizontalPadding)
+                .padding(.bottom, theme.compactControlSpacing)
             }
             Divider()
             inlineResults
@@ -86,8 +86,8 @@ struct Hades2SaveEditorView: View {
             if model.total > Hades2SaveEditorModel.pageSize {
                 Divider()
                 pagingControls
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, theme.rowHorizontalPadding)
+                    .padding(.vertical, theme.inlineRowVerticalPadding)
             }
             if model.pendingCount > 0 {
                 Divider()
@@ -169,7 +169,7 @@ struct Hades2SaveEditorView: View {
     }
 
     private var windowHeader: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: theme.sectionSpacing) {
             Image(systemName: "externaldrive.badge.gearshape")
                 .font(.title3)
                 .foregroundStyle(theme.accent)
@@ -211,12 +211,12 @@ struct Hades2SaveEditorView: View {
                 dismiss()
             }
         }
-        .padding(.horizontal, 19)
+        .padding(.horizontal, theme.rowHorizontalPadding)
         .padding(.vertical, 15)
     }
 
     private var documentSelection: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: theme.sectionSpacing) {
             Text(text("hades2.saveEditor.source.label"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -267,31 +267,18 @@ struct Hades2SaveEditorView: View {
             .disabled(model.busy)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.inlineRowVerticalPadding)
     }
 
     private var workbenchToolbar: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(text("hades2.saveEditor.workbench.search"), text: $model.search)
-                    .textFieldStyle(.plain)
-                    .onSubmit { model.submitSearch() }
-                if !model.search.isEmpty {
-                    Button {
-                        model.search = ""
-                        model.submitSearch()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(10)
-            .trainerSurface(.subtle, cornerRadius: 8)
+        HStack(spacing: theme.sectionSpacing) {
+            TrainerSearchField(
+                text: $model.search,
+                placeholder: text("hades2.saveEditor.workbench.search"),
+                clearLabel: localization.localized("host.search.clear"),
+                onSubmit: { model.submitSearch() }
+            )
             .disabled(model.busy || model.profile.isEmpty)
 
             Picker(
@@ -331,8 +318,8 @@ struct Hades2SaveEditorView: View {
                 .buttonStyle(.borderless)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.sectionSpacing)
     }
 
     private var inlineResults: some View {
@@ -355,13 +342,13 @@ struct Hades2SaveEditorView: View {
                                 if entity.entries.count > 1 {
                                     Text(entity.title)
                                         .font(.subheadline.weight(.semibold))
-                                        .padding(.horizontal, 18)
+                                        .padding(.horizontal, theme.rowHorizontalPadding)
                                         .padding(.top, 16)
                                         .padding(.bottom, 6)
                                 }
                                 ForEach(entity.entries) { entry in
                                     inlineEntry(entry, in: entity)
-                                    Divider().padding(.leading, 18)
+                                    Divider().padding(.leading, theme.rowHorizontalPadding)
                                 }
                             }
                         }
@@ -378,11 +365,11 @@ struct Hades2SaveEditorView: View {
     ) -> some View {
         if entry.domain == "advanced" {
             advancedEntry(entry)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, theme.rowHorizontalPadding)
+                .padding(.vertical, theme.inlineRowVerticalPadding)
         } else if entry.domain == "investigate" {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
+                HStack(spacing: theme.sectionSpacing) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(fieldTitle(entry, in: entity))
                             .font(.callout)
@@ -412,8 +399,8 @@ struct Hades2SaveEditorView: View {
                         .padding(.leading, 12)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.horizontal, theme.rowHorizontalPadding)
+            .padding(.vertical, theme.sectionSpacing)
         } else {
             HStack(spacing: 14) {
                 Text(fieldTitle(entry, in: entity))
@@ -440,8 +427,8 @@ struct Hades2SaveEditorView: View {
                         ))
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+            .padding(.horizontal, theme.rowHorizontalPadding)
+            .padding(.vertical, theme.inlineRowVerticalPadding)
         }
     }
 
@@ -550,7 +537,7 @@ struct Hades2SaveEditorView: View {
     }
 
     private var pagingControls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: theme.compactControlSpacing) {
             Text(pageSummary)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
@@ -648,21 +635,22 @@ struct Hades2SaveEditorView: View {
     }
 
     private var changesBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: theme.sectionSpacing) {
             Text(text("hades2.saveEditor.workbench.changes", arguments: [
                 String(model.pendingCount)
             ]))
             .font(.callout)
             Spacer()
-            Button(text("hades2.saveEditor.workbench.reviewApply")) {
+            TrainerPrimaryActionButton(
+                title: text("hades2.saveEditor.workbench.reviewApply"),
+                enabled: !model.busy
+            ) {
                 reviewExpanded.toggle()
                 if reviewExpanded { model.review() }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.busy)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.inlineRowVerticalPadding)
     }
 
     private var reviewDrawer: some View {
@@ -682,9 +670,12 @@ struct Hades2SaveEditorView: View {
                 Spacer()
                 Button(text("hades2.saveEditor.cancelChanges")) { model.cancel() }
                     .disabled(model.busy)
-                Button(text("hades2.saveEditor.apply")) { model.apply() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.busy || !model.hasWriteTarget)
+                TrainerPrimaryActionButton(
+                    title: text("hades2.saveEditor.apply"),
+                    enabled: !model.busy && model.hasWriteTarget
+                ) {
+                    model.apply()
+                }
             }
             Text(text("hades2.saveEditor.workbench.target", arguments: [
                 model.hasWriteTarget ? selectedTargetLabel : text("hades2.saveEditor.target.choose")
@@ -699,8 +690,8 @@ struct Hades2SaveEditorView: View {
                 }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.inlineRowVerticalPadding)
         .trainerSurface(.panel)
     }
 
@@ -797,7 +788,7 @@ struct Hades2SaveEditorView: View {
                 : "hades2.saveEditor.applyOutcome.memory.notReloaded"
         )
         return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(spacing: theme.compactControlSpacing) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(theme.accent)
                 Text(text("hades2.saveEditor.applyOutcome.title"))
@@ -823,8 +814,8 @@ struct Hades2SaveEditorView: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, theme.rowHorizontalPadding)
+        .padding(.vertical, theme.inlineRowVerticalPadding)
         .trainerSurface(.panel)
     }
 

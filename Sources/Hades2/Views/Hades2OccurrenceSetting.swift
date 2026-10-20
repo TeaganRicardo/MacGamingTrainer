@@ -18,6 +18,7 @@ struct Hades2OccurrenceSetting: View {
     let onCommit: (TrainerTextField.Completion) -> String
     let onReset: () -> Void
     var generateLabel: String? = nil
+    var generateShortcutText: String? = nil
     var generateHelp: String = ""
     var canGenerate: Bool = false
     var onGenerate: (() -> Void)? = nil
@@ -58,12 +59,15 @@ struct Hades2OccurrenceSetting: View {
                     Color.clear.frame(width: 26, height: 24)
                 }
                 if let onGenerate, let generateLabel {
-                    Button(generateLabel, action: onGenerate)
-                        .buttonStyle(.bordered)
-                        .lineLimit(1)
-                        .disabled(!canGenerate)
-                        .help(generateHelp)
-                        .accessibilityLabel(title + " " + generateLabel)
+                    TrainerShortcutBadgeSlot(text: generateShortcutText)
+                    TrainerSecondaryActionButton(
+                        title: generateLabel,
+                        enabled: canGenerate,
+                        width: theme.compactActionWidth,
+                        helpText: generateHelp,
+                        accessibilityLabel: title + " " + generateLabel,
+                        action: onGenerate
+                    )
                 }
             }
         }

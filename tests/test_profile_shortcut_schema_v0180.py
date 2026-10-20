@@ -30,7 +30,7 @@ future_collision = {
     'invincibility': chord(18,6144,'1'),
 }
 assert _normalize_shortcuts(future_collision) == future_collision, (
-    'backend must preserve unknown/known collisions for the Swift uiOrder owner to resolve'
+    'backend preserves forward-compatible IDs and leaves shortcut ordering to the Swift action registry'
 )
 many_future = {
     f'futureFeature{i}': chord(100 + i, 6144, f'K{i}')
@@ -48,6 +48,13 @@ valid = {
     'gardenQoL': chord(5,6144,'G'),
 }
 assert _normalize_shortcuts(valid) == valid
+versioned = {"_layoutVersion": 1, **valid}
+assert _normalize_shortcuts(versioned) == versioned
+future_layout_version = {"_layoutVersion": 2, **valid}
+assert _normalize_shortcuts(future_layout_version) == future_layout_version, (
+    "preserve a future shortcut-layout marker so the frontend can report that it left shortcuts unchanged"
+)
+assert _normalize_shortcuts({"_layoutVersion": True, **valid}) == valid
 
 
 # Backend preserves duplicate assignments instead of making UI-order decisions.

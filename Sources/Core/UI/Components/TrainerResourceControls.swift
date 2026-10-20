@@ -63,9 +63,12 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(theme.accent)
                 Spacer()
-                TextField(localization.presentation(searchPlaceholder), text: $search)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 260)
+                TrainerSearchField(
+                    text: $search,
+                    placeholder: localization.presentation(searchPlaceholder),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 260)
             }
             Picker(title, selection: $selection) {
                 if selection.isEmpty || sections.allSatisfy({ $0.items.isEmpty }) {
@@ -87,11 +90,11 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
                 Spacer()
                 TrainerNumberField(text: $amount, placeholder: "host.amount", width: 100, enabled: enabled && !selection.isEmpty, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
                     .id(selection)
-                Button(action: onLock) {
-                    Label(localization.localized(locked ? "host.locked" : "host.lock"), systemImage: locked ? "lock.fill" : "lock.open")
-                        .foregroundStyle(locked ? theme.accent : .secondary)
-                }
-                .disabled(!enabled || selection.isEmpty)
+                TrainerLockButton(
+                    locked: locked,
+                    enabled: enabled && !selection.isEmpty,
+                    action: onLock
+                )
             }
         }
     }
@@ -101,6 +104,7 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
     let title: String?
     let icon: String?
     let pickerLabel: String
+    @Environment(\.trainerTheme) private var theme
     @Binding var selection: String
     let sections: [TrainerPickerSection<Item>]
     let enabled: Bool
@@ -137,11 +141,14 @@ struct TrainerGroupedOptionPicker<Item: Identifiable>: View where Item.ID == Str
                 .disabled(!enabled || allItems.isEmpty)
 
                 TrainerShortcutBadgeSlot(text: shortcutText)
-                Button(actionTitle) {
+                TrainerSecondaryActionButton(
+                    title: actionTitle,
+                    enabled: enabled && hasSelection,
+                    width: theme.compactActionWidth
+                ) {
                     guard hasSelection else { return }
                     onAction(selectedID)
                 }
-                .disabled(!enabled || !hasSelection)
             }
         }
     }

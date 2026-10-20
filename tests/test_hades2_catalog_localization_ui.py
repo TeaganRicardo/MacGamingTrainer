@@ -182,8 +182,10 @@ assert '"hades2.spawn.exactTarget": "Boon / Effect"' in en_presentation
 
 # #347: Chaos is a dedicated two-sided lifecycle acquisition rather than two
 # independent rows in the generic Exact Boon navigator.
-assert '@ViewState<String> private var chaosBlessingSelection = ""' in view
-assert '@ViewState<String> private var chaosCurseSelection = ""' in view
+assert '@Published var selectedChaosBlessing = ""' in model
+assert '@Published var selectedChaosCurse = ""' in model
+assert '$model.selectedChaosBlessing' in view
+assert '$model.selectedChaosCurse' in view
 assert 'private var chaosBlessingOptions: [BoonOption]' in view
 assert 'private var chaosCurseOptions: [BoonOption]' in view
 assert '$0.acquisitionMode == "chaosBlessing"' in view
@@ -194,10 +196,11 @@ chaos_pair_surface = exact_surface[
     exact_surface.index('hades2.spawn.chaosPair'):
     exact_surface.index('hades2.spawn.exactSource')
 ]
-assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection)' in chaos_pair_surface
-assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection)' in chaos_pair_surface
+assert 'Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing)' in chaos_pair_surface
+assert 'Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse)' in chaos_pair_surface
 assert 'model.acquireChaosPair(' in chaos_pair_surface
-assert chaos_pair_surface.count('Button(text("hades2.spawn.acquire"))') == 1
+assert chaos_pair_surface.count('TrainerSecondaryActionButton(') == 1
+assert 'title: text("hades2.spawn.acquire")' in chaos_pair_surface
 assert '"hades2.spawn.chaosPair": "卡俄斯配对"' in zh_presentation
 assert '"hades2.spawn.chaosPair": "Chaos Pair"' in en_presentation
 assert '"hades2.spawn.chaosBlessing": "祝福"' in zh_presentation
@@ -672,11 +675,14 @@ assert 'deferredIssue' not in trait_manager
 assert 'model.advanceTraitLifecycle(trait)' in trait_manager
 assert 'hades2.traits.chaos.cancelPair' in trait_manager
 
-# #345: contextual controls may change with the selected effect, but they must
-# never participate in positioning the fixed level / rarity / remove group.
+# #345: contextual controls occupy a separate conditional row so they cannot
+# compress or overlap the fixed level / rarity / remove group.
 assert 'currentRunTraitCommonControls(managedCurrentRunTrait)' in trait_manager
-assert '.overlay(alignment: .leading)' in trait_manager
-assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' in trait_manager
+assert 'if let trait = managedCurrentRunTrait, trait.hasContextualControls {' in trait_manager
+assert 'if trait.hasTemporaryContextualControls {' in trait_manager
+assert 'currentRunTraitContextualControls(trait)' in trait_manager
+assert '.overlay(alignment: .leading)' not in trait_manager
+assert '.padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)' not in trait_manager
 
 contextual_controls = trait_manager[
     trait_manager.index('private func currentRunTraitContextualControls'):

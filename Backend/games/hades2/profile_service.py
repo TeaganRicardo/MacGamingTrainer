@@ -43,6 +43,9 @@ def _normalize_shortcuts(raw):
     """Validate current Profile shortcut chords without legacy coercion."""
     if not isinstance(raw,dict):return {}
     result={}
+    layout_version=raw.get('_layoutVersion')
+    if type(layout_version) is int and layout_version >= 1:
+        result['_layoutVersion']=layout_version
     actions=sorted(
         action for action in raw
         if isinstance(action,str) and _SHORTCUT_ACTION_RE.fullmatch(action)

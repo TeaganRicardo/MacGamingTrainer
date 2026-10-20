@@ -4,7 +4,7 @@
 "host.language.en" = "English";
 "host.saveManagement" = "存档管理";
 "host.connectGame" = "连接游戏";
-"host.disconnectGame" = "断开连接";
+"host.disconnectGame" = "断开游戏连接";
 "host.connected" = "已连接";
 "host.disconnected" = "未连接";
 "host.refreshStatusHelp" = "按需读取状态，不进行持续调试轮询";
@@ -19,8 +19,9 @@
 "host.value" = "数值";
 "host.amount" = "数量";
 "host.lock" = "锁定";
-"host.locked" = "已锁定";
+"host.unlock" = "解锁";
 "host.resource.searchPlaceholder" = "搜索名称或资源 ID";
+"host.search.clear" = "清除搜索";
 "host.resource.noMatches" = "没有匹配项目";
 "host.backend.operation.recover" = "恢复后端";
 "host.backend.error.startFailed" = "无法启动后端，请查看日志。";

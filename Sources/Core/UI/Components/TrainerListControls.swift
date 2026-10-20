@@ -1,36 +1,92 @@
 import AppKit
 import SwiftUI
 
-struct TrainerPrimaryActionButton: View {
-    @Environment(\.trainerTheme) private var theme
+private struct TrainerActionButtonLabel: View {
     let title: String
     let systemImage: String?
-    let enabled: Bool
-    let action: () -> Void
-
-    init(
-        title: String,
-        systemImage: String? = nil,
-        enabled: Bool = true,
-        action: @escaping () -> Void
-    ) {
-        self.title = title
-        self.systemImage = systemImage
-        self.enabled = enabled
-        self.action = action
-    }
+    let fillsWidth: Bool
 
     var body: some View {
-        Button(action: action) {
+        Group {
             if let systemImage {
                 Label(title, systemImage: systemImage)
             } else {
                 Text(title)
             }
         }
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
+    }
+}
+
+struct TrainerPrimaryActionButton: View {
+    @Environment(\.trainerTheme) private var theme
+    let title: String
+    let systemImage: String?
+    let enabled: Bool
+    let width: CGFloat?
+    let action: () -> Void
+
+    init(
+        title: String,
+        systemImage: String? = nil,
+        enabled: Bool = true,
+        width: CGFloat? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.enabled = enabled
+        self.width = width
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+        }
         .buttonStyle(.borderedProminent)
         .tint(theme.accent)
         .disabled(!enabled)
+        .frame(width: width)
+    }
+}
+
+struct TrainerSecondaryActionButton: View {
+    let title: String
+    let systemImage: String?
+    let enabled: Bool
+    let width: CGFloat?
+    let helpText: String?
+    let accessibilityLabel: String?
+    let action: () -> Void
+
+    init(
+        title: String,
+        systemImage: String? = nil,
+        enabled: Bool = true,
+        width: CGFloat? = nil,
+        helpText: String? = nil,
+        accessibilityLabel: String? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.enabled = enabled
+        self.width = width
+        self.helpText = helpText
+        self.accessibilityLabel = accessibilityLabel
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            TrainerActionButtonLabel(title: title, systemImage: systemImage, fillsWidth: width != nil)
+        }
+        .buttonStyle(.bordered)
+        .disabled(!enabled)
+        .help(helpText ?? "")
+        .accessibilityLabel(accessibilityLabel ?? title)
+        .frame(width: width)
     }
 }
 

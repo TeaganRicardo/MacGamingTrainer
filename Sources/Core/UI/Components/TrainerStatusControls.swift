@@ -34,13 +34,19 @@ struct TrainerConnectionStatusCard: View {
                 .help(localization.localized("host.refreshStatusHelp"))
                 .disabled(!backendAvailable || !actionsEnabled)
             if backendAvailable {
-                Button(connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"), action: onPrimary)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!actionsEnabled)
+                TrainerPrimaryActionButton(
+                    title: connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"),
+                    enabled: actionsEnabled,
+                    width: theme.connectionActionWidth,
+                    action: onPrimary
+                )
             } else {
-                Button(localization.localized("host.restartBackend"), action: onRestart)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!actionsEnabled)
+                TrainerPrimaryActionButton(
+                    title: localization.localized("host.restartBackend"),
+                    enabled: actionsEnabled,
+                    width: theme.connectionActionWidth,
+                    action: onRestart
+                )
             }
         }
         .padding(theme.panelPadding)

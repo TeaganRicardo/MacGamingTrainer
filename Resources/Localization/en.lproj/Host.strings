@@ -4,7 +4,7 @@
 "host.language.en" = "English";
 "host.saveManagement" = "Save Management";
 "host.connectGame" = "Connect Game";
-"host.disconnectGame" = "Disconnect";
+"host.disconnectGame" = "Disconnect Game";
 "host.connected" = "Connected";
 "host.disconnected" = "Disconnected";
 "host.refreshStatusHelp" = "Read status on demand without continuous debugger polling";
@@ -19,8 +19,9 @@
 "host.value" = "Value";
 "host.amount" = "Amount";
 "host.lock" = "Lock";
-"host.locked" = "Locked";
+"host.unlock" = "Unlock";
 "host.resource.searchPlaceholder" = "Search name or resource ID";
+"host.search.clear" = "Clear search";
 "host.resource.noMatches" = "No matching items";
 "host.backend.operation.recover" = "Recover Backend";
 "host.backend.error.startFailed" = "Unable to start the backend. Check the log.";

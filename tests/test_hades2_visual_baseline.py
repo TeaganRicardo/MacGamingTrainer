@@ -13,6 +13,14 @@ stats = (CORE_UI / 'Components/TrainerStatControls.swift').read_text()
 resource = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
 row = (CORE_UI / 'Primitives/TrainerRow.swift').read_text()
 card = (CORE_UI / 'Primitives/TrainerCard.swift').read_text()
+search_field = (CORE_UI / 'Components/TrainerSearchField.swift').read_text()
+action_buttons = (CORE_UI / 'Components/TrainerListControls.swift').read_text()
+occurrence = (HADES / 'Views/Hades2OccurrenceSetting.swift').read_text()
+save_editor = (HADES / 'Views/Hades2SaveEditorView.swift').read_text()
+resource_controls = (CORE_UI / 'Components/TrainerResourceControls.swift').read_text()
+lock_button = (CORE_UI / 'Primitives/TrainerToggleControl.swift').read_text()
+status_controls = (CORE_UI / 'Components/TrainerStatusControls.swift').read_text()
+management = (HADES / 'Views/Hades2ManagementViews.swift').read_text()
 
 # v0.17.5 keeps v0.11 visuals but the implementation now lives in Core.
 assert not (HADES / 'Views/Controls').exists()
@@ -66,12 +74,30 @@ assert '.frame(width: 58)' in stats
 assert 'HStack(spacing: 5)' in view
 assert '.contentShape(Rectangle())' in view
 
+# Search controls and primary actions use the same Core-owned presentation.
+assert 'theme.compactControlSpacing' in search_field
+assert 'theme.controlPadding' in search_field
+assert '.trainerSurface(.subtle, cornerRadius: theme.controlCornerRadius)' in search_field
+assert 'TrainerSearchField(' in view
+assert 'TrainerSearchField(' in save_editor
+assert 'struct TrainerSecondaryActionButton' in action_buttons
+assert 'TrainerSecondaryActionButton(' in occurrence
+assert 'TrainerSearchField(' in resource_controls
+assert 'TrainerPrimaryActionButton(' in save_editor
+assert 'TrainerPrimaryActionButton(' in status_controls
+assert 'TrainerPrimaryActionButton(' in management
+assert '.buttonStyle(.borderedProminent)' not in status_controls
+assert 'theme.rowHorizontalPadding' in save_editor
+assert 'theme.panelPadding' not in save_editor
+assert 'theme.inlineRowVerticalPadding' in save_editor
+
 # Stat/resource geometry stays on the old baseline.
 assert '.frame(width: 58)' in stats
 assert 'TrainerRow(opacity:' in stats
 assert 'TrainerLockButton' in stats
 assert 'TrainerNumberField(text: $amount' in resource
-assert 'Label(localization.localized(locked ? "host.locked" : "host.lock")' in resource
+assert 'TrainerLockButton(' in resource
+assert 'localization.localized(locked ? "host.unlock" : "host.lock")' in lock_button
 
 print('hades2_visual_baseline_v0175_ok')
 

@@ -25,7 +25,7 @@ assert "let nextOccurrenceTarget: Hades2FieldPatch<String>" in state
 assert "let occurrenceTargets: [Hades2OccurrenceTarget]?" in state
 assert '@Published var nextOccurrenceTarget: String?' in model
 assert '@Published var occurrenceTargets: [Hades2OccurrenceTarget] = []' in model
-assert "func setNextOccurrence(_ target: String?)" in model
+assert "func setNextOccurrence(_ target: String?, completion: ((Bool) -> Void)? = nil) -> Bool" in model
 
 assert 'occurrenceTargets = occurrenceList' in runtime
 assert 'kind = definition.kind' in runtime and 'sourceId = definition.sourceId' in runtime

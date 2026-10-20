@@ -16,11 +16,23 @@ struct Hades2TrainerView: View {
 
     private enum TraitManagerLayout {
         static let rowSpacing: CGFloat = 12
-        static let levelControlsWidth: CGFloat = 174
-        static let rarityControlsWidth: CGFloat = 224
-        static let removeControlWidth: CGFloat = 106
-        static let commonControlsWidth: CGFloat = 528
+        static let removeControlWidth: CGFloat = 132
         static let searchWidth: CGFloat = 260
+
+        static func levelControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            42 + 58 + compactActionWidth + 2 * 6
+        }
+
+        static func rarityControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            48 + 102 + compactActionWidth + 2 * 6
+        }
+
+        static func commonControlsWidth(compactActionWidth: CGFloat) -> CGFloat {
+            levelControlsWidth(compactActionWidth: compactActionWidth)
+                + rarityControlsWidth(compactActionWidth: compactActionWidth)
+                + removeControlWidth
+                + 2 * rowSpacing
+        }
     }
 
     private struct ExactBoonSourceGroup: Identifiable {
@@ -61,8 +73,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var specialSearch = ""
     @ViewState<String> private var exactSearch = ""
     @ViewState<String> private var exactSourceSelection = ""
-    @ViewState<String> private var chaosBlessingSelection = ""
-    @ViewState<String> private var chaosCurseSelection = ""
     @ViewState<String> private var traitSearch = ""
     @ViewState<String> private var managedTraitSelection = ""
     @ViewState<[String: String]> private var traitLevelInputs = [:]
@@ -261,11 +271,11 @@ struct Hades2TrainerView: View {
     }
 
     private func repairChaosPairSelections() {
-        if !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection }) {
-            chaosBlessingSelection = chaosBlessingOptions.first?.id ?? ""
+        if !chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing }) {
+            model.selectedChaosBlessing = chaosBlessingOptions.first?.id ?? ""
         }
-        if !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection }) {
-            chaosCurseSelection = chaosCurseOptions.first?.id ?? ""
+        if !chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }) {
+            model.selectedChaosCurse = chaosCurseOptions.first?.id ?? ""
         }
     }
 
@@ -579,20 +589,22 @@ struct Hades2TrainerView: View {
                 .frame(maxWidth: .infinity)
                 .disabled(currentRunTraitPickerSections.allSatisfy({ $0.items.isEmpty }))
 
-                TextField(text("hades2.traits.search"), text: $traitSearch)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: TraitManagerLayout.searchWidth)
+                TrainerSearchField(
+                    text: $traitSearch,
+                    placeholder: text("hades2.traits.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(width: TraitManagerLayout.searchWidth)
             }
 
-            currentRunTraitCommonControls(managedCurrentRunTrait)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .overlay(alignment: .leading) {
-                    if let trait = managedCurrentRunTrait {
-                        currentRunTraitContextualControls(trait)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.trailing, TraitManagerLayout.commonControlsWidth + TraitManagerLayout.rowSpacing)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                currentRunTraitCommonControls(managedCurrentRunTrait)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                if let trait = managedCurrentRunTrait, trait.hasContextualControls {
+                    currentRunTraitContextualControls(trait)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
         }
         .onAppear {
             repairManagedTraitSelection()
@@ -613,8 +625,7 @@ struct Hades2TrainerView: View {
 
     @ViewBuilder
     private func currentRunTraitContextualControls(_ trait: CurrentRunTrait) -> some View {
-        if trait.family == "temporary"
-            && (trait.remainingUses != nil || trait.canSetRemainingUses || trait.canExpire) {
+        if trait.hasTemporaryContextualControls {
             HStack(spacing: 6) {
                 Text(text("hades2.traits.remainingUses"))
                     .font(.caption)
@@ -672,47 +683,46 @@ struct Hades2TrainerView: View {
     private func currentRunTraitCommonControls(_ trait: CurrentRunTrait?) -> some View {
         HStack(spacing: TraitManagerLayout.rowSpacing) {
             HStack(spacing: 6) {
-                Text(text("hades2.traits.targetLevel"))
+                Text(text("hades2.traits.levelLabel"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TextField(text("hades2.traits.targetLevel"), text: traitLevelInput(trait))
-                        .textFieldStyle(.roundedBorder)
+                    TrainerTextField(title: "—", text: traitLevelInput(trait))
                         .frame(width: 58)
+                        .accessibilityLabel(text("hades2.traits.targetLevel"))
                         .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
-                    Button(text("hades2.traits.apply")) {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.traits.applyLevel"),
+                        enabled: canApplyTraitLevel(trait),
+                        width: theme.compactActionWidth
+                    ) {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
-                    .buttonStyle(.bordered)
-                    .lineLimit(1)
-                    .frame(width: 62)
-                    .disabled(!canApplyTraitLevel(trait))
                 } else {
-                    TextField(text("hades2.traits.targetLevel"), text: .constant(""))
-                        .textFieldStyle(.roundedBorder)
+                    TrainerTextField(title: "—", text: .constant(""))
                         .frame(width: 58)
+                        .accessibilityLabel(text("hades2.traits.targetLevel"))
                         .disabled(true)
 
-                    Button(text("hades2.traits.apply")) {}
-                        .buttonStyle(.bordered)
-                        .lineLimit(1)
-                        .frame(width: 62)
-                        .disabled(true)
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.traits.applyLevel"),
+                        enabled: false,
+                        width: theme.compactActionWidth,
+                        action: {}
+                    )
                 }
             }
-            .frame(width: TraitManagerLayout.levelControlsWidth, alignment: .trailing)
+            .frame(width: TraitManagerLayout.levelControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             HStack(spacing: 6) {
                 Text(text("hades2.traits.targetRarity"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
                     .frame(width: 48, alignment: .trailing)
 
                 if let trait {
@@ -730,13 +740,13 @@ struct Hades2TrainerView: View {
                     .frame(width: 102)
                     .disabled(!model.canMutateTraits || !trait.canSetRarity)
 
-                    Button(text("hades2.traits.apply")) {
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.traits.applyRarity"),
+                        enabled: canApplyTraitRarity(trait),
+                        width: theme.compactActionWidth
+                    ) {
                         model.setTraitRarity(trait, rarity: traitRarityInput(trait).wrappedValue)
                     }
-                    .buttonStyle(.bordered)
-                    .lineLimit(1)
-                    .frame(width: 62)
-                    .disabled(!canApplyTraitRarity(trait))
                 } else {
                     Picker(text("hades2.traits.targetRarity"), selection: .constant("")) {
                         Text("—").tag("")
@@ -746,29 +756,30 @@ struct Hades2TrainerView: View {
                     .frame(width: 102)
                     .disabled(true)
 
-                    Button(text("hades2.traits.apply")) {}
-                        .buttonStyle(.bordered)
-                        .lineLimit(1)
-                        .frame(width: 62)
-                        .disabled(true)
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.traits.applyRarity"),
+                        enabled: false,
+                        width: theme.compactActionWidth,
+                        action: {}
+                    )
                 }
             }
-            .frame(width: TraitManagerLayout.rarityControlsWidth, alignment: .trailing)
+            .frame(width: TraitManagerLayout.rarityControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
 
             Button(role: .destructive) {
                 guard let trait else { return }
                 model.removeTrait(trait)
             } label: {
                 Text(currentRunTraitRemovalLabel(trait))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
             .frame(width: TraitManagerLayout.removeControlWidth)
             .disabled(trait == nil || !model.canMutateTraits || trait?.canRemove != true)
         }
-        .frame(width: TraitManagerLayout.commonControlsWidth, alignment: .trailing)
+        .frame(width: TraitManagerLayout.commonControlsWidth(compactActionWidth: theme.compactActionWidth), alignment: .trailing)
     }
 
     private var resourceSection: some View {
@@ -1301,7 +1312,13 @@ struct Hades2TrainerView: View {
                 }
             }.labelsHidden().frame(maxWidth: 360).disabled(!model.canEditDesired)
             TrainerShortcutBadge(text: model.shortcutText(.applyNextRoomReward))
-            Button(text("hades2.nextRoom.apply")) { model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward) }.disabled(!model.canEditDesired)
+            TrainerSecondaryActionButton(
+                title: text("hades2.nextRoom.apply"),
+                enabled: model.canEditDesired,
+                width: theme.compactActionWidth
+            ) {
+                model.setNextRoomReward(model.selectedNextRoomReward.isEmpty ? nil : model.selectedNextRoomReward)
+            }
         }.trainerPanel()
     }
 
@@ -1337,14 +1354,18 @@ struct Hades2TrainerView: View {
             .labelsHidden()
             .frame(maxWidth: 360)
             .disabled(!model.canEditDesired)
-            Button(text("hades2.occurrence.apply")) {
-                model.setNextOccurrence(
+            TrainerShortcutBadgeSlot(text: model.shortcutText(.applyNextOccurrence))
+            TrainerSecondaryActionButton(
+                title: text("hades2.occurrence.apply"),
+                enabled: model.canEditDesired,
+                width: theme.compactActionWidth
+            ) {
+                _ = model.setNextOccurrence(
                     model.selectedNextOccurrenceTarget.isEmpty
                         ? nil
                         : model.selectedNextOccurrenceTarget
                 )
             }
-            .disabled(!model.canEditDesired)
         }
         .trainerPanel()
     }
@@ -1396,7 +1417,12 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.characterRewards"), systemImage: "moon.stars.fill").font(.subheadline.weight(.medium))
                 Spacer()
-                TextField(text("hades2.spawn.search"), text: $specialSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                TrainerSearchField(
+                    text: $specialSearch,
+                    placeholder: text("hades2.spawn.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 280)
             }
             spawnRow(
                 title: nil,
@@ -1411,7 +1437,12 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.exactBoons"), systemImage: "scope").font(.subheadline.weight(.medium))
                 Spacer()
-                TextField(text("hades2.spawn.search"), text: $exactSearch).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                TrainerSearchField(
+                    text: $exactSearch,
+                    placeholder: text("hades2.spawn.search"),
+                    clearLabel: localization.localized("host.search.clear")
+                )
+                .frame(maxWidth: 280)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(text("hades2.spawn.chaosPair"))
@@ -1422,7 +1453,7 @@ struct Hades2TrainerView: View {
                         Text(text("hades2.spawn.chaosBlessing"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosBlessing"), selection: $chaosBlessingSelection) {
+                        Picker(text("hades2.spawn.chaosBlessing"), selection: $model.selectedChaosBlessing) {
                             if chaosBlessingOptions.isEmpty {
                                 Text(text("hades2.spawn.noItems")).tag("")
                             }
@@ -1439,7 +1470,7 @@ struct Hades2TrainerView: View {
                         Text(text("hades2.spawn.chaosCurse"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Picker(text("hades2.spawn.chaosCurse"), selection: $chaosCurseSelection) {
+                        Picker(text("hades2.spawn.chaosCurse"), selection: $model.selectedChaosCurse) {
                             if chaosCurseOptions.isEmpty {
                                 Text(text("hades2.spawn.noItems")).tag("")
                             }
@@ -1452,17 +1483,19 @@ struct Hades2TrainerView: View {
                         .disabled(!model.canAcquireChaosPair || chaosCurseOptions.isEmpty)
                     }
 
-                    Button(text("hades2.spawn.acquire")) {
-                        model.acquireChaosPair(
-                            blessingReward: chaosBlessingSelection,
-                            curseReward: chaosCurseSelection
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireChaosPair))
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.spawn.acquire"),
+                        enabled: model.canAcquireChaosPair
+                            && chaosBlessingOptions.contains(where: { $0.id == model.selectedChaosBlessing })
+                            && chaosCurseOptions.contains(where: { $0.id == model.selectedChaosCurse }),
+                        width: theme.compactActionWidth
+                    ) {
+                        _ = model.acquireChaosPair(
+                            blessingReward: model.selectedChaosBlessing,
+                            curseReward: model.selectedChaosCurse
                         )
                     }
-                    .disabled(
-                        !model.canAcquireChaosPair
-                            || !chaosBlessingOptions.contains(where: { $0.id == chaosBlessingSelection })
-                            || !chaosCurseOptions.contains(where: { $0.id == chaosCurseSelection })
-                    )
                 }
             }
             .onAppear { repairChaosPairSelections() }
@@ -1510,13 +1543,15 @@ struct Hades2TrainerView: View {
                         .disabled(!model.canAcquireExactReward || selectedExactItems.isEmpty)
                     }
 
-                    Button(text("hades2.spawn.acquire")) {
-                        model.acquireExactBoon(model.selectedExactBoon)
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.acquireExactBoon))
+                    TrainerSecondaryActionButton(
+                        title: text("hades2.spawn.acquire"),
+                        enabled: model.canAcquireExactReward
+                            && selectedExactItems.contains(where: { $0.id == model.selectedExactBoon }),
+                        width: theme.compactActionWidth
+                    ) {
+                        _ = model.acquireExactBoon(model.selectedExactBoon)
                     }
-                    .disabled(
-                        !model.canAcquireExactReward
-                            || !selectedExactItems.contains(where: { $0.id == model.selectedExactBoon })
-                    )
                 }
             }
             .onAppear { repairExactSourceSelection() }
@@ -1526,8 +1561,12 @@ struct Hades2TrainerView: View {
             HStack {
                 Label(text("hades2.spawn.purgingPool"), systemImage: "arrow.left.arrow.right.circle").font(.subheadline.weight(.medium))
                 Spacer()
-                Button(text("hades2.spawn.open")) { model.openSellTraits() }
-                    .disabled(!model.canOpenSellTraits)
+                TrainerShortcutBadgeSlot(text: model.shortcutText(.openSellTraits))
+                TrainerSecondaryActionButton(
+                    title: text("hades2.spawn.open"),
+                    enabled: model.canOpenSellTraits,
+                    width: theme.compactActionWidth
+                ) { _ = model.openSellTraits() }
             }
             if model.connected {
                 Divider()
@@ -1597,10 +1636,11 @@ struct Hades2TrainerView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Spacer()
+                    TrainerShortcutBadgeSlot(text: model.shortcutText(.disableAll))
                     Button { model.disableAll() } label: {
-                        Label("\(localization.localized("host.disableAll"))  \(model.shortcutText(.disableAll))", systemImage: "power")
+                        Label(localization.localized("host.disableAll"), systemImage: "power")
                     }
-                        .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
+                    .disabled(!model.connected || !model.canAcceptRuntimeAction || model.exiting)
                 }
                 HStack(spacing: 12) {
                     Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }

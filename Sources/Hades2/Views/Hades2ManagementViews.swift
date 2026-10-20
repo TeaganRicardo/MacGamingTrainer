@@ -4,6 +4,7 @@ import AppKit
 struct Hades2ProfileManagerView: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerTheme) private var theme
     @Binding var isPresented: Bool
     @State private var profileName = ""
     @State private var selectedProfile = ""
@@ -20,13 +21,25 @@ struct Hades2ProfileManagerView: View {
             Text(text("hades2.profile.explanation"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let warning = model.profileShortcutWarning {
+                Text(localization.string(warning))
+                    .foregroundStyle(theme.warning)
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack(spacing: 10) {
-                TextField(text("hades2.profile.namePlaceholder"), text: $profileName).textFieldStyle(.roundedBorder)
-                Button(text("hades2.profile.saveCurrent")) {
+                TrainerTextField(
+                    title: text("hades2.profile.namePlaceholder"),
+                    text: $profileName
+                )
+                .frame(maxWidth: .infinity)
+                TrainerPrimaryActionButton(
+                    title: text("hades2.profile.saveCurrent"),
+                    enabled: !model.busy && !profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
                     model.saveProfile(profileName)
                     selectedProfile = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
                 }
-                .disabled(model.busy || profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             Divider()
             if model.profiles.isEmpty {
@@ -53,6 +66,7 @@ struct Hades2ProfileManagerView: View {
         } footer: {
             HStack { Spacer(); Button(localization.localized("host.done")) { isPresented = false } }
         }
+        .onDisappear { model.clearProfileShortcutWarning() }
         .onChange(of: model.profiles.map(\.name), initial: true) { _, names in
             if !names.contains(selectedProfile) {
                 selectedProfile = names.first ?? ""
@@ -133,20 +147,25 @@ struct Hades2ShortcutSettingsView: View {
             Text(localization.localized("host.hotkeys.help"))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(ShortcutAction.uiOrder) { action in
-                HStack {
-                    Text(text(action.presentationKey))
-                    Spacer()
-                    Button {
-                        beginCapture(action)
-                    } label: {
-                        Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minWidth: 110)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
+                    ForEach(ShortcutAction.allCases) { action in
+                        HStack {
+                            Text(text(action.presentationKey))
+                            Spacer()
+                            Button {
+                                beginCapture(action)
+                            } label: {
+                                Text(capturing == action ? localization.localized("host.hotkeys.pressNew") : model.shortcutText(action))
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(width: theme.shortcutCaptureWidth, alignment: .center)
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    .buttonStyle(.bordered)
                 }
             }
+            .frame(maxHeight: 560)
             if let issue = model.shortcutIssue {
                 Text(shortcutIssueText(issue))
                     .foregroundStyle(theme.warning)
