@@ -88,7 +88,7 @@ assert 'TrainerPrimaryActionButton(' in status_controls
 assert 'TrainerPrimaryActionButton(' in management
 assert '.buttonStyle(.borderedProminent)' not in status_controls
 assert 'theme.rowHorizontalPadding' in save_editor
-assert 'theme.panelPadding' in save_editor
+assert 'theme.panelPadding' not in save_editor
 assert 'theme.inlineRowVerticalPadding' in save_editor
 
 # Stat/resource geometry stays on the old baseline.
