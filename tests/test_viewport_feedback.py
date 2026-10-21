@@ -30,7 +30,7 @@ for raw in sys.stdin:
     if issues_path.exists():
         payload.update(json.loads(issues_path.read_text()))
     reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6,
-             'moduleProtocolVersion': 16, 'gameID': args.game, 'ok': True}
+             'moduleProtocolVersion': 17, 'gameID': args.game, 'ok': True}
     if req['command'] == 'open_sell_traits':
         outcomes = ['accepted', 'opened', 'completed', 'completed', 'failed', 'outcome_unknown']
         ack_loss = 'ack_loss_' in pathlib.Path(__file__).name

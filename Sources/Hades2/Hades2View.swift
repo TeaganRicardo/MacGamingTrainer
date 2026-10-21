@@ -43,6 +43,7 @@ struct Hades2TrainerView: View {
 
     @ObservedObject var model: Hades2TrainerModel
     @Environment(\.trainerTheme) private var theme
+    @Environment(\.trainerToolWindows) private var toolWindows
     @EnvironmentObject private var localization: TrainerLocalizationStore
     @ViewState<EditField?> private var focusedField = nil
 
@@ -61,7 +62,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var search = ""
     @ViewState<String> private var multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
     @ViewState<Bool> private var profileManager = false
-    @ViewState<Hades2SaveEditorPresentation?> private var saveEditorPresentation = nil
     @ViewState<Bool> private var diagnosticSheet = false
     @ViewState<String> private var moneyFactor = String(format: "%g", Hades2MultiplierKey.moneyMultiplier.defaultValue)
     @ViewState<String> private var materialFactor = String(format: "%g", Hades2MultiplierKey.resourceMultiplier.defaultValue)
@@ -864,7 +864,6 @@ struct Hades2TrainerView: View {
         rootContent
             .sheet(isPresented: $model.shortcutSettingsPresented) { Hades2ShortcutSettingsView(model: model) }
             .sheet(isPresented: $profileManager) { Hades2ProfileManagerView(model: model, isPresented: $profileManager) }
-            .hades2SaveEditorSheet($saveEditorPresentation)
             .sheet(isPresented: $diagnosticSheet) { Hades2DiagnosticsView(model: model, isPresented: $diagnosticSheet) }
     }
 
@@ -1651,9 +1650,9 @@ struct Hades2TrainerView: View {
                 HStack(spacing: 12) {
                     Button { profileManager = true; model.listProfiles() } label: { Label(text("hades2.manage.profiles"), systemImage: "slider.horizontal.3") }
                     Button {
-                        saveEditorPresentation = Hades2SaveEditorPresentation(
-                            model: model.makeSaveEditorModel()
-                        )
+                        toolWindows.open("hades2-save-editor", text("hades2.saveEditor.title")) {
+                            Hades2GameModule.makeSaveEditorWindow(model: model)
+                        }
                     } label: {
                         Label(text("hades2.saveEditor.title"), systemImage: "externaldrive.badge.gearshape")
                     }

@@ -39,7 +39,7 @@ for raw in sys.stdin:
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 16,
+        'moduleProtocolVersion': 17,
         'gameID': args.game,
         'ok': True,
         'result': state,

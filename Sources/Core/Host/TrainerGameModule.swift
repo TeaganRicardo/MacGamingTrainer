@@ -114,7 +114,7 @@ protocol TrainerGameModule {
     static func makeManagementCommands(model: Model, localization: TrainerLocalizationStore) -> ManagementCommands
 
     /// Optional game-owned workbench for a generic verified backup row.
-    static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> AnyView)? { get }
+    static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { get }
 
     /// Key namespace this module owns. Registering it lets the Host resolve the
     /// model's tokens without Core learning any module vocabulary.
@@ -130,7 +130,7 @@ protocol TrainerGameModule {
 }
 
 extension TrainerGameModule {
-    static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> AnyView)? { nil }
+    static var managedBackupEditor: ((Model, TrainerSaveSnapshot) -> TrainerToolWindowContent)? { nil }
     /// A module without its own namespace has no module-owned text to resolve.
     public static var presentationKeyPrefix: String { "" }
 

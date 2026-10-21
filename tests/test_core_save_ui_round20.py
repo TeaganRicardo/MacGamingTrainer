@@ -62,7 +62,7 @@ assert "TrainerHostView<ActiveGameModule>(model: model, session: backendSession)
 for token in (
     "private var managementActions: TrainerManagementActions",
     "TrainerManagementActions(openSaveManagement:",
-    "saveManagerPresented = true",
+    'toolWindows.open(id: "host-save-management"',
     "saveManager.refresh()",
     ".environment(\\.trainerManagementActions, managementActions)",
 ):

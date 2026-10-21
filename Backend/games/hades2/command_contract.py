@@ -704,7 +704,9 @@ _COMMAND_SPECS = (
         validate=_save_editor_language,
         invoke=lambda adapter, params: adapter.cancel_save_editor(params),
     ),
-    _spec("save_editor_apply", timeout=30.0, invoke=_direct("apply_save_editor")),
+    _spec("save_editor_apply", timeout=30.0,
+        invoke=lambda adapter, params: adapter.apply_save_editor(params)),
+    _spec("save_editor_close", invoke=lambda adapter, params: adapter.close_save_editor(params)),
     _spec("list_profiles", invoke=_list_profiles),
     _spec("save_profile", invoke=_save_profile),
     _spec("load_profile", invoke=_load_profile),
@@ -743,11 +745,12 @@ class Hades2CommandContract:
             if spec is None:
                 raise ValueError("未知命令。")
             validated = spec.validate(params)
-            if command.startswith("save_editor_") and isinstance(params, dict) and "workspaceId" in params:
-                identifier = params["workspaceId"]
+            if command.startswith("save_editor_") and command not in ("save_editor_inventory", "save_editor_open"):
+                identifier = _params(params).get("workspaceId")
                 if not isinstance(identifier, str) or not identifier or len(identifier) > 128:
                     raise ValueError("Save Editor workspace identity is invalid.")
                 self.adapter.validate_save_workspace(identifier)
+                validated = dict(validated, workspaceId=identifier)
             if spec.requires_request_id:
                 validated = dict(validated, requestId=request_id)
             return spec.invoke(self.adapter, validated)

@@ -45,6 +45,7 @@ enum Hades2Request {
     case saveEditorReview(language: String)
     case saveEditorCancel(language: String)
     case saveEditorApply
+    case saveEditorClose
     case listProfiles
     case saveProfile(name: String, shortcuts: [String: Any])
     case loadProfile(String)
@@ -101,6 +102,7 @@ enum Hades2Request {
         case .saveEditorReview: return .saveEditorReview
         case .saveEditorCancel: return .saveEditorCancel
         case .saveEditorApply: return .saveEditorApply
+        case .saveEditorClose: return .saveEditorClose
         case .listProfiles: return .listProfiles
         case .saveProfile: return .saveProfile
         case .loadProfile: return .loadProfile

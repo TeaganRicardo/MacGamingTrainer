@@ -132,7 +132,7 @@ assert names == [
     "expire_trait", "remove_trait", "advance_trait_lifecycle",
     "open_special_choice", "save_editor_inventory", "save_editor_open", "save_editor_target", "save_editor_query",
     "save_editor_detail", "save_editor_stage", "save_editor_unstage", "save_editor_review", "save_editor_cancel",
-    "save_editor_apply", "list_profiles", "save_profile", "load_profile",
+    "save_editor_apply", "save_editor_close", "list_profiles", "save_profile", "load_profile",
     "delete_profile", "diagnostics", "export_diagnostics", "prepare", "restore",
 ]
 timeouts = {row["name"]: row["timeoutSeconds"] for row in metadata}

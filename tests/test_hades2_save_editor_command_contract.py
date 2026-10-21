@@ -51,9 +51,13 @@ class Probe:
         self.calls.append(("cancel", params))
         return {"count": 0, "changes": []}
 
-    def apply_save_editor(self):
-        self.calls.append(("apply", {}))
+    def apply_save_editor(self, params):
+        self.calls.append(("apply", params))
         return {"applied": True}
+
+    def close_save_editor(self, params):
+        self.calls.append(("close", params))
+        return {"closed": True}
 
 
 probe = Probe()
@@ -65,6 +69,7 @@ assert opened["profile"] == "Profile1"
 queried = contract.dispatch(
     "save_editor_query",
     {
+        "workspaceId": "selected-document",
         "domain": "resources",
         "search": "moon",
         "offset": 20,
@@ -78,32 +83,32 @@ assert queried == {"domain": "resources", "items": []}
 
 investigated = contract.dispatch(
     "save_editor_query",
-    {"domain": "investigate", "search": "Nemesis", "stateFilter": "notRecorded", "language": "zh-CN"},
+    {"workspaceId": "selected-document", "domain": "investigate", "search": "Nemesis", "stateFilter": "notRecorded", "language": "zh-CN"},
     "investigate",
 )
 assert investigated["domain"] == "investigate"
 assert contract.dispatch(
     "save_editor_detail",
-    {"entryId": "investigate:NemesisPostTrueEnding01", "language": "zh-CN"},
+    {"workspaceId": "selected-document", "entryId": "investigate:NemesisPostTrueEnding01", "language": "zh-CN"},
     "detail",
 )["scene"] == "NemesisPostTrueEnding01"
 
 staged = contract.dispatch(
     "save_editor_stage",
-    {"entryId": "resource:MetaCurrency", "operation": "set", "value": 500, "language": "en"},
+    {"workspaceId": "selected-document", "entryId": "resource:MetaCurrency", "operation": "set", "value": 500, "language": "en"},
     "stage",
 )
 assert staged["count"] == 1
 assert contract.dispatch(
     "save_editor_unstage",
-    {"entryId": "resource:MetaCurrency", "language": "en"},
+    {"workspaceId": "selected-document", "entryId": "resource:MetaCurrency", "language": "en"},
     "unstage",
 )["actionCount"] == 0
-assert contract.dispatch("save_editor_review", {"language": "zh-CN"}, "review")["count"] == 1
-assert contract.dispatch("save_editor_cancel", {"language": "en"}, "cancel")["count"] == 0
-assert contract.dispatch("save_editor_apply", {}, "apply")["applied"] is True
+assert contract.dispatch("save_editor_review", {"workspaceId": "selected-document", "language": "zh-CN"}, "review")["count"] == 1
+assert contract.dispatch("save_editor_cancel", {"workspaceId": "selected-document", "language": "en"}, "cancel")["count"] == 0
+assert contract.dispatch("save_editor_apply", {"workspaceId": "selected-document"}, "apply")["applied"] is True
 
-assert probe.calls == [
+expected_calls = [
     ("open", {}),
     ("query", {
         "domain": "resources",
@@ -137,6 +142,10 @@ assert probe.calls == [
     ("cancel", {"language": "en"}),
     ("apply", {}),
 ]
+assert probe.calls == [(name, dict(params, workspaceId="selected-document") if name != "open" else params)
+                       for name, params in expected_calls]
+assert contract.dispatch("save_editor_close", {"workspaceId": "selected-document"}, "close") == {"closed": True}
+assert probe.calls[-1] == ("close", {"workspaceId": "selected-document"})
 
 metadata = {row["name"]: row["timeoutSeconds"] for row in command_metadata()}
 for name in (
@@ -150,6 +159,7 @@ for name in (
     "save_editor_review",
     "save_editor_cancel",
     "save_editor_apply",
+    "save_editor_close",
 ):
     assert name in metadata
 assert metadata["save_editor_apply"] == 30.0
@@ -176,6 +186,8 @@ for command, params in (
     ("save_editor_target", {"target": target, "source": source}),
     ("save_editor_target", {"target": target, "workspaceId": "old-document"}),
     ("save_editor_apply", {"workspaceId": False}),
+    ("save_editor_apply", {}),
+    ("save_editor_close", {}),
 ):
     try:
         contract.dispatch(command, params, "invalid-selection")

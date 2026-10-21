@@ -48,6 +48,7 @@ enum Hades2Command: String {
     case saveEditorReview = "save_editor_review"
     case saveEditorCancel = "save_editor_cancel"
     case saveEditorApply = "save_editor_apply"
+    case saveEditorClose = "save_editor_close"
     case listProfiles = "list_profiles"
     case saveProfile = "save_profile"
     case loadProfile = "load_profile"
