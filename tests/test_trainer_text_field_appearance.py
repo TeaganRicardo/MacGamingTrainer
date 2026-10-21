@@ -43,6 +43,48 @@ struct Fixture: View {
     }
 }
 
+struct MetricFixture: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
+    @State private var focus: String?
+    @State private var current = "11"
+    @State private var maximum = "22"
+    @State private var amount = "33"
+    @State private var counter = "44"
+    @State private var stat = "55"
+    @State private var inline = "66"
+    @State private var multiplier = "77"
+    @State private var compact = "88"
+
+    private func title(_ zh: String, _ en: String) -> String {
+        localization.language == .en ? en : zh
+    }
+    private var state: TrainerFeatureControlState {
+        TrainerFeatureControlState(isOn: true, isInteractive: true, canEditValue: true,
+            opacity: 1, indicatorColor: .blue, helpText: "", isWarning: false)
+    }
+    var body: some View {
+        VStack {
+            TrainerVitalMetricCard(title: title("能量", "Energy"), icon: "bolt", tint: .blue,
+                current: $current, maximum: $maximum, focus: $focus, currentField: "current",
+                maximumField: "maximum", locked: false, editable: true, onLock: {})
+            TrainerAmountMetricCard(title: title("数量", "Amount"), icon: "circle", tint: .blue,
+                text: $amount, focus: $focus, focusValue: "amount", locked: false, editable: true, onLock: {})
+            TrainerCounterMetricCard(title: title("计数", "Counter"), icon: "circle", tint: .blue,
+                text: $counter, focus: $focus, focusValue: "counter", detail: nil, editable: true)
+            TrainerStatMetricCard(title: title("属性", "Stat"), icon: "circle", text: $stat,
+                focus: $focus, focusValue: "stat", suffix: "%", locked: false,
+                supported: true, available: true, editable: false, onLock: {})
+            TrainerInlineStatEditor(title: title("行内属性", "Inline"), text: $inline,
+                focus: $focus, focusValue: "inline", suffix: "%", locked: false,
+                supported: true, available: true, editable: true, onLockChange: { _ in })
+            TrainerFeatureMultiplierRow(title: title("倍率", "Multiplier"), icon: "circle",
+                state: state, text: $multiplier, shortcutText: nil, action: {})
+            TrainerCompactMultiplierRow(title: title("紧凑倍率", "Compact"), icon: "circle",
+                state: state, text: $compact, shortcutText: nil, action: {})
+        }
+    }
+}
+
 @main
 struct Main {
     @MainActor
@@ -87,7 +129,45 @@ struct Main {
             check(plain.textColor != NSColor.clear, "plain metric text is transparent")
             check(disabled.isBezeled && !disabled.isEnabled && disabled.stringValue == "789",
                   "disabled numeric input lost its visible control")
+            check(rounded.accessibilityLabel() == "rounded",
+                  "a field without a separate semantic name lost its title fallback")
             window.close()
+
+            let localization = TrainerLocalizationStore(defaults: InMemoryDefaults())
+            let metricWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 850),
+                styleMask: [.titled], backing: .buffered, defer: false)
+            metricWindow.appearance = NSAppearance(named: appearance)
+            let metrics = NSHostingView(rootView: MetricFixture().environmentObject(localization))
+            metricWindow.contentView = metrics
+            for language in [TrainerPresentationLanguage.zhCN, .en] {
+                localization.language = language
+                metrics.layoutSubtreeIfNeeded()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.10))
+                let inputs = Dictionary(uniqueKeysWithValues: fields(in: metrics).map { ($0.stringValue, $0) })
+                let expected = language == .en
+                    ? ["11": "Current Energy", "22": "Maximum Energy", "33": "Amount", "44": "Counter",
+                       "55": "Stat", "66": "Inline", "77": "Multiplier", "88": "Compact"]
+                    : ["11": "当前能量", "22": "能量上限", "33": "数量", "44": "计数",
+                       "55": "属性", "66": "行内属性", "77": "倍率", "88": "紧凑倍率"]
+                check(inputs.count == expected.count, "shared metric fixture did not mount every numeric input")
+                for (value, name) in expected {
+                    check(inputs[value]?.accessibilityLabel() == name,
+                          "numeric field \(value) exposes its placeholder instead of \(name): \(String(describing: inputs[value]?.accessibilityLabel()))")
+                }
+                check(inputs["11"]?.placeholderString == "—" && inputs["77"]?.placeholderString == "2",
+                      "semantic field names changed the visual placeholders")
+                check(inputs["55"]?.isEnabled == false, "naming a disabled field changed its capability")
+            }
+            let amount = fields(in: metrics).first { $0.stringValue == "33" }!
+            check(metricWindow.makeFirstResponder(amount), "could not focus the named amount input")
+            let editor = amount.currentEditor() as! NSTextView
+            editor.selectAll(nil); editor.insertText("39", replacementRange: editor.selectedRange())
+            localization.language = .zhCN
+            RunLoop.current.run(until: Date().addingTimeInterval(0.10))
+            check(editor.string == "39" && amount.accessibilityLabel() == "数量",
+                  "live label localization replaced the focused native draft")
+            metricWindow.makeFirstResponder(nil)
+            metricWindow.close()
         }
         print("trainer_text_field_appearance_ok")
     }
@@ -99,9 +179,14 @@ with tempfile.TemporaryDirectory(prefix="mgt-field-appearance-") as temporary:
     swift = directory / "main.swift"
     binary = directory / "field_appearance"
     swift.write_text(HARNESS)
+    for language in ("zh-CN", "en"):
+        localized = directory / f"{language}.lproj"
+        localized.mkdir()
+        shutil.copy2(ROOT / f"Resources/Localization/{language}.lproj/Host.strings", localized / "Host.strings")
     subprocess.run([
         SWIFTC, "-parse-as-library",
-        str(ROOT / "Sources/Core/UI/Primitives/TrainerTextField.swift"),
+        *map(str, sorted((ROOT / "Sources/Core").rglob("*.swift"))),
+        str(ROOT / "tests/fixtures/swift/InMemoryDefaults.swift"),
         str(swift), "-o", str(binary),
     ], cwd=ROOT, check=True)
     subprocess.run([str(binary)], cwd=ROOT, check=True, timeout=15)

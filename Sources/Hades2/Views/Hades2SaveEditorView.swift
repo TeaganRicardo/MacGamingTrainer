@@ -482,6 +482,7 @@ struct Hades2SaveEditorView: View {
             TrainerTextField(
                 title: text("hades2.saveEditor.value"),
                 text: draft,
+                accessibilityLabel: entry.displayName,
                 onCommit: { edit in
                     guard model.workspaceID == workspaceID else { return edit.text }
                     return model.completeTextEdit(entry, text: edit.text, changed: edit.changed)

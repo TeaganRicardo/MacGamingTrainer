@@ -12,6 +12,7 @@ struct TrainerTextField: NSViewRepresentable {
     @Environment(\.isEnabled) private var enabled
     let title: String
     @Binding var text: String
+    var accessibilityLabel: String? = nil
     var onEditingChanged: (Bool) -> Void = { _ in }
     var onCommit: (Completion) -> String = { $0.text }
     var onCancel: (() -> Void)?
@@ -132,7 +133,7 @@ struct TrainerTextField: NSViewRepresentable {
 
     private func configure(_ field: NSTextField) {
         field.placeholderString = title
-        field.setAccessibilityLabel(title)
+        field.setAccessibilityLabel(accessibilityLabel ?? title)
         field.font = font
         field.alignment = alignment
         field.isEnabled = enabled
