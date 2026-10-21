@@ -1,4 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
+#if defined(__APPLE__)
+/* Darwin hides O_NOFOLLOW without the native feature namespace. */
+#define _DARWIN_C_SOURCE 1
+#endif
 
 /* The producer is the shipped CommandMailbox.c ABI. This fixture replaces
  * only the game's Lua consumer, using the same native protocol in a process
