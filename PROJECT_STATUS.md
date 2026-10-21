@@ -25,8 +25,8 @@ Retain these unperformed scope families in the consolidated user-run pass; detai
 
 - Transformed/thrown Cast repetition and infinite-ammo fired/death/pickup bookkeeping.
 - Exact acquisition and mounted level/rarity/removal/teardown across ordinary/Hermes, Chaos pairs, Selene/Path of Stars, Hammer, Arachne, Echo previous-run, Well/temporary effects, Familiar, Keepsake, Arcana and direct special-NPC owners; applicable cancellation/expiry and effect recomputation.
-- Native reroll/menu families, reward doors, currency/history, complete menu unwind and owner changes. The focused revision-96 presentation acceptance above remains valid.
-- Independent gathering-tool/plant probabilities and deliberate generation, native collection/minigame accounting, Chaos Gate eligibility/cost/routing and disable/reset/load behavior.
+- Native reroll/menu families, reward doors, currency/history, complete menu unwind and owner changes, including non-consuming gold/rerolls with retained gains and deliberate numeric edits. The focused revision-96 presentation acceptance above remains valid.
+- Independent gathering-tool/plant probabilities and deliberate generation, native collection/minigame accounting, garden instant maturity followed by native harvesting, Chaos Gate eligibility/cost/routing and disable/reset/load behavior. Retired Garden Convenience preferences/shortcuts are discarded; they never authorize the new one-shot maturity action.
 - Invincibility native protection/Chronos behavior; Crossroads/session/Hero/run transitions; NPC/Charon occurrence and token consumption; desired/active/dormant state, Profile/restart/reconnect and unknown-outcome non-replay.
 - Save Editor fixed source/explicit target, managed backups, load/recovery and running-target disk replacement. Disk-write success does not establish in-memory game reload or survival of a later game-authored save.
 - Shared input/focus/commit, transient feedback/recovery access, bilingual layout and game-management placement, including affected narrow-window/accessibility behavior.

@@ -88,6 +88,13 @@ def _generate_gathering(raw):
     return {"family": params["family"], "scopeToken": token}
 
 
+def _mature_garden(raw):
+    token = _params(raw).get("scopeToken")
+    if not isinstance(token, str) or not 1 <= len(token) <= 128:
+        raise ValueError("hades2.garden.unavailable")
+    return {"scopeToken": token}
+
+
 def _set_vital(raw):
     params = _params(raw)
     vital = params.get("vital")
@@ -611,6 +618,7 @@ _COMMAND_SPECS = (
         reply_kind="patch",
     ),
     _spec("generate_gathering", request_id=True, validate=_generate_gathering),
+    _spec("mature_garden", request_id=True, validate=_mature_garden),
     _spec("set_stat", validate=_set_stat),
     _spec("set_element", validate=_set_element),
     _spec("lock_element", validate=_lock_element),

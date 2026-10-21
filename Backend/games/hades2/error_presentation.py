@@ -100,6 +100,9 @@ class Hades2PresentationError(AdapterError):
 # disappear with the tables.
 
 REGISTRY = [
+ {'match': 'literal', 'message': 'hades2.garden.unavailable', 'key': 'hades2.garden.unavailable', 'runtime': {'commands': ['mature_garden'], 'producer': {'kind': 'helper', 'name': 'prepareGardenMaturity'}}},
+ {'match': 'literal', 'message': 'Disable Infinite Gold before selecting a fixed-value gold lock', 'key': 'hades2.error.infiniteMoneyLockConflict', 'runtime_only': True, 'runtime': {'commands': ['lock_resource'], 'producer': {'kind': 'command', 'name': 'lock_resource'}}},
+ {'match': 'literal', 'message': 'Disable Infinite Rerolls before selecting a fixed-value reroll lock', 'key': 'hades2.error.infiniteRerollsLockConflict', 'runtime_only': True, 'runtime': {'commands': ['lock_rerolls'], 'producer': {'kind': 'command', 'name': 'lock_rerolls'}}},
  {'match': 'literal', 'message': 'Save Editor workspace is not open.', 'key': 'hades2.saveEditor.error.notOpen'},
  {'match': 'literal', 'message': 'Save Editor save management is unavailable.', 'key': 'hades2.saveEditor.error.unavailable'},
  {'match': 'literal', 'message': 'Game must be stopped before applying a save edit.', 'key': 'hades2.saveEditor.error.applyRequiresStopped'},

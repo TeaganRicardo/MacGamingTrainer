@@ -22,8 +22,8 @@ for path in view_files:
         assert not re.search(r'(Row|Card|Toggle|Button|Field|Metric|Editor|Picker|Control|Badge)$', name), (path, name)
 
 required = (
-    'TrainerFeatureToggleRow', 'TrainerFeatureMultiplierRow', 'TrainerCompactMultiplierRow',
-    'TrainerInlineStatEditor', 'TrainerResourceEditor', 'TrainerGroupedOptionPicker',
+    'TrainerFeatureToggleRow', 'TrainerMetricCard', 'TrainerCompactMultiplierRow',
+    'TrainerResourceEditor', 'TrainerGroupedOptionPicker',
     'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
     'TrainerPillBadge', 'TrainerEmptyState',

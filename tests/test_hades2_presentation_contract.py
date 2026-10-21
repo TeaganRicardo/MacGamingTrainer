@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Backend"))
 
-from games.hades2 import error_presentation
+from games.hades2 import error_presentation, terminology
 
 LOCALIZATION = ROOT / "Sources/Hades2/Presentation/Localization"
 TABLES = {
@@ -37,7 +37,7 @@ USER_FACING_TERM_GROUPS = (
     "productTerms",
 )
 REGISTRY = json.loads(
-    (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8")
+    terminology._reference_path().read_text(encoding="utf-8")
 )
 
 
@@ -405,7 +405,7 @@ assert "option.sourceEnglishName.localizedCaseInsensitiveContains(exactSearch)" 
 # referenced through it, not spelled out in a table. A hardcoded bilingual pair
 # records its provenance only in a comment.
 _reg = json.loads(
-    (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8"))
+    terminology._reference_path().read_text(encoding="utf-8"))
 _god = (_reg.get("productTerms") or {}).get("invincibility")
 assert _god, "the invincibility Trainer Product Term is not declared in the registry"
 assert _god["value"] != _god["englishValue"], "a product term pair must differ by language"

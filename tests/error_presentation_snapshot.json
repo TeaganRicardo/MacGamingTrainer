@@ -343,6 +343,10 @@
       "arguments": [],
       "key": "hades2.error.desiredSchemaInvalid"
     },
+    "hades2.garden.unavailable": {
+      "arguments": [],
+      "key": "hades2.garden.unavailable"
+    },
     "kind 使用了已不再支持的旧数据格式（schemaVersion=1，当前支持 9），": {
       "arguments": [
         "kind",
@@ -1581,6 +1585,39 @@
       "arguments": [],
       "key": "hades2.gathering.unavailable.tool"
     },
+    "lock_rerolls::Disable Infinite Rerolls before selecting a fixed-value reroll lock": {
+      "arguments": [],
+      "key": "hades2.error.infiniteRerollsLockConflict"
+    },
+    "lock_rerolls::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "lock_resource::Disable Infinite Gold before selecting a fixed-value gold lock": {
+      "arguments": [],
+      "key": "hades2.error.infiniteMoneyLockConflict"
+    },
+    "lock_resource::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "mature_garden::Unsupported sample-purpose: missing SampleFunction": {
+      "arguments": [
+        "sample-purpose",
+        "SampleFunction"
+      ],
+      "key": "hades2.error.nativeFunctionMissing"
+    },
+    "mature_garden::hades2.garden.unavailable": {
+      "arguments": [],
+      "key": "hades2.garden.unavailable"
+    },
     "open_sell_traits::Boon selling requires a live trait owner": {
       "arguments": [],
       "key": "hades2.error.sellNeedsTraitOwner"
@@ -1987,6 +2024,9 @@
     "advance_trait_lifecycle",
     "expire_trait",
     "generate_gathering",
+    "lock_rerolls",
+    "lock_resource",
+    "mature_garden",
     "open_sell_traits",
     "open_special_choice",
     "remove_trait",

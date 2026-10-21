@@ -53,10 +53,9 @@ assert 'return "Boon", wanted' in lua
 assert '{ id = "TalentDrop", name = "繁星之路", category = "角色奖励", kind = "consumable", group = "special", family = "Selene"' in lua
 assert 'sourceId = "Selene", sourceName = "塞勒涅"' in lua
 
-# ShortcutAction declaration order is the sole default-allocation order.
-# Expand the actual SwiftUI composition tree and compare its visible shortcut
-# affordances with CaseIterable order. This catches missing registrations and
-# actions whose default chord is out of top-to-bottom order.
+# The selected common list owns the first ten defaults. Numeric controls may
+# appear above it, and speed owns its explicit minus/plus chords. Every current
+# action must still have exactly one visible affordance in its owning section.
 def source_section(source, start, end):
     start_at = source.index(start)
     return source[start_at:source.index(end, start_at + len(start))]
@@ -86,7 +85,7 @@ family_order = enum_cases(
 assert "static let uiOrder" not in types
 assert "ShortcutAction.uiOrder" not in store + model + management
 assert "ShortcutAction.allCases" in store
-assert "ShortcutAction.allCases.enumerated()" in store
+assert "ShortcutAction.allCases.filter" in store
 assert "defaultShortcutIndex" not in types + store
 assert "profileShortcutWarning" in model + management
 assert "hades2.error.profileShortcutLayoutUnsupported" in model + management
@@ -104,44 +103,32 @@ assert "family.shortcutAction" in gathering
 assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gathering
 assert "TrainerShortcutBadgeSlot(text: generateShortcutText)" in occurrence
 
-combat = source_section(view, "private var combatSection: some View {", "private var buildSection: some View {")
-build = source_section(view, "private var buildSection: some View {", "private func text(_ key: String, arguments: [String]) -> String {")
-boon_rarity = source_section(view, "private var boonRarityPanel: some View {", "private var nextRoomRewardPanel: some View {")
-build = build.replace("            boonRarityPanel\n", boon_rarity)
-resource = source_section(view, "private var resourcePanel: some View {", "private var boonPanel: some View {")
-boon = source_section(view, "private var boonPanel: some View {", "private func exactItemLabel(")
-next_room = source_section(view, "private var nextRoomRewardPanel: some View {", "private var nextOccurrencePanel: some View {")
-next_occurrence = source_section(view, "private var nextOccurrencePanel: some View {", "private var resourcePanel: some View {")
-spawn = source_section(view, "private var spawnSection: some View {", "private var gameSpeedMapping:")
-spawn = spawn.replace("                boonPanel\n", boon)
-spawn = spawn.replace("                nextRoomRewardPanel\n", next_room)
-spawn = spawn.replace("                nextOccurrencePanel\n", next_occurrence)
-management_controls = source_section(view, "private var management: some View {", "private func featureRow(")
+common = source_section(view, "private var commonSection: some View {", "private var boonsSection: some View {")
+common_order = shortcut_references(common)
+assert common_order == [
+    "invincibility", "infiniteHealth", "infiniteMana", "infiniteMoney", "infiniteRerolls",
+    "forceEnableRerolls", "instantCastCooldown", "hexAlwaysReady", "infiniteAmmo", "autoMiniGames",
+]
+assert action_order[:10] == common_order
+parts = [
+    common,
+    source_section(view, "private var gameSpeedPanel: some View {", "private var presentedContent:"),
+    source_section(view, "private var damageMetric: some View {", "private var boonRarityPanel:"),
+    source_section(view, "private var boonRarityPanel: some View {", "private var nextRoomRewardPanel:"),
+    source_section(view, "private var currentRunEffectsPanel: some View {", "private func exactItemLabel("),
+    source_section(view, "private var boonAcquisitionPanel: some View {", "private var currentRunEffectsPanel:"),
+    source_section(view, "private var resourcePanel: some View {", "private var rewardSpawningPanel:"),
+    source_section(view, "private var resourceSection: some View {", "private var roomsSection:"),
+    source_section(view, "private var nextRoomRewardPanel: some View {", "private var resourcePanel:"),
+    source_section(view, "private var rewardSpawningPanel: some View {", "private var boonAcquisitionPanel:"),
+    source_section(view, "private var management: some View {", "private func featureRow("),
+]
+visible_actions = [action for part in parts for action in shortcut_references(part)]
+visible_actions.extend("generate" + family[:1].upper() + family[1:] for family in family_order)
+assert sorted(visible_actions) == sorted(action_order), (visible_actions, action_order)
 root = source_section(view, "private var rootContent: some View {", "@ViewBuilder\n    private var statusAndSessionSection")
-root_order = re.findall(
-    r"(combatSection|buildSection|resourceSection|Hades2GatheringPanel\(model: model\)|"
-    r"Hades2ChaosGatePanel\(model: model\)|spawnSection|management)",
-    root,
-)
-expanded = {
-    "combatSection": combat,
-    "buildSection": build,
-    "resourceSection": resource,
-    "Hades2GatheringPanel(model: model)": None,
-    "Hades2ChaosGatePanel(model: model)": "",
-    "spawnSection": spawn,
-    "management": management_controls,
-}
-visible_order = []
-for item in root_order:
-    if item == "Hades2GatheringPanel(model: model)":
-        visible_order.extend(["generate" + family[:1].upper() + family[1:] for family in family_order])
-    else:
-        visible_order.extend(shortcut_references(expanded[item]))
-assert visible_order == action_order, (
-    "ShortcutAction declaration order must follow the rendered top-to-bottom control order; "
-    f"UI={visible_order}, registry={action_order}"
-)
+assert all(section in root for section in ("statusAndSessionSection", "commonSection", "boonsSection", "resourceSection", "roomsSection", "management"))
+assert "gardenQoL" not in view
 assert len(set(action_order)) == len(action_order)
 assert "Color.clear" not in badge
 assert "if let text, !text.isEmpty" in badge

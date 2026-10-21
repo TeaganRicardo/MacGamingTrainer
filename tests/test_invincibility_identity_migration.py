@@ -14,13 +14,13 @@ from games.hades2.preferences import (
 )
 from games.hades2.profile_service import PROFILE_SCHEMA_VERSION, Hades2ProfileService
 
-assert DESIRED_STATE_SCHEMA_VERSION == 9
+assert DESIRED_STATE_SCHEMA_VERSION == 10
 assert PROFILE_SCHEMA_VERSION == 6
 
 legacy_desired = {"godMode": True, "gardenQoL": True}
 migrated = normalize_persisted_desired(legacy_desired, 4)
 assert migrated["invincibility"] is True
-assert migrated["gardenQoL"] is True
+assert "gardenQoL" not in migrated
 assert "godMode" not in migrated
 
 current = normalize_persisted_desired(

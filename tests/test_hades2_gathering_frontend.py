@@ -18,14 +18,22 @@ p = argparse.ArgumentParser(); p.add_argument('--game', required=True)
 args, _ = p.parse_known_args()
 probabilities = {}
 generated = None
+garden_matured = False
 trace = pathlib.Path(__file__).with_suffix('.trace')
 for raw in sys.stdin:
  req = json.loads(raw)
  with trace.open('a') as out: out.write(json.dumps(req) + '\n')
  state = {'connected': True, 'status': 'ready', 'scene': 'run',
-          'capabilities': {}, 'gatheringProbabilities': probabilities,
+          'capabilities': {'matureGarden': not garden_matured}, 'gatheringProbabilities': probabilities,
+          'gardenScopeToken': None if garden_matured else 'observed-garden',
           'gatheringTargets': {name: {'available': True, 'scopeToken': 'observed-' + name} for name in ('flora', 'mining', 'digging', 'shades', 'fishing')}}
- if req['command'] == 'set_gathering_desired':
+ if req['command'] == 'mature_garden':
+  assert req['params'] == {'scopeToken': 'observed-garden'}
+  garden_matured = True
+  state['capabilities']['matureGarden'] = False
+  state['gardenScopeToken'] = None
+  state['lastAction'] = {'requestId': req['id'], 'command': 'mature_garden', 'outcome': 'completed'}
+ elif req['command'] == 'set_gathering_desired':
   family, value = req['params']['family'], req['params']['probability']
   if value is None: probabilities.pop(family, None)
   else: probabilities[family] = value
@@ -38,7 +46,7 @@ for raw in sys.stdin:
   state['status'] = 'restart_required'
   state['gatheringTargets'] = {}
   state['lastAction'] = {'requestId': generated, 'command': 'generate_gathering', 'outcome': 'outcome_unknown'}
- reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 15, 'gameID': args.game, 'ok': True, 'result': state}
+ reply = {'type': 'result', 'id': req['id'], 'protocolVersion': 6, 'moduleProtocolVersion': 16, 'gameID': args.game, 'ok': True, 'result': state}
  print(json.dumps(reply), flush=True)
 '''
 HARNESS = r'''
@@ -70,6 +78,16 @@ func wait(_ predicate: () -> Bool) {
         let host = NSHostingView(rootView: Hades2GameModule.makeContent(model: model).environmentObject(localization))
         host.frame = NSRect(x: 0, y: 0, width: 1100, height: 2200)
         host.layoutSubtreeIfNeeded()
+
+        check(model.canMatureGarden && model.gardenScopeToken == "observed-garden", "observed garden must enable its explicit action")
+        model.performShortcut(.matureGarden)
+        model.performShortcut(.matureGarden)
+        wait { !model.busy && !model.canMatureGarden }
+        check(model.gardenScopeToken == nil, "native maturity must clear the obsolete target")
+        let requests = try String(contentsOf: worker.deletingPathExtension().appendingPathExtension("trace"), encoding: .utf8)
+        check(requests.split(separator: "\n").filter { $0.contains("mature_garden") }.count == 1, "pending garden shortcut must not duplicate the one-shot")
+        check(model.noticeText.key == "hades2.receipt.completed"
+              && model.noticeText.arguments == ["hades2.garden.title"], "garden action must publish its completed receipt")
 
         let generation = model.editGeneration
         check(model.completeTextEdit(.gathering(.flora), text: "", changed: false, generation: generation).isEmpty,

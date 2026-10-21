@@ -18,7 +18,7 @@ from games.hades2.profile_service import Hades2ProfileService, PROFILE_SCHEMA_VE
 from hades2_resident_session_fakes import FakeResidentSession, FakeTimeWarpController
 
 assert Hades2PreferenceStore.defaults()['chaosGateProbability'] is None
-assert DESIRED_STATE_SCHEMA_VERSION == 9 and PROFILE_SCHEMA_VERSION == 6
+assert DESIRED_STATE_SCHEMA_VERSION == 10 and PROFILE_SCHEMA_VERSION == 6
 for value in (None, 0, 100, 32.5):
     assert Hades2PreferenceStore.normalize({'chaosGateProbability': value})['chaosGateProbability'] == value
 for value in (True, -1, 101, 10**1000, math.nan, math.inf, '50', [], {}):
@@ -61,14 +61,14 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
         result = adapter.dispatch('set_chaos_gate_desired', {'probability': value}, 'desired')
         assert result['chaosGateProbability'] == value
     persisted = json.loads((base/'desired-state.json').read_text())
-    assert persisted['schemaVersion'] == 9 and persisted['chaosGateProbability'] == 80
+    assert persisted['schemaVersion'] == DESIRED_STATE_SCHEMA_VERSION and persisted['chaosGateProbability'] == 80
     assert persisted['gatheringProbabilities'] == {'flora': 25}
     assert not {'ForceSecretDoor', 'ForceNextRoom', 'door', 'scopeToken'} & set(persisted)
     restarted = Hades2Adapter(resident_session=OfflineSession(), time_warp_controller=FakeTimeWarpController())
     assert restarted.preferences['chaosGateProbability'] == 80 and restarted.preference_dirty
     adapter.save_profile('Chaos Gate')
     envelope = json.loads(adapter.profile_service.path('Chaos Gate').read_text())
-    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == 9
+    assert envelope['schemaVersion'] == 6 and envelope['desiredSchemaVersion'] == DESIRED_STATE_SCHEMA_VERSION
     assert envelope['desired']['chaosGateProbability'] == 80
     adapter.reset_desired()
     assert adapter.preferences['chaosGateProbability'] is None and adapter.state['chaosGateProbability'] is None
@@ -143,7 +143,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     assert saved_pending['desired']['chaosGateProbability'] == 60
 
     future_path = base/'future-desired.json'
-    future_path.write_text(json.dumps(dict(persisted, schemaVersion=10)))
+    future_path.write_text(json.dumps(dict(persisted, schemaVersion=DESIRED_STATE_SCHEMA_VERSION + 1)))
     before_bytes = future_path.read_bytes()
     store = Hades2PreferenceStore(future_path)
     defaults, loaded = store.load()
@@ -155,7 +155,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-chaos-gate-preferences-') as tempor
     service = Hades2ProfileService(base/'future-profiles')
     service.save('Future', {'chaosGateProbability': 100})
     path = service.path('Future')
-    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = 10
+    document = json.loads(path.read_text()); document['desiredSchemaVersion'] = DESIRED_STATE_SCHEMA_VERSION + 1
     path.write_text(json.dumps(document)); before_bytes = path.read_bytes()
     for action in (lambda: service.load('Future'), lambda: service.save('Future', {})):
         try: action()

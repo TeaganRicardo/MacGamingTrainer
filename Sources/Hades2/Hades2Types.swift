@@ -49,14 +49,17 @@ struct BoonOption: Identifiable {
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
-    // Case declaration order is the visible feature order and the only source
-    // for derived default allocation. Keep this in lockstep with the UI contract.
-    case invincibility, infiniteHealth, infiniteMana, instantCastCooldown, hexAlwaysReady
-    case infiniteAmmo, damageEnabled, autoMiniGames, gardenQoL
-    case forceEnableRerolls
+    // The selected ten common controls own the first ten default chords.
+    // Other controls retain shortcuts in their functional sections; numeric
+    // damage controls can appear above the common list without taking its keys.
+    case invincibility, infiniteHealth, infiniteMana, infiniteMoney, infiniteRerolls
+    case forceEnableRerolls, instantCastCooldown, hexAlwaysReady, infiniteAmmo, autoMiniGames
+    case decreaseGameSpeed, increaseGameSpeed
+    case damageEnabled
     case boonRarityEnabled, forceLegendary, forceDuo
     case moneyMultiplierEnabled, resourceMultiplierEnabled
     case generateFlora, generateMining, generateDigging, generateShades, generateFishing
+    case matureGarden
     case spawnOlympian, spawnPickup, spawnSpecial, acquireChaosPair, acquireExactBoon, openSellTraits
     case applyNextRoomReward, applyNextOccurrence
     case disableAll
@@ -70,6 +73,8 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
+
+    var isSpeedAdjustment: Bool { self == .decreaseGameSpeed || self == .increaseGameSpeed }
 
     var gatheringFamily: Hades2GatheringFamily? {
         switch self {
@@ -89,12 +94,16 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .invincibility: return "hades2.feature.invincibility"
         case .infiniteHealth: return "hades2.feature.infiniteHealth"
         case .infiniteMana: return "hades2.feature.infiniteMana"
+        case .infiniteMoney: return "hades2.feature.infiniteMoney"
+        case .infiniteRerolls: return "hades2.feature.infiniteRerolls"
         case .instantCastCooldown: return "hades2.feature.instantCastCooldown"
         case .hexAlwaysReady: return "hades2.feature.hexAlwaysReady"
         case .infiniteAmmo: return "hades2.feature.infiniteAmmo"
         case .damageEnabled: return "hades2.feature.damageMultiplier"
         case .autoMiniGames: return "hades2.feature.autoMiniGames"
-        case .gardenQoL: return "hades2.feature.gardenQoL"
+        case .decreaseGameSpeed: return "hades2.shortcut.decreaseGameSpeed"
+        case .increaseGameSpeed: return "hades2.shortcut.increaseGameSpeed"
+        case .matureGarden: return "hades2.garden.title"
         case .forceEnableRerolls: return "hades2.feature.forceEnableRerolls"
         case .boonRarityEnabled: return "hades2.feature.boonRarity"
         case .forceLegendary: return "hades2.feature.forceLegendary"

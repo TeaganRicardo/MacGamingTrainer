@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 117 then
+if previousModule and previousModule.revision ~= 118 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,17 +15,18 @@ if previousModule and previousModule.revision ~= 117 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 117,
+    version = 1, revision = 118,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
     infiniteMana = false,
+    infiniteMoney = false,
+    infiniteRerolls = false,
     damageEnabled = false,
     instantCastCooldown = false,
     hexAlwaysReady = false,
     infiniteAmmo = false,
     autoMiniGames = false,
-    gardenQoL = false,
     boonRarityEnabled = false,
     forceEnableRerolls = false,
     moneyMultiplierEnabled = false,
@@ -44,12 +45,13 @@ if __MacGamingTrainerV1 == nil then
       invincibility = false,
       infiniteHealth = false,
       infiniteMana = false,
+      infiniteMoney = false,
+      infiniteRerolls = false,
       damageEnabled = false,
       instantCastCooldown = false,
       hexAlwaysReady = false,
       infiniteAmmo = false,
       autoMiniGames = false,
-      gardenQoL = false,
       boonRarityEnabled = false,
       forceEnableRerolls = false,
       moneyMultiplierEnabled = false,
@@ -1098,11 +1100,6 @@ if __MacGamingTrainerV1 == nil then
     releaseHook("WaitForFishingInput")
     releaseHook("ExorcismSequence")
   end
-  local function releaseGardenQoL()
-    M.gardenQoL = false
-    releaseHook("GardenPlantSeed")
-    releaseHook("UseGardenPlot")
-  end
   local function releaseBoonRarity()
     M.boonRarityEnabled = false
     releaseHook("GetRarityChances")
@@ -1126,11 +1123,13 @@ if __MacGamingTrainerV1 == nil then
     releaseHook("GetRandomValue")
   end
   local function releaseEconomyRuntime()
-    M.moneyMultiplierEnabled, M.resourceMultiplierEnabled = false, false
+    M.infiniteMoney, M.moneyMultiplierEnabled, M.resourceMultiplierEnabled = false, false, false
     releaseHook("AddResource")
     releaseHook("SpendResource")
   end
   local function releaseRerollsRuntime()
+    M.infiniteRerolls = false
+    runtimeState.rerollBalance = nil
     releaseHook("UpdateRerollUI")
   end
   -- DodgeChance is an engine LifeProperty.  Current game scripts always target
@@ -1491,7 +1490,6 @@ if __MacGamingTrainerV1 == nil then
     releaseHex()
     releaseAmmo()
     releaseMiniGames()
-    releaseGardenQoL()
     releaseBoonRarity()
     if runtimeState.forceRerolls ~= nil then runtimeState.forceRerolls.release() end
     M.forceEnableRerolls = false
@@ -1528,8 +1526,8 @@ if __MacGamingTrainerV1 == nil then
   end
   local function anyRuntimeActive()
     return M.invincibility or M.infiniteHealth or M.infiniteMana or M.damageEnabled
-      or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.gardenQoL or M.boonRarityEnabled
-      or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
+      or M.instantCastCooldown or M.hexAlwaysReady or M.infiniteAmmo or M.autoMiniGames or M.boonRarityEnabled
+      or M.infiniteMoney or M.infiniteRerolls or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled
       or owns("HeroHasTrait") or owns("OpenUpgradeChoiceMenu") or owns("CreateBoonLootButtons")
       or owns("UpdateStoreReroll") or owns("CreateSurfaceShopButtons") or owns("HandleSurfaceShopAction")
       or owns("HasHeroTraitValue") or owns("AssignRoomToExitDoor")
@@ -1550,6 +1548,7 @@ if __MacGamingTrainerV1 == nil then
       session = function() return SessionState end,
       gameState = function() return GameState end,
       resources = function() return type(GameState) == "table" and GameState.Resources or nil end,
+      gardenPlots = function() return type(GameState) == "table" and GameState.GardenPlots or nil end,
       run = function() return M.runtimeOwners.run() end,
       hero = function() return M.runtimeOwners.hero() end,
       room = function() return M.runtimeOwners.currentRoom() end,
@@ -1629,11 +1628,10 @@ if __MacGamingTrainerV1 == nil then
     if M.infiniteAmmo and not owns("UpdateWeaponAmmo") then releaseAmmo() end
     if M.autoMiniGames and type(WaitForFishingInput) == "function" and not owns("WaitForFishingInput")
         and type(ExorcismSequence) == "function" and not owns("ExorcismSequence") then releaseMiniGames() end
-    if M.gardenQoL and (not owns("GardenPlantSeed") or not owns("UseGardenPlot")) then releaseGardenQoL() end
     if M.boonRarityEnabled and (not owns("GetRarityChances") or not owns("SetTraitsOnLoot")) then releaseBoonRarity() end
-    if (M.moneyMultiplierEnabled or M.resourceMultiplierEnabled or next(M.resourceLocks))
+    if (M.infiniteMoney or M.moneyMultiplierEnabled or M.resourceMultiplierEnabled or next(M.resourceLocks))
         and (not owns("AddResource") or not owns("SpendResource")) then releaseEconomyRuntime() end
-    if M.rerollsLock ~= nil and not owns("UpdateRerollUI") then releaseRerollsRuntime() end
+    if (M.infiniteRerolls or M.rerollsLock ~= nil) and not owns("UpdateRerollUI") then releaseRerollsRuntime() end
     if M.statTargets.grasp ~= nil and M.statRuntime.grasp and not owns("GetMaxMetaUpgradeCost") then releaseGraspLock() end
     if M.statTargets.crit ~= nil and M.statRuntime.crit
         and (not owns("CalculateCritChance") or not owns("GetTotalHeroTraitValue")) then releaseCritLock() end
@@ -6708,14 +6706,18 @@ if __MacGamingTrainerV1 == nil then
       setButtonVisible(button, number(CurrentRun.NumRerolls) >= cost)
     end
 
-    local function rollbackPanelSpend(screen, button)
+    local function rollbackPanelSpend(screen, button, retainedCurrency)
       local run = type(CurrentRun) == "table" and CurrentRun or nil
       local room = type(run) == "table" and run.CurrentRoom or nil
       local cost = type(button) == "table" and button.Cost or nil
       if type(room) ~= "table" or not finite(cost) or cost < 0 or not finite(run.NumRerolls) then
         return false
       end
-      if M.rerollsLock ~= nil then
+      if retainedCurrency then
+        -- The native UI publication already retained this operation's spend.
+        -- Its captured mode matters even if presentation yielded and the user
+        -- has since disabled Infinite Rerolls.
+      elseif M.rerollsLock ~= nil then
         run.NumRerolls = M.rerollsLock
       else
         run.NumRerolls = run.NumRerolls + cost
@@ -6734,7 +6736,9 @@ if __MacGamingTrainerV1 == nil then
     end
 
     local function failNoPlanAfterSpend(screen, button, operation)
-      operation.rollback(function() return rollbackPanelSpend(screen, button) end)
+      operation.rollback(function()
+        return rollbackPanelSpend(screen, button, operation.retainedRerollCurrency)
+      end)
       error("Force reroll pool has no changed eligible candidates")
     end
 
@@ -6749,13 +6753,15 @@ if __MacGamingTrainerV1 == nil then
       end
     end
     local function runReroll(screen, work)
-      local frame = pendingRerollOwners[screen]
+      local pending = pendingRerollOwners[screen]
+      local frame = pending and pending.owner or nil
       pendingRerollOwners[screen] = nil
       local ok, message = nativeOperations.run(nil, "completed", function(operation)
         -- Hades invokes this callback only after reroll currency/history have
         -- been mutated. A captured pre-spend frame therefore enters here with
         -- the native boundary already crossed, even if its owner went stale
         -- before callback dispatch.
+        operation.retainedRerollCurrency = pending and pending.retainedCurrency
         operation.enter()
         return work(operation)
       end, frame, frame ~= nil)
@@ -6975,7 +6981,10 @@ if __MacGamingTrainerV1 == nil then
           or rerollFunctionName == surfaceShopCallbackName
           or rerollFunctionName == nemesisTradeCallbackName
         if trainerOwnedCallback then
-          pendingRerollOwners[screen] = nativeOperations.owner()
+          pendingRerollOwners[screen] = {
+            owner = nativeOperations.owner(),
+            retainedCurrency = M.infiniteRerolls and owns("UpdateRerollUI"),
+          }
         end
 
         -- Hades II 1.143476 AttemptPanelReroll and both presentation owners
@@ -7233,6 +7242,78 @@ if __MacGamingTrainerV1 == nil then
     }
   end)()
 
+  M.gardenMaturity = (function()
+    local observed, token, serial = nil, nil, 0
+    local function inspect()
+      if type(CurrentHubRoom) ~= "table" or not M.runtimeOwners.heroAvailable()
+          or type(GameState.GardenPlots) ~= "table" or type(GardenData) ~= "table"
+          or type(GardenData.Seeds) ~= "table"
+          or not M.nativeFunctionsAvailable({ "GardenTimeTick", "GardenPlotTimeUpdatePresentation" }) then return nil end
+      local plots = {}
+      for id, plot in pairs(GameState.GardenPlots) do
+        local seed = type(plot) == "table" and GardenData.Seeds[plot.SeedName] or nil
+        local outcome = type(seed) == "table" and type(seed.RandomOutcomes) == "table"
+          and seed.RandomOutcomes[plot.OutcomeKey] or nil
+        if finite(id) and type(plot) == "table" and plot.ObjectId == id and finite(plot.PlantId)
+            and type(plot.SeedName) == "string" and type(outcome) == "table"
+            and not plot.ReadyForHarvest and finite(plot.GrowTimeRemaining) and plot.GrowTimeRemaining > 0 then
+          plots[#plots + 1] = { id = id, plot = plot, seed = plot.SeedName, outcome = plot.OutcomeKey,
+            plantId = plot.PlantId, timesUsed = plot.TimesUsed }
+        end
+      end
+      if #plots == 0 then return nil end
+      table.sort(plots, function(left, right) return left.id < right.id end)
+      return { session = SessionState, gameState = GameState, garden = GameState.GardenPlots,
+        run = CurrentRun, hero = M.runtimeOwners.hero(), room = CurrentHubRoom, map = MapState, plots = plots }
+    end
+    local function same(left, right)
+      if left == nil or right == nil then return false end
+      for _, key in ipairs({ "session", "gameState", "garden", "run", "hero", "room", "map" }) do
+        if left[key] ~= right[key] then return false end
+      end
+      if #left.plots ~= #right.plots then return false end
+      for index, row in ipairs(left.plots) do
+        local other = right.plots[index]
+        for _, key in ipairs({ "id", "plot", "seed", "outcome", "plantId", "timesUsed" }) do
+          if row[key] ~= other[key] then return false end
+        end
+      end
+      return true
+    end
+    local function scopeToken()
+      local current = inspect()
+      if current == nil then observed, token = nil, nil; return nil end
+      if not same(observed, current) then
+        serial = serial + 1
+        observed, token = current, M.traitInventoryGeneration .. ":garden:" .. tostring(serial)
+      end
+      return token
+    end
+    local function prepareGardenMaturity(params)
+      local current = inspect()
+      if type(params.scopeToken) ~= "string" or params.scopeToken ~= token
+          or not same(observed, current) then error("hades2.garden.unavailable") end
+      return current
+    end
+    local function mature(record, target)
+      nativeOperations.run(record, "completed", function(operation)
+        if not same(target, inspect()) then error("hades2.garden.unavailable") end
+        for _, row in ipairs(target.plots) do
+          operation.enter()
+          -- GardenTimeTick owns the native maturity transition and its live
+          -- presentation. One final tick avoids replaying every elapsed room
+          -- and leaves crop identity/outcome and native harvesting intact.
+          row.plot.GrowTimeRemaining = 1
+          GardenTimeTick({ PlotId = row.id, Ticks = 1, UpdatePlotPresentation = true })
+          if not row.plot.ReadyForHarvest or row.plot.GrowTimeRemaining > 0 then
+            error("Native garden maturity did not complete")
+          end
+        end
+      end)
+    end
+    return { scopeToken = scopeToken, prepare = prepareGardenMaturity, mature = mature }
+  end)()
+
   local occurrenceTargets, occurrenceTargetOrder
 
   M.observationRetention.elementOrder = { "Fire", "Water", "Earth", "Air", "Aether" }
@@ -7306,6 +7387,12 @@ if __MacGamingTrainerV1 == nil then
     local economySupported = type(AddResource) == "function" and type(SpendResource) == "function" and resourceCatalogReady()
     local activeMoney = not not (M.moneyMultiplierEnabled and owns("AddResource") and owns("SpendResource"))
     local activeResources = not not (M.resourceMultiplierEnabled and owns("AddResource") and owns("SpendResource"))
+    featureSupportMap.infiniteMoney = economySupported
+    activeFeatureMap.infiniteMoney = not not (M.infiniteMoney and owns("SpendResource"))
+    if M.desiredFeatures.infiniteMoney and not activeFeatureMap.infiniteMoney then dormantFeatureMap.infiniteMoney = true end
+    featureSupportMap.infiniteRerolls = type(UpdateRerollUI) == "function"
+    activeFeatureMap.infiniteRerolls = not not (M.infiniteRerolls and owns("UpdateRerollUI") and M.runtimeOwners.rerollsAvailable())
+    if M.desiredFeatures.infiniteRerolls and not activeFeatureMap.infiniteRerolls then dormantFeatureMap.infiniteRerolls = true end
     featureSupportMap.moneyMultiplierEnabled = economySupported
     featureSupportMap.resourceMultiplierEnabled = economySupported
     activeFeatureMap.moneyMultiplierEnabled = activeMoney
@@ -7363,6 +7450,7 @@ if __MacGamingTrainerV1 == nil then
     -- Editable commands independently expose the owner-specific capabilities.
     local sceneOperational = currentScene == "crossroads"
       or (currentScene == "run" and M.runtimeOwners.heroAvailable())
+    local gardenScopeToken = M.gardenMaturity.scopeToken()
     return {
       status = sceneOperational and "ready" or "waiting", scene = currentScene,
       capabilities = {
@@ -7384,22 +7472,25 @@ if __MacGamingTrainerV1 == nil then
         setRerolls = M.runtimeOwners.rerollsAvailable() and type(UpdateRerollUI) == "function"
           and type(ShowRerollUI) == "function",
         setSpellCharge = M.runtimeOwners.heroAvailable(),
+        matureGarden = gardenScopeToken ~= nil,
         setResource = resourceReady(),
         spawnReward = rewardOwner ~= nil, setStats = anyAvailableStat(statAvailable),
         setElements = M.runtimeOwners.elementsAvailable(), hotBackup = true, hotRestore = false,
       },
       featureSupport = featureSupportMap,
+      gardenScopeToken = gardenScopeToken or jsonNull,
       -- BEGIN GENERATED DURABLE FEATURE PROJECTION
       desiredFeatures = {
         invincibility = M.desiredFeatures.invincibility,
         infiniteHealth = M.desiredFeatures.infiniteHealth,
         infiniteMana = M.desiredFeatures.infiniteMana,
+        infiniteMoney = M.desiredFeatures.infiniteMoney,
+        infiniteRerolls = M.desiredFeatures.infiniteRerolls,
         damageEnabled = M.desiredFeatures.damageEnabled,
         instantCastCooldown = M.desiredFeatures.instantCastCooldown,
         hexAlwaysReady = M.desiredFeatures.hexAlwaysReady,
         infiniteAmmo = M.desiredFeatures.infiniteAmmo,
         autoMiniGames = M.desiredFeatures.autoMiniGames,
-        gardenQoL = M.desiredFeatures.gardenQoL,
         boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
         forceEnableRerolls = M.desiredFeatures.forceEnableRerolls,
         moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled,
@@ -7410,9 +7501,10 @@ if __MacGamingTrainerV1 == nil then
       dormantFeatures = dormantFeatureMap,
       invincibility = M.desiredFeatures.invincibility, infiniteHealth = M.desiredFeatures.infiniteHealth,
       infiniteMana = M.desiredFeatures.infiniteMana, damageEnabled = M.desiredFeatures.damageEnabled,
+      infiniteMoney = M.desiredFeatures.infiniteMoney, infiniteRerolls = M.desiredFeatures.infiniteRerolls,
       instantCastCooldown = M.desiredFeatures.instantCastCooldown,
       hexAlwaysReady = M.desiredFeatures.hexAlwaysReady, infiniteAmmo = M.desiredFeatures.infiniteAmmo,
-      autoMiniGames = M.desiredFeatures.autoMiniGames, gardenQoL = M.desiredFeatures.gardenQoL,
+      autoMiniGames = M.desiredFeatures.autoMiniGames,
       boonRarityEnabled = M.desiredFeatures.boonRarityEnabled,
       boonRarity = { target = M.boonRarityTarget, multiplier = M.boonRarityMultiplier * 100,
         forceLegendary = M.boonForceLegendary, forceDuo = M.boonForceDuo },
@@ -7459,7 +7551,6 @@ if __MacGamingTrainerV1 == nil then
         hexRuntime = M.hexRuntime or jsonNull,
         miniGameHooks = { fishing = owns("WaitForFishingInput"), exorcism = owns("ExorcismSequence") },
         boonRarityHooks = { chances = owns("GetRarityChances"), options = owns("SetTraitsOnLoot") },
-        gardenHooks = { plant = owns("GardenPlantSeed"), harvest = owns("UseGardenPlot") },
         nextRoomRewardHook = owns("ChooseRoomReward") and owns("StartRoom"),
         nextRoomRewardPatchedDoors = M.nextRoomRewardPatchedDoors or jsonNull,
         nextRoomRewardToken = M.nextRoomRewardToken or jsonNull,
@@ -7931,35 +8022,6 @@ if __MacGamingTrainerV1 == nil then
     end
     M.autoMiniGames = true
   end
-  local function installGardenQoL()
-    requireFunctions("garden quality-of-life", { "GardenPlantSeed", "UseGardenPlot" })
-    if not owns("GardenPlantSeed") then
-      installHook("GardenPlantSeed", function(original, screen, button, args, ...)
-        if not M.gardenQoL then return original(screen, button, args, ...) end
-        local protected = {}
-        if type(args) == "table" then for key, value in pairs(args) do protected[key] = value end end
-        protected.MultiPlant = true
-        return original(screen, button, protected, ...)
-      end)
-    end
-    if not owns("UseGardenPlot") then
-      installHook("UseGardenPlot", function(original, plot, args, user, ...)
-        if not M.gardenQoL or type(plot) ~= "table" or not plot.ReadyForHarvest then
-          return original(plot, args, user, ...)
-        end
-        local upgrades = type(GameState) == "table" and GameState.WorldUpgrades or nil
-        if type(upgrades) ~= "table" then return original(plot, args, user, ...) end
-        local previous = upgrades.WorldUpgradeGardenHarvestAll
-        upgrades.WorldUpgradeGardenHarvestAll = true
-        local packed = table.pack(pcall(original, plot, args, user, ...))
-        upgrades.WorldUpgradeGardenHarvestAll = previous
-        if not packed[1] then error(packed[2]) end
-        return table.unpack(packed, 2, packed.n)
-      end)
-    end
-    M.gardenQoL = true
-  end
-
   runtimeConfig.rarityRank = { Common = 1, Rare = 2, Epic = 3, Heroic = 4 }
   local function traitSpecialRarity(traitName)
     local data = type(TraitData) == "table" and TraitData[traitName] or nil
@@ -8498,6 +8560,14 @@ if __MacGamingTrainerV1 == nil then
       return result
     end)
     installHook("SpendResource", function(original, id, amount, source, args)
+      if M.infiniteMoney and id == "Money" and source ~= trainerSource
+          and finite(amount) and amount > 0 then
+        -- ResourceLogic treats a zero spend as failure. A non-consuming
+        -- purchase succeeds without invoking native spend side effects;
+        -- retain the native affordability and zero/invalid-spend rules.
+        local balance = type(GameState.Resources) == "table" and GameState.Resources.Money
+        return finite(balance) and balance >= amount
+      end
       if M.resourceLocks[id] ~= nil and finite(amount) and amount > 0 then
         -- Preserve the game's spend path/presentations without consuming the
         -- locked currency.  Passing zero is safer than spending then writing
@@ -8513,8 +8583,23 @@ if __MacGamingTrainerV1 == nil then
   end
   local function installRerolls()
     requireFunctions("reroll lock", { "UpdateRerollUI" })
+    if M.desiredFeatures.infiniteRerolls and not M.infiniteRerolls then
+      runtimeState.rerollBalance = { session = SessionState, run = CurrentRun, value = CurrentRun.NumRerolls }
+    end
+    M.infiniteRerolls = M.desiredFeatures.infiniteRerolls
     installHook("UpdateRerollUI", function(original, value)
-      if M.rerollsLock ~= nil then
+      if M.infiniteRerolls and M.runtimeOwners.rerollsAvailable() then
+        -- Both native spend owners and AddRerolls publish the real counter
+        -- here before yielding. Retain gains rather than a captured fixed
+        -- value, and never carry this observed balance into another Run.
+        local balance = runtimeState.rerollBalance
+        if balance == nil or balance.session ~= SessionState or balance.run ~= CurrentRun then
+          balance = { session = SessionState, run = CurrentRun, value = CurrentRun.NumRerolls }
+          runtimeState.rerollBalance = balance
+        end
+        balance.value = math.max(balance.value, CurrentRun.NumRerolls)
+        CurrentRun.NumRerolls, value = balance.value, balance.value
+      elseif M.rerollsLock ~= nil and M.runtimeOwners.rerollsAvailable() then
         CurrentRun.NumRerolls = M.rerollsLock
         value = M.rerollsLock
       end
@@ -8649,11 +8734,6 @@ if __MacGamingTrainerV1 == nil then
       support = function() return type(WaitForFishingInput) == "function" or type(ExorcismSequence) == "function" end,
       active = function() return M.autoMiniGames and (owns("WaitForFishingInput") or owns("ExorcismSequence")) end,
     },
-    gardenQoL = {
-      install = installGardenQoL, release = releaseGardenQoL, available = function() return true end,
-      support = function() return type(GardenPlantSeed) == "function" and type(UseGardenPlot) == "function" end,
-      active = function() return M.gardenQoL and owns("GardenPlantSeed") and owns("UseGardenPlot") end,
-    },
     boonRarityEnabled = {
       install = installBoonRarity, release = releaseBoonRarity, available = function() return true end,
       support = function() return type(GetRarityChances) == "function" and type(SetTraitsOnLoot) == "function" and type(GetEligibleUpgrades) == "function" end,
@@ -8667,7 +8747,7 @@ if __MacGamingTrainerV1 == nil then
   }
   featureOrder = {
     "invincibility", "infiniteHealth", "infiniteMana", "damageEnabled", "instantCastCooldown",
-    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
+    "hexAlwaysReady", "infiniteAmmo", "autoMiniGames", "boonRarityEnabled",
     "forceEnableRerolls",
   }
   statOrder = { "grasp", "dodge", "crit", "chargeSpeed", "moveSpeed", "sprintSpeed", "dashSpeed", "attackSpeed", "manaRegen", "enemyDamage", "enemyHealth" }
@@ -8746,7 +8826,7 @@ if __MacGamingTrainerV1 == nil then
     return false
   end
   local function reconcileEconomy(raiseOnError)
-    local desired = M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled
+    local desired = M.desiredFeatures.infiniteMoney or M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled
       or next(M.resourceLocks) ~= nil
     if not desired then
       releaseEconomyRuntime()
@@ -8756,6 +8836,7 @@ if __MacGamingTrainerV1 == nil then
     if M.featureErrors.economy ~= nil and not raiseOnError then return false end
     local ok, message = pcall(function()
       installEconomy()
+      M.infiniteMoney = M.desiredFeatures.infiniteMoney
       M.moneyMultiplierEnabled = M.desiredFeatures.moneyMultiplierEnabled
       M.resourceMultiplierEnabled = M.desiredFeatures.resourceMultiplierEnabled
     end)
@@ -8795,16 +8876,14 @@ if __MacGamingTrainerV1 == nil then
         allOk = false
       end
     end
-    if onlyKey == nil or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
-      if (M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then
+    if onlyKey == nil or onlyKey == "infiniteMoney" or onlyKey == "moneyMultiplierEnabled" or onlyKey == "resourceMultiplierEnabled" or onlyKey == "economy" then
+      if (M.desiredFeatures.infiniteMoney or M.desiredFeatures.moneyMultiplierEnabled or M.desiredFeatures.resourceMultiplierEnabled or next(M.resourceLocks) ~= nil) and not economyReady() then
         releaseEconomyRuntime(); M.featureErrors.economy = nil
       elseif not reconcileEconomy(raiseOnError) then allOk = false end
     end
-    if onlyKey == nil or onlyKey == "rerolls" then
-      if M.rerollsLock ~= nil and M.runtimeOwners.rerollsAvailable() then
+    if onlyKey == nil or onlyKey == "rerolls" or onlyKey == "infiniteRerolls" then
+      if (M.desiredFeatures.infiniteRerolls or M.rerollsLock ~= nil) and M.runtimeOwners.rerollsAvailable() then
         if not featureAttempt("rerolls", true, installRerolls, releaseRerollsRuntime, raiseOnError) then allOk = false end
-      elseif M.rerollsLock ~= nil then
-        releaseRerollsRuntime(); M.featureErrors.rerolls = nil
       else
         releaseRerollsRuntime(); M.featureErrors.rerolls = nil
       end
@@ -8878,6 +8957,7 @@ if __MacGamingTrainerV1 == nil then
       advance_trait_lifecycle = { "session", "run", "hero" },
       open_special_choice = { "session", "run", "hero" },
       generate_gathering = { "session", "run", "hero", "room", "map" },
+      mature_garden = { "session", "gameState", "gardenPlots", "run", "hero", "room", "map" },
       acquire_chaos_pair = { "session", "run", "hero" },
       spawn_reward = function(context)
         return type(context) == "table" and context.ownerKeys
@@ -8896,6 +8976,7 @@ if __MacGamingTrainerV1 == nil then
       advance_trait_lifecycle = { "generationId", "runId", "instanceId", "trait", "family", "expectedLevel", "expectedRarity", "expectedSameNameCount", "expectedRemainingUses" },
       open_special_choice = { "source" },
       generate_gathering = { "family", "scopeToken" },
+      mature_garden = { "scopeToken" },
       acquire_chaos_pair = { "blessing", "curse" },
       spawn_reward = { "reward" },
     }
@@ -9703,6 +9784,11 @@ if __MacGamingTrainerV1 == nil then
       return actionLedger.run(command, params, function(record) return runtimeState.roomGeneration.generate(record, target) end,
         function() target = runtimeState.roomGeneration.prepare(params) end)
     end
+    if command == "mature_garden" then
+      local target
+      return actionLedger.run(command, params, function(record) M.gardenMaturity.mature(record, target) end,
+        function() target = M.gardenMaturity.prepare(params) end)
+    end
     if command == "spawn_reward" or command == "acquire_chaos_pair" then
       local plan
       return actionLedger.run(command, params,
@@ -9889,12 +9975,17 @@ if __MacGamingTrainerV1 == nil then
       if type(value) ~= "boolean" then error("Feature value must be boolean") end
       if M.desiredFeatures[feature] == nil then error("Unknown feature") end
       local previous = M.desiredFeatures[feature]
+      local previousMoneyLock, previousRerollsLock = M.resourceLocks.Money, M.rerollsLock
       M.desiredFeatures[feature] = value
+      if feature == "infiniteMoney" and value then M.resourceLocks.Money = nil end
+      if feature == "infiniteRerolls" and value then M.rerollsLock = nil end
       M.featureErrors[feature] = nil
       if feature == "moneyMultiplierEnabled" or feature == "resourceMultiplierEnabled" then M.featureErrors.economy = nil end
       if not value then
         local entry = featureRegistry[feature]
         if entry ~= nil then entry.release()
+        elseif feature == "infiniteMoney" then M.infiniteMoney = false
+        elseif feature == "infiniteRerolls" then M.infiniteRerolls = false
         elseif feature == "moneyMultiplierEnabled" then M.moneyMultiplierEnabled = false
         elseif feature == "resourceMultiplierEnabled" then M.resourceMultiplierEnabled = false end
         if feature == "infiniteMana" and M.runtimeOwners.manaAvailable() then refreshMana() end
@@ -9903,6 +9994,8 @@ if __MacGamingTrainerV1 == nil then
       if not ok then
         if M.terminalActionUnknown then error(message) end
         M.desiredFeatures[feature] = previous
+        if feature == "infiniteMoney" then M.resourceLocks.Money = previousMoneyLock end
+        if feature == "infiniteRerolls" then M.rerollsLock = previousRerollsLock end
         M.featureErrors[feature] = nil
         if feature == "moneyMultiplierEnabled" or feature == "resourceMultiplierEnabled" then M.featureErrors.economy = nil end
         reconcileDesired(false, feature)
@@ -9916,6 +10009,9 @@ if __MacGamingTrainerV1 == nil then
       if not resourceReady() then error("Resource inventory owner is unavailable") end
       validateResource(params.resource)
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
+      if params.resource == "Money" and params.locked and M.desiredFeatures.infiniteMoney then
+        error("Disable Infinite Gold before selecting a fixed-value gold lock")
+      end
       -- An inventory owner can accept an exact lock without AddResource or
       -- SpendResource. The frame guard enforces it now; the existing economy
       -- reconciler mounts the native spend/gain hooks when their owner appears.
@@ -9934,12 +10030,15 @@ if __MacGamingTrainerV1 == nil then
     if command == "lock_rerolls" then
       if not M.runtimeOwners.rerollsAvailable() then error("Reroll owner is unavailable") end
       if type(params.locked) ~= "boolean" then error("locked must be boolean") end
+      if params.locked and M.desiredFeatures.infiniteRerolls then
+        error("Disable Infinite Rerolls before selecting a fixed-value reroll lock")
+      end
       if params.locked then
         if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
         installRerolls()
         M.rerollsLock = CurrentRun.NumRerolls
         installGuard()
-      else M.rerollsLock = nil; releaseRerollsRuntime() end
+      else M.rerollsLock = nil; reconcileDesired(false, "rerolls") end
       if not anyDesired() and not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
     end
@@ -9957,6 +10056,9 @@ if __MacGamingTrainerV1 == nil then
       return actionLedger.run(command, params, function()
         if M.rerollsLock ~= nil then M.rerollsLock = params.amount end
         CurrentRun.NumRerolls = params.amount
+        if M.infiniteRerolls then
+          runtimeState.rerollBalance = { session = SessionState, run = CurrentRun, value = params.amount }
+        end
         ShowRerollUI()
         UpdateRerollUI(params.amount)
       end)

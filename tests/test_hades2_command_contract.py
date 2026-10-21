@@ -113,6 +113,10 @@ def expect_error(command, params, message):
 
 # The build-facing metadata is one complete authoritative Host command list and
 # one Host watchdog policy. Swift generation consumes this directly.
+_, mature_params = dispatch_runtime("mature_garden", {"scopeToken": "observed-garden"}, "mature-request")
+assert mature_params == {"scopeToken": "observed-garden", "requestId": "mature-request"}
+for invalid_token in (None, "", "x" * 129):
+    expect_error("mature_garden", {"scopeToken": invalid_token}, "hades2.garden.unavailable")
 metadata = command_metadata()
 names = [row["name"] for row in metadata]
 assert names == [
@@ -121,7 +125,7 @@ assert names == [
     "set_vital", "set_counter", "lock_vital",
     "set_resource", "lock_resource", "set_rerolls", "lock_rerolls",
     "set_gathering_desired", "set_chaos_gate_desired",
-    "generate_gathering", "set_stat", "set_element", "lock_element",
+    "generate_gathering", "mature_garden", "set_stat", "set_element", "lock_element",
     "set_boon_rarity_desired", "set_next_room_reward_desired", "set_next_occurrence_desired",
     "spawn_reward", "acquire_chaos_pair", "open_sell_traits",
     "set_trait_level", "set_trait_rarity", "set_trait_remaining_uses",

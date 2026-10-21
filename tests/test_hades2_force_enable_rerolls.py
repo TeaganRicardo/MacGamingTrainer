@@ -407,6 +407,35 @@ assert(not exhaustedScreen.Components.RerollButton.Visible
 assert(CurrentRun.NumRerolls == 10, 'exhausted pool changed reroll currency')
 PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = fullArachnePool
 
+-- A pool can disappear after the native spend. Infinite Rerolls has already
+-- retained that currency at UpdateRerollUI, so rollback must not mint another
+-- coin even if the user turns the mode off during native presentation.
+CurrentRun.NumRerolls = 10
+CurrentRun.CurrentRoom.SpentRerolls = {}
+M.dispatch('set_feature', { feature = 'infiniteRerolls', value = true, includeCatalogs = false })
+local changingPool = copy(EnemyData.NPC_Arachne_01)
+changingPool.ObjectId = 400
+changingPool.BlockReroll = true
+changingPool.UpgradeOptions = { copy(basePool[1]), copy(basePool[2]), copy(basePool[3]) }
+local changingScreen = OpenUpgradeChoiceMenu(changingPool)
+assert(changingScreen.Components.RerollButton.Visible)
+local nativePreReroll = PreRerollPanelPresentation
+PreRerollPanelPresentation = function(...)
+  nativePreReroll(...)
+  M.dispatch('set_feature', { feature = 'infiniteRerolls', value = false, includeCatalogs = false })
+  PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = {
+    copy(basePool[1]), copy(basePool[2]), copy(basePool[3]),
+  }
+end
+CallFunctionName(changingScreen.Components.RerollButton.OnPressedFunctionName,
+  changingScreen, changingScreen.Components.RerollButton)
+assert(CurrentRun.NumRerolls == 10,
+  'failed forced reroll refunded a spend already retained by Infinite Rerolls')
+assert(not M.dispatch('status', { includeCatalogs = false }).runtimeOutcomeUnknown,
+  'known rolled-back candidate exhaustion tainted runtime trust')
+PreRerollPanelPresentation = nativePreReroll
+PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = fullArachnePool
+
 -- Existing reroll lock remains independent: native spend is immediately reconciled to the locked count.
 CurrentRun.NumRerolls = 10
 CurrentRun.CurrentRoom.SpentRerolls = {}

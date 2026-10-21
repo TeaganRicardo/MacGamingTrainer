@@ -197,10 +197,10 @@ else:
 assert len(mutation_session.calls) == 1
 assert mutation_adapter.preference_dirty is True
 assert mutation_adapter.state['status'] == 'waiting'
-assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 15
+assert a.game_id == 'hades2' and a.display_name == 'Hades II' and a.module_protocol_version == 16
 assert a.state['version'] == '1.143476'
-assert 'gardenQoL' in TOGGLES and 'enemyHealth' in STAT_RULES
-assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 15
+assert 'infiniteMoney' in TOGGLES and 'gardenQoL' not in TOGGLES and 'enemyHealth' in STAT_RULES
+assert a.metadata()['transport'] == 'supergiant-lldb-lua' and a.metadata()['protocolVersion'] == 16
 
 # A process-query failure is not evidence that Hades stopped. Preserve the
 # existing debugger/session state and surface the query error instead of
@@ -236,8 +236,8 @@ finally:
 
 
 # Offline desired profile semantics survived the module move.
-state = a.set_desired('gardenQoL', True)
-assert state['gardenQoL'] is True and a.preferences['gardenQoL'] is True
+state = a.set_desired('infiniteMoney', True)
+assert state['infiniteMoney'] is True and a.preferences['infiniteMoney'] is True
 state = a.set_next_room_reward_desired('WeaponUpgrade')
 assert state['nextRoomReward'] == 'WeaponUpgrade'
 
@@ -246,9 +246,9 @@ saved = a.save_profile('模块化测试', {
     'disableAll': {'keyCode':29,'modifiers':6144,'keyLabel':'0'},
 })
 assert saved['saved'] and saved['profiles'][0]['name'] == '模块化测试'
-a.preferences['gardenQoL'] = False; a._save_preferences()
+a.preferences['infiniteMoney'] = False; a._save_preferences()
 loaded = a.load_profile('模块化测试')
-assert loaded['loadedProfile'] == '模块化测试' and a.preferences['gardenQoL'] is True
+assert loaded['loadedProfile'] == '模块化测试' and a.preferences['infiniteMoney'] is True
 assert loaded['shortcuts']['invincibility'] == {'keyCode':18,'modifiers':6144,'keyLabel':'1'}
 assert a.delete_profile('模块化测试')['deleted']
 

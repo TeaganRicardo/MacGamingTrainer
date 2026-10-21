@@ -505,7 +505,7 @@
       "reason": "Invincibility is a Trainer-owned custom damage-blocking feature distinct from Hades II native God Mode, so it has no official localization. The Trainer owns this bilingual pair."
     },
     "forceEnableRerolls": {
-      "value": "强制启用重骰",
+      "value": "强制重骰",
       "englishValue": "Force Enable Rerolls",
       "status": "trainer_product_label",
       "reason": "Trainer-owned durable control that exposes applicable native in-game reroll controls without granting reroll currency or changing permanent MetaUpgrade progression."
@@ -539,6 +539,42 @@
       "englishValue": "Apply Occurrence Chance",
       "status": "trainer_product_label",
       "reason": "Trainer action accepts a future-room Chaos Gate conditional chance; it does not create an entrance in the current room."
+    },
+    "infiniteMoney": {
+      "value": "无限金币",
+      "englishValue": "Infinite Gold",
+      "status": "trainer_product_label",
+      "reason": "Trainer mode that prevents ordinary gold consumption while retaining gains and native affordability."
+    },
+    "infiniteRerolls": {
+      "value": "无限重骰",
+      "englishValue": "Infinite Rerolls",
+      "status": "trainer_product_label",
+      "reason": "Trainer mode that retains the current reroll balance on native spends while accepting gains."
+    },
+    "gardenInstantMaturity": {
+      "value": "花园瞬间成熟",
+      "englishValue": "Instant Garden Maturity",
+      "status": "trainer_product_label",
+      "reason": "Explicit Trainer action to mature already-planted crops through the native garden tick without harvesting."
+    },
+    "unlimitedCast": {
+      "value": "法阵无限使用",
+      "englishValue": "Unlimited Cast",
+      "status": "trainer_product_label",
+      "reason": "Trainer control for continuously available native Cast delivery."
+    },
+    "unlimitedHex": {
+      "value": "巫咒无限使用",
+      "englishValue": "Unlimited Hex",
+      "status": "trainer_product_label",
+      "reason": "Trainer control for native Hex readiness."
+    },
+    "autoMiniGames": {
+      "value": "小游戏必定成功",
+      "englishValue": "Always Succeed at Minigames",
+      "status": "trainer_product_label",
+      "reason": "Trainer automation of the supported native fishing and exorcism minigames."
     }
   },
   "registry": {

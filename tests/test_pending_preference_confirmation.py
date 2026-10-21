@@ -219,18 +219,18 @@ assert transport_b.state['desiredFeatures']['invincibility'] is False
 
 adapter_b.dispatch(
     'set_desired',
-    {'feature': 'gardenQoL', 'value': True},
+    {'feature': 'infiniteMoney', 'value': True},
     'desired-b',
 )
-assert transport_b.state['desiredFeatures']['gardenQoL'] is True
-assert adapter_b.preferences['gardenQoL'] is True
+assert transport_b.state['desiredFeatures']['infiniteMoney'] is True
+assert adapter_b.preferences['infiniteMoney'] is True
 assert adapter_b.preferences['invincibility'] is True
 assert adapter_b.preference_dirty is True, (
     'successful feature B must not confirm failed feature A'
 )
 persisted_b = json.loads((base_b / 'desired-state.json').read_text(encoding='utf-8'))
 assert persisted_b['invincibility'] is True
-assert persisted_b['gardenQoL'] is True
+assert persisted_b['infiniteMoney'] is True
 
 adapter_b.dispatch('status', {}, 'status-b')
 assert transport_b.state['desiredFeatures']['invincibility'] is True

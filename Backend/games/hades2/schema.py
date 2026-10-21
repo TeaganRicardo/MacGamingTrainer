@@ -1,8 +1,8 @@
 import math
 
 TOGGLES = (
-    'invincibility','infiniteHealth','infiniteMana','damageEnabled','instantCastCooldown',
-    'hexAlwaysReady','infiniteAmmo','autoMiniGames','gardenQoL','boonRarityEnabled',
+    'invincibility','infiniteHealth','infiniteMana','infiniteMoney','infiniteRerolls','damageEnabled','instantCastCooldown',
+    'hexAlwaysReady','infiniteAmmo','autoMiniGames','boonRarityEnabled',
     'forceEnableRerolls','moneyMultiplierEnabled','resourceMultiplierEnabled',
 )
 
@@ -142,7 +142,7 @@ def disconnected_capabilities():
         'setFeature':False,
         'setHealth':False,'setMana':False,'setArmor':False,
         'setRerolls':False,'setSpellCharge':False,'setResource':False,
-        'setStats':False,'setElements':False,
+        'setStats':False,'setElements':False,'matureGarden':False,
         'traitInventory':False,'traitMutation':False,'roomContext':False,
         'sellTraits':False,'specialChoice':False,'acquireExactReward':False,
         'acquireChaosPair':False,'spawnReward':False,

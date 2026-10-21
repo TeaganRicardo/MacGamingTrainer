@@ -21,6 +21,7 @@ enum Hades2Command: String {
     case setGatheringDesired = "set_gathering_desired"
     case setChaosGateDesired = "set_chaos_gate_desired"
     case generateGathering = "generate_gathering"
+    case matureGarden = "mature_garden"
     case setStat = "set_stat"
     case setElement = "set_element"
     case lockElement = "lock_element"

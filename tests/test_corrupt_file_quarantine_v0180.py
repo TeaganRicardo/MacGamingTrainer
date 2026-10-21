@@ -159,7 +159,7 @@ try:
     # in the live namespace.  Invalid JSON and invalid envelopes are moved out
     # of the *.json set, while healthy profiles remain available.
     profiles = Hades2ProfileService(base/'profiles')
-    good = store.defaults(); good['gardenQoL'] = True
+    good = store.defaults(); good['infiniteMoney'] = True
     profiles.save('healthy', good, {'invincibility': 1})
 
     bad_json = profiles.root/'bad-json.json'

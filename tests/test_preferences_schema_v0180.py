@@ -166,7 +166,7 @@ adapter._replay_preferences(dict(adapter.state), force_full=True)
 assert len(recorder.calls) == 1
 canonical_desired, _, force_full = recorder.calls[0]
 assert force_full is True
-assert canonical_desired['gardenQoL'] is True
+assert 'gardenQoL' not in canonical_desired
 assert canonical_desired['resourceLocks'] == {}
 assert canonical_desired['elementLocks'] == {}
 assert canonical_desired['statLocks'] == {}
@@ -204,7 +204,7 @@ profile_path.write_text(json.dumps({
 }), encoding='utf-8')
 loaded_profile_state = profile_adapter.load_profile('bad-desired')
 assert loaded_profile_state['loadedProfile'] == 'bad-desired'
-assert profile_adapter.preferences['gardenQoL'] is True
+assert 'gardenQoL' not in profile_adapter.preferences
 assert profile_adapter.preferences['resourceLocks'] == {'MetaCurrency':12}
 assert profile_adapter.preferences['elementLocks'] == {'Water':4}
 assert profile_adapter.preferences['statLocks'] == {'grasp':30}
