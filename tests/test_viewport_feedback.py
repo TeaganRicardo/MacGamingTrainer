@@ -242,6 +242,34 @@ struct Main {
         let unknown = nextNotice("hades2.receipt.outcomeUnknown")
         check(model.currentIssues.contains { $0.id == "recovery" },
               "outcome-unknown omitted the retained restart requirement")
+        // The receipt, runtime error and retained terminal recovery must give
+        // the same safe next step in both languages, including after a live
+        // language change. A reconnect alone cannot restore unknown trust.
+        let originalLanguage = localization.language
+        let uncertainMessages = [unknown.text] + [
+            "hades2.error.outcomeUnknownEmpty", "hades2.error.outcomeUnknownGeneric",
+            "hades2.error.outcomeUnknownRuntime", "hades2.error.outcomeUnknownTransport",
+            "hades2.error.outcomeUnknownUnreadable", "hades2.error.restartRequired",
+        ].map { TrainerTextToken(key: $0, arguments: ["fixture diagnostic"]) }
+        for language in [TrainerPresentationLanguage.zhCN, .en] {
+            localization.language = language
+            let required = language == .en
+                ? ["may have executed", "Do not repeat", "Inspect the game state", "restart Hades II", "before reconnecting"]
+                : ["可能已执行", "请勿重复", "检查游戏状态", "重新启动 Hades II", "后再连接"]
+            for token in uncertainMessages {
+                let rendered = localization.string(token)
+                check(required.allSatisfy { rendered.contains($0) },
+                      "unknown-action feedback conflicts with restart recovery in \(language): \(rendered)")
+            }
+            check(localization.string(model.statusTitle).contains(language == .en ? "Restarted" : "重启"),
+                  "terminal session status lost restart meaning")
+            check(model.currentIssues.contains { $0.id == "operation" && $0.text == unknown.text },
+                  "retained details lost the uncertain action receipt")
+            check(!localization.string(completed.text).contains(language == .en ? "restart" : "重启")
+                    && !localization.string(failed.text).contains(language == .en ? "restart" : "重启"),
+                  "completed or ordinary failed receipts acquired terminal recovery instructions")
+        }
+        localization.language = originalLanguage
         pump(6)
         model.showFeedbackDetails(for: unknown.id)
         pump(3)
