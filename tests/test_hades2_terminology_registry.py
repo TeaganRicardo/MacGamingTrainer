@@ -68,16 +68,53 @@ def test_target_build_source_evidence_is_pinned():
     assert evidence["normalization"]["normalizedIds"] == ["ReRollAlt", "Health", "Mana"]
 
     source_files = evidence["sourceFiles"]
-    assert set(source_files) == {
-        "HelpText.zh-CN.sjson", "HelpText.en.sjson",
-        "ScreenText.zh-CN.sjson", "ScreenText.en.sjson",
-        "TraitText.zh-CN.sjson", "TraitText.en.sjson",
+    assert source_files == {
+        "HelpText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/HelpText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/HelpText.zh-CN.sjson",
+            "sha256": "688bb11c9abd68514e94805ee93ca05473c5b998521670e2eb32930c56415283",
+        },
+        "HelpText.en.sjson": {
+            "bundlePath": "sources/Text/en/HelpText.en.sjson",
+            "gamePath": "Content/Game/Text/en/HelpText.en.sjson",
+            "sha256": "955a0e05b1072d7d60eadd6240f59133191406078b153805c32ed76900f21e8b",
+        },
+        "ScreenText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/ScreenText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/ScreenText.zh-CN.sjson",
+            "sha256": "96926b3e8a5cf1167f69a610a43c25cd60fc7ccc6f5be8fe0dee02e152304346",
+        },
+        "ScreenText.en.sjson": {
+            "bundlePath": "sources/Text/en/ScreenText.en.sjson",
+            "gamePath": "Content/Game/Text/en/ScreenText.en.sjson",
+            "sha256": "1f487de92208530189b63ba5c4fc4c23f1b4f4d038a7baa053042d7651d43eb3",
+        },
+        "TraitText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/TraitText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/TraitText.zh-CN.sjson",
+            "sha256": "18238e96d684986829a4905acec8a82a30f6d60c3da39951184a238ccfe98c31",
+        },
+        "TraitText.en.sjson": {
+            "bundlePath": "sources/Text/en/TraitText.en.sjson",
+            "gamePath": "Content/Game/Text/en/TraitText.en.sjson",
+            "sha256": "75ef411d23f54d0caaf94e9b58b4f80768ec0ca23d394833dc9296d4b00b4712",
+        },
     }
-    for source in source_files.values():
-        digest = source["sha256"]
-        assert len(digest) == 64 and all(char in "0123456789abcdef" for char in digest)
-        assert source["bundlePath"].startswith("sources/Text/")
-        assert source["gamePath"].startswith("Content/Game/Text/")
+    normalized_terms = {
+        row["id"]: (row["value"], row["englishValue"])
+        for row in reference["officialTerms"].values()
+        if row["id"] in evidence["normalization"]["normalizedIds"]
+    }
+    assert normalized_terms == {
+        "ReRollAlt": ("重塑命运", "Change of Fate"),
+        "Health": ("生命值", "Life"),
+        "Mana": ("魔力值", "Magick"),
+    }
+    assert all(
+        not value.startswith("{!Icons.")
+        for pair in normalized_terms.values()
+        for value in pair
+    )
 
     for term in load_hades2_terminology().by_class(TermClass.NATIVE_GAME):
         assert term.source_zh_cn in source_files
