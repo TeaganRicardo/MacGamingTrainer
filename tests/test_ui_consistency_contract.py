@@ -111,8 +111,8 @@ trait_action_keys = {
     "hades2.traits.applyRarity",
 }
 assert 'text("hades2.traits.levelLabel")' in view
-assert 'TrainerTextField(title: "—", text: traitLevelInput(trait))' in view
-assert '.accessibilityLabel(text("hades2.traits.targetLevel"))' in view
+# Native trait-input names are covered by test_runtime_text_edit_completion.py;
+# the initializer/outer-modifier shape does not prove the AppKit name.
 assert '.minimumScaleFactor(0.72)' not in view
 assert '.minimumScaleFactor(0.8)' not in view
 assert 'text("hades2.traits.applyLevel")' in view
