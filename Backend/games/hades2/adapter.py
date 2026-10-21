@@ -145,7 +145,7 @@ class Hades2Adapter(GameAdapter):
         self.profile_service=Hades2ProfileService(preparation.DATA/'profiles')
         self.command_contract=Hades2CommandContract(self)
         self.reply_projection=Hades2ReplyProjection()
-        self.save_workspace=None
+        self.save_workspaces={}
         # A persisted desired profile is intentionally treated as pending on a
         # fresh backend process. If the resident Lua module already matches it,
         # replay is a no-op; if Hades itself restarted, the same profile is
@@ -1008,16 +1008,16 @@ class Hades2Adapter(GameAdapter):
 
     def bind_save_service(self, save_service):
         super().bind_save_service(save_service)
-        self.save_workspace = None
+        self.save_workspaces = {}
 
-    def _require_save_workspace(self):
-        if self.save_workspace is None:
+    def _require_save_workspace(self, identifier):
+        workspace = self.save_workspaces.get(identifier)
+        if workspace is None:
             raise ValueError("Save Editor workspace is not open.")
-        return self.save_workspace
+        return workspace
 
     def validate_save_workspace(self, identifier):
-        if self._require_save_workspace().identifier != identifier:
-            raise ValueError("Save Editor document is no longer selected; open it explicitly again.")
+        self._require_save_workspace(identifier)
 
     def save_editor_inventory(self, params):
         if self.save_service is None:
@@ -1028,23 +1028,31 @@ class Hades2Adapter(GameAdapter):
         if self.save_service is None:
             raise ValueError("Save Editor save management is unavailable.")
         params = params or {}
-        self.save_workspace = Hades2SaveWorkspace.open(self.save_service,
+        workspace = Hades2SaveWorkspace.open(self.save_service,
             snapshot_id=params.get("snapshotId"), source=params.get("source"), target=params.get("target"))
-        return self.save_workspace.summary()
+        self.save_workspaces[workspace.identifier] = workspace
+        return workspace.summary()
+
+    def close_save_editor(self, params):
+        identifier = params["workspaceId"]
+        self._require_save_workspace(identifier)
+        del self.save_workspaces[identifier]
+        return {"closed": True}
 
     def set_save_editor_target(self, params):
-        return self._require_save_workspace().set_target(params["target"])
+        return self._require_save_workspace(params["workspaceId"]).set_target(params["target"])
 
     def query_save_editor(self, params):
-        return self._require_save_workspace().query(**params)
+        query = {key: value for key, value in params.items() if key != "workspaceId"}
+        return self._require_save_workspace(params["workspaceId"]).query(**query)
 
     def detail_save_editor(self, params):
-        return self._require_save_workspace().investigate(
+        return self._require_save_workspace(params["workspaceId"]).investigate(
             params["entryId"], params["language"]
         )
 
     def stage_save_editor(self, params):
-        return self._require_save_workspace().stage(
+        return self._require_save_workspace(params["workspaceId"]).stage(
             params["entryId"],
             params["operation"],
             params.get("value"),
@@ -1052,18 +1060,18 @@ class Hades2Adapter(GameAdapter):
         )
 
     def unstage_save_editor(self, params):
-        return self._require_save_workspace().unstage(
+        return self._require_save_workspace(params["workspaceId"]).unstage(
             params["entryId"], language=params["language"]
         )
 
     def review_save_editor(self, params):
-        return self._require_save_workspace().review(language=params["language"])
+        return self._require_save_workspace(params["workspaceId"]).review(language=params["language"])
 
     def cancel_save_editor(self, params):
-        return self._require_save_workspace().cancel(language=params["language"])
+        return self._require_save_workspace(params["workspaceId"]).cancel(language=params["language"])
 
-    def apply_save_editor(self):
-        return self._require_save_workspace().apply()
+    def apply_save_editor(self, params):
+        return self._require_save_workspace(params["workspaceId"]).apply()
 
     def metadata(self):
         metadata = super().metadata()

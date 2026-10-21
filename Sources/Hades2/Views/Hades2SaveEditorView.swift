@@ -1,21 +1,5 @@
 import SwiftUI
 
-struct Hades2SaveEditorPresentation: Identifiable {
-    let model: Hades2SaveEditorModel
-
-    var id: ObjectIdentifier { ObjectIdentifier(model) }
-}
-
-extension View {
-    func hades2SaveEditorSheet(
-        _ presentation: Binding<Hades2SaveEditorPresentation?>
-    ) -> some View {
-        sheet(item: presentation) { item in
-            Hades2SaveEditorView(model: item.model)
-        }
-    }
-}
-
 enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
     case all
     case story
@@ -31,6 +15,7 @@ enum Hades2SaveWorkbenchSection: String, CaseIterable, Identifiable {
 struct Hades2SaveEditorView: View {
     @StateObject private var model: Hades2SaveEditorModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.trainerCloseToolWindow) private var closeWindow
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
@@ -208,8 +193,9 @@ struct Hades2SaveEditorView: View {
             .accessibilityLabel(text("hades2.saveEditor.source.read"))
 
             Button(localization.localized("host.done")) {
-                dismiss()
+                if let closeWindow { closeWindow() } else { dismiss() }
             }
+            .disabled(model.busy)
         }
         .padding(.horizontal, theme.rowHorizontalPadding)
         .padding(.vertical, 15)

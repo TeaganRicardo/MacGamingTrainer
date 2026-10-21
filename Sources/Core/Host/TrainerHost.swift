@@ -8,8 +8,8 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     @ObservedObject var model: Module.Model
     @StateObject private var targetMonitor: TrainerTargetProcessMonitor
     @StateObject private var saveManager: TrainerSaveManagerModel
+    @StateObject private var toolWindows = TrainerToolWindowStore()
     @State private var connectionPolicy = TrainerConnectionPolicy()
-    @State private var saveManagerPresented = false
 
     init(model: Module.Model, session: TrainerBackendSession) {
         self.model = model
@@ -23,8 +23,14 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
     private var managementActions: TrainerManagementActions {
         guard Module.descriptor.supportsSaveManagement else { return .none }
         return TrainerManagementActions(openSaveManagement: {
-            saveManagerPresented = true
-            saveManager.refresh()
+            toolWindows.open(id: "host-save-management", title: localization.localized("host.saveManagement"),
+                             localization: localization, theme: theme) {
+                saveManager.refresh()
+                return TrainerToolWindowContent(canClose: { !saveManager.busy }) {
+                    TrainerSaveManagerView(model: saveManager, managedBackupEditor:
+                        Module.managedBackupEditor.map { factory in { snapshot in factory(model, snapshot) } })
+                }
+            }
         })
     }
 
@@ -72,6 +78,7 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         } feedback: {
             Module.makeFeedback(model: model)
         }
+        .environment(\.trainerToolWindows, toolWindows.actions(localization: localization, theme: theme))
         .onAppear {
             registerModulePresentation(localization)
             targetMonitor.refresh()
@@ -128,10 +135,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
         }
         .onChange(of: model.connected) { _, connected in
             connectionPolicy.connectionChanged(connected: connected)
-        }
-        .sheet(isPresented: $saveManagerPresented) {
-            TrainerSaveManagerView(model: saveManager, managedBackupEditor:
-                Module.managedBackupEditor.map { factory in { snapshot in factory(model, snapshot) } })
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             targetMonitor.refresh()

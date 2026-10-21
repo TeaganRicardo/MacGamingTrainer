@@ -8,14 +8,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            for window in NSApp.windows where window.canBecomeMain {
-                window.title = "\(ActiveGameModule.descriptor.displayName) · Mac Gaming Trainer"
-                window.delegate = self
-                window.titlebarAppearsTransparent = true
-                window.backgroundColor = .clear
-            }
-        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -45,7 +37,14 @@ private struct WindowCloseBridge: NSViewRepresentable {
         weak var closeDelegate: AppDelegate?
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            configureWindow()
+        }
+
+        func configureWindow() {
             window?.delegate = closeDelegate
+            window?.title = "\(ActiveGameModule.descriptor.displayName) · Mac Gaming Trainer"
+            window?.titlebarAppearsTransparent = true
+            window?.backgroundColor = .clear
         }
     }
 
@@ -59,7 +58,7 @@ private struct WindowCloseBridge: NSViewRepresentable {
     func updateNSView(_ view: HookView, context: Context) {
         delegate.model = model
         view.closeDelegate = delegate
-        view.window?.delegate = delegate
+        view.configureWindow()
     }
 }
 

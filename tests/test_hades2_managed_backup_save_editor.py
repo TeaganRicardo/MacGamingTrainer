@@ -226,7 +226,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
     request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=77)
     assert request(adapter, "save_editor_review", workspaceId=owner)["changes"][0]["before"] == 20
     request(adapter, "save_editor_cancel", workspaceId=owner)
-    assert adapter.save_workspace.document.lua_state["GameState"]["Resources"]["MetaCurrency"] == 20
+    assert adapter.save_workspaces[owner].document.lua_state["GameState"]["Resources"]["MetaCurrency"] == 20
     request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=88)
     selected = request(adapter, "save_editor_target", workspaceId=owner, target=identity("Profile3.sav"))
     assert selected["workspaceId"] == owner and selected["sourceSHA256"] == source_sha
@@ -242,18 +242,29 @@ with tempfile.TemporaryDirectory(prefix="mgt-backup-selection-") as temporary:
     assert contents(snapshot_folder) == preserved
     service.source_files, service.read_source_file = original_sources, original_read
 
-    # A different explicit source owns later commands; the prior view cannot
-    # stage or apply into it even though semantic entry IDs happen to match.
+    # Opening a second window must leave the earlier source/draft/target
+    # addressable. Identical semantic entry IDs cannot redirect either window.
     newer = request(adapter, "save_editor_open", source=identity("Profile1.sav"), target=identity("Profile3.sav"))
-    for command, params in (("save_editor_stage", {"entryId": "resource:MetaCurrency", "operation": "set", "value": 999}),
-                            ("save_editor_apply", {})):
+    new_owner = newer["workspaceId"]
+    assert new_owner != owner
+    request(adapter, "save_editor_stage", workspaceId=owner, entryId="resource:MetaCurrency", operation="set", value=999)
+    assert request(adapter, "save_editor_review", workspaceId=owner)["changes"][0]["after"] == 999
+    assert request(adapter, "save_editor_review", workspaceId=new_owner)["count"] == 0
+    request(adapter, "save_editor_stage", workspaceId=new_owner, entryId="resource:MetaCurrency", operation="set", value=321)
+    request(adapter, "save_editor_cancel", workspaceId=owner)
+    assert request(adapter, "save_editor_review", workspaceId=new_owner)["changes"][0]["after"] == 321
+    assert request(adapter, "save_editor_close", workspaceId=owner) == {"closed": True}
+    assert owner not in adapter.save_workspaces and new_owner in adapter.save_workspaces
+    for invalid in (owner, "forged-workspace", None):
         try:
-            request(adapter, command, workspaceId=owner, **params)
+            request(adapter, "save_editor_apply", workspaceId=invalid)
         except Exception as error:
-            assert "no longer selected" in str(getattr(error, "diagnostic", None) or error)
+            assert "workspace" in str(getattr(error, "diagnostic", None) or error).lower()
         else:
-            raise AssertionError("departed frontend adopted a different document")
-    assert newer["workspaceId"] != owner and adapter.save_workspace.review()["count"] == 0
+            raise AssertionError("an absent document was redirected to an open workspace")
+    request(adapter, "save_editor_apply", workspaceId=new_owner)
+    assert resource(saves / "Profile3.sav") == 321
+    assert contents(snapshot_folder) == preserved
 
 
 with tempfile.TemporaryDirectory(prefix="mgt-backup-recovery-") as temporary:

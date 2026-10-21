@@ -490,7 +490,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 16,
+                'moduleProtocolVersion': 17,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -524,7 +524,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 16,
+                'moduleProtocolVersion': 17,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -554,7 +554,7 @@ for raw in sys.stdin:
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 16,
+        'moduleProtocolVersion': 17,
         'gameID': args.game,
         'ok': True,
         'result': result,
@@ -565,20 +565,6 @@ harness = r'''
 import Foundation
 import SwiftUI
 import AppKit
-
-struct SaveEditorPresentationHarness: View {
-    let model: Hades2SaveEditorModel
-    @State private var presentation: Hades2SaveEditorPresentation? = nil
-
-    var body: some View {
-        Text("host")
-            .frame(width: 600, height: 400)
-            .hades2SaveEditorSheet($presentation)
-            .onAppear {
-                presentation = Hades2SaveEditorPresentation(model: model)
-            }
-    }
-}
 
 func fail(_ message: String) -> Never {
     fputs("FAIL: \(message)\\n", stderr)
@@ -726,22 +712,18 @@ struct Main {
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         app.finishLaunching()
-        let root = SaveEditorPresentationHarness(model: model)
-            .environmentObject(localization)
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = NSHostingView(rootView: root)
-        window.orderFront(nil)
+        let toolWindows = TrainerToolWindowStore()
+        let window = toolWindows.open(id: "save-editor", title: "Save Editor", localization: localization, theme: .standard) {
+            TrainerToolWindowContent(canClose: { !model.busy }, onClose: model.close) {
+                Hades2SaveEditorView(model: model)
+            }
+        }
         pumpUntil {
             model.profile == "Profile1" && model.items.count == 1
         }
 
         if model.profile != "Profile1" {
-            fail("Save Editor sheet did not mount the editor model")
+            fail("Save Editor independent window did not mount the editor model")
         }
         if model.relativePath != "Profile1.sav" { fail("relative path was not decoded") }
         if model.availableDomains != Hades2SaveEditorDomain.allCases {
@@ -1327,6 +1309,7 @@ struct Main {
         model.selectedSourceID = "main/Profile3.sav"
         pumpUntil(timeout: 2.0) {
             model.workspaceID != oldWorkspace && model.sourceRelativePath == "Profile3.sav"
+                && !model.busy && !model.querying
         }
         guard model.workspaceID != oldWorkspace,
               model.sourceRelativePath == "Profile3.sav",
@@ -1345,17 +1328,11 @@ struct Main {
         // while the ordinary default above still opens exactly once.
         let manualModel = Hades2SaveEditorModel(session: session, snapshotID: "manual-selection")
         let beforeManual = commands(at: commandLog).count
-        let manualWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        manualWindow.contentView = NSHostingView(
-            rootView: SaveEditorPresentationHarness(model: manualModel)
-                .environmentObject(localization)
-        )
-        manualWindow.orderFront(nil)
+        let manualWindow = toolWindows.open(id: "manual-editor", title: "Manual", localization: localization, theme: .standard) {
+            TrainerToolWindowContent(canClose: { !manualModel.busy }, onClose: manualModel.close) {
+                Hades2SaveEditorView(model: manualModel)
+            }
+        }
         pumpUntil {
             !manualModel.busy && manualModel.sourceFiles.count == 2
         }
@@ -1401,6 +1378,12 @@ struct Main {
             fail("Inventory refresh re-opened the document or lost missing pinned identities")
         }
         manualWindow.close()
+        pumpUntil {
+            commands(at: commandLog).contains { row in
+                row["command"] as? String == "save_editor_close"
+                    && (row["params"] as? [String: Any])?["workspaceId"] as? String == manualWorkspace
+            }
+        }
 
         // A managed backup uses the same session and semantic model. Source
         // selection remains an explicit proposal in an unmounted model; targets
@@ -1463,6 +1446,28 @@ struct Main {
             fail("explicit read did not replace the document and reset its staged batch")
         }
 
+        let finalWorkspace = model.workspaceID
+        let backupOwnerBeforeClose = backupModel.workspaceID
+        let beforeFocus = commands(at: commandLog).count
+        let reused = toolWindows.open(id: "save-editor", title: "Save Editor", localization: localization, theme: .standard) {
+            fail("opening an existing editor recreated its model")
+        }
+        pump(0.05)
+        if reused !== window || commands(at: commandLog).count != beforeFocus {
+            fail("focusing an existing editor re-read its document")
+        }
+        window.performClose(nil)
+        pumpUntil {
+            commands(at: commandLog).contains { row in
+                row["command"] as? String == "save_editor_close"
+                    && (row["params"] as? [String: Any])?["workspaceId"] as? String == finalWorkspace
+            }
+        }
+        if model.workspaceID != nil || backupModel.workspaceID != backupOwnerBeforeClose {
+            fail("closing one editor released another document")
+        }
+        backupModel.close()
+        pump(0.05)
         session.stop()
         pump(0.10)
         print("hades2_save_editor_frontend_ok")

@@ -464,6 +464,7 @@ final class Hades2SaveEditorModel: ObservableObject {
         invalidateQuery()
         invalidateDetail()
         guard let source = sourceFiles.first(where: { $0.id == selectedSourceID }) else { return }
+        let previousWorkspace = workspaceID
         lastApplyReceipt = nil
         perform(.saveEditorOpenSelection(snapshotID: snapshotID, source: source.identity, target: selectedTargetIdentity),
                 operation: "hades2.saveEditor.operation.open") { [weak self] reply in
@@ -477,6 +478,9 @@ final class Hades2SaveEditorModel: ObservableObject {
                 self.restoreLoadedSourceSelection()
                 return
             }
+            if let previousWorkspace, previousWorkspace != self.workspaceID {
+                self.releaseWorkspace(previousWorkspace)
+            }
             self.pendingActions = []
             self.pendingEffectCount = 0
             self.pendingPhysicalChangeCount = 0
@@ -487,6 +491,23 @@ final class Hades2SaveEditorModel: ObservableObject {
             self.selectedScope = "all"
             self.query(offset: 0)
         }
+    }
+
+    /// Native tool windows close only when blocking document requests finish.
+    /// Queries may still be in flight; invalidate their captured ownership and
+    /// release this workspace without affecting any other editor.
+    func close() {
+        scheduledSearch?.cancel()
+        scheduledSearch = nil
+        invalidateQuery()
+        invalidateDetail()
+        if let workspaceID { releaseWorkspace(workspaceID) }
+        workspaceID = nil
+    }
+
+    private func releaseWorkspace(_ identifier: String) {
+        api.request(.saveEditorClose, operation: "host.done", announceSuccess: false,
+                    saveWorkspaceID: identifier)
     }
 
     private func restoreLoadedSourceSelection() {

@@ -2,8 +2,10 @@ import SwiftUI
 
 struct TrainerSaveManagerView: View {
     @ObservedObject var model: TrainerSaveManagerModel
-    var managedBackupEditor: ((TrainerSaveSnapshot) -> AnyView)? = nil
+    var managedBackupEditor: ((TrainerSaveSnapshot) -> TrainerToolWindowContent)? = nil
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.trainerToolWindows) private var toolWindows
+    @Environment(\.trainerCloseToolWindow) private var closeWindow
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
 
@@ -15,7 +17,6 @@ struct TrainerSaveManagerView: View {
     @State private var preserveCurrent = true
     @State private var deleteIDs: Set<String> = []
     @State private var confirmDelete = false
-    @State private var editorPresentation: TrainerManagedBackupEditorPresentation?
 
     var body: some View {
         TrainerSheetScaffold(title: localization.localized("host.saveManagement"), icon: "externaldrive.fill", width: 780) {
@@ -101,15 +102,12 @@ struct TrainerSaveManagerView: View {
                 TrainerPrimaryActionButton(
                     title: localization.localized("host.done"),
                     enabled: !model.busy,
-                    action: dismiss.callAsFunction
+                    action: { if let closeWindow { closeWindow() } else { dismiss() } }
                 )
                 .keyboardShortcut(.defaultAction)
             }
         }
         .interactiveDismissDisabled(model.busy)
-        .sheet(item: $editorPresentation) { presentation in
-            presentation.content
-        }
         .sheet(item: $restoreCandidate) { snapshot in
             TrainerSaveRestoreConfirmationView(
                 snapshot: snapshot,
@@ -231,7 +229,10 @@ struct TrainerSaveManagerView: View {
                 TrainerOverflowMenu(enabled: !model.busy) {
                     if let managedBackupEditor {
                         Button {
-                            editorPresentation = TrainerManagedBackupEditorPresentation(content: managedBackupEditor(snapshot))
+                            toolWindows.open("managed-backup-editor-" + snapshot.id,
+                                             localization.localized("host.save.edit") + " · " + displayName(for: snapshot)) {
+                                managedBackupEditor(snapshot)
+                            }
                         } label: {
                             Label(localization.localized("host.save.edit"), systemImage: "square.and.pencil")
                         }
@@ -308,11 +309,6 @@ struct TrainerSaveManagerView: View {
         editingID = nil
         renameText = ""
     }
-}
-
-private struct TrainerManagedBackupEditorPresentation: Identifiable {
-    let id = UUID()
-    let content: AnyView
 }
 
 private struct TrainerSaveRestoreConfirmationView: View {
