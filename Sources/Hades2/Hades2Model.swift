@@ -865,7 +865,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             } else { errorToken = presentation("hades2.receipt.failed", arguments: [title.key]) }
         case .outcomeUnknown:
             noticeToken = nil
-            errorToken = presentation(command == .generateGathering ? "hades2.receipt.rerollOutcomeUnknown" : "hades2.receipt.outcomeUnknown", arguments: [title.key])
+            errorToken = presentation("hades2.receipt.outcomeUnknown", arguments: [title.key])
         case .completed:
             noticeToken = presentation("hades2.receipt.completed", arguments: [title.key])
         }

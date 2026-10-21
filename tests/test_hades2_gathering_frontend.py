@@ -114,7 +114,7 @@ func wait(_ predicate: () -> Bool) {
         check(Hades2StatePatch(["gatheringProbabilities": ["flora": 101]]).gatheringProbabilities.value == nil, "invalid probability decoded")
         model.refreshFromHost()
         wait { !model.busy && model.status == "restart_required" }
-        check(model.errorText.key == "hades2.receipt.rerollOutcomeUnknown" && !model.canGenerateGathering(.flora), "uncertain generation lost restart instruction or stayed actionable")
+        check(model.errorText.key == "hades2.receipt.outcomeUnknown" && !model.canGenerateGathering(.flora), "uncertain generation lost restart instruction or stayed actionable")
         model.generateGathering(.mining)
         pump(0.1)
         check(model.canEditDesired && !model.canGenerateGathering(.mining),
