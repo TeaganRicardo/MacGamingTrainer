@@ -3,15 +3,15 @@ import io
 import json
 import runpy
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from lua_runtime_support import require_lua52
+from lua_native_prerequisites import require_lua52_native
 
 ROOT = Path(__file__).resolve().parents[1]
+_, compiler, lua_flags = require_lua52_native('Native query expression', language='c++')
 sys.path.insert(0, str(ROOT / 'Backend'))
 from core.adapter import AdapterError
 from games.hades2.native_effect_query import NativeQueryLibrary
@@ -201,16 +201,8 @@ int main() {
 '''
 program = program.replace('EXPRESSION', expression).replace('CAP', str(fixture['namespace']['LUA_TRANSPORT_RESULT_LIMIT_BYTES']))
 program = program.replace('PAYLOADSIZE', str(len(payload.encode()))).replace('PAYLOAD', json.dumps(payload))
-lua = Path(require_lua52('Native query expression')).resolve()
-if (lua.parent/'lua.h').is_file() and (lua.parent/'liblua.a').is_file():
-    lua_flags = ['-I', str(lua.parent), str(lua.parent/'liblua.a')]
-elif Path('/usr/include/lua5.2/lua.h').is_file():
-    lua_flags = ['-I', '/usr/include/lua5.2', '-llua5.2']
-else:
-    lua_flags = ['-I', str(lua.parent.parent/'include'), str(lua.parent.parent/'lib/liblua.a')]
 with tempfile.TemporaryDirectory(prefix='mgt-native-query-expression-') as temporary:
     root = Path(temporary); cpp = root/'expression.cpp'; cpp.write_text(program)
-    compiler = shutil.which('c++'); assert compiler, 'A C++ compiler is required'
     executable = root/'expression'
     subprocess.run([compiler, '-std=c++17', str(cpp), *lua_flags, '-lm', '-o', str(executable)], check=True)
     subprocess.run([str(executable)], check=True, timeout=15)
