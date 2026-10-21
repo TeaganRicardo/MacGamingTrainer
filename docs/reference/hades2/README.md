@@ -5,32 +5,37 @@ This directory stores versioned research/reference snapshots extracted from inst
 Status rules:
 
 - `1.139672-24556151/` is the retained **frozen census/research snapshot**. Historical roadmap identifiers inside its research notes are traceability only; current planning authority is GitHub issue #124.
-- `1.143476-25481925/` contains target-build compatibility revalidation evidence for the currently verified game build.
-- The curated `1.139672-24556151/ui_terminology.json` is an intentional production exception: Hades II packages it through module `appResources` as the terminology-governance source. Its executable role does not make the other files in that snapshot production dependencies.
+- `1.143476-25481925/` contains target-build compatibility evidence and the current production terminology snapshot, revalidated against the installed build's bilingual `DisplayName` sources.
+- The packaged `1.143476-25481925/ui_terminology.json` is the intentional production exception: Hades II packages it through module `appResources` as the terminology-governance source. The old `1.139672-24556151/ui_terminology.json` remains historical evidence and is no longer packaged.
 - Generated inventories, matrices, and research ledgers are evidence. They do not override current production code, `ENGINEERING_INVARIANTS.md`, or current issue sequencing.
 
 The frozen 1.139672 snapshot records identifiers and relationships from the game's data tables rather than copying Lua source. It intentionally preserves normal entries, debug/internal entries, inheritance-only stubs, aliases, and names that may not be safe trainer targets.
 
-## Private raw-source evidence bundle
+## Private raw-source evidence bundles
 
-The project owner also keeps a private, version-frozen raw-source evidence bundle for this supported build in Google Drive:
+The project owner keeps private, version-frozen raw-source evidence bundles in Google Drive. They are evidence, not production dependencies.
+
+### Historical census bundle: 1.139672 / Steam 24556151
 
 - folder: `MacGamingTrainer/ReferenceEvidence/Hades2/1.139672-24556151/`;
 - Drive folder: https://drive.google.com/drive/folders/1lughi1ucofi9EwqqJmD0GUPuCA0lu3Ld
 - captured against repository baseline: `c19cc6678fe1946e3853ebdf342ec29d30329c43`;
 - archive SHA-256: `9149fc79e5898964ac429ae5c1380e27e54fef52c58119fa108e5283ea7874c6`.
 
-It contains the full installed `Content/Scripts` tree, non-localization Game SJSON sources, English and Simplified Chinese text trees, Steam/app version metadata, per-file SHA-256 hashes, and a compressed bundle. It is private evidence, not a production dependency or replacement for the curated files in this directory.
+This bundle supports the historical frozen catalog/census snapshot. Its terminology file is retained for historical comparison and is no longer the packaged runtime resource.
 
-For later catalog/census work on build 1.139672 / 24556151, use this GitHub snapshot first and fetch the specific raw source from the private Drive bundle when source-level confirmation is needed. Use the target Mac again only when the evidence bundle lacks the required material or when the supported game build changes.
+### Current terminology bundle: 1.143476 / Steam 25481925
 
-Snapshot contents include:
-- full inventories for consumables, loot, traits, resources, stores, rooms, encounters, units, weapons, projectiles, progression, requirements, and UI data;
-- `trait_references.csv`, `store_references.csv`, and `static_room_links.csv` static-reference indexes;
-- `aliases.csv` for reference-only selector/alias identifiers;
-- curated `catalog_legality.csv`, `well_shop.csv`, `reroll_ledger.csv`, and `native_interactions.csv` research ledgers;
-- `provisional_catalog_names.md` with the supported-build rationale for Trainer-authored/composed catalog labels;
-- `manifest.json` with source build and row counts.
+- folder: `MacGamingTrainer/ReferenceEvidence/Hades2/1.143476-25481925/`;
+- Drive folder: https://drive.google.com/drive/folders/1rB2Rq9lUneTrsCt7_eWXEcHM42qxnI6W
+- captured at `2026-09-30T04:08:07Z`, against repository baseline `03f4bdbf45adfc9df8929c22ee373136b230830d`;
+- archive: `hades2-catalog-evidence-1.143476-steam-25481925.tar.gz`;
+- archive SHA-256: `621b4b7498b7ffd77e08c9b10ef58d743c9a0be1e1abe7c3f625598b21e284bb`;
+- manifest: `manifest/FILES.sha256` (1,164 file entries; all hashes verified).
+
+It contains the current build's full `Content/Scripts` tree, non-localization Game SJSON sources, English and Simplified Chinese text trees, substitutions, Steam/app metadata, and per-file hashes. The production terminology snapshot embeds hashes for the six localization files it consumes and records the comparison of 46 native term IDs and values: 43 exact `DisplayName` matches, three icon-prefix-normalized labels, and zero wording mismatches.
+
+For catalog/census work on build 1.139672 / 24556151, use the historical GitHub snapshot and its matching private bundle. For current terminology verification, use `1.143476-25481925/ui_terminology.json` and the current-build evidence bundle. Only revisit the target Mac when the evidence bundle lacks required material or the supported build changes.
 
 ## Usage
 

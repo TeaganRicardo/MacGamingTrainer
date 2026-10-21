@@ -9,7 +9,7 @@ from games.hades2 import catalog, localization
 from games.hades2.terminology import TermClass, load_hades2_terminology
 
 reference = json.loads(
-    (ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json").read_text(encoding="utf-8")
+    (ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json").read_text(encoding="utf-8")
 )
 
 assert reference["target"]["languages"] == ["zh-CN", "en"]
@@ -63,7 +63,7 @@ for kind, term_key in resource_section_terms.items():
 surface_paths = sorted((ROOT / "Sources/Hades2").rglob("*.swift"))
 surface_paths += sorted((ROOT / "Backend/games/hades2").glob("*.py"))
 surface_paths += [ROOT / "Backend/games/hades2/runtime/hades.lua"]
-reference_dir = ROOT / "docs/reference/hades2/1.139672-24556151"
+reference_dir = ROOT / "docs/reference/hades2/1.143476-25481925"
 surface_paths += sorted(reference_dir.glob("*.md"))
 surface_paths += sorted(reference_dir.glob("*.csv"))
 surface_paths += [ROOT / "docs/reference/hades2/README.md"]

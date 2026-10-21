@@ -18,8 +18,8 @@ def test_registry_loads_target_build_and_all_term_classes():
     registry = load_hades2_terminology()
 
     assert registry.target == {
-        "gameVersion": "1.139672",
-        "steamBuild": "24556151",
+        "gameVersion": "1.143476",
+        "steamBuild": "25481925",
         "languages": ["zh-CN", "en"],
     }
     assert registry.by_class(TermClass.NATIVE_GAME)
@@ -41,6 +41,84 @@ def test_native_terms_keep_shared_localization_provenance():
     assert olympian.localization_id == "Boon"
     assert olympian.zh_cn == "奥林匹斯的祝福"
     assert olympian.english == "Boon of Olympus"
+
+
+def test_target_build_source_evidence_is_pinned():
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+
+    assert reference["target"] == {
+        "gameVersion": "1.143476",
+        "steamBuild": "25481925",
+        "languages": ["zh-CN", "en"],
+    }
+    evidence = reference["sourceEvidence"]
+    assert evidence["sourceKind"] == "installed_game_source_archive"
+    assert evidence["capturedAtUtc"] == "2026-09-30T04:08:07Z"
+    assert evidence["repositoryBaseline"] == "03f4bdbf45adfc9df8929c22ee373136b230830d"
+    assert evidence["archiveSha256"] == "621b4b7498b7ffd77e08c9b10ef58d743c9a0be1e1abe7c3f625598b21e284bb"
+    assert evidence["fileManifestEntriesVerified"] == 1164
+    assert evidence["nativeTermComparison"] == {
+        "field": "DisplayName",
+        "nativeTermCount": 46,
+        "exactMatches": 43,
+        "normalizedMatches": 3,
+        "mismatches": 0,
+    }
+    assert evidence["normalization"]["normalizedIds"] == ["ReRollAlt", "Health", "Mana"]
+
+    source_files = evidence["sourceFiles"]
+    assert source_files == {
+        "HelpText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/HelpText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/HelpText.zh-CN.sjson",
+            "sha256": "688bb11c9abd68514e94805ee93ca05473c5b998521670e2eb32930c56415283",
+        },
+        "HelpText.en.sjson": {
+            "bundlePath": "sources/Text/en/HelpText.en.sjson",
+            "gamePath": "Content/Game/Text/en/HelpText.en.sjson",
+            "sha256": "955a0e05b1072d7d60eadd6240f59133191406078b153805c32ed76900f21e8b",
+        },
+        "ScreenText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/ScreenText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/ScreenText.zh-CN.sjson",
+            "sha256": "96926b3e8a5cf1167f69a610a43c25cd60fc7ccc6f5be8fe0dee02e152304346",
+        },
+        "ScreenText.en.sjson": {
+            "bundlePath": "sources/Text/en/ScreenText.en.sjson",
+            "gamePath": "Content/Game/Text/en/ScreenText.en.sjson",
+            "sha256": "1f487de92208530189b63ba5c4fc4c23f1b4f4d038a7baa053042d7651d43eb3",
+        },
+        "TraitText.zh-CN.sjson": {
+            "bundlePath": "sources/Text/zh-CN/TraitText.zh-CN.sjson",
+            "gamePath": "Content/Game/Text/zh-CN/TraitText.zh-CN.sjson",
+            "sha256": "18238e96d684986829a4905acec8a82a30f6d60c3da39951184a238ccfe98c31",
+        },
+        "TraitText.en.sjson": {
+            "bundlePath": "sources/Text/en/TraitText.en.sjson",
+            "gamePath": "Content/Game/Text/en/TraitText.en.sjson",
+            "sha256": "75ef411d23f54d0caaf94e9b58b4f80768ec0ca23d394833dc9296d4b00b4712",
+        },
+    }
+    normalized_terms = {
+        row["id"]: (row["value"], row["englishValue"])
+        for row in reference["officialTerms"].values()
+        if row["id"] in evidence["normalization"]["normalizedIds"]
+    }
+    assert normalized_terms == {
+        "ReRollAlt": ("重塑命运", "Change of Fate"),
+        "Health": ("生命值", "Life"),
+        "Mana": ("魔力值", "Magick"),
+    }
+    assert all(
+        not value.startswith("{!Icons.")
+        for pair in normalized_terms.values()
+        for value in pair
+    )
+
+    for term in load_hades2_terminology().by_class(TermClass.NATIVE_GAME):
+        assert term.source_zh_cn in source_files
+        assert term.source_english in source_files
 
 
 def test_product_terms_are_explicit_trainer_owned_pairs():
@@ -109,7 +187,7 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
 
 def test_registry_rejects_native_term_without_provenance():
     reference = {
-        "target": {"gameVersion": "1.139672", "steamBuild": "24556151", "languages": ["zh-CN", "en"]},
+        "target": {"gameVersion": "1.143476", "steamBuild": "25481925", "languages": ["zh-CN", "en"]},
         "officialTerms": {
             "broken": {
                 "value": "坏术语",
@@ -162,7 +240,7 @@ def test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms():
 
 
 def test_registry_rejects_mismatched_native_bilingual_source_pair():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["officialTerms"]["boon"]["englishSource"] = "TraitText.en.sjson"
 
@@ -186,7 +264,7 @@ def test_registry_reports_forbidden_surface_leakage_from_registry_policy():
 
 
 def test_aliases_have_one_authoritative_registry_representation():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     assert "forbiddenUserFacingAliases" not in reference
     assert {row["value"] for row in reference["compatibilityAliases"].values()} == {
@@ -195,7 +273,7 @@ def test_aliases_have_one_authoritative_registry_representation():
 
 
 def test_registry_rejects_alias_target_regression():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["compatibilityAliases"]["specialBoon"]["canonicalTerm"] = "productTerms.missing"
 
@@ -210,6 +288,7 @@ def test_registry_rejects_alias_target_regression():
 for _test in (
     test_registry_loads_target_build_and_all_term_classes,
     test_native_terms_keep_shared_localization_provenance,
+    test_target_build_source_evidence_is_pinned,
     test_product_terms_are_explicit_trainer_owned_pairs,
     test_legacy_aliases_and_internal_terms_are_not_user_facing,
     test_frontend_roles_use_declared_trainer_product_pairs,

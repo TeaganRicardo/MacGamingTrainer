@@ -8,7 +8,7 @@ SCRIPT = ROOT / "Tools/ci_docs_only.py"
 REFERENCE_ROOT = "docs/reference/hades2/1.139672-24556151"
 REFERENCE_DATA = f"{REFERENCE_ROOT}/catalog_legality.csv"
 GENERATED_DATA = f"{REFERENCE_ROOT}/generated/loot.csv"
-TERMINOLOGY_RESOURCE = f"{REFERENCE_ROOT}/ui_terminology.json"
+TERMINOLOGY_RESOURCE = "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
 
 spec = importlib.util.spec_from_file_location("ci_docs_only", SCRIPT)
 module = importlib.util.module_from_spec(spec)
