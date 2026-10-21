@@ -24,7 +24,8 @@ assert 'localization.localized("host.saveManagement")' in hades_management, (
     "module-composed Save Management entry must use shared Host localization lookup"
 )
 status_controls = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
-assert 'localization.localized("host.connectGame")' in status_controls and 'localization.localized("host.disconnectGame")' in status_controls
+assert 'localization.localized(primaryActionTitleKey)' in status_controls
+assert 'return "host.connectGame"' in status_controls and 'return "host.disconnectGame"' in status_controls
 assert "TrainerLanguageCommands(localization: localization)" in app, "language selector must be user reachable in app menu"
 macos_only = (ROOT / "Tools/macos_only_tests.txt").read_text(encoding="utf-8").splitlines()
 assert "test_host_localization_behavior.py" in macos_only, "compiled localization behavior must run in Build 2 macOS"

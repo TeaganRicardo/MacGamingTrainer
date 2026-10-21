@@ -43,6 +43,10 @@ public final class TrainerLocalizationStore: ObservableObject {
     }
 
     public func localized(_ key: String, arguments: [String] = []) -> String {
+        localized(key, language: language, arguments: arguments)
+    }
+
+    public func localized(_ key: String, language: TrainerPresentationLanguage, arguments: [String] = []) -> String {
         let tableURL = Bundle.standard.url(forResource: language.rawValue, withExtension: "lproj")
         let bundle = tableURL.flatMap(Bundle.init(url:)) ?? Bundle.standard
         var value = bundle.localizedString(forKey: key, value: key, table: "Host")
@@ -93,8 +97,12 @@ public final class TrainerLocalizationStore: ObservableObject {
     }
 
     public func string(_ key: String, arguments: [String] = []) -> String {
-        if let resolved = resolveModule(key, arguments: arguments) { return resolved }
-        if key.hasPrefix("host.") { return localized(key, arguments: arguments) }
+        string(key, arguments: arguments, language: language)
+    }
+
+    public func string(_ key: String, arguments: [String] = [], language: TrainerPresentationLanguage) -> String {
+        if let resolved = resolveModule(key, arguments: arguments, language: language) { return resolved }
+        if key.hasPrefix("host.") { return localized(key, language: language, arguments: arguments) }
         // A key with no owning table and no arguments is not copy, it is a
         // defect. Showing the raw key makes that visible; a missing `{0}`
         // argument is dropped rather than rendered, because a literal "{0}" in
@@ -106,7 +114,7 @@ public final class TrainerLocalizationStore: ObservableObject {
         moduleResolvers.keys.contains { key.hasPrefix($0) }
     }
 
-    private func resolveModule(_ key: String, arguments: [String]) -> String? {
+    private func resolveModule(_ key: String, arguments: [String], language: TrainerPresentationLanguage) -> String? {
         for (prefix, resolver) in moduleResolvers where key.hasPrefix(prefix) {
             return resolver(key, arguments, language)
         }

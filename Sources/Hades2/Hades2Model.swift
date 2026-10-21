@@ -82,6 +82,14 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         return Hades2Presentation.token("hades2.status.detailWithPID", arguments: [version, String(pid)])
     }
     var hostActionsEnabled: Bool { canAcceptRuntimeAction && !exiting && protocolCompatible }
+    var launchActionFromHost: (() -> Void)? { { [weak self] in self?.launchGame() } }
+    @Published var workbenchSearch = ""
+    @Published var numericControlsExpanded = false
+
+    func showWorkbenchSection(_ section: Hades2WorkbenchSection) {
+        if section == .values { numericControlsExpanded = true }
+        workbenchSearch = ""
+    }
     // Hades-owned notice/error are language-neutral tokens. Core-owned failures
     // still arrive as backendStatus strings, which the Host resolves; anything
     // Hades produces itself is a token so it can be re-resolved live.

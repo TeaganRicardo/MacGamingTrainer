@@ -382,7 +382,8 @@ for token in (
     "localization.string(statusToken)",
     "localization.string(detailToken)",
     'localization.localized("host.refreshStatusHelp")',
-    'localization.localized("host.restartBackend")',
+    'localization.localized(primaryActionTitleKey)',
+    'return "host.restartBackend"',
 ):
     assert token in status_controls, token
 

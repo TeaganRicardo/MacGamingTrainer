@@ -54,6 +54,36 @@ if args.count != 3 { fail("expected temporary backend server path and Python exe
 if ReferenceFixtureGameModule.managedBackupEditor != nil {
     fail("A module without an editor must retain the default absent backup action")
 }
+
+// Exercise the actual connection card's callbacks without launching a game.
+// The Host chooses placement and state; an optional module launch action is
+// used only when the target is absent and the backend is available.
+var selectedActions: [String] = []
+func connectionCard(backend: Bool = true, connected: Bool = false,
+                    running: Bool = false, supportsLaunch: Bool = true) -> TrainerConnectionStatusCard {
+    TrainerConnectionStatusCard(
+        busy: false, connected: connected,
+        operationToken: .init(key: "host.connectGame"), statusToken: .init(key: "host.disconnected"),
+        detailToken: .init(key: "host.disconnected"), backendAvailable: backend, actionsEnabled: true,
+        onRefresh: { selectedActions.append("refresh") },
+        onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
+        onRestart: { selectedActions.append("restart") }, targetRunning: running,
+        onLaunch: supportsLaunch ? { selectedActions.append("launch") } : nil
+    )
+}
+for (card, title) in [
+    (connectionCard(), "host.launchGame"),
+    (connectionCard(running: true), "host.connectGame"),
+    (connectionCard(connected: true, running: true), "host.disconnectGame"),
+    (connectionCard(backend: false), "host.restartBackend"),
+    (connectionCard(supportsLaunch: false), "host.connectGame"),
+] {
+    if card.primaryActionTitleKey != title { fail("connection action label does not match target state") }
+    card.performPrimaryAction()
+}
+if selectedActions != ["launch", "connect", "disconnect", "restart", "connect"] {
+    fail("connection card routed to the wrong module/Host action: \(selectedActions)")
+}
 let backendPythonURL = URL(fileURLWithPath: args[2])
 
 let missingSession = TrainerBackendSession(

@@ -1,6 +1,38 @@
 import AppKit
 import SwiftUI
 
+struct TrainerSectionButton: View {
+    let title: String
+    let detail: String?
+    let systemImage: String
+    let action: () -> Void
+
+    init(title: String, detail: String? = nil, systemImage: String, action: @escaping () -> Void) {
+        self.title = title
+        self.detail = detail
+        self.systemImage = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage).frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct TrainerActionButtonLabel: View {
     let title: String
     let systemImage: String?

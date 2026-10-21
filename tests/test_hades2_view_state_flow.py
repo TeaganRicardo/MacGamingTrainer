@@ -92,6 +92,21 @@ struct Main {
 
         try? FileManager.default.removeItem(at: commandLog)
 
+        // Locating a function preserves the entire workbench and cannot send a
+        // runtime mutation. Numeric results also expose the folded controls.
+        model.workbenchSearch = "Grasp"
+        model.showWorkbenchSection(.values)
+        if !model.workbenchSearch.isEmpty || !model.numericControlsExpanded {
+            fail("numeric navigation did not reveal the controls and clear the query")
+        }
+        model.workbenchSearch = "Garden"
+        model.showWorkbenchSection(.resources)
+        if !model.workbenchSearch.isEmpty || !model.numericControlsExpanded {
+            fail("section navigation reset unrelated numeric disclosure state")
+        }
+        pump(0.10)
+        if !commands(at: commandLog).isEmpty { fail("function navigation dispatched a backend action") }
+
         model.connected = true
         model.capabilities = [
             "setHealth": true,

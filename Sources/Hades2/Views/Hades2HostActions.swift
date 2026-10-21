@@ -3,9 +3,21 @@ import SwiftUI
 struct Hades2SidebarActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerNavigateToSection) private var navigate
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 4) {
+            Divider().padding(.vertical, 2)
+            ForEach(Hades2WorkbenchSection.allCases) { section in
+                if section == .management { Divider().padding(.vertical, 2) }
+                TrainerSectionButton(
+                    title: Hades2GameModule.resolveText(key: section.titleKey, localization: localization),
+                    systemImage: section.icon
+                ) {
+                    model.showWorkbenchSection(section)
+                    navigate(section.id)
+                }
+            }
             if !model.currentIssues.isEmpty {
                 Button { model.showFeedbackDetails() } label: {
                     Label(localization.localized("host.feedback.currentIssues"), systemImage: "exclamationmark.circle")
@@ -28,13 +40,49 @@ struct Hades2SidebarActions: View {
 struct Hades2HeaderActions: View {
     @ObservedObject var model: Hades2TrainerModel
     @EnvironmentObject private var localization: TrainerLocalizationStore
+    @Environment(\.trainerNavigateToSection) private var navigate
+
+    private var results: [Hades2WorkbenchEntry] {
+        Hades2WorkbenchCatalog.matches(model.workbenchSearch) { key in
+            TrainerPresentationLanguage.allCases.map {
+                Hades2GameModule.resolveText(key: key, language: $0, localization: localization)
+            }
+        }
+    }
+
+    private func locate(_ entry: Hades2WorkbenchEntry) {
+        model.showWorkbenchSection(entry.section)
+        navigate(entry.section.id)
+    }
 
     var body: some View {
-        Button { model.launchGame() } label: {
-            Label(localization.localized("host.launchGame"), systemImage: "play.fill").padding(.horizontal, 7).padding(.vertical, 5)
+        VStack(alignment: .leading, spacing: 8) {
+            TrainerSearchField(
+                text: $model.workbenchSearch,
+                placeholder: Hades2GameModule.resolveText(key: "hades2.workbench.search", localization: localization),
+                clearLabel: localization.localized("host.search.clear")
+            ) {
+                if let first = results.first { locate(first) }
+            }
+            if !model.workbenchSearch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if results.isEmpty {
+                    TrainerEmptyState(text: Hades2GameModule.resolveText(key: "hades2.workbench.searchEmpty", localization: localization))
+                } else {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(results) { entry in
+                                TrainerSectionButton(
+                                    title: Hades2GameModule.resolveText(key: entry.titleKey, localization: localization),
+                                    detail: Hades2GameModule.resolveText(key: entry.section.titleKey, localization: localization),
+                                    systemImage: entry.section.icon
+                                ) { locate(entry) }
+                            }
+                        }
+                    }
+                    .frame(height: min(CGFloat(results.count) * 52, 312))
+                }
+            }
         }
-        .buttonStyle(.bordered)
-        .disabled(model.busy || model.exiting)
     }
 }
 

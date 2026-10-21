@@ -571,7 +571,9 @@
     "hades2.section.resourcesAndGathering": "资源与采集",
     "hades2.section.roomsAndRewards": "房间与奖励",
     "hades2.shortcut.decreaseGameSpeed": "降低游戏速度",
-    "hades2.shortcut.increaseGameSpeed": "提高游戏速度"
+    "hades2.shortcut.increaseGameSpeed": "提高游戏速度",
+    "hades2.workbench.search": "搜索功能…",
+    "hades2.workbench.searchEmpty": "未找到匹配的功能。"
   },
   "language": "zh-CN"
 }
