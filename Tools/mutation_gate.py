@@ -103,6 +103,10 @@ PROVENANCE = {
     "trait-level-capability-gate": "#227: the trait family was rewritten around a snapshot capability projection, and the replacement set_trait_level guard kept only a source-token assertion, so deleting the increaseOne check went undetected until this audit added an owning behaviour test",
     "trait-target-count-recheck": "#227: when the D01 remove_trait(name) mutation anchors were retired, the revalidated target snapshot's expectedSameNameCount recheck lost all mutation coverage; restored by test_hades2_live_trait_capability_gating.py",
     "trait-direct-removal-verification": "#227: single-instance force removal must fail closed when the game-owned callback leaves the instance mounted, and that receipt guard had no owning behaviour test after the D01 model was retired",
+    "core-save-physical-directory-identity": "#515: Core Save §5 requires a captured directory descriptor to remain bound to the selected physical directory; path-only validation can accept same-path inode replacement.",
+    "core-save-recovery-evidence-retention": "#515: Core Save §5 requires the last rollback copy to survive an unverified rollback; a cleanup-flag regression can delete the only recoverable bytes.",
+    "core-save-transaction-boundary": "#515: Core Save §5 requires every exit after the first real mutation to attempt rollback; a misplaced transaction-start flag bypasses recovery.",
+    "core-save-recovery-evidence-discovery": "#515: Core Save §5 requires preserved .rollback-* evidence to be rediscovered by a later CoreSaveService; otherwise process loss hides the only recovery copy."
 }
 
 
@@ -168,6 +172,43 @@ def _hades_lua() -> Path:
 def manifest() -> list[Mutation]:
     lua = _hades_lua()
     return [
+        # --- Core Save transaction safety (#515) --------------------------
+        Mutation(
+            ident="core-save-physical-directory-identity",
+            invariant="a captured save target must remain in the same physical directory even if its pathname is reused",
+            path=ROOT / "Backend/core/save_restore.py",
+            old="            if current != destination or (before.st_dev, before.st_ino) != (now.st_dev, now.st_ino):\n",
+            new="            if current != destination:\n",
+            test="tests/test_core_save_file_sources.py",
+            note="#515: same-path directory replacement must be rejected by physical identity, not pathname equality alone",
+        ),
+        Mutation(
+            ident="core-save-recovery-evidence-retention",
+            invariant="failed rollback preserves the last recoverable pre-transaction save copy",
+            path=ROOT / "Backend/core/save_restore.py",
+            old="            cleanup_rollback = False\n",
+            new="            cleanup_rollback = True\n",
+            test="tests/test_core_save_restore.py",
+            note="#515: cleanup must remain disabled when rollback verification fails",
+        ),
+        Mutation(
+            ident="core-save-transaction-boundary",
+            invariant="an exit after the first real save mutation still attempts rollback",
+            path=ROOT / "Backend/core/save_restore.py",
+            old="            mutation_started = True\n",
+            new="            mutation_started = False\n",
+            test="tests/test_core_save_restore.py",
+            note="#515: the mutation-start marker separates preflight interruption from a partial write requiring rollback",
+        ),
+        Mutation(
+            ident="core-save-recovery-evidence-discovery",
+            invariant="a new CoreSaveService rediscovers preserved rollback directories after worker loss",
+            path=ROOT / "Backend/core/save_service.py",
+            old="            paths.append(str(resolved))\n",
+            new="            pass\n",
+            test="tests/test_core_save_service.py",
+            note="#515: preserved recovery evidence must remain visible after the original service is gone",
+        ),
         # #227 supersedes the D01 SellTraits-only mutation model. Its live
         # target/capability/replay invariants are owned by
         # test_hades2_live_trait_capability_gating.py. The retired

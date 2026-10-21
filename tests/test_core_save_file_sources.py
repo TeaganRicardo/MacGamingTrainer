@@ -98,6 +98,51 @@ with tempfile.TemporaryDirectory(prefix="mgt-physical-target-") as temporary:
     assert other.read_bytes() == b"other physical target"
     assert (saves / "departed/slot.dat").read_bytes() == b"edited fixed document"
 
+with tempfile.TemporaryDirectory(prefix="mgt-same-path-directory-replacement-") as temporary:
+    folder = Path(temporary)
+    saves = folder / "saves"
+    selected = saves / "selected"
+    selected.mkdir(parents=True)
+    target = selected / "slot.dat"
+    baseline = b"baseline bytes in selected directory"
+    candidate = b"replacement bytes"
+    target.write_bytes(baseline)
+    spec = SaveManagementSpec(roots=(SaveRootSpec("files", str(saves), ("selected/*.dat",)),),
+        provider=None, hot_backup=False, restore_policy="stoppedOnly", staged_restore=False)
+    service = CoreSaveService("same-path-directory-replacement", spec, folder / "data", lambda: False)
+    prepared = folder / "prepared.dat"
+    prepared.write_bytes(candidate)
+    replacement = ResolvedSaveFile("files", "selected/slot.dat", prepared)
+    departed = saves / "departed"
+    real_verify_target_paths = restore_module.SaveRestoreTransaction._verify_target_paths
+    swapped = [False]
+
+    def replace_directory_at_transaction_boundary(transaction, expected_paths):
+        if not swapped[0]:
+            # Reuse the exact pathname with a different directory inode. The
+            # current path already contains candidate bytes, so content checks
+            # alone cannot reveal that the captured descriptor belongs elsewhere.
+            selected.rename(departed)
+            selected.mkdir()
+            (selected / "slot.dat").write_bytes(candidate)
+            swapped[0] = True
+        return real_verify_target_paths(transaction, expected_paths)
+
+    restore_module.SaveRestoreTransaction._verify_target_paths = replace_directory_at_transaction_boundary
+    try:
+        try:
+            service.replace_files((replacement,))
+        except SaveRestoreError:
+            pass
+        else:
+            raise AssertionError("same-path physical directory replacement was accepted")
+    finally:
+        restore_module.SaveRestoreTransaction._verify_target_paths = real_verify_target_paths
+    assert swapped[0], "directory replacement did not reach the transaction boundary"
+    assert (departed / "slot.dat").read_bytes() == baseline
+    assert (selected / "slot.dat").read_bytes() == candidate
+    assert not list((service.store.ensure_storage_root() / "transactions").glob(".rollback-*"))
+
 with tempfile.TemporaryDirectory(prefix="mgt-directory-write-race-") as temporary:
     folder = Path(temporary)
     saves = folder / "saves"
