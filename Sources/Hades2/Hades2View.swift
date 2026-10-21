@@ -919,6 +919,7 @@ struct Hades2TrainerView: View {
     private var catalogSnapshot: Hades2ViewCatalogSnapshot {
         Hades2ViewCatalogSnapshot(
             materialID: material?.id,
+            materialCount: material?.count,
             occurrenceTargetIDs: model.occurrenceTargets.map(\.id),
             olympianIDs: olympianBoons.map(\.id),
             pickupIDs: pickupRewards.map(\.id),
@@ -1069,8 +1070,9 @@ struct Hades2TrainerView: View {
     }
 
     private func applyCatalogChanges(from oldValue: Hades2ViewCatalogSnapshot, to newValue: Hades2ViewCatalogSnapshot) {
-        if oldValue.materialID != newValue.materialID && focusedField != .material {
-            materialAmount = material.map { number($0.count) } ?? ""
+        if oldValue.materialID != newValue.materialID
+            || (oldValue.materialCount != newValue.materialCount && focusedField != .material) {
+            materialAmount = newValue.materialCount.map { number($0) } ?? ""
         }
         if !model.selectedNextOccurrenceTarget.isEmpty
             && !newValue.occurrenceTargetIDs.contains(model.selectedNextOccurrenceTarget) {

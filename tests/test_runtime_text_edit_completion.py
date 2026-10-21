@@ -131,6 +131,52 @@ final class GenerateAction: NSObject {
    wait("\(command) did not complete \(count) requests") { commands(command).count==count && !model.busy }
    pump()
   }
+  // Selected-material observations refresh idle controls without taking over
+  // a native draft. Losing that owner abandons its draft before selecting the
+  // next material; it must never submit the old amount to the replacement.
+  func material(_ id: String, _ count: Double) -> MaterialResource {
+   MaterialResource(id:id,name:id,englishName:id,count:count,locked:false,
+                    sectionTitle:"",englishSectionTitle:"",sortOrder:0)
+  }
+  guard let amount=fields(host).first(where:{$0.isEditable && $0.stringValue=="17"})
+  else { fatalError("selected material amount field missing") }
+  window.makeFirstResponder(nil); pump()
+  model.resources=[material("MetaCurrency",31)]; pump()
+  check(amount.stringValue=="31" && mutations().isEmpty,
+        "external selected-material observation left the unfocused amount stale: \(amount.stringValue)")
+  check(window.makeFirstResponder(amount), "could not focus selected material")
+  model.resources=[material("MetaCurrency",32)]; pump()
+  check((amount.currentEditor() as? NSTextView)?.string=="31" && mutations().isEmpty,
+        "observation replaced a focused material before typing")
+  window.makeFirstResponder(nil); pump()
+  check(amount.stringValue=="32" && mutations().isEmpty,
+        "unchanged material blur did not restore the latest observation")
+  let materialEditor=edit(amount,to:"41",in:window)
+  model.resources=[material("MetaCurrency",33)]; pump()
+  check(materialEditor.string=="41" && mutations().isEmpty,
+        "external material change overwrote or submitted an in-progress draft")
+  materialEditor.doCommand(by:#selector(NSResponder.insertNewline(_:)))
+  waitForCommand("set_resource",count:1)
+  check((mutations()[0]["params"] as? [String:Any])?["resource"] as? String=="MetaCurrency"
+        && model.resources.first?.count==41,
+        "material Return did not commit exactly once to the captured owner")
+  _ = edit(amount,to:"51",in:window)
+  model.resources=[material("PlantFNightshade",73)]; pump()
+  guard let replacementAmount=fields(host).first(where:{$0.isEditable && $0.stringValue=="73"})
+  else { fatalError("material owner replacement did not reset the displayed amount") }
+  window.makeFirstResponder(nil); pump()
+  check(amount.currentEditor()==nil && mutations().count==1,
+        "material owner replacement submitted an abandoned draft")
+  _ = edit(replacementAmount,to:"81",in:window)
+  model.resources=[]; pump()
+  window.makeFirstResponder(nil); pump()
+  check(replacementAmount.currentEditor()==nil && mutations().count==1,
+        "losing every material submitted an abandoned draft")
+  model.refreshFromHost(); wait { !model.busy }; pump()
+  check(fields(host).contains(where:{$0.isEditable && $0.stringValue=="41"}),
+        "restored material owner did not restore its observed amount")
+  try? FileManager.default.removeItem(at:log)
+  check(window.makeFirstResponder(money), "could not restore money focus after material checks")
   guard let untyped=money.currentEditor() as? NSTextView else { fatalError("focused field editor missing") }
   model.money=777; pump()
   check(untyped.string=="123" && mutations().isEmpty, "refresh overwrote a focused editor before the first keystroke")
