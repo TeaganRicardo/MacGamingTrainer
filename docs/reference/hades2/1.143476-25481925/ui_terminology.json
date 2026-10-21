@@ -1,0 +1,671 @@
+{
+  "target": {
+    "gameVersion": "1.143476",
+    "steamBuild": "25481925",
+    "languages": [
+      "zh-CN",
+      "en"
+    ]
+  },
+  "sourceEvidence": {
+    "sourceKind": "installed_game_source_archive",
+    "capturedAtUtc": "2026-09-30T04:08:07Z",
+    "repositoryBaseline": "03f4bdbf45adfc9df8929c22ee373136b230830d",
+    "archive": "hades2-catalog-evidence-1.143476-steam-25481925.tar.gz",
+    "archiveSha256": "621b4b7498b7ffd77e08c9b10ef58d743c9a0be1e1abe7c3f625598b21e284bb",
+    "fileManifest": "manifest/FILES.sha256",
+    "fileManifestEntriesVerified": 1164,
+    "nativeTermComparison": {
+      "field": "DisplayName",
+      "nativeTermCount": 46,
+      "exactMatches": 43,
+      "normalizedMatches": 3,
+      "mismatches": 0
+    },
+    "normalization": {
+      "rule": "Strip a single leading {!Icons.*} marker and its following whitespace from DisplayName before storing the user-readable value.",
+      "normalizedIds": [
+        "ReRollAlt",
+        "Health",
+        "Mana"
+      ]
+    },
+    "sourceFiles": {
+      "HelpText.zh-CN.sjson": {
+        "bundlePath": "sources/Text/zh-CN/HelpText.zh-CN.sjson",
+        "gamePath": "Content/Game/Text/zh-CN/HelpText.zh-CN.sjson",
+        "sha256": "688bb11c9abd68514e94805ee93ca05473c5b998521670e2eb32930c56415283"
+      },
+      "HelpText.en.sjson": {
+        "bundlePath": "sources/Text/en/HelpText.en.sjson",
+        "gamePath": "Content/Game/Text/en/HelpText.en.sjson",
+        "sha256": "955a0e05b1072d7d60eadd6240f59133191406078b153805c32ed76900f21e8b"
+      },
+      "ScreenText.zh-CN.sjson": {
+        "bundlePath": "sources/Text/zh-CN/ScreenText.zh-CN.sjson",
+        "gamePath": "Content/Game/Text/zh-CN/ScreenText.zh-CN.sjson",
+        "sha256": "96926b3e8a5cf1167f69a610a43c25cd60fc7ccc6f5be8fe0dee02e152304346"
+      },
+      "ScreenText.en.sjson": {
+        "bundlePath": "sources/Text/en/ScreenText.en.sjson",
+        "gamePath": "Content/Game/Text/en/ScreenText.en.sjson",
+        "sha256": "1f487de92208530189b63ba5c4fc4c23f1b4f4d038a7baa053042d7651d43eb3"
+      },
+      "TraitText.zh-CN.sjson": {
+        "bundlePath": "sources/Text/zh-CN/TraitText.zh-CN.sjson",
+        "gamePath": "Content/Game/Text/zh-CN/TraitText.zh-CN.sjson",
+        "sha256": "18238e96d684986829a4905acec8a82a30f6d60c3da39951184a238ccfe98c31"
+      },
+      "TraitText.en.sjson": {
+        "bundlePath": "sources/Text/en/TraitText.en.sjson",
+        "gamePath": "Content/Game/Text/en/TraitText.en.sjson",
+        "sha256": "75ef411d23f54d0caaf94e9b58b4f80768ec0ca23d394833dc9296d4b00b4712"
+      }
+    }
+  },
+  "officialTerms": {
+    "boon": {
+      "value": "祝福",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "GodBoon",
+      "englishValue": "Boon",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "olympianBoons": {
+      "value": "奥林匹斯的祝福",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "Boon",
+      "englishValue": "Boon of Olympus",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "reroll": {
+      "value": "重塑命运",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "ReRollAlt",
+      "englishValue": "Change of Fate",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "purgingPool": {
+      "value": "净化之池",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "SellTrait_Title",
+      "englishValue": "Pool of Purging",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "spell": {
+      "value": "巫咒",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "Spell",
+      "englishValue": "Hex",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "health": {
+      "value": "生命值",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "Health",
+      "englishValue": "Life",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "mana": {
+      "value": "魔力值",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "Mana",
+      "englishValue": "Magick",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "wellOfCharon": {
+      "value": "卡戎之井",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "WellShop_Title",
+      "englishValue": "Well of Charon",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "gatheringFlora": {
+      "value": "植物",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "HarvestPoint",
+      "englishValue": "Flora",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringMining": {
+      "value": "矿藏",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "PickaxePoint",
+      "englishValue": "Outcropping",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringDigging": {
+      "value": "挖掘点",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "DiggingPoint",
+      "englishValue": "Digging Spot",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringShades": {
+      "value": "迷途暗灵",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "ExorcismPointPlural",
+      "englishValue": "Lost Shades",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringFishing": {
+      "value": "钓鱼点",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "FishingPoint",
+      "englishValue": "Fishing Point",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "gatheringPickaxe": {
+      "value": "月牙镐",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolPickaxe",
+      "englishValue": "Crescent Pick",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringShovel": {
+      "value": "银辉铲",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolShovel",
+      "englishValue": "Silver Spade",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringTablet": {
+      "value": "安魂石板",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolExorcismBook",
+      "englishValue": "Tablet of Peace",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "gatheringRod": {
+      "value": "钓鱼竿",
+      "source": "TraitText.zh-CN.sjson",
+      "id": "ToolFishingRod",
+      "englishValue": "Rod of Fishing",
+      "englishSource": "TraitText.en.sjson"
+    },
+    "chaosGate": {
+      "value": "混沌之门",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "HealthGate",
+      "englishValue": "Chaos Gate",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    }
+  },
+  "nativeChoiceTitles": {
+    "Artemis": {
+      "value": "阿尔忒弥斯的祝福",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "UpgradeChoiceMenu_Artemis",
+      "englishValue": "Boons of Artemis",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Athena": {
+      "value": "雅典娜的祝福",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "UpgradeChoiceMenu_Athena",
+      "englishValue": "Boons of Athena",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Dionysus": {
+      "value": "迪奥尼索司的祝福",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "UpgradeChoiceMenu_Dionysus",
+      "englishValue": "Boons of Dionysus",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Hades": {
+      "value": "哈迪斯的祝福",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "UpgradeChoiceMenu_Hades",
+      "englishValue": "Boons of Hades",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Arachne": {
+      "value": "丝绸华服",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "ArachneCostumeMenu_Title",
+      "englishValue": "Silken Fineries",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Narcissus": {
+      "value": "二手礼物",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "NarcissusGiftsMenu_Title",
+      "englishValue": "Second-Hand Gifts",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Echo": {
+      "value": "凄楚回声",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "EchoChoiceMenu_Title",
+      "englishValue": "Plaintive Echoes",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Medea": {
+      "value": "暗夜诅咒",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "MedeaCurseMenu_Title",
+      "englishValue": "Nightly Curses",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Circe": {
+      "value": "机缘变幻",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "CirceChoiceMenu_Title",
+      "englishValue": "Changes & Fortunes",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Icarus": {
+      "value": "最新发明",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "IcarusChoiceMenu_Title",
+      "englishValue": "Latest Inventions",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Chaos": {
+      "value": "卡俄斯的祝福",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "UpgradeChoiceMenu_Chaos",
+      "englishValue": "Boons of Chaos",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "Selene": {
+      "value": "月之礼赠",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "SpellScreenMenu_Title",
+      "englishValue": "Gifts of the Moon",
+      "englishSource": "ScreenText.en.sjson"
+    },
+    "SeleneTalents": {
+      "value": "繁星之路",
+      "source": "ScreenText.zh-CN.sjson",
+      "id": "TalentScreenMenu_Title",
+      "englishValue": "Path of Stars",
+      "englishSource": "ScreenText.en.sjson"
+    }
+  },
+  "officialSourceNames": {
+    "Artemis": {
+      "value": "阿尔忒弥斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Artemis_Field_01",
+      "englishValue": "Artemis",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Athena": {
+      "value": "雅典娜",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Athena_01",
+      "englishValue": "Athena",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Dionysus": {
+      "value": "迪奥尼索司",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Dionysus_01",
+      "englishValue": "Dionysus",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Hades": {
+      "value": "哈迪斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Hades_01",
+      "englishValue": "Hades",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Arachne": {
+      "value": "阿拉克涅",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Arachne_01",
+      "englishValue": "Arachne",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Narcissus": {
+      "value": "纳西索斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Narcissus_01",
+      "englishValue": "Narcissus",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Echo": {
+      "value": "回声",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Echo_01",
+      "englishValue": "Echo",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Medea": {
+      "value": "美狄亚",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Medea_01",
+      "englishValue": "Medea",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Circe": {
+      "value": "喀耳刻",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Circe_01",
+      "englishValue": "Circe",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Icarus": {
+      "value": "伊卡洛斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Icarus_01",
+      "englishValue": "Icarus",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Nemesis": {
+      "value": "涅墨西斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Nemesis_01",
+      "englishValue": "Nemesis",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "Heracles": {
+      "value": "赫拉克勒斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Heracles_01",
+      "englishValue": "Heracles",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "Charon": {
+      "value": "卡戎",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Charon_01",
+      "englishValue": "Charon",
+      "englishSource": "HelpText.en.sjson",
+      "verification": "Same localization ID verified in supported Hades II 1.143476 / Steam 25481925."
+    },
+    "Chaos": {
+      "value": "卡俄斯",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Chaos_01",
+      "englishValue": "Chaos",
+      "englishSource": "HelpText.en.sjson"
+    },
+    "Selene": {
+      "value": "塞勒涅",
+      "source": "HelpText.zh-CN.sjson",
+      "id": "NPC_Selene_01",
+      "englishValue": "Selene",
+      "englishSource": "HelpText.en.sjson"
+    }
+  },
+  "productTerms": {
+    "characterRewards": {
+      "value": "角色奖励",
+      "status": "trainer_product_label",
+      "reason": "Heterogeneous aggregation of official outfits, gifts, blessings, curses, inventions and related reward flows; the target build has no single official umbrella term.",
+      "englishValue": "Character Rewards"
+    },
+    "rewardChoiceScreen": {
+      "value": "奖励选择界面",
+      "status": "trainer_product_label",
+      "reason": "Generic Trainer status text used only when the exact native source title is unavailable in an asynchronous receipt.",
+      "englishValue": "Reward Choice"
+    },
+    "olympianGroup": {
+      "value": "奥林匹斯诸神",
+      "status": "trainer_product_label",
+      "reason": "Trainer grouping for the official '奥林匹斯的祝福' reward family; not presented as a native screen title.",
+      "englishValue": "Olympians"
+    },
+    "pickupRewards": {
+      "value": "资源与常规掉落",
+      "status": "trainer_product_label",
+      "reason": "Trainer aggregation for heterogeneous room rewards and pickups.",
+      "englishValue": "Resources & Standard Drops"
+    },
+    "metaRewards": {
+      "value": "局外资源奖励",
+      "status": "trainer_product_label",
+      "reason": "Trainer grouping for meta/progression resources that share no single native screen title.",
+      "englishValue": "Meta Resources"
+    },
+    "elementRewards": {
+      "value": "元素奖励",
+      "status": "trainer_product_label",
+      "reason": "Trainer grouping for element-essence reward entries.",
+      "englishValue": "Element Rewards"
+    },
+    "otherRoomRewards": {
+      "value": "其他房间奖励",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback group for audited room rewards without a narrower owner.",
+      "englishValue": "Other Room Rewards"
+    },
+    "shopItems": {
+      "value": "商店商品",
+      "englishValue": "Shop Items",
+      "status": "trainer_product_label",
+      "reason": "Trainer aggregation for heterogeneous shop entries; not presented as a native game screen title."
+    },
+    "resources": {
+      "value": "资源",
+      "englishValue": "Resources",
+      "status": "trainer_product_label",
+      "reason": "Generic Trainer grouping for material resources."
+    },
+    "resourcePlants": {
+      "value": "植物与种子",
+      "englishValue": "Plants & Seeds",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory resource section when its current installed native title cannot be resolved."
+    },
+    "resourceGifts": {
+      "value": "赠礼",
+      "englishValue": "Gifts",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory gift-resource section when its current installed native title cannot be resolved."
+    },
+    "resourceFish": {
+      "value": "鱼类",
+      "englishValue": "Fish",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for the live Inventory fish-resource section when its current installed native title cannot be resolved."
+    },
+    "resourceMinerals": {
+      "value": "矿物",
+      "englishValue": "Minerals",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for resource rows classified by their stable runtime resource family when no native Inventory section owns them."
+    },
+    "resourceBossMaterials": {
+      "value": "首领素材",
+      "englishValue": "Boss Materials",
+      "status": "trainer_product_label",
+      "reason": "Trainer fallback for resource rows classified as boss materials when no native Inventory section owns them."
+    },
+    "chaosPair": {
+      "value": "卡俄斯配对",
+      "englishValue": "Chaos Pair",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned control that acquires two explicitly selected Chaos phases in one request; it is not a native screen title. Verified selector-role terminology for supported build 1.143476 / Steam 25481925."
+    },
+    "chaosBlessingSelector": {
+      "value": "祝福",
+      "englishValue": "Blessing",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned selector role for TrialUpgrade.PermanentTraits. Supported build 1.143476 / Steam 25481925 exposes the combined native ChaosBlessingFormat title, not a standalone Chaos side-title localization pair. Actual selected item names retain their native localization identities."
+    },
+    "chaosCurseSelector": {
+      "value": "诅咒",
+      "englishValue": "Curse",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned selector role for TrialUpgrade.TemporaryTraits. Supported build 1.143476 / Steam 25481925 exposes the combined native ChaosBlessingFormat title; the native Status label describes enemy status effects and is not this selector. Actual selected item names retain their native localization identities."
+    },
+    "invincibility": {
+      "value": "无敌模式",
+      "englishValue": "Invincibility",
+      "status": "trainer_product_label",
+      "reason": "Invincibility is a Trainer-owned custom damage-blocking feature distinct from Hades II native God Mode, so it has no official localization. The Trainer owns this bilingual pair."
+    },
+    "forceEnableRerolls": {
+      "value": "强制启用重骰",
+      "englishValue": "Force Enable Rerolls",
+      "status": "trainer_product_label",
+      "reason": "Trainer-owned durable control that exposes applicable native in-game reroll controls without granting reroll currency or changing permanent MetaUpgrade progression."
+    },
+    "gatheringPanel": {
+      "value": "采集点",
+      "englishValue": "Gathering Points",
+      "reason": "Trainer panel grouping five native collection families.",
+      "status": "trainer_product_label"
+    },
+    "gatheringNative": {
+      "value": "原生 / 默认",
+      "englishValue": "Native / Default",
+      "reason": "Trainer setting leaves native gathering or room occurrence probability unchanged.",
+      "status": "trainer_product_label"
+    },
+    "gatheringCustom": {
+      "value": "自定义",
+      "englishValue": "Custom",
+      "reason": "Trainer setting replaces a conditional native gathering trial or room occurrence chance.",
+      "status": "trainer_product_label"
+    },
+    "generateGathering": {
+      "value": "当前房间生成",
+      "englishValue": "Generate in Current Room",
+      "reason": "Trainer one-shot action invokes native setup for one unused authored gathering point.",
+      "status": "trainer_product_label"
+    },
+    "chaosGateApply": {
+      "value": "应用出现概率",
+      "englishValue": "Apply Occurrence Chance",
+      "status": "trainer_product_label",
+      "reason": "Trainer action accepts a future-room Chaos Gate conditional chance; it does not create an entrance in the current room."
+    }
+  },
+  "registry": {
+    "owner": "Backend/games/hades2",
+    "classPolicies": {
+      "native_game": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "user_ui",
+          "user_error",
+          "diagnostic",
+          "protocol",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": []
+      },
+      "trainer_product": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "user_ui",
+          "user_error",
+          "diagnostic",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "protocol",
+          "storage"
+        ]
+      },
+      "internal_domain": {
+        "lifecycle": "active",
+        "allowedSurfaces": [
+          "diagnostic",
+          "protocol",
+          "storage",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "user_ui",
+          "user_error"
+        ]
+      },
+      "compatibility_alias": {
+        "lifecycle": "compatibility",
+        "allowedSurfaces": [
+          "compatibility_input",
+          "diagnostic",
+          "test",
+          "documentation"
+        ],
+        "forbiddenSurfaces": [
+          "user_ui",
+          "user_error",
+          "protocol",
+          "storage"
+        ]
+      }
+    }
+  },
+  "internalTerms": {
+    "talentDrop": {
+      "value": "TalentDrop"
+    },
+    "spellDrop": {
+      "value": "SpellDrop"
+    },
+    "metaCurrencyDrop": {
+      "value": "MetaCurrencyDrop"
+    },
+    "specialGroup": {
+      "value": "group = special"
+    },
+    "olympianGroup": {
+      "value": "group = olympian"
+    }
+  },
+  "compatibilityAliases": {
+    "specialBoon": {
+      "value": "特殊祝福",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "specialBoonThreeChoice": {
+      "value": "特殊祝福三选一",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "specialBoonChoice": {
+      "value": "特殊祝福选择",
+      "canonicalTerm": "productTerms.characterRewards"
+    },
+    "godsBoon": {
+      "value": "诸神祝福",
+      "canonicalTerm": "officialTerms.olympianBoons"
+    },
+    "divineBoon": {
+      "value": "神祇祝福",
+      "canonicalTerm": "officialTerms.olympianBoons"
+    },
+    "rerollShort": {
+      "value": "重骰",
+      "canonicalTerm": "officialTerms.reroll"
+    },
+    "artemisAlt": {
+      "value": "阿耳忒弥斯",
+      "canonicalTerm": "officialSourceNames.Artemis"
+    },
+    "dionysusAlt": {
+      "value": "狄俄尼索斯",
+      "canonicalTerm": "officialSourceNames.Dionysus"
+    },
+    "sellBoonScreen": {
+      "value": "祝福出售界面",
+      "canonicalTerm": "officialTerms.purgingPool"
+    },
+    "sellBoon": {
+      "value": "出售祝福",
+      "canonicalTerm": "officialTerms.purgingPool"
+    },
+    "nativeThreeChoice": {
+      "value": "原生三选一",
+      "canonicalTerm": "productTerms.rewardChoiceScreen"
+    },
+    "chaosBoonShort": {
+      "value": "卡俄斯祝福",
+      "canonicalTerm": "nativeChoiceTitles.Chaos"
+    }
+  }
+}

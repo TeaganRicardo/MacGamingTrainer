@@ -18,8 +18,8 @@ def test_registry_loads_target_build_and_all_term_classes():
     registry = load_hades2_terminology()
 
     assert registry.target == {
-        "gameVersion": "1.139672",
-        "steamBuild": "24556151",
+        "gameVersion": "1.143476",
+        "steamBuild": "25481925",
         "languages": ["zh-CN", "en"],
     }
     assert registry.by_class(TermClass.NATIVE_GAME)
@@ -41,6 +41,47 @@ def test_native_terms_keep_shared_localization_provenance():
     assert olympian.localization_id == "Boon"
     assert olympian.zh_cn == "奥林匹斯的祝福"
     assert olympian.english == "Boon of Olympus"
+
+
+def test_target_build_source_evidence_is_pinned():
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+
+    assert reference["target"] == {
+        "gameVersion": "1.143476",
+        "steamBuild": "25481925",
+        "languages": ["zh-CN", "en"],
+    }
+    evidence = reference["sourceEvidence"]
+    assert evidence["sourceKind"] == "installed_game_source_archive"
+    assert evidence["capturedAtUtc"] == "2026-09-30T04:08:07Z"
+    assert evidence["repositoryBaseline"] == "03f4bdbf45adfc9df8929c22ee373136b230830d"
+    assert evidence["archiveSha256"] == "621b4b7498b7ffd77e08c9b10ef58d743c9a0be1e1abe7c3f625598b21e284bb"
+    assert evidence["fileManifestEntriesVerified"] == 1164
+    assert evidence["nativeTermComparison"] == {
+        "field": "DisplayName",
+        "nativeTermCount": 46,
+        "exactMatches": 43,
+        "normalizedMatches": 3,
+        "mismatches": 0,
+    }
+    assert evidence["normalization"]["normalizedIds"] == ["ReRollAlt", "Health", "Mana"]
+
+    source_files = evidence["sourceFiles"]
+    assert set(source_files) == {
+        "HelpText.zh-CN.sjson", "HelpText.en.sjson",
+        "ScreenText.zh-CN.sjson", "ScreenText.en.sjson",
+        "TraitText.zh-CN.sjson", "TraitText.en.sjson",
+    }
+    for source in source_files.values():
+        digest = source["sha256"]
+        assert len(digest) == 64 and all(char in "0123456789abcdef" for char in digest)
+        assert source["bundlePath"].startswith("sources/Text/")
+        assert source["gamePath"].startswith("Content/Game/Text/")
+
+    for term in load_hades2_terminology().by_class(TermClass.NATIVE_GAME):
+        assert term.source_zh_cn in source_files
+        assert term.source_english in source_files
 
 
 def test_product_terms_are_explicit_trainer_owned_pairs():
@@ -109,7 +150,7 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
 
 def test_registry_rejects_native_term_without_provenance():
     reference = {
-        "target": {"gameVersion": "1.139672", "steamBuild": "24556151", "languages": ["zh-CN", "en"]},
+        "target": {"gameVersion": "1.143476", "steamBuild": "25481925", "languages": ["zh-CN", "en"]},
         "officialTerms": {
             "broken": {
                 "value": "坏术语",
@@ -162,7 +203,7 @@ def test_registry_tracks_policy_lifecycle_alias_targets_and_internal_terms():
 
 
 def test_registry_rejects_mismatched_native_bilingual_source_pair():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["officialTerms"]["boon"]["englishSource"] = "TraitText.en.sjson"
 
@@ -186,7 +227,7 @@ def test_registry_reports_forbidden_surface_leakage_from_registry_policy():
 
 
 def test_aliases_have_one_authoritative_registry_representation():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     assert "forbiddenUserFacingAliases" not in reference
     assert {row["value"] for row in reference["compatibilityAliases"].values()} == {
@@ -195,7 +236,7 @@ def test_aliases_have_one_authoritative_registry_representation():
 
 
 def test_registry_rejects_alias_target_regression():
-    reference_path = ROOT / "docs/reference/hades2/1.139672-24556151/ui_terminology.json"
+    reference_path = ROOT / "docs/reference/hades2/1.143476-25481925/ui_terminology.json"
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
     reference["compatibilityAliases"]["specialBoon"]["canonicalTerm"] = "productTerms.missing"
 
@@ -210,6 +251,7 @@ def test_registry_rejects_alias_target_regression():
 for _test in (
     test_registry_loads_target_build_and_all_term_classes,
     test_native_terms_keep_shared_localization_provenance,
+    test_target_build_source_evidence_is_pinned,
     test_product_terms_are_explicit_trainer_owned_pairs,
     test_legacy_aliases_and_internal_terms_are_not_user_facing,
     test_frontend_roles_use_declared_trainer_product_pairs,
