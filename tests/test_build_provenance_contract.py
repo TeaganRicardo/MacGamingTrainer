@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -199,6 +200,17 @@ else:
         script.chmod(0o755)
         for name in ('sw_vers', 'xcode-select', 'xcodebuild', 'xcrun'):
             (fake_bin / name).symlink_to(script)
+        # The fake tools use /usr/bin/env python3 as their shebang; pin the
+        # interpreter so Apple's python3 shim also ignores the fake Xcode path.
+        (fake_bin / 'python3').symlink_to(sys.executable)
+
+        # /usr/bin/git on macOS is an xcrun launcher. Resolve the actual Git
+        # executable before injecting a simulated, nonexistent DEVELOPER_DIR;
+        # source-identity checks must still run against the real repository.
+        real_git = (subprocess.check_output(['xcrun', '--find', 'git'], text=True).strip()
+                    if sys.platform == 'darwin' else shutil.which('git'))
+        self.assertTrue(real_git)
+        (fake_bin / 'git').symlink_to(real_git)
 
         event_path = Path(self.temporary.name) / 'dispatch.json'
         event_path.write_text('{}')
@@ -223,6 +235,9 @@ else:
         result = self.run_tool(env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads(self.provenance_path().read_text())
+        self.assertEqual(manifest['source'], {
+            'commit': actual, 'tree': git(self.root, 'rev-parse', 'HEAD^{tree}'),
+        })
         self.assertEqual(manifest['toolchain'], {
             'host': {
                 'runnerLabel': 'macos-26',
