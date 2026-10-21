@@ -119,6 +119,8 @@ final class GenerateAction: NSObject {
   }.environmentObject(localization))
   let window=NSWindow(contentRect:NSRect(x:0,y:0,width:1400,height:2600),styleMask:[.titled],backing:.buffered,defer:false)
   window.contentView=host; host.layoutSubtreeIfNeeded(); pump(0.5)
+  check(!fields(host).contains(where:{$0.isEditable && $0.accessibilityLabel()=="—"}),
+        "a numeric input still exposes its visual placeholder as its native accessibility name")
   guard var money=fields(host).first(where:{$0.isEditable && $0.stringValue == "123"}) else { fatalError("money text field not found: \(fields(host).map(\.stringValue))") }
   check(window.makeFirstResponder(money), "could not focus money field"); pump()
   try? FileManager.default.removeItem(at:log)

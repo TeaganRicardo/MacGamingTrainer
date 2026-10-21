@@ -690,9 +690,8 @@ struct Hades2TrainerView: View {
                     .frame(width: 42, alignment: .trailing)
 
                 if let trait {
-                    TrainerTextField(title: "—", text: traitLevelInput(trait))
+                    TrainerTextField(title: "—", text: traitLevelInput(trait), accessibilityLabel: text("hades2.traits.targetLevel"))
                         .frame(width: 58)
-                        .accessibilityLabel(text("hades2.traits.targetLevel"))
                         .disabled(!model.canMutateTraits || !trait.canIncreaseLevel)
 
                     TrainerSecondaryActionButton(
@@ -703,9 +702,8 @@ struct Hades2TrainerView: View {
                         model.setTraitLevel(trait, targetLevel: traitLevelInput(trait).wrappedValue)
                     }
                 } else {
-                    TrainerTextField(title: "—", text: .constant(""))
+                    TrainerTextField(title: "—", text: .constant(""), accessibilityLabel: text("hades2.traits.targetLevel"))
                         .frame(width: 58)
-                        .accessibilityLabel(text("hades2.traits.targetLevel"))
                         .disabled(true)
 
                     TrainerSecondaryActionButton(
