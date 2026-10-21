@@ -571,7 +571,9 @@
     "hades2.section.resourcesAndGathering": "Resources & Gathering",
     "hades2.section.roomsAndRewards": "Rooms & Rewards",
     "hades2.shortcut.decreaseGameSpeed": "Decrease Game Speed",
-    "hades2.shortcut.increaseGameSpeed": "Increase Game Speed"
+    "hades2.shortcut.increaseGameSpeed": "Increase Game Speed",
+    "hades2.workbench.search": "Search functions…",
+    "hades2.workbench.searchEmpty": "No matching functions."
   },
   "language": "en"
 }

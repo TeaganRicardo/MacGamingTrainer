@@ -14,43 +14,64 @@ struct TrainerConnectionStatusCard: View {
     let onPrimary: () -> Void
     let onRestart: () -> Void
 
+    let targetRunning: Bool
+    let onLaunch: (() -> Void)?
+
+    init(busy: Bool, connected: Bool, operationToken: TrainerTextToken, statusToken: TrainerTextToken,
+         detailToken: TrainerTextToken, backendAvailable: Bool, actionsEnabled: Bool,
+         onRefresh: @escaping () -> Void, onPrimary: @escaping () -> Void, onRestart: @escaping () -> Void,
+         targetRunning: Bool = true, onLaunch: (() -> Void)? = nil) {
+        self.busy = busy
+        self.connected = connected
+        self.operationToken = operationToken
+        self.statusToken = statusToken
+        self.detailToken = detailToken
+        self.backendAvailable = backendAvailable
+        self.actionsEnabled = actionsEnabled
+        self.onRefresh = onRefresh
+        self.onPrimary = onPrimary
+        self.onRestart = onRestart
+        self.targetRunning = targetRunning
+        self.onLaunch = onLaunch
+    }
+
+    var primaryActionTitleKey: String {
+        if !backendAvailable { return "host.restartBackend" }
+        if connected { return "host.disconnectGame" }
+        if !targetRunning && onLaunch != nil { return "host.launchGame" }
+        return "host.connectGame"
+    }
+
+    func performPrimaryAction() {
+        if !backendAvailable { onRestart() }
+        else if !connected && !targetRunning, let onLaunch { onLaunch() }
+        else { onPrimary() }
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            if busy {
-                ProgressView().controlSize(.small)
-            } else {
-                Circle().fill(connected ? theme.success : theme.inactive).frame(width: 8, height: 8)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                // Both are language-neutral tokens: a module owns its wording,
-                // the Host owns resolution, and a language switch re-renders
-                // without a backend round trip.
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                if busy { ProgressView().controlSize(.small) }
+                else { Circle().fill(connected ? theme.success : theme.inactive).frame(width: 6, height: 6) }
                 Text(busy ? localization.string(operationToken) + "…" : localization.string(statusToken))
                     .font(.subheadline.weight(.medium))
-                Text(localization.string(detailToken)).font(.caption).foregroundStyle(.secondary)
             }
-            Spacer()
-            Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
-                .help(localization.localized("host.refreshStatusHelp"))
-                .disabled(!backendAvailable || !actionsEnabled)
-            if backendAvailable {
+            Text(localization.string(detailToken))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
                 TrainerPrimaryActionButton(
-                    title: connected ? localization.localized("host.disconnectGame") : localization.localized("host.connectGame"),
+                    title: localization.localized(primaryActionTitleKey),
                     enabled: actionsEnabled,
                     width: theme.connectionActionWidth,
-                    action: onPrimary
+                    action: performPrimaryAction
                 )
-            } else {
-                TrainerPrimaryActionButton(
-                    title: localization.localized("host.restartBackend"),
-                    enabled: actionsEnabled,
-                    width: theme.connectionActionWidth,
-                    action: onRestart
-                )
+                Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
+                    .help(localization.localized("host.refreshStatusHelp"))
+                    .accessibilityLabel(localization.localized("host.refreshStatus"))
+                    .disabled(!backendAvailable || !actionsEnabled)
             }
         }
-        .padding(theme.panelPadding)
-        .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
     }
 }
 

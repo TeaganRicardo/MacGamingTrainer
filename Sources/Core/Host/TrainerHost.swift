@@ -46,13 +46,6 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                 presentation: Module.presentation,
                 connected: model.connected
             ) {
-                Module.makeSidebarActions(model: model)
-            }
-        } content: {
-            VStack(alignment: .leading, spacing: theme.pageSpacing) {
-                TrainerPageHeader(title: Module.presentation.headerTitle) {
-                    Module.makeHeaderActions(model: model)
-                }
                 TrainerConnectionStatusCard(
                     busy: model.busy,
                     connected: model.connected,
@@ -63,8 +56,15 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
                     actionsEnabled: model.hostActionsEnabled,
                     onRefresh: model.refreshFromHost,
                     onPrimary: handlePrimaryConnectionAction,
-                    onRestart: model.restartBackendFromHost
+                    onRestart: model.restartBackendFromHost,
+                    targetRunning: targetMonitor.isRunning,
+                    onLaunch: model.launchActionFromHost
                 )
+                Module.makeSidebarActions(model: model)
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: theme.pageSpacing) {
+                Module.makeHeaderActions(model: model)
                 Module.makeContent(model: model)
                     .environment(\.trainerManagementActions, managementActions)
             }

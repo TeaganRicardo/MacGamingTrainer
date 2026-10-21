@@ -32,14 +32,16 @@ struct Hades2GameModule: TrainerGameModule {
     static func resolveText(
         key: String,
         arguments: [String] = [],
+        language: TrainerPresentationLanguage? = nil,
         localization: TrainerLocalizationStore
     ) -> String {
+        let language = language ?? localization.language
         guard key.hasPrefix(Hades2Presentation.Key.prefix) else {
-            return localization.string(key, arguments: arguments)
+            return localization.string(key, arguments: arguments, language: language)
         }
         return Hades2Presentation.shared.string(
             key,
-            language: localization.language,
+            language: language,
             arguments: arguments
         )
     }

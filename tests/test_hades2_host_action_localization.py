@@ -58,7 +58,6 @@ assert not re.search(r"[\u3400-\u9fff]", host_actions), (
 
 for token in (
     '@EnvironmentObject private var localization: TrainerLocalizationStore',
-    'Label(localization.localized("host.launchGame"), systemImage: "play.fill")',
     'CommandMenu(localization.localized("host.trainerMenu"))',
     'Button(localization.localized("host.refreshStatus"))',
     'Button(localization.localized("host.disableAll"))',
@@ -66,6 +65,17 @@ for token in (
     'Button(localization.localized("host.viewLog"))',
 ):
     assert token in host_actions, token
+
+# Launch is now on the active game's Host-owned connection card. The module
+# supplies its launch callback; modules without one keep connect-only behavior.
+connection_card = (ROOT / "Sources/Core/UI/Components/TrainerStatusControls.swift").read_text(encoding="utf-8")
+host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text(encoding="utf-8")
+assert 'return "host.launchGame"' in connection_card
+assert "onLaunch: model.launchActionFromHost" in host
+assert "var launchActionFromHost: (() -> Void)?" in protocol
+header_actions = host_actions.split("struct Hades2HeaderActions", 1)[1].split("struct Hades2ManagementCommands", 1)[0]
+assert "TrainerSearchField(" in header_actions
+assert "launchGame" not in header_actions
 
 sidebar_actions = host_actions[
     host_actions.index("struct Hades2SidebarActions"):
@@ -173,7 +183,7 @@ resolver = module_text[module_text.index("static func resolveText"):]
 resolver = resolver[:resolver.index("\n    static func makeModel")]
 assert 'guard key.hasPrefix(Hades2Presentation.Key.prefix) else {' in resolver, (
     "the module resolver has no Host-key fallback")
-assert "localization.string(key, arguments: arguments)" in resolver, (
+assert "localization.string(key, arguments: arguments, language: language)" in resolver, (
     "a Host key is not resolved through the Host table")
 # A Hades key must still resolve through the module tables, not the Host one.
 assert "Hades2Presentation.shared.string(" in resolver

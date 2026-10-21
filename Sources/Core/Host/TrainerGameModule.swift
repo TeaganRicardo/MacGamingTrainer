@@ -56,6 +56,8 @@ protocol TrainerHostModel: ObservableObject {
     var statusTitle: TrainerTextToken { get }
     var connectionDetailText: TrainerTextToken { get }
     var hostActionsEnabled: Bool { get }
+    /// Optional module-owned launch operation; the Host owns its card placement.
+    var launchActionFromHost: (() -> Void)? { get }
 
     func toggleConnectionFromHost()
     func connectAutomaticallyFromHost(targetJustLaunched: Bool)
@@ -68,6 +70,7 @@ protocol TrainerHostModel: ObservableObject {
 }
 
 extension TrainerHostModel {
+    var launchActionFromHost: (() -> Void)? { nil }
     /// Automatic target connection carries only generic lifecycle context.
     /// Modules that do not care about launch timing keep the normal toggle path.
     func connectAutomaticallyFromHost(targetJustLaunched: Bool) {

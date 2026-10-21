@@ -60,7 +60,6 @@ struct Hades2TrainerView: View {
     @ViewState<String> private var selectedMaterial = ""
     @ViewState<String> private var search = ""
     @ViewState<String> private var multiplier = String(format: "%g", Hades2MultiplierKey.damageMultiplier.defaultValue)
-    @ViewState<Bool> private var statsExpanded = false
     @ViewState<Bool> private var profileManager = false
     @ViewState<Hades2SaveEditorPresentation?> private var saveEditorPresentation = nil
     @ViewState<Bool> private var diagnosticSheet = false
@@ -330,22 +329,22 @@ struct Hades2TrainerView: View {
 
     private var rootContent: some View {
         VStack(alignment: .leading, spacing: theme.pageSpacing) {
-            statusAndSessionSection
-            commonSection
-            boonsSection
-            resourceSection
-            roomsSection
-            management
+            statusAndSessionSection.id(Hades2WorkbenchSection.values.id)
+            commonSection.id(Hades2WorkbenchSection.common.id)
+            boonsSection.id(Hades2WorkbenchSection.boons.id)
+            resourceSection.id(Hades2WorkbenchSection.resources.id)
+            roomsSection.id(Hades2WorkbenchSection.rooms.id)
+            management.id(Hades2WorkbenchSection.management.id)
         }
     }
 
     @ViewBuilder
     private var statusAndSessionSection: some View {
         TrainerSectionHeader(title: text("hades2.section.runData"), icon: "gauge.with.dots.needle.67percent") {
-            Button { withAnimation(.easeInOut(duration: 0.18)) { statsExpanded.toggle() } } label: {
+            Button { withAnimation(.easeInOut(duration: 0.18)) { model.numericControlsExpanded.toggle() } } label: {
                 HStack(spacing: 5) {
-                    Text(statsExpanded ? text("hades2.section.collapse") : text("hades2.section.expand"))
-                    Image(systemName: statsExpanded ? "chevron.up" : "chevron.down")
+                    Text(model.numericControlsExpanded ? text("hades2.section.collapse") : text("hades2.section.expand"))
+                    Image(systemName: model.numericControlsExpanded ? "chevron.up" : "chevron.down")
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -1136,7 +1135,7 @@ struct Hades2TrainerView: View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
         return LazyVGrid(columns: columns, spacing: 12) {
             primarySessionMetrics
-            if statsExpanded {
+            if model.numericControlsExpanded {
                 expandedSessionMetrics
             }
         }

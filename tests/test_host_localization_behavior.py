@@ -63,6 +63,16 @@ struct LocalizationBehaviorTest {
             missingValue.string(TrainerTextToken(key: "fixture.missing")) == "fixture.missing",
             "an unknown module key must render as its own identity"
         )
+        // Search reads both shipped languages without changing the selected
+        // presentation language or persisting a transient lookup preference.
+        precondition(missingValue.localized("host.gameLibrary", language: .en) == "Game Library")
+        precondition(missingValue.string("host.save.fileCount", arguments: ["3"], language: .en) == "3 files")
+        precondition(missingValue.string("fixture.count", arguments: ["4"], language: .en) == "4 Items")
+        precondition(missingValue.string("fixture.ready", language: .zhCN) == "夹具就绪")
+        precondition(missingValue.string("unowned {0} {1}", arguments: ["value"], language: .en) == "unowned value ")
+        precondition(missingValue.language == .zhCN, "explicit lookups must preserve the selection")
+        precondition(defaults.string(forKey: TrainerLocalizationStore.userDefaultsKey) == nil,
+                     "explicit lookups must not persist a language change")
 
         defaults.set("fr", forKey: TrainerLocalizationStore.userDefaultsKey)
         let invalidValue = TrainerLocalizationStore(defaults: defaults)
