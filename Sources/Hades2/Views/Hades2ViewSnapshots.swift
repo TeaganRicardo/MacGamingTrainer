@@ -42,6 +42,7 @@ struct Hades2ViewConfigSnapshot: Equatable {
 
 struct Hades2ViewCatalogSnapshot: Equatable {
     let materialID: String?
+    let materialCount: Double?
     let occurrenceTargetIDs: [String]
     let olympianIDs: [String]
     let pickupIDs: [String]
