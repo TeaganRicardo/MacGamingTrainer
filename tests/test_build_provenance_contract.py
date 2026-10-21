@@ -509,8 +509,8 @@ else:
         source_runtime = {
             'schemaVersion': 1,
             'provider': 'astral-sh/python-build-standalone',
-            'release': '20261003',
-            'version': '3.15.0rc3',
+            'release': '20261013',
+            'version': '3.15.0',
             'distributions': {
                 'arm64': {
                     'target': 'aarch64-apple-darwin',
@@ -561,8 +561,8 @@ else:
         manifest = json.loads(self.provenance_path().read_text())
         runtime = manifest['pythonRuntime']
         self.assertEqual(runtime['provider'], source_runtime['provider'])
-        self.assertEqual(runtime['release'], '20261003')
-        self.assertEqual(runtime['version'], '3.15.0rc3')
+        self.assertEqual(runtime['release'], '20261013')
+        self.assertEqual(runtime['version'], '3.15.0')
         self.assertEqual(runtime['architectures'], ['arm64'])
         self.assertEqual(
             runtime['distributions'],
@@ -577,7 +577,7 @@ else:
             hashlib.sha256(packaged_bytes).hexdigest(),
         )
 
-        mismatched = dict(packaged_runtime, version='3.15.0')
+        mismatched = dict(packaged_runtime, version='3.15.1')
         package(mismatched)
         mismatch = self.run_tool('--local', '--module-id', 'hades2')
         self.assertNotEqual(mismatch.returncode, 0)
