@@ -277,13 +277,17 @@ final class GenerateAction: NSObject {
   guard let replacement=fields(host).first(where:{$0.isEditable && $0.stringValue=="200"}) else { fatalError("profile replacement did not rebuild the numeric field") }
   money=replacement
 
-  guard let damage=fields(host).first(where:{$0.isEditable && $0.stringValue=="2" && $0.bounds.width < 80}) else { fatalError("damage multiplier field missing") }
-  let damageEditor=edit(damage,to:"5.25",in:window); pump(0.45)
-  check(damage.currentEditor() != nil && commands("set_desired").isEmpty, "multiplier typing dismissed focus or applied early")
-  model.damageMultiplier=9; pump()
-  check(damageEditor.string=="5.25", "background desired refresh overwrote the multiplier draft")
+  // Damage now lives in the collapsed numeric area. Exercise the same native
+  // multiplier editing/completion contract through the visible Gold gain field;
+  // the typed completion cases below still cover Damage's command identity.
+  let multiplierName=Hades2GameModule.resolveText(key:"hades2.feature.moneyMultiplier",localization:localization)
+  guard let gainMultiplier=fields(host).first(where:{$0.isEditable && $0.accessibilityLabel()==multiplierName}) else { fatalError("gold gain multiplier field missing") }
+  let multiplierEditor=edit(gainMultiplier,to:"5.25",in:window); pump(0.45)
+  check(gainMultiplier.currentEditor() != nil && commands("set_desired").isEmpty, "multiplier typing dismissed focus or applied early")
+  model.moneyMultiplier=9; pump()
+  check(multiplierEditor.string=="5.25", "background desired refresh overwrote the multiplier draft")
   window.makeFirstResponder(nil); waitForCommand("set_desired",count:1)
-  check(model.damageMultiplier==5.25 && (commands("set_desired").last?["params"] as? [String:Any])?["feature"] as? String=="damageMultiplier", "multiplier blur misrouted its draft")
+  check(model.moneyMultiplier==5.25 && (commands("set_desired").last?["params"] as? [String:Any])?["feature"] as? String=="moneyMultiplier", "multiplier blur misrouted its draft")
 
   // All Hades numeric families cross one validation/completion interface.
   let generation=model.editGeneration

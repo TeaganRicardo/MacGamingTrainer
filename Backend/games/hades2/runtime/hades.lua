@@ -1129,8 +1129,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function releaseRerollsRuntime()
     M.infiniteRerolls = false
-    runtimeState.rerollBalance = nil
-    releaseHook("UpdateRerollUI")
+    M.rerollCurrency.release()
   end
   -- DodgeChance is an engine LifeProperty.  Current game scripts always target
   -- the hero explicitly when writing it; omitting DestinationId is accepted by
@@ -6761,7 +6760,7 @@ if __MacGamingTrainerV1 == nil then
         -- been mutated. A captured pre-spend frame therefore enters here with
         -- the native boundary already crossed, even if its owner went stale
         -- before callback dispatch.
-        operation.retainedRerollCurrency = pending and pending.retainedCurrency
+        operation.retainedRerollCurrency = pending and pending.spend and pending.spend.retained
         operation.enter()
         return work(operation)
       end, frame, frame ~= nil)
@@ -6892,13 +6891,52 @@ if __MacGamingTrainerV1 == nil then
           owner, screen.ChosenGiveOption, screen.ChosenGetOption
         )
         if plan == nil then
-          operation.rollback(function() return rollbackPanelSpend(screen, button) end)
+          operation.rollback(function() return rollbackPanelSpend(screen, button, operation.retainedRerollCurrency) end)
           error("Force reroll pool has no changed eligible candidates")
         end
         owner.operation.enter()
         CloseTradeScreen(screen, button)
         owner.nextPlan = plan
       end)
+    end
+
+    local function attemptPanelReroll(original, screen, button, ...)
+      if not M.desiredFeatures.forceEnableRerolls then return original(screen, button, ...) end
+      if M.terminalActionUnknown then
+        pcall(clearRerollControl, screen, true)
+        return
+      end
+      if type(button) == "table"
+          and button.RerollFunctionName == nemesisTradeCallbackName then
+        local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
+        if type(owner) ~= "table"
+            or owner.source ~= screen.Source
+            or owner.args ~= screen.Args
+            or owner.run ~= CurrentRun
+            or currentNamedScreen("TradeScreen") ~= screen then
+          clearRerollControl(screen, true)
+          return
+        end
+      end
+
+      local rerollFunctionName = type(button) == "table" and button.RerollFunctionName or nil
+      local trainerOwnedCallback = rerollFunctionName == callbackName
+        or rerollFunctionName == seleneCallbackName
+        or rerollFunctionName == surfaceShopCallbackName
+        or rerollFunctionName == nemesisTradeCallbackName
+      if trainerOwnedCallback then
+        pendingRerollOwners[screen] = {
+          owner = nativeOperations.owner(),
+          spend = M.rerollCurrency.pendingSpend(),
+        }
+      end
+
+      -- Hades II 1.143476 AttemptPanelReroll and both presentation owners
+      -- yield through wait(). Keep that game coroutine outside protected
+      -- Trainer calls; classify only our callback after the native spend.
+      local result = original(screen, button, ...)
+      if trainerOwnedCallback then pendingRerollOwners[screen] = nil end
+      return result
     end
 
     local function install()
@@ -6956,44 +6994,6 @@ if __MacGamingTrainerV1 == nil then
           return result
         end)
       end
-
-      installHook("AttemptPanelReroll", function(original, screen, button, ...)
-        if M.terminalActionUnknown then
-          pcall(clearRerollControl, screen, true)
-          return
-        end
-        if type(button) == "table"
-            and button.RerollFunctionName == nemesisTradeCallbackName then
-          local owner = type(screen) == "table" and nemesisTradeScreens[screen] or nil
-          if type(owner) ~= "table"
-              or owner.source ~= screen.Source
-              or owner.args ~= screen.Args
-              or owner.run ~= CurrentRun
-              or currentNamedScreen("TradeScreen") ~= screen then
-            clearRerollControl(screen, true)
-            return
-          end
-        end
-
-        local rerollFunctionName = type(button) == "table" and button.RerollFunctionName or nil
-        local trainerOwnedCallback = rerollFunctionName == callbackName
-          or rerollFunctionName == seleneCallbackName
-          or rerollFunctionName == surfaceShopCallbackName
-          or rerollFunctionName == nemesisTradeCallbackName
-        if trainerOwnedCallback then
-          pendingRerollOwners[screen] = {
-            owner = nativeOperations.owner(),
-            retainedCurrency = M.infiniteRerolls and owns("UpdateRerollUI"),
-          }
-        end
-
-        -- Hades II 1.143476 AttemptPanelReroll and both presentation owners
-        -- yield through wait(). Keep that game coroutine outside protected
-        -- Trainer calls; classify only our callback after the native spend.
-        local result = original(screen, button, ...)
-        if trainerOwnedCallback then pendingRerollOwners[screen] = nil end
-        return result
-      end, "session")
 
       installHook("HeroHasTrait", function(original, name, ...)
         if name == "PanelRerollMetaUpgrade" and M.desiredFeatures.forceEnableRerolls then
@@ -7169,7 +7169,6 @@ if __MacGamingTrainerV1 == nil then
       releaseHook("HandleScreenInput")
       releaseHook("OpenTradeScreen")
       releaseHook("NemesisTradeChoice")
-      releaseHook("AttemptPanelReroll")
       releaseHook("UpdateTalentButtons")
       releaseHook("CreateSpellButtons")
       releaseHook("CreateBoonLootButtons")
@@ -7238,7 +7237,7 @@ if __MacGamingTrainerV1 == nil then
 
     return {
       install = install, release = release, supported = supported,
-      active = active, fixedPlan = fixedPlan,
+      active = active, fixedPlan = fixedPlan, attemptPanelReroll = attemptPanelReroll,
     }
   end)()
 
@@ -7247,6 +7246,7 @@ if __MacGamingTrainerV1 == nil then
     local function inspect()
       if type(CurrentHubRoom) ~= "table" or not M.runtimeOwners.heroAvailable()
           or type(GameState.GardenPlots) ~= "table" or type(GardenData) ~= "table"
+          or type(MapState) ~= "table" or type(MapState.ActiveObstacles) ~= "table"
           or type(GardenData.Seeds) ~= "table"
           or not M.nativeFunctionsAvailable({ "GardenTimeTick", "GardenPlotTimeUpdatePresentation" }) then return nil end
       local plots = {}
@@ -7254,7 +7254,8 @@ if __MacGamingTrainerV1 == nil then
         local seed = type(plot) == "table" and GardenData.Seeds[plot.SeedName] or nil
         local outcome = type(seed) == "table" and type(seed.RandomOutcomes) == "table"
           and seed.RandomOutcomes[plot.OutcomeKey] or nil
-        if finite(id) and type(plot) == "table" and plot.ObjectId == id and finite(plot.PlantId)
+        if finite(id) and type(plot) == "table" and MapState.ActiveObstacles[id] == plot
+            and plot.ObjectId == id and finite(plot.PlantId)
             and type(plot.SeedName) == "string" and type(outcome) == "table"
             and not plot.ReadyForHarvest and finite(plot.GrowTimeRemaining) and plot.GrowTimeRemaining > 0 then
           plots[#plots + 1] = { id = id, plot = plot, seed = plot.SeedName, outcome = plot.OutcomeKey,
@@ -7390,7 +7391,7 @@ if __MacGamingTrainerV1 == nil then
     featureSupportMap.infiniteMoney = economySupported
     activeFeatureMap.infiniteMoney = not not (M.infiniteMoney and owns("SpendResource"))
     if M.desiredFeatures.infiniteMoney and not activeFeatureMap.infiniteMoney then dormantFeatureMap.infiniteMoney = true end
-    featureSupportMap.infiniteRerolls = type(UpdateRerollUI) == "function"
+    featureSupportMap.infiniteRerolls = M.rerollCurrency.supported()
     activeFeatureMap.infiniteRerolls = not not (M.infiniteRerolls and owns("UpdateRerollUI") and M.runtimeOwners.rerollsAvailable())
     if M.desiredFeatures.infiniteRerolls and not activeFeatureMap.infiniteRerolls then dormantFeatureMap.infiniteRerolls = true end
     featureSupportMap.moneyMultiplierEnabled = economySupported
@@ -8562,11 +8563,13 @@ if __MacGamingTrainerV1 == nil then
     installHook("SpendResource", function(original, id, amount, source, args)
       if M.infiniteMoney and id == "Money" and source ~= trainerSource
           and finite(amount) and amount > 0 then
-        -- ResourceLogic treats a zero spend as failure. A non-consuming
-        -- purchase succeeds without invoking native spend side effects;
-        -- retain the native affordability and zero/invalid-spend rules.
         local balance = type(GameState.Resources) == "table" and GameState.Resources.Money
-        return finite(balance) and balance >= amount
+        if finite(balance) and balance >= amount then
+          -- Fund only the native rounded debit. The original still owns
+          -- accounting, quests, callbacks and presentation with the actual
+          -- cost. Never restore an old balance over gains made by a callback.
+          GameState.Resources.Money = balance + round(amount)
+        end
       end
       if M.resourceLocks[id] ~= nil and finite(amount) and amount > 0 then
         -- Preserve the game's spend path/presentations without consuming the
@@ -8581,31 +8584,79 @@ if __MacGamingTrainerV1 == nil then
       return result
     end)
   end
-  local function installRerolls()
-    requireFunctions("reroll lock", { "UpdateRerollUI" })
-    if M.desiredFeatures.infiniteRerolls and not M.infiniteRerolls then
-      runtimeState.rerollBalance = { session = SessionState, run = CurrentRun, value = CurrentRun.NumRerolls }
+  M.rerollCurrency = (function()
+    local pending = setmetatable({}, { __mode = "k" })
+    local function supported()
+      return M.nativeFunctionsAvailable({ "UpdateRerollUI", "AttemptPanelReroll", "AttemptReroll" })
     end
-    M.infiniteRerolls = M.desiredFeatures.infiniteRerolls
-    installHook("UpdateRerollUI", function(original, value)
-      if M.infiniteRerolls and M.runtimeOwners.rerollsAvailable() then
-        -- Both native spend owners and AddRerolls publish the real counter
-        -- here before yielding. Retain gains rather than a captured fixed
-        -- value, and never carry this observed balance into another Run.
-        local balance = runtimeState.rerollBalance
-        if balance == nil or balance.session ~= SessionState or balance.run ~= CurrentRun then
-          balance = { session = SessionState, run = CurrentRun, value = CurrentRun.NumRerolls }
-          runtimeState.rerollBalance = balance
-        end
-        balance.value = math.max(balance.value, CurrentRun.NumRerolls)
-        CurrentRun.NumRerolls, value = balance.value, balance.value
-      elseif M.rerollsLock ~= nil and M.runtimeOwners.rerollsAvailable() then
-        CurrentRun.NumRerolls = M.rerollsLock
-        value = M.rerollsLock
+    local function pendingSpend()
+      return pending[coroutine.running()]
+    end
+    local function withSpend(work, run, cost, ...)
+      if not M.infiniteRerolls or run ~= CurrentRun or not M.runtimeOwners.rerollsAvailable()
+          or not finite(cost) or cost <= 0 or run.NumRerolls < cost then return work(...) end
+      local thread = coroutine.running()
+      local previous = pending[thread]
+      local spend = { session = SessionState, run = run, hero = M.runtimeOwners.hero(),
+        balance = run.NumRerolls, expected = run.NumRerolls - cost, retained = false }
+      pending[thread] = spend
+      -- Native eligibility may return early; presentations may yield. Keep
+      -- the original game coroutine outside protected Trainer calls.
+      local results = table.pack(work(...))
+      if pending[thread] == spend then pending[thread] = previous end
+      return table.unpack(results, 1, results.n)
+    end
+    local function retainSpend(value)
+      local thread = coroutine.running()
+      local spend = pending[thread]
+      pending[thread] = nil
+      if spend ~= nil and M.infiniteRerolls and spend.session == SessionState
+          and spend.run == CurrentRun and spend.hero == M.runtimeOwners.hero()
+          and value == spend.expected and CurrentRun.NumRerolls == spend.expected then
+        -- Consume this one native debit before its UI/presentation can yield.
+        -- Gains and native Arcana/pre-run resets outside the spend owner pass
+        -- through; there is no retained balance spanning separate actions.
+        CurrentRun.NumRerolls, value, spend.retained = spend.balance, spend.balance, true
       end
-      return original(value)
-    end)
-  end
+      return value
+    end
+    local function install()
+      M.infiniteRerolls = M.desiredFeatures.infiniteRerolls
+      if M.infiniteRerolls then
+        requireFunctions("non-consuming rerolls", { "UpdateRerollUI", "AttemptPanelReroll", "AttemptReroll" })
+      end
+      if M.infiniteRerolls or M.rerollsLock ~= nil then
+        requireFunctions("reroll lock", { "UpdateRerollUI" })
+        installHook("UpdateRerollUI", function(original, value)
+          if M.infiniteRerolls then value = retainSpend(value)
+          elseif M.rerollsLock ~= nil and M.runtimeOwners.rerollsAvailable() then
+            CurrentRun.NumRerolls, value = M.rerollsLock, M.rerollsLock
+          end
+          return original(value)
+        end)
+      else releaseHook("UpdateRerollUI") end
+      if M.infiniteRerolls or M.desiredFeatures.forceEnableRerolls then
+        requireFunctions("panel reroll owner", { "AttemptPanelReroll" })
+        installHook("AttemptPanelReroll", function(original, screen, button, ...)
+          local cost = type(button) == "table" and button.Cost or nil
+          return withSpend(runtimeState.forceRerolls.attemptPanelReroll, CurrentRun, cost,
+            original, screen, button, ...)
+        end, "session")
+      else releaseHook("AttemptPanelReroll") end
+      if M.infiniteRerolls then
+        installHook("AttemptReroll", function(original, run, target, ...)
+          return withSpend(original, run, 1, run, target, ...)
+        end, "session")
+      else releaseHook("AttemptReroll") end
+    end
+    local function release()
+      releaseHook("UpdateRerollUI")
+      releaseHook("AttemptPanelReroll")
+      releaseHook("AttemptReroll")
+      pending = setmetatable({}, { __mode = "k" })
+    end
+    return { supported = supported, pendingSpend = pendingSpend, install = install, release = release }
+  end)()
   local function containsDodgeChange(value, seen, depth)
     if type(value) ~= "table" or depth > 5 then return false end
     seen = seen or {}; if seen[value] then return false end; seen[value] = true
@@ -8881,9 +8932,9 @@ if __MacGamingTrainerV1 == nil then
         releaseEconomyRuntime(); M.featureErrors.economy = nil
       elseif not reconcileEconomy(raiseOnError) then allOk = false end
     end
-    if onlyKey == nil or onlyKey == "rerolls" or onlyKey == "infiniteRerolls" then
-      if (M.desiredFeatures.infiniteRerolls or M.rerollsLock ~= nil) and M.runtimeOwners.rerollsAvailable() then
-        if not featureAttempt("rerolls", true, installRerolls, releaseRerollsRuntime, raiseOnError) then allOk = false end
+    if onlyKey == nil or onlyKey == "rerolls" or onlyKey == "infiniteRerolls" or onlyKey == "forceEnableRerolls" then
+      if (M.desiredFeatures.infiniteRerolls or M.rerollsLock ~= nil or M.desiredFeatures.forceEnableRerolls) and M.runtimeOwners.rerollsAvailable() then
+        if not featureAttempt("rerolls", true, M.rerollCurrency.install, releaseRerollsRuntime, raiseOnError) then allOk = false end
       else
         releaseRerollsRuntime(); M.featureErrors.rerolls = nil
       end
@@ -10035,8 +10086,9 @@ if __MacGamingTrainerV1 == nil then
       end
       if params.locked then
         if not finite(CurrentRun.NumRerolls) then error("Unsupported rerolls: counter unavailable") end
-        installRerolls()
+        requireFunctions("reroll lock", { "UpdateRerollUI" })
         M.rerollsLock = CurrentRun.NumRerolls
+        M.rerollCurrency.install()
         installGuard()
       else M.rerollsLock = nil; reconcileDesired(false, "rerolls") end
       if not anyDesired() and not anyRuntimeActive() then releaseGuard() end
@@ -10056,9 +10108,6 @@ if __MacGamingTrainerV1 == nil then
       return actionLedger.run(command, params, function()
         if M.rerollsLock ~= nil then M.rerollsLock = params.amount end
         CurrentRun.NumRerolls = params.amount
-        if M.infiniteRerolls then
-          runtimeState.rerollBalance = { session = SessionState, run = CurrentRun, value = params.amount }
-        end
         ShowRerollUI()
         UpdateRerollUI(params.amount)
       end)

@@ -213,6 +213,21 @@ end
 
 HandleScreenInput = function(screen)
   assert(screen.Name == 'TradeScreen')
+  if tradeMode == 'exhaustedWithInfinite' then
+    local button = screen.Components.RerollButton
+    assert(type(button) == 'table' and button.Visible)
+    rerollUiHook = function()
+      rerollUiHook = nil
+      screen.Args.GetOptions = { screen.ChosenGetOption }
+    end
+    CallFunctionName(button.OnPressedFunctionName, screen, button)
+    assert(CurrentRun.NumRerolls == 5,
+      'exhausted Nemesis callback refunded already-retained currency')
+    assert(not M.dispatch('status', { includeCatalogs = false }).runtimeOutcomeUnknown,
+      'known exhausted Nemesis pool tainted the runtime')
+    CloseTradeScreen(screen)
+    return
+  end
   if tradeMode == 'closeFailure' then
     local button = screen.Components.RerollButton
     assert(type(button) == 'table' and button.Visible,
@@ -543,6 +558,16 @@ local exhaustedSource = { Name = 'NPC_Nemesis_01', ObjectId = 807, Accepted = fa
 NemesisTradeChoice(exhaustedSource, PresetEventArgs.NemesisBuyItemChoices, {})
 assert(CurrentRun.NumRerolls == 5 and panelSpendMutations == 0,
   'exhausted Nemesis trade spent a reroll')
+PresetEventArgs.NemesisBuyItemChoices.GetOptions = fullMoneyPool
+
+-- Losing all replacement candidates after the native debit must roll back
+-- only native history; Infinite Rerolls has already retained the currency.
+resetTrade('exhaustedWithInfinite', 5)
+M.dispatch('set_feature', { feature = 'infiniteRerolls', value = true, includeCatalogs = false })
+local infiniteSource = { Name = 'NPC_Nemesis_01', ObjectId = 815, Accepted = false }
+NemesisTradeChoice(infiniteSource, PresetEventArgs.NemesisBuyItemChoices, {})
+assert(CurrentRun.NumRerolls == 5 and not infiniteSource.Accepted)
+M.dispatch('set_feature', { feature = 'infiniteRerolls', value = false, includeCatalogs = false })
 PresetEventArgs.NemesisBuyItemChoices.GetOptions = fullMoneyPool
 
 -- Repeated native clicks use the same Boon panel base/escalation policy.

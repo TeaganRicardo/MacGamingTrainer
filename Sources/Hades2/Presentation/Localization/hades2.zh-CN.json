@@ -565,7 +565,7 @@
     "hades2.garden.help": "催熟当前已种植物；成熟后仍由游戏正常收获。",
     "hades2.garden.matureNow": "立即催熟",
     "hades2.garden.title": "{term:productTerms.gardenInstantMaturity}",
-    "hades2.garden.unavailable": "请在十字路口确认有尚未成熟的已种植物，并刷新状态。",
+    "hades2.garden.unavailable": "请进入十字路口的花园区域，确认有尚未成熟的已种植物，并刷新状态。",
     "hades2.section.boonsAndEffects": "祝福与本局效果",
     "hades2.section.common": "常用功能",
     "hades2.section.resourcesAndGathering": "资源与采集",

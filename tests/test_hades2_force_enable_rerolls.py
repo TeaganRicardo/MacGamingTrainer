@@ -412,6 +412,7 @@ PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = fullArachnePool
 -- coin even if the user turns the mode off during native presentation.
 CurrentRun.NumRerolls = 10
 CurrentRun.CurrentRoom.SpentRerolls = {}
+AttemptReroll = AttemptReroll or function() error('door path is outside this panel fixture') end
 M.dispatch('set_feature', { feature = 'infiniteRerolls', value = true, includeCatalogs = false })
 local changingPool = copy(EnemyData.NPC_Arachne_01)
 changingPool.ObjectId = 400
@@ -435,6 +436,18 @@ assert(not M.dispatch('status', { includeCatalogs = false }).runtimeOutcomeUnkno
   'known rolled-back candidate exhaustion tainted runtime trust')
 PreRerollPanelPresentation = nativePreReroll
 PresetEventArgs.ArachneCostumeChoices.UpgradeOptions = fullArachnePool
+
+-- Releasing the forced controls must leave ordinary non-consuming panel
+-- rerolls mounted; both consumers share the native entry wrapper.
+M.dispatch('set_feature', { feature = 'infiniteRerolls', value = true, includeCatalogs = false })
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = false, includeCatalogs = false })
+MGTFixtureNativeReroll = function() end
+local beforeNativePanel = CurrentRun.NumRerolls
+CallFunctionName('AttemptPanelReroll', {}, { Cost = 1, RerollFunctionName = 'MGTFixtureNativeReroll' })
+assert(CurrentRun.NumRerolls == beforeNativePanel,
+  'releasing forced controls removed non-consuming native panel ownership')
+M.dispatch('set_feature', { feature = 'forceEnableRerolls', value = true, includeCatalogs = false })
+M.dispatch('set_feature', { feature = 'infiniteRerolls', value = false, includeCatalogs = false })
 
 -- Existing reroll lock remains independent: native spend is immediately reconciled to the locked count.
 CurrentRun.NumRerolls = 10

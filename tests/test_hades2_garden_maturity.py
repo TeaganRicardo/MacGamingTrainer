@@ -14,7 +14,7 @@ GameState = { Resources = {}, LifetimeResourcesGained = {}, RunHistory = {}, Gar
 ResourceData = {}; ResourceDisplayOrderData = {}; TraitElementData = {}; TraitData = {}
 EnemyData = {}; PresetEventArgs = {}; ScreenData = {}; LootObjects = {}; LootData = {}
 ConsumableData = {}; RewardStoreData = {}; CodexOrdering = { OlympianGods = {}, Order = {} }
-MapState = { RoomRequiredObjects = {} }
+MapState = { RoomRequiredObjects = {}, ActiveObstacles = {} }
 CurrentRun = { Hero = { ObjectId = 1, Traits = {}, TraitDictionary = {}, Elements = {} },
   CurrentRoom = {}, NumRerolls = 0 }
 CurrentHubRoom = { Name = "Hub" }
@@ -24,6 +24,7 @@ local function plant(id, remaining, ready)
   local plot = { ObjectId = id, PlantId = id + 1000, SeedName = "SeedA", OutcomeKey = "normal",
     StartingGrowTime = 8, GrowTimeRemaining = remaining, ReadyForHarvest = ready }
   GameState.GardenPlots[id] = plot
+  MapState.ActiveObstacles[id] = plot
   return plot
 end
 local growing = plant(10, 4, false)
@@ -82,6 +83,17 @@ if arg[3] == "presentationFailure" then
   print("garden_maturity_ok")
   return
 end
+if arg[3] == "offMap" then
+  CurrentHubRoom = { Name = "Hub_PreRun" }
+  MapState = { RoomRequiredObjects = {}, ActiveObstacles = {} }
+  assert(not status().capabilities.matureGarden, "persisted plots are not a live garden presentation owner")
+  assert(not pcall(M.dispatch, "mature_garden", { requestId = "old-map-plants",
+    scopeToken = observed.gardenScopeToken, includeCatalogs = false }))
+  assert(growing.GrowTimeRemaining == 4 and next(nativeUpdates) == nil,
+    "off-map maturity must not mutate plots or present against stale plant IDs")
+  print("garden_maturity_ok")
+  return
+end
 assert(not pcall(M.dispatch, "set_feature", { feature = "gardenQoL", value = true,
   includeCatalogs = false }), "retired garden convenience must not remain a current feature")
 assert(observed.desiredFeatures.gardenQoL == nil and observed.featureSupport.gardenQoL == nil)
@@ -133,7 +145,7 @@ print("garden_maturity_ok")
 with tempfile.TemporaryDirectory(prefix="mgt-garden-maturity-") as temporary:
     harness = Path(temporary) / "garden.lua"
     harness.write_text(HARNESS)
-    for scenario in ("normal", "presentationFailure"):
+    for scenario in ("normal", "presentationFailure", "offMap"):
         result = subprocess.run(
             [LUA, str(harness), str(ROOT / "Backend/games/hades2/runtime/hades.lua"),
              str(RESIDENT_DISPATCH_CONTRACT), scenario],
