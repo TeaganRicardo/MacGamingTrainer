@@ -140,6 +140,8 @@ router.close()
         + '\n'
         + '\n'.join(path.read_text() for path in (project / 'Sources/Core').rglob('*.swift'))
         + '\n'
+        + '\n'.join(path.read_text() for path in (project / 'Backend/core').rglob('*.py'))
+        + '\n'
         + (root / 'build.sh').read_text()
         + '\n'
         + (root / 'Tools/module_support.py').read_text()
