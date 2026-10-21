@@ -51,7 +51,8 @@ product_version = plistlib.loads((root/'Info.plist').read_bytes())['CFBundleShor
 assert HOST_PROTOCOL_VERSION == 6
 assert not hasattr(core_protocol, 'PROTOCOL_VERSION'), 'obsolete protocol alias was restored'
 assert APP_BACKEND_VERSION == product_version
-assert any(row['id'] == 'hades2' and row['protocolVersion'] == 15 for row in available_games())
+hades_manifest = json.loads((root/'Backend/games/hades2/module.json').read_text())
+assert any(row['id'] == 'hades2' and row['protocolVersion'] == hades_manifest['protocolVersion'] for row in available_games())
 
 context = GameAdapterContext(
     game_id='fake', display_name='Fake Game', module_protocol_version=7,

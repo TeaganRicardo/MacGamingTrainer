@@ -52,6 +52,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
     private var pendingFeatureIntents: [Hades2FeatureKey: PendingFeatureIntent] = [:]
     private var pendingBoonRarityRequestID: UUID?
+    private var pendingGameSpeedRequestID: UUID?
     private let backendSession: TrainerBackendSession
     private let logSink: TrainerLogSink
     private let backendScriptURL: URL?
@@ -152,11 +153,13 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     @Published var invincibility = false
     @Published var infiniteHealth = false
     @Published var infiniteMana = false
+    @Published var infiniteMoney = false
+    @Published var infiniteRerolls = false
     @Published var instantCastCooldown = false
     @Published var hexAlwaysReady = false
     @Published var infiniteAmmo = false
     @Published var autoMiniGames = false
-    @Published var gardenQoL = false
+    @Published private(set) var gardenScopeToken: String?
     @Published var boonRarityEnabled = false
     @Published var forceEnableRerolls = false
     @Published var damageEnabled = false
@@ -597,6 +600,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         featureSupport = [:]
         pendingFeatureIntents.removeAll()
         pendingBoonRarityRequestID = nil
+        pendingGameSpeedRequestID = nil
         statSupport = [:]
         statAvailable = [:]
         // Observable state, so it cannot outlive the backend that produced it.
@@ -641,6 +645,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if !moneyLocked { money = nil }
         if !rerollsLocked { rerolls = nil }
         gatheringTargets = [:]
+        gardenScopeToken = nil
         if !graspLocked { graspValue = nil }
         if !dodgeLocked { dodgeValue = nil }
         if !critLocked { critValue = nil }
@@ -722,7 +727,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 self[keyPath: key.modelKeyPath] = pendingFeatureIntents[key]?.enabled ?? value
             }
         }
-        if let value = patch.gameSpeed { gameSpeed = value }
+        if let value = patch.gameSpeed, pendingGameSpeedRequestID == nil { gameSpeed = value }
         if let value = patch.damageMultiplier { damageMultiplier = value }
         if let value = patch.moneyLocked { moneyLocked = value }
         if let value = patch.moneyMultiplier { moneyMultiplier = value }
@@ -738,6 +743,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         if patch.chaosGateProbability.isPresent { chaosGateProbability = patch.chaosGateProbability.value }
         if patch.gatheringProbabilities.isPresent { gatheringProbabilities = patch.gatheringProbabilities.value ?? [:] }
         if patch.gatheringTargets.isPresent { gatheringTargets = patch.gatheringTargets.value ?? [:] }
+        if patch.gardenScopeToken.isPresent { gardenScopeToken = patch.gardenScopeToken.value }
         if patch.warningText.isPresent { warning = patch.warningText.value ?? "" }
         if let receipt = patch.lastAction { presentActionReceipt(receipt) }
         if let value = patch.boons { boons = value }
@@ -841,6 +847,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         case .openSellTraits: title = presentation("hades2.spawn.purgingPool")
         case .openSpecialChoice: title = presentation("hades2.spawn.rewardChoice")
         case .generateGathering: title = presentation("hades2.gathering.generate")
+        case .matureGarden: title = presentation("hades2.garden.title")
         case .setTraitLevel: title = presentation("hades2.receipt.traitLevelAction")
         case .setTraitRarity: title = presentation("hades2.receipt.traitRarityAction")
         case .setTraitRemainingUses: title = presentation("hades2.receipt.traitDurationAction")
@@ -1078,13 +1085,26 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
         let value = (rawValue * 10).rounded() / 10
         guard Self.gameSpeedInputRange.contains(value), abs(gameSpeed - value) >= 0.0001 else { return }
         gameSpeed = value
+        let requestID = UUID()
+        pendingGameSpeedRequestID = requestID
+        var rejectedObservedSpeed: Double?
         send(
             .setDesired(feature: Hades2MultiplierKey.gameSpeed.rawValue, value: value),
             title: "hades2.op.updateGameSpeed",
             allowsFollowingAction: true,
             announceSuccess: false,
-            completion: completion
-        )
+            onReply: { reply in
+                if !reply.success, let state = reply.state {
+                    rejectedObservedSpeed = Hades2StatePatch(state).gameSpeed
+                }
+            }
+        ) { [weak self] success in
+            if let self, self.pendingGameSpeedRequestID == requestID {
+                self.pendingGameSpeedRequestID = nil
+                if !success, let observed = rejectedObservedSpeed { self.gameSpeed = observed }
+            }
+            completion?(success)
+        }
     }
 
     private func amountValue(_ text: String) -> Int? {
@@ -1231,7 +1251,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func lockResource(_ resource: String, locked: Bool) {
-        guard canSetResource else { return }
+        guard canSetResource, !(locked && resource == "Money" && infiniteMoney) else { return }
         guard resource == "Money" || resources.contains(where: { $0.id == resource }) else { return }
         send(.lockResource(resource: resource, locked: locked), title: locked ? "hades2.op.lockResource" : "hades2.op.unlockResource")
     }
@@ -1243,7 +1263,7 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     }
 
     func lockRerolls(_ locked: Bool) {
-        guard canSetRerolls else { return }
+        guard canSetRerolls, !(locked && infiniteRerolls) else { return }
         send(.lockRerolls(locked: locked), title: locked ? "hades2.op.lockRerolls" : "hades2.op.unlockRerolls")
     }
 
@@ -1267,6 +1287,19 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
     func canGenerateGathering(_ family: Hades2GatheringFamily) -> Bool {
         connected && canAcceptRuntimeAction && !exiting && protocolCompatible
             && gatheringTargets[family]?.available == true
+    }
+
+    var canMatureGarden: Bool {
+        connected && canAcceptRuntimeAction && !exiting && protocolCompatible
+            && capabilities["matureGarden"] == true && gardenScopeToken != nil
+    }
+
+    @discardableResult
+    func matureGarden(completion: ((Bool) -> Void)? = nil) -> Bool {
+        guard canMatureGarden, let token = gardenScopeToken else { return false }
+        send(.matureGarden(scopeToken: token), title: "hades2.garden.title",
+             announceSuccess: false, completion: completion)
+        return true
     }
 
     @discardableResult
@@ -1674,8 +1707,9 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
             return
         }
         switch action {
-        case .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
-             .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
+        case .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
+             .instantCastCooldown, .hexAlwaysReady,
+             .infiniteAmmo, .damageEnabled, .autoMiniGames, .boonRarityEnabled,
              .forceEnableRerolls, .moneyMultiplierEnabled, .resourceMultiplierEnabled:
             // Durable desired edits are FIFO; earlier requests do not discard
             // newer hotkey intent.
@@ -1728,6 +1762,20 @@ final class Hades2TrainerModel: ObservableObject, TrainerHostModel {
                 rejectShortcut(action)
                 return
             }
+        case .matureGarden:
+            guard matureGarden(completion: Self.playOneShotShortcutResult) else {
+                rejectShortcut(action)
+                return
+            }
+        case .decreaseGameSpeed, .increaseGameSpeed:
+            let delta = action == .decreaseGameSpeed ? -0.1 : 0.1
+            let next = min(Self.gameSpeedInputRange.upperBound,
+                           max(Self.gameSpeedInputRange.lowerBound, gameSpeed + delta))
+            guard canEditDesired, abs(gameSpeed - next) >= 0.0001 else {
+                rejectShortcut(action)
+                return
+            }
+            setGameSpeedValue(next, completion: Self.playOneShotShortcutResult)
         case .spawnOlympian:
             guard !selectedOlympianReward.isEmpty,
                   spawnBoon(selectedOlympianReward, completion: Self.playOneShotShortcutResult) else {
@@ -1880,12 +1928,13 @@ private extension Hades2FeatureKey {
         case .invincibility: return \.invincibility
         case .infiniteHealth: return \.infiniteHealth
         case .infiniteMana: return \.infiniteMana
+        case .infiniteMoney: return \.infiniteMoney
+        case .infiniteRerolls: return \.infiniteRerolls
         case .damageEnabled: return \.damageEnabled
         case .instantCastCooldown: return \.instantCastCooldown
         case .hexAlwaysReady: return \.hexAlwaysReady
         case .infiniteAmmo: return \.infiniteAmmo
         case .autoMiniGames: return \.autoMiniGames
-        case .gardenQoL: return \.gardenQoL
         case .boonRarityEnabled: return \.boonRarityEnabled
         case .forceEnableRerolls: return \.forceEnableRerolls
         case .moneyMultiplierEnabled: return \.moneyMultiplierEnabled

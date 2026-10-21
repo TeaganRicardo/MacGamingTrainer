@@ -72,6 +72,7 @@ struct Hades2StatePatch {
     let gatheringProbabilities: Hades2FieldPatch<[Hades2GatheringFamily: Double]>
     let chaosGateProbability: Hades2FieldPatch<Double>
     let gatheringTargets: Hades2FieldPatch<[Hades2GatheringFamily: Hades2GatheringTarget]>
+    let gardenScopeToken: Hades2FieldPatch<String>
 
     let warningText: Hades2FieldPatch<String>
     let boons: [BoonOption]?
@@ -117,6 +118,7 @@ struct Hades2StatePatch {
         featureErrors = Self.stringMapField(payload, "featureErrors")
         featureErrorPresentations = Self.textTokenMapField(payload, "featureErrorPresentations")
         desiredFeatures = Self.featureMap(payload["desiredFeatures"])
+        gardenScopeToken = Self.field(payload, "gardenScopeToken", String.self)
         gameSpeed = Self.number(payload["gameSpeed"])
         damageMultiplier = Self.number(payload["damageMultiplier"])
         moneyLocked = payload["moneyLocked"] as? Bool

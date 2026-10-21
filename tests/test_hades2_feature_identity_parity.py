@@ -71,7 +71,10 @@ economy_toggles = {
     for key in resident_multipliers
     if f"{key}Enabled" in TOGGLES
 }
-expected_registry_order = [key for key in TOGGLES if key not in economy_toggles]
+# These currencies share their existing economy/reroll-lock owner rather
+# than installing competing hooks from the independent-feature registry.
+shared_currency_toggles = {"infiniteMoney", "infiniteRerolls"}
+expected_registry_order = [key for key in TOGGLES if key not in economy_toggles | shared_currency_toggles]
 assert registry_keys == set(expected_registry_order), (
     f"resident feature registry lost a durable behavior route: "
     f"missing={sorted(set(expected_registry_order) - registry_keys)}, "

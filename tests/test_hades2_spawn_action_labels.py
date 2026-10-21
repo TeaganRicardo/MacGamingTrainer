@@ -22,7 +22,7 @@ label = re.search(r'actionTitle:\s*text\("([^"]+)"\)', body)
 assert label is not None, 'The picker action must resolve its label through the live language helper.'
 assert label.group(1) == 'hades2.spawn.generate', 'All Spawn actions use the module-owned Generate term.'
 
-panel = source.split('private var boonPanel: some View {', 1)[1].split('private func spawnRow(', 1)[0]
+panel = source.split('private var rewardSpawningPanel: some View {', 1)[1].split('private func spawnRow(', 1)[0]
 for action, callback in (
     ('spawnOlympian', 'spawnBoon'),
     ('spawnPickup', 'spawnBoon'),

@@ -23,7 +23,7 @@ _LEGACY_V3_DIGIT_KEYCODES = {
 }
 
 _SHORTCUT_ACTION_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
-_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode',))
+_RETIRED_SHORTCUT_ACTIONS = frozenset(('godMode','gardenQoL'))
 
 
 def _profile_schema_version(payload):

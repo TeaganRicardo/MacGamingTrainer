@@ -42,6 +42,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
     let focusValue: Field
     let locked: Bool
     let editable: Bool
+    let lockEnabled: Bool
     let placeholder: String
     let onLock: () -> Void
     var onCommit: (TrainerTextField.Completion) -> String = { $0.text }
@@ -55,6 +56,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         focusValue: Field,
         locked: Bool,
         editable: Bool,
+        lockEnabled: Bool = true,
         placeholder: String = "—",
         onLock: @escaping () -> Void,
         onCommit: @escaping (TrainerTextField.Completion) -> String = { $0.text }
@@ -67,6 +69,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         self.focusValue = focusValue
         self.locked = locked
         self.editable = editable
+        self.lockEnabled = lockEnabled
         self.placeholder = placeholder
         self.onLock = onLock
         self.onCommit = onCommit
@@ -74,7 +77,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
 
     var body: some View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
-            TrainerLockButton(locked: locked, enabled: editable, action: onLock)
+            TrainerLockButton(locked: locked, enabled: editable && lockEnabled, action: onLock)
         } content: {
             TrainerTextField(title: placeholder, text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)

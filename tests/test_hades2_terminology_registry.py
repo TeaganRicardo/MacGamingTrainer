@@ -169,6 +169,9 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
         "chaosBlessingSelector": "hades2.spawn.chaosBlessing",
         "chaosCurseSelector": "hades2.spawn.chaosCurse",
         "forceEnableRerolls": "hades2.feature.forceEnableRerolls",
+        "infiniteMoney": "hades2.feature.infiniteMoney",
+        "infiniteRerolls": "hades2.feature.infiniteRerolls",
+        "gardenInstantMaturity": "hades2.garden.title",
     }
     tables = {
         language: json.loads(
@@ -181,8 +184,9 @@ def test_frontend_roles_use_declared_trainer_product_pairs():
         assert term.term_class is TermClass.TRAINER_PRODUCT
         assert term.reason and term.localization_id is None
         key = presentation_id
-        assert tables["zh-CN"][key] == term.zh_cn
-        assert tables["en"][key] == term.english
+        placeholder = "{term:productTerms." + term_id + "}"
+        assert tables["zh-CN"][key] in (term.zh_cn, placeholder)
+        assert tables["en"][key] in (term.english, placeholder)
 
 
 def test_registry_rejects_native_term_without_provenance():

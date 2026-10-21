@@ -38,6 +38,10 @@ func shortcutKey(_ action: ShortcutAction) -> String {
     "shortcut.action.\(action.rawValue)"
 }
 
+func legacyShortcutKey(_ identity: String) -> String {
+    "shortcut.action.\(identity == "invincibility" ? "godMode" : identity)"
+}
+
 func legacyShortcutKey(_ action: ShortcutAction) -> String {
     action == .invincibility ? "shortcut.action.godMode" : shortcutKey(action)
 }
@@ -54,15 +58,15 @@ func seedV3Defaults(_ defaults: UserDefaults, invincibilityOverride: Int? = nil)
     }
 }
 
-let legacyV4Order: [ShortcutAction] = [
-    .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
-    .infiniteAmmo, .damageEnabled, .autoMiniGames, .gardenQoL, .boonRarityEnabled,
-    .forceEnableRerolls, .forceLegendary, .forceDuo, .moneyMultiplierEnabled,
-    .resourceMultiplierEnabled, .spawnOlympian, .spawnPickup, .spawnSpecial,
-    .applyNextRoomReward, .disableAll,
+let legacyV4Order: [String] = [
+    "invincibility", "infiniteHealth", "infiniteMana", "instantCastCooldown", "hexAlwaysReady",
+    "infiniteAmmo", "damageEnabled", "autoMiniGames", "gardenQoL", "boonRarityEnabled",
+    "forceEnableRerolls", "forceLegendary", "forceDuo", "moneyMultiplierEnabled",
+    "resourceMultiplierEnabled", "spawnOlympian", "spawnPickup", "spawnSpecial",
+    "applyNextRoomReward", "disableAll",
 ]
 
-func legacyV4DefaultLayout() -> [ShortcutAction: HotkeyChord] {
+func legacyV4DefaultLayout() -> [String: HotkeyChord] {
     Dictionary(uniqueKeysWithValues: legacyV4Order.enumerated().compactMap { index, action in
         HotkeyChord.controlOptionDefault(index: index).map { (action, $0) }
     })
@@ -74,7 +78,7 @@ func seedKnownBrokenV4Defaults(_ defaults: UserDefaults) {
     for action in legacyV4Order {
         defaults.set(clean[action]!.payload, forKey: legacyShortcutKey(action))
     }
-    defaults.set(clean[.moneyMultiplierEnabled]!.payload, forKey: legacyShortcutKey(.gardenQoL))
+    defaults.set(clean["moneyMultiplierEnabled"]!.payload, forKey: legacyShortcutKey("gardenQoL"))
     defaults.set(HotkeyChord.controlOptionDigit(9)!.payload, forKey: legacyShortcutKey(.moneyMultiplierEnabled))
     defaults.set(HotkeyChord.controlOptionDigit(0)!.payload, forKey: legacyShortcutKey(.disableAll))
 }
@@ -83,10 +87,7 @@ let migratedV3DefaultsStore = makeDefaults()
 seedV3Defaults(migratedV3DefaultsStore)
 let migratedV3Defaults = Hades2ShortcutStore(defaults: migratedV3DefaultsStore)
 func matchesDerivedDefaults(_ store: Hades2ShortcutStore) -> Bool {
-    ShortcutAction.allCases.enumerated().allSatisfy { index, action in
-        guard let expected = HotkeyChord.defaultShortcut(index: index) else { return false }
-        return store.chord(action) == expected
-    }
+    Hades2ShortcutStore.defaultLayout().allSatisfy { action, expected in store.chord(action) == expected }
 }
 
 precondition(matchesDerivedDefaults(migratedV3Defaults))
@@ -96,10 +97,10 @@ seedV3Defaults(migratedV3CustomStore, invincibilityOverride: 0)
 let migratedV3Custom = Hades2ShortcutStore(defaults: migratedV3CustomStore)
 precondition(migratedV3Custom.chord(.invincibility).keyLabel == "0")
 precondition(migratedV3Custom.chord(.infiniteHealth).keyLabel == "2")
-precondition(migratedV3Custom.chord(.gardenQoL).keyLabel == "9")
-precondition(migratedV3Custom.chord(.moneyMultiplierEnabled).keyLabel == "E")
+precondition(migratedV3Custom.chord(.infiniteAmmo).keyLabel == "9")
+precondition(migratedV3Custom.chord(.moneyMultiplierEnabled) == Hades2ShortcutStore.defaultLayout()[.moneyMultiplierEnabled])
 let disableAllIndex = ShortcutAction.allCases.firstIndex(of: .disableAll)!
-let disableAllDefault = HotkeyChord.defaultShortcut(index: disableAllIndex)!
+let disableAllDefault = Hades2ShortcutStore.defaultLayout()[.disableAll]!
 precondition(migratedV3Custom.chord(.disableAll) == disableAllDefault)
 precondition(unique(migratedV3Custom))
 
@@ -111,19 +112,29 @@ precondition(matchesDerivedDefaults(repairedV4))
 let defaults = Hades2ShortcutStore(defaults: makeDefaults())
 precondition(matchesDerivedDefaults(defaults))
 precondition(unique(defaults))
-precondition(defaults.chord(.generateFlora) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFlora)!)!)
-precondition(defaults.chord(.generateFishing) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .generateFishing)!)!)
-precondition(defaults.chord(.applyNextOccurrence) == HotkeyChord.defaultShortcut(index: ShortcutAction.allCases.firstIndex(of: .applyNextOccurrence)!)!)
 precondition(defaults.chord(.disableAll) == disableAllDefault)
 precondition(defaults.payload()["_layoutVersion"] as? Int == 1)
 precondition(defaults.payload()["invincibility"] == nil)
+let common: [ShortcutAction] = [.invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney,
+    .infiniteRerolls, .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames]
+precondition(Array(ShortcutAction.allCases.prefix(10)) == common)
+precondition(common.map { defaults.chord($0).displayText } == ["⌃⌥1", "⌃⌥2", "⌃⌥3", "⌃⌥4", "⌃⌥5", "⌃⌥6", "⌃⌥7", "⌃⌥8", "⌃⌥9", "⌃⌥A"])
+precondition(defaults.chord(.decreaseGameSpeed).displayText == "⌃⌥−")
+precondition(defaults.chord(.increaseGameSpeed).displayText == "⌃⌥+")
+let retiredStore = makeDefaults()
+retiredStore.set(6, forKey: "shortcut.layoutVersion")
+retiredStore.set(HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X").payload, forKey: "shortcut.action.gardenQoL")
+let retired = Hades2ShortcutStore(defaults: retiredStore)
+precondition(retiredStore.object(forKey: "shortcut.action.gardenQoL") == nil)
+precondition(ShortcutAction(rawValue: "gardenQoL") == nil)
+precondition(retired.payload()["gardenQoL"] == nil)
 
 // Legacy Profiles serialized every derived chord. Loading their untouched
 // layout should reflow to current visible order, while a real custom chord survives.
 let legacyDefaults = legacyV4DefaultLayout()
 var legacyDefaultProfile: [String: Any] = [:]
 for action in legacyV4Order {
-    legacyDefaultProfile[action.rawValue] = legacyDefaults[action]!.payload
+    legacyDefaultProfile[action] = legacyDefaults[action]!.payload
 }
 var migratedLegacyProfile = Hades2ShortcutStore(defaults: makeDefaults())
 let seedCustom = HotkeyChord(keyCode: 7, modifiers: HotkeyChord.commandModifier, keyLabel: "X")

@@ -41,7 +41,7 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 9
+DESIRED_STATE_SCHEMA_VERSION = 10
 
 
 def _finite_number(value):
@@ -193,6 +193,9 @@ def normalize_persisted_desired(raw, schema_version):
     if schema_version < 9 and isinstance(migrated,dict):
         migrated.pop('nextOccurrenceTarget',None)
         migrated.pop('nextOccurrenceToken',None)
+    if schema_version < 10 and isinstance(migrated,dict):
+        migrated.pop('infiniteMoney',None)
+        migrated.pop('infiniteRerolls',None)
     return Hades2PreferenceStore.normalize(migrated)
 
 
@@ -228,11 +231,15 @@ class Hades2PreferenceStore:
         result['statLocks']=_normalize_stat_locks(raw.get('statLocks'))
         result['vitalLocks']=normalize_vital_locks(raw.get('vitalLocks'))
         result['resourceLocks']=_normalize_resource_locks(raw.get('resourceLocks'))
+        if result.get('infiniteMoney'):
+            result['resourceLocks'].pop('Money',None)
         result['elementLocks']=_normalize_element_locks(raw.get('elementLocks'))
         result['gatheringProbabilities']=normalize_gathering_probabilities(raw.get('gatheringProbabilities'))
         result['chaosGateProbability']=normalize_chaos_gate_probability(raw.get('chaosGateProbability'))
         value=_normalize_amount(raw.get('rerollsLock'))
         if value is not None:result['rerollsLock']=value
+        if result.get('infiniteRerolls'):
+            result['rerollsLock']=None
         reward=raw.get('nextRoomReward')
         if is_valid_next_room_reward(reward):
             result['nextRoomReward']=NEXT_ROOM_REWARD_MIGRATIONS.get(reward,reward)

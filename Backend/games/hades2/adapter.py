@@ -60,6 +60,7 @@ def clear_active(state,preserve_desired=False):
         state['gatheringProbabilities']={}
         state['chaosGateProbability']=None
     state['gatheringTargets']={}
+    state['gardenScopeToken']=None
     state.update(moneyLocked=False,rerollsLocked=False,healthLocked=False,manaLocked=False,armorLocked=False,scene='unknown')
     stats=state.get('stats')
     if isinstance(stats,dict):
@@ -76,6 +77,7 @@ def mark_disconnected(state):
     """Lose transport verification without pretending the Lua session was cleared."""
     state.update(connected=False, scene='unknown')
     state['gatheringTargets']={}
+    state['gardenScopeToken']=None
     state['activeFeatures']={key:False for key in TOGGLES}; state['activeFeatures']['gameSpeed']=False
     state['dormantFeatures']={}
     state['featureErrors']={}
@@ -131,7 +133,7 @@ class Hades2Adapter(GameAdapter):
         desired_defaults=desired_feature_defaults()
         self.state={'connected':False,'pid':None,'version':'1.'+preparation.VERSION,'status':'disconnected','scene':'unknown',
                     **desired_defaults,
-                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{},
+                    'resources':[],'rewards':[],'stats':{},'statSupport':{},'elements':[], 'boonRarity':default_boon_rarity(), 'nextRoomReward':None, 'nextOccurrenceTarget':None, 'gatheringProbabilities':{}, 'gatheringTargets':{}, 'gardenScopeToken':None,
                     'desiredFeatures':{key:desired_defaults[key] for key in TOGGLES},
                     'activeFeatures':{key:False for key in TOGGLES},
                     'dormantFeatures':{},
@@ -540,6 +542,12 @@ class Hades2Adapter(GameAdapter):
 
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
+        if feature=='infiniteMoney' and value is True:
+            locks=dict(preferences.get('resourceLocks',{}))
+            locks.pop('Money',None)
+            preferences['resourceLocks']=locks
+        if feature=='infiniteRerolls' and value is True:
+            preferences['rerollsLock']=None
         self._persist_preferences_candidate(preferences)
         self.preferences=preferences
         self.preference_initialized=True

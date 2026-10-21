@@ -28,6 +28,7 @@ let patch = Hades2StatePatch([
     "desiredFeatures": [
         "invincibility": true,
         "gardenQoL": false,
+        "infiniteMoney": false,
         "unknownFeature": true,
     ],
     "activeFeatures": [
@@ -36,7 +37,7 @@ let patch = Hades2StatePatch([
     ],
 ])
 precondition(patch.desiredFeatures?[.invincibility] == true)
-precondition(patch.desiredFeatures?[.gardenQoL] == false)
+precondition(patch.desiredFeatures?[.infiniteMoney] == false)
 precondition(patch.desiredFeatures?.count == 2)
 precondition(patch.activeFeatures?["invincibility"] == true)
 precondition(patch.activeFeatures?["gameSpeed"] == true)

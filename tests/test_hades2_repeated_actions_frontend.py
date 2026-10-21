@@ -39,6 +39,8 @@ for line in sys.stdin:
         feature = request["params"]["feature"]
         value = request["params"]["value"]
         observed["desiredFeatures"] = {feature: value}
+        if feature == "gameSpeed":
+            observed["gameSpeed"] = value
         if feature == "invincibility" and value:
             enable_count += 1
             if enable_count == 3:
@@ -52,7 +54,7 @@ for line in sys.stdin:
         }
     response = {
         "type": "result", "id": request["id"], "protocolVersion": 6,
-        "moduleProtocolVersion": 15, "gameID": args.game, "ok": success,
+        "moduleProtocolVersion": 16, "gameID": args.game, "ok": success,
         "result" if success else "state": observed,
     }
     if not success:
@@ -237,6 +239,29 @@ struct Main {
         waitForIdle(model, logURL: logURL, phase: "rejected boon rarity")
         check(!model.boonForceLegendary,
               "failed boon rarity edit retained an optimistic forced legendary value")
+
+        // Speed keys may arrive faster than replies. The first acknowledgement
+        // cannot overwrite the newer desired value used by the next key press.
+        model.gameSpeed = 1.0
+        model.performShortcut(.increaseGameSpeed)
+        model.performShortcut(.increaseGameSpeed)
+        check(abs(model.gameSpeed - 1.2) < 0.0001, "speed shortcut burst did not accumulate")
+        let speedReplyWindow = Date().addingTimeInterval(0.40)
+        while Date() < speedReplyWindow {
+            pump(0.012)
+            check(abs(model.gameSpeed - 1.2) < 0.0001,
+                  "older speed acknowledgement overwrote the later pending intent")
+        }
+        waitForIdle(model, logURL: logURL, phase: "two speed increases")
+        model.performShortcut(.decreaseGameSpeed)
+        waitForIdle(model, logURL: logURL, phase: "one speed decrease")
+        check(abs(model.gameSpeed - 1.1) < 0.0001, "speed decrease used stale input")
+        let speedValues = loggedCommands(at: logURL).filter {
+            ($0["params"] as? [String: Any])?["feature"] as? String == "gameSpeed"
+        }.compactMap { ($0["params"] as? [String: Any])?["value"] as? Double }
+        check(speedValues.count == 3 && abs(speedValues[0] - 1.1) < 0.0001
+              && abs(speedValues[1] - 1.2) < 0.0001 && abs(speedValues[2] - 1.1) < 0.0001,
+              "speed keys did not preserve the ordered desired values: \(speedValues)")
 
         // Applying a next-room reward mints a consumption identity. A double
         // shortcut press must not mint a second token while the first is pending.

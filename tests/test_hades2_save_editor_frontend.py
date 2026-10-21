@@ -490,7 +490,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 15,
+                'moduleProtocolVersion': 16,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -524,7 +524,7 @@ for raw in sys.stdin:
                 'type': 'result',
                 'id': req['id'],
                 'protocolVersion': 6,
-                'moduleProtocolVersion': 15,
+                'moduleProtocolVersion': 16,
                 'gameID': args.game,
                 'ok': False,
                 'error': {
@@ -554,7 +554,7 @@ for raw in sys.stdin:
         'type': 'result',
         'id': req['id'],
         'protocolVersion': 6,
-        'moduleProtocolVersion': 15,
+        'moduleProtocolVersion': 16,
         'gameID': args.game,
         'ok': True,
         'result': result,

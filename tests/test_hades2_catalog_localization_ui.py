@@ -127,15 +127,12 @@ assert direct['sourceName'] == '阿耳忒弥斯' and direct['sourceEnglishName']
 assert direct['sectionTitle'] == '阿耳忒弥斯' and direct['englishSectionTitle'] == 'Artemis'
 assert direct['englishCategory'] == 'Character Rewards'
 
-# The exact-acquisition picker is its own user-visible surface directly below
-# Character Rewards and above the mounted-management affordance. Recognition
-# labels must stay user-facing: backend strategy and raw TraitData ids are not
-# presentation fields.
-boon_panel = view[view.index('private var boonPanel: some View'):view.index('private func spawnRow', view.index('private var boonPanel: some View'))]
-character_index = boon_panel.index('hades2.spawn.characterRewards')
-exact_index = boon_panel.index('hades2.spawn.exactBoons')
-purging_index = boon_panel.index('hades2.spawn.purgingPool')
-assert character_index < exact_index < purging_index
+# Exact acquisition and mounted effects remain in the continuous boons section;
+# native reward generation has its own rooms/rewards panel. Recognition labels
+# stay user-facing rather than exposing backend strategy or TraitData ids.
+boon_panel = view[view.index('private var boonAcquisitionPanel: some View'):view.index('private var currentRunEffectsPanel: some View')]
+assert 'hades2.spawn.exactBoons' in boon_panel
+assert 'hades2.spawn.purgingPool' in view[view.index('private var currentRunEffectsPanel: some View'):]
 assert 'model.selectedExactBoon' in view
 assert 'selection: exactItemSelection' in boon_panel
 assert '$exactSearch' in boon_panel
@@ -165,10 +162,7 @@ assert 'private func repairExactSourceSelection()' in view
 assert 'private func selectExactSource(_ sourceID: String)' in view
 assert 'private var exactItemSelection: Binding<String>' in view
 
-exact_surface = boon_panel[
-    boon_panel.index('hades2.spawn.exactBoons'):
-    boon_panel.index('hades2.spawn.purgingPool')
-]
+exact_surface = boon_panel
 assert 'TrainerGroupedOptionPicker(' not in exact_surface
 assert exact_surface.count('Picker(') >= 2
 assert 'text("hades2.spawn.exactSource")' in exact_surface

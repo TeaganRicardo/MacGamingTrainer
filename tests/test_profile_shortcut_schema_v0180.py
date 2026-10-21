@@ -45,9 +45,10 @@ assert _normalize_shortcuts({'../escape': chord(18,6144,'1')}) == {}
 valid = {
     'invincibility': chord(18,6144,'1'),
     'infiniteHealth': chord(19,6144,'2'),
-    'gardenQoL': chord(5,6144,'G'),
+    'infiniteMoney': chord(5,6144,'G'),
 }
 assert _normalize_shortcuts(valid) == valid
+assert _normalize_shortcuts({'gardenQoL': chord(5,6144,'G'), **valid}) == valid
 versioned = {"_layoutVersion": 1, **valid}
 assert _normalize_shortcuts(versioned) == versioned
 future_layout_version = {"_layoutVersion": 2, **valid}

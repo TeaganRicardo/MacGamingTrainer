@@ -35,7 +35,7 @@ for raw in sys.stdin:
  if command=='status': time.sleep(.20)
  if command=='set_resource':
   if params['amount']==888:
-   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':15,'gameID':args.game,'ok':False,
+   print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':16,'gameID':args.game,'ok':False,
                      'error':{'code':'fixture_rejected','presentation':'hades2.error.exactNotEligible'}}),flush=True)
    continue
   if params['resource']=='Money': state['money']=params['amount']
@@ -58,7 +58,7 @@ for raw in sys.stdin:
  if command=='set_chaos_gate_desired': state['chaosGateProbability']=params['probability']
  if command=='load_profile': state['money']=200
  if command=='disconnect': state['connected']=False
- print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':15,'gameID':args.game,'ok':True,'result':state}),flush=True)
+ print(json.dumps({'type':'result','id':req['id'],'protocolVersion':6,'moduleProtocolVersion':16,'gameID':args.game,'ok':True,'result':state}),flush=True)
 """
 HARNESS = r"""
 import AppKit
@@ -277,13 +277,17 @@ final class GenerateAction: NSObject {
   guard let replacement=fields(host).first(where:{$0.isEditable && $0.stringValue=="200"}) else { fatalError("profile replacement did not rebuild the numeric field") }
   money=replacement
 
-  guard let damage=fields(host).first(where:{$0.isEditable && $0.stringValue=="2" && $0.bounds.width < 80}) else { fatalError("damage multiplier field missing") }
-  let damageEditor=edit(damage,to:"5.25",in:window); pump(0.45)
-  check(damage.currentEditor() != nil && commands("set_desired").isEmpty, "multiplier typing dismissed focus or applied early")
-  model.damageMultiplier=9; pump()
-  check(damageEditor.string=="5.25", "background desired refresh overwrote the multiplier draft")
+  // Damage now lives in the collapsed numeric area. Exercise the same native
+  // multiplier editing/completion contract through the visible Gold gain field;
+  // the typed completion cases below still cover Damage's command identity.
+  let multiplierName=Hades2GameModule.resolveText(key:"hades2.feature.moneyMultiplier",localization:localization)
+  guard let gainMultiplier=fields(host).first(where:{$0.isEditable && $0.accessibilityLabel()==multiplierName}) else { fatalError("gold gain multiplier field missing") }
+  let multiplierEditor=edit(gainMultiplier,to:"5.25",in:window); pump(0.45)
+  check(gainMultiplier.currentEditor() != nil && commands("set_desired").isEmpty, "multiplier typing dismissed focus or applied early")
+  model.moneyMultiplier=9; pump()
+  check(multiplierEditor.string=="5.25", "background desired refresh overwrote the multiplier draft")
   window.makeFirstResponder(nil); waitForCommand("set_desired",count:1)
-  check(model.damageMultiplier==5.25 && (commands("set_desired").last?["params"] as? [String:Any])?["feature"] as? String=="damageMultiplier", "multiplier blur misrouted its draft")
+  check(model.moneyMultiplier==5.25 && (commands("set_desired").last?["params"] as? [String:Any])?["feature"] as? String=="moneyMultiplier", "multiplier blur misrouted its draft")
 
   // All Hades numeric families cross one validation/completion interface.
   let generation=model.editGeneration
