@@ -39,6 +39,12 @@ precondition(matches("悟性").contains { $0.titleKey == "hades2.stat.grasp" && 
 precondition(matches("Grasp").contains { $0.titleKey == "hades2.stat.grasp" && $0.section == .values })
 precondition(matches("花园瞬间成熟").contains { $0.shortcut == .matureGarden && $0.section == .resources })
 precondition(matches("Chaos Gate").contains { $0.titleKey == "hades2.chaosGate.title" && $0.section == .rooms })
+for key in ["hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.chaos.cancelPair", "hades2.rarity.minimum"] {
+    for label in resolve(key) {
+        precondition(matches(label).contains { $0.titleKey == key && $0.section == .boons },
+                     "a visible non-shortcut function is absent from search: \(label)")
+    }
+}
 precondition(matches("无法匹配的功能").isEmpty)
 let entries = Hades2WorkbenchCatalog.entries
 precondition(Set(entries.map(\.id)).count == entries.count, "search destinations must be stable and unique")

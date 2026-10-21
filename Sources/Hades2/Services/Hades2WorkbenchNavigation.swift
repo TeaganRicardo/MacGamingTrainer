@@ -50,9 +50,17 @@ enum Hades2WorkbenchCatalog {
         ]
         let other: [(Hades2WorkbenchSection, [String])] = [
             (.values, numeric),
-            (.boons, ["hades2.traits.manager", "hades2.section.elements"]),
-            (.resources, Hades2GatheringFamily.allCases.map(\.titleKey) + ["hades2.resource.sectionDefault"]),
-            (.rooms, ["hades2.chaosGate.title"]),
+            (.common, ["hades2.gameSpeed.title"]),
+            (.boons, ["hades2.traits.manager", "hades2.traits.targetLevel", "hades2.traits.targetRarity",
+                      "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
+                      "hades2.traits.remove", "hades2.traits.removeAllMatching",
+                      "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
+                      "hades2.rarity.minimum", "hades2.rarity.multiplier", "hades2.section.elements"]),
+            (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)
+                + ["hades2.resource.materials", "hades2.gathering.title", "hades2.gathering.restoreNative"]),
+            (.rooms, ["hades2.chaosGate.title", "hades2.chaosGate.probability", "hades2.nextRoom.title",
+                      "hades2.occurrence.title", "hades2.spawn.olympianBoons", "hades2.spawn.pickupRewards",
+                      "hades2.spawn.characterRewards"]),
             (.management, ["hades2.manage.profiles", "hades2.saveEditor.title", "hades2.manage.diagnostics",
                            "hades2.manage.prepareSigning", "hades2.manage.restoreSigning", "host.saveManagement",
                            "host.shortcutSettings", "host.viewLog", "host.viewLogHistory", "host.clearCompletedLogs",
