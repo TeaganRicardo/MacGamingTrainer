@@ -773,6 +773,9 @@ struct Main {
         if inlineValueField() == nil {
             fail("The initial Save result requires an extra entity selection before editing")
         }
+        if inlineValueField()?.accessibilityLabel() != "Ashes" {
+            fail("The inline Save input is named only by its generic value placeholder")
+        }
 
         let sent = commands(at: commandLog)
         if sent.map({ $0["command"] as? String }) != ["save_editor_inventory", "save_editor_open", "save_editor_query"] {

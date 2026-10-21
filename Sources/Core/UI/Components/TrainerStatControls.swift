@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TrainerVitalMetricCard<Field: Hashable>: View {
+    @EnvironmentObject private var localization: TrainerLocalizationStore
     let title: String
     let icon: String
     let tint: Color
@@ -20,11 +21,11 @@ struct TrainerVitalMetricCard<Field: Hashable>: View {
             TrainerLockButton(locked: locked, enabled: editable, action: onLock)
         } content: {
             HStack(spacing: 2) {
-                TrainerTextField(title: "—", text: $current, onEditingChanged: TrainerTextField.editingTracker(focus, equals: currentField), onCommit: onCurrentCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
+                TrainerTextField(title: "—", text: $current, accessibilityLabel: localization.localized("host.input.currentValue", arguments: [title]), onEditingChanged: TrainerTextField.editingTracker(focus, equals: currentField), onCommit: onCurrentCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
                     .frame(width: 54)
                     .disabled(!editable)
                 Text("/").foregroundStyle(.secondary)
-                TrainerTextField(title: "—", text: $maximum, onEditingChanged: TrainerTextField.editingTracker(focus, equals: maximumField), onCommit: onMaximumCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
+                TrainerTextField(title: "—", text: $maximum, accessibilityLabel: localization.localized("host.input.maximumValue", arguments: [title]), onEditingChanged: TrainerTextField.editingTracker(focus, equals: maximumField), onCommit: onMaximumCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 19))
                     .frame(width: 54)
                     .disabled(!editable)
             }
@@ -75,7 +76,7 @@ struct TrainerAmountMetricCard<Field: Hashable>: View {
         TrainerMetricCard(title: title, icon: icon, tint: tint) {
             TrainerLockButton(locked: locked, enabled: editable, action: onLock)
         } content: {
-            TrainerTextField(title: placeholder, text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
+            TrainerTextField(title: placeholder, text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(!editable)
         }
@@ -99,7 +100,7 @@ struct TrainerCounterMetricCard<Field: Hashable>: View {
                 Text(detail).font(.caption2).foregroundStyle(.secondary)
             }
         } content: {
-            TrainerTextField(title: "—", text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
+            TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .disabled(!editable)
         }
@@ -128,7 +129,7 @@ struct TrainerStatMetricCard<Field: Hashable>: View {
             TrainerLockButton(locked: locked, enabled: isEditable, action: onLock)
         } content: {
             HStack(spacing: 3) {
-                TrainerTextField(title: "—", text: $text, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
+                TrainerTextField(title: "—", text: $text, accessibilityLabel: title, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit, style: .plain, alignment: .center, font: TrainerTextField.metricFont(size: 20))
                     .frame(width: 58)
                     .disabled(!isEditable)
                 if !suffix.isEmpty {
@@ -160,7 +161,7 @@ struct TrainerInlineStatEditor<Field: Hashable>: View {
             HStack(spacing: 12) {
                 Text(title).font(.subheadline.weight(.semibold))
                 Spacer()
-                TrainerNumberField(text: $text, placeholder: "host.value", width: 90, enabled: isEditable, alignment: .leading, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit)
+                TrainerNumberField(text: $text, placeholder: "host.value", accessibilityLabel: title, width: 90, enabled: isEditable, alignment: .leading, onEditingChanged: TrainerTextField.editingTracker(focus, equals: focusValue), onCommit: onCommit)
                 if !suffix.isEmpty {
                     Text(suffix).foregroundStyle(.secondary).frame(width: 18)
                 }

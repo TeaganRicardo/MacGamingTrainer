@@ -845,6 +845,7 @@ struct Hades2TrainerView: View {
                 TrainerNumberField(
                     text: gameSpeedInputBinding,
                     placeholder: String(Hades2MultiplierKey.gameSpeed.defaultValue),
+                    accessibilityLabel: text("hades2.gameSpeed.a11y"),
                     width: 62,
                     enabled: model.canEditDesired,
                     onEditingChanged: tracking(.gameSpeed),
@@ -1260,6 +1261,7 @@ struct Hades2TrainerView: View {
                 TrainerNumberField(
                     text: $boonRarityFactor,
                     placeholder: "100",
+                    accessibilityLabel: text("hades2.rarity.multiplier"),
                     width: 72,
                     enabled: model.canEditDesired,
                     onEditingChanged: tracking(.boonRarity),

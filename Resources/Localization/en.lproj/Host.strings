@@ -18,6 +18,8 @@
 "host.more" = "More";
 "host.value" = "Value";
 "host.amount" = "Amount";
+"host.input.currentValue" = "Current {0}";
+"host.input.maximumValue" = "Maximum {0}";
 "host.lock" = "Lock";
 "host.unlock" = "Unlock";
 "host.resource.searchPlaceholder" = "Search name or resource ID";

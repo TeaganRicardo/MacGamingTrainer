@@ -56,7 +56,7 @@ struct TrainerFeatureMultiplierRow: View {
             HStack(spacing: 16) {
                 TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, emphasized: state.isOn)
                 Spacer()
-                TrainerNumberField(text: $text, placeholder: "2", width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
+                TrainerNumberField(text: $text, placeholder: "2", accessibilityLabel: title, width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
                 Text("×").foregroundStyle(.secondary)
                 TrainerShortcutBadgeSlot(text: shortcutText)
                 TrainerToggleControl(
@@ -94,7 +94,7 @@ struct TrainerCompactMultiplierRow: View {
             }
             .font(.subheadline.weight(.medium))
             Spacer()
-            TrainerNumberField(text: $text, placeholder: "2", width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
+            TrainerNumberField(text: $text, placeholder: "2", accessibilityLabel: title, width: 70, enabled: state.canEditValue, alignment: .leading, onEditingChanged: onEditingChanged, onCommit: onCommit)
             Text("×").foregroundStyle(.secondary)
             TrainerShortcutBadgeSlot(text: shortcutText)
             TrainerToggleControl(

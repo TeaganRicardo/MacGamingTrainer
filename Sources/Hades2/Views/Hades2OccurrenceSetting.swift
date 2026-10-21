@@ -32,13 +32,13 @@ struct Hades2OccurrenceSetting: View {
                 TrainerTextField(
                     title: nativeLabel,
                     text: $input,
+                    accessibilityLabel: title + " " + probabilityLabel,
                     onEditingChanged: onEditingChanged,
                     onCommit: onCommit,
                     alignment: .center
                 )
                 .frame(width: 82)
                 .disabled(!enabled)
-                .accessibilityLabel(title + " " + probabilityLabel)
                 .help(probabilityHelp)
                 Text(input.isEmpty ? "" : "%")
                     .font(.subheadline)

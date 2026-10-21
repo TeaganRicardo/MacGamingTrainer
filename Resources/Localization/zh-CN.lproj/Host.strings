@@ -18,6 +18,8 @@
 "host.more" = "更多";
 "host.value" = "数值";
 "host.amount" = "数量";
+"host.input.currentValue" = "当前{0}";
+"host.input.maximumValue" = "{0}上限";
 "host.lock" = "锁定";
 "host.unlock" = "解锁";
 "host.resource.searchPlaceholder" = "搜索名称或资源 ID";
