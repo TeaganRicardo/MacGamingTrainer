@@ -10014,8 +10014,10 @@ if __MacGamingTrainerV1 == nil then
       -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH
       if feature == "damageMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
+        runtimeState.previousDamageMultiplier = M.damageMultiplier
         M.damageMultiplier = value
-        return state(params.includeCatalogs)
+        feature = "damageEnabled"
+        value = value ~= 1
       end
       if feature == "moneyMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end

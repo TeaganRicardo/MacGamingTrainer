@@ -29,7 +29,7 @@ EXPECTED_DEFAULTS = {
     "forceEnableRerolls": False,
     "moneyMultiplierEnabled": False,
     "resourceMultiplierEnabled": False,
-    "damageMultiplier": 2.0,
+    "damageMultiplier": 1.0,
     "moneyMultiplier": 2.0,
     "resourceMultiplier": 2.0,
     "gameSpeed": 1.0,

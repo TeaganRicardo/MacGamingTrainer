@@ -360,18 +360,23 @@ struct Hades2TrainerView: View {
     private var commonSection: some View {
         TrainerSection(title: text("hades2.section.common"), icon: "bolt.fill") {
             VStack(spacing: 1) {
-                featureRow(text("hades2.feature.invincibility"), key: .invincibility, icon: "shield.fill", enabled: model.invincibility, shortcut: .invincibility) { model.feature(.invincibility, value: !model.invincibility) }
-                featureRow(text("hades2.feature.infiniteHealth"), key: .infiniteHealth, icon: "heart.fill", enabled: model.infiniteHealth, shortcut: .infiniteHealth) { model.feature(.infiniteHealth, value: !model.infiniteHealth) }
-                featureRow(text("hades2.feature.infiniteMana"), key: .infiniteMana, icon: "sparkles", enabled: model.infiniteMana, shortcut: .infiniteMana) { model.feature(.infiniteMana, value: !model.infiniteMana) }
-                featureRow(text("hades2.feature.infiniteMoney"), key: .infiniteMoney, icon: "circle.hexagongrid.fill", enabled: model.infiniteMoney, shortcut: .infiniteMoney) { model.feature(.infiniteMoney, value: !model.infiniteMoney) }
-                    .help(text("hades2.feature.infiniteMoney.help"))
-                featureRow(text("hades2.feature.infiniteRerolls"), key: .infiniteRerolls, icon: "dice.fill", enabled: model.infiniteRerolls, shortcut: .infiniteRerolls) { model.feature(.infiniteRerolls, value: !model.infiniteRerolls) }
-                    .help(text("hades2.feature.infiniteRerolls.help"))
-                featureRow(text("hades2.feature.forceEnableRerolls"), key: .forceEnableRerolls, icon: "arrow.triangle.2.circlepath", enabled: model.forceEnableRerolls, shortcut: .forceEnableRerolls) { model.feature(.forceEnableRerolls, value: !model.forceEnableRerolls) }
-                featureRow(text("hades2.feature.instantCastCooldown"), key: .instantCastCooldown, icon: "circle.dotted.circle", enabled: model.instantCastCooldown, shortcut: .instantCastCooldown) { model.feature(.instantCastCooldown, value: !model.instantCastCooldown) }
-                featureRow(text("hades2.feature.hexAlwaysReady"), key: .hexAlwaysReady, icon: "moon.stars.fill", enabled: model.hexAlwaysReady, shortcut: .hexAlwaysReady) { model.feature(.hexAlwaysReady, value: !model.hexAlwaysReady) }
-                featureRow(text("hades2.feature.infiniteAmmo"), key: .infiniteAmmo, icon: "scope", enabled: model.infiniteAmmo, shortcut: .infiniteAmmo) { model.feature(.infiniteAmmo, value: !model.infiniteAmmo) }
-                featureRow(text("hades2.feature.autoMiniGames"), key: .autoMiniGames, icon: "gamecontroller.fill", enabled: model.autoMiniGames, shortcut: .autoMiniGames) { model.feature(.autoMiniGames, value: !model.autoMiniGames) }
+                ForEach(Hades2WorkbenchCatalog.shortcutActions(in: .common).filter { $0.commonFeatureIcon != nil }) { action in
+                    if let key = action.featureKey, let icon = action.commonFeatureIcon {
+                        let enabled = model.isFeatureEnabled(key)
+                        if let helpKey = action.commonFeatureHelpKey {
+                            featureRow(text(action.presentationKey), key: key, icon: icon,
+                                       enabled: enabled, shortcut: action) {
+                                model.feature(key, value: !model.isFeatureEnabled(key))
+                            }
+                            .help(text(helpKey))
+                        } else {
+                            featureRow(text(action.presentationKey), key: key, icon: icon,
+                                       enabled: enabled, shortcut: action) {
+                                model.feature(key, value: !model.isFeatureEnabled(key))
+                            }
+                        }
+                    }
+                }
             }
             .trainerGroupedRows()
             gameSpeedPanel
@@ -1209,23 +1214,21 @@ struct Hades2TrainerView: View {
     }
 
     private var damageMetric: some View {
-        let presentation = model.featurePresentation(.damageEnabled, enabled: model.damageEnabled)
-        return TrainerMetricCard(title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill", tint: accent) {
-            TrainerToggleControl(isOn: model.damageEnabled, enabled: presentation.isInteractive,
-                helpText: presentation.helpText(using: localization)) {
-                model.feature(.damageEnabled, value: !model.damageEnabled)
-            }
-            .accessibilityLabel(text("hades2.feature.damageMultiplier"))
+        let modified = abs(model.damageMultiplier - 1) >= 0.0001
+        return TrainerMetricCard(title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill",
+                                 tint: modified ? accent : theme.inactive) {
+            EmptyView()
         } content: {
             HStack(spacing: 6) {
-                TrainerShortcutBadgeSlot(text: model.shortcutText(.damageEnabled))
-                TrainerNumberField(text: $multiplier, placeholder: "2", accessibilityLabel: text("hades2.feature.damageMultiplier"),
+                TrainerNumberField(text: $multiplier, placeholder: "1",
+                    accessibilityLabel: text("hades2.feature.damageMultiplier"),
                     width: 58, enabled: model.canEditDesired, onEditingChanged: tracking(.damageMultiplier),
                     onCommit: completing(.multiplier("damageMultiplier")))
-                Text("×").foregroundStyle(.secondary)
+                Text("×")
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
             }
         }
-        .opacity(presentation.opacity)
     }
 
     private var boonRarityPanel: some View {

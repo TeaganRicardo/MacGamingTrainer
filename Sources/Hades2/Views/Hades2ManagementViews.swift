@@ -149,7 +149,7 @@ struct Hades2ShortcutSettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: theme.sheetSpacing) {
-                    ForEach(ShortcutAction.allCases) { action in
+                    ForEach(Hades2WorkbenchCatalog.orderedShortcutActions) { action in
                         HStack {
                             Text(text(action.presentationKey))
                             Spacer()

@@ -149,12 +149,21 @@ for key in (
 gathering = (HADES / "Views/Hades2GatheringPanel.swift").read_text()
 occurrence_setting = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
 visible_ui = "\n".join((view, management_view, gathering, occurrence_setting))
+common_section = view[view.index("private var commonSection: some View {"):view.index("private var boonsSection: some View {")]
+assert "Hades2WorkbenchCatalog.shortcutActions(in: .common)" in common_section
+assert "action.commonFeatureIcon" in common_section
+common_actions = {
+    "invincibility", "infiniteHealth", "infiniteMana", "infiniteMoney", "infiniteRerolls",
+    "forceEnableRerolls", "instantCastCooldown", "hexAlwaysReady", "infiniteAmmo", "autoMiniGames",
+}
 gathering_actions = {
     "generateFlora", "generateMining", "generateDigging", "generateShades", "generateFishing",
 }
 assert "generateShortcutText: model.shortcutText(family.shortcutAction)" in gathering
 assert "var shortcutAction: ShortcutAction" in types
 for action in actions:
+    if action in common_actions:
+        continue
     if action in gathering_actions:
         assert re.search(rf"case \.{re.escape(action)}: \.\w+", types), (
             f"gathering shortcut is not mapped to a family: {action}"
