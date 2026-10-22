@@ -49,32 +49,54 @@ struct BoonOption: Identifiable {
 }
 
 enum ShortcutAction: String, CaseIterable, Identifiable {
-    // The selected ten common controls own the first ten default chords.
-    // Other controls retain shortcuts in their functional sections; numeric
-    // damage controls can appear above the common list without taking its keys.
+    // Declaration order mirrors the workbench for diagnostics. The canonical
+    // allocation and presentation order is Hades2WorkbenchCatalog.orderedShortcutActions.
     case invincibility, infiniteHealth, infiniteMana, infiniteMoney, infiniteRerolls
     case forceEnableRerolls, instantCastCooldown, hexAlwaysReady, infiniteAmmo, autoMiniGames
     case decreaseGameSpeed, increaseGameSpeed
-    case damageEnabled
-    case boonRarityEnabled, forceLegendary, forceDuo
+    case boonRarityEnabled, forceLegendary, forceDuo, acquireChaosPair, acquireExactBoon, openSellTraits
     case moneyMultiplierEnabled, resourceMultiplierEnabled
-    case generateFlora, generateMining, generateDigging, generateShades, generateFishing
-    case matureGarden
-    case spawnOlympian, spawnPickup, spawnSpecial, acquireChaosPair, acquireExactBoon, openSellTraits
+    case generateFlora, generateMining, generateDigging, generateShades, generateFishing, matureGarden
     case applyNextRoomReward, applyNextOccurrence
+    case spawnOlympian, spawnPickup, spawnSpecial
     case disableAll
 
     /// Stable legacy subset used only to interpret the v3 numeric layout.
-    /// It must not participate in active default allocation.
+    /// The retired damage toggle remains recognized as legacy data by the
+    /// migration store, but is no longer a current shortcut action.
     static let legacyDigitActions: [ShortcutAction] = [
         .invincibility, .infiniteHealth, .infiniteMana, .instantCastCooldown, .hexAlwaysReady,
-        .infiniteAmmo, .damageEnabled, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
+        .infiniteAmmo, .autoMiniGames, .moneyMultiplierEnabled, .disableAll,
     ]
 
     var id: String { rawValue }
     var featureKey: Hades2FeatureKey? { Hades2FeatureKey(rawValue: rawValue) }
 
     var isSpeedAdjustment: Bool { self == .decreaseGameSpeed || self == .increaseGameSpeed }
+
+    var commonFeatureIcon: String? {
+        switch self {
+        case .invincibility: "shield.fill"
+        case .infiniteHealth: "heart.fill"
+        case .infiniteMana: "sparkles"
+        case .infiniteMoney: "circle.hexagongrid.fill"
+        case .infiniteRerolls: "dice.fill"
+        case .forceEnableRerolls: "arrow.triangle.2.circlepath"
+        case .instantCastCooldown: "circle.dotted.circle"
+        case .hexAlwaysReady: "moon.stars.fill"
+        case .infiniteAmmo: "scope"
+        case .autoMiniGames: "gamecontroller.fill"
+        default: nil
+        }
+    }
+
+    var commonFeatureHelpKey: String? {
+        switch self {
+        case .infiniteMoney: "hades2.feature.infiniteMoney.help"
+        case .infiniteRerolls: "hades2.feature.infiniteRerolls.help"
+        default: nil
+        }
+    }
 
     var gatheringFamily: Hades2GatheringFamily? {
         switch self {
@@ -99,7 +121,6 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .instantCastCooldown: return "hades2.feature.instantCastCooldown"
         case .hexAlwaysReady: return "hades2.feature.hexAlwaysReady"
         case .infiniteAmmo: return "hades2.feature.infiniteAmmo"
-        case .damageEnabled: return "hades2.feature.damageMultiplier"
         case .autoMiniGames: return "hades2.feature.autoMiniGames"
         case .decreaseGameSpeed: return "hades2.shortcut.decreaseGameSpeed"
         case .increaseGameSpeed: return "hades2.shortcut.increaseGameSpeed"
@@ -127,7 +148,6 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         }
     }
 }
-
 struct ElementCount: Identifiable, Equatable {
     let id: String
     let name: String

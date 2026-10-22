@@ -48,6 +48,10 @@ for key in ["hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.tr
 precondition(matches("无法匹配的功能").isEmpty)
 let entries = Hades2WorkbenchCatalog.entries
 precondition(Set(entries.map(\.id)).count == entries.count, "search destinations must be stable and unique")
+precondition(Set(Hades2WorkbenchCatalog.orderedShortcutActions) == Set(ShortcutAction.allCases))
+precondition(Hades2WorkbenchCatalog.orderedShortcutActions.count == ShortcutAction.allCases.count)
+precondition(entries.contains { $0.titleKey == "hades2.feature.damageMultiplier" && $0.shortcut == nil && $0.section == .values })
+precondition(!ShortcutAction.allCases.contains { $0.rawValue == "damageEnabled" })
 for action in ShortcutAction.allCases {
     precondition(entries.filter { $0.shortcut == action }.count == 1, "a current shortcut action is absent or duplicated")
 }
