@@ -16,8 +16,6 @@ struct Hades2ChaosGatePanel: View {
     }
 
     var body: some View {
-        let generation = model.editGeneration
-        return TrainerSection(title: text("hades2.chaosGate.title"), icon: "door.left.hand.open") {
             Hades2OccurrenceSetting(
                 title: text("hades2.chaosGate.probability"),
                 icon: "percent",
@@ -36,8 +34,5 @@ struct Hades2ChaosGatePanel: View {
                 },
                 onReset: { model.setChaosGateProbability(nil) }
             )
-        }
-        .onAppear { synchronize() }
-        .onChange(of: model.chaosGateProbability) { synchronize() }
     }
 }

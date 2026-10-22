@@ -262,8 +262,9 @@ struct Hades2ShortcutStore {
 
     private static func knownBrokenV4MigratedLayout() -> [String: HotkeyChord] {
         var layout = legacyV4DefaultLayout()
-        for (identity, digit) in legacyV3DefaultDigits {
-            guard let proposed = HotkeyChord.controlOptionDigit(digit) else { continue }
+        for identity in legacyV4ActionOrder {
+            guard let digit = legacyV3DefaultDigits[identity],
+                  let proposed = HotkeyChord.controlOptionDigit(digit) else { continue }
             if let other = legacyV4ActionOrder.first(where: {
                 $0 != identity && layout[$0].map(Self.token) == Self.token(proposed)
             }) {
