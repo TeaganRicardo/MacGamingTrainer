@@ -1207,7 +1207,7 @@ struct Hades2TrainerView: View {
     }
 
     private var damageMetric: some View {
-        let modified = model.damageMultiplier != 1
+        let modified = abs(model.damageMultiplier - 1) >= 0.0001
         return TrainerMetricCard(title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill",
                                  tint: modified ? accent : theme.inactive) {
             EmptyView()
@@ -1429,7 +1429,9 @@ struct Hades2TrainerView: View {
                 options: specialBoons,
                 selection: $model.selectedSpecialReward,
                 shortcut: .spawnSpecial,
-                enabled: model.canSpawnReward,
+                // The row stays interactive while either character-reward action
+                // family is available; the button reflects the selected option.
+                enabled: model.canSpawnReward || model.canOpenSpecialChoice,
                 actionEnabled: model.canPerformSelectedSpecialReward,
                 onAction: model.performSpecialReward
             )

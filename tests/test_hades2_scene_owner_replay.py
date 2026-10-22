@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     )
     adapter.preferences = adapter._default_preferences()
     adapter.preferences.update(
-        damageEnabled=True,
+        damageMultiplier=2.0,
         infiniteAmmo=True,
         statLocks={"moveSpeed": 150},
         vitalLocks={"health": {"current": 40, "max": 100}},
@@ -61,7 +61,10 @@ with tempfile.TemporaryDirectory(prefix="mgt-scene-owner-replay-") as temporary:
     batches = [call["batch"] for call in resident.calls if call["kind"] == "reconcile"]
     assert len(batches) == 1, "Hero-less Crossroads skipped durable resident replay"
     batch = batches[0]
-    assert ("set_feature", {"feature": "damageEnabled", "value": True}) in batch
+    assert ("set_feature", {"feature": "damageMultiplier", "value": 2.0}) in batch
+    assert not any(
+        params.get("feature") == "damageEnabled" for command, params in batch
+    ), "the retired damage toggle must not replay as an independent intent"
     assert ("set_feature", {"feature": "infiniteAmmo", "value": True}) in batch
     assert any(command == "stage_desired_locks" for command, _ in batch), (
         "cold attach failed to give ownerless locks to the resident"

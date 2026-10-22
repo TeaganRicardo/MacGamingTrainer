@@ -94,7 +94,7 @@ enum Hades2WorkbenchCatalog {
             (.common, ["hades2.gameSpeed.title"]),
             (.boons, ["hades2.traits.manager", "hades2.traits.targetLevel", "hades2.traits.targetRarity",
                       "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
-                      "hades2.traits.remove",
+                      "hades2.traits.remove", "hades2.traits.removeAllMatching",
                       "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
                       "hades2.rarity.minimum", "hades2.rarity.multiplier", "hades2.section.elements"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)

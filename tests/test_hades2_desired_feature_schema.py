@@ -126,6 +126,11 @@ assert legacy_enabled["damageEnabled"] is True
 legacy_default = Hades2PreferenceStore.normalize({"damageEnabled": True})
 assert legacy_default["damageMultiplier"] == 2.0
 assert legacy_default["damageEnabled"] is True
+# An explicit 1x is normal damage even when an old profile left the toggle on:
+# migration must not silently upgrade it to the historical 2x default.
+legacy_explicit_one = Hades2PreferenceStore.normalize({"damageEnabled": True, "damageMultiplier": 1.0})
+assert legacy_explicit_one["damageMultiplier"] == 1.0
+assert legacy_explicit_one["damageEnabled"] is False
 assert Hades2PreferenceStore.normalize({"damageMultiplier": 1.0})["damageEnabled"] is False
 assert Hades2PreferenceStore.normalize({"damageMultiplier": 4.0})["damageEnabled"] is True
 versioned_legacy = normalize_persisted_desired({"schemaVersion": 10, "damageEnabled": False, "damageMultiplier": 2.0}, 10)

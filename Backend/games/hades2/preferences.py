@@ -56,13 +56,19 @@ def _finite_number(value):
 LEGACY_DAMAGE_MULTIPLIER = 2.0
 
 
-def canonicalize_damage(preferences):
+def canonicalize_damage(preferences,legacy_toggle_veto=True):
     """Collapse the retired damage toggle into the authoritative multiplier.
 
     A persisted profile from an older schema can carry ``damageEnabled: false``
-    next to the retired 2x default; the toggle only ever vetoes (disables), so
-    an explicit ``false`` normalizes to 1x instead of resurrecting the effect.
-    An enabled toggle without a multiplier keeps the historical 2x default.
+    next to the retired 2x default; the toggle only ever vetoed (disabled), so
+    ``legacy_toggle_veto`` normalizes an explicit ``false`` to 1x instead of
+    resurrecting the effect. An enabled toggle without a multiplier keeps the
+    historical 2x default; an explicit multiplier always wins, so a stored 1x
+    stays normal damage.
+
+    Runtime desired state is already a projection of the multiplier, so callers
+    that own an explicit multiplier pass ``legacy_toggle_veto=False``: a stale
+    derived toggle must never veto the value it is derived from.
     """
     if not isinstance(preferences,dict):return preferences
     result=dict(preferences)
@@ -71,14 +77,10 @@ def canonicalize_damage(preferences):
     multiplier=result.get('damageMultiplier')
     if not _finite_number(multiplier) or not rule['min']<=multiplier<=rule['max']:
         multiplier=None
-    if enabled is False:
+    if legacy_toggle_veto and enabled is False:
         multiplier=1.0
-    elif enabled is True and (multiplier is None or multiplier<=1):
-        # Turning the retired toggle back on must produce an effective value:
-        # 1x is defined as "off", so the historical 2x default is restored.
-        multiplier=LEGACY_DAMAGE_MULTIPLIER
     elif multiplier is None:
-        multiplier=rule['default']
+        multiplier=LEGACY_DAMAGE_MULTIPLIER if enabled is True else rule['default']
     result['damageMultiplier']=float(multiplier)
     result['damageEnabled']=multiplier!=1.0
     return result

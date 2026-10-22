@@ -10051,7 +10051,9 @@ if __MacGamingTrainerV1 == nil then
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
         if M.terminalActionUnknown then error(message) end
-        if params.feature == "damageMultiplier" or params.feature == "damageEnabled" then
+        if params.feature == "damageMultiplier" then
+          -- Only the multiplier branch stages a previous value; a toggle write
+          -- never changes the multiplier, so it has nothing to roll back.
           M.damageMultiplier = runtimeState.previousDamageMultiplier
           runtimeState.previousDamageMultiplier = nil
         end
@@ -10063,7 +10065,7 @@ if __MacGamingTrainerV1 == nil then
         reconcileDesired(false, feature)
         error("Feature unavailable: " .. tostring(message))
       end
-      if params.feature == "damageMultiplier" or params.feature == "damageEnabled" then runtimeState.previousDamageMultiplier = nil end
+      if params.feature == "damageMultiplier" then runtimeState.previousDamageMultiplier = nil end
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)

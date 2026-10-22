@@ -16,6 +16,7 @@ from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vi
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
 from .preferences import (
+    LEGACY_DAMAGE_MULTIPLIER,
     Hades2PreferenceStore,
     canonicalize_damage,
     next_room_reward_consumed,
@@ -425,7 +426,7 @@ class Hades2Adapter(GameAdapter):
             diagnostics=decoded.get('runtimeDiagnostics')
             token=diagnostics.get('nextOccurrenceToken') if isinstance(diagnostics,dict) else None
             self.preferences['nextOccurrenceToken']=token if occurrence is not None and isinstance(token,str) and token else None
-        self.preferences=canonicalize_damage(self.preferences)
+        self.preferences=canonicalize_damage(self.preferences,legacy_toggle_veto=False)
 
     def _adopt_lua_preferences(self,decoded):
         self._adopt_runtime_preferences(decoded)
@@ -550,11 +551,23 @@ class Hades2Adapter(GameAdapter):
         preferences=dict(self.preferences);preferences[feature]=value
         # The multiplier owns damage. An explicit multiplier write is
         # authoritative and drops the derived toggle, otherwise the stale
-        # projection would veto it; a legacy toggle write is translated into a
-        # multiplier write so the resident never receives a second intent.
+        # projection would veto it.
         if feature=='damageMultiplier':
             preferences.pop('damageEnabled',None)
-        preferences=canonicalize_damage(preferences)
+        elif feature=='damageEnabled':
+            # A legacy toggle write is translated here, where the intent is
+            # unambiguous. 1x is defined as off, so enabling must produce an
+            # effective value: keep an existing multiplier above 1x or restore
+            # the historical default.
+            preferences.pop('damageEnabled',None)
+            if value is False:
+                preferences['damageMultiplier']=1.0
+            else:
+                current=preferences.get('damageMultiplier')
+                if not (isinstance(current,(int,float)) and not isinstance(current,bool) and current>1):
+                    preferences['damageMultiplier']=LEGACY_DAMAGE_MULTIPLIER
+        preferences=canonicalize_damage(preferences,legacy_toggle_veto=False)
+        # Either half of the pair reaches the resident as one multiplier write.
         if feature in ('damageEnabled','damageMultiplier'):
             feature='damageMultiplier'
             value=preferences['damageMultiplier']
@@ -669,7 +682,7 @@ class Hades2Adapter(GameAdapter):
         if not self.runtime.has_attachment:return dict(self.state)
         # Desired damage is one value even when a caller mutated the retired
         # toggle directly; canonicalize before it reaches the resident diff.
-        self.preferences=canonicalize_damage(self.preferences)
+        self.preferences=canonicalize_damage(self.preferences,legacy_toggle_veto=False)
         if self._preference_persistence_dirty:
             # Current in-memory desired is authoritative. Retry its failed
             # durable write before crossing another runtime mutation boundary.
