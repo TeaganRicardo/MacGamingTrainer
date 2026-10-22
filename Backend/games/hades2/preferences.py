@@ -359,7 +359,12 @@ class Hades2PreferenceStore:
         try:
             if self.write_blocked_error is not None:
                 raise self.write_blocked_error
-            document=dict(preferences)
+            # The durable document must state the same intent the runtime acts
+            # on. The multiplier is authoritative here, so persist the projected
+            # pair instead of whatever stale toggle the caller still carried;
+            # the legacy veto belongs to reading an older document, not to
+            # writing the current one.
+            document=canonicalize_damage(preferences,legacy_toggle_veto=False)
             document['schemaVersion']=DESIRED_STATE_SCHEMA_VERSION
             payload=json.dumps(document,ensure_ascii=False,sort_keys=True,indent=2,allow_nan=False)+'\n'
             atomic_write_text(self.path,payload)

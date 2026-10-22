@@ -105,4 +105,11 @@ document = json.loads(Path(adapter.preference_store.path).read_text(encoding='ut
 assert document['damageMultiplier'] == 5.0
 assert document['damageEnabled'] is True
 
+# The durable document must state the intent the runtime acts on even when a
+# caller hands the store a stale toggle next to an explicit multiplier.
+adapter.preference_store.save({'damageMultiplier': 4.0, 'damageEnabled': False})
+document = json.loads(Path(adapter.preference_store.path).read_text(encoding='utf-8'))
+assert document['damageMultiplier'] == 4.0
+assert document['damageEnabled'] is True
+
 print('hades2_damage_intent_boundary_ok')
