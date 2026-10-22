@@ -22,7 +22,8 @@ for path in view_files:
         assert not re.search(r'(Row|Card|Toggle|Button|Field|Metric|Editor|Picker|Control|Badge)$', name), (path, name)
 
 required = (
-    'TrainerFeatureToggleRow', 'TrainerMetricCard', 'TrainerCompactMultiplierRow',
+    'TrainerFeatureToggleRow', 'TrainerMultiplierMetricCard',
+    'TrainerCompactMultiplierRow',
     'TrainerResourceEditor', 'TrainerGroupedOptionPicker',
     'TrainerVitalMetricCard', 'TrainerAmountMetricCard',
     'TrainerCounterMetricCard', 'TrainerStatMetricCard', 'TrainerMessageBanner',
@@ -33,6 +34,10 @@ required = (
 for name in required:
     assert f'struct {name}' in core_ui, name
     assert name in product_views, name
+
+# The base card is the primitive the metric wrappers build on; the product
+# renders through the wrappers, so only its existence is required.
+assert 'struct TrainerMetricCard' in core_ui
 
 assert 'struct TrainerSelectableListRow' not in core_ui
 

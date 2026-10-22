@@ -17,6 +17,11 @@ struct Hades2SidebarActions: View {
                     model.showWorkbenchSection(section)
                     navigate(section.id)
                 }
+                // Section rows are navigation shortcuts, not form controls: the
+                // window's initial key view lands on the first row and would
+                // otherwise keep a focus ring on it until something else takes
+                // focus. Keep them keyboard-reachable without the persistent box.
+                .focusEffectDisabled()
             }
             if !model.currentIssues.isEmpty {
                 Button { model.showFeedbackDetails() } label: {

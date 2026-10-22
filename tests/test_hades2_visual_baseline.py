@@ -29,7 +29,7 @@ for token in ('Capsule()', 'RoundedRectangle(', '.background('):
     assert token not in all_hades, f'game module still draws reusable visual primitive: {token}'
 
 for component in (
-    'TrainerFeatureToggleRow(', 'TrainerMetricCard(', 'TrainerCompactMultiplierRow(',
+    'TrainerFeatureToggleRow(', 'TrainerMultiplierMetricCard(', 'TrainerCompactMultiplierRow(',
     'TrainerResourceEditor(', 'TrainerGroupedOptionPicker(',
 'TrainerVitalMetricCard(', 'TrainerAmountMetricCard(',
     'TrainerCounterMetricCard(', 'TrainerStatMetricCard(',

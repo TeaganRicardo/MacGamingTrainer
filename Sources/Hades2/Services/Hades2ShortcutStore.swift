@@ -41,13 +41,18 @@ struct Hades2ShortcutStore {
     }
 
     static func defaultLayout() -> [ShortcutAction: HotkeyChord] {
-        let ordinary = Hades2WorkbenchCatalog.orderedShortcutActions.filter { !$0.isSpeedAdjustment }
+        // Actions with a dedicated, hand-picked chord keep it out of the
+        // sequential allocation so they never consume a positional slot.
+        let dedicated: Set<ShortcutAction> = [.decreaseGameSpeed, .increaseGameSpeed, .disableAll]
+        let ordinary = Hades2WorkbenchCatalog.orderedShortcutActions.filter { !dedicated.contains($0) }
         var result = Dictionary(uniqueKeysWithValues: ordinary.enumerated().compactMap { index, action in
             HotkeyChord.defaultShortcut(index: index).map { (action, $0) }
         })
         let modifiers = HotkeyChord.controlModifier | HotkeyChord.optionModifier
         result[.decreaseGameSpeed] = HotkeyChord(keyCode: 27, modifiers: modifiers, keyLabel: "−")
         result[.increaseGameSpeed] = HotkeyChord(keyCode: 24, modifiers: modifiers, keyLabel: "+")
+        // "Disable all" is a panic key: one fixed chord, never reallocated.
+        result[.disableAll] = HotkeyChord(keyCode: 51, modifiers: modifiers, keyLabel: "⌫")
         return result
     }
 

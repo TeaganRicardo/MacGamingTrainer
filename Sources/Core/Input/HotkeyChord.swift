@@ -47,10 +47,13 @@ struct HotkeyChord: Equatable {
     private static let defaultKeys: [(keyCode: UInt32, label: String)] = [
         (18, "1"), (19, "2"), (20, "3"), (21, "4"), (23, "5"),
         (22, "6"), (26, "7"), (28, "8"), (25, "9"), (29, "0"),
-        (0, "A"), (11, "B"), (8, "C"), (2, "D"), (14, "E"), (3, "F"), (5, "G"),
-        (4, "H"), (34, "I"), (38, "J"), (40, "K"), (37, "L"), (46, "M"), (45, "N"),
-        (31, "O"), (35, "P"), (12, "Q"), (15, "R"), (1, "S"), (17, "T"), (32, "U"),
-        (9, "V"), (13, "W"), (7, "X"), (16, "Y"), (6, "Z"),
+        // Letters follow the physical keyboard rows (QWERTY order) so the
+        // sequence stays predictable for muscle memory, not alphabetised.
+        (12, "Q"), (13, "W"), (14, "E"), (15, "R"), (17, "T"), (16, "Y"),
+        (32, "U"), (34, "I"), (31, "O"), (35, "P"),
+        (0, "A"), (1, "S"), (2, "D"), (3, "F"), (5, "G"), (4, "H"),
+        (38, "J"), (40, "K"), (37, "L"),
+        (6, "Z"), (7, "X"), (8, "C"), (9, "V"), (11, "B"), (45, "N"), (46, "M"),
     ]
 
     /// Frozen key sequence used only to recognize the released v4 defaults.

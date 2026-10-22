@@ -59,9 +59,14 @@ struct TrainerResourceEditor<Item: Identifiable>: View where Item.ID == String {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Label(title, systemImage: icon)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(theme.accent)
+                // Same icon treatment as every other functional row: the icon
+                // carries this editor's on/off state instead of a fixed accent.
+                TrainerIconLabel(
+                    title: title,
+                    icon: icon,
+                    tint: enabled ? theme.accent : theme.inactive,
+                    emphasized: enabled
+                )
                 Spacer()
                 TrainerSearchField(
                     text: $search,

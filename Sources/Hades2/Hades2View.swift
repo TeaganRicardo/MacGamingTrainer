@@ -1207,21 +1207,12 @@ struct Hades2TrainerView: View {
     }
 
     private var damageMetric: some View {
-        let modified = abs(model.damageMultiplier - 1) >= 0.0001
-        return TrainerMetricCard(title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill",
-                                 tint: modified ? accent : theme.inactive) {
-            EmptyView()
-        } content: {
-            HStack(spacing: 6) {
-                TrainerNumberField(text: $multiplier, placeholder: "1",
-                    accessibilityLabel: text("hades2.feature.damageMultiplier"),
-                    width: 58, enabled: model.canEditDesired, onEditingChanged: tracking(.damageMultiplier),
-                    onCommit: completing(.multiplier("damageMultiplier")))
-                Text("×")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        TrainerMultiplierMetricCard(
+            title: text("hades2.feature.damageMultiplier"), icon: "bolt.fill",
+            text: $multiplier, focus: $focusedField, focusValue: .damageMultiplier,
+            suffix: "×", editable: model.canEditDesired,
+            onCommit: completing(.multiplier("damageMultiplier"))
+        )
     }
 
     private var boonRarityPanel: some View {
@@ -1381,8 +1372,12 @@ struct Hades2TrainerView: View {
 
     private var resourcePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
+            // The two gain multipliers are one family; keep them adjacent so the
+            // shared "gain" meaning is visible instead of split around the editor.
             multiplierRow(text("hades2.feature.moneyMultiplier"), enabled: model.moneyMultiplierEnabled, actual: model.moneyMultiplier,
                 text: $moneyFactor, feature: "moneyMultiplier", toggle: .moneyMultiplierEnabled, shortcut: .moneyMultiplierEnabled)
+            multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
+                text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
             Divider()
             TrainerResourceEditor(
                 title: text("hades2.resource.materials"),
@@ -1410,9 +1405,6 @@ struct Hades2TrainerView: View {
                 onEditingChanged: tracking(.material),
                 onCommit: completing(.resource(selectedMaterial))
             )
-            Divider()
-            multiplierRow(text("hades2.feature.resourceMultiplier"), enabled: model.resourceMultiplierEnabled, actual: model.resourceMultiplier,
-                text: $materialFactor, feature: "resourceMultiplier", toggle: .resourceMultiplierEnabled, shortcut: .resourceMultiplierEnabled)
         }
         .trainerPanel()
     }

@@ -143,7 +143,11 @@ damage = source_section(view, "private var damageMetric: some View {", "private 
 assert "TrainerToggleControl" not in damage
 assert ".damageEnabled" not in damage
 assert "TrainerShortcutBadgeSlot" not in damage
-assert 'placeholder: "1"' in damage
+# Damage renders through the shared numeric metric card so its height, label
+# colour and suffix treatment match the rest of the numeric section.
+assert "TrainerMultiplierMetricCard(" in damage
+assert 'suffix: "×"' in damage
+assert "TrainerNumberField" not in damage
 assert "'damageMultiplier': {'default':1.0" in schema
 assert "case .damageMultiplier: return 1.0" in feature_bindings
 assert 'feature = "damageEnabled"' in feature_generator
