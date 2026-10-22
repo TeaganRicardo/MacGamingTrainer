@@ -11,6 +11,8 @@ badge = (CORE_UI / "Primitives/TrainerBadge.swift").read_text()
 theme = (CORE_UI / "TrainerTheme.swift").read_text()
 resource = (CORE_UI / "Components/TrainerResourceControls.swift").read_text()
 status = (CORE_UI / "Components/TrainerStatusControls.swift").read_text()
+sidebar = (CORE_UI / "TrainerSidebar.swift").read_text()
+host = (ROOT / "Sources/Core/Host/TrainerHost.swift").read_text()
 management = (HADES / "Views/Hades2ManagementViews.swift").read_text()
 primary_button = (CORE_UI / "Components/TrainerListControls.swift").read_text()
 lock_button = (CORE_UI / "Primitives/TrainerToggleControl.swift").read_text()
@@ -57,6 +59,15 @@ assert ".minimumScaleFactor(0.65)" not in view
 assert ".minimumScaleFactor(0.85)" in view
 assert ".frame(width: theme.connectionActionWidth)" not in status
 assert "width: theme.connectionActionWidth" in status
+assert '"MAC GAMING"' not in sidebar
+assert 'host.gameLibrary' not in sidebar
+assert 'targetRunning ? theme.warning : theme.inactive' in sidebar
+assert '.accessibilityValue(localization.string(detailToken))' in sidebar
+assert 'busy: model.busy' in host
+assert 'targetRunning: targetMonitor.isRunning' in host
+assert 'Text(localization.string(statusToken))' not in status
+assert 'Text(localization.string(detailToken))' not in status
+assert 'operationToken: model.operation' not in host[host.index('TrainerConnectionStatusCard('):host.index('Module.makeSidebarActions') ]
 assert "struct TrainerSecondaryActionButton" in primary_button
 assert ".help(helpText ?? \"\")" in primary_button
 assert ".accessibilityLabel(accessibilityLabel ?? title)" in primary_button

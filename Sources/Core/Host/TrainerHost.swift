@@ -50,14 +50,15 @@ struct TrainerHostView<Module: TrainerGameModule>: View {
             TrainerSidebar(
                 descriptor: Module.descriptor,
                 presentation: Module.presentation,
-                connected: model.connected
+                connected: model.connected,
+                busy: model.busy,
+                targetRunning: targetMonitor.isRunning,
+                operationToken: model.operation,
+                statusToken: model.statusTitle,
+                detailToken: model.connectionDetailText
             ) {
                 TrainerConnectionStatusCard(
-                    busy: model.busy,
                     connected: model.connected,
-                    operationToken: model.operation,
-                    statusToken: model.statusTitle,
-                    detailToken: model.connectionDetailText,
                     backendAvailable: model.backendAvailable,
                     actionsEnabled: model.hostActionsEnabled,
                     onRefresh: model.refreshFromHost,

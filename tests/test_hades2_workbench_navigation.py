@@ -7,6 +7,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+header_actions = (ROOT/'Sources/Hades2/Views/Hades2HostActions.swift').read_text()
+assert '.popover(isPresented: $resultsPresented, arrowEdge: .bottom)' in header_actions
+assert 'resultsPresented = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty' in header_actions
+assert 'if !model.workbenchSearch.trimmingCharacters' not in header_actions
+assert 'resultsPresented = false' in header_actions
 SWIFTC = shutil.which('swiftc')
 assert SWIFTC, 'swiftc required for workbench search behavior'
 reference = json.loads((ROOT/'docs/reference/hades2/1.143476-25481925/ui_terminology.json').read_text())

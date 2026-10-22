@@ -6,43 +6,70 @@ struct TrainerSidebar<Actions: View>: View {
     let descriptor: GameModuleDescriptor
     let presentation: TrainerGamePresentation
     let connected: Bool
+    let busy: Bool
+    let targetRunning: Bool
+    let operationToken: TrainerTextToken
+    let statusToken: TrainerTextToken
+    let detailToken: TrainerTextToken
     let actions: Actions
 
-    init(descriptor: GameModuleDescriptor, presentation: TrainerGamePresentation, connected: Bool, @ViewBuilder actions: () -> Actions) {
+    init(
+        descriptor: GameModuleDescriptor,
+        presentation: TrainerGamePresentation,
+        connected: Bool,
+        busy: Bool,
+        targetRunning: Bool,
+        operationToken: TrainerTextToken,
+        statusToken: TrainerTextToken,
+        detailToken: TrainerTextToken,
+        @ViewBuilder actions: () -> Actions
+    ) {
         self.descriptor = descriptor
         self.presentation = presentation
         self.connected = connected
+        self.busy = busy
+        self.targetRunning = targetRunning
+        self.operationToken = operationToken
+        self.statusToken = statusToken
+        self.detailToken = detailToken
         self.actions = actions()
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            HStack(spacing: 10) {
-                Image(systemName: "gamecontroller.fill")
-                    .font(.title2)
-                    .foregroundStyle(theme.accent)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("MAC GAMING").font(.system(size: 11, weight: .bold, design: .rounded)).tracking(1.5)
-                    Text("Trainer").font(.title3.weight(.bold))
-                }
-            }
-            .padding(.top, 14)
+    private var statusHelp: String {
+        if busy { return localization.string(operationToken) }
+        return "\(localization.string(statusToken))\n\(localization.string(detailToken))"
+    }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(localization.localized("host.gameLibrary"))
-                    .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 12) {
-                        Image(systemName: presentation.sidebarIconSystemName).font(.title2).foregroundStyle(theme.accent)
-                        Text(descriptor.displayName).font(.headline)
-                        Spacer()
-                        Circle().fill(connected ? theme.success : theme.inactive).frame(width: 6, height: 6)
-                    }
-                    actions.buttonStyle(.plain)
-                }
-                .padding(14)
-                .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
+    private var statusIndicator: some View {
+        Group {
+            if busy {
+                ProgressView().controlSize(.mini).frame(width: 8, height: 8)
+            } else {
+                Circle()
+                    .fill(connected ? theme.success : targetRunning ? theme.warning : theme.inactive)
+                    .frame(width: 6, height: 6)
             }
+        }
+        .help(statusHelp)
+        .accessibilityLabel(busy ? localization.string(operationToken) : localization.string(statusToken))
+        .accessibilityValue(localization.string(detailToken))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: presentation.sidebarIconSystemName)
+                        .font(.title2)
+                        .foregroundStyle(theme.accent)
+                    Text(descriptor.displayName).font(.headline)
+                    Spacer()
+                    statusIndicator
+                }
+                actions.buttonStyle(.plain)
+            }
+            .padding(14)
+            .background(theme.panel, in: RoundedRectangle(cornerRadius: theme.cardCornerRadius))
 
             Spacer()
         }

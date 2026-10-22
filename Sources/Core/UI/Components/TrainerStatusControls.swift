@@ -3,29 +3,26 @@ import SwiftUI
 struct TrainerConnectionStatusCard: View {
     @Environment(\.trainerTheme) private var theme
     @EnvironmentObject private var localization: TrainerLocalizationStore
-    let busy: Bool
     let connected: Bool
-    let operationToken: TrainerTextToken
-    let statusToken: TrainerTextToken
-    let detailToken: TrainerTextToken
     let backendAvailable: Bool
     let actionsEnabled: Bool
     let onRefresh: () -> Void
     let onPrimary: () -> Void
     let onRestart: () -> Void
-
     let targetRunning: Bool
     let onLaunch: (() -> Void)?
 
-    init(busy: Bool, connected: Bool, operationToken: TrainerTextToken, statusToken: TrainerTextToken,
-         detailToken: TrainerTextToken, backendAvailable: Bool, actionsEnabled: Bool,
-         onRefresh: @escaping () -> Void, onPrimary: @escaping () -> Void, onRestart: @escaping () -> Void,
-         targetRunning: Bool = true, onLaunch: (() -> Void)? = nil) {
-        self.busy = busy
+    init(
+        connected: Bool,
+        backendAvailable: Bool,
+        actionsEnabled: Bool,
+        onRefresh: @escaping () -> Void,
+        onPrimary: @escaping () -> Void,
+        onRestart: @escaping () -> Void,
+        targetRunning: Bool = true,
+        onLaunch: (() -> Void)? = nil
+    ) {
         self.connected = connected
-        self.operationToken = operationToken
-        self.statusToken = statusToken
-        self.detailToken = detailToken
         self.backendAvailable = backendAvailable
         self.actionsEnabled = actionsEnabled
         self.onRefresh = onRefresh
@@ -49,28 +46,17 @@ struct TrainerConnectionStatusCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                if busy { ProgressView().controlSize(.small) }
-                else { Circle().fill(connected ? theme.success : theme.inactive).frame(width: 6, height: 6) }
-                Text(busy ? localization.string(operationToken) + "…" : localization.string(statusToken))
-                    .font(.subheadline.weight(.medium))
-            }
-            Text(localization.string(detailToken))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
-                TrainerPrimaryActionButton(
-                    title: localization.localized(primaryActionTitleKey),
-                    enabled: actionsEnabled,
-                    width: theme.connectionActionWidth,
-                    action: performPrimaryAction
-                )
-                Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
-                    .help(localization.localized("host.refreshStatusHelp"))
-                    .accessibilityLabel(localization.localized("host.refreshStatus"))
-                    .disabled(!backendAvailable || !actionsEnabled)
-            }
+        HStack(spacing: 8) {
+            TrainerPrimaryActionButton(
+                title: localization.localized(primaryActionTitleKey),
+                enabled: actionsEnabled,
+                width: theme.connectionActionWidth,
+                action: performPrimaryAction
+            )
+            Button(action: onRefresh) { Image(systemName: "arrow.clockwise") }
+                .help(localization.localized("host.refreshStatusHelp"))
+                .accessibilityLabel(localization.localized("host.refreshStatus"))
+                .disabled(!backendAvailable || !actionsEnabled)
         }
     }
 }
