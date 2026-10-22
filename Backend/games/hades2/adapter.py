@@ -548,9 +548,16 @@ class Hades2Adapter(GameAdapter):
 
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
-        # The multiplier owns damage; writing either half of the pair rewrites
-        # both so a replayed profile can never ask for 1x and enabled at once.
+        # The multiplier owns damage. An explicit multiplier write is
+        # authoritative and drops the derived toggle, otherwise the stale
+        # projection would veto it; a legacy toggle write is translated into a
+        # multiplier write so the resident never receives a second intent.
+        if feature=='damageMultiplier':
+            preferences.pop('damageEnabled',None)
         preferences=canonicalize_damage(preferences)
+        if feature in ('damageEnabled','damageMultiplier'):
+            feature='damageMultiplier'
+            value=preferences['damageMultiplier']
         if feature=='infiniteMoney' and value is True:
             locks=dict(preferences.get('resourceLocks',{}))
             locks.pop('Money',None)
