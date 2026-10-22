@@ -58,3 +58,10 @@ assert en["hades2.occurrence.pending"] == "Pending"
 assert zh["hades2.occurrence.pending"] == "待触发"
 
 print("hades2_occurrence_frontend_ok")
+
+
+resource_controls = (ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift").read_text()
+assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering
+assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate
+assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
+assert "TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, emphasized: state.isOn)" in resource_controls

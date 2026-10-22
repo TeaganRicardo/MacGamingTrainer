@@ -189,3 +189,11 @@ for action in actions:
     )
 
 print("ui_consistency_contract_ok")
+
+
+resource_controls = (ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift").read_text()
+occurrence_setting = (HADES / "Views/Hades2OccurrenceSetting.swift").read_text()
+assert "TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, emphasized: state.isOn)" in resource_controls
+assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
+assert "inline: true" in view
+assert "specialSearch" not in view

@@ -197,3 +197,20 @@ for line in (
     assert line in view
 
 print('hades2_feature_contracts_ok')
+
+
+resource_controls = read('Sources/Core/UI/Components/TrainerResourceControls.swift')
+occurrence_setting = read('Sources/Hades2/Views/Hades2OccurrenceSetting.swift')
+gathering_panel = read('Sources/Hades2/Views/Hades2GatheringPanel.swift')
+chaos_gate_panel = read('Sources/Hades2/Views/Hades2ChaosGatePanel.swift')
+host_actions = read('Sources/Hades2/Views/Hades2HostActions.swift')
+assert "inline: true" in view
+assert "if inline" in resource_controls
+assert "actionAvailable ? theme.accent : theme.inactive" in resource_controls
+assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
+assert 'TrainerSection(title: text("hades2.section.elements")' not in view
+assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering_panel
+assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_panel
+assert "specialSearch" not in view
+assert "resultsPresented" in host_actions
+assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions

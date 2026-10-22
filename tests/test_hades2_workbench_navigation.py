@@ -78,3 +78,7 @@ with tempfile.TemporaryDirectory(prefix='mgt-workbench-navigation-') as temporar
                     str(ROOT/'Sources/Hades2/Services/Hades2WorkbenchNavigation.swift'),
                     str(main), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
+
+workbench_view = (ROOT / "Sources/Hades2/Hades2View.swift").read_text()
+assert "specialSearch" not in workbench_view
+assert "inline: true" in workbench_view
