@@ -197,3 +197,6 @@ assert "TrainerIconLabel(title: title, icon: icon, tint: state.indicatorColor, e
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
 assert "inline: true" in view
 assert "specialSearch" not in view
+
+assert 'let lines = busy' in sidebar
+assert 'return lines.joined(separator: "\\n")' in sidebar

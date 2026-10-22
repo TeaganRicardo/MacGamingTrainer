@@ -36,8 +36,10 @@ struct TrainerSidebar<Actions: View>: View {
     }
 
     private var statusHelp: String {
-        if busy { return localization.string(operationToken) }
-        return "\(localization.string(statusToken))\n\(localization.string(detailToken))"
+        let lines = busy
+            ? [localization.string(operationToken), localization.string(statusToken), localization.string(detailToken)]
+            : [localization.string(statusToken), localization.string(detailToken)]
+        return lines.joined(separator: "\n")
     }
 
     private var statusIndicator: some View {
