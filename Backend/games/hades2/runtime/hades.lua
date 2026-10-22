@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 118 then
+if previousModule and previousModule.revision ~= 119 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 118 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 118,
+    version = 1, revision = 119,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -31,7 +31,7 @@ if __MacGamingTrainerV1 == nil then
     forceEnableRerolls = false,
     moneyMultiplierEnabled = false,
     resourceMultiplierEnabled = false,
-    damageMultiplier = 2,
+    damageMultiplier = 1,
     moneyMultiplier = 2,
     resourceMultiplier = 2,
     -- END GENERATED DURABLE FEATURE STATE
@@ -1514,6 +1514,7 @@ if __MacGamingTrainerV1 == nil then
   end
   local function disable()
     clearDesired()
+    M.damageMultiplier = 1
     deactivateRuntime()
     releaseGuard()
   end
@@ -10006,6 +10007,10 @@ if __MacGamingTrainerV1 == nil then
     end
     if command == "set_feature" then
       local feature, value = params.feature, params.value
+      -- A legacy Profile may still carry the retired damage toggle. The
+      -- multiplier is authoritative: 1x means normal damage, every other
+      -- accepted value means the effect is enabled.
+      if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end
       -- BEGIN GENERATED DURABLE MULTIPLIER DISPATCH
       if feature == "damageMultiplier" then
         if not finite(value) or value < 1 or value > 100 then error("Multiplier must be 1..100") end
@@ -10044,6 +10049,10 @@ if __MacGamingTrainerV1 == nil then
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
         if M.terminalActionUnknown then error(message) end
+        if params.feature == "damageMultiplier" then
+          M.damageMultiplier = runtimeState.previousDamageMultiplier
+          runtimeState.previousDamageMultiplier = nil
+        end
         M.desiredFeatures[feature] = previous
         if feature == "infiniteMoney" then M.resourceLocks.Money = previousMoneyLock end
         if feature == "infiniteRerolls" then M.rerollsLock = previousRerollsLock end
@@ -10052,6 +10061,7 @@ if __MacGamingTrainerV1 == nil then
         reconcileDesired(false, feature)
         error("Feature unavailable: " .. tostring(message))
       end
+      if params.feature == "damageMultiplier" then runtimeState.previousDamageMultiplier = nil end
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)
