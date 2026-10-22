@@ -214,3 +214,10 @@ assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate_
 assert "specialSearch" not in view
 assert "resultsPresented" in host_actions
 assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions
+
+
+gathering_action_key = "hades2.gathering.generateHelp"
+zh_localization = read('Sources/Hades2/Presentation/Localization/hades2.zh-CN.json')
+en_localization = read('Sources/Hades2/Presentation/Localization/hades2.en.json')
+assert f'"{gathering_action_key}": "生成"' in zh_localization
+assert f'"{gathering_action_key}": "Generate"' in en_localization
