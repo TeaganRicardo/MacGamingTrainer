@@ -28,8 +28,7 @@ struct Hades2GatheringPanel: View {
 
     var body: some View {
         let generation = model.editGeneration
-        return TrainerSection(title: text("hades2.gathering.title"), icon: "leaf") {
-            VStack(spacing: 1) {
+        return VStack(spacing: 1) {
                 ForEach(Hades2GatheringFamily.allCases) { family in
                     Hades2OccurrenceSetting(
                         title: text(family.titleKey),
@@ -58,8 +57,7 @@ struct Hades2GatheringPanel: View {
                                 : text("hades2.gathering.generateHelp")),
                         canGenerate: model.canGenerateGathering(family),
                         onGenerate: { _ = model.generateGathering(family) }
-                    )
-                }
+                )
             }
         }
         .onAppear { synchronize() }

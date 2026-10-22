@@ -6,7 +6,7 @@ for _, name in ipairs({ "SessionState", "GameState" }) do
 end
 if type(UpdateTimers) ~= "function" then error("Unsupported game runtime: missing UpdateTimers") end
 local previousModule = __MacGamingTrainerV1
-if previousModule and previousModule.revision ~= 119 then
+if previousModule and previousModule.revision ~= 120 then
   local cleanupOk, cleanupMessage = pcall(previousModule.dispatch, "cleanup")
   if not cleanupOk then
     error("MGT_RESIDENT_RESTART_REQUIRED: previous resident cleanup failed: " .. tostring(cleanupMessage))
@@ -15,7 +15,7 @@ if previousModule and previousModule.revision ~= 119 then
 end
 if __MacGamingTrainerV1 == nil then
   local M = {
-    version = 1, revision = 119,
+    version = 1, revision = 120,
     -- BEGIN GENERATED DURABLE FEATURE STATE
     invincibility = false,
     infiniteHealth = false,
@@ -10051,7 +10051,7 @@ if __MacGamingTrainerV1 == nil then
       local ok, message = pcall(function() reconcileDesired(true, feature) end)
       if not ok then
         if M.terminalActionUnknown then error(message) end
-        if params.feature == "damageMultiplier" then
+        if params.feature == "damageMultiplier" or params.feature == "damageEnabled" then
           M.damageMultiplier = runtimeState.previousDamageMultiplier
           runtimeState.previousDamageMultiplier = nil
         end
@@ -10063,7 +10063,7 @@ if __MacGamingTrainerV1 == nil then
         reconcileDesired(false, feature)
         error("Feature unavailable: " .. tostring(message))
       end
-      if params.feature == "damageMultiplier" then runtimeState.previousDamageMultiplier = nil end
+      if params.feature == "damageMultiplier" or params.feature == "damageEnabled" then runtimeState.previousDamageMultiplier = nil end
       if anyDesired() then installGuard()
       elseif not anyRuntimeActive() then releaseGuard() end
       return state(params.includeCatalogs)

@@ -26,8 +26,13 @@ struct Hades2OccurrenceSetting: View {
     var body: some View {
         TrainerRow {
             HStack(spacing: 12) {
-                TrainerIconLabel(title: title, icon: icon)
-                    .help(probabilityHelp)
+                TrainerIconLabel(
+                    title: title,
+                    icon: icon,
+                    tint: hasOverride ? theme.accent : theme.inactive,
+                    emphasized: hasOverride
+                )
+                .help(probabilityHelp)
                 Spacer(minLength: 8)
                 TrainerTextField(
                     title: nativeLabel,

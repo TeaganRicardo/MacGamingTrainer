@@ -150,7 +150,7 @@ assert 'feature = "damageEnabled"' in feature_generator
 assert "value = value ~= 1" in feature_generator
 assert 'if feature == "damageEnabled" then value = M.damageMultiplier ~= 1 end' in lua
 assert "M.damageMultiplier = 1" in lua[lua.index("local function disable()"):lua.index("local function anyDesired()")]
-assert "revision = 119" in lua
+assert "revision = 120" in lua
 assert len(set(action_order)) == len(action_order)
 assert "Color.clear" not in badge
 assert "if let text, !text.isEmpty" in badge
@@ -216,8 +216,16 @@ assert "resultsPresented" in host_actions
 assert ".popover(isPresented: $resultsPresented, arrowEdge: .bottom)" in host_actions
 
 
-gathering_action_key = "hades2.gathering.generateHelp"
+gathering_action_key = "hades2.gathering.generate"
+gathering_help_key = "hades2.gathering.generateHelp"
 zh_localization = read('Sources/Hades2/Presentation/Localization/hades2.zh-CN.json')
 en_localization = read('Sources/Hades2/Presentation/Localization/hades2.en.json')
-assert f'"{gathering_action_key}": "生成"' in zh_localization
-assert f'"{gathering_action_key}": "Generate"' in en_localization
+terminology = json.loads(read('docs/reference/hades2/1.143476-25481925/ui_terminology.json'))
+# The compact action label is one short product term; the hover help stays an
+# explanation, so it must not collapse into a copy of the label.
+assert terminology['productTerms']['generateGathering']['value'] == "生成"
+assert terminology['productTerms']['generateGathering']['englishValue'] == "Generate"
+assert f'"{gathering_action_key}": "{{term:productTerms.generateGathering}}"' in zh_localization
+assert f'"{gathering_action_key}": "{{term:productTerms.generateGathering}}"' in en_localization
+assert f'"{gathering_help_key}": "生成"' not in zh_localization
+assert f'"{gathering_help_key}": "Generate"' not in en_localization

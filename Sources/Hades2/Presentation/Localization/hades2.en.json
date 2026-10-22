@@ -405,7 +405,7 @@
     "hades2.gathering.percent": "Conditional Probability",
     "hades2.gathering.apply": "Apply Probability",
     "hades2.gathering.explanation": "Applies to eligible gathering trials in newly created rooms. Flora uses each native trial, without a room-wide guarantee. 0% blocks ordinary trials while preserving native forced spawns; 100% still respects eligibility, biome limits and family arbitration.",
-    "hades2.gathering.generateHelp": "Generate",
+    "hades2.gathering.generateHelp": "Generate the selected gathering item in the current room.",
     "hades2.gathering.unavailable.scene": "Requires an actionable room in the current run.",
     "hades2.gathering.unavailable.native": "The native gathering interface is unavailable.",
     "hades2.gathering.unavailable.familiar": "The linked Familiar collector is not present in the room.",

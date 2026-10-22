@@ -15,7 +15,12 @@ from .desired_reconciliation import Hades2DesiredStateReconciler
 from .vital_state import normalize_vital_locks, observed_vital_lock, observed_vital_values
 from .config import DATA, GAME_SPEC, MODULE_MANIFEST, STEAM_SPEC
 from .persistence import PersistenceError
-from .preferences import Hades2PreferenceStore, next_room_reward_consumed, next_occurrence_consumed
+from .preferences import (
+    Hades2PreferenceStore,
+    canonicalize_damage,
+    next_room_reward_consumed,
+    next_occurrence_consumed,
+)
 from .profile_service import Hades2ProfileService
 from .reply_projection import ACTION_RESULT_FIELDS, Hades2ReplyProjection
 from .resident_session import Hades2ResidentSession, ResidentConnectionError, ResidentGenerationInvalidated, ResidentSessionError
@@ -420,6 +425,7 @@ class Hades2Adapter(GameAdapter):
             diagnostics=decoded.get('runtimeDiagnostics')
             token=diagnostics.get('nextOccurrenceToken') if isinstance(diagnostics,dict) else None
             self.preferences['nextOccurrenceToken']=token if occurrence is not None and isinstance(token,str) and token else None
+        self.preferences=canonicalize_damage(self.preferences)
 
     def _adopt_lua_preferences(self,decoded):
         self._adopt_runtime_preferences(decoded)
@@ -542,6 +548,9 @@ class Hades2Adapter(GameAdapter):
 
     def set_desired(self,feature,value):
         preferences=dict(self.preferences);preferences[feature]=value
+        # The multiplier owns damage; writing either half of the pair rewrites
+        # both so a replayed profile can never ask for 1x and enabled at once.
+        preferences=canonicalize_damage(preferences)
         if feature=='infiniteMoney' and value is True:
             locks=dict(preferences.get('resourceLocks',{}))
             locks.pop('Money',None)
@@ -651,6 +660,9 @@ class Hades2Adapter(GameAdapter):
 
     def _replay_preferences(self,observed_state,force_full=False):
         if not self.runtime.has_attachment:return dict(self.state)
+        # Desired damage is one value even when a caller mutated the retired
+        # toggle directly; canonicalize before it reaches the resident diff.
+        self.preferences=canonicalize_damage(self.preferences)
         if self._preference_persistence_dirty:
             # Current in-memory desired is authoritative. Retry its failed
             # durable write before crossing another runtime mutation boundary.

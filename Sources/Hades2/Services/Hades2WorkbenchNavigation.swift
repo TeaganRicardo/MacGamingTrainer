@@ -39,19 +39,42 @@ enum Hades2WorkbenchCatalog {
     /// One ordered registry drives default shortcut allocation, shortcut
     /// settings and function discovery. Keep this in the visible workbench order.
     static let orderedShortcutActions: [ShortcutAction] = [
-        .invincibility, .infiniteHealth, .infiniteMana, .infiniteMoney, .infiniteRerolls,
-        .forceEnableRerolls, .instantCastCooldown, .hexAlwaysReady, .infiniteAmmo, .autoMiniGames,
-        .decreaseGameSpeed, .increaseGameSpeed,
-        .boonRarityEnabled, .forceLegendary, .forceDuo, .acquireChaosPair, .acquireExactBoon, .openSellTraits,
-        .moneyMultiplierEnabled, .resourceMultiplierEnabled,
-        .generateFlora, .generateMining, .generateDigging, .generateShades, .generateFishing, .matureGarden,
-        .applyNextRoomReward, .applyNextOccurrence,
-        .spawnOlympian, .spawnPickup, .spawnSpecial,
+        .invincibility,
+        .infiniteHealth,
+        .infiniteMana,
+        .infiniteMoney,
+        .infiniteRerolls,
+        .forceEnableRerolls,
+        .instantCastCooldown,
+        .hexAlwaysReady,
+        .infiniteAmmo,
+        .autoMiniGames,
+        .decreaseGameSpeed,
+        .increaseGameSpeed,
+        .boonRarityEnabled,
+        .forceLegendary,
+        .forceDuo,
+        .openSellTraits,
+        .acquireChaosPair,
+        .acquireExactBoon,
+        .moneyMultiplierEnabled,
+        .resourceMultiplierEnabled,
+        .generateFlora,
+        .generateMining,
+        .generateDigging,
+        .generateShades,
+        .generateFishing,
+        .matureGarden,
+        .applyNextRoomReward,
+        .applyNextOccurrence,
+        .spawnOlympian,
+        .spawnPickup,
+        .spawnSpecial,
         .disableAll,
     ]
 
-    static func shortcutActions(in section: Hades2WorkbenchSection) -> [ShortcutAction] {
-        orderedShortcutActions.filter { section(for: $0) == section }
+    static func shortcutActions(in workbenchSection: Hades2WorkbenchSection) -> [ShortcutAction] {
+        orderedShortcutActions.filter { section(for: $0) == workbenchSection }
     }
 
     static let entries: [Hades2WorkbenchEntry] = {
@@ -71,7 +94,7 @@ enum Hades2WorkbenchCatalog {
             (.common, ["hades2.gameSpeed.title"]),
             (.boons, ["hades2.traits.manager", "hades2.traits.targetLevel", "hades2.traits.targetRarity",
                       "hades2.traits.remainingUses", "hades2.traits.expireNow", "hades2.traits.temporary.cancel",
-                      "hades2.traits.remove", "hades2.traits.removeAllMatching",
+                      "hades2.traits.remove",
                       "hades2.traits.chaos.advance", "hades2.traits.chaos.cancelPair",
                       "hades2.rarity.minimum", "hades2.rarity.multiplier", "hades2.section.elements"]),
             (.resources, Hades2GatheringFamily.allCases.map(\.titleKey)

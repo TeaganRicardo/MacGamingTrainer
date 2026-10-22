@@ -62,9 +62,8 @@ var selectedActions: [String] = []
 func connectionCard(backend: Bool = true, connected: Bool = false,
                     running: Bool = false, supportsLaunch: Bool = true) -> TrainerConnectionStatusCard {
     TrainerConnectionStatusCard(
-        busy: false, connected: connected,
-        operationToken: .init(key: "host.connectGame"), statusToken: .init(key: "host.disconnected"),
-        detailToken: .init(key: "host.disconnected"), backendAvailable: backend, actionsEnabled: true,
+        connected: connected,
+        backendAvailable: backend, actionsEnabled: true,
         onRefresh: { selectedActions.append("refresh") },
         onPrimary: { selectedActions.append(connected ? "disconnect" : "connect") },
         onRestart: { selectedActions.append("restart") }, targetRunning: running,

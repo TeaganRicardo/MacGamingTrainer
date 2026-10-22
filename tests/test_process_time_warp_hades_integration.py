@@ -47,7 +47,7 @@ class FakeTransport:
             "activeFeatures": {key: False for key in TOGGLES},
             "dormantFeatures": {},
             "featureErrors": {},
-            "damageMultiplier": 2.0,
+            "damageMultiplier": 1.0,
             "moneyMultiplier": 2.0,
             "resourceMultiplier": 2.0,
             "boonRarity": {

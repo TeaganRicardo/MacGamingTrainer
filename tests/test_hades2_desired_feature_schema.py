@@ -115,3 +115,19 @@ assert normalized["damageMultiplier"] == 4.0
 assert normalized["gameSpeed"] == 2.0
 
 print("hades2_desired_feature_schema_ok")
+
+# Damage multiplier is the only durable source of truth; old toggle profiles migrate once.
+legacy_disabled = Hades2PreferenceStore.normalize({"damageEnabled": False, "damageMultiplier": 3.0})
+assert legacy_disabled["damageMultiplier"] == 1.0
+assert legacy_disabled["damageEnabled"] is False
+legacy_enabled = Hades2PreferenceStore.normalize({"damageEnabled": True, "damageMultiplier": 3.0})
+assert legacy_enabled["damageMultiplier"] == 3.0
+assert legacy_enabled["damageEnabled"] is True
+legacy_default = Hades2PreferenceStore.normalize({"damageEnabled": True})
+assert legacy_default["damageMultiplier"] == 2.0
+assert legacy_default["damageEnabled"] is True
+assert Hades2PreferenceStore.normalize({"damageMultiplier": 1.0})["damageEnabled"] is False
+assert Hades2PreferenceStore.normalize({"damageMultiplier": 4.0})["damageEnabled"] is True
+versioned_legacy = normalize_persisted_desired({"schemaVersion": 10, "damageEnabled": False, "damageMultiplier": 2.0}, 10)
+assert versioned_legacy["damageMultiplier"] == 1.0
+assert versioned_legacy["damageEnabled"] is False

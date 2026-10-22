@@ -97,7 +97,7 @@ assert 'text("hades2.spawn.rewardChoice")' not in view
 assert 'actionTitle: text("hades2.spawn.generate")' in view
 assert 'selectedSpecialRewardIsNativeChoice' not in view
 assert 'text("hades2.spawn.open")' in view
-assert 'Label(text("hades2.spawn.purgingPool")' in view
+assert 'title: text("hades2.spawn.purgingPool")' in view
 assert '祝福管理' not in view
 
 definitions = lua[lua.index('catalogs.nativeSpecialChoiceDefinitions'):lua.index('catalogs.nativeSpecialChoiceSources')]

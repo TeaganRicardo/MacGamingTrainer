@@ -14,6 +14,7 @@ from .schema import (
     BOON_RARITY_TARGETS,
     ELEMENT_IDS,
     MAX_AMOUNT,
+    MULTIPLIER_RULES,
     MULTIPLIERS,
     NEXT_ROOM_REWARD_MAX_LENGTH,
     NEXT_OCCURRENCE_MAX_LENGTH,
@@ -41,11 +42,46 @@ NEXT_ROOM_REWARD_MIGRATIONS = {
 }
 
 
-DESIRED_STATE_SCHEMA_VERSION = 10
+DESIRED_STATE_SCHEMA_VERSION = 11
 
 
 def _finite_number(value):
     return type(value) in (int,float) and not isinstance(value,bool) and math.isfinite(value)
+
+
+# `damageMultiplier` is the only durable damage intent: 1x is normal damage and
+# every other accepted value enables the effect. `damageEnabled` survives as a
+# derived projection for older profiles, the resident's feature list and the
+# public status payload, so both keys are always written together.
+LEGACY_DAMAGE_MULTIPLIER = 2.0
+
+
+def canonicalize_damage(preferences):
+    """Collapse the retired damage toggle into the authoritative multiplier.
+
+    A persisted profile from an older schema can carry ``damageEnabled: false``
+    next to the retired 2x default; the toggle only ever vetoes (disables), so
+    an explicit ``false`` normalizes to 1x instead of resurrecting the effect.
+    An enabled toggle without a multiplier keeps the historical 2x default.
+    """
+    if not isinstance(preferences,dict):return preferences
+    result=dict(preferences)
+    rule=MULTIPLIER_RULES['damageMultiplier']
+    enabled=result.get('damageEnabled')
+    multiplier=result.get('damageMultiplier')
+    if not _finite_number(multiplier) or not rule['min']<=multiplier<=rule['max']:
+        multiplier=None
+    if enabled is False:
+        multiplier=1.0
+    elif enabled is True and (multiplier is None or multiplier<=1):
+        # Turning the retired toggle back on must produce an effective value:
+        # 1x is defined as "off", so the historical 2x default is restored.
+        multiplier=LEGACY_DAMAGE_MULTIPLIER
+    elif multiplier is None:
+        multiplier=rule['default']
+    result['damageMultiplier']=float(multiplier)
+    result['damageEnabled']=multiplier!=1.0
+    return result
 
 
 def _normalize_amount(value):
@@ -218,6 +254,7 @@ class Hades2PreferenceStore:
     def normalize(cls, raw):
         result=cls.defaults()
         if not isinstance(raw,dict):return result
+        raw=canonicalize_damage(raw)
         for key in TOGGLES+MULTIPLIERS:
             value=normalize_desired_feature_value(key,raw.get(key))
             if value is not None:result[key]=value

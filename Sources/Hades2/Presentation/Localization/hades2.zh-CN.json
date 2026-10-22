@@ -405,7 +405,7 @@
     "hades2.gathering.percent": "条件概率",
     "hades2.gathering.apply": "应用概率",
     "hades2.gathering.explanation": "仅对新创建房间的合格采集判定应用概率。植物每次原生判定独立计算，并非每房间保证；0% 禁止普通判定，但保留原生强制生成；100% 仍受资格、区域数量上限和家族互斥限制。",
-    "hades2.gathering.generateHelp": "生成",
+    "hades2.gathering.generateHelp": "在当前房间生成所选采集点。",
     "hades2.gathering.unavailable.scene": "需要当前可操作的本局房间。",
     "hades2.gathering.unavailable.native": "当前原生采集接口不可用。",
     "hades2.gathering.unavailable.familiar": "当前灵宠采集者尚未出现在房间中。",

@@ -60,7 +60,10 @@ assert zh["hades2.occurrence.pending"] == "待触发"
 print("hades2_occurrence_frontend_ok")
 
 
-resource_controls = (ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift").read_text()
+resource_controls = (ROOT / "Sources/Core/UI/Components/TrainerResourceControls.swift").read_text(encoding="utf-8")
+gathering = (ROOT / "Sources/Hades2/Views/Hades2GatheringPanel.swift").read_text(encoding="utf-8")
+chaos_gate = (ROOT / "Sources/Hades2/Views/Hades2ChaosGatePanel.swift").read_text(encoding="utf-8")
+occurrence_setting = (ROOT / "Sources/Hades2/Views/Hades2OccurrenceSetting.swift").read_text(encoding="utf-8")
 assert 'TrainerSection(title: text("hades2.gathering.title")' not in gathering
 assert 'TrainerSection(title: text("hades2.chaosGate.title")' not in chaos_gate
 assert "tint: hasOverride ? theme.accent : theme.inactive" in occurrence_setting
