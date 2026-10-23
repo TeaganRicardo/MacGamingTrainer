@@ -64,6 +64,13 @@ with tempfile.TemporaryDirectory(prefix="mgt-arcana-equipment-") as temporary:
     assert path.read_bytes() == original
     review = editor.review(language="en")
     assert "linked:card:ChanneledCast:Unlocked" in {row["id"] for row in review["changes"]}
+    layout_effect = next((row for row in review["changes"]
+                          if row["id"] == "linked:arcanaCache:MetaUpgradeCardLayout"), None)
+    assert layout_effect is not None, "review hides the newly created native Arcana layout"
+    assert layout_effect["before"] is None
+    assert layout_effect["after"]["luaType"] == "table"
+    assert len(layout_effect["after"]["entries"]) == 5
+    assert layout_effect["name"] == "Arcana card layout"
     editor.apply()
     saved = Hades2SaveDocument.load(path).lua_state
     assert saved["GameState"]["MetaUpgradeState"]["ChanneledCast"]["Unlocked"] is True

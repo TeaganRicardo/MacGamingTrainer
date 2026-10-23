@@ -433,14 +433,16 @@ def linked_changes(root, intents):
             result.append(effect)
     for key in _CACHE_LABELS:
         old, new = root["GameState"].get(key), candidate["GameState"].get(key)
-        if key == "MetaUpgradeCardLayout" or (
+        if (
             (type(old) is type(new) or (_number(old) and _number(new))) and old == new
         ):
             continue
         effect = {"id": "linked:arcanaCache:" + key, "domain": "progression", "rawId": key,
             "name": cache_label(key, "en"), "operation": "set",
-            "before": save_advanced.json_value(old), "after": new}
+            "before": save_advanced.json_value(old), "after": save_advanced.json_value(new)}
         if isinstance(old, LuaTable) or (_number(old) is False and type(old) is float):
             effect["beforeDisplay"] = json.dumps(save_advanced.typed_value(old), ensure_ascii=False)
+        if isinstance(new, LuaTable):
+            effect["afterDisplay"] = json.dumps(save_advanced.typed_value(new), ensure_ascii=False)
         result.append(effect)
     return result
