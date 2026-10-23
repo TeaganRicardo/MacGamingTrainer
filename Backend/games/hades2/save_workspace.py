@@ -17,6 +17,7 @@ from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
 from .error_presentation import presentation_for
 from .save_native_ids import QUEST_IDS, RESOURCE_IDS
+from .save_mutation_utils import owner as lua_owner
 from .save_document import AmbiguousLuaKeyError, Hades2SaveDocument, HadesSaveFormatError, LuaTable
 from .save_edit import Hades2SaveEditSession
 from .save_provider import editor_default_source, editor_files, profile_file_identity
@@ -238,11 +239,12 @@ class Hades2SaveWorkspace:
         return game_state
 
     def _resources(self):
-        try:
-            game_state = self._game_state()
-            resources = game_state["Resources"]
-        except KeyError as error:
-            raise ValueError("Save Editor resource inventory is unavailable.") from error
+        game_state = self._game_state()
+        resources = game_state.get("Resources")
+        if resources is None:
+            # Query/preview must not materialize a source owner. Apply creates
+            # the table on its isolated candidate when an edit requests it.
+            return LuaTable()
         if not isinstance(resources, LuaTable):
             raise ValueError("Save Editor resource inventory is malformed.")
         return resources
@@ -266,6 +268,7 @@ class Hades2SaveWorkspace:
             "rawId": identifier,
             "path": ["GameState", "Resources", identifier],
             "before": int(value),
+            "beforePresent": identifier in resources,
             "mutationKinds": ("set",),
         }
 
@@ -282,6 +285,19 @@ class Hades2SaveWorkspace:
         )
 
         rows = []
+        try:
+            resources = self._resources()
+        except ValueError:
+            resources = None
+
+        def typed_row(index, key):
+            path = ["GameState", "Resources", key]
+            item = save_advanced.row(self.document.lua_state,
+                save_advanced.entry_id(path, index), language)
+            if type(key) is str:
+                item.update(name=names.get(key) or key, englishName=english.get(key) or key)
+            return item
+
         for key in sorted(RESOURCE_IDS):
             row = {
                 "id": "resource:" + key,
@@ -303,16 +319,43 @@ class Hades2SaveWorkspace:
             try:
                 descriptor = self._resource_descriptor(key)
             except AmbiguousLuaKeyError:
+                matches = [(index, field) for index, field, _, _ in resources.physical_entries()
+                           if field == key] if isinstance(resources, LuaTable) else []
+                if matches:
+                    rows.extend(typed_row(index, field) for index, field in matches)
+                    continue
                 row["ownerState"] = "ambiguous"
                 row["blockReasonCode"] = "ambiguousOwner"
             except ValueError:
+                # A known semantic integer with another reliably encoded type
+                # remains repairable through the same typed path owner.
+                matches = [(index, field) for index, field, _, _ in resources.physical_entries()
+                           if field == key] if isinstance(resources, LuaTable) else []
+                if matches:
+                    rows.extend(typed_row(index, field) for index, field in matches)
+                    continue
                 row["ownerState"] = "unsupported"
                 row["blockReasonCode"] = "unsupportedOwner"
             else:
                 row["value"] = descriptor["before"]
+                row["beforePresent"] = descriptor["beforePresent"]
                 row["editable"] = True
                 row["mutationKinds"] = list(descriptor["mutationKinds"])
             rows.append(row)
+        if isinstance(resources, LuaTable):
+            for index, key, value, _ in resources.physical_entries():
+                if type(key) is str and key in RESOURCE_IDS:
+                    continue
+                try:
+                    save_advanced.validate_key(key)
+                except ValueError as error:
+                    rows.append({"id": "advanced-unaddressable-resource:" + str(index),
+                        "domain": "advanced", "rawId": str(key), "name": str(key),
+                        "englishName": str(key), "path": [], "value": None,
+                        "valueType": save_advanced.value_type(value), "editable": False,
+                        "mutationKinds": [], "readOnlyReason": str(error)})
+                else:
+                    rows.append(typed_row(index, key))
         return rows
 
     def _player_stat_descriptor(self, identifier):
@@ -421,6 +464,8 @@ class Hades2SaveWorkspace:
                 "valueType": "integer",
                 "editable": False,
                 "mutationKinds": [],
+                "readOnlyReason": ("这是根据下层记录计算的汇总；请修改对应记录。" if language == "zh-CN" else
+                                   "This summary is calculated from underlying records; edit those records directly."),
             }
             for key, zh, en, value, path in measurements
         ]
@@ -1478,7 +1523,7 @@ class Hades2SaveWorkspace:
                 "before": before,
                 "after": value,
                 **({"ownerEvidence": descriptor["ownerEvidence"]} if descriptor["domain"] == "questRewards" else {}),
-                **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] == "history" else {}),
+                **({"beforePresent": descriptor["beforePresent"]} if descriptor["domain"] in ("history", "resources") else {}),
             }
         try:
             return self.review(language=language)
@@ -1523,7 +1568,7 @@ class Hades2SaveWorkspace:
                 raise save_advanced.AdvancedMutationError("Save Editor staged reward source has changed; remove and stage the claim again.", conflict=True)
             if ((intent.get("typedBefore") != descriptor.get("typedBefore"))
                     if intent["domain"] == "advanced" else
-                    (intent["before"] != descriptor["before"] or (intent["domain"] == "history" and
+                    (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
                      intent["beforePresent"] != descriptor["beforePresent"]))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
         self._apply_intent_batch(candidate, intents)
@@ -1577,7 +1622,7 @@ class Hades2SaveWorkspace:
             if (intent["operation"] not in descriptor["mutationKinds"]
                     or (intent.get("typedBefore") != descriptor.get("typedBefore")
                         if intent["domain"] == "advanced" else
-                        (intent["before"] != descriptor["before"] or (intent["domain"] == "history" and
+                        (intent["before"] != descriptor["before"] or (intent["domain"] in ("history", "resources") and
                          intent["beforePresent"] != descriptor["beforePresent"])))):
                 raise ValueError("Save Editor staged owner is ambiguous or has changed.")
             direct.append({
@@ -1623,7 +1668,7 @@ class Hades2SaveWorkspace:
                 "constraints": dict(row.get("constraints") or {}),
                 "choices": list(row.get("choices") or ()),
                 "choiceNames": dict(row.get("choiceNames") or {}),
-                **({"beforePresent": intent["beforePresent"], "afterPresent": True} if intent["domain"] == "history" else {}),
+                **({"beforePresent": intent["beforePresent"], "afterPresent": True} if intent["domain"] in ("history", "resources") else {}),
                 "effects": [
                     self._present_linked_effect(effect, language)
                     for effect in effects_by_action.get(intent["id"], [])
@@ -1680,7 +1725,8 @@ class Hades2SaveWorkspace:
             save_narrative.apply_intent(document.lua_state, intent)
             return
         path = intent["path"]
-        owner = _lua_path(document.lua_state, path[:-1])
+        owner = (lua_owner(document.lua_state, path[:-1], create=True)
+                 if intent["domain"] == "resources" else _lua_path(document.lua_state, path[:-1]))
         if not isinstance(owner, LuaTable):
             raise ValueError("Save Editor mutation owner is not a table.")
         key = path[-1]
