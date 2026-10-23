@@ -242,8 +242,7 @@ survivors = conflict.review(language="en")
 assert survivors["actionCount"] == 1
 assert survivors["actions"][0]["entryId"] == "weapon:WeaponDagger"
 
-# A source-known but read-only relationship record never becomes a requested
-# action merely because it is visible in the entity/search projection.
+# Stored gift quantities are actual requested actions, with aggregate effects.
 gift_npc = LuaTable(1, 1, [(1.0, "GiftPoints"), ("GiftPoints", 1.0)])
 read_only_state = {
     "NPCInteractions": table({"NPC_Hecate_01": 1.0}),
@@ -254,17 +253,17 @@ read_only_state = {
     "ObjectivesCompleted": table({}),
     "CompletedObjectiveSets": table({}),
 }
-_, read_only = environment("read-only", read_only_state)
-gift_rows = read_only.query(domain="relationships", language="en")["items"]
+gift_saves, read_only = environment("gift-quantity", read_only_state)
+gift_rows = read_only.query(domain="relationships", search="Hecate", language="en")["items"]
 gift = next(row for row in gift_rows if row["id"] == "gift:Hecate:GiftPoints")
-assert gift["editable"] is False
-try:
-    read_only.stage("gift:Hecate:GiftPoints", "set", 0, language="en")
-except ValueError:
-    pass
-else:
-    raise AssertionError("read-only gift history became a staged action")
-assert read_only.review(language="en")["actionCount"] == 0
+assert gift["editable"] is True and gift["warning"]
+read_only.stage(gift["id"], "set", 0, language="en")
+assert read_only.review(language="en")["actionCount"] == 1
+read_only.apply()
+gift_state = Hades2SaveDocument.load(gift_saves / "Profile1.sav").lua_state["GameState"]
+assert gift_state["GiftRecord"]["Hecate"]["GiftPoints"] == 0
+assert gift_state["GiftResourceRecord"]["GiftPoints"] == 0
+assert gift_state["GiftRecord"]["Hecate"][1] == "GiftPoints"
 
 # If a previously staged physical owner becomes ambiguous, review fails closed
 # without discarding that intent; the user can still explicitly remove it.

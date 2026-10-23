@@ -121,15 +121,15 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     ambiguous_known = ambiguous_workspace.query(
         domain="discover", search="Ashes", language="en"
     )
-    ambiguous_resource = next(
-        item for item in ambiguous_known["items"]
-        if item["id"] == "resource:MetaCurrency"
-    )
-    assert ambiguous_resource["state"] == "ambiguous"
-    assert ambiguous_resource["editable"] is False
-    assert ambiguous_resource["reasonCode"] == "ambiguousOwner"
+    ambiguous_resources = [item for item in ambiguous_known["items"]
+                           if item["path"] == ["GameState", "Resources", "MetaCurrency"]]
+    assert len(ambiguous_resources) == 2
+    assert len({item["id"] for item in ambiguous_resources}) == 2
+    assert all(item["state"] == "ambiguous" and not item["editable"]
+               and item["reasonCode"] == "ambiguousOwner" and item["readOnlyReason"]
+               for item in ambiguous_resources)
     assert any(
-        item["id"] == "resource:MetaCurrency"
+        item["path"] == ["GameState", "Resources", "MetaCurrency"]
         for item in ambiguous_workspace.query(
             domain="discover", search="灰烬", language="en"
         )["items"]
@@ -158,20 +158,19 @@ with tempfile.TemporaryDirectory(prefix="mgt-save-discovery-") as td:
     )
     malformed_resource = next(
         item for item in malformed_known["items"]
-        if item["id"] == "resource:MetaCurrency"
+        if item["path"] == ["GameState", "Resources", "MetaCurrency"]
     )
-    assert malformed_resource["state"] == "unsupported"
-    assert malformed_resource["editable"] is False
-    assert malformed_resource["reasonCode"] == "unsupportedOwner"
+    assert malformed_resource["state"] == "observed"
+    assert malformed_resource["editable"] is True
+    assert malformed_resource["valueType"] == "string"
+    assert malformed_resource["warning"]
     unsupported_only = malformed_workspace.query(
         domain="discover",
         search="Ashes",
         language="en",
         stateFilter="unsupported",
     )
-    assert [item["id"] for item in unsupported_only["items"]] == [
-        "resource:MetaCurrency"
-    ]
+    assert unsupported_only["items"] == []
 
     flag_session = Session()
     flag_state = flag_session.document.lua_state["GameState"]
