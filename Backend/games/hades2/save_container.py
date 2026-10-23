@@ -48,6 +48,18 @@ def is_id(identifier):
     return isinstance(identifier, str) and identifier.startswith(_PREFIX)
 
 
+def intent_sort_key(intent):
+    if not is_id(intent["id"]):
+        return (0, intent["id"])
+    _, path, _ = _inner(intent["id"])
+    # A vector append at 9 must precede 10. JSON identities are opaque and
+    # retain their physical source suffixes; ordering uses native key values.
+    components = tuple((0, int(key)) if type(key) is bool else
+                       (1, key) if type(key) in (int, float) else (2, key)
+                       for key in path)
+    return (1, components)
+
+
 def _view(document):
     header = []
     for field in _HEADER_LABELS:
@@ -279,7 +291,7 @@ def linked_changes(document, intents):
     if not own:
         return []
     candidate = Hades2SaveDocument.from_bytes(document.to_bytes())
-    for intent in sorted(own, key=lambda item: item["id"]):
+    for intent in sorted(own, key=intent_sort_key):
         apply_intent(candidate, intent)
     finalize_batch(candidate, own)
     old, new = document.header.cosmetics_points, candidate.header.cosmetics_points

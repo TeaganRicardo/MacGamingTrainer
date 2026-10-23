@@ -101,6 +101,18 @@ private func fields(_ view: NSView) -> [NSTextField] { (view as? NSTextField).ma
         scalar("1", "-5.25")
         typed("2", "{\"luaType\":\"table\",\"entries\":[{\"key\":{\"luaType\":\"string\",\"value\":\"Child\"},\"value\":{\"luaType\":\"string\",\"value\":\"container table\"}}]}")
         typed("3", "{\"luaType\":\"number\",\"encoding\":\"nonfinite\",\"value\":\"-inf\"}")
+        let infiniteTable = search("4")
+        press(root, "hades2.saveEditor.workbench.browse")
+        until("infinite-key table browse failed") { !model.querying && model.advancedPath == infiniteTable.path }
+        let infinite = search("inf")
+        let infiniteKey = Hades2SaveTypedValue(["luaType": "number", "encoding": "nonfinite", "value": "inf"])!
+        require(infinite.path.last == .typed(infiniteKey), "infinite key lost its typed path")
+        press(root, "hades2.saveEditor.workbench.browse")
+        until("infinite-key child browse failed") { !model.querying && model.advancedPath == infinite.path }
+        scalar("Nested", "infinite edited")
+        model.leaveAdvanced(); until("infinite child leave failed") { !model.querying && model.advancedPath == infiniteTable.path }
+        scalar("UniqueSibling", "sibling edited")
+        model.leaveAdvanced(); until("infinite table leave failed") { !model.querying && model.advancedPath == [.saveContainer("payload")] }
         model.leaveAdvanced(); until("payload leave failed") { !model.querying && model.advancedPath.isEmpty }
         let main = search("Main Lua root")
         require(main.childCount == nil, "main root duplicated child navigation")
@@ -111,7 +123,7 @@ private func fields(_ view: NSView) -> [NSTextField] { (view as? NSTextField).ma
         until("root member did not stage") { !model.busy && model.pendingActions.contains { $0.rawID == "NewRoot" } }
         require(model.pendingActions.first { $0.rawID == "NewRoot" }!.entryID.hasPrefix("advanced:"), "root member identity aliased")
         press(sheet, "host.done"); until("root sheet did not close") { window.attachedSheet == nil }
-        require(model.pendingCount == 6, "container action count wrong")
+        require(model.pendingCount == 8, "container action count wrong")
         let stagedTarget = try Data(contentsOf: base.appendingPathComponent("saves/Profile2.sav"))
         require(stagedTarget == targetBefore, "Stage changed disk bytes")
         press(root, "hades2.saveEditor.workbench.reviewApply")

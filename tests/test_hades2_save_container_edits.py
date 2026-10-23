@@ -301,6 +301,67 @@ class SaveContainerEditTests(unittest.TestCase):
             self.editor.stage(self.namespace("payload")["id"], "set", replacement)
         self.assertEqual(self.editor.review()["actionCount"], 0)
 
+    def test_infinite_keys_keep_siblings_and_typed_paths_through_apply(self):
+        document = Hades2SaveDocument.load(self.path)
+        document.lua_state["InfiniteKeys"] = table([(float("inf"), table({"Nested": "main"})),
+            (-float("inf"), "minus"), ("UniqueSibling", "original")])
+        document.lua_values[2] = table([(float("inf"), table({"Nested": "extra"})),
+            (-float("inf"), "extra minus"), ("UniqueSibling", "original")])
+        self.path.write_bytes(document.to_bytes())
+        self.editor = Hades2SaveWorkspace.open(self.service,
+            source={"rootId": "main", "relativePath": "Profile1.sav"},
+            target={"rootId": "main", "relativePath": "Profile1.sav"})
+        tagged = {"luaType": "number", "encoding": "nonfinite", "value": "inf"}
+        paths = ([{"saveContainer": "payload"}, 2], ["InfiniteKeys"])
+        for path in paths:
+            rows = self.rows(path)
+            json.dumps(rows, allow_nan=False)
+            self.assertEqual(len(rows), 3)
+            sibling = next(row for row in rows if row["rawId"] == "UniqueSibling")
+            self.assertTrue(sibling["editable"])
+            self.editor.stage(sibling["id"], "set", "changed")
+            positive = next(row for row in rows if row["rawId"] == "inf")
+            self.assertEqual(positive["path"][-1], tagged)
+            self.assertTrue(positive["editable"])
+            nested = self.rows(positive["path"])[0]
+            self.editor.stage(nested["id"], "set", "edited inf child")
+            negative = next(row for row in rows if row["rawId"] == "-inf")
+            self.editor.stage(negative["id"], "set", "edited -inf")
+        self.editor.stage(self.namespace("main")["id"], "addMembership", {
+            "key": tagged, "value": node("string", "root added")})
+        json.dumps(self.editor.review(), allow_nan=False)
+        self.editor.apply()
+        reopened = Hades2SaveDocument.load(self.path)
+        self.assertEqual(reopened.lua_state[float("inf")], "root added")
+        for owner in (reopened.lua_state["InfiniteKeys"], reopened.lua_values[2]):
+            self.assertEqual(owner[float("inf")]["Nested"], "edited inf child")
+            self.assertEqual(owner[-float("inf")], "edited -inf")
+            self.assertEqual(owner["UniqueSibling"], "changed")
+        self.assertEqual(save_advanced.entry_id(["Same", 1.5, True], 2), 'advanced:["Same",1.5,true]:2')
+        with self.assertRaises(ValueError):
+            save_advanced.decode_path([{**tagged, "value": "nan"}])
+        with self.assertRaises(ValueError):
+            save_advanced.parse_id('advanced:[Infinity]:0')
+
+    def test_sequence_appends_nine_and_ten_form_one_valid_stable_batch(self):
+        document = Hades2SaveDocument.load(self.path)
+        document.lua_values = [document.lua_state, *range(1, 9)]
+        document.header.notable_lua_data = tuple("Original" + str(index) for index in range(1, 9))
+        self.path.write_bytes(document.to_bytes())
+        self.editor = Hades2SaveWorkspace.open(self.service,
+            source={"rootId": "main", "relativePath": "Profile1.sav"},
+            target={"rootId": "main", "relativePath": "Profile1.sav"})
+        for root in (self.namespace("payload"), self.field("notable_lua_data")):
+            for index in (9, 10):
+                self.editor.stage(root["id"], "addMembership", {"key": node("number", index),
+                    "value": node("string", "Added" + str(index))})
+        self.assertEqual(self.editor.review()["actionCount"], 4)
+        self.editor.apply()
+        reopened = Hades2SaveDocument.load(self.path)
+        self.assertEqual(reopened.lua_values[1:9], list(range(1, 9)))
+        self.assertEqual(reopened.lua_values[9:], ["Added9", "Added10"])
+        self.assertEqual(reopened.header.notable_lua_data, tuple("Original" + str(index) for index in range(1, 9)) + ("Added9", "Added10"))
+
 
 if __name__ == "__main__":
     unittest.main()

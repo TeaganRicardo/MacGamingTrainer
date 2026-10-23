@@ -41,7 +41,9 @@ enum Hades2SaveEditorPathComponent: Hashable {
             return
         }
         if let object = value as? [String: Any],
-           let typed = Hades2SaveTypedValue(object), typed.kind == "string" {
+           let typed = Hades2SaveTypedValue(object),
+           typed.kind == "string" || (typed.kind == "number" && object["encoding"] as? String == "nonfinite"
+               && ["inf", "-inf"].contains(object["value"] as? String ?? "")) {
             self = .typed(typed)
             return
         }

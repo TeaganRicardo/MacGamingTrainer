@@ -67,8 +67,10 @@ replaced with finite values, another typed value or removed. Explicit
 `-inf`) can also be written. Transport JSON never contains a bare NaN or
 Infinity. Canonical tagged values provide stable NaN intent/no-op comparison.
 Swift retains the tagged JSON instead of converting its value to Double.
-Nonfinite table keys remain invalid because they cannot provide the supported
-finite, unique key identity.
+Infinite table keys use the same explicit tagged encoding in paths and action
+identities. Both signs retain a unique stable Lua numeric identity; finite-key
+identities keep their existing encoding. Nil, NaN and unsupported key types
+remain invalid. An infinite key does not block unrelated table siblings.
 
 ## Batch and verification boundary
 
@@ -77,7 +79,9 @@ semantic linked effects, entire headers/fields and extra vectors/nested fields.
 Deleting a sequence member changes later physical positions, so another action
 in that sequence must first be removed from the batch. A rejected new request
 restores the previously acknowledged basket. Header and extra-payload actions
-remain independent of unrelated native main-tree actions.
+remain independent of unrelated native main-tree actions. Multiple sequence
+appends use numeric native positions (9 before 10), without changing stable
+physical action identities or weakening removal/shift conflict detection.
 
 `test_hades2_save_container_edits.py` first reproduced the missing header entry,
 then the detail/query namespace refusal, a conditional field being silently

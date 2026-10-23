@@ -84,7 +84,7 @@ def typed_value(value):
                     "value": base64.b64encode(value.encode("utf-8", errors="surrogateescape")).decode("ascii")}
     if kind == "number" and not math.isfinite(value):
         # Explicit encoding keeps JSON finite and gives NaN stable intent
-        # equality. Nonfinite values remain forbidden as table keys.
+        # equality. NaN remains forbidden as a table key.
         return {"luaType": kind, "encoding": "nonfinite", "value": repr(value)}
     if kind == "unsupported":
         raise AdvancedMutationError("Save Editor Lua value cannot be encoded.")
@@ -129,7 +129,9 @@ def value_from_typed(node, depth=0, *, max_depth=_MAX_LUABINS_DEPTH):
 
 def validate_key(key):
     if type(key) not in (str, int, float, bool):
-        raise AdvancedMutationError("Save Editor Lua keys must be strings, finite numbers or booleans.")
+        raise AdvancedMutationError("Save Editor Lua keys must be strings, numbers other than NaN, or booleans.")
+    if type(key) is float and math.isinf(key):
+        return key
     validate_scalar(key, value_type(key))
     return key
 
@@ -147,7 +149,8 @@ def resolve_path(root, path):
 
 
 def entry_id(path, index):
-    return "advanced:" + json.dumps(path, ensure_ascii=True, separators=(",", ":"), allow_nan=False) + ":" + str(index)
+    encoded = [typed_value(key) if type(key) is float and math.isinf(key) else key for key in path]
+    return "advanced:" + json.dumps(encoded, ensure_ascii=True, separators=(",", ":"), allow_nan=False) + ":" + str(index)
 
 
 def parse_id(identifier):
@@ -155,11 +158,12 @@ def parse_id(identifier):
         raise AdvancedMutationError("Save Editor Advanced identity is invalid.")
     try:
         text, suffix = identifier[len("advanced:"):].rsplit(":", 1)
-        path = json.loads(text)
+        # Bare JSON Infinity/NaN has no supported wire representation. Only
+        # the explicit tagged encoding can identify an infinite Lua key.
+        path = json.loads(text, parse_constant=lambda _value: None)
         if not isinstance(path, list) or not path or len(path) > _MAX_LUABINS_DEPTH + 2:
             raise AdvancedMutationError()
-        for key in path:
-            validate_key(key)
+        path = decode_path(path)
         if suffix != "new" and (not suffix.isdigit()):
             raise AdvancedMutationError()
     except (ValueError, TypeError) as error:
@@ -217,7 +221,8 @@ def decode_path(path):
 
 
 def wire_path(path):
-    return [typed_value(key) if isinstance(key, str) and typed_value(key).get("encoding") else key for key in path]
+    return [typed_value(key) if ((isinstance(key, str) and typed_value(key).get("encoding"))
+            or (type(key) is float and math.isinf(key))) else key for key in path]
 
 
 def row(root, identifier, language):

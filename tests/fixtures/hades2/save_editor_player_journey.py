@@ -80,7 +80,8 @@ def document(amount, marker):
     values = [table({"GameState": state, "CurrentRun": current})]
     if os.environ.get("MGT_SAVE_CONTAINER_FIXTURE") == "1":
         header.timestamp = 18446744073709551615
-        values.extend([12.5, table({"Child": "original"}), None])
+        values.extend([12.5, table({"Child": "original"}), None,
+            LuaTable(0, 2, [(float("inf"), table({"Nested": "original"})), ("UniqueSibling", "original")])])
     return Hades2SaveDocument(header, values).to_bytes()
 
 

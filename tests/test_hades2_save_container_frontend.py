@@ -52,6 +52,8 @@ with tempfile.TemporaryDirectory(prefix="mgt-container-save-journey-") as tempor
     assert installed.lua_values[2]["Child"] == "container table"
     assert installed.lua_values[3] == -float("inf")
     assert installed.lua_state["NewRoot"] == "created"
+    assert installed.lua_values[4][float("inf")]["Nested"] == "infinite edited"
+    assert installed.lua_values[4]["UniqueSibling"] == "sibling edited"
     requests = [json.loads(line) for line in (base / "commands.jsonl").read_text().splitlines()]
     assert any(request["command"] == "save_editor_query" and request["params"].get("path") == [{"saveContainer": "header"}] for request in requests)
     assert any(request["command"] == "save_editor_query" and request["params"].get("path") == [{"saveContainer": "payload"}] for request in requests)

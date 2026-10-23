@@ -1575,7 +1575,7 @@ class Hades2SaveWorkspace:
         # A staged batch represents a set of user intents, not a sequence of
         # mutations. Canonical ordering makes overlapping side effects and the
         # resulting constraint error independent of click/staging order.
-        intents = tuple(sorted(intents, key=lambda intent: intent["id"]))
+        intents = tuple(sorted(intents, key=save_container.intent_sort_key))
         semantic = tuple(intent for intent in intents if intent["domain"] != "advanced")
         if any(intent["domain"] == "advanced" for intent in intents):
             semantic_root = self._project_intent_batch_root(semantic)

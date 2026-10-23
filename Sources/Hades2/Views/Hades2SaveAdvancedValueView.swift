@@ -133,14 +133,19 @@ struct Hades2SaveAdvancedValueView: View {
         let rawKey: Any
         switch draft.keyType {
         case "number":
-            guard let number = Double(draft.key), number.isFinite else { invalidMembership(); return }
+            guard let number = Double(draft.key), !number.isNaN else { invalidMembership(); return }
             rawKey = number
         case "boolean":
             guard ["true", "false"].contains(draft.key) else { invalidMembership(); return }
             rawKey = draft.key == "true"
         default: rawKey = draft.key
         }
-        let key: [String: Any] = ["luaType": draft.keyType, "value": rawKey]
+        let key: [String: Any]
+        if draft.keyType == "number", let number = rawKey as? Double, number.isInfinite {
+            key = ["luaType": "number", "encoding": "nonfinite", "value": number.sign == .minus ? "-inf" : "inf"]
+        } else {
+            key = ["luaType": draft.keyType, "value": rawKey]
+        }
         var payload: [String: Any] = ["key": key]
         if operation == "addMembership" {
             guard let value = Hades2SaveTypedValue(text: draft.value) else { invalidMembership(); return }
