@@ -175,8 +175,8 @@ def main():
     ))
     router = JsonlRequestRouter(adapter, save_data_root=base / "data",
                                 target_running_probe=lambda: False)
-    # The provider's native-source lookups are contained in this empty temp
-    # game tree; missing source evidence remains truthful and read-only.
+    # Source lookups remain contained in this temporary game tree. An authored
+    # corpus may explain context; it cannot inspect an installed game tree.
     router.save_service.provider = Hades2SaveProvider(game_path=base / "native-game")
     for raw in sys.stdin:
         request = json.loads(raw)

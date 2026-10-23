@@ -96,7 +96,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
             }
             return sheet
         }
-        func typed(_ row: Hades2SaveEditorEntry, _ value: String, probeLanguage: Bool = false) {
+        func typed(_ row: Hades2SaveEditorEntry, _ value: String, probeLanguage: Bool = false, probeBackend: Bool = false) {
             var sheet = openValue(row)
             var input = fields(sheet).first { $0.isEditable && $0.accessibilityLabel()?.contains(text("hades2.saveEditor.advanced.typedValue")) == true }!
             if probeLanguage {
@@ -115,8 +115,26 @@ private func fields(_ view: NSView) -> [NSTextField] {
                 input = fields(sheet).first { $0.isEditable && $0.accessibilityLabel()?.contains(text("hades2.saveEditor.advanced.typedValue")) == true }!
                 require(input.stringValue == "invalid tagged value", "reopening the same Advanced field lost its retained invalid draft")
             }
+            if probeBackend {
+                // Structurally tagged JSON reaches the real backend, where
+                // the codec owner rejects inconsistent allocation hints.
+                let rejected = "{\"luaType\":\"table\",\"arraySize\":1,\"hashSize\":0,\"entries\":[]}"
+                let count = model.pendingCount
+                edit(input, rejected)
+                until("backend refusal did not retain its field correction") { !model.busy && model.editFailures[row.id] != nil }
+                require(model.pendingCount == count && !model.pendingActions.contains { $0.entryID == row.id },
+                        "refused typed value joined the acknowledged Changes batch")
+                press(sheet, "host.done")
+                until("refused value editor did not dismiss") { window.attachedSheet == nil }
+                sheet = openValue(row)
+                input = fields(sheet).first { $0.isEditable && $0.accessibilityLabel()?.contains(text("hades2.saveEditor.advanced.typedValue")) == true }!
+                require(input.stringValue == rejected, "reopening lost the backend-refused typed draft needed for correction")
+                require(model.editFailures[row.id] != nil, "reopening discarded the backend-refused field correction")
+            }
             edit(input, value)
             until("Advanced typed edit did not stage") { !model.busy && model.pendingActions.contains { $0.entryID == row.id } }
+            require(model.editFailures[row.id] == nil && model.typedDrafts[row.id] == nil,
+                    "acknowledged typed correction retained its rejected draft or error")
             press(sheet, "host.done")
             until("Advanced sheet did not close") { window.attachedSheet == nil }
         }
@@ -152,7 +170,7 @@ private func fields(_ view: NSView) -> [NSTextField] {
         until("Advanced boolean did not stage") { !model.busy && model.pendingActions.contains { $0.entryID == boolean.id } }
         numericOrText("Text", "  exact  "); numericOrText("Empty", "")
         typed(search("Binary"), "{\"luaType\":\"string\",\"encoding\":\"base64\",\"value\":\"AP4=\"}", probeLanguage: true)
-        typed(search("Nil"), "{\"luaType\":\"number\",\"value\":3}")
+        typed(search("Nil"), "{\"luaType\":\"number\",\"value\":3}", probeBackend: true)
         typed(search("Members"), "{\"luaType\":\"table\",\"entries\":[{\"key\":{\"luaType\":\"boolean\",\"value\":true},\"value\":{\"luaType\":\"string\",\"value\":\"boolean changed\"}},{\"key\":{\"luaType\":\"number\",\"value\":1},\"value\":{\"luaType\":\"string\",\"value\":\"number changed\"}},{\"key\":{\"luaType\":\"string\",\"value\":\"1\"},\"value\":{\"luaType\":\"string\",\"value\":\"string changed\"}},{\"key\":{\"luaType\":\"string\",\"encoding\":\"base64\",\"value\":\"/w==\"},\"value\":{\"luaType\":\"string\",\"value\":\"binary changed\"}}]}")
         let removed = search("Removed")
         guard let remove = nativeAccessibilityControls(root).first(where: { $0.identifier == "saveEditor.unset." + removed.id })

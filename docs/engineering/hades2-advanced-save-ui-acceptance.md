@@ -25,6 +25,9 @@ ownership. Error feedback remains scoped to the field or operation. A language
 or detail refresh preserves a focused draft. Completed invalid typed drafts
 remain in that Save document when the value editor closes and reopens; a valid
 correction or explicit document abandonment clears the corresponding draft.
+Typed values rejected by the backend's codec or conflict validation retain the
+exact submitted text and field correction through closing/reopening as well;
+only an acknowledged correction replaces that retained input.
 The table member form likewise retains its key type, exact key/value text and
 local correction when its sheet closes and reopens. Those drafts belong to the
 current Save document; changing source, closing it or canceling its changes

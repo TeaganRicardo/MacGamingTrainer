@@ -946,9 +946,11 @@ final class Hades2SaveEditorModel: ObservableObject {
         membershipDrafts[entryID] = draft
     }
 
-    private func reconcileEdits(_ entryIDs: Set<String>?) {
+    private func reconcileEdits(_ entryIDs: Set<String>?, preservingTypedDrafts: Bool = false) {
         if let entryIDs {
-            for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID) }
+            if !preservingTypedDrafts {
+                for entryID in entryIDs { typedDrafts.removeValue(forKey: entryID) }
+            }
         } else {
             typedDrafts = [:]
             membershipDrafts = [:]
@@ -973,7 +975,11 @@ final class Hades2SaveEditorModel: ObservableObject {
             presentFailure: false
         ) { [weak self] reply in
             guard let self, self.workspaceID == workspace else { return }
-            defer { self.reconcileEdits([entryID]) }
+            var acknowledged = false
+            // Inline controls still restore their acknowledged projection on
+            // refusal; the structure editor retains its explicit typed input
+            // so reopening can correct a backend-only codec/conflict error.
+            defer { self.reconcileEdits([entryID], preservingTypedDrafts: !acknowledged) }
             guard reply.success, let result = reply.result else {
                 self.editFailures[entryID] = reply.failure.map {
                     TrainerTextToken(key: $0.presentation, arguments: $0.presentationArguments)
@@ -985,6 +991,7 @@ final class Hades2SaveEditorModel: ObservableObject {
                 return
             }
             self.editFailures.removeValue(forKey: entryID)
+            acknowledged = true
             if self.language != requestedLanguage { self.review() }
         }
     }
