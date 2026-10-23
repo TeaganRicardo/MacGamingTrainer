@@ -53,6 +53,38 @@ explicitly accepts that completed result. The regression therefore forces the
 unknown path without assuming that elapsed wall time alone proves an unknown
 outcome.
 
+## Fresh LLDB worker measurements
+
+[#552](https://github.com/TeaganRicardo/MacGamingTrainer/issues/552) owns the
+first-connection symbol-index work under #376. Run its separate opt-in workload:
+
+```sh
+python3 Tools/profile_hades2_operations.py --mode first-touch --output /tmp/hades2-first-touch.json
+```
+
+This alternates five baseline and five production workers, each with a new
+debugger and temporary native helper. The helper loads Foundation, AppKit,
+SwiftUI and Metal without opening a window. Baseline uses the production
+constructor with only `target.preload-symbols` overridden to `false`; production
+uses the constructor unchanged. The ordinary transport workload above reuses a
+debugger and does not isolate this cost.
+
+The report retains effective settings, framework/module counts, native LLDB
+statistics (including instrumentation plugins and resolved internal breakpoints),
+three production expression results per worker, native entry counts and restored
+focus. Each worker uses its own initially empty index-cache directory, explicitly
+disables that cache, checks zero symbol-cache reads/writes and verifies the
+directory remains empty after debugger cleanup. OS file caches are not purged;
+these are fresh-worker measurements. There is no timing assertion in CI.
+
+Preloading lets LLDB's existing parallel module workers build symbol name indexes
+before serial scripting-resource and runtime discovery needs them. See the
+official [module preload loop](https://github.com/swiftlang/llvm-project/blob/ca3748a6234a9f6e22d94fbe91e99836457f8fe4/lldb/source/Core/ModuleList.cpp#L2262)
+and [symbol name-index preload](https://github.com/swiftlang/llvm-project/blob/ca3748a6234a9f6e22d94fbe91e99836457f8fe4/lldb/source/Symbol/Symtab.cpp#L490).
+Compare the report's wall times; cumulative per-module parse/index durations can
+overlap across worker threads. Synthetic module counts and speedups do not
+establish Hades connection latency or runtime fault-reporting acceptance.
+
 ## Resident measurements
 
 `--mode resident --samples 30` runs the shipped Lua source with explicit native

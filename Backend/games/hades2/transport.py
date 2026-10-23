@@ -29,7 +29,7 @@ class Hades2LuaTransport:
         self.last_mailbox_profile = {}
         lldb.SBDebugger.Initialize()
         self.debugger=lldb.SBDebugger.Create(); self.debugger.SetAsync(True)
-        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','false'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
+        for setting,value in (('symbols.enable-external-lookup','false'), ('target.preload-symbols','true'), ('target.load-script-from-symbol-file','false'), ('symbols.load-on-demand','true')):
             result=lldb.SBCommandReturnObject()
             self.debugger.GetCommandInterpreter().HandleCommand('settings set '+setting+' '+value,result)
             if not result.Succeeded():raise TransportError('debugger_configuration',result.GetError())
