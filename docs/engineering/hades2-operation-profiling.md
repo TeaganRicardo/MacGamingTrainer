@@ -66,8 +66,8 @@ This alternates five baseline and five production workers, each with a new
 debugger and temporary native helper. The helper loads Foundation, AppKit,
 SwiftUI and Metal without opening a window. Baseline uses the production
 constructor with only `target.preload-symbols` overridden to `false`; production
-uses the constructor unchanged. The ordinary transport workload above reuses a
-debugger and does not isolate this cost.
+uses the constructor unchanged. The ordinary transport workload above keeps its
+attachments in one worker process and does not isolate this cost.
 
 The report retains effective settings, framework/module counts, native LLDB
 statistics (including instrumentation plugins and resolved internal breakpoints),
