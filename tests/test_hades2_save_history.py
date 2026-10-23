@@ -1,5 +1,6 @@
 """Read-only player history through the real Save entity query and stage seam."""
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,11 +14,11 @@ def table(mapping):
     return LuaTable(0, len(mapping), list(mapping.items()))
 
 
-def workspace(state):
+def workspace(state, game_path="/nonexistent/mgt-history-fixture"):
     state.update({"Resources": table({}), "Flags": table({})})
     root = table({"GameState": table(state), "CurrentRun": table({})})
     session = SimpleNamespace(document=SimpleNamespace(lua_state=root), relative_path="Profile1.sav")
-    return Hades2SaveWorkspace(session, "Profile1", game_path="/nonexistent/mgt-history-fixture"), root
+    return Hades2SaveWorkspace(session, "Profile1", game_path=game_path), root
 
 
 w, root = workspace({
@@ -92,4 +93,38 @@ unavailable = malformed.query(domain="entities", scope="records", language="en")
 assert any(g["id"] == "history:unavailable:RunHistory" for g in unavailable["entities"])
 assert saved["GameState"]["RunHistory"][1] == "not a run"
 assert any(g["id"] == "history:gathering:fishing" for g in unavailable["entities"])
+
+# Literal duplicate keys have no unique native owner. Do not present two
+# seemingly authoritative controls with the same physical path and row ID.
+duplicates = LuaTable(0, 2, [("KnownBoon", 1), ("KnownBoon", 2)])
+for field, value, unavailable_owner in (
+    ("RunHistory", table({1: table({"RunResult": 1, "TraitCache": duplicates})}), "RunHistory"),
+    ("FishCaught", duplicates, "FishCaught"),
+):
+    duplicate, document = workspace({field: value})
+    duplicate_page = duplicate.query(domain="entities", scope="records", language="en")
+    assert any(g["id"] == "history:unavailable:" + unavailable_owner
+               for g in duplicate_page["entities"]), "ambiguous history keys acquired a normal projection"
+    assert document["GameState"][field] is value
+
+with tempfile.TemporaryDirectory(prefix="mgt-history-names-") as temporary:
+    source = Path(temporary)
+    for language, boon, fish in (("en", "Divine Strike", "Silver Carp"),
+                                ("zh-CN", "神圣攻击", "银鲤")):
+        (source / ("History." + language + ".sjson")).write_text(
+            'Id = "KnownBoon" DisplayName = "' + boon + '"\n'
+            'Id = "KnownFish" DisplayName = "' + fish + '"\n', encoding="utf-8")
+    named, _ = workspace({
+        "RunHistory": table({1: table({"RunResult": 1, "TraitCache": table({"KnownBoon": 2})})}),
+        "LifetimeTraitStats": table({"KnownBoon": table({"UseCount": 3})}),
+        "FishCaught": table({"KnownFish": 1}),
+    }, game_path=str(source))
+    for language, boon, fish in (("en", "Divine Strike", "Silver Carp"),
+                                ("zh-CN", "神圣攻击", "银鲤")):
+        values = named.query(domain="entities", scope="records", language=language, limit=100)["entities"]
+        by_id = {group["id"]: group for group in values}
+        assert boon in by_id["history:trait:KnownBoon"]["name"]
+        row = next(row for row in by_id["history:run:1"]["items"] if row["rawId"] == "trait:KnownBoon")
+        assert boon in row["name"] and row["englishName"] == "Trait · Divine Strike"
+        assert by_id["history:collection:FishCaught"]["items"][0]["name"] == fish
 print("hades2_save_history_ok")

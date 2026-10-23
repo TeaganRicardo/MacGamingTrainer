@@ -142,10 +142,14 @@ def rows(root, language="zh-CN", game_path=None):
                         "string", (identity,))
             traits = _get(run, "TraitCache")
             if isinstance(traits, LuaTable):
+                seen_traits = set()
                 identifiers = [key for key, _ in traits.entries() if isinstance(key, str)]
                 names = official_display_names(identifiers, language, game_path=game_path)
                 english = names if not zh else official_display_names(identifiers, "en", game_path=game_path)
                 for position, (identifier, count) in enumerate(traits.entries(), 1):
+                    if identifier in seen_traits:
+                        raise ValueError("ambiguous run trait history")
+                    seen_traits.add(identifier)
                     if not isinstance(identifier, str) or not _number(count):
                         continue
                     name = names.get(identifier) or ("未识别祝福 {}" if zh else "Unidentified trait {}").format(position)
@@ -187,11 +191,14 @@ def rows(root, language="zh-CN", game_path=None):
     for owner_name, titles in (("FishCaught", ("鱼类记录", "Fish caught")),
                               ("ExorcisedNames", ("引魂对象记录", "Pacified shades"))):
         def counts(records):
-            projected = []
+            projected, seen = [], set()
             identities = [key for key, _ in records.entries() if isinstance(key, str)]
             names = official_display_names(identities, language, game_path=game_path)
             english = names if not zh else official_display_names(identities, "en", game_path=game_path)
             for position, (key, count) in enumerate(records.entries(), 1):
+                if key in seen:
+                    raise ValueError("ambiguous gathering history")
+                seen.add(key)
                 if isinstance(key, str) and _number(count):
                     name = names.get(key) or ("未识别对象 {}" if zh else "Unidentified entity {}").format(position)
                     en = english.get(key) or "Unidentified entity {}".format(position)
