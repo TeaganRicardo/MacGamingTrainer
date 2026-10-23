@@ -11,7 +11,7 @@ import math
 import uuid
 from types import SimpleNamespace
 
-from . import save_equipment, save_long_term, save_narrative
+from . import save_equipment, save_history, save_long_term, save_narrative
 from .save_entities import entity_page
 from .save_investigation import NativeDialogueInvestigation
 from .localization import official_display_names
@@ -856,6 +856,7 @@ class Hades2SaveWorkspace:
             rows.extend(self._resource_rows(language))
         if scope in ("all", "records"):
             rows.extend(self._player_stat_rows(language))
+            rows.extend(save_history.rows(root, language, game_path=self._game_path))
         if scope in ("all", "story"):
             rows.extend(save_narrative.rows(
                 root, "flags", language, game_path=self._game_path
