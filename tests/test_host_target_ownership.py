@@ -73,7 +73,6 @@ final class NSRunningApplication {
     struct ActivationOptions: OptionSet {
         let rawValue: Int
         static let activateAllWindows = Self(rawValue: 1)
-        static let activateIgnoringOtherApps = Self(rawValue: 2)
     }
     func activate(options: ActivationOptions) -> Bool {
         if uiMode == "activate" { print("activated"); fflush(stdout); return true }
@@ -85,7 +84,7 @@ final class FixtureApplication {
     func setActivationPolicy(_ policy: Policy) {}
     func activate(ignoringOtherApps: Bool) {}
 }
-let NSApp = FixtureApplication()
+enum NSApplication { static let shared = FixtureApplication() }
 final class NSAlert {
     enum Style { case warning }
     var alertStyle = Style.warning

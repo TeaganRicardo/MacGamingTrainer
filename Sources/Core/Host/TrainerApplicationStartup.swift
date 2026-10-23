@@ -25,7 +25,7 @@ enum TrainerApplicationStartup {
             case .occupied(let pid):
                 if let pid, let existing = NSRunningApplication(processIdentifier: pid),
                    existing.bundleIdentifier == Bundle.main.bundleIdentifier,
-                   existing.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) {
+                   existing.activate(options: [.activateAllWindows]) {
                     exit(EXIT_SUCCESS)
                 }
                 showAlert(localization: localization, title: "host.startup.alreadyRunning",
@@ -40,8 +40,9 @@ enum TrainerApplicationStartup {
     }
 
     private static func showAlert(localization: TrainerLocalizationStore, title: String, detail: String) {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        let application = NSApplication.shared
+        application.setActivationPolicy(.regular)
+        application.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = localization.localized(title)
